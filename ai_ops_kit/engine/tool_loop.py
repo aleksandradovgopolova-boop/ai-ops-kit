@@ -175,6 +175,11 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
     # Локальный импорт (как ai_ops_run зовёт providers): response_contract — лист, engine не тянет,
     # цикла нет; локально — чтобы не расширять статический граф engine ради одного класса-исключения.
     from ai_ops_kit.providers.response_contract import ProviderRefusal as _ProviderRefusal
+    # #160: тем же локальным способом — тип структурного отказа СРЕДЫ (вложенный `claude -p` внутри
+    # активной сессии Claude обрывается ДО модели). Он не сетевой сбой и не вердикт: прежде летел до
+    # CLI и убивал прогон; здесь становится НАЗВАННЫМ no-verdict, по которому открывается handoff.
+    from ai_ops_kit.providers.orchestrator_providers import (
+        ProviderEnvUnavailableError as _ProviderEnvUnavailable)
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     context = base_context
     reads, denied = [], []
@@ -194,6 +199,17 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
                         f"затем верни {terminal_kind}.")
         try:
             action = reviewer(context)
+        except _ProviderEnvUnavailable as env_err:
+            # #160: провайдер ревьюера структурно не запускается в ЭТОЙ среде (сессия внутри сессии) —
+            # повтор бесполезен. НЕ пробрасываем (иначе падает весь прогон): возвращаем named
+            # no-verdict `env-unavailable`. По нему `_run_reviews` открывает handoff оркестратору
+            # (awaiting_reviewer) вместо глухого no-verdict. refusal несёт причину до отчёта.
+            return {"result": None, "stopped": "env-unavailable",
+                    "refusal": {"kind": "provider-refusal", "reason": "env_unavailable",
+                                "reason_text": "исполнитель ревьюера недоступен в этой среде",
+                                "provider": getattr(env_err, "provider", "") or "",
+                                "detail": str(getattr(env_err, "detail", "") or "")[:300]},
+                    "reads": reads, "denied": denied}
         except _ProviderRefusal as refusal:
             # Провайдер судьи НАЗВАЛ отказ (пусто/обрезано/отказ модели). Прежде это был
             # неперехваченный подъём (после того как провайдеры научились называть пустой ответ);
