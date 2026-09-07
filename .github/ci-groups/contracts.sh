@@ -6,4 +6,13 @@
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1   # байткод в дереве ломает проверку целостности managed
 cd "$(dirname "$0")/../.."
-python3 -m pytest -n auto --dist loadfile tests/contracts -q
+# ПАРКОВКА ТЯЖЁЛОГО МОНОЛИТА (2026-09-07, #465). test_validate_release_claims — самый тяжёлый
+# slow-файл (~16 тестов по ~6 c = ~99 c): под `--dist loadfile` он пришпилен к ОДНОМУ воркеру и
+# в одиночку задаёт пол шарда, куда бы ни попал. В обеих группах selftests он пробивал стену
+# (selftests-m доходил до ~196 c). Эта группа (`contracts`) — самая недогруженная в матрице
+# (~21 c при стене 180 c), поэтому монолит запускается здесь: он всё равно slow (в `fast` не
+# входит) и ИСКЛЮЧЁН из selftests-a/-m по имени (`-k "... and not test_validate_release"`), так что
+# не гоняется дважды. Пятый шард завести нельзя — он переименовал бы required-контекст (капкан
+# статусов защиты ветки), а у `contracts` имя и путь те же. Если файл раздробят/переименуют — снять
+# отсюда и вернуть в общий slow-набор.
+python3 -m pytest -n auto --dist loadfile tests/contracts tests/unit/test_validate_release_claims.py -q

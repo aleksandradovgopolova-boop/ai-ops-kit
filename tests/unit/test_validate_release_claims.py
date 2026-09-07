@@ -15,6 +15,11 @@ from validate_release_claims import (  # noqa: F401
     yaml,
 )
 
+# Тесты гоняют валидатор релиз-claims по всему реестру (полный сбор+сверка) — >10 c на CI, то есть
+# slow по определению маркера (pytest.ini). Самый тяжёлый лумп, снятый с шарда `fast` под
+# `--dist loadfile` в slow-шарды selftests; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 def base_claims():

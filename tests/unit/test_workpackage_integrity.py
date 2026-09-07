@@ -29,6 +29,11 @@ from _workpackage_helpers import (
     _valid_plan,
 )
 
+# execute_sequence гоняет реальные git-worktree + подпроцессы на каждый пакет — >10 c на CI, то есть
+# slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в slow-шарды
+# selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 
 # ─── Plan integrity validation ─────────────────────────────────────────────────
 

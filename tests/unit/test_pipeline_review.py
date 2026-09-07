@@ -14,6 +14,11 @@ from ai_ops_kit.engine import execution_pipeline
 
 from _pipeline_helpers import _init_git
 
+# Тесты поднимают реальный git-репозиторий и прогоняют конвейер ревью через подпроцессы — >10 c на
+# CI, то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 
 @pytest.mark.unit
 class TestSecurityVerdictErrorsAdditional:

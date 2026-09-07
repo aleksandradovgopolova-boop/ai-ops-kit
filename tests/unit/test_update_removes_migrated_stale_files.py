@@ -32,6 +32,11 @@ from pathlib import Path
 
 import pytest
 
+# Тесты гоняют реальный `ai-ops update` через подпроцессы и сверяют дерево установки — >10 c на CI,
+# то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 KIT = Path(__file__).resolve().parents[2]
 INSTALLER = KIT / "installer" / "ai_ops.py"
 
