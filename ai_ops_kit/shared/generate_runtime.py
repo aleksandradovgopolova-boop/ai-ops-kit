@@ -6,6 +6,11 @@
 
   claude-code: .ai/generated/claude-code/commands/ai-<workflow>.md   (слэш-команды)
   codex:       .ai/generated/codex/prompts/ai-<workflow>.md          ($-промпты)
+  qwen-code:   .ai/generated/qwen-code/commands/ai-<workflow>.md      (слэш-команды)
+
+Набор рантаймов НЕ захардкожен: берётся из registry/runtimes.yaml — все с
+adapter_depth: generated-commands, у которых есть профиль рендера (_RENDER_PROFILES).
+Новый generated-commands рантайм подключается объявлением в реестре + профилем.
 
 Плюс `.generation.json` — хэши источников, версия пакета: позволяет detect
 устаревшую генерацию (adapter drift) и перегенерировать. Файлы в .ai/generated/
@@ -29,7 +34,33 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-RUNTIMES = ("claude-code", "codex")
+
+# Профиль рендера рантайма: то, чего нет в реестре, — подпапка точки входа, наличие
+# YAML-фронтматтера и префикс вызова (`/` слэш-команда vs `$` codex-промпт). Набор рантаймов,
+# для которых мы генерируем, берётся из реестра (ниже), а НЕ из этого словаря: профиль лишь
+# описывает форму рендера уже отобранного рантайма.
+_RENDER_PROFILES = {
+    "claude-code": {"sub": "commands", "frontmatter": True,  "invoke": "/"},
+    "codex":       {"sub": "prompts",  "frontmatter": False, "invoke": "$"},
+    "qwen-code":   {"sub": "commands", "frontmatter": True,  "invoke": "/"},
+}
+
+
+def _load_generated_command_runtimes():
+    """Рантаймы для генерации — из registry/runtimes.yaml: объявленные с
+    adapter_depth: generated-commands И имеющие профиль рендера. Порядок — реестровый.
+    Так новый рантайм подключается ОБЪЯВЛЕНИЕМ в реестре (+ профиль), а не правкой хардкода;
+    'runtime-агностичность' здесь — не проза, а источник набора."""
+    try:
+        rt = yaml.safe_load((PKG / "registry" / "runtimes.yaml").read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return tuple(_RENDER_PROFILES)                # деградация: профили как есть
+    ids = [rid for rid, r in (rt.get("runtimes") or {}).items()
+           if isinstance(r, dict) and r.get("adapter_depth") == "generated-commands"]
+    return tuple(rid for rid in ids if rid in _RENDER_PROFILES) or tuple(_RENDER_PROFILES)
+
+
+RUNTIMES = _load_generated_command_runtimes()
 
 
 def sha256_file(p: Path):
@@ -56,7 +87,7 @@ def render_command(wid, w, agents, runtime):
     artifacts = "\n".join(f"- {a}" for a in w.get("required_artifacts", []))
 
     header = (f"---\ndescription: Workflow {wid} — {w.get('purpose','')}\n---\n"
-              if runtime == "claude-code" else "")
+              if _RENDER_PROFILES[runtime]["frontmatter"] else "")
     return f"""{header}# ai-{wid.lower()} — {w.get('purpose', wid)}
 
 Сгенерировано из registry/workflows.yaml — НЕ редактировать вручную
@@ -90,8 +121,8 @@ def render_start_task(runtime, workflows):
     реестрам в .ai/managed/ (routing-policy + workflows), вручную workflow выбирать не нужно."""
     wlist = "\n".join(f"- **{wid}** — {w.get('purpose', '')}" for wid, w in workflows.items())
     header = ("---\ndescription: Единая точка входа — опиши задачу словами, маршрут выберется сам\n---\n"
-              if runtime == "claude-code" else "")
-    invoke = "/ai-<workflow>" if runtime == "claude-code" else "$ai-<workflow>"
+              if _RENDER_PROFILES[runtime]["frontmatter"] else "")
+    invoke = f"{_RENDER_PROFILES[runtime]['invoke']}ai-<workflow>"
     return f"""{header}# ai-start-task — единая точка входа
 
 Сгенерировано из registry/ — НЕ редактировать вручную
@@ -151,8 +182,8 @@ def render_ai_run(runtime, workflows):
     транзакцией через контроллер ai_ops_kit/engine/ai_ops_run.py. `ai-start-task` сохраняется как
     совместимый алиас (та же спина route->RunPlan->WorkItem->preflight->active-work)."""
     header = ("---\ndescription: Канонический вход — задача в контролируемое исполнение и отчёт\n---\n"
-              if runtime == "claude-code" else "")
-    alias = "/ai-start-task" if runtime == "claude-code" else "$ai-start-task"
+              if _RENDER_PROFILES[runtime]["frontmatter"] else "")
+    alias = f"{_RENDER_PROFILES[runtime]['invoke']}ai-start-task"
     return f"""{header}# ai-run — канонический вход (задача → исполнение → отчёт)
 
 Сгенерировано из registry/ — НЕ редактировать вручную
@@ -197,7 +228,7 @@ def render_ai_ops_init(runtime):
     первичный онбординг репозитория. Реальную установку делает installer/ai_ops.py; онбординг
     (черновики context/*) — скилл repo-onboarding; выбор рантайма/включение — человек."""
     header = ("---\ndescription: Подключить AI Ops и подготовить репозиторий (установка + онбординг)\n---\n"
-              if runtime == "claude-code" else "")
+              if _RENDER_PROFILES[runtime]["frontmatter"] else "")
     return f"""{header}# ai-ops-init — разговорная установка и онбординг
 
 Сгенерировано из registry/ — НЕ редактировать вручную
@@ -246,7 +277,7 @@ def generate(child_root: Path, verbose=True, runtimes=None, command_filter=None)
     out_files = []
     active = _active_runtimes(runtimes)
     for runtime in active:
-        sub = "commands" if runtime == "claude-code" else "prompts"
+        sub = _RENDER_PROFILES[runtime]["sub"]
         base = child_root / ".ai" / "generated" / runtime / sub
         base.mkdir(parents=True, exist_ok=True)
         for wid, w in workflows.items():
