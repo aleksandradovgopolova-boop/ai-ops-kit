@@ -47,6 +47,18 @@ raises:
   # ПОЧЕМУ снижение оправдано, а не «так вышло».
   - at: '2026-09-07'
     what: rebaseline_after_measurement
+    from_behavioral: 397
+    from_total: 463
+    to_behavioral: 398
+    to_total: 464
+    to_share_pct: 85.78
+    work: '#591: ревьюер code_review — либо родит вердикт, либо падает быстро (оставшаяся половина #577)'
+    why: >-
+      Один новый поведенческий тест-файл (test_reviewer_verdict_or_fast_fail.py — импортирует tool_loop/
+      tool_broker И зовёт make_reviewer_proposer/run_review): 397->398, структурных без изменений (66).
+      Доля поведенческих выросла 85.75% -> 85.78% (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
     from_behavioral: 395
     from_total: 461
     to_behavioral: 397
