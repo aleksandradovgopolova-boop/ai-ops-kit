@@ -33,6 +33,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -42,6 +43,8 @@ KINDS = ("OpportunityBrief", "ProductDecisionRecord", "OutcomeContract", "Outcom
 CONFIDENCE = ("low", "medium", "high")
 HYPOTHESIS = ("confirmed", "refuted", "inconclusive")
 TARGET_MET = ("yes", "no", "unknown")
+# Вердикт по РЕАЛЬНОМУ замеру (evaluate_outcome), в отличие от объявленного человеком target_met.
+MEASURED_VERDICT = ("met", "failed", "unknown")
 
 
 def _text(v) -> str:
@@ -193,6 +196,142 @@ def cross_check(contract: dict, readout: dict) -> list:
         errors.append(f"guardrails не отчитаны: {', '.join(missing)} — умолчание о том, что было "
                       f"объявлено заранее, читается как «всё в порядке»")
     return errors
+
+
+def _num(v):
+    """Извлечь число из значения: int/float как есть; из строки — первое число ('86 сек' -> 86.0).
+
+    Единицы у guardrail-порогов пишутся текстом ('90 сек'), поэтому парсим первое число, а не
+    требуем чистый numeric. bool числом НЕ считается. -> float | None (не число — None, не ноль)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    s = _text(v)
+    m = re.search(r"-?\d+(?:[.,]\d+)?", s) if s else None
+    if not m:
+        return None
+    try:
+        return float(m.group(0).replace(",", "."))
+    except ValueError:
+        return None
+
+
+def _direction(baseline: float, target: float) -> str:
+    """Направление улучшения по знаку target-baseline. -> 'increase' | 'decrease' | 'hold'."""
+    if target > baseline:
+        return "increase"
+    if target < baseline:
+        return "decrease"
+    return "hold"
+
+
+def _primary_met(direction: str, target: float, measured: float) -> bool:
+    """Дотянула ли основная метрика до цели С УЧЁТОМ направления улучшения."""
+    if direction == "increase":
+        return measured >= target
+    if direction == "decrease":
+        return measured <= target
+    return measured == target
+
+
+def _guardrail_breaches(contract: dict, readout: dict) -> list:
+    """Список пробитых guardrail'ов по observed-значениям отчёта.
+
+    within=False в отчёте — прямой сигнал пробоя (сильнее нашего парсинга единиц). Если within не
+    проставлен — сверяем численно против порога контракта (`must_not_exceed`/`must_not_drop_below`),
+    но только когда обе стороны парсятся как числа; иначе тихо пропускаем (не выдумываем пробой)."""
+    declared = {_text(g.get("name")): g for g in (contract.get("guardrails") or [])
+                if isinstance(g, dict) and _text(g.get("name"))}
+    breaches: list[str] = []
+    for obs in (readout.get("guardrails_observed") or []):
+        if not isinstance(obs, dict):
+            continue
+        name = _text(obs.get("name"))
+        if not name:
+            continue
+        if obs.get("within") is False:
+            breaches.append(name)
+            continue
+        if obs.get("within") is True:
+            continue
+        decl = declared.get(name)
+        ov = _num(obs.get("value"))
+        if not decl or ov is None:
+            continue
+        hi, lo = _num(decl.get("must_not_exceed")), _num(decl.get("must_not_drop_below"))
+        if hi is not None and ov > hi:
+            breaches.append(name)
+        elif lo is not None and ov < lo:
+            breaches.append(name)
+    return breaches
+
+
+def evaluate_outcome(contract: dict | None, readout: dict | None) -> dict:
+    """ФЛИП вердикта по итогу из `unknown` в `met`/`failed` по РЕАЛЬНОМУ замеру baseline→после релиза.
+
+    Ключевое отличие от `project_outcome` (#566): здесь вердикт СЧИТАЕТСЯ ИЗ ЧИСЕЛ (baseline →
+    measured против target + guardrails), а НЕ берётся из человеческого поля `target_met`. Декларация
+    «мы считаем, что цель достигнута» и измерение «метрика с 42% ушла на 41%» — разные вещи; петля
+    итога обязана опираться на второе. Пока замера нет — вердикт честно `unknown`, ровно как у
+    contract.baseline «без даты и источника это число из головы».
+
+    Реальный замер = число + дата (`measured.value`, `measured.measured_at`). Без даты замер не
+    считается измерением и вердикт остаётся `unknown` — это и есть барьер против «числа из головы»,
+    который иначе флипнул бы итог по выдуманным данным.
+
+    Правила (в порядке силы): guardrail пробит -> `failed` (сломали соседнее, даже если основная
+    метрика дотянула); основная метрика достигла цели -> `met`; не достигла -> `failed`.
+
+    -> {"verdict": met|failed|unknown, "reason", "measured", "measured_at", "baseline", "target",
+        "direction", "primary_met": bool|None, "guardrail_breaches": [...],
+        "is_real_measurement": bool}.
+    """
+    contract = contract or {}
+    baseline = _num((contract.get("baseline") or {}).get("value"))
+    target = _num((contract.get("target") or {}).get("value"))
+    result = {"verdict": "unknown", "reason": None, "measured": None, "measured_at": None,
+              "baseline": baseline, "target": target, "direction": None,
+              "primary_met": None, "guardrail_breaches": [], "is_real_measurement": False}
+
+    if not isinstance(readout, dict):
+        result["reason"] = "замера нет — итог по релизу ещё не измерен, флипать нечем"
+        return result
+
+    measured_block = readout.get("measured") or {}
+    measured = _num(measured_block.get("value"))
+    measured_at = _text(measured_block.get("measured_at"))
+    result["measured"], result["measured_at"] = measured, measured_at or None
+
+    if measured is None or not measured_at:
+        result["reason"] = ("замер без значения или без даты — это ещё не измерение "
+                            "(как baseline без даты: число из головы итог не флипает)")
+        return result
+    if baseline is None or target is None:
+        result["reason"] = "в контракте нет числового baseline/target — замер сравнить не с чем"
+        return result
+
+    result["is_real_measurement"] = True
+    direction = _direction(baseline, target)
+    result["direction"] = direction
+    primary_met = _primary_met(direction, target, measured)
+    result["primary_met"] = primary_met
+    breaches = _guardrail_breaches(contract, readout)
+    result["guardrail_breaches"] = breaches
+
+    if breaches:
+        result["verdict"] = "failed"
+        result["reason"] = (f"защитная метрика просела: {', '.join(breaches)} — цель не считается "
+                            f"достигнутой, даже если основная метрика дотянула")
+    elif primary_met:
+        result["verdict"] = "met"
+        result["reason"] = (f"основная метрика достигла цели ({measured} к цели {target} "
+                            f"от baseline {baseline}), защитные метрики удержаны")
+    else:
+        result["verdict"] = "failed"
+        result["reason"] = (f"основная метрика не достигла цели ({measured} к цели {target} "
+                            f"от baseline {baseline})")
+    return result
 
 
 def _slug(value: str) -> str:

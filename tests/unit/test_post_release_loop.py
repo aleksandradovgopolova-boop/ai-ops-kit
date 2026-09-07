@@ -201,3 +201,86 @@ def test_missing_prr_is_unknown_not_error(tmp_path):
     assert res["prr"]["found"] is False
     assert res["verdict"] == "unknown"
     assert any("PRR" in n for n in res["notes"])
+
+
+# ── #566: ЖИВОЙ ФЛИП вердикта по итогу и статус «технически done, продуктово нет» ──────────────────
+def _readout(value, *, measured_at="2026-09-16", target_met="no", guardrails=None):
+    return {"schema_version": 1, "kind": "OutcomeReadout",
+            "contract": "features/x/outcome-contract.yaml",
+            "measured": {"metric": "activation_rate", "value": value, "measured_at": measured_at},
+            "target_met": target_met, "hypothesis": "inconclusive",
+            "guardrails_observed": guardrails if guardrails is not None else [],
+            "unexpected_effects": [], "next_decision": "по правилу решения",
+            "back_to_discovery": "—"}
+
+
+def test_outcome_verdict_is_unknown_without_a_real_measurement(tmp_path):
+    """Контракт есть, замера (readout) нет -> outcome_verdict unknown, флип НЕ готов (честный дефолт)."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT, feature="x")
+    assert res["outcome_verdict"] == "unknown"
+    assert res["outcome_flip_ready"] is False
+    assert res["product_status"]["technically_done_not_product"] is False
+
+
+def test_real_measurement_flips_outcome_from_unknown_to_failed(tmp_path):
+    """Реальный замер ниже цели -> outcome_verdict флипается unknown→failed, флип готов."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT,
+                               readout=_readout(21))  # baseline 20, target 35 -> не дотянул
+    assert res["outcome_verdict"] == "failed"
+    assert res["outcome_flip_ready"] is True
+    assert res["outcome"]["measured_verdict"] == "failed"
+
+
+def test_real_measurement_flips_outcome_from_unknown_to_met(tmp_path):
+    """Реальный замер взял цель и guardrail в норме -> outcome_verdict флипается unknown→met."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT,
+                               readout=_readout(40, target_met="yes"))
+    assert res["outcome_verdict"] == "met"
+    assert res["outcome_flip_ready"] is True
+
+
+def test_green_delivery_plus_failed_outcome_is_technically_done_not_product(tmp_path):
+    """PRR валиден (доставка подтверждена) + итог failed -> явный статус «технически done, продуктово нет»."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT, readout=_readout(21))
+    ps = res["product_status"]
+    assert res["prr"]["valid"] is True            # доставка зелёная (verified-only PRR)
+    assert ps["status"] == "delivered_not_met"
+    assert ps["technically_done_not_product"] is True
+    assert ps["label"] == "технически done, продуктово нет"
+    # и это ВИДНО в заметках и техническом разборе
+    assert any("технически done, продуктово нет" in n for n in res["notes"])
+    assert "технически done, продуктово нет" in prl.render(res)
+
+
+def test_presenter_says_done_technically_not_product_to_the_owner(tmp_path):
+    """product-аудитория слышит различитель словами, а не gate/PRR-жаргоном."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT, readout=_readout(21))
+    text = presenter.render(presenter.from_post_release_loop(res), audience="product")
+    head = text.split("Технические детали")[0]
+    assert "правильное" in head.lower()           # «хорошо сделали» ≠ «сделали правильное»
+    assert "activation_rate" not in head          # внутреннее имя метрики — в технических деталях
+
+
+def test_run_still_never_writes_plan_even_when_flip_ready(tmp_path):
+    """Даже когда флип ГОТОВ, петля не трогает plan.yaml — сам флип это отдельный координационный PR."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None, plan_outcome=False)
+    plan = root / "planning" / "plan.yaml"
+    before = plan.read_text(encoding="utf-8")
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT, readout=_readout(21))
+    assert res["outcome_flip_ready"] is True          # флип готов…
+    assert plan.read_text(encoding="utf-8") == before  # …но данные плана не тронуты
+    assert "outcome: false" in plan.read_text(encoding="utf-8")
+
+
+def test_classify_product_status_matrix():
+    """Матрица классификатора: зелёная доставка × вердикт итога -> явные статусы."""
+    assert prl.classify_product_status(True, "failed")["technically_done_not_product"] is True
+    assert prl.classify_product_status(True, "failed")["status"] == "delivered_not_met"
+    assert prl.classify_product_status(False, "failed")["technically_done_not_product"] is False
+    assert prl.classify_product_status(True, "met")["status"] == "delivered_and_met"
+    assert prl.classify_product_status(True, "unknown")["status"] == "delivered_outcome_unmeasured"

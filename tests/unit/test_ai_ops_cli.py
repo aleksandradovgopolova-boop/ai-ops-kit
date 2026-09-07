@@ -650,6 +650,59 @@ class TestExplainIntent:
         rc = _explain_run(["explain", str(tmp_path)], tmp_path)
         assert rc == 1
 
+    # ── #566: явный статус «технически done, продуктово нет» в explain ─────────────────────────────
+    def test_failed_outcome_with_green_delivery_shows_technically_done_not_product(self):
+        """Итог failed + доставка подтверждена -> карточка explain говорит различитель явно."""
+        state = _focus_state(status="done")
+        state["product_outcome"] = {
+            "product_status": {"status": "delivered_not_met",
+                               "label": "технически done, продуктово нет",
+                               "technically_done_not_product": True,
+                               "delivery_verified": True, "outcome_verdict": "failed"},
+            "outcome_verdict": "failed", "reason": "activation 42%→41%", "flip_ready": True}
+        msg = _intents._explain_message(state)
+        assert msg["status"] == "degraded"
+        out = _presenter.render(msg, audience="product")
+        assert "Технически done, продуктово нет" in out
+        assert "правильное" in out.lower()
+
+    def test_unmeasured_outcome_leaves_the_card_unchanged(self):
+        """Итог ещё не измерен (unknown) -> карточку НЕ трогаем: unknown ≠ провал."""
+        state = _focus_state()
+        state["product_outcome"] = {
+            "product_status": {"technically_done_not_product": False, "label": "итог не измерен"},
+            "outcome_verdict": "unknown", "reason": None, "flip_ready": False}
+        msg = _intents._explain_message(state)
+        assert msg["status"] == "ok"
+        assert "Технически done" not in _presenter.render(msg, audience="product")
+
+    def test_explain_discovers_outcome_docs_and_flips_verdict(self, tmp_path):
+        """explain находит OutcomeContract(+Readout) в дочке и считает вердикт по РЕАЛЬНОМУ замеру."""
+        import yaml
+        contract = {"schema_version": 1, "kind": "OutcomeContract", "decision": "рост активации",
+                    "evaluation_period": "30 дней",
+                    "primary_metric": {"name": "activation_rate", "source": "posthog"},
+                    "baseline": {"value": 42, "measured_at": "2026-08-01", "source": "posthog"},
+                    "target": {"value": 45, "by": "2026-10-01"},
+                    "guardrails": [{"name": "error_rate", "must_not_exceed": 2}],
+                    "events": ["task.completed"],
+                    "decision_rules": {"continue": "взяли", "change": "ниже", "stop": "просели"}}
+        readout = {"schema_version": 1, "kind": "OutcomeReadout",
+                   "contract": "outcome-contract.yaml", "target_met": "no",
+                   "hypothesis": "refuted",
+                   "measured": {"metric": "activation_rate", "value": 41,
+                                "measured_at": "2026-09-16"},
+                   "guardrails_observed": [], "unexpected_effects": [],
+                   "next_decision": "менять подход", "back_to_discovery": "—"}
+        (tmp_path / "outcome-contract.yaml").write_text(
+            yaml.safe_dump(contract, allow_unicode=True), encoding="utf-8")
+        (tmp_path / "outcome-readout.yaml").write_text(
+            yaml.safe_dump(readout, allow_unicode=True), encoding="utf-8")
+        po = _intents._explain_outcome(tmp_path)
+        assert po is not None
+        assert po["outcome_verdict"] == "failed"     # флип unknown→failed по реальному замеру
+        assert po["flip_ready"] is True
+
 
 # ── #540: ai-ops inbox — единая владельческая очередь «что ждёт моего решения» ────────────────────
 # Проверяем ЧЕТЫРЕ обязательства: (1) очередь агрегирует из источников (решения с карточкой
