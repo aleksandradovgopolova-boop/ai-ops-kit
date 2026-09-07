@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 396
+behavioral_count: 397
 structural_count: 66
-total_count: 462
-behavioral_share_pct: 85.71
+total_count: 463
+behavioral_share_pct: 85.75
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -36,15 +36,15 @@ raises:
     what: rebaseline_after_measurement
     from_behavioral: 395
     from_total: 461
-    to_behavioral: 396
-    to_total: 462
-    to_share_pct: 85.71
-    work: '#567: outcome → insight → кандидат-работа'
+    to_behavioral: 397
+    to_total: 463
+    to_share_pct: 85.75
+    work: '#567: outcome → insight → кандидат-работа (+ ребейз на #580)'
     why: >-
       #567 добавил один поведенческий тест (test_outcome_insight.py — импортирует outcome_insight И
-      зовёт from_outcome/кандидат-генерацию), структурных без изменений (66). Доля поведенческих
-      выросла 85.68% -> 85.71% (не снижение). Точный счётчик пересчитан по факту; числа руками
-      (--baseline лоссовый).
+      зовёт from_outcome/кандидат-генерацию); при ребейзе на main приехал ещё один поведенческий тест
+      из #580 — итог 395->397, структурных без изменений (66). Доля поведенческих выросла
+      85.68% -> 85.75% (не снижение). Точный счётчик пересчитан по факту; числа руками (--baseline лоссовый).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 391

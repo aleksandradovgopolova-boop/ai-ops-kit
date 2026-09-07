@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1147
+  ai_ops_kit/cli/ai_ops_cli.py: 1157
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1743
   ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
@@ -44,8 +44,8 @@ raises:
   - at: '2026-09-07'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1135; ai_ops_cli_intents.py = 1728'
-    to: 'ai_ops_cli.py = 1145; ai_ops_cli_intents.py = 1743'
-    work: '#567: outcome → insight → кандидат-работа (замыкание петли вехи 4.1)'
+    to: 'ai_ops_cli.py = 1157; ai_ops_cli_intents.py = 1743'
+    work: '#567: outcome → insight → кандидат-работа (замыкание петли вехи 4.1) + ребейз на #580'
     why: >-
       Проводка петли Outcome→Insight→кандидат-Work: read-only intent-хендлеры сюрфейсинга кандидата
       в `inbox`/`next` легли в спутник ai_ops_cli_intents.py (+15), регистрация/вызов из маршрута
