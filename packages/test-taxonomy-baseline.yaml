@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 389
+behavioral_count: 390
 structural_count: 66
-total_count: 455
-behavioral_share_pct: 85.49
+total_count: 456
+behavioral_share_pct: 85.53
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -591,3 +591,18 @@ raises:
       над собранной из синтетики дочкой, плюс сверяет граф через validate_knowledge_graph. Структурных
       не прибавилось (66), доля 85.46 -> 85.49%. Baseline пере-записан на фактический замер (388 -> 389
       поведенческих из 455).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 389
+    from_total: 455
+    to_behavioral: 390
+    to_total: 456
+    to_share_pct: 85.53
+    work: one-command-setup (`ai-ops setup` — единая установка)
+    why: >-
+      Подъём порога ВВЕРХ: единая команда установки `ai-ops setup` добавила один ПОВЕДЕНЧЕСКИЙ
+      тест-файл (test_installer_setup.py) — грузит installer через spec_from_file_location(ai_ops.py)
+      И зовёт `_setup_remaining` над установленной дочкой, плюс гоняет `setup` реальным подпроцессом
+      (managed-зона, профиль стека, черновики bootstrap, честный остаток «от человека»). Структурных
+      не прибавилось (66), доля 85.49 -> 85.53%. Baseline пере-записан на фактический замер (389 -> 390
+      поведенческих из 456).
