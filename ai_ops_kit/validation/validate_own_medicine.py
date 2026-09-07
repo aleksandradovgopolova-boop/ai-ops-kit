@@ -490,6 +490,10 @@ NOT_CULTURE = {
     # неприменимо по построению: у кита нет `parent`, он и есть parent — ровно та же причина,
     # по которой в этом списке уже лежит `.ai-ops.yaml`.
     "package_channel": "чтение канала, который заработал пакет (release-claims.yaml)",
+    # SR-4: та же причина, что у package_channel — ЧТЕНИЕ факта о пакете (версия стандарта из
+    # registry/standard.yaml) для подстановки в конфиг дочки, а не доставка культуры. У кита нет
+    # parent — самоприменение неприменимо по построению.
+    "package_standard_version": "чтение версии стандарта пакета (registry/standard.yaml)",
     "compatible_range_for": "вычисление совместимого диапазона версий",
     "write_checksums": "чек-суммы managed-слоя — часть пункта managed_layer",
     "write_provenance": "происхождение managed-слоя — часть пункта managed_layer",

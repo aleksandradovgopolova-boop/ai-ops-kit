@@ -635,9 +635,16 @@ def audit(child_root, evidence: dict | None = None, model: dict | None = None) -
     # ответа о нём (`gap_plan` его блокирующим считал). В child-репозитории кита `.ai-ops.yaml`
     # есть ВСЕГДА, значит контур границ AI не попадал в blocking_gaps никогда.
     blocking_tiers = {t.get("id") for t in (model.get("gap_tiers") or []) if t.get("blocks_work")}
+    # SR-1: версия стандарта репозитория (отдельная от версии пакета) + сходится ли отпечаток
+    # состава требований с объявленным. Расхождение = требования правили, а версию не подняли.
+    from ai_ops_kit.planning import standard as _standard
+    std = {"version": _standard.current_version(),
+           "fingerprint_in_sync": _standard.load().get("requirements_fingerprint")
+           == _standard.compute_fingerprint()}
     return {"contours": rows, "by_state": by_state,
             "ready": [r["contour"] for r in rows if r["state"] == VERIFIED],
             "ai_can_build": ai_only, "needs_human": human,
+            "standard": std,
             "blocking_gaps": [r["contour"] for r in rows
                               if r["state"] != VERIFIED and r["gap_tier"] in blocking_tiers]}
 

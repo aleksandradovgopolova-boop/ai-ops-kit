@@ -118,6 +118,30 @@ def pkg_version():
     return (PKG / "VERSION").read_text(encoding="utf-8").strip()
 
 
+def package_standard_version(pkg_root=None):
+    """Версия стандарта пакета (SR-1) из registry/standard.yaml. -> int | None (нет файла/версии)."""
+    root = Path(pkg_root) if pkg_root else PKG
+    p = root / "registry" / "standard.yaml"
+    if not p.is_file():
+        return None
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        v = doc.get("standard_version")
+        return int(v) if v is not None else None
+    except (OSError, yaml.YAMLError, TypeError, ValueError):
+        return None
+
+
+def child_standard_version(cfg=None):
+    """Версия стандарта, объявленная дочкой в .ai-ops.yaml -> standard.version. -> int | None."""
+    cfg = cfg if cfg is not None else _read_child_cfg()
+    try:
+        v = (cfg.get("standard") or {}).get("version")
+        return int(v) if v is not None else None
+    except (TypeError, ValueError, AttributeError):
+        return None
+
+
 def parse_version(v):
     """'2.14.1' -> (2, 14, 1). Пре-релизы/суффиксы отбрасываются (MVP-семантика)."""
     core = str(v).strip().lstrip("v").split("-", 1)[0].split("+", 1)[0]
@@ -1263,6 +1287,17 @@ def cmd_status():
     else:
         verdict = "✓ актуально"
     print(f"установлено: {inst or '—'}   пакет: {avail}   {verdict}")
+    # SR-4: версия СТАНДАРТА отдельно от версии пакета — «на какой версии требований репозиторий».
+    _csv, _psv = child_standard_version(), package_standard_version()
+    if _psv is not None:
+        if _csv is None:
+            print(f"стандарт: дочка версию не объявила   доступно: {_psv}   "
+                  "(поставьте standard.version в .ai-ops.yaml)")
+        elif _csv == _psv:
+            print(f"стандарт: {_csv}   доступно: {_psv}   ✓ требования актуальны")
+        else:
+            arrow = "отстала" if _csv < _psv else "впереди пакета"
+            print(f"стандарт: {_csv}   доступно: {_psv}   ⟳ требования изменились ({arrow})")
     print(f"целостность managed: {'ДРИФТ (' + str(len(drift)) + ' файлов)' if drift else 'OK'}")
     for d in drift[:10]:
         print(f"  - {d['kind']}: {d['path']}")
@@ -2619,6 +2654,11 @@ def cmd_init(target_dir):
         _pc = package_channel()
         if _pc:
             text = re.sub(r"(^\s*update_channel:\s*)\S+", rf"\g<1>{_pc}", text, count=1, flags=re.M)
+        # SR-4: дочка объявляет версию стандарта, под которую установлена (не версию пакета).
+        _sv = package_standard_version()
+        if _sv is not None:
+            text = re.sub(r"(^standard:\n(?:.*\n)*?\s*version:\s*)\S+", rf"\g<1>{_sv}",
+                          text, count=1, flags=re.M)
         cfg.write_text(text, encoding="utf-8")
         edit_hint = "project.name и providers" if psrc else "project.name, providers и parent.source"
         print(f"создана заготовка {cfg} (версия {pkg_version()}; "
