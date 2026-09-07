@@ -13,17 +13,20 @@ schema_version: 1
 registry_type: standard
 
 # Версия стандарта. Патч-релиз кита её НЕ меняет. Растёт только при изменении требований к репозиторию.
-standard_version: 1
+# v2 (#609): введена ярусная таксономия обязательности (Tier 1/2/3) и каталог стандарта по ярусам —
+# новые обязательные артефакты в поверхности стандарта требуют роста версии (SR-1).
+standard_version: 2
 
 # Отпечаток состава требований (sha256[:16] от required_artifacts + required_sections + сила гейтов,
 # считанных из источников ниже). Меняется состав — обязаны измениться отпечаток и standard_version.
-requirements_fingerprint: "6013c88989a3e590"
+requirements_fingerprint: "2e3d3d83f6c2cb41"
 
 # Откуда читается состав (SR-2: ссылки на реестры, а не дубль):
 sources:
   required_artifacts:
     - "registry/product-operating-model.yaml: contours[].source_of_truth[] c required: true"
     - "registry/artifact-registry.yaml: artifacts[] c required: true"
+    - "registry/artifact-registry.yaml: standard_catalog[] с ярусом, применимым к default_profile (#609)"
     - "manifest/ai-ops-manifest.yaml: living_status.required_context_docs + product_operating_model.required_repo_artifacts"
   required_sections:
     - "registry/product-operating-model.yaml: source_of_truth[].required_sections"
@@ -31,8 +34,10 @@ sources:
   check_strength:
     - "quality/gates.yaml: gates[].blocking"
 
-# Профиль по умолчанию для дочки (SR-4). Один профиль сейчас — это просто стандарт; второй вводится
-# по замеру, а не заранее (см. docs/engineering-standard-requirements.md, вопрос 2 владельцу).
+# Профиль по умолчанию для дочки (SR-4). Профиль ВЫБИРАЕТ применимые ярусы обязательности
+# (#609): состав ярусов и их применимость объявлены в registry/artifact-registry.yaml -> profiles.
+# `ai-product` включает все три яруса (Tier 1/2/3). Отпечаток стандарта считается по каталогу этого
+# профиля — смена default_profile меняет поверхность требований.
 default_profile: ai-product
 
 # Что считается ломающим изменением стандарта (docs/engineering-standard-requirements.md §6):

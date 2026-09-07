@@ -63,6 +63,34 @@ def test_standard_manifest_references_existing_sources():
         "состав требований читается из реестров и непуст (SR-2)"
 
 
+# ── #609: ярусный каталог — часть версионируемой поверхности стандарта ──
+
+def test_standard_catalog_feeds_requirement_surface():
+    """Каталог стандарта по ярусам входит в состав требований (SR-1/SR-2, #609)."""
+    rs = S.requirement_set()
+    assert any(a.startswith("tier:") for a in rs["required_artifacts"]), \
+        "ярусные артефакты каталога обязаны попадать в поверхность требований (#609)"
+
+
+def test_catalog_change_moves_fingerprint(tmp_path):
+    """Смена состава каталога/ярусов меняет отпечаток — ратчет чувствует новый обязательный артефакт."""
+    (tmp_path / "registry").mkdir()
+    (tmp_path / "registry" / "standard.yaml").write_text(
+        "default_profile: ai-product\n", encoding="utf-8")
+    ar = {"registry_type": "artifact-registry",
+          "profiles": {"ai-product": {"includes_tiers": ["tier1"]}},
+          "standard_catalog": [{"id": "readme", "tier": "tier1", "path": "README.md",
+                                "ai_check": "x"}]}
+    (tmp_path / "registry" / "artifact-registry.yaml").write_text(
+        yaml.safe_dump(ar), encoding="utf-8")
+    fp1 = S.compute_fingerprint(tmp_path)
+    ar["standard_catalog"].append({"id": "security", "tier": "tier1", "path": "SECURITY.md",
+                                   "ai_check": "y"})
+    (tmp_path / "registry" / "artifact-registry.yaml").write_text(
+        yaml.safe_dump(ar), encoding="utf-8")
+    assert fp1 != S.compute_fingerprint(tmp_path), "новый ярусный артефакт обязан менять отпечаток"
+
+
 # ── SR-3: update_channel влияет на поведение ──
 
 def test_update_channel_is_meaningful():

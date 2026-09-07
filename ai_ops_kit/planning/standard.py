@@ -69,6 +69,16 @@ def requirement_set(pkg_root: Path = PKG) -> dict:
         for sec in ((a.get("structure") or {}).get("required_sections") or []):
             required_sections.add(f"{a.get('path', a.get('id'))}::{sec}")
 
+    # #609: каталог стандарта по ярусам — часть версионируемой поверхности стандарта (SR-1/SR-2).
+    # Учитываем только элементы, чей ярус применим к профилю по умолчанию: смена состава ярусов или
+    # их применимости к default-профилю меняет отпечаток и обязана поднять standard_version.
+    default_profile = _y(root / "registry" / "standard.yaml").get("default_profile")
+    prof = (ar.get("profiles") or {}).get(default_profile) or {}
+    default_tiers = set(prof.get("includes_tiers") or [])
+    for c in ar.get("standard_catalog") or []:
+        if c.get("tier") in default_tiers:
+            required_artifacts.add(f"tier:{c.get('tier')}:{c.get('id')}")
+
     # manifest: context-доки + repo-артефакты продуктовой модели
     so = man.get("session_orchestration") or {}
     ls = (so.get("living_status") or {})
