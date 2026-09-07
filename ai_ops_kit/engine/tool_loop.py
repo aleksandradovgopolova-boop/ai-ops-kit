@@ -144,13 +144,26 @@ def make_reviewer_proposer(provider, gate_id, checklist="", required_evidence=No
             rr = _ge.extract_reviewer_json(raw)
             if rr is not None:
                 return rr
+            # ПРОЗАИЧЕСКИЙ ВЕРДИКТ живого судьи (issue #591): структурного JSON нет, но `claude -p` часто
+            # ЗАКЛЮЧАЕТ прозой («Recommendation: pass»). Прежде это падало в parse_action -> ещё виток.
+            # Засчитываем тем же УЖЕ доверенным парсером, что и офлайн-путь (`evidence_from_markdown`).
+            # ★ЗАЩИТА ОТ ЛОЖНОГО ЗЕЛЁНОГО★: `_last_prose_verdict` даёт вердикт ТОЛЬКО на явную финальную
+            # строку; мутная проза -> None -> НЕ синтезируем (тем более не «pass»). Строгость не ослабляем.
+            prose = _ge._last_prose_verdict(raw)
+            if prose is not None:
+                synth = {"kind": "reviewer-result", "status": prose, "checks": [],
+                         "prose_verdict": True}
+                if prose in ("warn", "fail"):
+                    synth["blockers"] = [
+                        f"вердикт вынесен прозой ({prose}); структурного reviewer-result нет"]
+                return synth
         return parse_action(raw)
     return propose
 
 
 def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_context="",
                required_evidence=None, reviewed_revision=None,
-               terminal_kind="reviewer-result", terminal_field=None):
+               terminal_kind="reviewer-result", terminal_field=None, max_unproductive=2):
     """Один независимый ревью-проход под READ-ONLY политикой -> reviewer-result (dict) + трейс.
 
     Ревьюер может читать файлы (write/shell брокер отклонит — capability-независимость от писателя),
@@ -164,6 +177,12 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
     больше нельзя, принимается только reviewer-result. Вердикт НЕ фабрикуется: если ревьюер и на
     форс-ходе не заключает — честный no-verdict (fail). Мы лишь ограничиваем фазу чтения и требуем
     заключить по прочитанному — ровно то, что обязан делать компетентный судья.
+
+    issue #591 (оставшаяся половина #577): прежние глушилки считали брокер-чтения, но живой `claude -p`
+    читает ВНУТРИ своего цикла и `{"op":"read"}` не шлёт — `reads` структурно 0, форс не взводился,
+    петля молола все `max_reads+2` спавна («прочитано 0», ~84 мин). Теперь форс взводит ЕЩЁ и счётчик
+    НЕПРОДУКТИВНЫХ витков (ни чтения, ни вердикта; реальное чтение/вердикт его сбрасывают): после
+    `max_unproductive` (K) — форс-ход «вердикт СЕЙЧАС», нет и на нём — break. Вердикт НЕ фабрикуется.
 
     B2-14 (2026-08-14): вид терминального вердикта стал ПАРАМЕТРОМ. Петля read-only судьи нужна не
     только гейтам: сверка критериев приёмки — тот же шов (независимый судья, те же нуджи, тот же
@@ -184,12 +203,15 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
     context = base_context
     reads, denied = [], []
     stopped = "no-verdict"
+    unproductive = 0                                # витков подряд без брокер-чтения И без вердикта
     for _ in range(max_reads + 2):                  # +1 нудж-запас, +1 форс-ход вердикта
         try:
             bud.charge_call()
         except _budget_mod.BudgetExceeded as e:
             stopped = f"budget: {e}"; break
-        force_verdict = len(reads) >= max_reads     # бюджет чтений исчерпан -> только вердикт
+        # форс: исчерпаны брокер-чтения (мокнутый судья) ЛИБО K непродуктивных витков (живой судья,
+        # чей reads структурно 0) — читать больше нельзя, только вердикт (issue #591)
+        force_verdict = len(reads) >= max_reads or unproductive >= max_unproductive
         if force_verdict:
             context += (f"\n[ревью] ЛИМИТ ЧТЕНИЙ ИСЧЕРПАН. Больше не читай. Верни СЛЕДУЮЩИМ РОВНО один "
                         f"{terminal_kind} по уже прочитанному (чего не подтвердил чтением — то и "
@@ -217,7 +239,10 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
             return {"result": None, "stopped": f"refusal: {refusal.reason}",
                     "refusal": refusal.as_dict(), "reads": reads, "denied": denied}
         if not isinstance(action, dict) or action.get("error"):
+            unproductive += 1                       # ответ не разобрался — непродуктивный виток (#591)
             context += f"\n[ревью] верни РОВНО один JSON: read-действие или {terminal_kind}."
+            if force_verdict:                       # форс-ход не дал вердикта -> не молоть до потолка
+                break
             continue
         # терминальный вердикт: по kind, по названному полю вердикта либо (для reviewer-result) по status
         _terminal = (action.get("kind") == terminal_kind
@@ -232,16 +257,18 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
             if reviewed_revision:
                 action.setdefault("reviewed_revision", reviewed_revision)
             return {"result": action, "stopped": "verdict", "reads": reads, "denied": denied}
-        # на форс-ходе чтения запрещены: не исполняем, повторно требуем вердикт
+        # на форс-ходе чтения запрещены, вердикта так и нет -> break (issue #591: не крутить впустую)
         if force_verdict:
             context += f"\n[ревью] чтение отклонено: лимит исчерпан. Нужен {terminal_kind}, не read."
-            continue
+            break
         # иначе — действие через брокер (read-only Policy: write/shell -> DENIED)
         ev = tool_broker.execute(action, root, policy)
         if ev["allowed"] and ev.get("ok") and ev.get("op") == "read":
             reads.append(ev.get("target"))
+            unproductive = 0                        # реальное брокер-чтение — продуктивный виток
             context += f"\n--- {ev.get('target')} ---\n{ev.get('output_tail')}\n--- конец ---"
         elif not ev["allowed"]:
+            unproductive += 1
             denied.append({"op": ev.get("op"), "reason": ev["reason"]})
             # Вид вердикта здесь тоже параметр (ревью PR #118): судья сверки приёмки, получив
             # отказ брокера, читал «верни reviewer-result» — то есть подсказку вернуть вердикт
@@ -250,6 +277,7 @@ def run_review(reviewer, root, policy, gate_id, budget=None, max_reads=6, base_c
             context += (f"\n[ревью] действие {ev.get('op')} ОТКЛОНЕНО (ты read-only судья, не автор): "
                         f"{ev['reason']}. Верни read или {terminal_kind}.")
         else:
+            unproductive += 1                       # не-read действие тоже не двигает ревью
             context += f"\n[ревью] {ev.get('op')} -> {ev.get('reason')}"
     return {"result": None, "stopped": stopped, "reads": reads, "denied": denied}
 

@@ -23,15 +23,27 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 397
+behavioral_count: 398
 structural_count: 66
-total_count: 463
-behavioral_share_pct: 85.75
+total_count: 464
+behavioral_share_pct: 85.78
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
   # (например, крупный ввоз структурных фикстур-контрактов) добавляются сюда: дата, откуда/куда и
   # ПОЧЕМУ снижение оправдано, а не «так вышло».
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 397
+    from_total: 463
+    to_behavioral: 398
+    to_total: 464
+    to_share_pct: 85.78
+    work: '#591: ревьюер code_review — либо родит вердикт, либо падает быстро (оставшаяся половина #577)'
+    why: >-
+      Один новый поведенческий тест-файл (test_reviewer_verdict_or_fast_fail.py — импортирует tool_loop/
+      tool_broker И зовёт make_reviewer_proposer/run_review): 397->398, структурных без изменений (66).
+      Доля поведенческих выросла 85.75% -> 85.78% (не снижение). Числа руками (--baseline лоссовый).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 395
