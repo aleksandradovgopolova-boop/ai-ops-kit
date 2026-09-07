@@ -13,6 +13,14 @@ requires-python = ">=3.12"   # пол = версия, на которой РЕА
 license = {text = "MIT"}
 dependencies = ["pyyaml"]
 
+[project.scripts]
+# Консольный вход для pip/pipx: `ai-ops <интент>` (next/status/inbox/explain/do/run/…).
+# Диспетчер — ai_ops_kit/cli/entry.py; интенты живут в ai_ops_kit/cli/ai_ops_cli.py -> INTENTS
+# (уже в поставке). Жизненный цикл кита (init/doctor/update) сюда НЕ входит: установщик
+# в поставку не едет (docs/api/public-surface.md). Новый консольный вход АДДИТИВЕН и не
+# breaking change (AGENTS.md, «Публичная граница»: новый интент/вход — не ломающее изменение).
+ai-ops = "ai_ops_kit.cli.entry:main"
+
 [project.optional-dependencies]
 test = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0"]
 dev = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0", "ruff>=0.16.2", "mypy>=1.0", "pre-commit>=3.0"]

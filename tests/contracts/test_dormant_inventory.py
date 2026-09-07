@@ -64,6 +64,9 @@ ALLOWLIST_MODULES: dict[str, str] = {
         "commands/maintenance/night-review.md зовёт процессом; Robin запускает по расписанию",
     f"{PKG}.lifecycle.merge_memory":
         "commands/task/ai-finish-task.md зовёт `ai_ops_kit.lifecycle.merge_memory record …`",
+    f"{PKG}.cli.entry":
+        "точка входа `ai-ops` из pyproject.toml -> [project.scripts]; console_scripts запускает "
+        "процессом (pip/pipx), а не импортом — нулевой импортер здесь норма по устройству",
 }
 
 # --- Замороженный потолок генуинно-дормантных модулей (2026-09-05, аудит 10 ролей). ---
@@ -85,12 +88,14 @@ KNOWN_DORMANT: dict[str, str] = {
     # отсутствие Decision-контракта закрывает продвижение fail-closed. Появился не-тестовый импортёр
     # (cli — слой entrypoints, выше intelligence: импорт вниз разрешён) -> по правилу «список только
     # сокращается» имя обязано уйти; иначе test_known_dormant_list_only_shrinks покраснел бы.
-    f"{PKG}.intelligence.evolution_triggers":
-        "замыкание governance-петли ADR↔Product Health (цель ai-product-operations, achieved); "
-        "едет в дочку, но 0 импортеров — только сам импортирует валидаторы",
-    f"{PKG}.intelligence.outcome_analytics":
-        "сводная аналитика исходов (цель outcome-and-analytics-loop, ACHIEVED); "
-        "installer.UNWIRED_MODULES, 0 импортеров — ровно случай ложной зрелости",
+    # `intelligence/evolution_triggers` УБРАН ИЗ СПИСКА 2026-09-07 (#584): ПРОВЕДЁН В КОНТУР.
+    # Пост-релизный путь `cli/post_release_loop._assess_evolution` импортирует его и зовёт `report()`
+    # (ADR↔product-health) в `run_post_release`; cli — слой entrypoints, выше intelligence, импорт
+    # вниз разрешён. Появился не-тестовый импортёр -> по правилу «список только сокращается» имя ушло.
+    # `intelligence/outcome_analytics` УБРАН ИЗ СПИСКА 2026-09-07 (#584): ПРОВЕДЁН В КОНТУР.
+    # `cli/post_release_loop._assess_cost_analytics` импортирует его и зовёт `collect_analytics()` в
+    # `run_post_release` — стоимостная/эффект-аналитика ПОД пост-релизным путём (не второй outcome-
+    # вердикт: тот остаётся за #566). Не-тестовый импортёр появился -> имя обязано было уйти отсюда.
     f"{PKG}.intelligence.refactoring_advisor":
         "советчик рефакторинга (цель autonomous-product-loop, achieved); "
         "installer.UNWIRED_MODULES, импортеров нет",

@@ -1,0 +1,15 @@
+{
+  "name": "ai-ops",
+  "version": "4.0.0",
+  "description": "AI Ops Kit внутри Claude Code — организует продуктовую работу, ведёт задачу до draft PR, ревьюит с доказательствами. Интерфейс владельца: status / inbox / next / explain / do.",
+  "author": {
+    "name": "Aleksandra Dovgopolova",
+    "url": "https://github.com/aleksandradovgopolova-boop"
+  },
+  "homepage": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit",
+  "repository": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit",
+  "license": "MIT",
+  "keywords": ["ai-ops", "sdlc", "spec-driven", "quality-gates", "product", "evidence"],
+  "commands": "./plugin/commands/",
+  "skills": "./plugin/skills/"
+}

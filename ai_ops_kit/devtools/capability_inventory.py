@@ -75,6 +75,9 @@ ALLOWLIST_PREFIXES: tuple[str, ...] = (
 ALLOWLIST_MODULES: frozenset[str] = frozenset({
     f"{PKG_NAME}.intelligence.nightly_review",
     f"{PKG_NAME}.lifecycle.merge_memory",
+    # Точка входа `ai-ops` (pyproject.toml -> [project.scripts]): console_scripts запускает
+    # процессом (pip/pipx), а не импортом — нулевой импортер здесь норма по устройству.
+    f"{PKG_NAME}.cli.entry",
 })
 SKIP_DIRS = frozenset({
     ".git", ".ai", ".claude", ".venv", "venv", "env", "node_modules",

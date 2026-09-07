@@ -52,8 +52,16 @@ def _ux(report):
 def test_no_verdict_becomes_named_refusal_not_a_silent_stall(child_root):
     """Ревьюер, не вынесший разбираемого вердикта, -> гейт НЕ исчезает: назван отказ, гейт неудовлетворён."""
     _init_git(child_root)
-    # проза без JSON -> parse_action не разбирает -> петля исчерпывается в no-verdict
-    report = _run(child_root, lambda _p: "Я пока не могу вынести вердикт по этому диффу.", "nv1")
+    # проза без JSON -> parse_action не разбирает -> петля исчерпывается в no-verdict.
+    # issue #591: счётчик вызовов делает МЕДЛИТЕЛЬНОСТЬ видимой тесту — ревьюер, не выносящий
+    # вердикта, НЕ мелется max_reads+2 витков (в поле это были ~84 мин): K=2 -> ≤ K+2 на гейт.
+    calls = {"n": 0}
+
+    def stalling_reviewer(_p):
+        calls["n"] += 1
+        return "Я пока не могу вынести вердикт по этому диффу."
+
+    report = _run(child_root, stalling_reviewer, "nv1")
 
     entry = _ux(report)
     assert entry is not None, "гейт ux_review исчез из reviews — тот самый молчаливый ступор"
@@ -63,6 +71,14 @@ def test_no_verdict_becomes_named_refusal_not_a_silent_stall(child_root):
     assert "не вынес вердикт" in reason, reason
     assert "нет заключения reviewer" not in reason, "общая формулировка врала о причине"
     assert "ux_review" in report["gates"]["unmet"], "работа не должна тихо пройти без вердикта"
+    # issue #591: медлительность видна тесту. Живой прогон гонит НЕСКОЛЬКО ai-review гейтов (ux,
+    # design_system, accessibility, visual_regression), каждый — свой run_review. Фикс держит КАЖДЫЙ
+    # гейт в ≤ K+2 витков (K=2): всего ≤ N_гейтов·(K+2), а не N·(max_reads+2)=N·8 старой молотилки.
+    n_gates = len(report.get("reviews") or [])
+    assert n_gates >= 1
+    assert calls["n"] <= n_gates * 4, (
+        f"ревьюер смолот {calls['n']} раз на {n_gates} гейт(ов) (~{calls['n'] // max(n_gates, 1)}/гейт) "
+        f"— молотилка (N·(max_reads+2)={n_gates * 8}) вернулась")
 
 
 @pytest.mark.unit
