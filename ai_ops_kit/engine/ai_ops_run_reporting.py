@@ -44,7 +44,20 @@ def _review_fix_context(rep):
                 if tail:
                     break
             parts.append(f"[проверка {name}] упала:\n{tail}".rstrip())
+    # NO-VERDICT vs КОД (issue #577, поле 07.09.2026): тот же класс, что env-скип выше. Ревью, закрытое
+    # `closed_as="refused"` (независимый ревьюер не вынес разбираемого вердикта / провайдер судьи отказал —
+    # см. pipeline_evidence._run_reviews через evidence_from_no_verdict/evidence_from_judge_refusal), несёт
+    # status fail/warn, но перезапуск ПИСАТЕЛЯ его починить НЕ может: refused — сигнал «ревьюер молчит/
+    # недоступен», а не «код плохой». Прежде такая запись шла писателю как обычный блокер, и fix-loop
+    # (ai_ops_run_exec) перезапускал пайплайн → снова _run_reviews → снова спавн `claude -p` (ревьюера):
+    # (fix_attempts+1)×гейты×reads×медленный subprocess = часы, PR не открывался (живой заезд wow-repo).
+    # Пропускаем refused: если он ОСТАЛСЯ единственным блокером, parts пуст → None → fix-loop делает break
+    # → прогон честно завершается NOT_READY с уже названной причиной, БЕЗ повторного спавна ревьюера.
+    # Содержательный fail/warn с реальными блокерами (closed_as "blocked"/"advisory") писателя ретраит как
+    # раньше — фильтр по closed_as, а не по status, именно чтобы не убить полезный ретрай.
     for rv in (rep.get("reviews") or []):
+        if rv.get("closed_as") == "refused":
+            continue   # ревьюер не вынес вердикт — писатель это не чинит, не зацикливаем
         if rv.get("status") in ("fail", "warn"):
             bl = "; ".join(rv.get("blockers") or []) if rv.get("blockers") else "устрани замечания ревью"
             parts.append(f"[{rv.get('gate')}: {rv.get('status')}] {bl}")

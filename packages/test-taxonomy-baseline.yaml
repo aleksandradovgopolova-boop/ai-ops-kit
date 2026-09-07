@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 391
+behavioral_count: 392
 structural_count: 66
-total_count: 457
-behavioral_share_pct: 85.56
+total_count: 458
+behavioral_share_pct: 85.59
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -619,3 +619,17 @@ raises:
       (test_reviewer_handoff.py — импортирует engine.reviewer_handoff И зовёт open_request/load_verdict
       + прогоняет _run_reviews через run_pipeline). Структурных не прибавилось (66), доля 85.53 ->
       85.56%. Baseline пере-записан на фактический замер (390 -> 391 поведенческих из 457).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 391
+    from_total: 457
+    to_behavioral: 392
+    to_total: 458
+    to_share_pct: 85.59
+    work: fix-loop-stops-on-reviewer-no-verdict (#577)
+    why: >-
+      Подъём порога ВВЕРХ: фикс петли fix-loop на no-verdict (#577) добавил один ПОВЕДЕНЧЕСКИЙ
+      тест-файл (test_fix_loop_stops_on_reviewer_no_verdict.py — зовёт _review_fix_context над
+      refused/blocked-ревью И прогоняет реальный fix-loop ai_ops_run.run со счётчиком перезапусков
+      пайплайна). Структурных не прибавилось (66), доля 85.56 -> 85.59%. Baseline пере-записан на
+      фактический замер (391 -> 392 поведенческих из 458).
