@@ -660,3 +660,16 @@ raises:
       refused/blocked-ревью И прогоняет реальный fix-loop ai_ops_run.run со счётчиком перезапусков
       пайплайна). Структурных не прибавилось (66), доля 85.56 -> 85.59%. Baseline пере-записан на
       фактический замер (391 -> 392 поведенческих из 458).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 395
+    from_total: 461
+    to_behavioral: 396
+    to_total: 462
+    to_share_pct: 85.71
+    work: handoff-verdict-consumed-by-resume-and-reevaluate
+    why: >-
+      Мега-тест-файл test_ai_ops_cli.py перерос 850 строк — тема «--reevaluate-only в CLI» вынесена
+      в отдельный ПОВЕДЕНЧЕСКИЙ файл test_ai_ops_cli_reevaluate.py (зовёт ai_ops_cli._build_cli_arg_parser
+      и _build_signals). Структурных не прибавилось (66), доля 85.68 -> 85.71%. Baseline пере-записан
+      на фактический замер (395 -> 396 поведенческих из 462).

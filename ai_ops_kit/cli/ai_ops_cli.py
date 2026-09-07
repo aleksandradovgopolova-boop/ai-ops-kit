@@ -771,6 +771,11 @@ def _build_cli_arg_parser():
                     help="resume: доставить УЖЕ готовый READY-коммит без перезапуска писателя "
                          "(#403: перепроверка существующего HEAD без нового evidence-коммита, затем "
                          "доставка) — при сбое доставки после READY не плодит новые коммиты")
+    ap.add_argument("--reevaluate-only", action="store_true", dest="reevaluate_only",
+                    help="run: ПЕРЕОЦЕНИТЬ гейты существующей фичи БЕЗ переавторинга и без вызова "
+                         "модели (план/SHA стабильны) — например, оркестратор записал вердикт-ревью "
+                         "или человек добавил ApprovalRecord: гейт закрывается по артефакту, работа "
+                         "доходит до ready/доставки. Нужен --execute + --feature. engine=pipeline")
     ap.add_argument("--budget", type=int, default=None,
                     help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
     ap.add_argument("--approved", default=None,
@@ -1110,6 +1115,13 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
                              takeover_reason=getattr(a, "takeover_reason", None),
                              require_fix=flags.get("require_fix", False),
                              review_fix_attempts=review_fix,
+                             # #570-follow-up: `--reevaluate-only` теперь принимается и CLI-обёрткой
+                             # (`./ai-ops run ... --reevaluate-only`), а не только движком напрямую —
+                             # иначе штатная переоценка после записи вердикта-ревью падала бы
+                             # «unrecognized arguments». Уровень (task_type) берётся из сохранённых на
+                             # specify сигналов (`_carry_stored_signals`), поэтому ENGINEERING не
+                             # превращается молча в QUICK на переоценке без --signals.
+                             reevaluate_only=getattr(a, "reevaluate_only", False),
                              provider_resolution={k: _pres.get(k) for k in
                                                   ("provider", "source", "reason", "warning")})
         ai_ops_run.print_human(rep)

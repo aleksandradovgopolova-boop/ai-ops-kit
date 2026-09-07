@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1145
+  ai_ops_kit/cli/ai_ops_cli.py: 1147
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1743
   ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
@@ -498,3 +498,15 @@ raises:
       concurrent-путь (`parallel_live.run_live_concurrent`) получил живой вызыватель. Сама логика
       вынесена в отдельный модуль `parallel_live_dispatch` (ниже порога), в cli — только объявление
       флага + ~13 строк маршрутизации. Потолок поднят под факт (поверх #543); ратчет держит вниз от 1068.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1135'
+    to: 'ai_ops_cli.py = 1147'
+    work: 'handoff-verdict-consumed-by-resume-and-reevaluate: --reevaluate-only в CLI-обёртке'
+    why: >-
+      `--reevaluate-only` поднят в run-субпарсер `./ai-ops run` (прежде жил только у движка, и
+      `./ai-ops run ... --reevaluate-only` падал «unrecognized arguments»): объявление флага +
+      проброс в `ai_ops_run.run(reevaluate_only=...)` с комментарием ПОЧЕМУ (уровень берётся из
+      сохранённых на specify сигналов, ENGINEERING не становится молча QUICK). +12 строк поверх
+      сведённой вехи 4.1 (замер итога слияния: 1135 -> 1147, а не сумма раздельных); ai_ops_cli.py —
+      известный кандидат на вынос, ратчет держит рост вниз.

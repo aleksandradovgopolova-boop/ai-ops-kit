@@ -355,6 +355,142 @@ def _review_cites_delivered_file(res, delivered, work_root) -> bool:
     return False
 
 
+# СТРУКТУРНО НЕМОЙ ОТВЕТ ПРОВАЙДЕРА-РЕВЬЮЕРА — среда недоступна (вложенный `claude -p` оборвался ДО
+# модели, #160) ИЛИ провайдер вернул ПУСТО (`empty_answer`): вердикта в ответе нет ВОВСЕ, повтор его
+# не родит. Только такой ответ ведёт в handoff (awaiting_reviewer). Это НЕ «дал разбор без вердикта»
+# (проза / `shape_violated` / `refused_by_model`) — тот остаётся НАЗВАННЫМ no-verdict, а не handoff:
+# иначе ЛЮБОЙ no-verdict молча превращался бы в ожидание оркестратора (страж бы ослаб).
+_PROVIDER_MUTE_REFUSALS = frozenset({"env_unavailable", "empty_answer"})
+
+
+def _provider_structurally_mute(rv) -> bool:
+    """Провайдер СТРУКТУРНО не дал ответа (среда недоступна / пустой ответ), а не «дал разбор без
+    вердикта». `env-unavailable` несёт свой `stopped`; пустой ответ приходит `ProviderRefusal` с
+    `reason` в _PROVIDER_MUTE_REFUSALS (run_review кладёт его в `stopped='refusal: <reason>'`)."""
+    if rv.get("stopped") == "env-unavailable":
+        return True
+    return (rv.get("refusal") or {}).get("reason") in _PROVIDER_MUTE_REFUSALS
+
+
+def _gate_ev_from_verdict(gid, g, rv, *, revision, delivered, work_root, valid_ids, signals,
+                          calibrated_enforcement, ui_evidence):
+    """Из ПРИНЯТОГО reviewer-result (`rv`) -> (gate_ev-запись, review-запись).
+
+    Одна логика статуса и заземления для ОБОИХ путей — живого вердикта провайдера (`_run_reviews`) и
+    потреблённого handoff-артефакта (`_consume_handoff_verdicts`), — чтобы artifact-first и живой
+    вердикт не расходились. Заземление pass идёт тем же путём, что рубер-штамп (Fix C: 0 reads И ни
+    одной цитаты, подтверждённой чтением ДОСТАВЛЕННОГО файла, -> блок). Извлечено из `_run_reviews`
+    (07.09) РОВНО тем же телом: потребление вердикта нельзя было держать в двух разных местах."""
+    from ai_ops_kit.checks import reviewer_result as vrr  # чистая проверка вниз (лента №5)
+    req = g.get("required_evidence", []) or []
+    res = rv.get("result")
+    errs = vrr.check(res, gate_ids=valid_ids) if isinstance(res, dict) else ["ревьюер не вынес вердикт"]
+    entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
+             "denied": rv.get("denied"), "valid": not errs, "source": rv.get("source"),
+             "status": (res or {}).get("status") if not errs else None,
+             "blockers": (res or {}).get("blockers") if isinstance(res, dict) else None,
+             "errors": errs or None}
+    if errs:
+        # НЕ тихий пропуск. no-verdict -> НАЗВАННЫЙ отказ в gate_ev (взводит reviewer-blocked),
+        # с причиной, которую человек может разобрать (находка поля P0, obs-2026-08-20).
+        ref = gate_executor.evidence_from_no_verdict(
+            g, gate_id=gid, stopped=rv.get("stopped"), reads=rv.get("reads"),
+            errors=errs, refusal=rv.get("refusal"))
+        entry["closed_as"] = "refused"
+        entry["status"] = ref["status"]                       # fail/warn, не None
+        entry["reason"] = (ref.get("blockers") or ref.get("warnings") or [None])[0]
+        return ref, entry
+    status = res.get("status")
+    blocking = bool(g.get("blocking"))
+    ev_ref = f"independent reviewer verdict @ {revision or 'HEAD'}"
+    ev_status = "not_run"
+    calib_ui = calibrated_enforcement and gid in gate_policy.UI_GATES
+    if calib_ui and isinstance(ui_evidence, dict):
+        ev_status = (ui_evidence.get(gid) or {}).get("deterministic_status", "not_run")
+    # РУБЕР-ШТАМП ПЕРЕОПРЕДЕЛЁН ЧЕРЕЗ ЭТАЛОН, А НЕ ЧЕРЕЗ read-op СУДЬИ (Fix C для ревьюеров,
+    # 01.09.2026). claude-cli судит из диффа и read-op детерминированно НЕ эмитит — поэтому
+    # вовлечённость определяется тем, СВЕРЕН ли вердикт с ДОСТАВЛЕННЫМ файлом ЧТЕНИЕМ (P0
+    # 04.09.2026): кит сам знает состав правки (`delivered`), САМ читает файл и подтверждает, что
+    # процитированный диапазон строк в нём РЕАЛЕН. Рубер-штампом остаётся pass с И 0 reads, И ни
+    # одной цитатой, подтверждённой чтением доставленного файла. Фабрикация «pass без ничего» — fail.
+    if (status == "pass" and blocking and not rv.get("reads")
+            and not _review_cites_delivered_file(res, delivered, work_root)):
+        entry["closed_as"] = "blocked"
+        entry["status"] = "fail"
+        return ({"status": "fail",
+                 "blockers": [f"reviewer вынес pass без единого чтения (0 reads) и ни одна "
+                              f"цитата не подтверждена чтением доставленного файла "
+                              f"(строки выдуманы/файл чужой) — рубер-штамп не закрывает "
+                              f"блокирующий гейт @ {gid}; сверка с эталоном не доказана"],
+                 "checks": res.get("checks", []), "evidence": [ev_ref]}, entry)
+    if calib_ui and ev_status == "fail":
+        entry["closed_as"] = "blocked"
+        entry["status"] = "fail"
+        entry["calibrated"] = "evidence_block"
+        return ({"status": "fail",
+                 "blockers": [f"детерминированное UI-evidence: реальная регрессия/дефект @ {gid} "
+                              f"(evidence=fail) — блокирует независимо от вердикта ревьюера"],
+                 "checks": res.get("checks", []), "evidence": [ev_ref]}, entry)
+    if status == "fail" or (status == "warn" and blocking):
+        if calib_ui:
+            action, reason = gate_policy.effective_review_outcome(gid, signals, status, ev_status)
+            if action == "advisory":
+                entry["closed_as"] = "advisory"
+                entry["status"] = "warn"
+                entry["calibrated"] = reason
+                return ({"status": "warn",
+                         "warnings": [f"калибровка v3.1.8: {reason} (reviewer {status})"],
+                         "checks": res.get("checks", []), "evidence": [ev_ref]}, entry)
+        blockers = res.get("blockers") or (
+            [f"reviewer WARN на блокирующем гейте — не чистый pass @ {gid}"] if status == "warn"
+            else [f"reviewer FAIL @ {gid}"])
+        entry["closed_as"] = "blocked"
+        return ({"status": "fail", "blockers": blockers,
+                 "checks": res.get("checks", []), "evidence": [ev_ref]}, entry)
+    entry["closed_as"] = status
+    return ({"status": status, "provided": list(req),
+             "checks": res.get("checks", []), "evidence": [ev_ref]}, entry)
+
+
+def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *, child_root=None,
+                              calibrated_enforcement=False, ui_evidence=None):
+    """Потребить ЗАПИСАННЫЕ оркестратором вердикты для ai-review гейтов БЕЗ вызова провайдера.
+
+    #570 follow-up (живой прогон 07.09): artifact-first жил ТОЛЬКО внутри `_run_reviews`, а тот
+    зовётся лишь при `--review` с живым провайдером. На штатном resume/reevaluate (0 model-вызовов,
+    без `--review`) записанный вердикт не потреблялся, и code_review оставался «нет заключения
+    reviewer», хотя `reviewer_handoff.load_verdict` тот же артефакт ПРИНИМАЕТ. Здесь вердикт-артефакт
+    потребляется НЕЗАВИСИМО от `--review`: он читается, провайдера НЕ вызывает и ПЕРЕОПРЕДЕЛЯЕТ
+    отсутствие/пустой no-verdict (а не проигрывает ему из-за порядка/скипа). Заземление pass идёт
+    ТЕМ ЖЕ путём, что живой вердикт (`_gate_ev_from_verdict`) — 0 false-green и writer≠judge не
+    ослаблены: устаревший-SHA / писательский / незаземлённый вердикт гейт не закроет."""
+    from ai_ops_kit.engine import reviewer_handoff  # #160: handoff оркестратору (тот же слой engine)
+    handoff_root = child_root or work_root
+    gates = gate_executor.load_gates()
+    valid_ids = set(gates)
+    delivered = _delivered_files(work_root, revision)
+    gate_ev = dict(gate_ev)
+    reviews = []
+    for gid in _reviewable_gates(gate_ids, signals):
+        # Настоящий pass независимый вердикт не переспоривает; отсутствие/пустой no-verdict — да
+        # (принцип: вердикт-артефакт оркестратора ПЕРЕОПРЕДЕЛЯЕТ пустой no-verdict).
+        if (gate_ev.get(gid) or {}).get("status") == "pass":
+            continue
+        handoff_rr, _ = reviewer_handoff.load_verdict(handoff_root, gid, revision=revision)
+        if handoff_rr is None:
+            continue
+        g = gates.get(gid) or {}
+        rv = {"result": handoff_rr, "stopped": "handoff-artifact", "reads": [], "denied": [],
+              "source": "handoff-artifact"}
+        ev, entry = _gate_ev_from_verdict(
+            gid, g, rv, revision=revision, delivered=delivered, work_root=work_root,
+            valid_ids=valid_ids, signals=signals, calibrated_enforcement=calibrated_enforcement,
+            ui_evidence=ui_evidence)
+        gate_ev[gid] = ev
+        reviews.append(entry)
+    return gate_ev, reviews
+
+
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
                  max_reads=10, change_context=None,
                  calibrated_enforcement=False, ui_evidence=None, child_root=None):
@@ -362,11 +498,11 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
 
     #160 (сессия Клода): перед вызовом провайдера смотрим, не оставил ли ОРКЕСТРАТОР валидный вердикт
     в handoff-артефакте на ТЕКУЩЕЙ ревизии (artifact-first) — тогда берём его БЕЗ вызова провайдера.
-    А если провайдер ревьюера структурно недоступен в среде (`stopped=='env-unavailable'`), гейт не
-    уходит в глухой no-verdict, а встаёт в `awaiting_reviewer` с записанным запросом на ревью.
-    Handoff-артефакты живут под `child_root/.ai` (переживают пересборку worktree); при отсутствии
-    child_root — под work_root."""
-    from ai_ops_kit.checks import reviewer_result as vrr  # чистая проверка вниз (лента №5)
+    А если провайдер ревьюера СТРУКТУРНО не дал ответа (среда недоступна ИЛИ вернул пусто) на
+    БЛОКИРУЮЩЕМ гейте, тот не уходит в глухой no-verdict, а встаёт в `awaiting_reviewer` с записанным
+    запросом на ревью. Handoff-артефакты живут под `child_root/.ai` (переживают пересборку worktree);
+    при отсутствии child_root — под work_root. Решение по вердикту (форма/заземление/статус) вынесено
+    в `_gate_ev_from_verdict` — общее с artifact-only-потреблением (`_consume_handoff_verdicts`)."""
     from ai_ops_kit.engine import reviewer_handoff  # #160: handoff оркестратору (тот же слой engine)
     handoff_root = child_root or work_root
     gates = gate_executor.load_gates()
@@ -391,8 +527,8 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
         req = g.get("required_evidence", []) or []
         # ARTIFACT-FIRST (#160 handoff): валидный вердикт оркестратора на ТЕКУЩЕМ SHA -> берём его БЕЗ
         # вызова провайдера. Валидность (форма + gate + reviewed_revision==revision + writer≠judge)
-        # проверяет load_verdict; ЗАЗЕМЛЕНИЕ pass идёт НИЖЕ тем же путём, что живой вердикт (Fix C:
-        # рубер-штамп + _review_cites_delivered_file), поэтому здесь не дублируется и не расходится.
+        # проверяет load_verdict; ЗАЗЕМЛЕНИЕ pass идёт в _gate_ev_from_verdict тем же путём, что
+        # живой вердикт, поэтому здесь не дублируется и не расходится.
         handoff_rr, _ = reviewer_handoff.load_verdict(handoff_root, gid, revision=revision)
         if handoff_rr is not None:
             rv = {"result": handoff_rr, "stopped": "handoff-artifact", "reads": [], "denied": [],
@@ -404,104 +540,37 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
             rv = tool_loop.run_review(reviewer, work_root, ro_policy, gid, budget=budget,
                                       max_reads=max_reads, base_context=change_ctx,
                                       required_evidence=req, reviewed_revision=revision)
-            # HANDOFF-OPEN (#160): провайдер ревьюера недоступен в среде (сессия Клода) -> НЕ глухой
-            # no-verdict, а awaiting_reviewer: пишем запрос на ревью, гейт остаётся блокирующим (fail),
-            # но ОТЛИЧИМ — прогон не падает и оркестратор знает, что заполнить. resume перечитает вердикт.
-            if rv.get("stopped") == "env-unavailable":
+            # HANDOFF-OPEN (#160 + follow-up 07.09): провайдер ревьюера СТРУКТУРНО не дал ответа
+            # (среда недоступна ИЛИ пустой ответ) на БЛОКИРУЮЩЕМ гейте -> НЕ глухой no-verdict, а
+            # awaiting_reviewer: пишем запрос на ревью, гейт остаётся блокирующим (fail), но ОТЛИЧИМ —
+            # прогон не падает и оркестратор знает, что заполнить. resume перечитает вердикт.
+            # Только БЛОКИРУЮЩИЙ гейт: advisory-гейт всё равно не блокирует, ему handoff не нужен (и
+            # это сохраняет named refusal у ux_review — «дал разбор без вердикта» не станет awaiting).
+            if _provider_structurally_mute(rv) and bool(g.get("blocking")):
+                # причина едет в handoff человеку/оркестратору: пустой ответ провайдера ≠ недоступность
+                # среды, и подменять одну формулировкой другой значило бы врать о причине.
+                cause = ("исполнитель ревьюера недоступен в этой среде (сессия Клода, #160)"
+                         if rv.get("stopped") == "env-unavailable"
+                         else (rv.get("refusal") or {}).get("reason_text")
+                         or "провайдер ревьюера вернул пустой ответ (вердикта нет)")
                 aw = reviewer_handoff.open_request(
                     handoff_root, gid, checklist=_gate_checklist(g), reviewed_revision=revision,
-                    changed_files=delivered, blocking=bool(g.get("blocking")), required_evidence=req)
+                    changed_files=delivered, blocking=True, required_evidence=req, cause=cause)
                 gate_ev[gid] = aw
-                # entry.status="awaiting_reviewer" (НЕ "fail"): гейт-evidence блокирует (fail),
-                # но это ОЖИДАНИЕ ревью, а не отрицательный вердикт судьи — иначе _hard_stop счёл бы
-                # это reviewer-blocked и остановил бы цепочку. Как «awaiting author/review evidence»,
-                # awaiting_reviewer оставляет работу незавершённой, а не отравляет цепочку.
-                reviews.append({"gate": gid, "stopped": "env-unavailable", "reads": [],
+                # entry.status="awaiting_reviewer" (НЕ "fail"): гейт-evidence блокирует (fail), но
+                # это ОЖИДАНИЕ ревью, а не отрицательный вердикт судьи — иначе _hard_stop счёл бы это
+                # reviewer-blocked и остановил бы цепочку.
+                reviews.append({"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads") or [],
                                 "denied": rv.get("denied"), "valid": False, "source": "handoff-request",
                                 "status": "awaiting_reviewer", "closed_as": "awaiting_reviewer",
                                 "reason": (aw.get("blockers") or aw.get("warnings") or [None])[0]})
                 continue
-        res = rv.get("result")
-        errs = vrr.check(res, gate_ids=valid_ids) if isinstance(res, dict) else ["ревьюер не вынес вердикт"]
-        entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
-                 "denied": rv.get("denied"), "valid": not errs, "source": rv.get("source"),
-                 "status": (res or {}).get("status") if not errs else None,
-                 "blockers": (res or {}).get("blockers") if isinstance(res, dict) else None,
-                 "errors": errs or None}
+        ev, entry = _gate_ev_from_verdict(
+            gid, g, rv, revision=revision, delivered=delivered, work_root=work_root,
+            valid_ids=valid_ids, signals=signals, calibrated_enforcement=calibrated_enforcement,
+            ui_evidence=ui_evidence)
+        gate_ev[gid] = ev
         reviews.append(entry)
-        if errs:
-            # НЕ тихий пропуск. Прежде здесь стоял голый `continue`: gate_ev не получал ключа гейта,
-            # тот падал на общий _unmet_reason «нет заключения reviewer» (не называя ПОЧЕМУ вердикта
-            # нет), а _hard_stop не распознавал reviewer-blocked — работа МОЛЧА вставала (находка
-            # поля P0, obs-2026-08-20). Теперь no-verdict -> НАЗВАННЫЙ отказ в gate_ev, с
-            # `"reviewer verdict"` в evidence (взводит reviewer-blocked).
-            ref = gate_executor.evidence_from_no_verdict(
-                g, gate_id=gid, stopped=rv.get("stopped"), reads=rv.get("reads"),
-                errors=errs, refusal=rv.get("refusal"))
-            gate_ev[gid] = ref
-            entry["closed_as"] = "refused"
-            entry["status"] = ref["status"]                       # fail/warn, не None
-            entry["reason"] = (ref.get("blockers") or ref.get("warnings") or [None])[0]
-            continue
-        status = res.get("status")
-        blocking = bool(g.get("blocking"))
-        ev_ref = f"independent reviewer verdict @ {revision or 'HEAD'}"
-        ev_status = "not_run"
-        calib_ui = calibrated_enforcement and gid in gate_policy.UI_GATES
-        if calib_ui and isinstance(ui_evidence, dict):
-            ev_status = (ui_evidence.get(gid) or {}).get("deterministic_status", "not_run")
-        # РУБЕР-ШТАМП ПЕРЕОПРЕДЕЛЁН ЧЕРЕЗ ЭТАЛОН, А НЕ ЧЕРЕЗ read-op СУДЬИ (Fix C для ревьюеров,
-        # 01.09.2026). Прежде: pass без единого чтения СУДЬЁЙ = рубер-штамп. Но claude-cli судит из
-        # диффа и read-op детерминированно НЕ эмитит (тот же замер, что закрыл acceptance Fix C) —
-        # поэтому КАЖДЫЙ настоящий code_review/architecture_review штамповался в fail, и ни один
-        # прогон не мог закрыть блокирующее ревью (полевой блокер flip, ii-sreda). Теперь вовлечённость
-        # определяется тем, СВЕРЕН ли вердикт с ДОСТАВЛЕННЫМ файлом ЧТЕНИЕМ (P0 04.09.2026 поднял
-        # заземление до уровня приёмки): кит сам знает состав правки (`delivered`), САМ читает файл и
-        # подтверждает, что процитированный ревьюером диапазон строк в нём РЕАЛЕН (не выдуман). Совпадения
-        # ИМЕНИ файла мало — иначе pass проходил с фиктивными строками при 0 reads. Рубер-штампом остаётся
-        # pass, у которого И 0 reads, И ни одна цитата не подтверждена чтением доставленного файла
-        # (пустые/чужие/выдуманные evidence). Это НЕ ослабляет страж: фабрикация «pass без ничего» — fail.
-        if (status == "pass" and blocking and not rv.get("reads")
-                and not _review_cites_delivered_file(res, delivered, work_root)):
-            gate_ev[gid] = {"status": "fail",
-                            "blockers": [f"reviewer вынес pass без единого чтения (0 reads) и ни одна "
-                                         f"цитата не подтверждена чтением доставленного файла "
-                                         f"(строки выдуманы/файл чужой) — рубер-штамп не закрывает "
-                                         f"блокирующий гейт @ {gid}; сверка с эталоном не доказана"],
-                            "checks": res.get("checks", []), "evidence": [ev_ref]}
-            entry["closed_as"] = "blocked"
-            entry["status"] = "fail"
-            continue
-        if calib_ui and ev_status == "fail":
-            gate_ev[gid] = {"status": "fail",
-                            "blockers": [f"детерминированное UI-evidence: реальная регрессия/дефект @ {gid} "
-                                         f"(evidence=fail) — блокирует независимо от вердикта ревьюера"],
-                            "checks": res.get("checks", []), "evidence": [ev_ref]}
-            entry["closed_as"] = "blocked"
-            entry["status"] = "fail"
-            entry["calibrated"] = "evidence_block"
-            continue
-        if status == "fail" or (status == "warn" and blocking):
-            if calib_ui:
-                action, reason = gate_policy.effective_review_outcome(gid, signals, status, ev_status)
-                if action == "advisory":
-                    gate_ev[gid] = {"status": "warn",
-                                    "warnings": [f"калибровка v3.1.8: {reason} (reviewer {status})"],
-                                    "checks": res.get("checks", []), "evidence": [ev_ref]}
-                    entry["closed_as"] = "advisory"
-                    entry["status"] = "warn"
-                    entry["calibrated"] = reason
-                    continue
-            blockers = res.get("blockers") or (
-                [f"reviewer WARN на блокирующем гейте — не чистый pass @ {gid}"] if status == "warn"
-                else [f"reviewer FAIL @ {gid}"])
-            gate_ev[gid] = {"status": "fail", "blockers": blockers,
-                            "checks": res.get("checks", []), "evidence": [ev_ref]}
-            entry["closed_as"] = "blocked"
-        else:
-            gate_ev[gid] = {"status": status, "provided": list(req),
-                            "checks": res.get("checks", []), "evidence": [ev_ref]}
-            entry["closed_as"] = status
     return gate_ev, reviews
 
 

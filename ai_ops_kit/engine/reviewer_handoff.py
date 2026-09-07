@@ -61,21 +61,27 @@ def _reviewer_identity(rr: dict) -> str:
 
 
 def open_request(root, gate_id, *, checklist, reviewed_revision, changed_files, blocking,
-                 required_evidence=None):
+                 required_evidence=None, cause=None):
     """Записать машиночитаемый запрос на ревью и вернуть evidence состояния `awaiting_reviewer`.
 
     Запрос НЕ выдаёт вердикт — он говорит оркестратору, ЧТО заполнить: точный путь артефакта-вердикта,
     чек-лист гейта, проверяемую ревизию, список изменённых файлов. Гейт остаётся ЗАКРЫТЫМ (blocking ->
     fail), но ОТЛИЧИМ и от глухого no-verdict (записан запрос + `human_handoff`), и от hard-error
-    (прогон не падает). Ложным зелёным это не является: статус — fail на блокирующем гейте."""
+    (прогон не падает). Ложным зелёным это не является: статус — fail на блокирующем гейте.
+
+    `cause` — ПОЧЕМУ открыт handoff (среда недоступна / провайдер вернул пусто): едет в текст человеку
+    и в запрос, чтобы причина не подменялась одной дежурной формулировкой (следствие #570-follow-up:
+    awaiting открывается не только на env-unavailable, но и на пустом ответе провайдера)."""
     vpath = verdict_path(root, gate_id)
     rpath = request_path(root, gate_id)
+    cause = cause or "исполнитель ревьюера недоступен в этой среде (сессия Клода, #160)"
     req = {
         "schema_version": 1, "kind": "reviewer-request", "gate": gate_id,
         "reviewed_revision": reviewed_revision,
         "changed_files": sorted(changed_files or []),
         "checklist": checklist or "",
         "required_evidence": list(required_evidence or []),
+        "cause": cause,
         "verdict_artifact": str(vpath),
         "instructions": (
             f"Вынеси НЕЗАВИСИМОЕ ревью гейта '{gate_id}' и запиши reviewer-result "
@@ -88,8 +94,8 @@ def open_request(root, gate_id, *, checklist, reviewed_revision, changed_files, 
     d = _dir(root)
     d.mkdir(parents=True, exist_ok=True)
     rpath.write_text(json.dumps(req, ensure_ascii=False, indent=2), encoding="utf-8")
-    text = (f"ревьюер гейта {gate_id} недоступен в этой среде (сессия Клода, #160) — прогон встал в "
-            f"awaiting_reviewer: запрос на ревью записан в {rpath}, вердикт ожидается в {vpath} "
+    text = (f"ревьюер гейта {gate_id} не вынес вердикт ({cause}) — прогон встал в awaiting_reviewer: "
+            f"запрос на ревью записан в {rpath}, вердикт ожидается в {vpath} "
             f"(заполняет независимый оркестратор), после чего resume закроет гейт")
     ev = {"status": "fail" if blocking else "warn", "checks": [],
           "evidence": [f"awaiting_reviewer @ {gate_id}: handoff-запрос записан ({rpath.name})"],
