@@ -1213,23 +1213,6 @@ raises:
       4568601 -> 4584810, потолок 4587000.
   - at: '2026-09-07'
     what: volume
-    from_bytes: 4655000
-    to_bytes: 4675000
-    measured_before: 4641080
-    measured_after: 4667719
-    work: '#567: outcome → insight → кандидат-работа (замыкание петли вехи 4.1)'
-    files:
-      - ai_ops_kit/intelligence/outcome_insight.py
-      - ai_ops_kit/cli/post_release_loop.py
-      - ai_ops_kit/cli/ai_ops_cli.py
-      - ai_ops_kit/cli/ai_ops_cli_intents.py
-    why_it_works_in_the_child: >-
-      Новый доставляемый модуль intelligence/outcome_insight.py (генерация Insight + кандидат-Work из
-      реального Outcome) едет в дочку — его зовёт пост-релизный маршрут; плюс проводка в
-      post_release_loop/cli/cli_intents (сюрфейсинг кандидата в inbox/next). Замер РЕАЛЬНОЙ установкой
-      (installed/.ai/managed): 4641080 -> 4667719, потолок под факт 4675000 с видимым запасом.
-  - at: '2026-09-07'
-    what: volume
     from_bytes: 4587000
     to_bytes: 4655000
     measured_before: 4584810
@@ -1253,4 +1236,21 @@ raises:
       — последний занижает на ~62 КБ / 2 файла (source 4579092 против реальных 4641080), прошлая грабля.
       #565 в своей ленте мерился от старого main (до #160) и заявлял 4610000 — снято, потолок под факт
       объединённого дерева.
+  - at: '2026-09-07'
+    what: volume
+    from_bytes: 4655000
+    to_bytes: 4675000
+    measured_before: 4641080
+    measured_after: 4667719
+    work: '#567: outcome → insight → кандидат-работа (замыкание петли вехи 4.1)'
+    files:
+      - ai_ops_kit/intelligence/outcome_insight.py
+      - ai_ops_kit/cli/post_release_loop.py
+      - ai_ops_kit/cli/ai_ops_cli.py
+      - ai_ops_kit/cli/ai_ops_cli_intents.py
+    why_it_works_in_the_child: >-
+      Новый доставляемый модуль intelligence/outcome_insight.py (генерация Insight + кандидат-Work из
+      реального Outcome) едет в дочку — его зовёт пост-релизный маршрут; плюс проводка в
+      post_release_loop/cli/cli_intents (сюрфейсинг кандидата в inbox/next). Замер РЕАЛЬНОЙ установкой
+      (installed/.ai/managed): 4641080 -> 4667719, потолок под факт 4675000 с видимым запасом.
 
