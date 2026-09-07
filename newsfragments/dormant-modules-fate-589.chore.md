@@ -1,0 +1,1 @@
+Судьба 6 спящих модулей решена явно (#589): сняты 4 unwired-дубля (artifact_reality_check, refactoring_advisor, session_watch, watch_contract), 2 припаркованы с причиной (security_review_cascade, storybook_query). Ночной механизм сохранён (он в nightly_review, ограничен разрешениями). built≠wired: 6 → 2.

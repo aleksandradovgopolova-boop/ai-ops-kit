@@ -79,9 +79,10 @@ KNOWN_DORMANT: dict[str, str] = {
     # run-пути по явному opt-in `ai-ops run --parallel` (cli/ai_ops_cli). Появился не-тестовый
     # импортёр — по правилу «список только сокращается» имя обязано уйти; об этом сказал бы
     # `test_known_dormant_list_only_shrinks` (краснел бы, останься имя, раз модуль больше не дормантен).
-    f"{PKG}.intelligence.artifact_reality_check":
-        "сверка артефактов с реальным репо (цель ai-product-operations, achieved); "
-        "installer.UNWIRED_MODULES, импортеров нет — построено, но в контур не проведено",
+    # `intelligence/artifact_reality_check` СНЯТ ИЗ ПОСТАВКИ 2026-09-07 (#589, веха 4.2): не
+    # проведён и не отложен, а УДАЛЁН как дормантный дубль. Его предмет (ссылки артефактов ведут в
+    # существующие файлы) уже покрывают шипнутые validate_references/validate_cross_artifacts,
+    # которые агрегирует nightly_review; своих тестов не было. Файл удалён -> имя ушло из потолка.
     # `intelligence/decision_loop` УБРАН ИЗ СПИСКА 2026-09-07 (#564): он ПРОВЕДЁН В КОНТУР. Маршрут
     # `run --execute`/`do` (cli/ai_ops_cli._decision_contract_gate) импортирует decision_loop и зовёт
     # has_feature_decision_contract — для триггерного профиля (сигнал feature_decision_declared)
@@ -96,24 +97,33 @@ KNOWN_DORMANT: dict[str, str] = {
     # `cli/post_release_loop._assess_cost_analytics` импортирует его и зовёт `collect_analytics()` в
     # `run_post_release` — стоимостная/эффект-аналитика ПОД пост-релизным путём (не второй outcome-
     # вердикт: тот остаётся за #566). Не-тестовый импортёр появился -> имя обязано было уйти отсюда.
-    f"{PKG}.intelligence.refactoring_advisor":
-        "советчик рефакторинга (цель autonomous-product-loop, achieved); "
-        "installer.UNWIRED_MODULES, импортеров нет",
-    f"{PKG}.intelligence.session_watch":
-        "предупреждения о пределе сессии (цель session-autonomy-under-ceiling, achieved); "
-        "installer.UNWIRED_MODULES, импортеров нет",
-    f"{PKG}.intelligence.watch_contract":
-        "контракт наблюдения для nightly review (цель nightly-product-review, active); "
-        "installer.UNWIRED_MODULES, импортеров нет (nightly_review его не импортирует)",
+    # `intelligence/refactoring_advisor` СНЯТ ИЗ ПОСТАВКИ 2026-09-07 (#589, веха 4.2): удалён как
+    # дормантный груз. Грубые строковые эвристики (большие файлы/сложные функции) дублировали
+    # реальные защёлки func-size/file-size кита; своих тестов не было, полевого пути к вызову нет.
+    # `intelligence/session_watch` СНЯТ ИЗ ПОСТАВКИ 2026-09-07 (#589, веха 4.2): удалён как ДУБЛЬ уже
+    # проведённого `engops/session_guardrails` (classify_context/recommend, пороги compact/
+    # new_session), который зовут cli (ai_ops_cli) и engine (ai_ops_run_lifecycle). Порог сессии уже
+    # считается и всплывает — второй счётчик в intelligence-слое был мёртвым. Решение по разрешениям,
+    # а не по «ползунку автономности»: ночной путь ограничен механизмами nightly_review.run_autofix
+    # (worktree-only, черновой PR, никогда main, ноль вызовов модели, kill-switch), а не порогом.
+    # `intelligence/watch_contract` СНЯТ ИЗ ПОСТАВКИ 2026-09-07 (#589, веха 4.2): удалён как дормантное
+    # леса. Заявленный потребитель nightly_review его НЕ импортировал и пошёл другим устройством
+    # (жёсткий CHECKS + install_schedule); схему WatchContract никто не производил и не читал. Ночной
+    # МЕХАНИЗМ при этом цел и проведён (commands/maintenance/night-review.md -> nightly_review).
     f"{PKG}.security.security_review_cascade":
-        "asymmetric fail-closed судья, ЯВНО experimental/qualification-only и НЕ подключён к "
-        "рабочему security_review (сказано в докстринге модуля); 0 импортеров",
+        "PARK (#589, 2026-09-07): asymmetric fail-closed security-судья, ЯВНО experimental/"
+        "qualification-only (докстринг модуля), с тестами (tests/unit/test_security_review_cascade). "
+        "НЕ удаляем — ждёт КОНКРЕТНОГО: НОВОГО held-out на более сильной/иной модели, дающего "
+        "0 unsafe_pass И порог автономности; до тех пор strict-security за человеком (#5). Сохранён "
+        "как воспроизводимый отрицательный эксперимент + инфраструктура будущих Bench, не moat-про-запас",
     f"{PKG}.ui.storybook_query":
-        "read-only Storybook-адаптер (цель storybook-as-visual-contract, active); ОБЪЯВЛЕН "
-        "MCP-доступным инструментом storybook-query в registry/tools.yaml + capability-index.yaml "
-        "(доступ = минимальный read-only адаптер через MCP-декларацию, не MCP-сервер). Но 0 "
-        "не-тестовых Python-импортёров: реестровая декларация не создаёт импортёра, рабочий путь "
-        "его пока не зовёт — честно остаётся дормантным до проводки живым потребителем",
+        "PARK (#589, 2026-09-07): read-only Storybook-адаптер (цель storybook-as-visual-contract, "
+        "active), с тестами (test_storybook_query + test_mcp_access_to_ui_system, доказывают что "
+        "декларация резолвится в реальные read-only запросы). НЕ удаляем — подпирает объявленный "
+        "MCP-инструмент storybook-query (registry/tools.yaml + capability-index.yaml, исход #420). "
+        "Ждёт КОНКРЕТНОГО: живого потребителя UI-контекста ИЛИ полноценного MCP-сервера — оба "
+        "отложены владельцем («минимальный адаптер, не центр; сервер не сейчас»). Реестровая "
+        "декларация не создаёт Python-импортёра, поэтому честно остаётся дормантным до проводки",
 }
 
 
@@ -221,10 +231,10 @@ def test_importer_counter_is_correct_on_known_facts(tmp_path):
     modules = _pkg_modules()
     importers = _nontest_importers(modules)
 
-    # Реальные факты дерева. `artifact_reality_check` остаётся дормантным (0 импортеров) — берём его
-    # как эталон нуля; `decision_loop` с #564 ПРОВЕДЁН в маршрут, поэтому у него импортер уже есть.
-    assert importers[f"{PKG}.intelligence.artifact_reality_check"] == set(), \
-        "artifact_reality_check обязан иметь 0 не-тестовых импортеров (дормантный факт)"
+    # Реальные факты дерева. `security_review_cascade` остаётся дормантным (0 импортеров, PARK #589)
+    # — берём его как эталон нуля; `decision_loop` с #564 ПРОВЕДЁН в маршрут, поэтому импортер уже есть.
+    assert importers[f"{PKG}.security.security_review_cascade"] == set(), \
+        "security_review_cascade обязан иметь 0 не-тестовых импортеров (дормантный факт)"
     assert len(importers[f"{PKG}.intelligence.decision_loop"]) >= 1, \
         "decision_loop проведён в маршрут (#564) — у него обязан быть не-тестовый импортер (cli)"
     assert len(importers[f"{PKG}.engine.pipeline_evidence"]) >= 1, \
@@ -235,8 +245,8 @@ def test_importer_counter_is_correct_on_known_facts(tmp_path):
     # Синтетика: временный файл, импортирующий реальный модуль, засчитывается как импортёр.
     known = set(modules)
     probe = tmp_path / "probe_importer.py"
-    probe.write_text("from ai_ops_kit.intelligence import artifact_reality_check\n", encoding="utf-8")
-    assert f"{PKG}.intelligence.artifact_reality_check" in _imports_in(probe, known)
+    probe.write_text("from ai_ops_kit.security import security_review_cascade\n", encoding="utf-8")
+    assert f"{PKG}.security.security_review_cascade" in _imports_in(probe, known)
 
     # Самоимпорт не должен считаться проводкой: файл, «импортирующий сам себя», даёт 0.
     self_ref = _find_dormant({"pkg.mod.self"}, (), set())
@@ -331,7 +341,7 @@ def test_non_source_trees_are_not_counted_as_importers():
     copy_paths = [
         PKG_ROOT / ".ai" / "worktrees" / "x" / "ai_ops_kit" / "engine" / "foo.py",
         PKG_ROOT / ".venv" / "lib" / "python3.12" / "site-packages"
-        / "ai_ops_kit" / "intelligence" / "artifact_reality_check.py",
+        / "ai_ops_kit" / "security" / "security_review_cascade.py",
         PKG_ROOT / "node_modules" / "pkg" / "x.py",
         PKG_ROOT / "build" / "lib" / "ai_ops_kit" / "engine" / "bar.py",
     ]
@@ -342,11 +352,11 @@ def test_non_source_trees_are_not_counted_as_importers():
     assert not _is_skipped(PKG_ROOT / "ai_ops_kit" / "engine" / "tool_broker.py")
     assert not _is_skipped(PKG_ROOT / "installer" / "ai_ops.py")
 
-    # Интеграция: реальный обход зовёт предикат — на текущем дереве artifact_reality_check остаётся
+    # Интеграция: реальный обход зовёт предикат — на текущем дереве security_review_cascade остаётся
     # 0-импортерным даже если рядом (в .ai/.venv) лежит его копия, потому что такие деревья пропускаются.
     importers = _nontest_importers(_pkg_modules())
-    assert importers[f"{PKG}.intelligence.artifact_reality_check"] == set(), \
-        "artifact_reality_check обязан остаться дормантным — копии из не-исходных деревьев не в счёт"
+    assert importers[f"{PKG}.security.security_review_cascade"] == set(), \
+        "security_review_cascade обязан остаться дормантным — копии из не-исходных деревьев не в счёт"
 
 
 @pytest.mark.contract
