@@ -610,7 +610,21 @@ def materialize_runtime(child_root: Path):
         for f in sorted(xsrc.glob("*.md")):
             shutil.copy2(f, xdst / f.name)
             codex += 1
-    return {"claude_commands": claude, "codex_prompts": codex, "codex_generated": codex_generated}
+    # qwen-code -> .qwen/commands/ (in-repo путь, command_loading из runtimes.yaml), ТОЛЬКО если
+    # рантайм ЯВНО включён в .ai-ops.yaml. Как codex гейтится на CODEX_HOME, так qwen — на явное
+    # включение: иначе каждая дочка получала бы каталог .qwen/, которым не пользуется.
+    qsrc = child_root / ".ai" / "generated" / "qwen-code" / "commands"
+    qwen_generated = len(list(qsrc.glob("*.md"))) if qsrc.is_dir() else 0
+    qwen = 0
+    enabled = _configured_runtimes()
+    if qsrc.is_dir() and enabled is not None and "qwen-code" in enabled:
+        qdst = child_root / ".qwen" / "commands"
+        qdst.mkdir(parents=True, exist_ok=True)
+        for f in sorted(qsrc.glob("*.md")):
+            shutil.copy2(f, qdst / f.name)
+            qwen += 1
+    return {"claude_commands": claude, "codex_prompts": codex, "codex_generated": codex_generated,
+            "qwen_commands": qwen, "qwen_generated": qwen_generated}
 
 
 def manifest():
