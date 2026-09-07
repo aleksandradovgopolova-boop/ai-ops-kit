@@ -125,6 +125,7 @@ def test_broken_scope_declaration_is_not_green(claims, broken, expect):
     assert any(expect in e for e in errors), (broken, errors)
 
 
+@pytest.mark.slow  # поднимает подпроцесс check-full.sh (ruff по репо + сбор всего pytest), ~20 c — #465
 def test_script_announces_the_scope_it_actually_gives():
     """side-effect: доказать, что охват РЕАЛЬНО печатается, прежде чем считать его объявленным.
 
@@ -163,6 +164,7 @@ def test_script_refuses_an_interpreter_without_pytest(tmp_path):
     assert "pytest в нём нет" in (r.stdout + r.stderr), (r.stdout + r.stderr)[-600:]
 
 
+@pytest.mark.slow  # поднимает подпроцесс check-full.sh (ruff по репо + сбор всего pytest), ~20 c — #465
 def test_pytest_runs_on_the_interpreter_that_was_announced(tmp_path):
     """ШОВ, найденный собственной пробой: объявить охват одним интерпретатором, а гонять другим —
     это ровно «заявление шире полученного», против которого словарь охватов и заведён.
