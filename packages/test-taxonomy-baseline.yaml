@@ -23,10 +23,10 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 390
+behavioral_count: 391
 structural_count: 66
-total_count: 456
-behavioral_share_pct: 85.53
+total_count: 457
+behavioral_share_pct: 85.56
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
@@ -606,3 +606,16 @@ raises:
       (managed-зона, профиль стека, черновики bootstrap, честный остаток «от человека»). Структурных
       не прибавилось (66), доля 85.49 -> 85.53%. Baseline пере-записан на фактический замер (389 -> 390
       поведенческих из 456).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 390
+    from_total: 456
+    to_behavioral: 391
+    to_total: 457
+    to_share_pct: 85.56
+    work: code-review-reviewer-works-inside-a-claude-session (#160)
+    why: >-
+      Подъём порога ВВЕРХ: handoff ревью оркестратору (#160) добавил один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_reviewer_handoff.py — импортирует engine.reviewer_handoff И зовёт open_request/load_verdict
+      + прогоняет _run_reviews через run_pipeline). Структурных не прибавилось (66), доля 85.53 ->
+      85.56%. Baseline пере-записан на фактический замер (390 -> 391 поведенческих из 457).
