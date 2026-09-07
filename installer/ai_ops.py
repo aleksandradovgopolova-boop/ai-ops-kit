@@ -8,6 +8,11 @@
                          ([--quiet] молчит при успехе, [--json] — машиночитаемо)
   update [--force]     — обновить managed-слой из пакета (алгоритм ниже); --force игнорирует drift
   init <path>          — установить систему в новый child (создать .ai/, конфиг-заготовку)
+  setup <path>         — единая установка: init → onboard → bootstrap → model одной командой;
+                         печатает ОДИН экран «сделано автоматически» и «осталось от тебя»
+                         (секреты/провайдеры, ответы на вопросы, коммит — за человеком).
+                         [--dry-run] не пишет черновики bootstrap, только показывает план.
+                         Идемпотентна: на уже установленном ките не падает, обновляет состояние
   validate             — прогнать связанные валидаторы (child, registry, workflows, providers)
   doctor               — быстрая диагностика (гигиена путей окружения, версии, зоны, целостность,
                          node/openspec); --remove-path-belt удаляет остаточный .pth-пояс кита,
@@ -2571,6 +2576,152 @@ def cmd_init(target_dir):
     return 0
 
 
+def _run_managed_intent(root: Path, intent: str, *extra, timeout=300):
+    """Запустить интент движка ПОДПРОЦЕССОМ из managed-слоя дочки. -> (rc, объединённый вывод).
+
+    Пакет из `.ai/managed` в sys.path ЭТОГО процесса не попадает (`init` лишь скопировал файлы —
+    доставленный код не импортируется тем же процессом, что его положил). Поэтому интент нельзя
+    вызвать импортом, только запустить его копию. Первыми аргументами идут интент и путь репозитория
+    — ровно так, как их ждёт `ai_ops_cli.py` (intent + rest[0] = child_root).
+    """
+    import os
+    managed = root / ".ai" / "managed"
+    cli = managed / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
+    if not cli.is_file():
+        return 1, f"движок не найден в managed-слое: {cli}"
+    env = dict(os.environ)
+    env["PYTHONPATH"] = str(managed) + os.pathsep + env.get("PYTHONPATH", "")
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    try:
+        r = subprocess.run([sys.executable, str(cli), intent, str(root), *extra],
+                           cwd=str(root), env=env, capture_output=True, text=True, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        return 1, f"интент {intent} не ответил за {timeout}s"
+    except OSError as e:
+        return 1, f"не удалось запустить интент {intent}: {e}"
+    return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()
+
+
+def _setup_remaining(root: Path):
+    """Список «осталось от тебя» — ПО ФАКТУ, а не общими словами.
+
+    Три вещи автоматизировать нельзя, и setup их не прячет: секреты/провайдеры в `.ai-ops.yaml`,
+    ответы на продуктовые вопросы (`ai-ops model`), финальный коммит файлов кита. Перечень
+    плейсхолдеров конфига берём у валидатора `validate_child_config_filled`, а не угадываем.
+    """
+    out = []
+    # 1) Плейсхолдеры .ai-ops.yaml: провайдеры/токены и project.name вписывает ТОЛЬКО человек.
+    try:
+        if str(PKG) not in sys.path:
+            sys.path.insert(0, str(PKG))
+        from ai_ops_kit.validation import validate_child_config_filled as _cfgfill
+        _cfg = _cfgfill.assess(str(root))
+    except Exception as _e:  # noqa: BLE001 — недоступность проверки не прячем за «всё готово»
+        out.append(f"проверьте .ai-ops.yaml вручную (автопроверку выполнить не удалось: {_e})")
+        _cfg = None
+    if _cfg and _cfg.get("placeholders"):
+        fields = ", ".join(p["field"] for p in _cfg["placeholders"])
+        out.append(f"впишите в .ai-ops.yaml значения проекта (сейчас заготовки: {fields}) — "
+                   f"имя продукта и доступы провайдеров вписывает человек, кит их не знает")
+    # 2) Ответы на вопросы онбординга: `model` создал форму, ответы — за человеком.
+    _answers = root / ".ai" / "project" / "onboarding-answers.yaml"
+    if _answers.is_file():
+        out.append("ответьте на продуктовые вопросы: `ai-ops model` (форма — "
+                   ".ai/project/onboarding-answers.yaml)")
+    # 3) Финальный коммит — необратим, подтверждает человек; кит сам не коммитит.
+    out.append("закоммитьте файлы кита (.ai/, .ai-ops.yaml и др.) — это делает человек")
+    # 4) CI: если workflow-ов нет, включить их (иначе гейты кита в PR не отработают).
+    _wf = root / ".github" / "workflows"
+    if not (_wf.is_dir() and any(_wf.glob("*.yml"))):
+        out.append("включите CI (.github/workflows) — без него quality-гейты в PR не запускаются")
+    return out
+
+
+def _setup_summary(root: Path, steps_done, steps_failed):
+    """Один финальный экран: «сделано автоматически» и «осталось от тебя» (продуктовый язык)."""
+    print()
+    print("AI Ops установлен одной командой. Ниже — что сделано и что осталось.")
+    print("\nСделано автоматически:")
+    for s in steps_done:
+        print(f"  • {s}")
+    if steps_failed:
+        print("\nНе получилось (называю шаг, за успех не выдаю):")
+        for name, detail in steps_failed:
+            first = (detail.splitlines()[0][:200] if detail else "")
+            print(f"  • {name}" + (f" — {first}" if first else ""))
+    print("\nОсталось от тебя (это по своей природе за человеком — секреты и решения кит не делает):")
+    for r in _setup_remaining(root):
+        print(f"  • {r}")
+
+
+def cmd_setup(target_dir, *, apply=True):
+    """Единая установка вместо ручной цепочки init → onboard → bootstrap → model.
+
+    Проходит цепочку сама и печатает ОДИН экран: «сделано автоматически» и «осталось от тебя».
+    Делает ВСЁ автоматизируемое; три вещи автоматизировать нельзя и она их честно называет, а не
+    прячет: токены/провайдеры и `project.name` в `.ai-ops.yaml`, ответы на продуктовые вопросы,
+    финальный коммит. Секретов не вводит, ничего не коммитит. Идемпотентна — можно перезапускать.
+
+    apply=True (по умолчанию): bootstrap РЕАЛЬНО пишет отсутствующие черновики направления/плана.
+    apply=False (`--dry-run`): bootstrap только показывает, что создал бы, ничего не записывая.
+    """
+    root = Path(target_dir).resolve()
+    # Предпроверка — та же, что у init: без git установка была бы ложным зелёным.
+    if not root.is_dir():
+        print(f"ОШИБКА: каталога {root} нет — создайте его и инициализируйте git (git init).")
+        return 2
+    if not _is_git_worktree(root):
+        print(f"ОШИБКА: {root} — не git-репозиторий (или git недоступен). Кит ставится в "
+              f"git-репозиторий: движок работает через worktree/коммит и собирает evidence "
+              f"на точном SHA. Выполните `git init` (и первый коммит), затем повторите setup.")
+        return 2
+
+    done, failed = [], []
+
+    # 1) init — идемпотентно: уже установлено (rc 1) не роняет setup, продолжаем.
+    print("→ шаг 1/4: managed-зона (init)")
+    rc = cmd_init(str(root))
+    if rc == 2:
+        # Предпроверки (не каталог/не git) отсеяны выше; rc 2 здесь — иной жёсткий отказ init.
+        print("\nУстановка прервана: подготовить managed-зону не удалось (см. сообщение выше).")
+        return 2
+    done.append("managed-зона на месте" if rc == 1 else "managed-зона создана")
+    if rc == 1:
+        print("· managed-зона уже была — обновляю состояние (setup можно перезапускать).")
+
+    # 2) onboard — детект стека → .ai/repository-profile.yaml.
+    print("→ шаг 2/4: определяю стек (onboard)")
+    orc, oout = _run_managed_intent(root, "onboard")
+    if orc == 0:
+        done.append("стек репозитория определён (.ai/repository-profile.yaml)")
+    else:
+        failed.append(("определение стека (onboard)", oout))
+
+    # 3) bootstrap — черновики направления/плана ИЗ ФАКТОВ (реальный план не трогает).
+    print("→ шаг 3/4: черновик направления и плана (bootstrap)")
+    brc, bout = _run_managed_intent(root, "bootstrap", *(("--apply",) if apply else ()))
+    if brc == 0:
+        done.append("черновик направления и плана из фактов репозитория"
+                    + ("" if apply else " (показан, без записи — --dry-run)"))
+    else:
+        failed.append(("черновик направления/плана (bootstrap)", bout))
+
+    # 4) model — форма продуктовых вопросов для человека. НЕ блокирует: ответы всё равно за ним.
+    print("→ шаг 4/4: готовлю вопросы для человека (model)")
+    mrc, mout = _run_managed_intent(root, "model")
+    if mrc != 0:
+        failed.append(("вопросы онбординга (model)", mout))
+
+    _setup_summary(root, done, failed)
+
+    # Код возврата: 0 — автоматизируемое прошло (человеческие шаги остаются, это норма);
+    # 1 — упал автоматизируемый шаг (onboard/bootstrap), сбой за успех не выдаём; жёсткий провал
+    # init/предпроверки уже вернул 2 выше.
+    hard = [name for name, _ in failed
+            if name.startswith("определение стека") or name.startswith("черновик")]
+    return 1 if hard else 0
+
+
 def _onboarding_summary(onboarding_path):
     where = f"\nПодробнее — {onboarding_path.name} рядом с репозиторием." if onboarding_path else ""
     return (
@@ -3509,6 +3660,10 @@ def _dispatch(argv):
         if len(argv) < 3:
             print("использование: ai-ops init <путь-к-репозиторию>"); return 2
         return cmd_init(argv[2])
+    if cmd == "setup":
+        if len(argv) < 3:
+            print("использование: ai-ops setup <путь-к-репозиторию> [--dry-run]"); return 2
+        return cmd_setup(argv[2], apply="--dry-run" not in argv)
     if cmd == "delivery-proof":
         return cmd_delivery_proof(argv)
     if cmd == "validate":
