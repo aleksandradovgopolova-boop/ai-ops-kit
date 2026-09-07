@@ -23,15 +23,29 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 392
+behavioral_count: 395
 structural_count: 66
-total_count: 458
-behavioral_share_pct: 85.59
+total_count: 461
+behavioral_share_pct: 85.68
 
 raises:
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
   # (например, крупный ввоз структурных фикстур-контрактов) добавляются сюда: дата, откуда/куда и
   # ПОЧЕМУ снижение оправдано, а не «так вышло».
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 391
+    from_total: 457
+    to_behavioral: 395
+    to_total: 461
+    to_share_pct: 85.68
+    work: 'сведение вехи 4.1 (#564/#565/#566/#569) + ребейз на main (#578/#579)'
+    why: >-
+      Ленты вехи добавили 3 поведенческих тест-файла (decision-loop-wired, work-spine, product-objects),
+      плюс при ребейзе на main приехал ещё один поведенческий тест из #579 — итог 391->395, структурных
+      без изменений (66). Доля поведенческих ВЫРОСЛА 85.56% -> 85.68% (не снижение). Точный баз-счётчик
+      пересчитан по факту ОБЪЕДИНЁННОГО дерева, т.к. тест `test_baseline_matches_the_measurement` требует
+      точного равенства, а не только порога вниз. Числа правлены руками: флаг --baseline лоссовый.
   - at: '2026-09-02'
     what: baseline_established
     from_behavioral: null

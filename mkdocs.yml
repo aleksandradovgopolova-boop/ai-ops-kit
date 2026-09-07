@@ -39,6 +39,7 @@ nav:
     - Walkthrough: WALKTHROUGH.md
     - Installation: guides/installation.md
   - USE — каждый день:
+    - Карта возможностей (что кит умеет сегодня): capability-map.md
     - Гайд внедрения по ролям: adoption-guide.md
     - Модель платформы: platform-model.md
     - Каналы релиза: release-channels.md

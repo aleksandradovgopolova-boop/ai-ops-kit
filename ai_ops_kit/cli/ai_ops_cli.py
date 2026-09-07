@@ -428,10 +428,37 @@ def _intent_status(task, child_root, signals, a):
             next_steps=["починить файл плана и повторить"],
             technical={"ошибка": str(e)}), audience=aud))
         cross = None
+    # #565: per-work идентичность (ветка/заголовок) идущей работы берётся из ЕДИНОЙ Work-проекции —
+    # того же источника, что у `work show` и `explain`. Делаем это ПОСЛЕ reconcile/persist/crosscheck
+    # (они видят исходный реестр — поведение записи не меняется) и только для показа: проекция
+    # прикрепляется к записи (видна в --json), ветка синхронизируется. Статус «идёт ли работа»
+    # остаётся за реестром — это верный источник именно для этого вопроса.
+    _enrich_running_with_work_view(child_root, team)
     print(presenter.render(presenter.from_active_work({"active": team}, published=pub,
                                                       reconciled=reconciled, crosscheck=cross),
                            audience=aud))
     return 0
+
+
+def _enrich_running_with_work_view(child_root, team):
+    """READ-ONLY: прикрепить единую Work-проекцию к каждой идущей записи и синхронизировать ветку
+    из неё (issue #565). Ничего не пишет на диск и не меняет статус (за «идёт ли» отвечает реестр)."""
+    # project_work читает по контракту и не бросает на отсутствующих/битых источниках (каждый его
+    # reader глушит свой OSError/YAMLError у себя), поэтому обёртка-глушилка тут не нужна.
+    from ai_ops_kit.lifecycle import work_view
+    from ai_ops_kit.planning.delivery_plan import _workitem_key
+    for a in team or []:
+        wid = _workitem_key(a) or str(a.get("id") or "")
+        if not wid:
+            continue
+        v = work_view.project_work(wid, child_root)
+        if not v.get("sources"):
+            continue
+        a["work_view"] = v
+        if v.get("branch"):
+            a["branch"] = v["branch"]
+        if v.get("title") and not a.get("title"):
+            a["title"] = v["title"]
 
 
 @_intent("next")
@@ -962,6 +989,18 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
                 # Готовая команда с ответом обязана дойти до человека на любом уровне детализации.
                 _say(Path(child_root), "from_intake_gap", _missing, _cmd)
             return 2
+        # #564: Decision Loop проведён в маршрут. Для триггерного профиля (заявлено фича-решение)
+        # отсутствие Decision-контракта закрывает продвижение fail-closed — ДО выбора провайдера и
+        # любой траты. Для остальных работ сигнал не взведён и гейт возвращает None (не мешает).
+        from ai_ops_kit.intelligence import decision_loop
+        _dc = decision_loop.decision_contract_gate(signals, child_root, task, a.feature)
+        if _dc is not None:
+            if a.json:
+                print(json.dumps(_dc, ensure_ascii=False, indent=2))
+            else:
+                print(f"ОТКАЗ: {_dc['message']}")
+                print(f"  завести контракт: {_dc['propose_command']}")
+            return _dc["exit"]
         flags = pv["will_do"]["auto_flags"]
         # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и идёт под своим именем во все ветки
         # (sequential/обычная) — иначе автовыбор терялся бы по дороге (v2.120/v3.0-rc2).

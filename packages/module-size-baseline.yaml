@@ -19,9 +19,9 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1096
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1648
-  ai_ops_kit/ui/presenter.py: 880
+  ai_ops_kit/cli/ai_ops_cli.py: 1135
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1728
+  ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
   ai_ops_kit/planning/delivery_plan.py: 1135
@@ -43,9 +43,32 @@ raises:
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
   - at: '2026-09-07'
     what: raise_ceiling
-    from: 'ai_ops_cli_intents.py = 1518; ai_ops_cli.py = 1087; presenter.py = 798'
-    to: 'ai_ops_cli_intents.py = 1648; ai_ops_cli.py = 1096; presenter.py = 880'
-    work: 'knowledge-graph-query: Knowledge Graph как ЗАПРАШИВАЕМАЯ технология'
+    from: 'ai_ops_cli.py = 1108; ai_ops_cli_intents.py = 1648; presenter.py = 880'
+    to: 'ai_ops_cli.py = 1135; ai_ops_cli_intents.py = 1728; presenter.py = 944'
+    work: 'сведение вехи 4.1: #565 (Work-хребет) + #566 (живой outcome-флип) поверх #564'
+    why: >-
+      Потолки подняты по ФАКТУ объединённого дерева при сведении вехи (замер после слияния лент, а не
+      сумма раздельных). Три файла правили две ленты сразу: #565 провёл `status`/`explain`/`next`
+      через единую Work-проекцию, а #566 — различитель «технически done ≠ продуктово получилось» в
+      `readout`/`explain`; их read-only intent-хендлеры легли в спутник ai_ops_cli_intents.py,
+      продуктовые переводчики (прячут сессию/области записи/PRR от product-аудитории) — в presenter.py,
+      тонкая регистрация интентов — в ai_ops_cli.py. Сама доменная логика вынесена отдельными модулями
+      ниже порога (lifecycle/work_view.py, cli/post_release_loop.py, validation/validate_product_objects.py),
+      в baseline-файлы легли проводка и переводчики. presenter.py и ai_ops_cli_intents.py остаются
+      известными кандидатами на дальнейший вынос; потолки под факт, ратчет держит от тихого роста.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1096'
+    to: 'ai_ops_cli.py = 1108'
+    work: '#564: подключить Decision Loop в маршрут работы (built≠wired)'
+    why: >-
+      Проводка `intelligence/decision_loop` в рантайм-маршрут ОБЯЗАНА жить в файле маршрута:
+      fail-closed присутствие Decision-контракта проверяется на входе `run --execute`/`do`, до
+      выбора провайдера и любой траты. Сама логика гейта (decision_contract_gate +
+      has_feature_decision_contract) вынесена ВНИЗ в подключаемый модуль
+      intelligence/decision_loop.py, а в ai_ops_cli.py легла только тонкая проводка — импорт модуля
+      и вызов гейта с печатью отказа (+12 строк). Меньше в файле маршрута сделать нельзя: место
+      вызова и есть точка подключения, которой требует #564. Ратчет держит рост только вниз.
     why: >-
       Новый владельческий интент `ai-ops graph build|trace <feature>|gaps` — тонкий запрашиваемый
       слой ПОВЕРХ существующего (registry/entities.yaml + validate_knowledge_graph): собирает один

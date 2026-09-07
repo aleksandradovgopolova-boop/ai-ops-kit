@@ -152,6 +152,70 @@ def list_decisions(root: Path, status_filter: str | None = None) -> list[dict]:
     return decisions
 
 
+def has_feature_decision_contract(root: Path) -> bool:
+    """Есть ли в каталоге решений хотя бы один ВАЛИДНЫЙ Decision-контракт фичи.
+
+    Контракт = решение kind=feature-decision, несущее feature_target, который
+    проходит check_feature_target (baseline/target/guardrails). Пустой или
+    отсутствующий каталог -> False. Проверка READ-ONLY: каталог не создаётся
+    (в отличие от list_decisions, которая идёт через propose-путь), чтобы
+    fail-closed преамбула маршрута ничего не писала в дочку до старта.
+
+    #564 (built≠wired): это ТА функция, через которую decision_loop проведён в
+    рантайм-маршрут. Присутствие контракта проверяет она; КАЧЕСТВО объявленных
+    контрактов — advisory-гейт feature_decision_quality в пайплайне (тот же
+    check_feature_target, вынесенный вниз в checks.feature_decision).
+    """
+    ddir = Path(root) / ".ai" / "project" / "decisions"
+    if not ddir.exists():
+        return False
+    for f in sorted(ddir.glob("*.yaml")):
+        try:
+            d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, OSError):
+            continue
+        if not isinstance(d, dict) or d.get("kind") != "feature-decision":
+            continue
+        ft = d.get("feature_target")
+        if ft is not None and not check_feature_target(ft):
+            return True
+    return False
+
+
+def decision_contract_gate(signals, root, task=None, feature=None) -> dict | None:
+    """#564: fail-closed присутствие Decision-контракта для ТРИГГЕРНОГО профиля работы.
+
+    Триггер — сигнал `feature_decision_declared` (тот же, что делает трек FEATURE_DECISIONS
+    обязательным). Под ним работа не стартует без Decision-контракта — валидного фича-решения в
+    `.ai/project/decisions`. Для остальных работ сигнал не взведён -> None (не мешаем): governance
+    подключается ПО РИСКУ (три кольца). Проверяется ПРИСУТСТВИЕ (fail-closed, до траты); КАЧЕСТВО
+    объявленных контрактов — advisory-гейт feature_decision_quality в пайплайне.
+
+    Возвращает payload-словарь для блокировки (exit=2) либо None, если продвижение разрешено.
+    Маршрут (cli) зовёт это на входе `run --execute`/`do` — это и есть проводка decision_loop в
+    рантайм: до #564 модуль импортировали только тесты.
+    """
+    if not (signals or {}).get("feature_decision_declared"):
+        return None
+    if has_feature_decision_contract(Path(root)):
+        return None
+    wid = feature or "<wid>"
+    propose_cmd = (
+        f"python3 -m ai_ops_kit.intelligence.decision_loop {root} propose "
+        f"--id {wid} --proposal \"{task or '<что предлагается>'}\" "
+        "--feature-target '{\"baseline\": {\"metric\": \"...\", \"value\": ...}, "
+        "\"target\": {\"value\": ..., \"direction\": \"decrease\"}, "
+        "\"guardrails\": [{\"metric\": \"...\", \"bound\": \"...\"}]}'")
+    return {
+        "kind": "decision-contract-missing", "exit": 2,
+        "message": (
+            "работа заявлена как фича-решение, но для неё нет Decision-контракта — измеримого "
+            "обязательства (где мы сейчас, куда идём, что не должно сломаться). Без него запускать "
+            "нельзя: результат будет нечем признать успехом. Заведите решение и повторите запуск."),
+        "propose_command": propose_cmd,
+    }
+
+
 def format_decisions(decisions: list[dict]) -> str:
     """Format decisions into human-readable output."""
     if not decisions:

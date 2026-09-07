@@ -35,6 +35,12 @@ cd /path/to/project
 
 ## Что внутри
 
+> **Что кит умеет СЕГОДНЯ** — единая витрина [docs/capability-map.md](docs/capability-map.md):
+> каждая возможность с состоянием (**built** / **built≠wired** / **partial** / **planned**) и
+> способом проверки. Она ВЫВЕДЕНА из реестров и кода
+> (`python3 -m ai_ops_kit.devtools.capability_inventory`), а не написана руками, поэтому не
+> расходится с реальностью молча. Таблица ниже — обзор слоёв; точная карта — там.
+
 | Слой | Содержимое |
 |------|-----------|
 | **Execution Engine** | `ai-ops run` — единый движок «задача → draft PR» |
