@@ -614,3 +614,38 @@ gates:
     applicability: [ENGINEERING, PRODUCT]
     stale_detection: {bind_to: tested_revision}
     required_evidence: [logging_defined, metrics_defined, alerts_defined, slo_defined]
+
+# ─── Прополка advisory-гейтов (#616, 2026-09-07) ─────────────────────────────────────────────────
+# По каждому из 15 advisory-гейтов — ЯВНОЕ решение (как #589 по спящим модулям; здесь — по
+# недоказанным ГЕЙТАМ). §26: «успех — не больше гейтов». Полную таблицу с evidence/awaits несёт тело
+# PR #616; здесь — машиночитаемый исход, чтобы диспозиция была ДАННЫМИ, а не только прозой ревью.
+# decision ∈ remove_recommended | justified_advisory | owner_decision.
+#   remove_recommended — гейт перекрыт машинными проверками / закрывал сам себя / ничего не ждёт;
+#                        рекомендуется снять. САМО снятие меняет публичный счётчик гейтов в
+#                        registry/release-claims.yaml (координационный файл) и потому выносится
+#                        ОТДЕЛЬНЫМ координаторским PR — фичевый PR координационный файл не трогает
+#                        (registry/coordination-files.yaml, замер 20.08.2026).
+#   justified_advisory — advisory обоснованно: evidence назван ЛИБО blocking противоречит существу.
+#   owner_decision     — детерминирован и проведён (enforce-ready), но полевого срабатывания-на-дефекте
+#                        нет; перевод в blocking = рост enforcement-поверхности → решение ВЛАДЕЛЬЦА (§26).
+# Границы: MVP-blocking ≤ 8 не тронут; ловящий дефекты гейт не снят ради числа.
+advisory_review:
+  reviewed_at: "2026-09-07"
+  issue: 616
+  field_part_lands_via: 587   # «сработал в живом run --execute» достроит живой цикл #587 и далее
+  decisions:
+    documentation_drift:        {decision: remove_recommended,  field_evidence: false}  # перекрыт documentation_updated; дрейф чисел — knowledge_integrity/freshness; «дрейф смысла» закрывал сам писатель
+    regression_test_evidence:   {decision: justified_advisory,  field_evidence: true}   # раунд C квалификации T1/T2/T4
+    concurrency_preflight:      {decision: justified_advisory,  field_evidence: true}   # инцидент stale-premise + eval-кейс
+    contour_consistency:        {decision: justified_advisory,  field_evidence: true}   # обкатка niti 2026-08-12 (0 ложных)
+    own_medicine:               {decision: justified_advisory,  field_evidence: true}   # 3.36.9 + ратчет KNOWN_GAPS на ките
+    knowledge_integrity:        {decision: justified_advisory,  field_evidence: true}   # validate_references зелёный в CI
+    knowledge_freshness:        {decision: justified_advisory,  field_evidence: true}   # freshness — сигнал по конструкции
+    stakeholder_readiness:      {decision: justified_advisory,  field_evidence: false}  # human_by_nature: готовность людей
+    decision_quality:           {decision: justified_advisory,  field_evidence: false}  # human_by_nature: качество решения
+    release_safety:             {decision: justified_advisory,  field_evidence: false}  # трек RELEASE; ждёт места флагов в дочке
+    observability_readiness:    {decision: justified_advisory,  field_evidence: false}  # трек RELEASE; ждёт места конфига в дочке
+    event_contract_consistency: {decision: owner_decision,      field_evidence: false}  # enforce vs park: детерминирован+трек EVENTS
+    feature_decision_quality:   {decision: owner_decision,      field_evidence: false}  # enforce vs park: детерминирован+трек FEATURE_DECISIONS
+    documentation_updated:      {decision: owner_decision,      field_evidence: false}  # enforce vs park: машинный+трек DOCUMENTATION
+    surface_wiring_consistency: {decision: owner_decision,      field_evidence: false}  # снять vs park: child-only, ни разу не сработал
