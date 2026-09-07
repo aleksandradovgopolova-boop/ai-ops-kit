@@ -44,11 +44,15 @@ def main(argv=None) -> int:
                                  description="Governance-отчёт соответствия продукта стандарту (SR-17..23)")
     ap.add_argument("repo", nargs="?", default=".")
     ap.add_argument("--out", help="записать отчёт JSON в этот файл (SR-18: артефакт в истории дочки)")
+    ap.add_argument("--files", default="",
+                    help="изменённые пути PR через запятую (git diff --name-only) для блока "
+                         "расхождений SR-14..16; без них расхождение объявляется not_checked")
     ap.add_argument("--json", action="store_true", help="печатать отчёт как JSON")
     ns = ap.parse_args(argv if argv is not None else sys.argv[1:])
 
     root = Path(ns.repo)
-    rep = governance_report.build(root)
+    changed = [f.strip() for f in ns.files.split(",") if f.strip()]
+    rep = governance_report.build(root, changed_files=changed or None)
     if ns.out:
         out = Path(ns.out)
         out.parent.mkdir(parents=True, exist_ok=True)
