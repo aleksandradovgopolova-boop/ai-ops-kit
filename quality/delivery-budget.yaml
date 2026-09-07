@@ -34,7 +34,7 @@ ceilings:
   #   source давал 4579092, реальная поставка = 4641080. См. запись в `raises`.
   # 2026-09-07: 4655000 -> 4680000 под #567 (доставляемый модуль outcome_insight.py + проводка) и
   #   ребейз на #580. Реальная установка = 4676730. См. запись в `raises`.
-  volume_bytes: 4680000
+  volume_bytes: 4715000
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -60,7 +60,7 @@ ceilings:
   # Потолок строгий `<`, замер объединённого дерева = 555 содержательных, ставим 556.
   # 2026-09-07: 556 -> 557 под #567 — доставляемый модуль ai_ops_kit/intelligence/outcome_insight.py
   # (Outcome→Insight→кандидат-работа; зовётся из пост-релизного маршрута). Замер реальной установки.
-  substantive_files: 557
+  substantive_files: 560
 
 # Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
 # `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
@@ -1253,4 +1253,40 @@ raises:
       реального Outcome) едет в дочку — его зовёт пост-релизный маршрут; плюс проводка в
       post_release_loop/cli/cli_intents (сюрфейсинг кандидата в inbox/next). Замер РЕАЛЬНОЙ установкой
       (installed/.ai/managed): 4641080 -> 4667719, потолок под факт 4675000 с видимым запасом.
+  - at: '2026-09-07'
+    what: volume
+    from_bytes: 4680000
+    to_bytes: 4715000
+    measured_before: 4676730
+    measured_after: 4705732
+    work: 'SR-5/6/1..4/7: секционная валидация + версия стандарта + ARCHITECTURE.md'
+    files:
+      - ai_ops_kit/planning/standard.py
+      - ai_ops_kit/planning/artifact_sections.py
+      - registry/standard.yaml
+      - templates/system/ARCHITECTURE.md
+    why_it_works_in_the_child: >-
+      Все четыре едут в дочку и там ИСПОЛНЯЮТСЯ: planning/standard.py и registry/standard.yaml дают
+      `ai-ops status` версию стандарта репозитория (SR-1..4); planning/artifact_sections.py ведёт
+      секционную проверку обязательных артефактов дочки (SR-5/6, зовётся из repo_audit); шаблон
+      templates/system/ARCHITECTURE.md сеется черновиком при установке (SR-7). Замер РЕАЛЬНОЙ
+      установкой (installed/.ai/managed): 4676730 -> 4705732, потолок под факт с видимым запасом.
+      Снят templates/product-layer/ROADMAP.md (SR-2), поэтому чистый прирост файлов меньше добавленных.
+  - at: '2026-09-07'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 557
+    to_count: 560
+    measured_before: 556
+    measured_after: 559
+    work: 'SR-5/6/1..4/7: секционная валидация + версия стандарта + ARCHITECTURE.md'
+    files:
+      - ai_ops_kit/planning/standard.py
+      - ai_ops_kit/planning/artifact_sections.py
+      - registry/standard.yaml
+      - templates/system/ARCHITECTURE.md
+    why_it_works_in_the_child: >-
+      Те же файлы: они исполняются в дочке, а не лежат в ней (см. why выше по volume). Чистый прирост
+      +3, а не +4: templates/product-layer/ROADMAP.md снят (SR-2, второй шаблон горизонтов).
 

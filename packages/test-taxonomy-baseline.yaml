@@ -23,9 +23,9 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 397
+behavioral_count: 401
 structural_count: 66
-total_count: 463
+total_count: 467
 behavioral_share_pct: 85.75
 
 raises:
