@@ -142,3 +142,106 @@ def test_the_delivered_document_rides_to_the_child():
     assert DELIVERED_DOC.is_file(), f"нет {rel}"
     assert any(Path(rel).match(p) for p in patterns), (
         f"{rel} не попадает ни под один шаблон поставки {patterns} — документ останется в ките")
+
+
+# ─── источник доказательства: детерминированное ≠ AI-суждение (веха 4.2, #588) ────────────────────
+#
+# Тот же замер «кто закрывает» отвечает и на более грубый вопрос доверия: «этому можно ВЕРИТЬ как
+# доказательству, или это МНЕНИЕ?». Ответов три — deterministic | ai_judgment | human. Судья и
+# писатель схлопываются в ai_judgment (оба — суждение, ни одно не воспроизводимо); правило вехи:
+# одно AI-суждение (advisory) без детерминированной опоры «verified» НЕ даёт.
+
+def test_source_is_derived_from_gate_kind_not_self_declared():
+    """Источник — из структуры гейта (как closed_by), а не из самозаявления producer'а."""
+    assert ge.evidence_source({"validator": "validate-evidence"}) == "deterministic"
+    assert ge.evidence_source({"review_mode": "read-only"}) == "ai_judgment"     # судья — мнение
+    assert ge.evidence_source({"review_mode": "writer"}) == "ai_judgment"        # писатель — мнение
+    assert ge.evidence_source({"human_approval": True}) == "human"
+
+
+def test_source_map_covers_every_closed_by_value():
+    """Каждое значение closed_by схлопывается в известный источник — карта полная."""
+    for v in ge.CLOSED_BY_VALUES:
+        assert ge.EVIDENCE_SOURCE[v] in ge.EVIDENCE_SOURCE_VALUES
+
+
+def test_deterministic_pass_yields_verified():
+    """Пройденный детерминированный гейт — верификация опирается на воспроизводимый сигнал."""
+    gates = {"impl": {"validator": "validate-evidence"}}
+    verdict = ge.evidence_verdict([{"gate": "impl", "status": "pass"}], gates)
+    assert verdict["verified"] is True
+    assert verdict["deterministic"] == ["impl"]
+
+
+def test_single_ai_judgment_without_deterministic_backing_is_not_verified():
+    """ЦЕНТРАЛЬНЫЙ инвариант вехи 4.2: одно AI-суждение (advisory) не даёт verified."""
+    gates = {"review": {"review_mode": "read-only", "responsible_role": "reviewer"}}
+    verdict = ge.evidence_verdict([{"gate": "review", "status": "pass"}], gates)
+    assert verdict["verified"] is False
+    assert verdict["advisory"] == ["review"] == verdict["ai_judgment"]
+    assert "advisory" in verdict["reason"] and "verified не выставляется" in verdict["reason"]
+
+
+def test_writer_selfclaim_alone_is_not_verified():
+    """Самозаявление писателя — слабейший источник, тоже не даёт verified в одиночку."""
+    gates = {"selfcheck": {"review_mode": "writer", "responsible_role": "impl"}}
+    verdict = ge.evidence_verdict([{"gate": "selfcheck", "status": "pass"}], gates)
+    assert verdict["verified"] is False
+    assert verdict["advisory"] == ["selfcheck"]
+
+
+def test_ai_judgment_verified_only_when_a_deterministic_gate_also_passes():
+    """AI-суждение РЯДОМ с пройденным детерминированным гейтом — verified опирается на машину."""
+    gates = {"impl": {"validator": "validate-evidence"},
+             "review": {"review_mode": "read-only", "responsible_role": "reviewer"}}
+    results = [{"gate": "impl", "status": "pass"}, {"gate": "review", "status": "pass"}]
+    verdict = ge.evidence_verdict(results, gates)
+    assert verdict["verified"] is True
+    assert verdict["deterministic"] == ["impl"]
+    assert verdict["advisory"] == ["review"]        # мнение всё равно названо мнением
+
+
+def test_failed_deterministic_gate_does_not_back_verified():
+    """verified требует ПРОЙДЕННОГО детерминированного гейта — упавший опорой не является."""
+    gates = {"impl": {"validator": "validate-evidence"},
+             "review": {"review_mode": "read-only", "responsible_role": "reviewer"}}
+    results = [{"gate": "impl", "status": "fail"}, {"gate": "review", "status": "pass"}]
+    verdict = ge.evidence_verdict(results, gates)
+    assert verdict["verified"] is False
+    assert verdict["deterministic"] == []
+
+
+def test_human_only_is_not_deterministic_verification():
+    """Решение человека само по себе не делает вердикт детерминированным (но названо отдельно)."""
+    verdict = ge.evidence_verdict([{"gate": "approval", "status": "pass"}],
+                                  {"approval": {"human_approval": True}})
+    assert verdict["verified"] is False
+    assert verdict["human"] == ["approval"]
+    assert verdict["advisory"] == []                # человек — не AI-суждение
+
+
+def test_closure_breakdown_carries_source_split():
+    """Разбивка «кто закрывает» несёт и грубый источник доверия — доходит до отчёта прогона."""
+    bd = ge.closure_breakdown({"impl": {"validator": "validate-evidence"},
+                               "review": {"review_mode": "read-only"}})
+    assert bd["by_source"] == {"impl": "deterministic", "review": "ai_judgment"}
+    assert bd["deterministic"] == ["impl"] and bd["ai_judgment"] == ["review"]
+    # старый контракт не сломан
+    assert bd["machine_checked"] == ["impl"] and bd["judged_or_human"] == ["review"]
+
+
+def test_evaluate_output_includes_evidence_verdict():
+    """`evaluate()` кладёт вердикт честности evidence в результат — он доезжает до run-report."""
+    ev = ge.evaluate("QUICK")
+    v = ev.get("evidence_verdict")
+    assert v is not None
+    for k in ("verified", "deterministic", "ai_judgment", "advisory", "human", "reason"):
+        assert k in v
+
+
+def test_the_pipeline_puts_the_evidence_verdict_into_run_report_json():
+    """ШОВ: вердикт честности evidence попадает в `gates` отчёта прогона и в readout."""
+    src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    assert '"evidence_verdict": gates.get("evidence_verdict"),' in src, (
+        "вердикт честности evidence не доезжает до run-report — verified-привилегия невидима")
+    assert 'evidence:' in src, "advisory-вердикт не печатают человеку"
