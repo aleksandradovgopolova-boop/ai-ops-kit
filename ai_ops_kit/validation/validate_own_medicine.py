@@ -374,6 +374,40 @@ def check_product_layer_seeded(root, mod):
             f"источник подтверждён: реестр артефактов читается, объявлено артефактов слоя: {n}")
 
 
+def check_roadmap_migrated(root, mod):
+    """Перенос уходящего `.ai-ops/ROADMAP.md` в канонический корень (SR-2, `_migrate_legacy_roadmap`).
+
+    Для САМОГО КИТА — `not_applicable`: кит ведёт направление нативно в корневом `ROADMAP.md` и
+    никогда не имел `.ai-ops/ROADMAP.md` (слой `.ai-ops/` — то, что кит ДАЁТ дочке, а не ведёт у
+    себя). Миграция срабатывает только у дочки, установленной ДО свода путей: там заполненный
+    уходящий роадмап переносится в корень, чтобы резолвер не предпочёл пустой канонический.
+    """
+    legacy = Path(root) / ".ai-ops" / "ROADMAP.md"
+    if legacy.is_file():
+        # необычно для самого кита, но если файл есть — честно сообщаем, что перенос применим
+        return APPLIED, "уходящий `.ai-ops/ROADMAP.md` присутствует — перенос в корень применим", ""
+    return (NOT_APPLICABLE,
+            "кит ведёт направление нативно в корневом `ROADMAP.md` и не имеет `.ai-ops/ROADMAP.md`: "
+            "миграция уходящего пути касается только дочек, установленных до свода (SR-2)", "")
+
+
+def check_architecture_migrated(root, mod):
+    """Перенос уходящих `context/system/*` в канонический `ARCHITECTURE.md` (SR-7).
+
+    Для САМОГО КИТА — `not_applicable`: кит ведёт свою архитектуру нативно и не держит заполненных
+    `context/system/SystemOverview.md`/`RepositoryMap.md` для переноса. Миграция касается дочки,
+    заполнившей прежние файлы до перехода на ARCHITECTURE.md.
+    """
+    legacy = [Path(root) / "context" / "system" / n
+              for n in ("SystemOverview.md", "RepositoryMap.md")]
+    if any(p.is_file() and p.read_text(encoding="utf-8").strip() for p in legacy) \
+            and not (Path(root) / "ARCHITECTURE.md").exists():
+        return APPLIED, "заполненные уходящие context/system/* есть — перенос в ARCHITECTURE.md применим", ""
+    return (NOT_APPLICABLE,
+            "кит ведёт архитектуру нативно и не держит заполненных уходящих context/system/* для "
+            "переноса: миграция в ARCHITECTURE.md касается дочек, заполнивших прежние файлы (SR-7)", "")
+
+
 DELIVERY_CHECKS = {
     "context_backfilled": check_context_backfilled,
     "ci_workflows": check_ci_workflows,
@@ -382,6 +416,8 @@ DELIVERY_CHECKS = {
     "gitattributes": check_gitattributes,
     "entry_point": check_entry_point,
     "communication_adapter": check_communication_adapter,
+    "roadmap_migrated": check_roadmap_migrated,
+    "architecture_migrated": check_architecture_migrated,
     "planning_seeded": check_planning_seeded,
     "product_layer_seeded": check_product_layer_seeded,
 }
@@ -454,6 +490,10 @@ NOT_CULTURE = {
     # неприменимо по построению: у кита нет `parent`, он и есть parent — ровно та же причина,
     # по которой в этом списке уже лежит `.ai-ops.yaml`.
     "package_channel": "чтение канала, который заработал пакет (release-claims.yaml)",
+    # SR-4: та же причина, что у package_channel — ЧТЕНИЕ факта о пакете (версия стандарта из
+    # registry/standard.yaml) для подстановки в конфиг дочки, а не доставка культуры. У кита нет
+    # parent — самоприменение неприменимо по построению.
+    "package_standard_version": "чтение версии стандарта пакета (registry/standard.yaml)",
     "compatible_range_for": "вычисление совместимого диапазона версий",
     "write_checksums": "чек-суммы managed-слоя — часть пункта managed_layer",
     "write_provenance": "происхождение managed-слоя — часть пункта managed_layer",

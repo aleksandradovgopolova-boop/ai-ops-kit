@@ -70,7 +70,7 @@ class TestPositive:
         rep = PA.audit(r)
         assert _shape_ok(rep)
         assert rep["dimensions"]["artifacts"]["status"] == PA.GREEN
-        assert rep["dimensions"]["artifacts"]["counts"]["valid"] == 5
+        assert rep["dimensions"]["artifacts"]["counts"]["valid"] == 4  # SR-2: roadmap снят из слоя .ai-ops/
 
 
 # ── fail-closed ─────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ class TestFailClosed:
         r = _repo(tmp_path)
         rep = PA.audit(r)
         assert rep["dimensions"]["artifacts"]["status"] == PA.RED
-        assert rep["dimensions"]["artifacts"]["counts"]["missing"] == 5
+        assert rep["dimensions"]["artifacts"]["counts"]["missing"] == 4  # SR-2: roadmap снят из слоя .ai-ops/
         assert rep["verdict"] == PA.RED
 
     def test_unknown_axes_stay_unknown(self, tmp_path):

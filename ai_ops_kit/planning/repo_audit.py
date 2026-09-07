@@ -537,6 +537,13 @@ def _contour_state(child_root, c: dict, evidence: dict, model: dict) -> dict:
                 return True
         return False
 
+    def _resolve(rel):
+        for pre in ("", ".ai/project/", ".ai/custom/"):
+            p = root / (pre + rel)
+            if p.is_file():
+                return p
+        return None
+
     if not evidence.get("tree_readable"):
         state = UNKNOWN
     else:
@@ -570,11 +577,35 @@ def _contour_state(child_root, c: dict, evidence: dict, model: dict) -> dict:
     # спрашивать «кто основной пользователь» у репозитория с заполненным ProductOverview — то же
     # самое, что спрашивать про PostgreSQL при наличии миграций. Устаревший источник (`stale`)
     # вопросы возвращает: он отвечает, но неизвестно, на какой год.
+    # SR-5/6: секционные состояния присутствующих артефактов, объявивших required_sections. Три
+    # состояния (заполнена/нет/пуста): пустой раздел — отдельная находка, а не «есть». Список секций
+    # — данные (`required_sections` рядом с source_of_truth), проверку ведёт artifact_sections.
+    section_findings = []
+    if evidence.get("tree_readable"):
+        from ai_ops_kit.planning import artifact_sections as _sections
+        for s in _sot:
+            secs = s.get("required_sections")
+            if not secs:
+                continue
+            p = _resolve(s["path"])
+            if p is None:
+                continue                               # файла нет — покрыто missing_required
+            try:
+                states = _sections.section_states(p.read_text(encoding="utf-8"), secs)
+            except OSError:
+                continue
+            empty = [x["name"] for x in states if x["state"] == _sections.EMPTY]
+            missing_sec = [x["name"] for x in states if x["state"] == _sections.MISSING]
+            if empty or missing_sec:
+                section_findings.append({"path": s["path"], "empty_sections": empty,
+                                         "missing_sections": missing_sec})
+
     closed = state == VERIFIED
     return {"contour": c["id"], "title": c.get("title"), "question": c.get("question"),
             "state": state, "owner_role": c.get("owner_role"),
             "present": [s["path"] for s in (c.get("source_of_truth") or []) if _has(s["path"])],
             "missing_required": [s["path"] for s in req if not _has(s["path"])],
+            "section_findings": section_findings,
             "ai_can_reconstruct": rec.get("ability", "none"),
             "reconstruct_from": rec.get("from") or [],
             "needs_human": (not closed) and (bool(qs) or rec.get("ability") == "none"),
@@ -604,9 +635,16 @@ def audit(child_root, evidence: dict | None = None, model: dict | None = None) -
     # ответа о нём (`gap_plan` его блокирующим считал). В child-репозитории кита `.ai-ops.yaml`
     # есть ВСЕГДА, значит контур границ AI не попадал в blocking_gaps никогда.
     blocking_tiers = {t.get("id") for t in (model.get("gap_tiers") or []) if t.get("blocks_work")}
+    # SR-1: версия стандарта репозитория (отдельная от версии пакета) + сходится ли отпечаток
+    # состава требований с объявленным. Расхождение = требования правили, а версию не подняли.
+    from ai_ops_kit.planning import standard as _standard
+    std = {"version": _standard.current_version(),
+           "fingerprint_in_sync": _standard.load().get("requirements_fingerprint")
+           == _standard.compute_fingerprint()}
     return {"contours": rows, "by_state": by_state,
             "ready": [r["contour"] for r in rows if r["state"] == VERIFIED],
             "ai_can_build": ai_only, "needs_human": human,
+            "standard": std,
             "blocking_gaps": [r["contour"] for r in rows
                               if r["state"] != VERIFIED and r["gap_tier"] in blocking_tiers]}
 
@@ -711,6 +749,13 @@ def render(rep: dict) -> str:
         L.append(f"  {r['state']:9} {r['title']} · {who} · срочность {r['gap_tier']}")
         if r["missing_required"]:
             L.append(f"            нет: {', '.join(r['missing_required'])}")
+        # SR-6: пустая секция — отдельная находка, не «есть». Заголовок без тела выглядит закрытым.
+        for sf in r.get("section_findings") or []:
+            if sf["empty_sections"]:
+                L.append(f"            {sf['path']}: разделы есть, но ПУСТЫ (выглядят закрытыми): "
+                         f"{', '.join(sf['empty_sections'])}")
+            if sf["missing_sections"]:
+                L.append(f"            {sf['path']}: нет разделов: {', '.join(sf['missing_sections'])}")
 
     L.append("\nПЛАН ДОСТРОЙКИ (progressive — не «заполните 14 документов»)")
     for tid, t in rep["gap_plan"].items():

@@ -94,27 +94,12 @@ artifacts:
       - {action: update,   autonomy: execute}        # актуализация фактов (версия, прогресс)
       - {action: migrate,  autonomy: require_approval}
 
-  - id: roadmap
-    title: Roadmap
-    purpose: >-
-      Направления и ожидаемые результаты (Now/Next/Later), а не дубль backlog. ФОРМУ создаёт этот
-      слой; ведение (декомпозиция, связь с milestones/backlog) — забота ленты roadmap.
-    required: true
-    kind: document
-    format: markdown
-    path: ".ai-ops/ROADMAP.md"
-    template: {path: "templates/product-layer/ROADMAP.md", version: 1}
-    owner_role: product
-    source_contour: product_strategy
-    structure:
-      required_sections: [Now, Next, Later]
-    validation: [sections_present, template_version_current, roadmap_contract]
-    update: {mode: ai_assisted, regenerate: false, on: [replanning, insight]}
-    source: [planning_plan, strategy]
-    ai_actions:
-      - {action: generate, autonomy: prepare}
-      - {action: update,   autonomy: prepare}        # roadmap — территория стратегии: не execute молча
-      - {action: migrate,  autonomy: require_approval}
+  # roadmap СНЯТ из этого слоя (SR-2, свод к одному источнику). Направление продукта — обязательный
+  # артефакт контура product_strategy в registry/product-operating-model.yaml по каноническому пути
+  # `ROADMAP.md` в корне (declared-or-root). Прежде он дублировался здесь как `.ai-ops/ROADMAP.md` с
+  # другим шаблоном/горизонтами/валидаторами — две правды об одном направлении (validate_own_medicine
+  # прямо называл это дублем). Читатели теперь идут через roadmap.resolve_roadmap_path; уходящий путь
+  # мигрируется в корень при установке/обновлении (_migrate_legacy_roadmap).
 
   - id: delivery
     title: Delivery

@@ -48,12 +48,16 @@ def test_full_layer_makes_artifacts_valid(installer, tmp_path):
 
 @pytest.mark.contract
 def test_missing_artifact_blocks_and_is_named(installer, tmp_path):
-    """Удалённый обязательный артефакт -> not_ready, и блокер НАЗЫВАЕТ именно его."""
+    """Удалённый обязательный артефакт -> not_ready, и блокер НАЗЫВАЕТ именно его.
+
+    roadmap снят из слоя .ai-ops/ (SR-2, канонический — корневой ROADMAP.md); берём DELIVERY.md —
+    действующий обязательный артефакт слоя.
+    """
     p = _product(installer, tmp_path / "p")
-    (p / ".ai-ops" / "ROADMAP.md").unlink()
+    (p / ".ai-ops" / "DELIVERY.md").unlink()
     v = product_contract.validate(p)
     assert v["verdict"] == "not_ready"
-    assert any("roadmap" in b.lower() for b in v["blocking"])
+    assert any("delivery" in b.lower() for b in v["blocking"])
 
 
 @pytest.mark.contract

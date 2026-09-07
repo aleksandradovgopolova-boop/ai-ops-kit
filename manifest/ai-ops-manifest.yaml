@@ -324,12 +324,14 @@ session_orchestration:
       invariant: >
         продуктовые факты не выдумываются: цели, боли и «следующий результат» из кода не выводятся,
         и на их месте стоит пометка владельцу, а не правдоподобный текст
-    required_repo_artifacts:                          # обязательные артефакты контура планирования
+    required_repo_artifacts:                          # обязательные артефакты продуктового репозитория
       - ROADMAP.md                                    # направление: четыре горизонта
       - planning/plan.yaml                            # delivery plan: kind: delivery-plan
+      - ARCHITECTURE.md                               # единый источник правды об архитектуре (SR-7)
     templates:
       roadmap: templates/planning/ROADMAP.md
       plan: templates/planning/plan.yaml
+      architecture: templates/system/ARCHITECTURE.md
     # v3.35.2 (тир 3): РЕПОЗИТОРИЙ ВПРАВЕ ОПИСАТЬ СЕБЯ. Пути артефактов были жёсткими, и монорепо,
     # где продукт живёт в `apps/web/`, не мог описать себя вовсе. Дополнить сигналы кита было можно,
     # снять — нельзя (`**/entities/**` в Feature-Sliced Design: 6 ложных находок из 9).

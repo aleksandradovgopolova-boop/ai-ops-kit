@@ -27,12 +27,12 @@ ceilings:
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1068
   ai_ops_kit/ui/presenter_formatters.py: 977
-  ai_ops_kit/planning/repo_audit.py: 759
+  ai_ops_kit/planning/repo_audit.py: 804
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 909
   ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 1097
-  ai_ops_kit/validation/validate_own_medicine.py: 732
+  ai_ops_kit/validation/validate_own_medicine.py: 772
   ai_ops_kit/gates/gate_executor.py: 905
   ai_ops_kit/engine/tool_broker.py: 762
   ai_ops_kit/planning/contours.py: 724
@@ -41,6 +41,28 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_kit/validation/validate_own_medicine.py = 732'
+    to: 'ai_ops_kit/validation/validate_own_medicine.py = 772'
+    work: 'SR-7: проверки самоприменения для новых шагов доставки (миграции)'
+    why: >-
+      deliver_assets получил два новых шага (roadmap_migrated, architecture_migrated), и инвариант
+      own-medicine требует «каждый шаг доставки имеет решение о самоприменении» — добавлены
+      check_roadmap_migrated и check_architecture_migrated (по образцу соседних, ~30 строк). Файл —
+      реестр решений о самоприменении: рост пропорционален числу шагов доставки, а не монолитности.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/repo_audit.py = 759'
+    to: 'ai_ops_kit/planning/repo_audit.py = 804'
+    work: 'SR-5/6 + SR-1: секционные находки контура + версия стандарта в аудите'
+    why: >-
+      _contour_state получил вычисление секционных находок (SR-6: три состояния секции —
+      заполнена/нет/пуста, +~18 строк) и audit() — блок версии стандарта (SR-1, +~5 строк). Оба —
+      когерентная область файла-аудита: он и так собирает состояние репозитория против модели, а
+      секции и версия стандарта — часть этого состояния. Доменная логика секций вынесена отдельным
+      модулем planning/artifact_sections.py (ниже порога, не в baseline); версия стандарта — в
+      planning/standard.py. Здесь только проводка в отчёт. Потолок под факт, ратчет держит от роста.
   - at: '2026-09-07'
     what: raise_ceiling
     from: 'ai_ops_cli_intents.py=1743; ai_ops_cli.py=1157; gate_executor.py=820; execution_pipeline.py=779'

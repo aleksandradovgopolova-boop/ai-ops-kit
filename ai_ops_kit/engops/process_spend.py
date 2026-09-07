@@ -74,6 +74,9 @@ STATES = ("normal", "attention", "over_ceiling", "code_started", "unknown")
 # и `planning/`. ГРАНИЦА `engops/` (лента B) ПЕРЕСЕЧЕНА ОСОЗНАННО, правка на одну строку; сказано в PR.
 _KIT_PREFIXES = (".ai/", ".ai-ops/", ".claude/", ".github/", "features/", "planning/", "history/")
 _KIT_FILES = (".ai-ops.yaml", "ai-ops", "AI-OPS-ONBOARDING.md", "CLAUDE.md", "ROADMAP.md",
+              # ARCHITECTURE.md добавлен 07.09.2026 (SR-7): установка сеет его черновиком, значит
+              # свежая поставка НЕ должна читаться как правка кода — та же категория, что ROADMAP.md.
+              "ARCHITECTURE.md",
               # `.gitattributes` добавлен 18.08.2026 вместе с его установкой: `ensure_gitattributes`
               # пишет его в дочку, значит свежая поставка НЕ должна читаться как правка кода — ровно
               # тот же случай, что был с `.gitignore` (проба шва test_fresh_install_is_not_a_code_change).
