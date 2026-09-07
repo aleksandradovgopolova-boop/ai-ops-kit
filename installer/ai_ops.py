@@ -1454,6 +1454,40 @@ def _backfill_required_context(today=None, dry=False):
     return out
 
 
+def _migrate_legacy_roadmap(root: Path, dry=False):
+    """SR-2: перенести уходящий `.ai-ops/ROADMAP.md` в канонический корневой `ROADMAP.md`.
+
+    Прежде направление дублировалось: планирование вело корневой `ROADMAP.md`, а слой `.ai-ops/`
+    сеял свой `.ai-ops/ROADMAP.md`. Реестр `.ai-ops/`-роадмапа снят, читатели идут по каноническому
+    пути. Но дочка, установленная до свода, могла ЗАПОЛНИТЬ `.ai-ops/ROADMAP.md`; если просто дать
+    планированию посеять пустой корневой, резолвер предпочтёт пустой канонический заполненному
+    уходящему — содержимое потерялось бы. Поэтому здесь: если корневого нет, а уходящий есть и
+    непуст — переносим его содержимое в корень (не удаляя оригинал: снятие — забота окна вывода).
+    Идемпотентно: если корневой уже есть, не трогаем ничего. -> список {artifact, action}.
+    """
+    # Как у _seed_product_layer: установщик запускают файлом, тогда `import ai_ops_kit` без PKG на
+    # пути не резолвится. Резолвер направления — из пакета (учитывает declared-path монорепо); если
+    # пакет недоступен, fail-open на дефолтные пути — миграция всё равно работает для обычной дочки,
+    # а хуже случая (двойной путь остаётся) резолвер-читатель и так терпит.
+    if str(PKG) not in sys.path:
+        sys.path.insert(0, str(PKG))
+    try:
+        from ai_ops_kit.planning import roadmap as _roadmap
+        canonical = Path(root) / _roadmap.roadmap_rel(root)
+        legacy = Path(root) / _roadmap.LEGACY_ROADMAP_REL
+    except Exception:                                  # noqa: BLE001 — пакет недоступен: дефолтные пути
+        canonical = Path(root) / "ROADMAP.md"
+        legacy = Path(root) / ".ai-ops" / "ROADMAP.md"
+    if canonical.exists() or not legacy.is_file():
+        return []
+    if not legacy.read_text(encoding="utf-8").strip():
+        return []                                      # пустой уходящий переносить незачем — посев даст черновик
+    if not dry:
+        canonical.parent.mkdir(parents=True, exist_ok=True)
+        canonical.write_text(legacy.read_text(encoding="utf-8"), encoding="utf-8")
+    return [{"artifact": str(canonical.relative_to(root)), "action": "migrated-from-legacy"}]
+
+
 def _seed_planning_contour(root: Path, dry=False):
     """v3.35: контур Planning & Execution доезжает до репозитория ЧЕРНОВИКАМИ.
 
@@ -2024,6 +2058,9 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         "gitattributes": ensure_gitattributes(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
+        # ДО посева планирования (SR-2): перенести заполненный уходящий `.ai-ops/ROADMAP.md` в
+        # канонический корень, иначе посев дал бы пустой корневой поверх заполненного уходящего.
+        "roadmap_migrated": _migrate_legacy_roadmap(root),
         "planning_seeded": _seed_planning_contour(root),
         # PR-3: Product Operating Layer `.ai-ops/` (Passport из фактов, ROADMAP/DELIVERY/POLICY из
         # официальных шаблонов, templates/ — копия версий кита). Читает состав из реестра артефактов.
@@ -2060,6 +2097,12 @@ def _assets_report_line(assets: dict) -> str:
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += (" Политика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
+    migrated = [x["artifact"] for x in (assets.get("roadmap_migrated") or [])
+                if x.get("action") == "migrated-from-legacy"]
+    if migrated:
+        out += (" Направление продукта перенесено в " + ", ".join(migrated)
+                + ": прежний путь в `.ai-ops/` уходит, чтобы направление жило в одном месте. "
+                  "Содержимое сохранено, старый файл не удалён.")
     seeded = [x["artifact"] for x in (assets.get("planning_seeded") or [])
               if x.get("action") == "created-draft"]
     if seeded:

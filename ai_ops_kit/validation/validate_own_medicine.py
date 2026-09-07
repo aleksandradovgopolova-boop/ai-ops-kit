@@ -374,6 +374,23 @@ def check_product_layer_seeded(root, mod):
             f"источник подтверждён: реестр артефактов читается, объявлено артефактов слоя: {n}")
 
 
+def check_roadmap_migrated(root, mod):
+    """Перенос уходящего `.ai-ops/ROADMAP.md` в канонический корень (SR-2, `_migrate_legacy_roadmap`).
+
+    Для САМОГО КИТА — `not_applicable`: кит ведёт направление нативно в корневом `ROADMAP.md` и
+    никогда не имел `.ai-ops/ROADMAP.md` (слой `.ai-ops/` — то, что кит ДАЁТ дочке, а не ведёт у
+    себя). Миграция срабатывает только у дочки, установленной ДО свода путей: там заполненный
+    уходящий роадмап переносится в корень, чтобы резолвер не предпочёл пустой канонический.
+    """
+    legacy = Path(root) / ".ai-ops" / "ROADMAP.md"
+    if legacy.is_file():
+        # необычно для самого кита, но если файл есть — честно сообщаем, что перенос применим
+        return APPLIED, "уходящий `.ai-ops/ROADMAP.md` присутствует — перенос в корень применим", ""
+    return (NOT_APPLICABLE,
+            "кит ведёт направление нативно в корневом `ROADMAP.md` и не имеет `.ai-ops/ROADMAP.md`: "
+            "миграция уходящего пути касается только дочек, установленных до свода (SR-2)", "")
+
+
 DELIVERY_CHECKS = {
     "context_backfilled": check_context_backfilled,
     "ci_workflows": check_ci_workflows,
@@ -382,6 +399,7 @@ DELIVERY_CHECKS = {
     "gitattributes": check_gitattributes,
     "entry_point": check_entry_point,
     "communication_adapter": check_communication_adapter,
+    "roadmap_migrated": check_roadmap_migrated,
     "planning_seeded": check_planning_seeded,
     "product_layer_seeded": check_product_layer_seeded,
 }

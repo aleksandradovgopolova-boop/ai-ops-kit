@@ -25,7 +25,9 @@ REG = AR.load()
 def test_real_registry_loads_and_is_read_by_code():
     """Реестр читается кодом: артефакты и обязательный состав доступны как данные."""
     ids = AR.artifact_ids(REG)
-    assert "product_passport" in ids and "roadmap" in ids and "policy" in ids
+    assert "product_passport" in ids and "delivery" in ids and "policy" in ids
+    # SR-2: roadmap СНЯТ из этого слоя — его канонический дом product-operating-model.yaml (корень).
+    assert "roadmap" not in ids, "roadmap не должен дублироваться в слое .ai-ops/ (SR-2)"
     passport = AR.artifact(REG, "product_passport")
     assert passport["owner_role"] == "product"
     assert passport["template"]["version"] == 1

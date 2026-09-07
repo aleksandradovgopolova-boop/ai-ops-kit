@@ -76,14 +76,16 @@ def test_templates_dir_synced_with_kit_versions(installer, tmp_path):
 # ── fail-closed ──────────────────────────────────────────────────────────────────────────────────
 
 def test_existing_owner_files_are_not_overwritten(installer, tmp_path):
+    # DELIVERY.md как представитель документа слоя: roadmap снят из слоя (SR-2), но инвариант
+    # «существующий файл владельца не перезаписывается» держится на любом документе слоя.
     r = _repo(tmp_path)
     d = r / ".ai-ops"
     d.mkdir()
-    owner = "<!-- template-version: 1 -->\n# Мой roadmap\n## Now\nсвоё\n## Next\n\n## Later\n"
-    (d / "ROADMAP.md").write_text(owner, encoding="utf-8")
+    owner = "<!-- template-version: 1 -->\n# Моя доставка\nсвоё содержание\n"
+    (d / "DELIVERY.md").write_text(owner, encoding="utf-8")
     rep = installer._seed_product_layer(r)
-    assert (d / "ROADMAP.md").read_text(encoding="utf-8") == owner
-    assert any(x["artifact"].endswith("ROADMAP.md") and x["action"] == "exists" for x in rep)
+    assert (d / "DELIVERY.md").read_text(encoding="utf-8") == owner
+    assert any(x["artifact"].endswith("DELIVERY.md") and x["action"] == "exists" for x in rep)
 
 
 def test_missing_registry_does_not_crash_install(installer, tmp_path, monkeypatch):

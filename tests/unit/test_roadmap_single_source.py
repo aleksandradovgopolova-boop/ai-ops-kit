@@ -7,13 +7,26 @@
 """
 from __future__ import annotations
 
+import importlib.util
 import inspect
+from pathlib import Path
 
 from ai_ops_kit.planning import roadmap
 
 
 ROOT_RM = "# Roadmap\n\n## Now\n- корневой\n"
 LEGACY_RM = "# Roadmap\n\n## Now\n- уходящий .ai-ops\n"
+
+KIT = Path(__file__).resolve().parents[2]
+
+
+def _load_installer():
+    """installer/ai_ops.py — не пакет, грузим по пути (как в test_installer_setup)."""
+    spec = importlib.util.spec_from_file_location("installer_ai_ops_ss_under_test",
+                                                  KIT / "installer" / "ai_ops.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
 
 
 def _ai_ops(root):
@@ -82,3 +95,43 @@ def test_passport_no_longer_reads_either(tmp_path):
         "ai_ops_kit.planning.passport_generator", fromlist=["_milestone"])._milestone)
     assert '_read(root, ".ai-ops/ROADMAP.md")' not in src
     assert "resolve_roadmap_path" in src
+
+
+# ── SR-2 шаг 2: двойной посев снят, содержимое мигрируется ──
+
+def test_product_layer_no_longer_seeds_roadmap(tmp_path):
+    """`.ai-ops/ROADMAP.md` больше не сеется слоем (реестр .ai-ops/ не содержит roadmap)."""
+    mod = _load_installer()
+    mod._seed_product_layer(tmp_path)  # читает реестр из PKG кита, сеет в tmp_path/.ai-ops/
+    assert not (tmp_path / ".ai-ops" / "ROADMAP.md").exists(), \
+        "слой .ai-ops/ не должен сеять роадмап — он снят из реестра (SR-2)"
+
+
+def test_migration_moves_filled_legacy_to_canonical(tmp_path):
+    """Заполненный уходящий `.ai-ops/ROADMAP.md` переносится в корень, если корневого нет."""
+    mod = _load_installer()
+    _ai_ops(tmp_path)
+    (tmp_path / ".ai-ops" / "ROADMAP.md").write_text(LEGACY_RM, encoding="utf-8")
+    out = mod._migrate_legacy_roadmap(tmp_path)
+    assert out and out[0]["action"] == "migrated-from-legacy"
+    assert (tmp_path / "ROADMAP.md").is_file()
+    assert "уходящий" in (tmp_path / "ROADMAP.md").read_text(encoding="utf-8")
+
+
+def test_migration_is_idempotent_when_canonical_exists(tmp_path):
+    """Если корневой уже есть — миграция не трогает ничего (не затирает канонический)."""
+    mod = _load_installer()
+    (tmp_path / "ROADMAP.md").write_text(ROOT_RM, encoding="utf-8")
+    _ai_ops(tmp_path)
+    (tmp_path / ".ai-ops" / "ROADMAP.md").write_text(LEGACY_RM, encoding="utf-8")
+    assert mod._migrate_legacy_roadmap(tmp_path) == []
+    assert "корневой" in (tmp_path / "ROADMAP.md").read_text(encoding="utf-8")
+
+
+def test_migration_skips_empty_legacy(tmp_path):
+    """Пустой уходящий переносить незачем — посев даст черновик сам."""
+    mod = _load_installer()
+    _ai_ops(tmp_path)
+    (tmp_path / ".ai-ops" / "ROADMAP.md").write_text("   \n", encoding="utf-8")
+    assert mod._migrate_legacy_roadmap(tmp_path) == []
+    assert not (tmp_path / "ROADMAP.md").exists()
