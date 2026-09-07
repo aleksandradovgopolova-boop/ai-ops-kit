@@ -37,7 +37,7 @@ from pathlib import Path
 
 import yaml
 
-from ai_ops_kit.planning import architecture_invariants, artifact_sections, standard
+from ai_ops_kit.planning import architecture_invariants, artifact_sections, drift, standard
 
 # ── Четыре состояния строки отчёта (сумма равна общему числу, §3.2). ──
 PASS = "pass"
@@ -185,11 +185,13 @@ def _apply_overrides(rows: list, overrides: list, today: _dt.date) -> tuple[list
 
 
 def build(child_root, today: _dt.date | None = None, pkg_root: Path | None = None,
-          deps: tuple | None = None) -> dict:
+          deps: tuple | None = None, changed_files: list | None = None) -> dict:
     """Governance-отчёт продукта дочки. -> машиночитаемый dict (schemas/governance-report.schema.json).
 
     `deps` = (before, after) манифестов для SR-13 (новая зависимость без ADR), если контур PR даёт
     базу сравнения; иначе SR-13 объявляется not_checked с причиной, а не молча пропускается.
+    `changed_files` = изменённые пути PR для блока расхождений (SR-14..16): без них блок объявляет
+    not_checked, потому что расхождение меряется на диффе, а не на дереве.
     """
     root = Path(child_root)
     today = today or _dt.date.today()
@@ -225,6 +227,9 @@ def build(child_root, today: _dt.date | None = None, pkg_root: Path | None = Non
         # Архитектурные инварианты (SR-9..13) — ОТДЕЛЬНЫЙ advisory-блок: он приблизителен (§5.2),
         # его нельзя складывать с четырьмя числами структурного факта (§3.2 остаётся неизменным).
         "architecture": architecture_invariants.report(root, deps=deps),
+        # Расхождение (SR-14..16) — ВТОРОЙ РОД находки, отдельный от нарушения: код и описание
+        # разошлись, чинить нельзя, только показать. Меряется на диффе (SR-15), тоже advisory.
+        "drift": drift.report(root, changed_files=changed_files),
     }
 
 
@@ -263,6 +268,17 @@ def render(rep: dict) -> str:
             addr = f" [{r['address']}]" if r.get("address") else ""
             lines.append(f"    {_MARK.get(r['status'], '?')} {r['status']:12} {r['requirement']}"
                          f"{addr} — {tail}")
+    dr = rep.get("drift")
+    if dr:
+        dc = dr["counts"]
+        lines.append(f"  Расхождение (advisory, SR-14..16 — НЕ нарушение, показать нельзя починить): "
+                     f"drift {dc['drift']} · pass {dc['pass']} · not_checked {dc['not_checked']}")
+        for r in dr["rows"]:
+            if r["status"] == PASS:
+                continue
+            tail = r.get("reason") or r.get("detail") or ""
+            addr = f" [{r['address']}]" if r.get("address") else ""
+            lines.append(f"    ~ {r['status']:12} {r['requirement']}{addr} — {tail}")
     return "\n".join(lines)
 
 

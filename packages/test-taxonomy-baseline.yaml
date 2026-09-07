@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 408
+behavioral_count: 409
 structural_count: 66
-total_count: 474
-behavioral_share_pct: 86.08
+total_count: 475
+behavioral_share_pct: 86.11
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 408
+    from_total: 474
+    to_behavioral: 409
+    to_total: 475
+    to_share_pct: 86.11
+    work: 'SR-14..16 (расхождение архитектуры дочки, drift, advisory, #607)'
+    why: >-
+      #607 добавил один поведенческий тест-файл (test_drift — импортирует planning/drift И зовёт
+      его save_snapshot/report, а также сверяет проводку блока в governance_report), структурных без
+      изменений (66). Доля поведенческих выросла 86.08% -> 86.11% (не снижение). Числа руками
+      (--baseline лоссовый).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 407

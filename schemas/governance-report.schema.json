@@ -113,6 +113,56 @@
         }
       },
       "additionalProperties": true
+    },
+    "drift": {
+      "type": "object",
+      "description": "Расхождение (drift) архитектуры дочки (SR-14..16, срез 4) — ВТОРОЙ РОД находки, отдельный от нарушения: код и его описание разошлись, и неизвестно, какое устарело; чинить автоматически нельзя, только показать. Отличается от нарушения СЛОВАМИ (состояние `drift`), а не severity (SR-14). Меряется на ДИФФЕ, а не на дереве (SR-15): переиспользует source_of_truth_behind и сравнение сохранённого снимка архитектуры (SR-16). Производит ai_ops_kit/planning/drift.py; advisory (§5).",
+      "required": ["kind", "strength", "class", "counts", "rows"],
+      "properties": {
+        "kind": {"const": "drift"},
+        "schema_version": {"type": "integer"},
+        "strength": {"const": "advisory", "description": "расхождение показывают, но не блокируют: оно по определению не знает, какая сторона устарела"},
+        "class": {"const": "drift", "description": "РОД находки — расхождение, отдельный от нарушения инварианта (SR-14)"},
+        "snapshot": {"type": "string", "description": "путь сохранённого снимка архитектуры в области дочки (SR-16)"},
+        "snapshot_saved": {"type": "boolean", "description": "сохранён ли снимок; без него расхождение снимка not_checked (сравнивать не с чем)"},
+        "comparable": {"type": "boolean", "description": "есть ли изменённые пути (диф); без них блок not_checked, а не pass (SR-15)"},
+        "counts": {
+          "type": "object",
+          "required": ["pass", "drift", "not_checked"],
+          "properties": {
+            "pass": {"type": "integer"},
+            "drift": {"type": "integer"},
+            "not_checked": {"type": "integer"}
+          },
+          "additionalProperties": false
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["requirement", "status", "class", "closed_by", "strength"],
+            "properties": {
+              "requirement": {"type": "string"},
+              "status": {"enum": ["pass", "drift", "not_checked"],
+                "description": "`drift` — своё слово состояния, не `violated` (SR-14: род, а не severity)"},
+              "class": {"const": "drift"},
+              "closed_by": {"enum": ["validator", "judge", "writer", "human"]},
+              "strength": {"const": "advisory"},
+              "address": {"type": "string", "description": "адрес расхождения (контур или путь снимка)"},
+              "reason": {"type": "string"},
+              "detail": {"type": "string"}
+            },
+            "allOf": [
+              {
+                "if": {"properties": {"status": {"const": "not_checked"}}},
+                "then": {"required": ["reason"]}
+              }
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true
