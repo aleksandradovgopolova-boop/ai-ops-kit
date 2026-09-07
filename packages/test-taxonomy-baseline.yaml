@@ -23,12 +23,24 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 407
+behavioral_count: 408
 structural_count: 66
-total_count: 473
-behavioral_share_pct: 86.05
+total_count: 474
+behavioral_share_pct: 86.08
 
 raises:
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 407
+    from_total: 473
+    to_behavioral: 408
+    to_total: 474
+    to_share_pct: 86.08
+    work: 'SR-9..13 (архитектурные инварианты дочки, advisory, #606)'
+    why: >-
+      #606 добавил один поведенческий тест-файл (test_architecture_invariants — импортирует
+      planning/architecture_invariants И зовёт его), структурных без изменений (66). Доля
+      поведенческих выросла 86.05% -> 86.08% (не снижение). Числа руками (--baseline лоссовый).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 406
