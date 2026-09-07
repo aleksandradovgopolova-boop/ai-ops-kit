@@ -205,8 +205,14 @@ contours:
     holds: [компоненты, сервисы, зависимости, deployment topology, integrations, failure boundaries]
     owner_role: architect
     source_of_truth:
-      - {path: context/system/SystemOverview.md, required: true}
-      - {path: context/system/RepositoryMap.md, required: true}
+      # Канонический источник архитектуры — корневой ARCHITECTURE.md (SR-7, решение владельца
+      # 2026-09-07): единый документ «что построено / что осознанно не построено / куда идём / какие
+      # решения в основе», привычное индустрии имя. Прежние два файла того же смысла объявлялись
+      # обязательными, но НИКОГДА не сеялись (кит не давал им шаблона) — теперь они уходящие через
+      # окно вывода: остаются читаемыми (required:false), содержимое переносится в ARCHITECTURE.md.
+      - {path: ARCHITECTURE.md, required: true}
+      - {path: context/system/SystemOverview.md, required: false}   # DEPRECATED → ARCHITECTURE.md
+      - {path: context/system/RepositoryMap.md, required: false}    # DEPRECATED → ARCHITECTURE.md
       - {path: context/system/IntegrationMap.md, required: false}
     change_signals: ["context/system/**", "**/docker-compose*.y*ml", "**/Dockerfile*",
                      "**/*.tf", "infra/**", "deploy/**"]

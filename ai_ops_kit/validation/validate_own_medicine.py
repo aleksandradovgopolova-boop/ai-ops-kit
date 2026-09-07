@@ -391,6 +391,23 @@ def check_roadmap_migrated(root, mod):
             "миграция уходящего пути касается только дочек, установленных до свода (SR-2)", "")
 
 
+def check_architecture_migrated(root, mod):
+    """Перенос уходящих `context/system/*` в канонический `ARCHITECTURE.md` (SR-7).
+
+    Для САМОГО КИТА — `not_applicable`: кит ведёт свою архитектуру нативно и не держит заполненных
+    `context/system/SystemOverview.md`/`RepositoryMap.md` для переноса. Миграция касается дочки,
+    заполнившей прежние файлы до перехода на ARCHITECTURE.md.
+    """
+    legacy = [Path(root) / "context" / "system" / n
+              for n in ("SystemOverview.md", "RepositoryMap.md")]
+    if any(p.is_file() and p.read_text(encoding="utf-8").strip() for p in legacy) \
+            and not (Path(root) / "ARCHITECTURE.md").exists():
+        return APPLIED, "заполненные уходящие context/system/* есть — перенос в ARCHITECTURE.md применим", ""
+    return (NOT_APPLICABLE,
+            "кит ведёт архитектуру нативно и не держит заполненных уходящих context/system/* для "
+            "переноса: миграция в ARCHITECTURE.md касается дочек, заполнивших прежние файлы (SR-7)", "")
+
+
 DELIVERY_CHECKS = {
     "context_backfilled": check_context_backfilled,
     "ci_workflows": check_ci_workflows,
@@ -400,6 +417,7 @@ DELIVERY_CHECKS = {
     "entry_point": check_entry_point,
     "communication_adapter": check_communication_adapter,
     "roadmap_migrated": check_roadmap_migrated,
+    "architecture_migrated": check_architecture_migrated,
     "planning_seeded": check_planning_seeded,
     "product_layer_seeded": check_product_layer_seeded,
 }

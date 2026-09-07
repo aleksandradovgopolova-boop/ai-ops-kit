@@ -1488,6 +1488,32 @@ def _migrate_legacy_roadmap(root: Path, dry=False):
     return [{"artifact": str(canonical.relative_to(root)), "action": "migrated-from-legacy"}]
 
 
+def _migrate_legacy_architecture(root: Path, dry=False):
+    """SR-7: перенести уходящие `context/system/{SystemOverview,RepositoryMap}.md` в `ARCHITECTURE.md`.
+
+    Канонический источник архитектуры — корневой `ARCHITECTURE.md`. Прежние два файла того же смысла
+    объявлялись обязательными, но кит их не сеял; дочка могла заполнить их вручную. Если корневого
+    `ARCHITECTURE.md` нет, а заполненные уходящие есть — собираем их содержимое в `ARCHITECTURE.md`
+    (не удаляя оригиналы: снятие — окно вывода), иначе посев дал бы пустой канонический поверх
+    заполненного знания. Идемпотентно; fail-safe: пусто → ничего. -> список {artifact, action}.
+    """
+    canonical = Path(root) / "ARCHITECTURE.md"
+    if canonical.exists():
+        return []
+    parts = []
+    for rel in ("context/system/SystemOverview.md", "context/system/RepositoryMap.md"):
+        p = Path(root) / rel
+        if p.is_file() and p.read_text(encoding="utf-8").strip():
+            parts.append(f"<!-- перенесено из {rel} (SR-7) -->\n\n"
+                         + p.read_text(encoding="utf-8").strip())
+    if not parts:
+        return []
+    if not dry:
+        canonical.write_text("# Architecture\n\n" + "\n\n---\n\n".join(parts) + "\n",
+                             encoding="utf-8")
+    return [{"artifact": "ARCHITECTURE.md", "action": "migrated-from-legacy"}]
+
+
 def _seed_planning_contour(root: Path, dry=False):
     """v3.35: контур Planning & Execution доезжает до репозитория ЧЕРНОВИКАМИ.
 
@@ -2061,6 +2087,9 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         # ДО посева планирования (SR-2): перенести заполненный уходящий `.ai-ops/ROADMAP.md` в
         # канонический корень, иначе посев дал бы пустой корневой поверх заполненного уходящего.
         "roadmap_migrated": _migrate_legacy_roadmap(root),
+        # ДО посева (SR-7): перенести заполненные уходящие context/system/* в ARCHITECTURE.md,
+        # иначе посев дал бы пустой канонический поверх заполненного архитектурного знания.
+        "architecture_migrated": _migrate_legacy_architecture(root),
         "planning_seeded": _seed_planning_contour(root),
         # PR-3: Product Operating Layer `.ai-ops/` (Passport из фактов, ROADMAP/DELIVERY/POLICY из
         # официальных шаблонов, templates/ — копия версий кита). Читает состав из реестра артефактов.
@@ -2103,6 +2132,11 @@ def _assets_report_line(assets: dict) -> str:
         out += (" Направление продукта перенесено в " + ", ".join(migrated)
                 + ": прежний путь в `.ai-ops/` уходит, чтобы направление жило в одном месте. "
                   "Содержимое сохранено, старый файл не удалён.")
+    arch_migrated = [x["artifact"] for x in (assets.get("architecture_migrated") or [])
+                     if x.get("action") == "migrated-from-legacy"]
+    if arch_migrated:
+        out += (" Архитектура собрана в ARCHITECTURE.md из прежних context/system/*: "
+                "единый источник правды об архитектуре. Содержимое сохранено, старые файлы не удалены.")
     seeded = [x["artifact"] for x in (assets.get("planning_seeded") or [])
               if x.get("action") == "created-draft"]
     if seeded:
