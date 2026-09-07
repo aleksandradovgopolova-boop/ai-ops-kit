@@ -248,6 +248,10 @@ def _pipeline_run_gates(plan, gate_ev, committed_sha, signals, not_applicable, e
     _opinion = _cl.get("judged_or_human") or []
     print(f"  гейты: проверено машиной {_cnt.get('validator', 0)} из {len(_gate_ids)}"
           + (f"; остальное — мнение: {', '.join(_opinion)}" if _opinion else "; мнением не закрыт ни один"))
+    # веха 4.2 (#588): вердикт честности evidence — «зелёное» без детерминированной опоры advisory.
+    _ev = gates.get("evidence_verdict") or {}
+    if _ev and not _ev.get("verified") and _ev.get("advisory"):
+        print(f"  evidence: {_ev.get('reason')}")
 
     # v3.8.3: персистим ПРОЙДЕННОЕ gate-evidence билда (кроме security) по committed_sha в worktree/.ai —
     # чтобы последующий reevaluate (после человеко-approval) переиспользовал model-вердикт code_review и
@@ -461,6 +465,9 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
                   # «гейты пройдены» одинаково и там, где считала машина, и там, где высказался
                   # судья. 19 гейтов из 35 не имеют валидатора вовсе.
                   "closure": gates.get("closure"),
+                  # веха 4.2 (#588): вердикт честности evidence — verified привилегирует
+                  # детерминированные сигналы; AI-суждение advisory видно, а не выдаётся за доказательство.
+                  "evidence_verdict": gates.get("evidence_verdict"),
                   # evidence/аудит (аудит v2.79): полные per-gate результаты, не только сводка
                   "gate_results": gates.get("gate_results"),
                   "tested_revision": committed_sha},

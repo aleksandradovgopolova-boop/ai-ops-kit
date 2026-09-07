@@ -1375,6 +1375,25 @@ def _inbox_outcome_candidate(child_root):
             "critical_unknowns": rec.get("critical_unknowns") or [], "sources": rec.get("sources")}
 
 
+def _inbox_findings(child_root):
+    """Обратное наследование §28 (#585): наблюдения дочек из findings/from-children → кандидаты + уроки.
+
+    READ-ONLY проекция через ЕДИНЫЙ путь intelligence.child_findings (кандидаты из ОТКРЫТЫХ наблюдений,
+    уроки-прецеденты из ВСЕХ — факт+число случаев+контексты, без причинности, #586). Кандидаты — DRAFT:
+    активной работой без решения человека не станут (writer ≠ judge). Нет наблюдений → None (не пункт
+    очереди, а «нечего показать»). Сбой сбора → None (выдуманного не показываем).
+    -> dict|None: {candidates:[...], precedents:[...], open_count, observation_count}."""
+    try:
+        from ai_ops_kit.intelligence import child_findings
+        proj = child_findings.project_findings(Path(child_root))
+    except Exception:  # noqa: BLE001 — обратный канал обогащает очередь, не является её предусловием
+        return None
+    if not proj.get("observation_count"):
+        return None
+    return {"candidates": proj.get("candidates") or [], "precedents": proj.get("precedents") or [],
+            "open_count": proj.get("open_count", 0), "observation_count": proj.get("observation_count", 0)}
+
+
 def _inbox_release_warnings(child_root):
     """Предупреждения о выпуске из живого здоровья продукта: band red/yellow -> выпускать рискованно.
     Нет метрик/сбой сбора -> пусто (выдуманного предупреждения не даём). read-only (health считает
@@ -1399,12 +1418,15 @@ def _inbox_collect(child_root):
     registry_ok = blocked is not None
     insight = _inbox_insight(root)
     candidate = _inbox_outcome_candidate(root)   # #567: кандидат-работа из обратной петли
+    findings = _inbox_findings(root)             # #585: наблюдения дочек §28 -> кандидаты + уроки
     warnings = _inbox_release_warnings(root)
+    findings_items = len((findings or {}).get("candidates") or []) + (
+        1 if (findings or {}).get("precedents") else 0)
     total = (len(decisions) + len(blocked or []) + len(reviews or [])
-             + (1 if insight else 0) + (1 if candidate else 0) + len(warnings))
+             + (1 if insight else 0) + (1 if candidate else 0) + findings_items + len(warnings))
     return {"registry_ok": registry_ok, "total": total, "decisions": decisions,
             "blocked": blocked or [], "reviews": reviews or [], "insight": insight,
-            "candidate": candidate, "warnings": warnings}
+            "candidate": candidate, "findings": findings, "warnings": warnings}
 
 
 def _inbox_status(queue):
@@ -1412,7 +1434,8 @@ def _inbox_status(queue):
     -> заблокировано; иначе ок; недостоверный реестр -> degraded (не знаем, что застряло)."""
     if not queue.get("registry_ok", True):
         return "degraded"
-    if queue["decisions"] or queue["reviews"] or queue.get("candidate"):
+    findings = queue.get("findings") or {}
+    if queue["decisions"] or queue["reviews"] or queue.get("candidate") or findings.get("candidates"):
         return "needs_input"
     if queue["blocked"] or queue["warnings"]:
         return "blocked"
@@ -1430,6 +1453,11 @@ def _inbox_counts(queue):
         parts.append(f"ждут подтверждения — {len(queue['reviews'])}")
     if queue.get("candidate"):
         parts.append("предложенная работа по итогу релиза")
+    findings = queue.get("findings") or {}
+    if findings.get("candidates"):
+        parts.append(f"наблюдений дочек к разбору — {len(findings['candidates'])}")
+    if findings.get("precedents"):
+        parts.append("уроки из прогонов")
     if queue["insight"]:
         parts.append("свежий обзор")
     if queue["warnings"]:
@@ -1481,6 +1509,25 @@ def _inbox_render(queue, aud):
         for u in c["critical_unknowns"][:3]:
             lines.append("      " + h(f"не знаю: {u}"))
         lines.append("    " + h("это черновик — активной работой станет только по твоему решению"))
+    # #585: обратное наследование §28 — наблюдения дочек как кандидаты к разбору (DRAFT) и уроки.
+    findings = queue.get("findings") or {}
+    for cand in findings.get("candidates") or []:
+        lines.append("")
+        lines.append(h(f"• Наблюдение из прогона к разбору: {cand.get('title')}"))
+        if cand.get("source_context"):
+            lines.append("    " + h(f"контекст: {cand['source_context']}"))
+        lines.append("    " + h("это черновик — активной работой станет только по твоему решению"))
+    precedents = findings.get("precedents") or []
+    if precedents:
+        # Урок = ПРЕЦЕДЕНТ: факт + В СКОЛЬКИХ случаях + контексты, БЕЗ утверждения причинности (#586).
+        lines.append("")
+        lines.append(h("• Уроки из прогонов (прецеденты, не правила):"))
+        for p in precedents[:3]:
+            ctx = ", ".join(p.get("contexts") or [])[:80]
+            lines.append("    " + h(f"«{p.get('pattern')}» — {p.get('frequency_label')} "
+                                    f"(случаев: {p.get('case_count')}"
+                                    + (f"; контексты: {ctx}" if ctx else "") + ")"))
+        lines.append("    " + h("кит показывает факт и число случаев — вывод и перенос за тобой"))
     if queue["insight"]:
         lines.append("")
         lines.append(h(f"• Есть {queue['insight']['what']}"))
