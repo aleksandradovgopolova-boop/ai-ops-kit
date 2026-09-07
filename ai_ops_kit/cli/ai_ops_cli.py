@@ -767,7 +767,7 @@ def _build_cli_arg_parser():
                          "атомарная задача откатывается в обычный прогон. Основной checkout не трогается")
     ap.add_argument("--open-pr", action="store_true",
                     help="run: открыть draft PR по результату (нужен GITHUB_TOKEN)")
-    ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop")
+    ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop — предохранитель от убежавшего писателя, не рабочая точка (типовой расход единицы-десятки шагов; обоснование у поля max_steps в run_context)")
     ap.add_argument("--resume-from", help="run --sequential: продолжить с конкретного WorkPackage (id); "
                                           "пакеты до него берутся из снимков прошлого прогона")
     ap.add_argument("--retry-package", help="run --sequential: ДОВЕРЕННЫЙ retry заблокированного пакета (id) "
