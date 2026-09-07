@@ -19,8 +19,8 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1135
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1728
+  ai_ops_kit/cli/ai_ops_cli.py: 1145
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1743
   ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
@@ -41,6 +41,17 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1135; ai_ops_cli_intents.py = 1728'
+    to: 'ai_ops_cli.py = 1145; ai_ops_cli_intents.py = 1743'
+    work: '#567: outcome → insight → кандидат-работа (замыкание петли вехи 4.1)'
+    why: >-
+      Проводка петли Outcome→Insight→кандидат-Work: read-only intent-хендлеры сюрфейсинга кандидата
+      в `inbox`/`next` легли в спутник ai_ops_cli_intents.py (+15), регистрация/вызов из маршрута
+      пост-релиза — в ai_ops_cli.py (+10). Сама доменная логика вынесена отдельным модулем
+      intelligence/outcome_insight.py (244 строки, ниже порога 700, не в baseline) — центр тупой,
+      интеллект на периферии (правило вехи 4.1). Потолки под факт, ратчет держит от тихого роста.
   - at: '2026-09-07'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1108; ai_ops_cli_intents.py = 1648; presenter.py = 880'
