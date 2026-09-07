@@ -210,7 +210,12 @@ contours:
       # решения в основе», привычное индустрии имя. Прежние два файла того же смысла объявлялись
       # обязательными, но НИКОГДА не сеялись (кит не давал им шаблона) — теперь они уходящие через
       # окно вывода: остаются читаемыми (required:false), содержимое переносится в ARCHITECTURE.md.
-      - {path: ARCHITECTURE.md, required: true}
+      # required_sections (SR-5): объявлены ДАННЫМИ, не в коде — секционную проверку (SR-6, три
+      # состояния: заполнена/нет/пуста) ведёт artifact_sections по этому списку. Ядро из 21 раздела
+      # шаблона; добавление секции сюда не требует правки Python.
+      - {path: ARCHITECTURE.md, required: true,
+         required_sections: [Context, System Overview, Components, Data Flows, Failure Modes,
+                             Known Limitations]}
       - {path: context/system/SystemOverview.md, required: false}   # DEPRECATED → ARCHITECTURE.md
       - {path: context/system/RepositoryMap.md, required: false}    # DEPRECATED → ARCHITECTURE.md
       - {path: context/system/IntegrationMap.md, required: false}
