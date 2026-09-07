@@ -105,6 +105,9 @@ def collect(profile, root, policy, changed_files=None, broker=None):
                 "schema_evidence": {},
                 "gate_evidence": {"implementation_verification": {
                     "status": "pass",
+                    # веха 4.2 (#588): коллектор — детерминированный путь (реальные exit-коды),
+                    # честно помечаем источник как deterministic.
+                    "source": "deterministic",
                     "provided": ["skip_verification", "tested_revision"],
                     "evidence": [f"skip_reason:{impact_status}", f"revision:{revision}"],
                 }},
@@ -200,6 +203,9 @@ def collect(profile, root, policy, changed_files=None, broker=None):
     gate_evidence = {
         "implementation_verification": {
             "status": gate_status,
+            # веха 4.2 (#588): источник этого evidence — детерминированный (exit-коды реальных
+            # build/lint/typecheck/test-команд), не AI-суждение.
+            "source": "deterministic",
             "provided": provided,
             "evidence": ev_strings,
         }

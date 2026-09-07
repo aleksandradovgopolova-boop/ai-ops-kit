@@ -44,8 +44,10 @@ VALIDATION = PKG / "ai_ops_kit" / "validation"
 # `pending_human`/`human_handoff` — часть формы evidence, а не приписка сбоку: гейт, который ждёт
 # ЧЕЛОВЕКА, отличается от гейта, который нашёл дефект. Без объявления здесь такой признак в
 # загруженном evidence считался бы «неизвестным полем».
-_EVIDENCE_KEYS = {"status", "provided", "checks", "evidence", "warnings", "blockers", "override",
-                  "pending_human", "human_handoff"}
+_EVIDENCE_KEYS = {"status", "source", "provided", "checks", "evidence", "warnings", "blockers",
+                  "override", "pending_human", "human_handoff"}
+# веха 4.2 (#588): допустимые значения самодекларации источника доказательства.
+_EVIDENCE_SOURCE_KINDS = ("deterministic", "ai_judgment", "human")
 
 
 def validate_evidence(evidence) -> list:
@@ -59,6 +61,8 @@ def validate_evidence(evidence) -> list:
             errs.append(f"{gid}: значение должно быть объектом"); continue
         if e.get("status") not in ("pass", "warn", "fail"):
             errs.append(f"{gid}.status: '{e.get('status')}' вне [pass, warn, fail]")
+        if "source" in e and e["source"] not in _EVIDENCE_SOURCE_KINDS:
+            errs.append(f"{gid}.source: '{e['source']}' вне {list(_EVIDENCE_SOURCE_KINDS)}")
         for k in ("provided", "evidence", "warnings", "blockers"):
             if k in e and not (isinstance(e[k], list) and all(isinstance(x, str) for x in e[k])):
                 errs.append(f"{gid}.{k}: должен быть списком строк")
@@ -578,6 +582,27 @@ CLOSED_BY = {
 }
 CLOSED_BY_VALUES = tuple(dict.fromkeys(CLOSED_BY.values()))
 
+# ИСТОЧНИК ДОКАЗАТЕЛЬСТВА — БИНАРНАЯ ЧЕСТНОСТЬ ПОВЕРХ ЧЕТЫРЁХ «КТО ЗАКРЫВАЕТ» (веха 4.2, #588).
+#
+# Замер `closed_by` уже различает validator/judge/writer/human. Но вопрос вехи 4.2 другой и грубее:
+# «этому МОЖНО ВЕРИТЬ как доказательству, или это МНЕНИЕ?». Ответов ровно три:
+#   - `deterministic` — тест/lint/CI/schema-валидатор: воспроизводимо, тот же вход даёт тот же ответ;
+#   - `ai_judgment`   — заключение AI-судьи ИЛИ самозаявление писателя: advisory-мнение, НЕ доказательство
+#                       (если evidence генерит AI, а проверяет другой AI — ground truth нет);
+#   - `human`         — решение человека, ответственность названа поимённо.
+#
+# Писатель и судья схлопываются в `ai_judgment` НАМЕРЕННО: оба — суждение, ни одно не воспроизводимо;
+# для вопроса «можно ли верить» они по одну сторону от машины. `closed_by` сохраняет их различие
+# (writer ≠ judge), эта карта отвечает на более грубый вопрос доверия. Отличать от `evidence_mode`
+# в gate-result-v2 (это ПОЛИТИКА — как гейт СЛЕДУЕТ оценивать); здесь — ФАКТИЧЕСКИЙ источник закрытия.
+EVIDENCE_SOURCE = {
+    "validator": "deterministic",
+    "judge":     "ai_judgment",
+    "writer":    "ai_judgment",
+    "human":     "human",
+}
+EVIDENCE_SOURCE_VALUES = tuple(dict.fromkeys(EVIDENCE_SOURCE.values()))
+
 
 def closed_by(gate: dict, signals: dict = None) -> str:
     """Кто закрывает гейт СЕЙЧАС: validator | judge | writer | human.
@@ -589,19 +614,75 @@ def closed_by(gate: dict, signals: dict = None) -> str:
     return CLOSED_BY[classify(gate, signals)]
 
 
+def evidence_source(gate: dict, signals: dict = None) -> str:
+    """Источник доказательства гейта: deterministic | ai_judgment | human (веха 4.2, #588).
+
+    Выводится из `closed_by` — той же классификации, что ИСПОЛНЯЕТ гейт, а не из самозаявления:
+    AI-стадия не может пометить своё «зелёное» как детерминированное, потому что метку ставит
+    структура гейта, а не producer evidence. Это тот же принцип, что у `closed_by`.
+    """
+    return EVIDENCE_SOURCE[closed_by(gate, signals)]
+
+
 def closure_breakdown(gates: dict, signals: dict = None) -> dict:
-    """Разбивка «кто закрывает» по набору гейтов -> {counts, by_gate, judged_or_human}.
+    """Разбивка «кто закрывает» по набору гейтов -> {counts, by_gate, judged_or_human, by_source, …}.
 
     `judged_or_human` — то, ради чего разбивка существует: список гейтов, чьё «зелёное» является
     мнением. Человек, читающий отчёт, обязан видеть его как список, а не выводить из чисел.
+
+    Веха 4.2 (#588): та же разбивка отвечает и на грубый вопрос доверия — `by_source` схлопывает
+    четыре «кто закрывает» в три источника (deterministic | ai_judgment | human), а `ai_judgment`
+    называет гейты, чьё «зелёное» — advisory-мнение, не доказательство.
     """
     by_gate = {gid: closed_by(g or {}, signals) for gid, g in (gates or {}).items()}
     counts = {v: 0 for v in CLOSED_BY_VALUES}
     for v in by_gate.values():
         counts[v] = counts.get(v, 0) + 1
+    by_source = {gid: EVIDENCE_SOURCE[v] for gid, v in by_gate.items()}
     return {"counts": counts, "by_gate": by_gate,
             "machine_checked": sorted(g for g, v in by_gate.items() if v == "validator"),
-            "judged_or_human": sorted(g for g, v in by_gate.items() if v != "validator")}
+            "judged_or_human": sorted(g for g, v in by_gate.items() if v != "validator"),
+            # веха 4.2: тот же факт под углом доверия к доказательству
+            "by_source": by_source,
+            "deterministic": sorted(g for g, s in by_source.items() if s == "deterministic"),
+            "ai_judgment": sorted(g for g, s in by_source.items() if s == "ai_judgment"),
+            "human": sorted(g for g, s in by_source.items() if s == "human")}
+
+
+def evidence_verdict(gate_results: list, gates: dict, signals: dict = None) -> dict:
+    """Вердикт честности evidence вехи 4.2 (#588): «verified» ПРИВИЛЕГИРУЕТ детерминированные сигналы.
+
+    Правило: `verified=True` только если ХОТЯ БЫ ОДИН пройденный (status=pass) гейт закрыт
+    детерминированно (validator: тест/lint/CI/schema). Одно AI-суждение (advisory) — заключение
+    судьи или самозаявление писателя — БЕЗ детерминированной опоры `verified` НЕ даёт: система не
+    имеет права называть «проверено» то, что держится на её же (или соседнего AI) мнении.
+    Решение человека тоже само по себе не делает вердикт детерминированным — оно названо отдельно.
+
+    Возвращает {verified, deterministic, ai_judgment, advisory, human, reason}. `advisory` — те же
+    ai_judgment-гейты под именем, которое обязано попасть в readout: их «зелёное» — мнение.
+    """
+    src = {}
+    for r in gate_results or []:
+        gid = r.get("gate")
+        g = (gates or {}).get(gid)
+        if g is not None:
+            src[gid] = evidence_source(g, signals)
+    passed = [r for r in (gate_results or []) if r.get("status") == "pass"]
+    det = sorted(r["gate"] for r in passed if src.get(r.get("gate")) == "deterministic")
+    aij = sorted(r["gate"] for r in passed if src.get(r.get("gate")) == "ai_judgment")
+    hum = sorted(r["gate"] for r in passed if src.get(r.get("gate")) == "human")
+    verified = bool(det)
+    if verified:
+        reason = f"есть детерминированная опора ({', '.join(det)}) — verified"
+    elif aij:
+        reason = ("«зелёное» держится только на AI-суждении (advisory: "
+                  f"{', '.join(aij)}) — детерминированной опоры нет, verified не выставляется")
+    elif hum:
+        reason = f"закрыто человеком ({', '.join(hum)}); детерминированной верификации нет"
+    else:
+        reason = "нет пройденных гейтов — верифицировать нечего"
+    return {"verified": verified, "deterministic": det, "ai_judgment": aij,
+            "advisory": aij, "human": hum, "reason": reason}
 
 
 def _unmet_reason(kind: str, gate: dict) -> str:
@@ -798,6 +879,10 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
         # выходила: в отчёте прогона все гейты выглядели одинаково, и «зелёное» от валидатора было
         # неотличимо от «зелёного» по мнению судьи. Дочка, читающая отчёт, обязана видеть разницу.
         "closure": closure_breakdown({gid: gates[gid] for gid in gate_ids}, signals),
+        # ВЕРДИКТ ЧЕСТНОСТИ EVIDENCE (веха 4.2, #588): «verified» привилегирует детерминированные
+        # сигналы. Одно AI-суждение (advisory) без детерминированной опоры не даёт verified — иначе
+        # система назвала бы «проверено» то, что держится на её же мнении.
+        "evidence_verdict": evidence_verdict(results, {gid: gates[gid] for gid in gate_ids}, signals),
         "gate_results": results,
         "unmet_gates": unmet,
         "blocked": bool(unmet),
