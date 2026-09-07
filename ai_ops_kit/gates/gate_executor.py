@@ -241,7 +241,7 @@ def evidence_from_judge_refusal(gate: dict, refusal: dict, source: str):
 
 
 def evidence_from_no_verdict(gate: dict, *, gate_id: str, stopped=None, reads=None,
-                             errors=None, refusal=None):
+                             errors=None, refusal=None, session_degraded=False):
     """Ревью-петля завершилась без разбираемого вердикта -> evidence, которое НАЗЫВАЕТ причину.
 
     Тот же принцип, что evidence_from_judge_refusal: гейт остаётся НЕзакрытым (blocking -> fail,
@@ -253,14 +253,28 @@ def evidence_from_no_verdict(gate: dict, *, gate_id: str, stopped=None, reads=No
     (работа МОЛЧА вставала). Здесь причина названа, а `"reviewer verdict"` в evidence взводит
     распознавание reviewer-blocked (см. workpackage_executor._hard_stop).
 
-    Различает под-случаи: провайдер назвал отказ (refusal) / бюджет вызовов исчерпан / лимит чтений
-    исчерпан без вердикта / ответы судьи не разобрались в reviewer-result."""
+    Различает под-случаи: провайдер назвал отказ (refusal) / СРЕДА прогона деградировала (сессия
+    over_budget, #603) / бюджет вызовов исчерпан / лимит чтений исчерпан без вердикта / ответы судьи
+    не разобрались в reviewer-result.
+
+    `session_degraded` (#603, живой прогон 07.09): сессия ушла глубоко за потолок расхода
+    (over_budget). Тогда пустой no-verdict — вероятная причина СРЕДА, а не код: судья отвечает, но
+    не заключает. Ветка НАЗЫВАЕТ это средой (повтори в чистой сессии) вместо общего «не вернул
+    reviewer-result», который человек читает как «мой код плохой». needs_human=False (чинится чистой
+    сессией, как budget-ветка), но гейт по-прежнему НЕ закрыт (fail/warn) — это НЕ ложное зелёное."""
     if refusal:                       # провайдер назвал причину (пусто/обрезано/отказ) — она первична
         ev = evidence_from_judge_refusal(gate, refusal, f"reviewer verdict @ {gate_id} (refusal)")
         return ev
     nreads = len(reads or []) if not isinstance(reads, int) else reads
     stopped = stopped or "no-verdict"
-    if str(stopped).startswith("budget"):
+    if session_degraded:
+        # СРЕДА, а не код: сессия over_budget -> вероятная причина no-verdict — деградация среды.
+        # Порядок веток: refusal перекрыл выше; degraded идёт ДО budget/reads намеренно — когда
+        # сессия деградировала, это КОРЕНЬ, и его надо назвать, чтобы владелец повторил в чистой.
+        why, needs_human = (f"среда прогона деградировала (сессия over_budget): независимый судья не "
+                            f"вынес вердикт — вероятная причина СРЕДА, не код; повтори в чистой "
+                            f"сессии ({stopped})"), False
+    elif str(stopped).startswith("budget"):
         why, needs_human = f"судья исчерпал бюджет вызовов до вердикта ({stopped})", False
     elif nreads:
         why, needs_human = (f"судья прочитал {nreads} файл(ов), но на форс-ходе не вынес "
@@ -268,9 +282,12 @@ def evidence_from_no_verdict(gate: dict, *, gate_id: str, stopped=None, reads=No
     else:
         detail = "; ".join(errors or []) or str(stopped)
         why, needs_human = f"судья не вернул разбираемого reviewer-result ни разу ({detail})", True
-    text = f"независимый ревьюер не вынес вердикт по гейту {gate_id}: {why}. Гейт не закрыт."
+    # reason-code называет ПРИЧИНУ машиночитаемо: среда (degraded) отделена от «код/вердикт».
+    reason_code = "reviewer-environment-degraded" if session_degraded else "reviewer-no-verdict"
+    text = (f"независимый ревьюер не вынес вердикт по гейту {gate_id} [{reason_code}]: {why}. "
+            f"Гейт не закрыт.")
     ev = {"status": "fail" if gate.get("blocking") else "warn", "checks": [],
-          "evidence": [f"reviewer verdict @ {gate_id} (no-verdict: {stopped})"]}
+          "evidence": [f"reviewer verdict @ {gate_id} (no-verdict: {stopped}; {reason_code})"]}
     if gate.get("blocking"):
         ev["blockers"] = [text]
     else:

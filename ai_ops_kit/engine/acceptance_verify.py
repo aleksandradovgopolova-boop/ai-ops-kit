@@ -568,6 +568,10 @@ def verify(work_root, criteria, provider, revision=None, change_context=None, bu
     # контракту / рубер-штамп. Это и отличает «сверка не состоялась при поднятом судье» от «судьи
     # не было» — на различии стоит граница READY_FOR_PR (#176).
     if not isinstance(res, dict):
+        # TODO(#603): паритет degraded-environment для приёмки — если сессия over_budget
+        # (session_spend_state в signals), пометить reason «(вероятно среда: повтори в чистой
+        # сессии)», как в code_review-шве. `verify` сейчас не получает signals; проброс через всю
+        # цепочку вызова дороже и рискованнее чистоты code_review-шва — вынесено в follow-up.
         return _unverified(criteria, f"ревьюер не вынес вердикт ({rv.get('stopped')}) — сверки нет",
                            reads=reads, denied=denied, attempted=True)
     errs = var.check(res, criterion_ids=[c["id"] for c in criteria])

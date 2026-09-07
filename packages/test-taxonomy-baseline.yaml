@@ -23,12 +23,24 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 405
+behavioral_count: 406
 structural_count: 66
-total_count: 471
-behavioral_share_pct: 85.99
+total_count: 472
+behavioral_share_pct: 86.02
 
 raises:
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 405
+    from_total: 471
+    to_behavioral: 406
+    to_total: 472
+    work: '#603 (часть 2): тест-файл reviewer-environment-degraded (поведенческий)'
+    why: >-
+      Новый файл tests/unit/test_reviewer_environment_degraded.py — поведенческий: пробы читают
+      реальные evidence/gate_ev через evidence_from_no_verdict и живой run_pipeline (проброс
+      session_spend_state -> signals -> _run_reviews), а не структуру. +1 behavioral, +1 total;
+      доля поведенческих 85.99% -> 86.02% (растёт, не разбавляет).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 401

@@ -227,6 +227,20 @@ def _build_signals(intent, task, child_root, a):
     _rc = _ge.risk_calibrated_config(child_root)
     if _rc is not None and "risk_calibrated_enforcement" not in (signals.get("gates") or {}):
         signals.setdefault("gates", {})["risk_calibrated_enforcement"] = _rc
+    # #603: состояние расхода сессии -> в сигналы, чтобы пайплайн (engine) мог НАЗВАТЬ no-verdict
+    # ревью «средой» (сессия over_budget), а не «код плохой», НЕ импортируя engops (граница W3.2).
+    # cli-слой (entrypoints) engops трогать ВПРАВЕ. Совет — не блокирующий контур: сбой не роняет
+    # прогон, ключ просто не появляется (как и прочая гигиена сессии). Не перетираем явный --signals.
+    if "session_spend_state" not in signals:
+        try:
+            from ai_ops_kit.engops import session_guardrails as _sg, session_telemetry as _st
+            _snap = _st.snapshot(str(child_root))
+            _spend = _sg.classify_session_spend(
+                (_snap or {}).get("session_total_tokens"), _sg.load_policy(child_root))
+            if _spend:
+                signals["session_spend_state"] = _spend
+        except Exception:  # noqa: BLE001,S110 — гигиена сессии не блокирующий контур; сбой не роняет прогон
+            pass
     return signals
 
 

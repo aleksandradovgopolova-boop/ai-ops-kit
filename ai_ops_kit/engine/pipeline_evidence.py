@@ -393,9 +393,13 @@ def _gate_ev_from_verdict(gid, g, rv, *, revision, delivered, work_root, valid_i
     if errs:
         # НЕ тихий пропуск. no-verdict -> НАЗВАННЫЙ отказ в gate_ev (взводит reviewer-blocked),
         # с причиной, которую человек может разобрать (находка поля P0, obs-2026-08-20).
+        # #603: если СРЕДА прогона деградировала (сессия over_budget — cli-слой положил
+        # session_spend_state в signals), no-verdict называется средой, а не «код плохой».
+        # Читаем УЖЕ ПОЛОЖЕННОЕ значение — engine НЕ импортирует engops (граница W3.2).
+        session_degraded = (signals or {}).get("session_spend_state") == "over_budget"
         ref = gate_executor.evidence_from_no_verdict(
             g, gate_id=gid, stopped=rv.get("stopped"), reads=rv.get("reads"),
-            errors=errs, refusal=rv.get("refusal"))
+            errors=errs, refusal=rv.get("refusal"), session_degraded=session_degraded)
         entry["closed_as"] = "refused"
         entry["status"] = ref["status"]                       # fail/warn, не None
         entry["reason"] = (ref.get("blockers") or ref.get("warnings") or [None])[0]
