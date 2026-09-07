@@ -19,9 +19,9 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1108
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1648
-  ai_ops_kit/ui/presenter.py: 880
+  ai_ops_kit/cli/ai_ops_cli.py: 1135
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1728
+  ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 779
   ai_ops_kit/planning/delivery_plan.py: 1135
@@ -41,6 +41,21 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1108; ai_ops_cli_intents.py = 1648; presenter.py = 880'
+    to: 'ai_ops_cli.py = 1135; ai_ops_cli_intents.py = 1728; presenter.py = 944'
+    work: 'сведение вехи 4.1: #565 (Work-хребет) + #566 (живой outcome-флип) поверх #564'
+    why: >-
+      Потолки подняты по ФАКТУ объединённого дерева при сведении вехи (замер после слияния лент, а не
+      сумма раздельных). Три файла правили две ленты сразу: #565 провёл `status`/`explain`/`next`
+      через единую Work-проекцию, а #566 — различитель «технически done ≠ продуктово получилось» в
+      `readout`/`explain`; их read-only intent-хендлеры легли в спутник ai_ops_cli_intents.py,
+      продуктовые переводчики (прячут сессию/области записи/PRR от product-аудитории) — в presenter.py,
+      тонкая регистрация интентов — в ai_ops_cli.py. Сама доменная логика вынесена отдельными модулями
+      ниже порога (lifecycle/work_view.py, cli/post_release_loop.py, validation/validate_product_objects.py),
+      в baseline-файлы легли проводка и переводчики. presenter.py и ai_ops_cli_intents.py остаются
+      известными кандидатами на дальнейший вынос; потолки под факт, ратчет держит от тихого роста.
   - at: '2026-09-07'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1096'
