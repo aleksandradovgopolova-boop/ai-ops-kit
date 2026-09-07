@@ -697,7 +697,12 @@ UNWIRED_MODULES = frozenset({
     # ГРАНИЦА ПЕРЕСЕЧЕНА ОСОЗНАННО И НАЗВАНА: `installer/` — территория ленты B. Правка на одну
     # строку списка; оставить её несделанной было нельзя, иначе работа ленты A уехала бы в дочку
     # наполовину. Ленте B сказано.
-    "ai_ops_kit/intelligence/outcome_analytics.py",
+    # `intelligence/outcome_analytics.py` УБРАН ИЗ СПИСКА 2026-09-07 (#584): он ПОДКЛЮЧЁН. Пост-релизный
+    # путь `ai_ops_kit/cli/post_release_loop.py` (`_assess_cost_analytics`) импортирует его и зовёт
+    # `collect_analytics` в `run_post_release` — стоимостная/эффект-аналитика ПОД пост-релизным путём
+    # (не второй outcome-вердикт: тот остаётся за #566). Значит модуль обязан ехать в дочку: cli его
+    # зовёт, оставить в UNWIRED значило бы дать дочке cli, вызывающий отсутствующий файл (класс F-033).
+    # Список сокращён ФАКТОМ подключения — об этом сказал бы `test_unwired_modules_are_really_unwired`.
     "ai_ops_kit/intelligence/refactoring_advisor.py",
     "ai_ops_kit/intelligence/session_watch.py",
     "ai_ops_kit/intelligence/watch_contract.py",
