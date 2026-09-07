@@ -486,6 +486,10 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
         gate_ev, reviews = _consume_handoff_verdicts(
             work_root, plan["gates"], gate_ev, signals, committed_sha, child_root=child_root,
             calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence)
+        # Контракт `reviews`: None = ревью не проводилось. Пустой потреблённый список (вердикта-
+        # артефакта не было) == ревью не было -> None, иначе `report.reviews is None`-инвариант без
+        # ревьюера валится, а гейты при этом и так остаются как есть (потребления не случилось).
+        reviews = reviews or None
 
     # 6e. v2.95 -> v2.101 Security Pack: доменный security-вердикт -> gate_ev['security'].
     #     v3.38 (K6): тело вынесено в _evaluate_security (модуль pipeline_readiness, реэкспорт выше).
