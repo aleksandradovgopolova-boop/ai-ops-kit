@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 398
+behavioral_count: 401
 structural_count: 66
-total_count: 464
-behavioral_share_pct: 85.78
+total_count: 467
+behavioral_share_pct: 85.87
 
 raises:
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 397
+    from_total: 463
+    to_behavioral: 401
+    to_total: 467
+    to_share_pct: 85.87
+    work: 'сведение вехи 4.2 (#584/#585/#586 обучение)'
+    why: >-
+      #584/#585/#586 добавили 3 поведенческих тест-файла (precedent_ledger, child_findings,
+      post_release_learning_cluster — импортируют продуктовый код И зовут), структурных без изменений.
+      Доля поведенческих выросла 85.75% -> 85.84%. #588 дописал кейсы в существующий behavioral-файл
+      (test_gate_closure_map) — счёт файлов не меняет. Числа руками (--baseline лоссовый).
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
   # (например, крупный ввоз структурных фикстур-контрактов) добавляются сюда: дата, откуда/куда и
   # ПОЧЕМУ снижение оправдано, а не «так вышло».
