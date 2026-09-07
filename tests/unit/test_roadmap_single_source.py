@@ -128,6 +128,20 @@ def test_migration_is_idempotent_when_canonical_exists(tmp_path):
     assert "корневой" in (tmp_path / "ROADMAP.md").read_text(encoding="utf-8")
 
 
+def test_single_roadmap_template_one_horizon_model():
+    """SR-2 шаг 3: один шаблон роадмапа и одна модель горизонтов.
+
+    Прежде было ДВА шаблона с разными горизонтами: templates/planning/ROADMAP.md
+    (Сейчас/Следующий результат/Дальше/Later) и templates/product-layer/ROADMAP.md
+    (Now/Next/Later) — слово Later значило разные горизонты. Продукт-лэйер-шаблон снят;
+    канонический — планировочный, его разбирает roadmap.py. Защёлка от возврата второго.
+    """
+    assert not (KIT / "templates" / "product-layer" / "ROADMAP.md").exists(), \
+        "второй шаблон роадмапа вернулся — снова две модели горизонтов (SR-2)"
+    assert (KIT / "templates" / "planning" / "ROADMAP.md").is_file(), \
+        "канонический шаблон роадмапа (планировочный) обязан быть на месте"
+
+
 def test_migration_skips_empty_legacy(tmp_path):
     """Пустой уходящий переносить незачем — посев даст черновик сам."""
     mod = _load_installer()
