@@ -23,12 +23,24 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 405
+behavioral_count: 406
 structural_count: 66
-total_count: 471
-behavioral_share_pct: 85.99
+total_count: 472
+behavioral_share_pct: 86.02
 
 raises:
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 405
+    from_total: 471
+    to_behavioral: 406
+    to_total: 472
+    to_share_pct: 86.02
+    work: 'SR-17..23 (governance-отчёт продукта дочки, #605)'
+    why: >-
+      #605 добавил один поведенческий тест-файл (test_governance_report — импортирует
+      planning/governance_report И зовёт его), структурных без изменений (66). Доля поведенческих
+      выросла 85.99% -> 86.02% (не снижение). Числа руками (--baseline лоссовый).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 401

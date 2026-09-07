@@ -54,6 +54,7 @@ STANDALONE = [
     "validate_feature_learning",
     "validate_freshness",
     "validate_func_size",
+    "validate_governance_report",   # SR-17..23: governance-отчёт продукта; advisory, всегда 0 (нет .ai-ops.yaml -> пусто)
     "validate_integration_trace",
     "validate_key_lifecycle",
     "validate_layering",
