@@ -619,7 +619,12 @@ _WORK_VIEW_STATUS = {
 _WORK_VIEW_SOURCE_RU = {
     "workitem": "заявка на работу", "active_work": "реестр идущих работ",
     "work_graph": "граф пакетов работы", "plan": "план продукта",
+    # #565: приёмники хребта — попадают в «сведено из…», когда реально прочитаны.
+    "runs": "прогоны", "delivery": "доставка", "outcome": "исход",
 }
+# «Обязательные» источники идентичности работы — их отсутствие называется как пробел («не нашёл…»).
+# runs/delivery/outcome сюда НЕ входят намеренно: у ранней работы их ещё нет, и это не пробел, а
+# стадия жизни. Их присутствие видно из самих полей, а провенанс — из `sources`.
 _WORK_VIEW_ALL_SOURCES = ("workitem", "active_work", "work_graph", "plan")
 
 
@@ -657,6 +662,23 @@ def from_work_view(view: dict) -> dict:
                   else "Активной сессии за работой сейчас нет.")
     dcount = len(view.get("decisions") or [])
     acount = len(view.get("artifacts") or [])
+    # #565: хребет — прогоны, доставка (PR), исход. В продуктовую строку идёт СМЫСЛ (доставлено ли,
+    # каков исход), сырьё (url PR, band здоровья) остаётся в технических деталях.
+    runs = view.get("runs") or []
+    delivery = view.get("delivery") or {}
+    prs = delivery.get("prs") or []
+    outcome = view.get("outcome") or {}
+    pr_nums = ", ".join(("#" + str(p.get("number")) if p.get("number") else (p.get("url") or "?"))
+                        for p in prs)
+    delivered_line = (f" Доставлена в PR {pr_nums}." if prs else "")
+    if outcome.get("goal_outcome_reached") is True:
+        outcome_line = " Исход: цель достигнута."
+    elif outcome.get("goal_outcome") is not None:
+        outcome_line = " Исход: цель ещё не достигнута."
+    elif outcome:
+        outcome_line = " Исход пока измеряется."
+    else:
+        outcome_line = ""
     why = (f"Свёл всё, что известно, из {len(sources)} "
            + _q(len(sources), "источника", "источников", "источников") + f": {have_ru}.")
     if missing:
@@ -666,13 +688,23 @@ def from_work_view(view: dict) -> dict:
         status=status,
         headline=f"«{title}»",
         summary=(agent_line
+                 + (f" Прогонов: {len(runs)}." if runs else "")
+                 + delivered_line + outcome_line
                  + (f" Артефактов собрано: {acount}." if acount else "")
                  + (f" Связанных решений: {dcount}." if dcount else "")),
         why_it_matters=why,
         next_steps=["подробности по любой стороне — по запросу"],
         technical={"id": view.get("id"), "статус": st or "—",
+                   "workflow": view.get("workflow") or "—",
                    "стадия": view.get("lifecycle_intent") or "—",
                    "ветка": view.get("branch") or "—",
+                   "прогонов": len(runs) if runs else "—",
+                   "PR": pr_nums or "—",
+                   "исход": (outcome.get("readout_decision")
+                             or (outcome.get("prr") or {}).get("readout_decision")
+                             or ("достигнут" if outcome.get("goal_outcome_reached")
+                                 else ("не достигнут" if outcome.get("goal_outcome") is not None
+                                       else "—"))),
                    "ведущая сессия": view.get("current_agent") or "—",
                    "участники": ", ".join(view.get("participants") or []) or "—",
                    "области записи": ", ".join(view.get("write_scope") or []) or "—",

@@ -28,7 +28,9 @@ registry_type: delivery-budget
 ceilings:
   # Объём managed-поставки в байтах.
   # 2026-09-07: 4539000 -> 4571000 под knowledge-graph-query (см. запись в `raises`).
-  volume_bytes: 4571000
+  # 2026-09-07: 4571000 -> 4610000 под work-spine-565 (Work — хребет: runs/delivery/outcome+PR в
+  #   проекции; выросли уже доставляемые модули, новых файлов нет — см. запись в `raises`).
+  volume_bytes: 4610000
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -1164,3 +1166,27 @@ raises:
       собирая граф из его plan.yaml + FL-*.yaml + feature blueprints. На main оставалось всего ~2 КБ
       запаса (4536865 при потолке 4539000), поэтому +31 КБ пробили потолок; поднят под факт
       4536865 -> 4568601, потолок 4571000.
+  - at: '2026-09-07'
+    what: volume
+    from_bytes: 4571000
+    to_bytes: 4610000
+    from_count: null
+    to_count: null
+    measured_before: 4568601
+    measured_after: 4587030
+    work: work-spine-565 (Work — хребет, а не read-only витрина)
+    files:
+      - ai_ops_kit/lifecycle/work_view.py
+      - ai_ops_kit/ui/presenter.py
+      - ai_ops_kit/cli/ai_ops_cli.py
+      - ai_ops_kit/cli/ai_ops_cli_intents.py
+      - ai_ops_kit/planning/next_work.py
+    why_it_works_in_the_child: >-
+      Новых файлов поставки нет — выросли уже доставляемые модули под #565: work_view.py теперь читает
+      из РЕАЛЬНЫХ приёмников дочки прогоны (features/<id>/lifecycle-journal.jsonl), доставку и связь
+      работа->PR (features/<id>/delivery-outbox/*.receipt.yaml) и исход (plan goals + PRR), а не отдаёт
+      заглушки. presenter.py показывает PR/исход в карточке `ai-ops work show`, ai_ops_cli.py и
+      ai_ops_cli_intents.py проводят `ai-ops status`/`explain` через ту же проекцию, next_work.py даёт
+      идущим работам ветку из неё. Все пять файлов исполняются В продуктовом репозитории: команды
+      читают журнал/receipt/PRR самой дочки. На main оставался тонкий запас (4568601 при потолке
+      4571000), рост проекции ~18 КБ его пробил; поднят под факт 4568601 -> 4587030, потолок 4610000.

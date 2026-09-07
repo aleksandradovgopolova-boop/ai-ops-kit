@@ -377,6 +377,17 @@ def compute(child_root, budget_left=None, me=None):
     in_progress.sort(key=lambda r: r["id"])
     blocked.sort(key=lambda r: r["id"])
 
+    # #565: у ИДУЩИХ работ записанная ветка берётся из ЕДИНОЙ Work-проекции — того же источника, что
+    # у `work show`/`explain`/`status`. СЕЛЕКТИВНОСТЬ (ready/blocked/waiting) остаётся ВЫЧИСЛЯЕМОЙ из
+    # графа зависимостей — это другой вопрос, и проекция его не подменяет; дополняем лишь per-work
+    # факт, которого у `next` своего нет. READ-ONLY (project_work читает по контракту и не бросает на
+    # отсутствующих/битых источниках — каждый его reader глушит свой OSError/YAMLError у себя).
+    from ai_ops_kit.lifecycle import work_view as _wv
+    for _r in in_progress:
+        _v = _wv.project_work(_r["id"], child_root)
+        if _v.get("branch"):
+            _r["branch"] = _v["branch"]
+
     next_best = ready[0] if ready else None
     parallel, par_skipped = ([], [])
     if len(ready) > 1:
