@@ -37,7 +37,7 @@ from pathlib import Path
 
 import yaml
 
-from ai_ops_kit.planning import artifact_sections, standard
+from ai_ops_kit.planning import architecture_invariants, artifact_sections, standard
 
 # ── Четыре состояния строки отчёта (сумма равна общему числу, §3.2). ──
 PASS = "pass"
@@ -184,8 +184,13 @@ def _apply_overrides(rows: list, overrides: list, today: _dt.date) -> tuple[list
     return kept + na_rows + finding_rows, echo
 
 
-def build(child_root, today: _dt.date | None = None, pkg_root: Path | None = None) -> dict:
-    """Governance-отчёт продукта дочки. -> машиночитаемый dict (schemas/governance-report.schema.json)."""
+def build(child_root, today: _dt.date | None = None, pkg_root: Path | None = None,
+          deps: tuple | None = None) -> dict:
+    """Governance-отчёт продукта дочки. -> машиночитаемый dict (schemas/governance-report.schema.json).
+
+    `deps` = (before, after) манифестов для SR-13 (новая зависимость без ADR), если контур PR даёт
+    базу сравнения; иначе SR-13 объявляется not_checked с причиной, а не молча пропускается.
+    """
     root = Path(child_root)
     today = today or _dt.date.today()
     cfg = _read_config(root)
@@ -217,6 +222,9 @@ def build(child_root, today: _dt.date | None = None, pkg_root: Path | None = Non
         "counts": counts,
         "overrides": overrides_echo,
         "rows": rows,
+        # Архитектурные инварианты (SR-9..13) — ОТДЕЛЬНЫЙ advisory-блок: он приблизителен (§5.2),
+        # его нельзя складывать с четырьмя числами структурного факта (§3.2 остаётся неизменным).
+        "architecture": architecture_invariants.report(root, deps=deps),
     }
 
 
@@ -243,6 +251,18 @@ def render(rep: dict) -> str:
             state = "активен" if o["active"] else f"НЕ ПРИМЕНЁН — {o.get('problem', '')}"
             when = o.get("review_by") or o.get("remove_when") or "—"
             lines.append(f"    · {o['requirement']}: {o.get('reason', '')} (срок: {when}) — {state}")
+    arch = rep.get("architecture")
+    if arch:
+        ac = arch["counts"]
+        lines.append(f"  Архитектурные инварианты (advisory, SR-9..13): "
+                     f"pass {ac['pass']} · violated {ac['violated']} · not_checked {ac['not_checked']}")
+        for r in arch["rows"]:
+            if r["status"] == PASS:
+                continue
+            tail = r.get("reason") or r.get("detail") or ""
+            addr = f" [{r['address']}]" if r.get("address") else ""
+            lines.append(f"    {_MARK.get(r['status'], '?')} {r['status']:12} {r['requirement']}"
+                         f"{addr} — {tail}")
     return "\n".join(lines)
 
 

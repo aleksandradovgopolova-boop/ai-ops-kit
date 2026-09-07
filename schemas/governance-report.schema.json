@@ -67,6 +67,52 @@
         },
         "additionalProperties": true
       }
+    },
+    "architecture": {
+      "type": "object",
+      "description": "Архитектурные инварианты дочки (SR-9..13, срез 3) — ОТДЕЛЬНЫЙ advisory-блок, не свёрнутый в четыре числа §3.2: он приблизителен (граф JS/TS regex, §5.2) и не складывается со структурным фактом секций. Производит ai_ops_kit/planning/architecture_invariants.py по объявлению schemas/architecture-invariants.schema.json.",
+      "required": ["kind", "strength", "counts", "rows"],
+      "properties": {
+        "kind": {"const": "architecture-invariants"},
+        "schema_version": {"type": "integer"},
+        "strength": {"const": "advisory", "description": "инвариант поверх JS/TS-графа рождается advisory (§5.2); блокирует только после замера ложных на живом репозитории"},
+        "declared": {"type": "boolean", "description": "объявлены ли зоны И правила; иначе строки not_checked (SR-12)"},
+        "source": {"type": ["string", "null"], "description": "откуда прочитано объявление (файл или .ai-ops.yaml)"},
+        "counts": {
+          "type": "object",
+          "required": ["pass", "violated", "not_checked"],
+          "properties": {
+            "pass": {"type": "integer"},
+            "violated": {"type": "integer"},
+            "not_checked": {"type": "integer"}
+          },
+          "additionalProperties": false
+        },
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["requirement", "status", "closed_by", "strength"],
+            "properties": {
+              "requirement": {"type": "string"},
+              "status": {"enum": ["pass", "violated", "not_checked"]},
+              "closed_by": {"enum": ["validator", "judge", "writer", "human"]},
+              "strength": {"const": "advisory"},
+              "address": {"type": "string", "description": "файл:строка -> ребро графа (SR-11), а не только факт"},
+              "reason": {"type": "string"},
+              "detail": {"type": "string"}
+            },
+            "allOf": [
+              {
+                "if": {"properties": {"status": {"const": "not_checked"}}},
+                "then": {"required": ["reason"]}
+              }
+            ],
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
     }
   },
   "additionalProperties": true
