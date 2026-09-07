@@ -2243,7 +2243,20 @@ def _assets_report_line(assets: dict) -> str:
 # Молча перезаписывать файл в чужом `.github/` тоже нельзя: владелец вправе его править. Поэтому
 # кит трогает только то, что САМ написал и что с тех пор никто не менял — это знание хранится
 # отпечатком. Остальное он НАЗЫВАЕТ, а решение оставляет человеку.
-CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml", "ai-ops-audit.yml")
+CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml", "ai-ops-audit.yml",
+                # Набор supply-chain / OpenSSF (#608). ФОРДЖ-конфигурация дочки, не код кита: инвариант
+                # «никаких новых рантайм-зависимостей у инструментов» относится к движку, а эти файлы
+                # подключают GitHub-нативные механизмы. Доставляются как остальные (опт-аут = удалить
+                # файл), но ADVISORY по построению — блокирующими их делает владелец, не кит. Разбор
+                # границы и настроек репозитория — в `templates/ci/SUPPLY-CHAIN.md`.
+                "dependabot.yml",        # Dependency-Update-Tool; кладётся в .github/, не в workflows/
+                "ai-ops-codeql.yml",     # SAST
+                "ai-ops-secret-scan.yml",# секрет-скан (бэкстоп к нативному push protection)
+                "ai-ops-sbom.yml",       # SBOM + подписанные релизы (Sigstore attestations)
+                "ai-ops-scorecard.yml")  # агрегатный сигнал OpenSSF Scorecard
+# Куда ложится шаблон в дочке ОТНОСИТЕЛЬНО `.github/`. По умолчанию — `workflows/<name>`; исключение —
+# Dependabot, который GitHub читает ТОЛЬКО из `.github/dependabot.yml`. Источник всегда `templates/ci/<name>`.
+CI_TEMPLATE_DEST = {"dependabot.yml": ("dependabot.yml",)}
 # Путь отпечатков считается ОТ ПЕРЕДАННОГО КОРНЯ, а не от глобального REPO_ROOT. Первая версия
 # брала глобальный — и `sync_ci_workflows(other_root)` писал отпечатки в текущий репозиторий, а не
 # в тот, который обслуживал. Поймано тем, что в коммит кита попал чужой `.ai/runtime/ci-templates.json`.
@@ -2440,6 +2453,13 @@ def _sha(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _ci_dst(root: Path, name: str) -> Path:
+    """Куда в дочке ложится CI-шаблон. По умолчанию `.github/workflows/<name>`; Dependabot — особый
+    (`.github/dependabot.yml`), потому что GitHub читает его только оттуда."""
+    rel = CI_TEMPLATE_DEST.get(name, ("workflows", name))
+    return Path(root) / ".github" / Path(*rel)
+
+
 def _ci_prints_path(root: Path = None) -> Path:
     return Path(root or REPO_ROOT) / CI_PRINTS_REL
 
@@ -2492,7 +2512,7 @@ def ci_workflow_state(root: Path = None):
     prints, out = _ci_prints(root), []
     for name in CI_TEMPLATES:
         src = PKG / "templates" / "ci" / name
-        dst = root / ".github" / "workflows" / name
+        dst = _ci_dst(root, name)
         if not src.is_file():
             continue
         tpl = src.read_text(encoding="utf-8")
@@ -2541,7 +2561,7 @@ def sync_ci_workflows(root: Path = None, refresh: bool = False):
     for row in ci_workflow_state(root):
         name, state = row["file"], row["state"]
         src = PKG / "templates" / "ci" / name
-        dst = root / ".github" / "workflows" / name
+        dst = _ci_dst(root, name)
         tpl = src.read_text(encoding="utf-8")
         if state == "current":
             _remember_ci(name, tpl, root)         # происхождение теперь известно

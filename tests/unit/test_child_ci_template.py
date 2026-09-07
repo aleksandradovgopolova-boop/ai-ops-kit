@@ -121,7 +121,10 @@ def test_no_template_clones_into_shared_tmp():
 # Их решение — выбор раннера переменной — обкатано на живом стенде; здесь оно закреплено правилом.
 
 def _templates():
-    return sorted(TEMPLATES.glob("*.yml"))
+    # Только GitHub Actions workflow'ы: у них есть `jobs`, и правило про выбор раннера — про них.
+    # `dependabot.yml` — конфигурация Dependabot (без jobs), а не workflow: раннера у неё нет, и
+    # оба правила ниже к ней неприменимы (иначе они «слепнут» на файле без jobs).
+    return [t for t in sorted(TEMPLATES.glob("*.yml")) if t.name != "dependabot.yml"]
 
 
 @pytest.mark.unit
