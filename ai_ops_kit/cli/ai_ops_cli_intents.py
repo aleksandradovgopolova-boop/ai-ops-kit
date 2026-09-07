@@ -1193,16 +1193,20 @@ def _explain_state(child_root):
                 "product_outcome": _explain_outcome(root)}
     focus = active[0]
     wid = _explain_wid(focus)
-    wi = _explain_workitem(root, wid)
-    status = wi.get("status") or "in_progress"
+    # #565: per-work факты берём из ЕДИНОЙ Work-проекции (тот же источник, что у `work show` и
+    # `status`), а не своим набором чтений workitem/active-work. Так explain и work show не расходятся.
+    from ai_ops_kit.lifecycle import work_view
+    view = work_view.project_work(wid, root)
+    status = view.get("status") or "in_progress"
     return {
         "registry_ok": True, "active_count": len(active),
-        "focus": {"wid": wid, "task": wi.get("task") or focus.get("title") or wid,
-                  "workflow": wi.get("workflow"), "status": status,
-                  "branch": focus.get("branch"),
-                  "human_approval": bool(wi.get("human_approval_required"))},
+        "focus": {"wid": wid, "task": view.get("title") or focus.get("title") or wid,
+                  "workflow": view.get("workflow"), "status": status,
+                  "branch": view.get("branch") or focus.get("branch"),
+                  "human_approval": bool(view.get("human_approval_required"))},
         "conflicts": _explain_conflicts(focus, active[1:]),
         "cost": _explain_cost(root, wid), "gates": _explain_gates(root, wid),
+        "work_view": view,
         "living_status": doc,
         "product_outcome": _explain_outcome(root),
     }

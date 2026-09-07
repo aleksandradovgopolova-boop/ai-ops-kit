@@ -29,7 +29,8 @@ ceilings:
   # Объём managed-поставки в байтах.
   # 2026-09-07: 4539000 -> 4571000 под knowledge-graph-query (см. запись в `raises`).
   # 2026-09-07: 4571000 -> 4587000 под handoff-модуль reviewer_handoff.py (#160, см. `raises`).
-  volume_bytes: 4587000
+  # 2026-09-07: -> под сведение вехи 4.1 (#565 поверх #160), потолок по РЕАЛЬНОМУ замеру — см. `raises`.
+  volume_bytes: RECONCILE
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -1201,3 +1202,23 @@ raises:
       в дочку и исполняются там при прогоне из сессии Клода. На main оставалось ~2.4 КБ запаса
       (4568601 при потолке 4571000), поэтому +16 КБ пробили потолок; поднят под факт
       4568601 -> 4584810, потолок 4587000.
+  - at: '2026-09-07'
+    what: volume
+    from_bytes: 4587000
+    to_bytes: RECONCILE
+    measured_before: 4584810
+    measured_after: RECONCILE
+    work: milestone-4.1 integration (#565 Work-хребет поверх #160 + #564 + #566)
+    files:
+      - ai_ops_kit/lifecycle/work_view.py
+      - ai_ops_kit/ui/presenter.py
+      - ai_ops_kit/cli/ai_ops_cli.py
+      - ai_ops_kit/cli/ai_ops_cli_intents.py
+      - ai_ops_kit/planning/next_work.py
+    why_it_works_in_the_child: >-
+      #565 (Work — хребет) мерился в своей ленте от старого main (4568601), но в main уже приехал #160
+      (потолок 4587000). Раздельные замеры складывать нельзя (прошлая грабля — занижают), поэтому объём
+      объединённого дерева пересчитан РЕАЛЬНОЙ установкой при сведении вехи; потолок поставлен по факту
+      этого замера. work_view.py читает из реальных приёмников дочки (journal/receipt/PRR), presenter/
+      cli/cli_intents/next_work проводят status/explain/next через одну проекцию — все едут в дочку.
+
