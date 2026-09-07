@@ -26,7 +26,11 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]
 SCRIPT = PKG / "scripts" / "check-fast.sh"
 
-pytestmark = pytest.mark.unit
+# Каждый тест поднимает подпроцесс `check-fast.sh --collect-only` (ruff по всему репо + сбор всего
+# pytest) — 30–60 c на тест. По определению маркера (pytest.ini) это slow. Файл снят с шарда `fast`
+# в slow-шарды selftests, где есть запас; проверка зеркалирования CI по-прежнему идёт на КАЖДОМ PR.
+# Issue #465.
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 
 def _logging_python(tmp_path):

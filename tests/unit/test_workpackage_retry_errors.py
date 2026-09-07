@@ -26,6 +26,12 @@ from _workpackage_helpers import (
 )
 
 
+# execute_sequence гоняет реальные git-worktree + подпроцессы на каждый пакет: тесты по 20–40 c,
+# то есть slow по определению маркера (pytest.ini). Сняты с шарда `fast` в slow-шарды selftests,
+# где есть запас времени; на КАЖДОМ PR по-прежнему выполняются (selftests-a/-m). Issue #465.
+pytestmark = pytest.mark.slow
+
+
 # ─── retry_package: ветки ошибок ─────────────────────────────────────────────────
 
 @pytest.mark.unit
