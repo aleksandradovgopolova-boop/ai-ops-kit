@@ -165,11 +165,12 @@ probes:
   covers:
   - ai_ops_kit/engine/pipeline_evidence.py
   file: ai_ops_kit/engine/pipeline_evidence.py
-  find: '                and not _review_cites_delivered_file(res, delivered, work_root)):'
-  replace_with: '                and not False):'
+  find: '            and not _review_cites_delivered_file(res, delivered, work_root)):'
+  replace_with: '            and not False):'
   tests:
   - tests/unit/test_pipeline_review.py
-  why: 'ШОВ: `_run_reviews` обязан ЗВАТЬ заземление на пути рубер-штампа. Обойти вызов (`not False`)
+  why: 'ШОВ: потребление вердикта (`_gate_ev_from_verdict`, зовётся из `_run_reviews` и
+    `_consume_handoff_verdicts`) обязано ЗВАТЬ заземление на пути рубер-штампа. Обойти вызов (`not False`)
     — рубер-штамп сработает и на ЗАЗЕМЛЁННОМ pass: интеграционный тест grounded-pass покраснеет. Без
     шва механизм заземления мог бы стать зелёным и неиспользуемым — тот класс дефекта, ради которого
     введены швы (B2-14: сверки не было, а отчёт сообщал delivered).'
