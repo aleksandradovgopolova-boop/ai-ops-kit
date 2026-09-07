@@ -962,6 +962,18 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
                 # Готовая команда с ответом обязана дойти до человека на любом уровне детализации.
                 _say(Path(child_root), "from_intake_gap", _missing, _cmd)
             return 2
+        # #564: Decision Loop проведён в маршрут. Для триггерного профиля (заявлено фича-решение)
+        # отсутствие Decision-контракта закрывает продвижение fail-closed — ДО выбора провайдера и
+        # любой траты. Для остальных работ сигнал не взведён и гейт возвращает None (не мешает).
+        from ai_ops_kit.intelligence import decision_loop
+        _dc = decision_loop.decision_contract_gate(signals, child_root, task, a.feature)
+        if _dc is not None:
+            if a.json:
+                print(json.dumps(_dc, ensure_ascii=False, indent=2))
+            else:
+                print(f"ОТКАЗ: {_dc['message']}")
+                print(f"  завести контракт: {_dc['propose_command']}")
+            return _dc["exit"]
         flags = pv["will_do"]["auto_flags"]
         # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и идёт под своим именем во все ветки
         # (sequential/обычная) — иначе автовыбор терялся бы по дороге (v2.120/v3.0-rc2).
