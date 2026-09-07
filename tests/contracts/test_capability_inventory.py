@@ -87,16 +87,18 @@ def test_every_built_not_wired_module_is_shown_honestly_on_the_page():
 def test_a_new_built_not_wired_module_would_surface(tmp_path, monkeypatch):
     """Появился новый built≠wired модуль — витрина его ПОКАЖЕТ (детектор считает по дереву, не по списку).
 
-    Сажаем в дерево пакета модуль-сироту (0 не-тестовых импортёров, вне allowlist) и убеждаемся,
-    что генератор относит его к built≠wired. Так проверяется, что значения выведены из кода, а не
-    захардкожены списком.
+    Сажаем модуль-сироту (0 не-тестовых импортёров, вне allowlist) во ВРЕМЕННОЕ дерево пакета и
+    перенаправляем туда сканер генератора (`ci.PKG`), а не пишем в живой ai_ops_kit/ — иначе файл
+    видят соседние contract-тесты в том же прогоне (reachability/no_fake) и падают на нём. Так
+    проверяется, что значения выведены из дерева, а не захардкожены списком, и тест изолирован.
     """
-    orphan = PKG_ROOT / "ai_ops_kit" / "intelligence" / "brand_new_orphan_probe.py"
-    orphan.write_text("x = 1\n", encoding="utf-8")
-    try:
-        found = set(ci.dormant_modules())
-    finally:
-        orphan.unlink()
+    pkg = tmp_path / ci.PKG_NAME / "intelligence"
+    pkg.mkdir(parents=True)
+    (tmp_path / ci.PKG_NAME / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "__init__.py").write_text("", encoding="utf-8")
+    (pkg / "brand_new_orphan_probe.py").write_text("x = 1\n", encoding="utf-8")
+    monkeypatch.setattr(ci, "PKG", tmp_path)
+    found = set(ci.dormant_modules())
     assert "ai_ops_kit.intelligence.brand_new_orphan_probe" in found, (
         "витрина не увидела новый неподключённый модуль — значит она не выведена из дерева")
 

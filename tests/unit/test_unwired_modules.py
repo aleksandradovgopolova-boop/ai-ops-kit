@@ -36,13 +36,19 @@ WIRING_DIRS = ("ai_ops_kit", "tools", "registry", "quality", "config", "commands
                "docs", "templates", "agents", "rules")
 WIRING_FILES = ("README.md", "AGENTS.md")
 
+# Легит-перечислители: доки, чьё НАЗНАЧЕНИЕ — честно перечислять built≠wired модули по пути. Назвать
+# модуль здесь = пометить его «построен, но не подключён», а НЕ заявить, что дочка его зовёт. Поэтому
+# такое упоминание подключением не считается (иначе витрина возможностей #569 сама себе противоречит:
+# её тест требует называть каждый дормантный модуль по пути, а этот сторож то же имя запрещал бы).
+LEGIT_NAMERS = frozenset({PKG_ROOT / "docs" / "capability-map.md"})
+
 
 def _module_name(rel: str) -> str:
     return rel.rsplit("/", 1)[-1][: -len(".py")]
 
 
 def _mentions(name: str) -> list[str]:
-    """Файлы, которые называют модуль, кроме него самого и других неподключённых."""
+    """Файлы, которые называют модуль, кроме него самого, других неподключённых и легит-перечислителей."""
     own = {PKG_ROOT / r for r in installer.UNWIRED_MODULES}
     pat = re.compile(rf"\b{re.escape(name)}\b")
     hits = []
@@ -55,6 +61,8 @@ def _mentions(name: str) -> list[str]:
                 continue
             if p in own:
                 continue                       # ссылка внутри самой группы подключением не является
+            if p in LEGIT_NAMERS:
+                continue                       # честный перечислитель built≠wired — не wiring-заявление
             try:
                 if pat.search(p.read_text(encoding="utf-8", errors="ignore")):
                     hits.append(str(p.relative_to(PKG_ROOT)))
