@@ -28,7 +28,8 @@ registry_type: delivery-budget
 ceilings:
   # Объём managed-поставки в байтах.
   # 2026-09-07: 4539000 -> 4571000 под knowledge-graph-query (см. запись в `raises`).
-  volume_bytes: 4571000
+  # 2026-09-07: 4571000 -> 4587000 под handoff-модуль reviewer_handoff.py (#160, см. `raises`).
+  volume_bytes: 4587000
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -1180,5 +1181,23 @@ raises:
       структурно недоступен в среде (вложенный `claude -p` нем, #160), pipeline_evidence._run_reviews
       вызывает reviewer_handoff.open_request/load_verdict — гейт code_review встаёт в awaiting_reviewer
       и закрывается вердиктом-артефактом оркестратора на resume. Без модуля в поставке дочка не смогла
-      бы закрыть code_review в реальной среде команды. Растёт только счёт файлов (объём в норме),
-      потолок под факт (554 -> 555, measured 553 -> 554).
+      бы закрыть code_review в реальной среде команды. Растёт счёт файлов И объём (см. `what: volume`
+      ниже); потолок файлов под факт (554 -> 555, measured 553 -> 554).
+  - at: '2026-09-07'
+    what: volume
+    from_count: null
+    to_count: null
+    measured_before: 4568601
+    measured_after: 4584810
+    work: code-review-reviewer-works-inside-a-claude-session (#160)
+    files:
+      - ai_ops_kit/engine/reviewer_handoff.py
+      - ai_ops_kit/engine/pipeline_evidence.py
+      - ai_ops_kit/engine/tool_loop.py
+    why_it_works_in_the_child: >-
+      Объём поставки вырос на новый доставляемый модуль ai_ops_kit/engine/reviewer_handoff.py (машинерия
+      handoff) плюс проведённые в контур строки в pipeline_evidence._run_reviews (artifact-first +
+      открытие awaiting_reviewer) и tool_loop.run_review (перехват env-unavailable). Все три файла едут
+      в дочку и исполняются там при прогоне из сессии Клода. На main оставалось ~2.4 КБ запаса
+      (4568601 при потолке 4571000), поэтому +16 КБ пробили потолок; поднят под факт
+      4568601 -> 4584810, потолок 4587000.
