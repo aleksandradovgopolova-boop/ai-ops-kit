@@ -205,7 +205,12 @@ def _delivery_health(ev: dict) -> str:
 
 def _milestone(root: Path) -> dict:
     """Текущий milestone из ROADMAP.md (раздел Now) или плана. Иначе честный пробел."""
-    roadmap = _read(root, "ROADMAP.md") or _read(root, ".ai-ops/ROADMAP.md")
+    # Единый резолвер направления (SR-2): прежде читали `ROADMAP.md` ИЛИ `.ai-ops/ROADMAP.md` —
+    # два пути в одной строке означали, что канонический источник не определён. Теперь путь решает
+    # одно место (roadmap.resolve_roadmap_path), общее с health/drift/planning.
+    from ai_ops_kit.planning import roadmap as _roadmap
+    rp = _roadmap.resolve_roadmap_path(root)
+    roadmap = rp.read_text(encoding="utf-8") if rp.is_file() else None
     if roadmap:
         headers = {m.group(1).strip().lower(): m.start() for m in _H.finditer(roadmap)}
         if "now" in headers:
