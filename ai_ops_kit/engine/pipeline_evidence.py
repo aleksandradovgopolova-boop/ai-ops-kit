@@ -384,7 +384,12 @@ def _gate_ev_from_verdict(gid, g, rv, *, revision, delivered, work_root, valid_i
     from ai_ops_kit.checks import reviewer_result as vrr  # чистая проверка вниз (лента №5)
     req = g.get("required_evidence", []) or []
     res = rv.get("result")
-    errs = vrr.check(res, gate_ids=valid_ids) if isinstance(res, dict) else ["ревьюер не вынес вердикт"]
+    # issue #614: прозаический вердикт (`Recommendation: pass|needs_work`) приходит как reviewer-result
+    # со `status`, но БЕЗ структурных checks. Пустой checks для него — норма, а не порок формы: структура
+    # перестала быть условием вердикта. Заземление pass это НЕ ослабляет — рубер-штамп ниже держит.
+    _prose = isinstance(res, dict) and bool(res.get("prose_verdict"))
+    errs = (vrr.check(res, gate_ids=valid_ids, allow_empty_checks=_prose)
+            if isinstance(res, dict) else ["ревьюер не вынес вердикт"])
     entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
              "denied": rv.get("denied"), "valid": not errs, "source": rv.get("source"),
              "status": (res or {}).get("status") if not errs else None,
@@ -491,6 +496,16 @@ def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *
     return gate_ev, reviews
 
 
+# issue #614: чем просим ревьюера кода завершить на форс-ходе — ПРОСТОЙ строкой-итогом, а не тяжёлым
+# структурным reviewer-result. Живой `claude -p` на реальном диффе тонул в 56с прозы под структурным
+# JSON, а на этой строке заключал за 5с; `_last_prose_verdict` её ловит (make_reviewer_proposer
+# синтезирует reviewer-result со status). Security-ревью остаётся на структурной форме: ему нужен
+# domain_results, строкой его не заменить.
+_REVIEWER_VERDICT_HINT = ("РОВНО одну последнюю строку-итог `Recommendation: pass` или "
+                          "`Recommendation: needs_work` (структурный reviewer-result — по желанию, "
+                          "не обязателен)")
+
+
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
                  max_reads=10, change_context=None,
                  calibrated_enforcement=False, ui_evidence=None, child_root=None):
@@ -539,7 +554,8 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
                 required_evidence=req, reviewed_revision=revision)
             rv = tool_loop.run_review(reviewer, work_root, ro_policy, gid, budget=budget,
                                       max_reads=max_reads, base_context=change_ctx,
-                                      required_evidence=req, reviewed_revision=revision)
+                                      required_evidence=req, reviewed_revision=revision,
+                                      verdict_hint=_REVIEWER_VERDICT_HINT)
             # HANDOFF-OPEN (#160 + follow-up 07.09): провайдер ревьюера СТРУКТУРНО не дал ответа
             # (среда недоступна ИЛИ пустой ответ) на БЛОКИРУЮЩЕМ гейте -> НЕ глухой no-verdict, а
             # awaiting_reviewer: пишем запрос на ревью, гейт остаётся блокирующим (fail), но ОТЛИЧИМ —

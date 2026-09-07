@@ -73,3 +73,36 @@ def test_valid_pass(gate_ids):
         "status": "pass", "checks": [{"id": "c1", "status": "pass"}],
     }
     assert check(okr, gate_ids) == []
+
+
+@pytest.mark.unit
+def test_empty_checks_rejected_by_default(gate_ids):
+    """По умолчанию (структурный путь) пустой checks — порок формы: reviewer-result без checks
+    не принимается. Строгость структурного контракта не ослаблена."""
+    prose = {
+        "schema_version": 1, "kind": "reviewer-result", "gate": "code_review",
+        "status": "pass", "checks": [],
+    }
+    assert any("непустым" in e for e in check(prose, gate_ids))
+
+
+@pytest.mark.unit
+def test_empty_checks_allowed_for_prose_verdict(gate_ids):
+    """(#614) allow_empty_checks=True: прозаический вердикт (`Recommendation: pass`) несёт status,
+    но структурных checks у него нет — пустой список для него ДОПУСТИМ, структура не условие вердикта."""
+    prose = {
+        "schema_version": 1, "kind": "reviewer-result", "gate": "code_review",
+        "status": "pass", "checks": [], "prose_verdict": True,
+    }
+    assert check(prose, gate_ids, allow_empty_checks=True) == []
+
+
+@pytest.mark.unit
+def test_prose_warn_still_needs_blockers_even_with_empty_checks(gate_ids):
+    """(#614) Послабление касается ТОЛЬКО пустых checks: warn/fail по-прежнему обязаны нести
+    непустой blockers (блокирующий вердикт без причины запрещён)."""
+    warn_no_bl = {
+        "schema_version": 1, "kind": "reviewer-result", "gate": "code_review",
+        "status": "warn", "checks": [], "prose_verdict": True,
+    }
+    assert any("blockers" in e for e in check(warn_no_bl, gate_ids, allow_empty_checks=True))
