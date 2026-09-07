@@ -1,0 +1,182 @@
+# decision-boundary.yaml — ЯВНАЯ и НАЗВАННАЯ модель границы «кит решает сам / человек владеет».
+#
+# ЗАЧЕМ ЭТОТ ФАЙЛ (issue #615). Граница между тем, что кит делает автономно, и тем, что всегда
+# остаётся за человеком, УЖЕ работает — но размазана по механизмам (policy_engine, routing-policy,
+# workflows, spec_levels, decision_log) и подавалась как «адаптивный по умолчанию», что читается как
+# отложенный ответ. Здесь она НАЗВАНА и сведена в одно место как ДАННЫЕ: три класса действий,
+# три оси отнесения и правило эскалации к человеку. Это НЕ новый механизм и НЕ «диммер автономности»:
+# каждый класс ссылается (`implemented_by`) на уже существующий механизм, который его исполняет.
+#
+# ЧЕСТНОСТЬ ДЕКЛАРАЦИЙ (инвариант AGENTS.md). У каждой строки `implemented_by` есть `status`:
+#   implemented — механизм существует в коде/реестре и исполняет эту часть модели сегодня;
+#   planned     — заявлено, но кодом ещё не собрано (не выдаётся за готовое).
+schema_version: 1
+registry_type: decision-boundary
+
+model:
+  id: decision-boundary
+  name: Граница решений
+  one_liner: >-
+    Обратимое + локальное + дешёвое → кит делает сам; необратимое / широкий радиус / дорогая ошибка →
+    всегда решение человека.
+  # Статус МОДЕЛИ в целом: механизмы отнесения РАБОТАЮТ (governance подключается по риску — см.
+  # «Три кольца» в AGENTS.md), но единый классификатор, который берёт все три оси разом и выдаёт
+  # ИМЯ класса, ещё не собран — сегодня оси входят в решение раздельными сигналами (см. axes ниже).
+  status: partially_implemented
+  supersedes_framing: >-
+    Заменяет формулировку «адаптивный уровень автономии по умолчанию»: автономия — не ползунок,
+    а классификация действия по цене ошибки.
+
+# ── ТРИ ОСИ ОТНЕСЕНИЯ ───────────────────────────────────────────────────────────────────────────
+# Действие относится к классу по своему ХУДШЕМУ полюсу (см. assignment_rule): одной «тяжёлой» оси
+# достаточно, чтобы поднять действие к человеку. Оси независимы и не усредняются.
+axes:
+  - id: reversibility
+    name: Обратимость
+    poles: [reversible, irreversible]         # two-way door / one-way door
+    means: >-
+      reversible — последствие легко откатить (two-way door); irreversible — откат невозможен или
+      дорог (one-way door), например удаление данных, публикация наружу, релиз.
+    read_today_from:
+      # Как ось СЕЙЧАС попадает в решение (сигналы существующих механизмов), а не как «планируется».
+      - "spec_levels.classify: сигнал `irreversible`/`destructive` → эскалация до L3 CRITICAL"
+      - "decision_log: поле `reversibility` эпизода — one-way | two-way"
+
+  - id: blast_radius
+    name: Радиус поражения
+    poles: [local, wide]
+    means: >-
+      local — изменение в пределах одной работы/файла, откат локален; wide — задеты защищённые пути,
+      общая конфигурация, много контуров продукта или внешние потребители.
+    read_today_from:
+      - "routing-policy.approval_rules: default → human_approval_required=conditional «по protected-paths / destructive»"
+      - "product-operating-model: WorkItem.affects — сколько контуров задевает изменение"
+
+  - id: error_cost
+    name: Цена ошибки
+    poles: [cheap, expensive]
+    means: >-
+      cheap — ошибку ловит тест/CI, последствие мелкое; expensive — безопасность, потеря данных,
+      деньги, доверие пользователей: цена ошибки не покрывается автоматической проверкой.
+    read_today_from:
+      - "routing-policy: сигнал `risk` (low|medium|high|critical); risk∈{high,critical} → эскалация"
+      - "spec_levels.classify: `secret_boundary`/`risk` → L3 CRITICAL"
+
+# ── ТРИ КЛАССА ДЕЙСТВИЙ ─────────────────────────────────────────────────────────────────────────
+# Классы — это ИМЕНА для уже исполняемых уровней автономии (см. artifact-registry.autonomy_levels и
+# policy_engine.LEVELS), сгруппированных по тому, кто владеет решением. Порядок — по убыванию
+# автономии кита.
+classes:
+  - id: AUTONOMOUS
+    name: Автономно
+    owns_decision: kit
+    when: >-
+      ВСЕ три оси в мягком полюсе: reversible И local И cheap. Кит выполняет сам и уведомляет;
+      человек может откатить.
+    maps_to_autonomy_level: execute            # policy_engine.EXECUTE — исполнять без подтверждения
+    human_role: notified                       # видит результат, вправе откатить
+    examples:
+      - "актуализация фактов в статус-документе (версия, прогресс)"
+      - "механическая раскладка шаблонов из кита"
+
+  - id: COLLABORATIVE
+    name: Совместно
+    owns_decision: shared
+    when: >-
+      Смешанный профиль: ни одна ось не в тяжёлом полюсе, но есть защищённые пути / destructive-намёк
+      или средняя цена. Кит готовит изменение (черновик/PR), исполняет ТОЛЬКО после явного одобрения.
+    maps_to_autonomy_level: require_approval    # policy_engine.REQUIRE_APPROVAL — исполнить лишь по approved
+    also_uses_level: prepare                    # подготовить черновик к ревью, но не исполнять
+    human_role: approves
+    examples:
+      - "создание PR к ревью владельца (pr_autonomy)"
+      - "обновление обязательного артефакта, требующее подтверждения"
+
+  - id: ASSISTED
+    name: С помощником
+    owns_decision: human
+    when: >-
+      ХОТЯ БЫ ОДНА ось в тяжёлом полюсе: irreversible ИЛИ wide ИЛИ expensive. Решение всегда за
+      человеком; кит только предлагает и готовит бриф, но не исполняет (one-way door не проходится
+      автономно).
+    maps_to_autonomy_level: suggest             # policy_engine.SUGGEST — только предложить
+    also_uses_level: prepare                     # подготовить one-way-door-brief, решение за человеком
+    human_role: decides
+    examples:
+      - "смена политики (change_policy) — require_approval человека"
+      - "критическое/необратимое изменение: workflow CRITICAL, стадия human-approval"
+      - "значимое необратимое решение: DECISION → one-way-door-brief эскалируется, не принимается автономно"
+
+# ── ПРАВИЛО ОТНЕСЕНИЯ ───────────────────────────────────────────────────────────────────────────
+assignment_rule:
+  id: worst_axis_escalates
+  rule: >-
+    Действие относится к классу по ХУДШЕЙ из трёх осей. Любая тяжёлая ось (irreversible / wide /
+    expensive) поднимает действие к человеку (ASSISTED). Смешанный, но не тяжёлый профиль →
+    COLLABORATIVE. Все три оси мягкие → AUTONOMOUS. Понизить класс молча нельзя.
+  never_downgraded_silently: >-
+    Тот же инвариант, что у spec_levels: запрос более низкого уровня, чем требуют сигналы, не
+    понижает его молча — остаётся расчётный + причина эскалации.
+  fail_closed: >-
+    Сомнение = более высокий класс. У policy_engine дефолт по умолчанию — require_approval (человек
+    в контуре), а не execute.
+
+# ── СВЯЗЬ С СУЩЕСТВУЮЩИМИ МЕХАНИЗМАМИ ────────────────────────────────────────────────────────────
+# Модель не заводит своего исполнения — она НАЗЫВАЕТ то, что уже исполняют эти механизмы. Каждая
+# строка честно помечена: работает сегодня (implemented) или ещё нет (planned).
+implemented_by:
+  - mechanism: "Исполняемый gate уровней автономии (suggest/prepare/execute/require_approval)"
+    where: ai_ops_kit/governance/policy_engine.py
+    provides: [AUTONOMOUS, COLLABORATIVE, ASSISTED]
+    status: implemented
+    note: >-
+      enforce()/authorize() физически не выполняют действие, если уровень его не разрешает;
+      require_approval блокирует до явного одобрения. Дефолт fail-closed — require_approval.
+
+  - mechanism: "Словарь уровней автономии и per-action значения на артефактах"
+    where: registry/artifact-registry.yaml
+    provides: [AUTONOMOUS, COLLABORATIVE, ASSISTED]
+    status: implemented
+    note: "autonomy_levels + ai_actions[].autonomy — какой уровень у какого действия над артефактом."
+
+  - mechanism: "Маршрутизация по риску: critical → CRITICAL + human_approval_required"
+    where: registry/routing-policy.yaml
+    provides: [ASSISTED]
+    status: implemented
+    note: "workflow_rules (risk:critical → CRITICAL) и approval_rules (эскалация одобрения человека)."
+
+  - mechanism: "Workflow CRITICAL: risk-assessment (обратимость/радиус) + стадия human-approval"
+    where: registry/workflows.yaml
+    provides: [ASSISTED]
+    status: implemented
+    note: >-
+      Стадия risk-assessment оценивает обратимость и blast-radius; approval_policy.human_approval_required
+      блокирует автономное прохождение; DECISION эскалирует one-way door брифом.
+
+  - mechanism: "Глубина спецификации по необратимости/риску (эскалация до L3 CRITICAL)"
+    where: ai_ops_kit/gates/spec_levels.py
+    provides: [ASSISTED]
+    status: implemented
+    note: "classify(): irreversible/destructive/secret_boundary/risk∈{high,critical} → L3, нельзя понизить молча."
+
+  - mechanism: "Ось обратимости на решениях (one-way / two-way door)"
+    where: ai_ops_kit/governance/decision_log.py
+    provides: [reversibility]
+    status: implemented
+    note: "Эпизод решения обязан объявить reversibility; validate_decisions проверяет набор значений."
+
+  - mechanism: "Governance подключается ПО РИСКУ, не на каждой задаче (кольцо governance)"
+    where: AGENTS.md
+    provides: [assignment_rule]
+    status: implemented
+    note: "«Три кольца» (owner-review 2026-07-30): цена ошибки решает, включается ли governance-строгость."
+
+  - mechanism: "Единый классификатор: три оси разом → ИМЯ класса (AUTONOMOUS/COLLABORATIVE/ASSISTED)"
+    where: null
+    provides: [AUTONOMOUS, COLLABORATIVE, ASSISTED]
+    status: planned
+    note: >-
+      Сегодня оси входят в решение РАЗДЕЛЬНЫМИ сигналами (risk, irreversible, protected-paths), а имя
+      класса не вычисляется автоматически из всех трёх вместе. Свести их в один explainable-классификатор,
+      который печатает класс и причину, — планируемый шаг; до него модель называет и связывает, но не
+      считает класс за человека.

@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 406
+behavioral_count: 407
 structural_count: 66
-total_count: 472
-behavioral_share_pct: 86.02
+total_count: 473
+behavioral_share_pct: 86.05
 
 raises:
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 406
+    from_total: 472
+    to_behavioral: 407
+    to_total: 473
+    to_share_pct: 86.05
+    work: '#615 назвать модель границы решений (тест test_decision_boundary)'
+    why: >-
+      #615 добавил один поведенческий тест-файл (test_decision_boundary — импортирует
+      governance/policy_engine и gates/spec_levels И зовёт их, доказывая, что имя класса действия =
+      поведение gate), структурных без изменений (66). Доля поведенческих выросла 86.02% -> 86.05%
+      (не снижение). Числа руками (--baseline лоссовый).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 405

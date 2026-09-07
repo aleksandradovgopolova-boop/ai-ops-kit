@@ -877,6 +877,13 @@ DEV_ONLY_FILES = frozenset({
     # через pip). В pip-колесо он по-прежнему едет (packages.find, не managed_set), поэтому команда
     # `ai-ops` после установки пакета работает; в дочку слать незачем.
     "ai_ops_kit/cli/entry.py",
+    # 07.09.2026, issue #615. `registry/decision-boundary.yaml` НАЗЫВАЕТ модель границы решений
+    # (три класса действий × три оси) для governance и документации САМОГО кита. В дочке его пока
+    # НЕ читает никто: единый классификатор, который считал бы класс из трёх осей, помечен в файле
+    # `status: planned`, а исполняют границу уже едущие механизмы (policy_engine, routing-policy,
+    # workflows, spec_levels). По тому же правилу, что `release-claims-stays-in-the-kit`, реестр без
+    # читателя в дочке не едет в поставку — поедет, когда появится child-side читатель классификатора.
+    "registry/decision-boundary.yaml",
 })
 
 
