@@ -813,6 +813,13 @@ DEV_ONLY_FILES = frozenset({
     # `product-audit.schema.json` — контракт формы отчёта аудита (PR-21). Кит в рантайме её не
     # читает (форма проверяется в самом `product_audit` и тестом), значит в дочку её слать незачем.
     "schemas/product-audit.schema.json",
+    # `ai_ops_kit/cli/entry.py` — консольный вход `ai-ops` для pip/pipx
+    # (`pyproject.toml -> [project.scripts]`). Дочка ставится КОПИРОВАНИЕМ и водит кит своей обёрткой
+    # `./ai-ops` (`.ai/managed`, зовёт `ai_ops_cli` напрямую) — console_scripts у неё нет и этот вход
+    # она не использует. В дочке файл был бы инертным (0 импортеров, вызывается только процессом
+    # через pip). В pip-колесо он по-прежнему едет (packages.find, не managed_set), поэтому команда
+    # `ai-ops` после установки пакета работает; в дочку слать незачем.
+    "ai_ops_kit/cli/entry.py",
 })
 
 
