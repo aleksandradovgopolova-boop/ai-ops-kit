@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 401
+behavioral_count: 405
 structural_count: 66
-total_count: 467
-behavioral_share_pct: 85.87
+total_count: 471
+behavioral_share_pct: 85.99
 
 raises:
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 401
+    from_total: 467
+    to_behavioral: 405
+    to_total: 471
+    to_share_pct: 85.99
+    work: 'SR-1..8 (свод обязательных артефактов) + свед. с main #593/#597'
+    why: >-
+      SR-работа добавила 4 поведенческих тест-файла (roadmap_single_source, required_architecture,
+      artifact_sections, standard_version — импортируют продуктовый код И зовут), структурных без
+      изменений (66). При сведении с main приехали #593/#597 — итог по ФАКТУ объединённого дерева
+      405/471, доля выросла 85.87% -> 85.99% (не снижение). Числа руками (--baseline лоссовый).
   - at: '2026-09-07'
     what: rebaseline_after_measurement
     from_behavioral: 397

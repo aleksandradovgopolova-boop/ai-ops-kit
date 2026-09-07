@@ -1,0 +1,40 @@
+# registry/standard.yaml — стандарт репозитория как ВЕРСИОНИРУЕМЫЙ объект (SR-1..4).
+#
+# ЗАЧЕМ ОТДЕЛЬНАЯ ВЕРСИЯ. Версия стандарта и версия пакета были одним числом, поэтому любой патч
+# кита выглядел как изменение требований к репозиторию, а «Child A на стандарте 1, Child B на 2»
+# сказать было нечем. `standard_version` растёт ТОЛЬКО при изменении требований к репозиторию:
+# новый обязательный артефакт, новая обязательная секция, изменение силы проверки (SR-1).
+#
+# ЭТО МАНИФЕСТ-ССЫЛКА, НЕ ВТОРОЙ СПИСОК (SR-2). Состав требований живёт в существующих реестрах;
+# здесь — только версия, отпечаток и указатели, ОТКУДА состав читается. Код (`ai_ops_kit/planning/
+# standard.py`) собирает состав из этих источников и считает отпечаток; тест краснеет, если состав
+# изменился, а `standard_version`/`requirements_fingerprint` — нет (ратчет, как footprint/layering).
+schema_version: 1
+registry_type: standard
+
+# Версия стандарта. Патч-релиз кита её НЕ меняет. Растёт только при изменении требований к репозиторию.
+standard_version: 1
+
+# Отпечаток состава требований (sha256[:16] от required_artifacts + required_sections + сила гейтов,
+# считанных из источников ниже). Меняется состав — обязаны измениться отпечаток и standard_version.
+requirements_fingerprint: "6013c88989a3e590"
+
+# Откуда читается состав (SR-2: ссылки на реестры, а не дубль):
+sources:
+  required_artifacts:
+    - "registry/product-operating-model.yaml: contours[].source_of_truth[] c required: true"
+    - "registry/artifact-registry.yaml: artifacts[] c required: true"
+    - "manifest/ai-ops-manifest.yaml: living_status.required_context_docs + product_operating_model.required_repo_artifacts"
+  required_sections:
+    - "registry/product-operating-model.yaml: source_of_truth[].required_sections"
+    - "registry/artifact-registry.yaml: artifacts[].structure.required_sections"
+  check_strength:
+    - "quality/gates.yaml: gates[].blocking"
+
+# Профиль по умолчанию для дочки (SR-4). Один профиль сейчас — это просто стандарт; второй вводится
+# по замеру, а не заранее (см. docs/engineering-standard-requirements.md, вопрос 2 владельцу).
+default_profile: ai-product
+
+# Что считается ломающим изменением стандарта (docs/engineering-standard-requirements.md §6):
+#   новый обязательный артефакт; новая обязательная секция; новый инвариант по умолчанию; повышение
+#   силы проверки до блокирующей; удаление/переименование объявленного инварианта.

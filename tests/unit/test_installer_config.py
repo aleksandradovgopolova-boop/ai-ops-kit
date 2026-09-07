@@ -86,6 +86,10 @@ def test_filled_planning_artifacts_are_not_reported_as_gap(installed, ai_ops):
         "work:\n  - id: w-01\n    title: Работа\n    type: engineering\n    goal: real-goal\n"
         "    status: todo\n    owner_role: engineer\n    write_scope: [src/]\n",
         encoding="utf-8")
+    # SR-7: ARCHITECTURE.md — обязательный артефакт продуктовой модели; заполненный не должен
+    # числиться пробелом. Реальное содержание (не заготовка: без маркеров template/«Это заготовка»).
+    (installed / "ARCHITECTURE.md").write_text(
+        "# Architecture\n\n## Context\nнастоящий контекст системы\n", encoding="utf-8")
 
     _req, gaps, unfilled = ai_ops._planning_gaps(installed)
     assert not gaps and not unfilled, f"заполненные артефакты объявлены незаполненными: {gaps} {unfilled}"

@@ -32,8 +32,9 @@ def _write_passport(root, text="# Passport\n\nНазвание: X\n"):
 
 
 def _write_roadmap(root, text="# Roadmap\n\n## Now\n- x\n"):
-    _layer(root)
-    (root / hp.ROADMAP_REL).write_text(text, encoding="utf-8")
+    # Канонический путь направления — корневой ROADMAP.md (SR-2, свод путей к одному источнику).
+    # Прежде тест писал в `.ai-ops/ROADMAP.md`; теперь читатели ведёт единый резолвер.
+    (root / "ROADMAP.md").write_text(text, encoding="utf-8")
 
 
 GREEN_METRICS = {"adoption": {"value": 0.5, "target": 0.5}}
