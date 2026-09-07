@@ -661,7 +661,7 @@ DEV_ONLY_PREFIXES = (
 # Двенадцать модулей, добавленных 19.08, уезжали в дочку и были там НЕДОСТИЖИМЫ: ни один
 # поставляемый модуль их не импортирует, ни один реестр, гейт, workflow или команда не называет,
 # и ни один документ кита о них не упоминает. Замер на свежей установке: 0 импортов из поставки
-# (единственная ссылка — внутри самой группы: watch_contract -> nightly_review), 0 упоминаний в
+# (единственная ссылка была внутри самой группы), 0 упоминаний в
 # registry/quality/config/commands/workflows, 0 в README.md и docs/.
 #
 # Цена была видна сразу: потолок поставки пробит — 479 содержательных файлов при 475 и 3.7449 МБ
@@ -680,7 +680,12 @@ UNWIRED_MODULES = frozenset({
     # Четыре модуля-заготовки под Phase B (engops/{delivery_size,merge_lifecycle,refusal_paths,
     # session_thresholds}) СНЯТЫ 2026-09-05: 0 импортеров, порту не соответствовали, дормантный
     # инвентарь. Понадобится Phase B — реализации восстановят против Protocol'ов ports.py.
-    "ai_ops_kit/intelligence/artifact_reality_check.py",
+    # `intelligence/artifact_reality_check.py` СНЯТ ИЗ ПОСТАВКИ 2026-09-07 (#589, веха 4.2): не
+    # проведён решением, а УДАЛЁН как дормантный дубль. 0 импортеров, без своих тестов; его предмет
+    # (ссылки артефактов ведут в существующие файлы) уже покрывают ШИПНУТЫЕ валидаторы
+    # validate_references/validate_cross_artifacts, которые агрегирует nightly_review. Вторая
+    # реализация той же проверки — вторая правда, ровно то, что кит запрещает. Файл удалён вместе с
+    # именем; `test_every_unwired_module_still_exists` не даст имени пережить файл.
     # `intelligence/decision_loop.py` УБРАН ИЗ СПИСКА 2026-09-07 (#564): он ПОДКЛЮЧЁН. Маршрут
     # `run --execute`/`do` (ai_ops_kit/cli/ai_ops_cli.py, `_decision_contract_gate`) импортирует его
     # и зовёт `has_feature_decision_contract` — fail-closed присутствие Decision-контракта для
@@ -703,9 +708,18 @@ UNWIRED_MODULES = frozenset({
     # (не второй outcome-вердикт: тот остаётся за #566). Значит модуль обязан ехать в дочку: cli его
     # зовёт, оставить в UNWIRED значило бы дать дочке cli, вызывающий отсутствующий файл (класс F-033).
     # Список сокращён ФАКТОМ подключения — об этом сказал бы `test_unwired_modules_are_really_unwired`.
-    "ai_ops_kit/intelligence/refactoring_advisor.py",
-    "ai_ops_kit/intelligence/session_watch.py",
-    "ai_ops_kit/intelligence/watch_contract.py",
+    # СНЯТЫ ИЗ ПОСТАВКИ 2026-09-07 (#589, веха 4.2) — УДАЛЕНЫ как дормантный груз, не «отложены»:
+    #   · `intelligence/refactoring_advisor.py` — 0 импортеров, без своих тестов; грубые строковые
+    #     эвристики (большие файлы/сложные функции) дублируют РЕАЛЬНЫЕ защёлки func-size/file-size
+    #     кита. Общий совет без полевого пути к вызову.
+    #   · `intelligence/session_watch.py` — 0 импортеров, без своих тестов; ДУБЛЬ уже проведённого
+    #     `engops/session_guardrails` (classify_context/recommend, пороги compact/new_session),
+    #     который зовут cli (ai_ops_cli) и engine (ai_ops_run_lifecycle). Порог сессии УЖЕ считается
+    #     и всплывает — второй счётчик не нужен.
+    #   · `intelligence/watch_contract.py` — 0 импортеров, без своих тестов; его заявленный
+    #     потребитель `nightly_review` его НЕ импортирует и пошёл другим устройством (жёсткий кортеж
+    #     CHECKS + реальное CI-расписание install_schedule). Схема WatchContract, которую никто не
+    #     производит и не читает. Ночной МЕХАНИЗМ (nightly_review) при этом цел и проведён.
     # `planning/artifact_registry.py` и `planning/passport_generator.py` УБРАНЫ ИЗ СПИСКА 20.08.2026
     # (работа `product-layer-bootstrap`): они ПОДКЛЮЧЕНЫ. `_seed_product_layer` в этом установщике
     # читает реестр артефактов и генерирует Product Passport из фактического состояния дочки при
