@@ -1185,8 +1185,8 @@ raises:
       ниже); потолок файлов под факт (554 -> 555, measured 553 -> 554).
   - at: '2026-09-07'
     what: volume
-    from_count: null
-    to_count: null
+    from_bytes: 4571000
+    to_bytes: 4587000
     measured_before: 4568601
     measured_after: 4584810
     work: code-review-reviewer-works-inside-a-claude-session (#160)
