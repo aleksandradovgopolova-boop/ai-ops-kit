@@ -476,7 +476,13 @@ def _intent_next(task, child_root, signals, a):
     except (_plan.PlanCorrupt, _contours.ModelCorrupt) as e:
         print(f"ОШИБКА: {e}")
         return 1
+    # #567: предложенный кандидат из обратной петли Outcome→Insight. Живёт на слое CLI (entrypoints
+    # вправе звать intelligence вниз; next_work в `planning` тянуть вверх не может). НЕ ранжированная
+    # работа — черновик, активным станет только по решению человека; показываем ОТДЕЛЬНО.
+    from ai_ops_kit.cli.ai_ops_cli_intents import _inbox_outcome_candidate
+    candidate = _inbox_outcome_candidate(child_root)
     if js:
+        rep = dict(rep, outcome_candidate=candidate)
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
         # v3.35 Human Communication Layer: по умолчанию говорим смыслом, а не внутренним
@@ -484,6 +490,10 @@ def _intent_next(task, child_root, signals, a):
         from ai_ops_kit.ui import presenter
         aud = presenter.audience_from_config(child_root)
         print(presenter.render(presenter.from_next_work(rep), audience=aud))
+        if candidate:
+            print(f"\n  Предложение по итогу релиза (черновик, требует решения): {candidate['what']}"
+                  f"\n      основано на {candidate.get('sources')} набл. (уверенность "
+                  f"{candidate.get('confidence')}); активной не станет без твоего решения")
         # Ошибки плана и направления печатаются ВСЕГДА: «показать по запросу» относится к
         # техническим деталям исправного прогона, а не к дефекту, который блокирует ответ.
         for _e in (rep.get("plan_errors") or []):

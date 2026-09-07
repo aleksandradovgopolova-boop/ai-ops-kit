@@ -290,6 +290,19 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     # координационный PR (код петли ≠ правка данных плана); здесь по-прежнему ничего не пишется.
     outcome_flip_ready = bool(outcome and outcome.get("flip_ready"))
 
+    # (g) ОБРАТНАЯ ПЕТЛЯ Outcome → Insight → кандидат-работа (#567). Замыкается ЗДЕСЬ по той же
+    #     причине, что и вердикт из чисел: только слой entrypoints вправе звать И intelligence, И
+    #     validation. Инсайт строится на РЕАЛЬНОМ замере (measured_evaluation): на `unknown` петля
+    #     возвращает None (нет данных — инсайт не фабрикуется). Кандидат — DRAFT (writer ≠ judge),
+    #     в дочку ничего не пишется. `no_insight_reason` честно называет, почему инсайта нет.
+    from ai_ops_kit.intelligence import outcome_insight
+    measured_eval = (outcome or {}).get("measured_evaluation")
+    loop = outcome_insight.from_outcome(contract, readout, measured_eval) if measured_eval else None
+    insight = (loop or {}).get("insight")
+    candidate_work = (loop or {}).get("candidate_work")
+    recommendation = (loop or {}).get("recommendation")
+    insight_gap = None if insight else outcome_insight.no_insight_reason(measured_eval)
+
     notes: list[str] = []
     if not prr["found"]:
         notes.append("PRR не найден: пост-релизного отчёта о доставке ещё нет")
@@ -304,6 +317,12 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     elif outcome_verdict != "unknown":
         notes.append(f"итог по релизу измерен: {outcome_verdict} "
                      "(" + (outcome.get("measured_evaluation") or {}).get("reason", "") + ")")
+    if candidate_work:
+        notes.append(f"обратная петля: из измеренного итога родился инсайт (уверенность "
+                     f"{insight.get('confidence')}) и кандидат-работа «{candidate_work.get('title')}» "
+                     f"— черновик, активной не станет без твоего решения")
+    elif insight_gap:
+        notes.append(f"инсайт не строю: {insight_gap} (нет данных — не выдумываю)")
 
     return {
         "schema_version": 1,
@@ -322,8 +341,47 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
         # ФЛИП ГОТОВ, когда пришёл реальный замер (met/failed). Без замера — False (честный дефолт).
         # Сам флип goal.outcome не делается здесь: это отдельный координационный PR (см. #566).
         "outcome_flip_ready": outcome_flip_ready,
+        # ОБРАТНАЯ ПЕТЛЯ (#567): инсайт из измеренного итога, кандидат-работа (DRAFT) и рекомендация
+        # с evidence. None, если итог не измерен (`insight_gap` называет почему). Ничего не пишется:
+        # кандидат виден в inbox/next, активной работой станет только по решению человека.
+        "insight": insight,
+        "candidate_work": candidate_work,
+        "recommendation": recommendation,
+        "insight_gap": insight_gap,
         "notes": notes,
     }
+
+
+# Где искать OutcomeContract/OutcomeReadout в дочке (те же места, что читают explain/inbox/next).
+_OUTCOME_CONTRACT_GLOBS = ("outcome-contract.yaml", ".ai/project/readout/outcome-contract.yaml",
+                           "features/*/outcome-contract.yaml")
+_OUTCOME_READOUT_GLOBS = ("outcome-readout.yaml", ".ai/project/readout/outcome-readout.yaml",
+                          "features/*/outcome-readout.yaml")
+
+
+def discover_and_run(child_root) -> dict | None:
+    """Найти OutcomeContract(+Readout) в стандартных местах и прогнать петлю. Read-only.
+
+    Единый путь автообнаружения для inbox/next (#567) и explain (#566) — один механизм, не второй.
+    -> результат `run_post_release` либо None (контракта нет — тогда и петли нет)."""
+    root = Path(child_root)
+
+    def _first(globs):
+        for pat in globs:
+            found = sorted(root.glob(pat))
+            if found:
+                return found[0]
+        return None
+
+    cpath = _first(_OUTCOME_CONTRACT_GLOBS)
+    if cpath is None:
+        return None
+    contract, _ = _load_doc(cpath)
+    if not isinstance(contract, dict) or contract.get("kind") != "OutcomeContract":
+        return None
+    rpath = _first(_OUTCOME_READOUT_GLOBS)
+    readout = _load_doc(rpath)[0] if rpath is not None else None
+    return run_post_release(None, root, contract=contract, readout=readout)
 
 
 # ── Человекочитаемый разбор (для --json=off из CLI используется presenter; здесь — технический) ──
@@ -355,6 +413,22 @@ def render(result: dict) -> str:
         L.append(f"  продуктовый статус: {ps['label']} "
                  f"(доставка {'подтверждена' if ps.get('delivery_verified') else 'не подтверждена'}, "
                  f"итог {ps.get('outcome_verdict')})")
+    ins, cand, rec = result.get("insight"), result.get("candidate_work"), result.get("recommendation")
+    if ins:
+        L.append(f"  инсайт {ins.get('id')}: {ins.get('headline')} (уверенность {ins.get('confidence')})")
+        epi = ins.get("epistemics") or {}
+        for k, ru in (("observed", "наблюдал"), ("inferred", "вывел"), ("unknown", "не знаю")):
+            for item in epi.get(k) or []:
+                L.append(f"    · {ru}: {item}")
+        if rec:
+            L.append(f"    рекомендация ({rec.get('sources')} набл., факты {len(rec.get('facts') or [])}, "
+                     f"допущения {len(rec.get('assumptions') or [])}, "
+                     f"критично неизвестно {len(rec.get('critical_unknowns') or [])}): {rec.get('proposal')}")
+        if cand:
+            L.append(f"    кандидат-работа {cand.get('id')} [{cand.get('status')}, требует решения "
+                     f"человека]: {cand.get('title')} (роль {cand.get('owner_role')})")
+    elif result.get("insight_gap"):
+        L.append(f"  инсайт не строю: {result['insight_gap']}")
     for n in result.get("notes") or []:
         L.append(f"  — {n}")
     return "\n".join(L)
