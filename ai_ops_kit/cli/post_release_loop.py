@@ -196,6 +196,92 @@ def _assess_outcome(contract, readout, feature) -> dict | None:
     }
 
 
+# ── #584: проводка кластера обучения (outcome_analytics + evolution_triggers) в пост-релизный путь ──
+# built≠wired → built. Оба модуля были дормантны (0 не-тестовых импортёров); пост-релизная петля —
+# единственный слой entrypoints, что вправе звать intelligence вниз, — становится их РАНТАЙМ-ПУТЁМ.
+#
+# РАЗВЯЗКА ДУБЛИРОВАНИЯ С #566 (issue #584). Веха 4.1 (#566/#567) построила НОВЫЙ outcome-путь
+# (evaluate_outcome/outcome_insight): он отвечает на вопрос «ВЗЯЛИ ЛИ ЦЕЛЬ» (met/failed из чисел) —
+# ЕДИНСТВЕННЫЙ источник истины по продуктовому ИСХОДУ. `outcome_analytics` отвечает на ДРУГОЙ вопрос:
+# «СКОЛЬКО СТОИЛО и какой был эффект по прогонам» (токены, деньги, problem-rate). Это не второй
+# outcome-вердикт, а сопутствующая СТОИМОСТНАЯ/ЭФФЕКТ-аналитика ПОД тем же пост-релизным путём.
+# Поэтому решение — ПОДКЛЮЧИТЬ (не снять): двух параллельных outcome-вердиктов не заводим (вердикт по
+# исходу остаётся за #566), а стоимость/эффект честно живут рядом как аналитика, а не как второй итог.
+
+# Где искать в дочке отчёт product-health (product_health.compute) для evolution_triggers.
+_HEALTH_REPORT_GLOBS = ("product-health-report.json", ".ai/project/product-health-report.json",
+                        ".ai/project/health/product-health-*.json")
+# Где искать реестр ADR дочки (evolution_triggers сверяет обещания ADR с реальностью health).
+_ADR_SEARCH_DIRS = ("decisions/adr", ".ai/project/decisions/adr")
+
+
+def _assess_cost_analytics(child_root: Path) -> dict:
+    """Звено (h): сводная СТОИМОСТНАЯ/ЭФФЕКТ-аналитика прогонов (outcome_analytics, #584).
+
+    Композиция intelligence.outcome_analytics: сколько стоило (токены/деньги), problem-rate, топ задач.
+    Это НЕ вердикт по исходу (тот считает #566) — сопутствующая аналитика. Честный дефолт: нет журнала
+    расхода → нули, `measured` говорит правду о полноте. Сбой сбора не роняет петлю."""
+    from ai_ops_kit.intelligence import outcome_analytics
+    try:
+        a = outcome_analytics.collect_analytics(child_root, period="all")
+    except Exception as e:  # noqa: BLE001 — аналитика обогащает петлю, не является её предусловием
+        return {"available": False, "reason": f"аналитика не собрана ({type(e).__name__}: {e})"}
+    summary = a.get("summary") or {}
+    effect = a.get("effect_metrics") or {}
+    return {
+        "available": True,
+        "measured": bool(summary.get("total_runs")),
+        "total_runs": summary.get("total_runs", 0),
+        "total_tasks": summary.get("total_tasks", 0),
+        "total_cost_usd": summary.get("total_cost_usd", 0),
+        "avg_cost_per_task_usd": summary.get("avg_cost_per_task_usd", 0),
+        "total_tokens": summary.get("total_tokens", 0),
+        "problem_rate": effect.get("problem_rate"),
+    }
+
+
+def _find_first(child_root: Path, globs) -> Path | None:
+    for pat in globs:
+        found = sorted(child_root.glob(pat))
+        if found:
+            return found[0]
+    return None
+
+
+def _assess_evolution(child_root: Path) -> dict:
+    """Звено (i): триггеры развития — расхождение обещаний ADR с реальным product-health (#584).
+
+    Композиция intelligence.evolution_triggers: активные ADR обещают quality-атрибуты, product_health
+    меряет реальность; триггер (advisory, НЕ gate) — где обещание не держится. ЧЕСТНЫЙ ДЕФОЛТ: нет
+    отчёта health или реестра ADR → `available: false` с причиной, НЕ выдуманные триггеры. Сбой не
+    роняет петлю."""
+    from ai_ops_kit.checks import adr_registry
+    from ai_ops_kit.intelligence import evolution_triggers
+    health_path = _find_first(child_root, _HEALTH_REPORT_GLOBS)
+    if health_path is None:
+        return {"available": False, "reason": "отчёта product-health в дочке нет — сравнивать не с чем",
+                "trigger_count": 0, "triggers": []}
+    adr_dir = next((child_root / d for d in _ADR_SEARCH_DIRS if (child_root / d).is_dir()), None)
+    if adr_dir is None:
+        return {"available": False, "reason": "реестра ADR в дочке нет — обещаний для сверки нет",
+                "trigger_count": 0, "triggers": []}
+    try:
+        health, _ = _load_doc(health_path)
+        reg_errs, adrs = adr_registry.check_registry(adr_dir)
+        if not isinstance(health, dict):
+            return {"available": False, "reason": "отчёт product-health не разобран",
+                    "trigger_count": 0, "triggers": []}
+        if reg_errs:
+            return {"available": False, "reason": "реестр ADR требует починки (см. validate_adr_registry)",
+                    "trigger_count": 0, "triggers": []}
+        rep = evolution_triggers.report(adrs, health)
+    except Exception as e:  # noqa: BLE001 — триггеры обогащают петлю, не являются её предусловием
+        return {"available": False, "reason": f"триггеры не посчитаны ({type(e).__name__}: {e})",
+                "trigger_count": 0, "triggers": []}
+    return {"available": True, "health_band": rep.get("health_band"),
+            "trigger_count": rep.get("trigger_count", 0), "triggers": rep.get("triggers", [])}
+
+
 def classify_product_status(delivery_verified: bool, outcome_verdict: str) -> dict:
     """Свести состояние ДОСТАВКИ и вердикт по ПРОДУКТОВОМУ ИТОГУ в один явный статус (#566).
 
@@ -303,6 +389,17 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     recommendation = (loop or {}).get("recommendation")
     insight_gap = None if insight else outcome_insight.no_insight_reason(measured_eval)
 
+    # (h)+(i) #584: провести кластер обучения в контур — стоимостная аналитика прогонов и триггеры
+    #     развития (ADR↔health). Оба были дормантны; здесь у них появляется рантайм-импортёр.
+    cost_analytics = _assess_cost_analytics(child_root)
+    evolution = _assess_evolution(child_root)
+
+    # (j) #586: из измеренного инсайта рождается ПРЕЦЕДЕНТ (факт + число случаев + контекст), без
+    #     утверждения причинности. Один живой релиз = один случай ("прецедент, 1 случай", не "правило").
+    #     Проекция, не запись; None, если инсайта нет (unknown — данных для прецедента ещё нет).
+    from ai_ops_kit.intelligence import precedent_ledger
+    precedent = precedent_ledger.precedent_from_insight(insight, contract=contract) if insight else None
+
     notes: list[str] = []
     if not prr["found"]:
         notes.append("PRR не найден: пост-релизного отчёта о доставке ещё нет")
@@ -323,6 +420,12 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
                      f"— черновик, активной не станет без твоего решения")
     elif insight_gap:
         notes.append(f"инсайт не строю: {insight_gap} (нет данных — не выдумываю)")
+    if evolution.get("available") and evolution.get("trigger_count"):
+        notes.append(f"триггеры развития: {evolution['trigger_count']} — обещание ADR разошлось с "
+                     "реальным здоровьем продукта, стоит пересмотреть решение (advisory)")
+    if precedent:
+        notes.append(f"прецедент записан: {precedent.get('frequency_label')} — факт из исхода, "
+                     "решение и перенос на другие продукты остаются за тобой (не правило)")
 
     return {
         "schema_version": 1,
@@ -348,6 +451,11 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
         "candidate_work": candidate_work,
         "recommendation": recommendation,
         "insight_gap": insight_gap,
+        # #584: кластер обучения проведён в контур — стоимостная аналитика и триггеры развития.
+        "cost_analytics": cost_analytics,
+        "evolution_triggers": evolution,
+        # #586: прецедент из измеренного исхода (факт + число случаев, без причинности). None без замера.
+        "precedent": precedent,
         "notes": notes,
     }
 

@@ -479,10 +479,13 @@ def _intent_next(task, child_root, signals, a):
     # #567: предложенный кандидат из обратной петли Outcome→Insight. Живёт на слое CLI (entrypoints
     # вправе звать intelligence вниз; next_work в `planning` тянуть вверх не может). НЕ ранжированная
     # работа — черновик, активным станет только по решению человека; показываем ОТДЕЛЬНО.
-    from ai_ops_kit.cli.ai_ops_cli_intents import _inbox_outcome_candidate
+    from ai_ops_kit.cli.ai_ops_cli_intents import _inbox_findings, _inbox_outcome_candidate
     candidate = _inbox_outcome_candidate(child_root)
+    # #585: обратное наследование §28 — наблюдения дочек из findings/from-children как кандидаты к
+    # разбору (DRAFT). Тот же слой/принцип, что и outcome-кандидат: черновик, решает человек.
+    findings = _inbox_findings(child_root)
     if js:
-        rep = dict(rep, outcome_candidate=candidate)
+        rep = dict(rep, outcome_candidate=candidate, child_findings=findings)
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
         # v3.35 Human Communication Layer: по умолчанию говорим смыслом, а не внутренним
@@ -494,6 +497,11 @@ def _intent_next(task, child_root, signals, a):
             print(f"\n  Предложение по итогу релиза (черновик, требует решения): {candidate['what']}"
                   f"\n      основано на {candidate.get('sources')} набл. (уверенность "
                   f"{candidate.get('confidence')}); активной не станет без твоего решения")
+        for _cand in (findings or {}).get("candidates") or []:
+            print(f"\n  Наблюдение из прогона к разбору (черновик, требует решения): "
+                  f"{_cand.get('title')}"
+                  f"\n      контекст: {_cand.get('source_context') or '—'}; "
+                  "активной не станет без твоего решения")
         # Ошибки плана и направления печатаются ВСЕГДА: «показать по запросу» относится к
         # техническим деталям исправного прогона, а не к дефекту, который блокирует ответ.
         for _e in (rep.get("plan_errors") or []):
