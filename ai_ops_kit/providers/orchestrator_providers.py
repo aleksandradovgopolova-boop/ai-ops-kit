@@ -675,6 +675,38 @@ def _writer_lock_poll_seconds():
     return val if val > 0 else default
 
 
+def writer_lock_busy():
+    """Неблокирующая ПРОБА машинного замка писателя (#661): держит ли писателя ПРЯМО СЕЙЧАС другой
+    процесс на этой машине — без ожидания и без вставания в очередь. Пытается взять замок
+    `LOCK_NB` и тут же отпускает: удалось → свободен (`False`); `OSError` → держит другой процесс
+    (`True`). Проба сама замок НЕ удерживает (иначе стала бы вторым держателем и повлияла бы на
+    очередь), поэтому не деадлочит и не мешает.
+
+    Замок выключен (`AI_OPS_WRITER_LOCK=0`) или нет `fcntl` (Windows) → сериализации нет, значит и
+    «занятости», о которой стоит сигналить, тоже нет → `False` (симметрично `_writer_serialization_lock`,
+    который в этих случаях — no-op). Сбой открытия файла замка не выдаём за занятость: это не
+    «другой держатель», а недоступность самого замка → `False`, проба не должна врать про очередь."""
+    if os.environ.get("AI_OPS_WRITER_LOCK", "1") == "0":
+        return False
+    try:
+        import fcntl
+    except ImportError:
+        return False
+    try:
+        f = open(writer_lock_path(), "w")
+    except OSError:
+        return False
+    try:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            return True                       # держит другой процесс — писатель занят
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)  # свободен: сразу отпускаем, очередь не трогаем
+        return False
+    finally:
+        f.close()
+
+
 @contextlib.contextmanager
 def _writer_serialization_lock(notify=None, poll_seconds=None):
     """МАШИННЫЙ ЗАМОК ПИСАТЕЛЯ (поле 02–03.09.2026): один локальный `claude -p` за раз на всю

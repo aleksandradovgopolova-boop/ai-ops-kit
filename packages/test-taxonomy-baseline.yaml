@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 421
+behavioral_count: 422
 structural_count: 66
-total_count: 487
-behavioral_share_pct: 86.45
+total_count: 488
+behavioral_share_pct: 86.48
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 421
+    from_total: 487
+    to_behavioral: 422
+    to_total: 488
+    to_share_pct: 86.48
+    work: 'writer-contention-signal (#661)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_writer_contention.py: зовёт writer_contention.assess/
+      record/signal_path, orchestrator_providers.writer_lock_busy, attention_bus.collect и
+      ai_ops_cli_intents._inbox_collect — импортирует продуктовый код И исполняет его. Поверх #647
+      (421/487) доля поведенческих не падает (86.45% -> 86.48%).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 420
