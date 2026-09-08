@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 413
+behavioral_count: 414
 structural_count: 66
-total_count: 479
-behavioral_share_pct: 86.22
+total_count: 480
+behavioral_share_pct: 86.25
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 413
+    from_total: 479
+    to_behavioral: 414
+    to_total: 480
+    to_share_pct: 86.25
+    work: 'живой прогон #587: run без текста -> задача из спеки'
+    why: >-
+      #587 добавил один поведенческий тест-файл (test_run_task_from_spec — импортирует
+      gates/spec_levels И cli/ai_ops_cli, зовёт task_from_spec и гоняет `run` через main с реальной
+      спекой на диске), структурных без изменений (66). Доля поведенческих выросла 86.22% -> 86.25%
+      (не снижение). Числа руками (--baseline лоссовый). Пересведено при rebase поверх #636/#637/#638.
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 412

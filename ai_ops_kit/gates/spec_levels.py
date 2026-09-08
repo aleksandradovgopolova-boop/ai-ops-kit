@@ -204,6 +204,61 @@ def carried_signals(child_root, wid):
     return dict(stored) if isinstance(stored, dict) else {}
 
 
+# Разделы spec.yaml, из которых складывается ЗАДАЧА писателю, когда `run`/`do` вызваны без текста
+# задачи (только `--feature <wid>`). Порядок — как читает человек: сначала зачем и что, потом как
+# проверим и чем ограничены. Метка на русском предваряет содержимое раздела в собранном тексте.
+_TASK_SECTION_ORDER = (
+    ("goal", "Цель"),
+    ("scope", "Объём работ"),
+    ("expected_behavior", "Ожидаемое поведение"),
+    ("requirements", "Требования"),
+    ("acceptance_criteria", "Критерии приёмки"),
+    ("acceptance_scenarios", "Сценарии приёмки"),
+    ("edge_cases", "Крайние случаи"),
+    ("constraints", "Ограничения"),
+    ("affected_files", "Затрагиваемые файлы"),
+    ("implementation_plan", "План реализации"),
+    ("write_scope", "Область записи"),
+    ("verification_strategy", "Стратегия проверки"),
+)
+
+
+def task_from_spec(child_root, wid):
+    """Собрать ТЕКСТ ЗАДАЧИ из features/<wid>/spec.yaml для писателя, когда `run`/`do` вызваны без
+    позиционного текста (только `--feature`).
+
+    ПОЧЕМУ. Движок строит задачу писателю ТОЛЬКО из позиционного аргумента (`ctx = task + профиль`),
+    а НЕ из spec.yaml. Вызов `./ai-ops run --execute --feature <wid>` без текста давал писателю
+    пустой блок «=== ЗАДАЧА ===»: он либо не писал ничего, либо авторил спеку про «задача пуста».
+    Спека же — источник истины о том, что делать. Здесь берём заполненные (`status: complete`)
+    разделы и складываем их в связный текст задачи. Fail-closed: нет спеки / нет ни одного
+    заполненного раздела с содержимым -> "" (поведение как раньше, писатель получит пустую задачу и
+    кит честно заблокирует).
+    -> str (собранная задача) или "" .
+    """
+    sp = _spec_path(child_root, wid)
+    if not sp.is_file():
+        return ""
+    try:
+        import yaml
+        doc = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
+    except Exception:  # noqa: BLE001 — битый spec: пустая задача, а не догадка
+        return ""
+    sections = doc.get("sections") if isinstance(doc, dict) else None
+    if not isinstance(sections, dict):
+        return ""
+    parts = []
+    for sid, label in _TASK_SECTION_ORDER:
+        entry = sections.get(sid)
+        if not isinstance(entry, dict) or entry.get("status") != "complete":
+            continue
+        content = entry.get("content")
+        if not isinstance(content, str) or not content.strip():
+            continue
+        parts.append(f"{label}: {content.strip()}")
+    return "\n\n".join(parts)
+
+
 def provided_from_artifacts(child_root, wid, work_root=None):
     """v2.110: собрать provided-карту РАЗДЕЛОВ из РЕАЛЬНЫХ артефактов на диске (не из сигналов).
 
