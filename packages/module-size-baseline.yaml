@@ -19,8 +19,8 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1186
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1801
+  ai_ops_kit/cli/ai_ops_cli.py: 1192
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1897
   ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
@@ -39,6 +39,21 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 724
 
 raises:
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1186; ai_ops_cli_intents.py = 1801'
+    to: 'ai_ops_cli.py = 1192; ai_ops_cli_intents.py = 1897'
+    work: 'voluntary-child-registration: `reach` — добровольная отметка о подключении и охват без телеметрии'
+    why: >-
+      `ai_ops_cli_intents.py` +96: проб-свободный read/write-хендлер `_intent_reach`
+      (register|decline|forget|status|summary|coverage|collect) лёг в спутник по образцу остальных
+      команд — в дочке пишет обычные локальные файлы `.ai/reach/*`, мутационных git-проб не несёт,
+      поэтому НЕ в ai_ops_cli.py. `ai_ops_cli.py` +6: тонкая регистрация интента (INTENTS,
+      DIRECT_INTENTS, импорт+запись в for-цикл) плюс однократное предложение отметиться в
+      `_intent_onboard`. САМА доменная логика (запись-регистрация, решение-идемпотентность, снимок
+      продуктового статуса из Product Passport, счёт охвата из набора файлов реестра) вынесена
+      отдельным модулем `ai_ops_kit/engops/child_registry.py` (ниже порога 700) — сюда легла только
+      проводка; продуктовый статус впрыскивается вниз из passport_generator, как health в contract.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1171; pipeline_evidence.py < 700 (не в baseline)'

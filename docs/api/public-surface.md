@@ -120,6 +120,12 @@ experimental:
   # roadmap/delivery ещё может измениться. Дочка вправе пользоваться, зная это.
   cli_intents:
     - feedback
+    # voluntary-child-registration: `reach register|decline|forget|status|summary` (в дочке) и
+    # `reach coverage` (в ките) — ДОБРОВОЛЬНАЯ отметка о подключении и честный охват БЕЗ телеметрии.
+    # Всё opt-in, рукой владельца, без сети (сбор дочек — `python3 -m ai_ops_kit.engops.child_registry
+    # collect`). Регистрация несёт только имя проекта + версию кита + дату + анонимный id (без путей/
+    # почты/кода). Форма записи и сводки ещё уточняется — дочка вправе пользоваться, зная это.
+    - reach
     - roadmap
     - delivery
     # Backlog Intelligence (Фаза 2): `backlog classify|dedup|prioritize|graph` над GitHub Issues
@@ -277,6 +283,7 @@ audience:
     - graph
     - replan
     - readout
+    - reach
 ```
 
 ## Пояснения к решениям

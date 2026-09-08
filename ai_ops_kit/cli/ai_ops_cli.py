@@ -105,6 +105,11 @@ INTENTS = {
     # Без текста — показать судьбу уже записанных (канал обязан быть двусторонним).
     "feedback": ("рассказать киту, что он сделал не так (без текста — судьба уже сказанного)",
                  "feedback", True),
+    # voluntary-child-registration: ДОБРОВОЛЬНЫЙ охват без телеметрии. Подкоманда первым словом:
+    # register|decline|forget|status|summary (в дочке) · coverage|collect (в ките). Всё opt-in,
+    # рукой владельца, без сети. Без подкоманды — показать состояние отметки.
+    "reach":   ("добровольная отметка о подключении и охват (без телеметрии): "
+                "register|decline|forget|status|summary · coverage|collect", "reach", True),
     # Backlog Intelligence (Фаза 2): GitHub Issues как операционная единица. Подкоманда — первым
     # словом: classify | dedup | prioritize | graph. Без доступа к GitHub отвечает «не проверено»
     # с причиной, а не пустотой. Форма ещё меняется — интент experimental.
@@ -139,7 +144,7 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect", "replan", "inbox", "work", "readout", "graph")
+                  "inspect", "replan", "inbox", "work", "readout", "graph", "reach")
 
 
 def resolve_flags(signals):
@@ -305,6 +310,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
     _intent_explain, _intent_inbox, _intent_work, _intent_readout, _intent_graph,
+    _intent_reach,
 )
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
@@ -320,7 +326,7 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("onboard", _intent_onboard), ("doctor", _intent_doctor),
                    ("explain", _intent_explain), ("inbox", _intent_inbox),
                    ("work", _intent_work), ("readout", _intent_readout),
-                   ("graph", _intent_graph)):
+                   ("graph", _intent_graph), ("reach", _intent_reach)):
     _intent(_name)(_fn)
 del _name, _fn
 

@@ -86,6 +86,10 @@ EXPECTED_INTENTS = {
     # технология поверх registry/entities.yaml + validate_knowledge_graph. Собирает один граф из
     # plan.yaml + FL-*.yaml + feature blueprints. Делает достижимым intelligence/knowledge_graph.
     "graph",
+    # voluntary-child-registration: `reach register|decline|forget|status|summary|coverage` —
+    # добровольная отметка о подключении и охват БЕЗ телеметрии. Делает достижимым
+    # engops/child_registry (opt-in, рукой владельца, без сети).
+    "reach",
 }
 
 
