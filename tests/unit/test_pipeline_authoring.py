@@ -40,7 +40,7 @@ class TestAuthorWithRetry:
         author = lambda prompt: "schema_version: 1\nkind: requirements-artifact\nrequirements:\n  - id: R1\n    statement: test\n    acceptance:\n      - when x then y\n"
         import validate_requirements_artifact as vra
         check = lambda data: vra.check(data) if isinstance(data, dict) else ["not a dict"]
-        data, errs = execution_pipeline._author_with_retry(author, "prompt", check, bud)
+        data, errs, _tail = execution_pipeline._author_with_retry(author, "prompt", check, bud)
         assert errs == []
         assert data is not None
         assert data["kind"] == "requirements-artifact"
@@ -56,7 +56,7 @@ class TestAuthorWithRetry:
             return "schema_version: 1\nkind: requirements-artifact\nrequirements:\n  - id: R1\n    statement: test\n    acceptance:\n      - when x then y\n"
         import validate_requirements_artifact as vra
         check = lambda data: vra.check(data) if isinstance(data, dict) else ["not a dict"]
-        data, errs = execution_pipeline._author_with_retry(flaky_author, "prompt", check, bud)
+        data, errs, _tail = execution_pipeline._author_with_retry(flaky_author, "prompt", check, bud)
         assert errs == []
         assert calls["n"] == 2
 
@@ -65,7 +65,7 @@ class TestAuthorWithRetry:
         bud = budget_mod.Budget.from_dict({"max_model_calls": 5})
         author = lambda prompt: "always garbage"
         check = lambda data: ["invalid"] if not isinstance(data, dict) else ["still invalid"]
-        data, errs = execution_pipeline._author_with_retry(author, "prompt", check, bud, attempts=2)
+        data, errs, _tail = execution_pipeline._author_with_retry(author, "prompt", check, bud, attempts=2)
         assert len(errs) > 0
 
     def test_budget_exceeded(self):
@@ -74,8 +74,48 @@ class TestAuthorWithRetry:
         author = lambda prompt: "schema_version: 1\nkind: requirements-artifact\nrequirements:\n  - id: R1\n    statement: test\n    acceptance:\n      - when x then y\n"
         import validate_requirements_artifact as vra
         check = lambda data: vra.check(data) if isinstance(data, dict) else ["not a dict"]
-        data, errs = execution_pipeline._author_with_retry(author, "prompt", check, bud)
+        data, errs, _tail = execution_pipeline._author_with_retry(author, "prompt", check, bud)
         assert any("budget" in str(e) for e in errs)
+
+    def test_raw_tail_captured_on_failure(self):
+        """#587: при провале парсинга возвращается СЫРОЙ ответ модели — иначе причина не видна."""
+        from ai_ops_kit.shared import budget as budget_mod
+        bud = budget_mod.Budget.from_dict({"max_model_calls": 5})
+        author = lambda prompt: "Извини, я не смог составить YAML — вот пояснение прозой."
+        check = lambda data: ["invalid"] if not isinstance(data, dict) else []
+        data, errs, tail = execution_pipeline._author_with_retry(author, "prompt", check, bud, attempts=1)
+        assert errs
+        assert tail and "прозой" in tail
+
+    def test_raw_tail_none_on_success(self):
+        from ai_ops_kit.shared import budget as budget_mod
+        bud = budget_mod.Budget.from_dict({"max_model_calls": 5})
+        author = lambda prompt: "schema_version: 1\nkind: requirements-artifact\nrequirements:\n  - id: R1\n    statement: test\n    acceptance:\n      - when x then y\n"
+        import validate_requirements_artifact as vra
+        check = lambda data: vra.check(data) if isinstance(data, dict) else ["not a dict"]
+        data, errs, tail = execution_pipeline._author_with_retry(author, "prompt", check, bud)
+        assert errs == []
+        assert tail is None
+
+
+@pytest.mark.unit
+class TestRawAuthorTail:
+    """#587: _raw_author_tail — обрезанный сырой ответ модели для диагностики."""
+
+    def test_empty_marks_pusto(self):
+        from ai_ops_kit.engine import pipeline_evidence
+        assert pipeline_evidence._raw_author_tail("   ") == "(пусто)"
+        assert pipeline_evidence._raw_author_tail(None) == "(пусто)"
+
+    def test_long_is_truncated_with_count(self):
+        from ai_ops_kit.engine import pipeline_evidence
+        out = pipeline_evidence._raw_author_tail("x" * 900, limit=500)
+        assert out.startswith("x" * 500)
+        assert "+400 симв." in out
+
+    def test_short_returned_verbatim(self):
+        from ai_ops_kit.engine import pipeline_evidence
+        assert pipeline_evidence._raw_author_tail("kind: foo") == "kind: foo"
 
 
 @pytest.mark.unit
@@ -111,6 +151,17 @@ class TestRunAuthoring:
             "test task", {"max_model_calls": 5})
         assert "requirements" not in gate_ev
         assert any(not a["valid"] for a in authored)
+
+    def test_invalid_artifact_carries_author_output_tail(self, child_root):
+        """#587: невалидный артефакт несёт сырой ответ модели — чтобы причина была видна в отчёте."""
+        _init_git(child_root)
+        author = lambda prompt: "прозаичный отказ, никакого YAML"
+        gate_ev, authored, wrote = execution_pipeline._run_authoring(
+            author, child_root, ["requirements"], {}, "bad-wid",
+            "test task", {"max_model_calls": 5})
+        bad = [a for a in authored if not a["valid"]]
+        assert bad and bad[0].get("author_output_tail")
+        assert "прозаичный отказ" in bad[0]["author_output_tail"]
 
     def test_authoring_skips_existing_evidence(self, child_root):
         _init_git(child_root)

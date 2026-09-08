@@ -50,26 +50,44 @@ def _install_dependencies(profile, root, policy):
     return results
 
 
+def _raw_author_tail(raw, limit=500):
+    """Обрезанный хвост СЫРОГО ответа author-модели — для диагностики, когда YAML не разобрался.
+
+    ПОЧЕМУ. При провале парсинга движок писал только «author не вернул валидный YAML» и ВЫБРАСЫВАЛ
+    то, что модель реально вернула (живой прогон #587: спека забракована, а чем — не видно в отчёте).
+    Здесь — увидеть ответ: пусто / проза / обрезано. -> строка ≤limit или "" .
+    """
+    s = (raw if isinstance(raw, str) else "" if raw is None else str(raw)).strip()
+    if not s:
+        return "(пусто)"
+    return s if len(s) <= limit else s[:limit] + f"… (+{len(s) - limit} симв.)"
+
+
 def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
     """v3.0-rc14 (finding живой квалификации kimi): author-вызов ретраится при невалидном/пустом
-    артефакте."""
+    артефакте.
+
+    -> (data, errs, raw_tail). raw_tail — обрезанный сырой ответ последней попытки при провале
+    (для диагностики в отчёте), иначе None. Сигнатура из 3 значений с #587: раньше сырой ответ
+    выбрасывался, и причина невалидной спеки была не видна."""
     from ai_ops_kit.shared import budget as _budget_mod
     prompt = base_prompt
-    data, errs = None, ["author не вызван"]
+    data, errs, raw = None, ["author не вызван"], None
     for attempt in range(attempts):
         try:
             bud.charge_call()
         except _budget_mod.BudgetExceeded as e:
-            return data, [f"budget: {e}"]
-        data = _parse_yaml_block(author_proposer(prompt))
+            return data, [f"budget: {e}"], None
+        raw = author_proposer(prompt)
+        data = _parse_yaml_block(raw)
         errs = check_fn(data)
         if not errs:
-            return data, errs
+            return data, errs, None
         prompt = base_prompt + (
             f"\n\n[повтор {attempt + 1}/{attempts}] Твой предыдущий ответ НЕ прошёл валидацию: "
             f"{'; '.join(str(e) for e in (errs or [])[:3])}. Верни ТОЛЬКО валидный YAML строго по схеме "
             "выше — без прозы, без markdown-ограды, все обязательные поля заполнены.")
-    return data, errs
+    return data, errs, _raw_author_tail(raw)
 
 
 def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, openspec_validate):
@@ -96,10 +114,14 @@ def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, ope
                              else str(x)) for x in _v]
         return vsa.check(data)
 
-    data, errs = _author_with_retry(author_proposer, prompt, _spec_check, bud)
+    data, errs, raw_tail = _author_with_retry(author_proposer, prompt, _spec_check, bud)
     entry = {"gate": "specification", "artifact": f"openspec/changes/{wid}", "valid": not errs,
              "errors": errs or None}
     if errs:
+        # #587: показать, ЧТО вернула модель, когда YAML не разобрался — иначе причина невалидной
+        # спеки не видна в отчёте (было только «author не вернул валидный YAML»).
+        if raw_tail:
+            entry["author_output_tail"] = raw_tail
         return gate_ev, entry
     # Запись (I/O) — забота движка: чистая render_content строит содержимое, движок пишет файлы под
     # openspec-корень. Так рендер живёт вниз (в `checks`), а запись остаётся в слое ядра.
@@ -146,11 +168,15 @@ def _run_authoring(author_proposer, work_root, gate_ids, gate_ev, wid, task, bud
         def _check(data, mod=mod):
             return mod.check(data) if isinstance(data, dict) else ["author не вернул валидный YAML артефакта"]
 
-        data, errs = _author_with_retry(author_proposer, prompt, _check, bud)
+        data, errs, raw_tail = _author_with_retry(author_proposer, prompt, _check, bud)
         if errs and any("budget:" in str(e) for e in errs):
             authored.append({"gate": gid, "valid": False, "errors": errs})
             break
         entry = {"gate": gid, "artifact": fname, "valid": not errs, "errors": errs or None}
+        # #587: если YAML не разобрался — приложить обрезанный сырой ответ модели к записи, чтобы
+        # причина (пусто/проза/обрезано) была видна в run-report, а не терялась.
+        if errs and raw_tail:
+            entry["author_output_tail"] = raw_tail
         if not errs:
             out_dir.mkdir(parents=True, exist_ok=True)
             import yaml as _yaml

@@ -30,11 +30,13 @@ scopes:
 
   # cli/ — точка входа CLI. main() аккумулировала разбор аргументов и диспетч; разбор и путь
   # run --execute/do вынесены в _build_cli_arg_parser/_main_run_execute (ратчет опущен 348 -> 154).
+  # #587: разбор позиционных вынесен из main в _parse_task_and_root -> худшая функция теперь
+  # _main_run_execute (150); ратчет опущен 154 -> 150.
   - path: ai_ops_kit/cli/
-    max_function_lines: 154
-    max_function: main
+    max_function_lines: 150
+    max_function: _main_run_execute
     max_function_file: ai_ops_cli.py
-    max_function_lineno: 672
+    max_function_lineno: 1011
 
   # planning/ — контур Planning & Execution.
   - path: ai_ops_kit/planning/

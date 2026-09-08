@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1171
+  ai_ops_kit/cli/ai_ops_cli.py: 1186
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1801
   ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
@@ -36,8 +36,22 @@ ceilings:
   ai_ops_kit/gates/gate_executor.py: 905
   ai_ops_kit/engine/tool_broker.py: 762
   ai_ops_kit/planning/contours.py: 724
+  ai_ops_kit/engine/pipeline_evidence.py: 724
 
 raises:
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1171; pipeline_evidence.py < 700 (не в baseline)'
+    to: 'ai_ops_cli.py = 1186; pipeline_evidence.py = 724'
+    work: 'живой прогон #587: run без текста -> задача из спеки; диагностика невалидного author-YAML'
+    why: >-
+      `ai_ops_cli.py` +15: `run`/`do` без текста задачи собирают её из features/<wid>/spec.yaml
+      (движок строил задачу писателю только из позиционного аргумента, а не из спеки — вызов
+      `run --feature` без текста давал писателю пустой блок «ЗАДАЧА»). Разбор позиционных вынесен из
+      main в `_parse_task_and_root` (func-size опущен 154 -> 150), сама сборка задачи — в
+      `spec_levels.task_from_spec`. `pipeline_evidence.py` перешёл порог 700 -> 724: `_raw_author_tail`
+      + проводка сырого ответа модели в запись, когда author-YAML не разобрался (раньше причина
+      невалидной спеки не была видна в run-report — только «author не вернул валидный YAML»).
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
