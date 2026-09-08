@@ -22,7 +22,10 @@ import pytest
 
 from _installer_helpers import _run_cli
 
-pytestmark = pytest.mark.unit
+# Каждый тест поднимает реальную установку кита (подпроцессы + копирование дерева) — 20–40 c на
+# CI, то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile`
+# в slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 KIT = Path(__file__).resolve().parents[2]
 INSTALLER = KIT / "installer" / "ai_ops.py"

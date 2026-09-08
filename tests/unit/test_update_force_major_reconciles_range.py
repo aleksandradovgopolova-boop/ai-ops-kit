@@ -32,7 +32,10 @@ from _installer_helpers import _isolated_env, _run_cli
 KIT = Path(__file__).resolve().parents[2]
 INSTALLER = KIT / "installer" / "ai_ops.py"
 
-pytestmark = pytest.mark.unit
+# Тест гоняет реальный `ai-ops update` через подпроцессы в изолированном окружении — >10 c на CI,
+# то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 
 def _load_installer():

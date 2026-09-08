@@ -26,6 +26,11 @@ import pytest
 
 from validate_python_compat import PKG, check_imports, declared_floor, scan
 
+# Тесты сканируют весь пакет на запрет tomllib под полом py3.9 (проход по дереву) — >10 c на CI, то
+# есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 
 @pytest.mark.regression
 def test_tomllib_import_is_flagged_on_39_floor():

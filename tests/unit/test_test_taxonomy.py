@@ -30,7 +30,10 @@ from ai_ops_kit.validation.validate_test_taxonomy import (
     render_function_advisory,
 )
 
-pytestmark = pytest.mark.unit
+# Тесты гоняют валидатор таксономии по всему репо (сбор+проход всего дерева тестов) — >10 c на CI,
+# то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 
 # Фикстуры-исходники: «поведенческий» импортирует продукт И зовёт его; «структурный» только читает
