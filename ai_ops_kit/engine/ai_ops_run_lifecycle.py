@@ -628,6 +628,22 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
         # «preflight-конфликтов: 0», то есть заявлял «конфликтов нет» там, где проверки
         # вообще не было. Записываем сбой явно.
         preflight = {"error": f"{type(_pe).__name__}: {_pe}"[:200], "conflicts": None}
+    # #661: сигнал «писатель занят + работа независима → годится параллельный субагентный путь».
+    # Момент выбран потому, что здесь у нас ОБА факта: неблокирующая проба замка писателя говорит,
+    # занят ли он ПРЯМО СЕЙЧАС другим прогоном, а `preflight.conflicts` — независима ли эта работа
+    # от активных сессий. Движок только СИГНАЛИТ (субагентов не спавнит) и остаётся при безопасном
+    # дефолте — если координатор путь не подхватит, прогон дождётся очереди штатно. Best-effort:
+    # сбой сигнала не роняет и не блокирует регистрацию (advisory), но пишется в durable-дом.
+    try:
+        from ai_ops_kit.providers import orchestrator_providers as _op
+        from ai_ops_kit.engine import writer_contention as _wc
+        _busy = _op.writer_lock_busy()
+        _decision = _wc.assess(_busy, preflight.get("conflicts"))
+        if _decision["parallel_viable"]:
+            _wc.record(child_root, fid, _decision, areas=list(areas), work_id=fid)
+    except Exception as _wce:  # noqa: BLE001 — сигнал advisory: его сбой не роняет прогон...
+        # ...но и молча не исчезает: named в lifecycle_errors (как preflight-сбой выше).
+        lifecycle_errors.append(f"writer-contention signal: {type(_wce).__name__}: {_wce}"[:200])
     # регистрация активной работы (координация) — человекочитаемые строки в stderr, чтобы
     # stdout оставался чистым для --json.
     # КОД ВОЗВРАТА РЕГИСТРАЦИИ ЧИТАЕТСЯ (замер 18.08.2026). Прежде он отбрасывался в обеих

@@ -29,8 +29,8 @@ ceilings:
   ai_ops_kit/ui/presenter_formatters.py: 1059
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 713
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 922
-  ai_ops_kit/providers/orchestrator_providers.py: 946
+  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 938
+  ai_ops_kit/providers/orchestrator_providers.py: 978
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 772
   ai_ops_kit/gates/gate_executor.py: 905
@@ -39,6 +39,20 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 724
 
 raises:
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'orchestrator_providers.py = 946; ai_ops_run_lifecycle.py = 922'
+    to: 'orchestrator_providers.py = 978; ai_ops_run_lifecycle.py = 938'
+    work: 'writer-contention-signal (#661): сигнал «писатель занят + работа независима → параллель»'
+    why: >-
+      Кит сам распознаёт контенцию писателя и вместо тихого ожидания в очереди пишет машиночитаемый
+      сигнал + честный выбор в inbox. Механика сигнала (assess/record/signal_path) — в новом доноре
+      `engine/writer_contention.py` (ниже порога). В монолитах — тонкая проводка: providers +32
+      (неблокирующая проба замка `writer_lock_busy` с рационале-докстрингом — знать «занят ли писатель
+      ПРЯМО СЕЙЧАС», не вставая в очередь), run_lifecycle +16 (в точке, где уже посчитаны области и
+      concurrency-conflicts: проба + assess + record, best-effort с named-сбоем в lifecycle_errors).
+      Логика не в монолитах; потолки подняты под факт, ратчет держит вниз. Пересведено при rebase
+      поверх #647.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'presenter_formatters.py = 988; ai_ops_cli_intents.py = 1923; ai_ops_cli.py = 1192; presenter.py = 944'
