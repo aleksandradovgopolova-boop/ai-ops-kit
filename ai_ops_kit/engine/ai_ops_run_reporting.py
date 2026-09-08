@@ -282,6 +282,13 @@ def _enrich_run_report(rep, *, runtime, provider_name, provider_resolution, chil
             rep["escalation_error"] = model_resolution["escalation_error"]
     rep["model_resolution"] = model_resolution   # per-role решение роутера (видимость в каждом отчёте)
     rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
+    # #637: пост-фактум «работа стоила $X вместо ожидаемых $Y». Оценка до прогона живёт в preflight
+    # (checks["economic_budget"]), факт — в rep["cost"]; сводим их с дельтой. Честно: нет оценки или
+    # факта -> unavailable, не 0. Дельта не считается за факт поверх неполных данных.
+    _eb = ((pretruth or {}).get("checks") or {}).get("economic_budget") if isinstance(pretruth, dict) else None
+    if _eb is not None:
+        from ai_ops_kit.providers import cost_account as _ca
+        rep["cost_delta"] = _ca.estimate_vs_actual(_eb, rep.get("cost"))
     # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
     # на живом провайдере она вводит в заблуждение (предложитель УЖЕ живой). Честный отчёт.
     if provider_name and provider_name != "mock" and isinstance(rep.get("not_yet"), list):

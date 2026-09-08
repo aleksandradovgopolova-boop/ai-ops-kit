@@ -223,6 +223,10 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
         rep["roid"] = {"cost_per_successful_change": _roid["cost_per_change"],
                        "total_cost": _roid["total_cost"], "delivered_verified": _roid["delivered_verified"],
                        "note": _roid["note"]}
+        # #637: нагруженная стоимость ИСХОДА (AI + внимание человека); сборка — в cost_account,
+        # сюда только проводка в отчёт (монолит lifecycle не растёт содержательно).
+        rep["roid_outcome"] = cost_account.roid_outcome_report(
+            _cost, _lat, rep.get("manual_interventions"), rep.get("ready_for_pr"), child_root)
         _ls.journal_append(jname, {"kind": "run_cost", "run_id": fid, "workitem_id": fid,
                                     "attempt_id": attempt_id, **_cost_rep})
         # v3.10.0 Usage Truth: персист КАЖДОГО вызова (writer/reviewer/fix-loop/fallback/escalation)

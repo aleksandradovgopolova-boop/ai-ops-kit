@@ -29,7 +29,7 @@ ceilings:
   ai_ops_kit/ui/presenter_formatters.py: 977
   ai_ops_kit/planning/repo_audit.py: 805
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 909
+  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 913
   ai_ops_kit/providers/orchestrator_providers.py: 909
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 772
@@ -41,6 +41,16 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 909'
+    to: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 913'
+    work: 'стоимость успешного исхода — проводка roid_outcome в отчёт прогона (#637)'
+    why: >-
+      `_finalize_run_cost` получил +4 строки: тонкая проводка `rep["roid_outcome"]` рядом с уже
+      инлайновым `rep["roid"]`. САМА сборка секёта (attempt, ставка внимания из конфига, форма dict)
+      вынесена в `providers/cost_account.roid_outcome_report`, а не в монолит — сюда лёг только вызов,
+      симметричный существующему roid. Экономика живёт в cost_account, движок прогона лишь пишет её в отчёт.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1165; ai_ops_cli_intents.py = 1796; repo_audit.py = 804'

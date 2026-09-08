@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 412
+behavioral_count: 413
 structural_count: 66
-total_count: 478
-behavioral_share_pct: 86.19
+total_count: 479
+behavioral_share_pct: 86.22
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 412
+    from_total: 478
+    to_behavioral: 413
+    to_total: 479
+    to_share_pct: 86.22
+    work: 'стоимость успешного исхода + estimate-vs-actual дельта (#637)'
+    why: >-
+      #637 добавил один поведенческий тест-файл (test_cost_per_outcome — импортирует
+      providers/cost_account И зовёт cost_per_successful_outcome/estimate_vs_actual/human_attention_cost),
+      структурных без изменений (66). Доля поведенческих выросла 86.19% -> 86.22% (не снижение).
+      Числа руками (--baseline лоссовый). Пересведено при rebase поверх #636/#638 (#648/#649).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 411
