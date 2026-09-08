@@ -190,3 +190,36 @@ def test_onboarding_path(child):
     assert "Потому что" in nxt2.stdout or "потому что" in nxt2.stdout, (
         "работа названа без обоснования — совет без причины проверить нельзя:\n"
         + nxt2.stdout[-500:])
+
+
+def test_model_flow_writes_answer_form_as_superset(tmp_path, monkeypatch, capsys):
+    """`model --flow` — надмножество обычного `model`: форма ответов пишется и в первом часе.
+
+    Прежде `--flow` короткозамыкал ДО записи формы, и `setup` (шаг первого часа) не оставлял места
+    для ответов — остаток «ответь на вопросы» прятался (issue #612). Тест независим от фикстур:
+    repo_audit и first_hour подменены, проверяется сам факт записи формы на пути `--flow`.
+    """
+    import json
+    import types
+
+    from ai_ops_kit.cli import ai_ops_cli_intents as I
+    from ai_ops_kit.planning import first_hour, repo_audit
+
+    rep = {"ask": {"questions": [{"ask": "какова цель продукта?", "blocks_work": True,
+                                  "proposal": None}]},
+           "classification": {"class": "EARLY_PRODUCT"}, "conflicts": []}
+    monkeypatch.setattr(repo_audit, "run", lambda root: rep)
+    wrote = {}
+    monkeypatch.setattr(repo_audit, "write_question_file",
+                        lambda root, ask: (wrote.__setitem__("called", True),
+                                           tmp_path / "onboarding-answers.yaml")[1])
+    monkeypatch.setattr(first_hour, "run",
+                        lambda root, **k: {"kind": "first-hour", "stage": "needs_answers"})
+
+    a = types.SimpleNamespace(json=True, answer=None, why=None, flow=True, apply=False, budget=None)
+    rc = I._intent_model("", str(tmp_path), [], a)
+    assert rc == 0
+    assert wrote.get("called"), "model --flow не записал форму вопросов — надмножество нарушено"
+    # Путь имени файла попадает в JSON-вывод первого часа — видно, куда отвечать.
+    out = json.loads(capsys.readouterr().out)
+    assert out.get("answers_file", "").endswith("onboarding-answers.yaml")
