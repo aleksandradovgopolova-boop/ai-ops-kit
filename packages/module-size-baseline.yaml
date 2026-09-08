@@ -20,7 +20,7 @@ threshold: 700
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 1165
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1790
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1796
   ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
@@ -41,6 +41,17 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 1790'
+    to: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 1796'
+    work: 'единый классификатор границы решений (#631)'
+    why: >-
+      Команда `governance` получила проводку классификатора границы решений (+6 строк): вызов
+      decision_boundary.evaluate(signals) и вывод через decision_boundary.describe(). САМА логика
+      классификатора (три оси → класс, worst_axis_escalates, fail-closed) живёт в НОВОМ модуле
+      ai_ops_kit/governance/decision_boundary.py, а не в монолите — сюда легла только тонкая
+      проводка; рендер тоже вынесен в describe(), чтобы монолит не рос содержательно.
   - at: '2026-09-07'
     what: raise_ceiling
     from: 'ai_ops_kit/validation/validate_own_medicine.py = 732'

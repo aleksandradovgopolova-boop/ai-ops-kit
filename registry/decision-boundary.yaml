@@ -20,9 +20,11 @@ model:
     Обратимое + локальное + дешёвое → кит делает сам; необратимое / широкий радиус / дорогая ошибка →
     всегда решение человека.
   # Статус МОДЕЛИ в целом: механизмы отнесения РАБОТАЮТ (governance подключается по риску — см.
-  # «Три кольца» в AGENTS.md), но единый классификатор, который берёт все три оси разом и выдаёт
-  # ИМЯ класса, ещё не собран — сегодня оси входят в решение раздельными сигналами (см. axes ниже).
-  status: partially_implemented
+  # «Три кольца» в AGENTS.md), И единый классификатор, который берёт все три оси разом и выдаёт ИМЯ
+  # класса, теперь собран (ai_ops_kit/governance/decision_boundary.py, issue #631): оси всё ещё
+  # читаются из тех же сигналов (см. axes ниже), но имя класса вычисляется из всех трёх вместе,
+  # explainable, и проведено в контур командой `governance`.
+  status: implemented
   supersedes_framing: >-
     Заменяет формулировку «адаптивный уровень автономии по умолчанию»: автономия — не ползунок,
     а классификация действия по цене ошибки.
@@ -172,11 +174,13 @@ implemented_by:
     note: "«Три кольца» (owner-review 2026-07-30): цена ошибки решает, включается ли governance-строгость."
 
   - mechanism: "Единый классификатор: три оси разом → ИМЯ класса (AUTONOMOUS/COLLABORATIVE/ASSISTED)"
-    where: null
+    where: ai_ops_kit/governance/decision_boundary.py
     provides: [AUTONOMOUS, COLLABORATIVE, ASSISTED]
-    status: planned
+    status: implemented
     note: >-
-      Сегодня оси входят в решение РАЗДЕЛЬНЫМИ сигналами (risk, irreversible, protected-paths), а имя
-      класса не вычисляется автоматически из всех трёх вместе. Свести их в один explainable-классификатор,
-      который печатает класс и причину, — планируемый шаг; до него модель называет и связывает, но не
-      считает класс за человека.
+      evaluate(action) читает три оси из сигналов действия (risk, irreversible/destructive,
+      blast_radius/protected_paths, secret_boundary) и вычисляет ИМЯ класса из всех трёх ВМЕСТЕ по
+      правилу worst_axis_escalates, печатая класс + причину + требуемое одобрение + исполнителя.
+      Маппинг класс→уровень берётся ИЗ этого реестра (classes[].maps_to_autonomy_level) — не дубль;
+      исполнение уровня — policy_engine. Инварианты never_downgraded_silently и fail_closed соблюдены.
+      Проведён в контур командой `governance` (ai_ops_cli_intents._intent_governance). Issue #631.
