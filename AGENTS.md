@@ -14,7 +14,7 @@ child-репозиториев. Здесь разрабатывается сам
 | `quality/gates.yaml` | Реестр quality gates | Да, blocking-гейтов MVP ≤ 8 |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
-| `ai_ops_kit/` | **Код движка**: модули в пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новый модуль кладётся в свой пакет и обязан уложиться в слои `packages/layering.yaml`. Запуск скриптом — `python3 -m ai_ops_kit.<pkg>.<mod>` (плоский слой `tools/` снят в 4.0) |
+| `ai_ops_kit/` | **Код движка**: модули в пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новая capability живёт в СУЩЕСТВУЮЩЕМ домене (top-level пакетов — потолок 19, `package_ceiling` в `packages/layering.yaml`; новый пакет = архитектурное решение + ADR/DP, а не привычка). Модуль обязан уложиться в слои `packages/layering.yaml` и быть отнесён к одному из четырёх роль-слоёв (`conceptual_layers`). Запуск скриптом — `python3 -m ai_ops_kit.<pkg>.<mod>` (плоский слой `tools/` снят в 4.0) |
 | `ai_ops_kit/planning/` | Контур Planning & Execution (v3.35): модель контуров продукта, delivery plan, ROADMAP-контракт, отбор следующей работы, понимание репозитория при онбординге | Да; словари (роли, типы, состояния) живут в `registry/product-operating-model.yaml`, а не в коде |
 | `ai_ops_kit/validation/` | Валидаторы (Python, только pyyaml). Единственный каталог, ИЗ КОТОРОГО запускают скрипты напрямую (валидаторы через `import _bootstrap` — sys.path[0] = сам каталог); остальные модули пакета зовутся `python3 -m ai_ops_kit...`. `import _bootstrap` двурежимный (пакетный в `try`, плоский в `except`) | Да; тесты валидатора — в `tests/`, не внутри модуля |
 | `installer/ai_ops.py` | CLI `ai-ops` для child-репозиториев | Да |
@@ -48,6 +48,12 @@ child-репозиториев. Здесь разрабатывается сам
   разрешены осознанно — замер 12 пар и 210 циклов длиннее двух; строгий DAG требует разбора, а не
   выключателя. С v3.34 замер — ПОТОЛОК: новая пара или цикл краснеет, ушедшая обязана быть списана
   в `packages/layering.yaml` (ратчет ходит только вниз).
+- **Потолок пакетов и роль-слои (#638).** Число top-level пакетов в `ai_ops_kit/` — ПОТОЛОК
+  (`package_ceiling`, сейчас 19): структура отражает доменную модель, а не историю разработки.
+  Новая capability живёт в СУЩЕСТВУЮЩЕМ домене; рост числа требует архитектурного решения (ADR/DP),
+  не привычки «каждая capability — свой пакет». Ортогонально пяти dependency-слоям объявлены четыре
+  РОЛЬ-слоя (`conceptual_layers`: DOMAIN/APPLICATION/POLICY/ADAPTERS) — каждый пакет отнесён ровно к
+  одному, новый обязан быть классифицирован. Оба ратчета ходят вниз (`validate_layering.py`).
 - **Построено = проведено в контур (built≠wired).** Модуль `ai_ops_kit/**/*.py` считается
   проведённым в контур, если у него есть хотя бы один НЕ-ТЕСТОВЫЙ импортёр (файл вне `tests/`,
   не он сам). Импорт из теста и самоимпорт проводкой НЕ считаются. Нулевой импорт легитимен лишь у

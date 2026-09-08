@@ -62,6 +62,51 @@ layers:
       зависит от `validation`, — `devtools` (тот же слой entrypoints, это разрешено).
     packages: [cli, devtools, validation]
 
+# ─── Концептуальные слои (РОЛЬ), ортогонально dependency-слоям выше (#638) ──────────────────────
+# Пять слоёв ВЫШЕ — по направлению ЗАВИСИМОСТЕЙ (кто кого вправе импортировать). Эти четыре — по
+# РОЛИ пакета в продукте: чтобы 19 пакетов читались как доменная модель, а не как история
+# разработки, и чтобы не утонуть в собственных абстракциях. Ортогональны: dependency-слой пакета
+# НЕ равен его роль-слою (напр. `gates` — capabilities по зависимостям, POLICY по роли; `providers`
+# — capabilities по зависимостям, ADAPTERS по роли). Документарно, БЕЗ переезда файлов — именуются в
+# ARCHITECTURE.md. Ратчет `validate_layering.conceptual_layer_errors`: каждый top-level пакет
+# отнесён РОВНО к одному роль-слою; новый пакет обязан быть классифицирован, а не проскользнуть.
+conceptual_layers:
+  - name: DOMAIN
+    role: >
+      продуктовые сущности и доменные контракты: Work / Run / Outcome / Decision, порты ядра и
+      общий фундамент, на который опирается всё остальное.
+    packages: [kernel, lifecycle, shared]
+  - name: APPLICATION
+    role: >
+      как ведётся работа: сборка контекста, планирование, исполнение, доставка, инженерная
+      экономика, обучение из исходов (Workflow / Planning / Execution / Learning).
+    packages: [context, engine, planning, delivery, engops, intelligence]
+  - name: POLICY
+    role: >
+      что разрешено и что проверяется: quality gates, governance, безопасность, проверяющая логика
+      и валидаторы инвариантов (Governance / Security / Quality / Autonomy).
+    packages: [gates, governance, security, checks, validation]
+  - name: ADAPTERS
+    role: >
+      мосты к внешним поверхностям: CLI, чтение форджа, маршрутизация к модельным рантаймам
+      (Claude / Codex / Qwen), рендер человеку, dev-инструменты и CI-харнессы.
+    packages: [cli, integrations, providers, ui, devtools]
+
+# ─── Потолок на ЧИСЛО top-level пакетов (ратчет, #638) ──────────────────────────────────────────
+# Структура обязана отражать доменную модель, а не историю разработки. Прежде `AGENTS.md` прямо
+# разрешал «новый модуль — в свой пакет», и ограничение было только по слоям, не по числу: пакеты
+# плодились бы молча. Теперь число top-level пакетов в `ai_ops_kit/` — ПОТОЛОК. Новая capability
+# живёт в СУЩЕСТВУЮЩЕМ домене; рост числа требует архитектурного решения (запись сюда + ADR/DP), а
+# не привычки. Ратчет ходит вниз: слили/удалили пакет — опустить `count`. Считает
+# `validate_layering.package_ceiling_errors`.
+package_ceiling:
+  count: 19
+  measured_at: "2026-09-08"
+  reason: >
+    19 top-level пакетов (#638): checks, cli, context, delivery, devtools, engine, engops, gates,
+    governance, integrations, intelligence, kernel, lifecycle, planning, providers, security,
+    shared, ui, validation. Рост числа требует архитектурного решения; снижение — опустить count.
+
 # Правила поверх слоёв — то, что слоями не выражается.
 rules:
   # devtools не едет в child (installer.DEV_ONLY_TOOLS). Импорт из продуктового пакета означал бы,
