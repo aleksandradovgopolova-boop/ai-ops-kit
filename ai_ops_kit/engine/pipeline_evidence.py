@@ -314,7 +314,16 @@ def _reevaluate_artifact_evidence(work_root, wid, gate_ids):
         try:
             _avail, _ok, _ = _openspec_validate(work_root, wid)
             if _avail and _ok:
-                ev["specification"] = {"status": "pass", "provided": ["openspec_valid"],
+                # СИММЕТРИЯ С АВТОРИНГОМ (живой прогон 587). Путь авторинга спеки закрывает
+                # `specification` с ОБОИМИ required_evidence — `openspec_valid` И `requirements_covered`
+                # — на одном основании: `openspec validate --strict OK` (см. _run_spec_authoring,
+                # gate_ev["specification"].provided = ["openspec_valid", "requirements_covered"]).
+                # Здесь, на reevaluate, при ТОМ ЖЕ подтверждении отдавалось только `openspec_valid`,
+                # и гейт падал «бездоказательным pass: не подтверждён requirements_covered» — хотя SHA
+                # стабилен и спека валидна ровно как при авторинге. Правка чисто правку кода (без смены
+                # спеки) роняла specification на reevaluate. Отдаём оба — то же основание, что авторинг.
+                ev["specification"] = {"status": "pass",
+                                       "provided": ["openspec_valid", "requirements_covered"],
                                        "evidence": ["openspec validate --strict (reevaluate, SHA стабилен)"]}
         except Exception:  # noqa: BLE001,S110 — то же: не подтвердили спеку -> гейт остаётся незакрытым
             pass
@@ -527,9 +536,10 @@ def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *
 # JSON, а на этой строке заключал за 5с; `_last_prose_verdict` её ловит (make_reviewer_proposer
 # синтезирует reviewer-result со status). Security-ревью остаётся на структурной форме: ему нужен
 # domain_results, строкой его не заменить.
-_REVIEWER_VERDICT_HINT = ("РОВНО одну последнюю строку-итог `Recommendation: pass` или "
-                          "`Recommendation: needs_work` (структурный reviewer-result — по желанию, "
-                          "не обязателен)")
+_REVIEWER_VERDICT_HINT = ("для needs_work/fail — РОВНО одну последнюю строку-итог "
+                          "`Recommendation: needs_work`; для pass на блокирующем гейте — reviewer-result "
+                          "с ХОТЯ БЫ одной цитатой evidence{file,lines} на изменённый файл "
+                          "(прозаический pass без цитаты не заземлить, гейт не закроется)")
 
 
 def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revision, budget,
