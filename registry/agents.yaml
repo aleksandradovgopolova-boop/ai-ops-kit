@@ -7,7 +7,7 @@ contract_version: 1
 generated_note: Bootstrap-реестр из фактических файлов agents/ (тела не менялись). layer/action/target
   — план миграции (component-classification).
 counts:
-  agents: 51
+  agents: 47
 agents:
 - schema_version: 1
   id: context-builder
@@ -124,25 +124,6 @@ agents:
   action: create
   migration_phase: 3
   migration_note: 'NEW: PLAN CRITIQUE (adapt prompt-reviewer) (Ф3)'
-- schema_version: 1
-  id: repository-explorer
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: core
-  preset: null
-  file: agents/core/repository-explorer.md
-  domain: core
-  purpose: Исследует релевантную часть репозитория без изменений и возвращает компактную карту реализации,
-    зависимостей и рисков
-  review_mode: read-only
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: core
-  target_preset: null
-  action: merge
-  migration_phase: 2
-  migration_note: в context-builder (Ф2)
 - schema_version: 1
   id: requirements-writer
   version: 0.1.0
@@ -407,25 +388,6 @@ agents:
   migration_phase: 2
   migration_note: SPEC/ARCH + ADR (Ф2)
 - schema_version: 1
-  id: system-analyst
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: core
-  preset: null
-  file: agents/engineering/system-analyst.md
-  domain: engineering
-  purpose: Преобразует продуктовые и бизнес-требования в системные требования, контракты, модели данных,
-    последовательности и каталог ошибок
-  review_mode: read-only
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: core
-  target_preset: null
-  action: merge
-  migration_phase: 3
-  migration_note: -> requirements-writer (Ф3)
-- schema_version: 1
   id: agent-creator
   version: 2.0.0
   contract_version: 1
@@ -443,25 +405,6 @@ agents:
   action: move-later
   migration_phase: 7
   migration_note: инструмент авторинга (Ф7)
-- schema_version: 1
-  id: prompt-reviewer
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: core
-  preset: null
-  file: agents/meta/prompt-reviewer.md
-  domain: meta
-  purpose: Проверяет агентные инструкции на ясность роли, конфликт правил, чрезмерный scope, отсутствие
-    запретов, невалидируемый результат и platform lock-in
-  review_mode: read-only
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: core
-  target_preset: null
-  action: adapt
-  migration_phase: 3
-  migration_note: -> plan-reviewer PLAN CRITIQUE (Ф3)
 - schema_version: 1
   id: repository-memory-curator
   version: 2.0.0
@@ -499,24 +442,6 @@ agents:
   action: move-later
   migration_phase: 7
   migration_note: авторинг workflow (Ф7)
-- schema_version: 1
-  id: business-analyst
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: core
-  preset: null
-  file: agents/product/business-analyst.md
-  domain: product
-  purpose: Формализует бизнес-потребность, процессы, роли, правила, исключения и критерии приёмки
-  review_mode: read-only
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: core
-  target_preset: null
-  action: merge
-  migration_phase: 3
-  migration_note: -> requirements-writer (Ф3)
 - schema_version: 1
   id: experiment-designer
   version: 2.0.0

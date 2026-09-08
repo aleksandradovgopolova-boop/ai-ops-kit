@@ -329,8 +329,8 @@ contours:
 # `agents` — существующие id из `registry/agents.yaml` (ссылочная целостность проверяется:
 # роль, ссылающаяся на несуществующего агента, — ошибка реестра, а не опечатка).
 roles:
-  product:       {contour: product_strategy,              agents: [product-manager, business-analyst, product-reviewer]}
-  researcher:    {contour: research_decisions,             agents: [user-researcher, experiment-designer, system-analyst]}
+  product:       {contour: product_strategy,              agents: [product-manager, product-reviewer]}
+  researcher:    {contour: research_decisions,             agents: [user-researcher, experiment-designer]}
   architect:     {contour: system_architecture,            agents: [solution-architect, llm-architect, architecture-reviewer]}
   data-engineer: {contour: data_contracts,                 agents: [database-engineer, migration-engineer, integration-engineer]}
   engineer:      {contour: engineering_quality_security,   agents: [backend-developer, fullstack-developer, implementation-integrator]}

@@ -6,7 +6,7 @@ Machine-readable источники правды (Source of Truth).
 
 | Файл | Описание |
 |------|----------|
-| `agents.yaml` | 51 AI-агент с доменом, назначением, режимом ревью |
+| `agents.yaml` | 47 AI-агентов с доменом, назначением, режимом ревью |
 | `workflows.yaml` | Workflow контракты (QUICK/ENGINEERING/PRODUCT/...) |
 | `models.yaml` | Модели across 8+ провайдеров |
 | `providers.yaml` | Провайдеры: capabilities, auth, data residency |
