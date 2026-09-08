@@ -286,6 +286,11 @@ def _intent_model(task, child_root, signals, a):
     except _contours.ModelCorrupt as e:
         print(f"ОШИБКА: {e}")
         return 1
+    # #612: `model --answer <qid> "<value>"` записывает ОДИН ответ онбординга без ручной правки YAML.
+    if getattr(a, "answer", None):
+        ok, msg = repo_audit.record_answer(child_root, a.answer[0], a.answer[1], rep["ask"], why=a.why)
+        print(msg)
+        return 0 if ok else 2
     # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА. Прежде форма ответов создавалась только в
     # человеческой ветке: `--json` того же намерения оставлял человека без места для ответа, то
     # есть одна команда вела себя двумя разными способами.

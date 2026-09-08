@@ -327,6 +327,7 @@ from ai_ops_kit.planning.repo_audit_answers import (  # noqa: E402,F401
     _owner_comments,
     answers_path,
     read_answers,
+    record_answer,
     write_question_file,
 )
 

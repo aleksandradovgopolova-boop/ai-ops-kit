@@ -742,6 +742,12 @@ def _build_cli_arg_parser():
     ap.add_argument("rest", nargs="*")
     ap.add_argument("--signals", default="{}")
     ap.add_argument("--feature")
+    # #612 (первый час): `model --answer <qid> "<value>"` записывает один ответ онбординга без ручной
+    # правки .ai/project/onboarding-answers.yaml. `--why` — основание (источник), станет комментарием.
+    ap.add_argument("--answer", nargs=2, metavar=("QID", "VALUE"), default=None,
+                    help="model: записать один ответ онбординга (без ручной правки YAML)")
+    ap.add_argument("--why", default=None,
+                    help="model --answer: основание ответа (источник) — ляжет комментарием")
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")

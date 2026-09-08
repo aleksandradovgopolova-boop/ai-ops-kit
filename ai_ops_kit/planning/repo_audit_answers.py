@@ -130,8 +130,40 @@ def _owner_comments(text: str, kit_lines: set) -> dict:
     return {"header": header, "before": before, "inline": inline, "tail": tail}
 
 
-def write_question_file(child_root, ask: dict):
+def record_answer(child_root, qid, value, ask: dict, why=None):
+    """Записать ОДИН ответ владельца в форму онбординга БЕЗ ручной правки YAML (issue #612).
+
+    -> (ok: bool, message: str). Валидирует qid против пакета открытых вопросов и уже отвеченного
+    (переспросить/переответить законно); why становится inline-комментарием-основанием (F-020),
+    комментарии владельца при этом сохраняются существующей перезаписью. Прямая цель ROADMAP:
+    «владелец больше не обязан править YAML руками».
+    """
+    valid = {q.get("id") for q in (ask.get("questions") or []) if q.get("id")}
+    valid |= set(read_answers(child_root))
+    if qid not in valid:
+        opts = ", ".join(sorted(x for x in valid if x)) or "(открытых вопросов сейчас нет)"
+        return False, f"Вопроса онбординга '{qid}' нет. Доступны: {opts}"
+    path = write_question_file(child_root, ask, overrides={qid: value},
+                              notes=({qid: why} if why else None))
+    answered = read_answers(child_root)
+    remaining = [q.get("id") for q in (ask.get("questions") or [])
+                 if q.get("id") and q.get("id") not in answered]
+    try:
+        shown = path.relative_to(Path(child_root))
+    except ValueError:
+        shown = path
+    tail = (f" Осталось вопросов: {len(remaining)}." if remaining
+            else " Все онбординговые вопросы отвечены.")
+    return True, (f"Записал ответ: {qid} = {value} — это подтверждённый факт, переспрашиваться "
+                  f"не будет ({shown}).{tail}")
+
+
+def write_question_file(child_root, ask: dict, overrides=None, notes=None):
     """Создать/дополнить файл, в который человек ВПИШЕТ ответы. -> путь.
+
+    `overrides` (#612): {qid: value} — значения, записанные командой `model --answer`, а не рукой;
+    сливаются поверх уже прочитанных ответов. `notes`: {qid: text} — основание ответа, ложится
+    inline-комментарием (тот же механизм, что комментарии-основания владельца, F-020).
 
     Прежде `ai-ops model` печатал вопросы и ЗАВЕРШАЛСЯ: куда писать ответы, не сказано, интерактива
     нет — человек прочитал двенадцать вопросов и не может ответить. Тупик на главном шаге первого
@@ -151,6 +183,10 @@ def write_question_file(child_root, ask: dict):
     # Если файл есть, но не читается — НЕ перезаписываем: это уничтожило бы ответы владельца.
     # Пусть ошибка дойдёт до человека словами «починить, а не отвечать заново» (F-023).
     existing = read_answers(child_root)
+    # #612: `model --answer` подаёт значение сюда, а не человек в редакторе. Сливаем поверх уже
+    # прочитанного; None (значение не задано) не затирает существующий ответ.
+    if overrides:
+        existing = {**existing, **{k: v for k, v in overrides.items() if v is not None}}
     header = [
         "# Ответы владельца на вопросы онбординга AI Ops.",
         "#",
@@ -186,9 +222,13 @@ def write_question_file(child_root, ask: dict):
             # ответы уже прочитаны выше через `read_answers`, и потерять их этот путь не может
 
     def _value_line(qid, val):
-        """Строка значения вместе с хвостовым комментарием владельца, если он был."""
+        """Строка значения вместе с хвостовым комментарием владельца/основанием (#612), если был."""
         dumped = json.dumps(val, ensure_ascii=False) if val is not None else '""'
-        c = own["inline"].get(qid)
+        note = (notes or {}).get(qid)
+        if note:
+            c = note if note.lstrip().startswith("#") else f"# {note}"
+        else:
+            c = own["inline"].get(qid)
         return f"  {qid}: {dumped}" + (f"  {c}" if c else "")
 
     lines = header + own["header"] + ["answers:"]
