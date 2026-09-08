@@ -24,9 +24,9 @@ README ссылаются на неё, а не дублируют список �
 | Категория | Сколько |
 |---|---|
 | Команды владельца (`./ai-ops …`) | 32 |
-| Quality gates — всего | 36 |
+| Quality gates — всего | 35 |
 | — из них enforced (blocking) | 21 |
-| — из них advisory (partial) | 15 |
+| — из них advisory (partial) | 14 |
 | Роли в реестре | 51 |
 | **built≠wired модулей** | **1** |
 | planned / unsupported | 4 |
@@ -101,7 +101,6 @@ README ссылаются на неё, а не дублируют список �
 | `deploy_readiness` | verify | built (enforced) | ЧЕСТНАЯ зрелость поставки при изменении деплоя: лестница absent/configured/runnable/verified (ai_ops_kit/gates/deploy_readiness.py). Кит НЕ деплоит — он не даёт врать о готовности. Обязателен ТОЛЬКО п |
 | `design_system_usage` | design-system-review | built (enforced) | Использована дизайн-система — существующие компоненты и токены; новые обоснованы. |
 | `discovery_completeness` | discovery-review | built (enforced) | Discovery завершён — проблема, аудитория, гипотезы и метрики успеха зафиксированы. |
-| `documentation_drift` | result | partial (advisory) | Документация не отстаёт от кода/поведения (advisory до обкатки). |
 | `documentation_updated` | result | partial (advisory) | Документация обновлена вместе с изменением (Definition of Done). ПЕРЕВЕДЁН ИЗ САМОЗАЯВЛЕНИЯ В МАШИННЫЙ (v3.37, C3): оба доказательства — факты о дифе, а не суждение, и спрашивать о них стадию, которая |
 | `event_contract_consistency` | specification | partial (advisory) | Имена событий согласованы во всех слоях: единый каталог, каноничная грамматика, audit/analytics ссылаются на domain через maps_to, domain не подменён AuditEvent. Класс contract<->code<->analytics nami |
 | `evidence` | fact-check | built (enforced) | Каждый существенный вывод имеет источник и статус. |

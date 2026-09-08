@@ -346,15 +346,11 @@ gates:
     responsible_role: product-manager
     review_mode: read-only
     applicability: [PRODUCT]
-  documentation_drift:
-    id: documentation_drift
-    closed_by: writer
-    purpose: Документация не отстаёт от кода/поведения (advisory до обкатки).
-    stage: result
-    blocking: false
-    responsible_role: documentation-steward
-    review_mode: writer
-    applicability: [all]
+  # documentation_drift СНЯТ (#616, 2026-09-08). Причина (диспозиция в advisory_review ниже): перекрыт
+  # машинным `documentation_updated`; ссылочно-числовой дрейф ловят `knowledge_integrity`/
+  # `knowledge_freshness`; а «дрейф смысла» закрывал САМ ПИСАТЕЛЬ (review_mode: writer) — слабейшая
+  # форма. Со снятием писательских гейтов не остаётся вовсе (writer_closed == []), что усиливает
+  # инвариант writer ≠ judge, а не ослабляет проверку.
   archive_readiness:
     id: archive_readiness
     closed_by: validator
@@ -634,7 +630,7 @@ advisory_review:
   issue: 616
   field_part_lands_via: 587   # «сработал в живом run --execute» достроит живой цикл #587 и далее
   decisions:
-    documentation_drift:        {decision: remove_recommended,  field_evidence: false}  # перекрыт documentation_updated; дрейф чисел — knowledge_integrity/freshness; «дрейф смысла» закрывал сам писатель
+    documentation_drift:        {decision: removed,             field_evidence: false}  # СНЯТ #616: перекрыт documentation_updated; дрейф чисел — knowledge_integrity/freshness; «дрейф смысла» закрывал сам писатель (снят и последний writer-closed гейт)
     regression_test_evidence:   {decision: justified_advisory,  field_evidence: true}   # раунд C квалификации T1/T2/T4
     concurrency_preflight:      {decision: justified_advisory,  field_evidence: true}   # инцидент stale-premise + eval-кейс
     contour_consistency:        {decision: justified_advisory,  field_evidence: true}   # обкатка niti 2026-08-12 (0 ложных)

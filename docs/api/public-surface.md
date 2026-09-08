@@ -189,7 +189,6 @@ experimental:
     - surface_wiring_consistency
     - feature_decision_quality
     - stakeholder_readiness
-    - documentation_drift
     - documentation_updated
     - release_safety
     - decision_quality

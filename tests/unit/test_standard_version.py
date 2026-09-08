@@ -129,7 +129,9 @@ def test_example_config_declares_standard_and_init_substitutes(tmp_path):
     text = (KIT / "examples" / "child-config.example.yaml").read_text(encoding="utf-8")
     assert re.search(r"^standard:", text, re.M), "заготовка конфига обязана объявлять standard (SR-4)"
     sv = mod.package_standard_version()
-    out = re.sub(r"(^standard:\n(?:.*\n)*?\s*version:\s*)\S+", rf"\g<1>{sv}", text, count=1, flags=re.M)
+    # `.*` после `standard:` — строка блока несёт инлайн-комментарий (`standard:   # SR-4 …`); без
+    # него подстановка молча не срабатывала и маскировалась, пока версия примера совпадала с текущей.
+    out = re.sub(r"(^standard:.*\n(?:.*\n)*?\s*version:\s*)\S+", rf"\g<1>{sv}", text, count=1, flags=re.M)
     cfg = yaml.safe_load(out)
     assert cfg["standard"]["version"] == sv, "init обязан подставить версию стандарта пакета"
 

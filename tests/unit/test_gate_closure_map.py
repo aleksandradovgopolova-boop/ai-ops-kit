@@ -96,12 +96,13 @@ def test_writer_closed_gates_are_named_and_do_not_grow_silently():
     """
     writer_closed = sorted(gid for gid, g in GATES.items() if g["closed_by"] == "writer")
     # 2026-08-20 (C3): список СОКРАТИЛСЯ — `documentation_updated` переведён в машинный
-    # (`ai_ops_kit/gates/documentation_evidence.py`), потому что оба его доказательства оказались
-    # фактами о дифе, а не суждением. Ратчет ходит вниз: сюда можно только убавлять.
-    assert writer_closed == ["documentation_drift"], (
-        f"список самозаявляющихся гейтов изменился: {writer_closed}. Если гейт добавлен осознанно "
-        f"— обновите этот замер и rules/quality/gate-closure-map.md вместе с ним; если убавился — "
-        f"это ратчет вниз, и он приветствуется")
+    # (`ai_ops_kit/gates/documentation_evidence.py`). 2026-09-08 (#616): снят и последний
+    # самозаявляющийся гейт `documentation_drift` — писательских гейтов не осталось, ратчет дошёл до
+    # нуля. Ратчет ходит вниз: сюда можно только убавлять, ВЕРХ (новый writer-гейт) обязан краснеть.
+    assert writer_closed == [], (
+        f"появился самозаявляющийся (writer-closed) гейт: {writer_closed}. Ратчет самозаявляющихся "
+        f"гейтов дошёл до нуля (#616) и ходит только вниз — новый writer-гейт запрещён: гейт, который "
+        f"закрывает та же стадия, что и писала, — слабейшая форма (writer ≠ judge)")
 
 
 # ─── side-effect proof ─────────────────────────────────────────────────────────────────────────
