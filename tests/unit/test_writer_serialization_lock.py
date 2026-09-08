@@ -23,6 +23,9 @@ class _FakeProc:
 def _use_temp_lock(monkeypatch, tmp_path, enabled=True):
     monkeypatch.setenv("AI_OPS_WRITER_LOCK", "1" if enabled else "0")
     monkeypatch.setenv("AI_OPS_WRITER_LOCK_PATH", str(tmp_path / "ai-ops-writer.lock"))
+    # Дефолт опроса — 15 c (для человека), но тесты не должны на него простаивать: маленький
+    # интервал держит хендовер замка быстрым. Тесты, проверяющие сам дефолт/override, ставят env сами.
+    monkeypatch.setenv("AI_OPS_WRITER_LOCK_POLL_SECONDS", "0.05")
 
 
 def test_lock_path_is_machine_global_and_overridable(monkeypatch, tmp_path):
@@ -98,6 +101,118 @@ def test_lock_is_released_after_context(monkeypatch, tmp_path):
         fcntl.flock(f.fileno(), fcntl.LOCK_UN)
     finally:
         f.close()
+
+
+def _parse_waited_seconds(msg):
+    """Достать число секунд из уведомления об ожидании ('~N.N c…'). -> float|None."""
+    import re
+    m = re.search(r"~([0-9]+(?:\.[0-9]+)?)\s*c", msg)
+    return float(m.group(1)) if m else None
+
+
+def test_busy_lock_notifies_repeatedly_with_growing_wait(monkeypatch, tmp_path):
+    # #652: пока замок держит другой, ждущий получает НЕ ОДНО уведомление, а несколько,
+    # и в них виден растущий счётчик времени ожидания. Держим замок из отдельного fd,
+    # интервал делаем крошечным через env, отпускаем через короткое время.
+    fcntl = pytest.importorskip("fcntl")
+    _use_temp_lock(monkeypatch, tmp_path, enabled=True)
+    monkeypatch.setenv("AI_OPS_WRITER_LOCK_POLL_SECONDS", "0.05")
+
+    messages = []
+    guard = threading.Lock()
+
+    held = open(op.writer_lock_path(), "w")
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX)   # замок занят «другим прогоном»
+
+    got_lock = threading.Event()
+
+    def waiter():
+        with op._writer_serialization_lock(notify=lambda m: (guard.acquire(),
+                                                             messages.append(m),
+                                                             guard.release())):
+            got_lock.set()
+
+    th = threading.Thread(target=waiter)
+    th.start()
+    time.sleep(0.35)                            # даём набежать нескольким тикам ожидания
+    assert not got_lock.is_set(), "ждущий не должен войти, пока замок занят другим"
+    fcntl.flock(held.fileno(), fcntl.LOCK_UN)   # отпускаем — ждущий обязан взять замок
+    held.close()
+    th.join(timeout=10)
+    assert not th.is_alive() and got_lock.is_set(), "ждущий не получил освободившийся замок"
+
+    with guard:
+        waits = [_parse_waited_seconds(m) for m in messages]
+    waits = [w for w in waits if w is not None]
+    assert len(waits) >= 2, ("ожидалось >=2 уведомления об очереди, получено %d: %r"
+                             % (len(waits), messages))
+    assert waits == sorted(waits), "счётчик ожидания обязан расти, а не прыгать: %r" % waits
+    assert waits[-1] > waits[0], "между первым и последним уведомлением время должно вырасти: %r" % waits
+
+
+def test_free_lock_emits_no_waiting_notifications(monkeypatch, tmp_path):
+    # На свободном замке ожидания нет -> 0 уведомлений.
+    pytest.importorskip("fcntl")
+    _use_temp_lock(monkeypatch, tmp_path, enabled=True)
+    messages = []
+    with op._writer_serialization_lock(notify=messages.append):
+        pass
+    assert messages == [], "на свободном замке не должно быть уведомлений об ожидании"
+
+
+def test_disabled_lock_emits_no_waiting_notifications(monkeypatch, tmp_path):
+    # AI_OPS_WRITER_LOCK=0 -> no-op: ждать нечего, уведомлений нет даже при переданном notify.
+    _use_temp_lock(monkeypatch, tmp_path, enabled=False)
+    messages = []
+    with op._writer_serialization_lock(notify=messages.append):
+        pass
+    assert messages == [], "выключенный замок не ждёт и не должен уведомлять"
+
+
+def test_wait_sleeps_between_attempts_not_busy_loop(monkeypatch, tmp_path):
+    # Ожидание не крутит CPU: при интервале T за время ~k*T приходит ~k уведомлений, а не тысячи.
+    fcntl = pytest.importorskip("fcntl")
+    _use_temp_lock(monkeypatch, tmp_path, enabled=True)
+    interval = 0.05
+    monkeypatch.setenv("AI_OPS_WRITER_LOCK_POLL_SECONDS", str(interval))
+    messages = []
+    guard = threading.Lock()
+
+    held = open(op.writer_lock_path(), "w")
+    fcntl.flock(held.fileno(), fcntl.LOCK_EX)
+
+    def waiter():
+        with op._writer_serialization_lock(notify=lambda m: (guard.acquire(),
+                                                             messages.append(m),
+                                                             guard.release())):
+            pass
+
+    th = threading.Thread(target=waiter)
+    th.start()
+    window = 0.5
+    time.sleep(window)
+    with guard:
+        count = len(messages)
+    fcntl.flock(held.fileno(), fcntl.LOCK_UN)
+    held.close()
+    th.join(timeout=10)
+    # За ~window/interval тиков ожидаем единицы-десятки уведомлений; busy-loop дал бы сотни/тысячи.
+    expected = window / interval
+    assert count <= expected * 5, ("уведомлений %d за %.2fs при интервале %.3fs — похоже на busy-loop"
+                                   % (count, window, interval))
+    assert count >= 1, "хотя бы одно уведомление об ожидании должно прийти"
+
+
+def test_poll_seconds_default_and_override(monkeypatch):
+    # Дефолт 15 c; env переопределяет; мусор/непозитив -> дефолт (сон обязателен).
+    monkeypatch.delenv("AI_OPS_WRITER_LOCK_POLL_SECONDS", raising=False)
+    assert op._writer_lock_poll_seconds() == 15.0
+    monkeypatch.setenv("AI_OPS_WRITER_LOCK_POLL_SECONDS", "3.5")
+    assert op._writer_lock_poll_seconds() == 3.5
+    monkeypatch.setenv("AI_OPS_WRITER_LOCK_POLL_SECONDS", "nonsense")
+    assert op._writer_lock_poll_seconds() == 15.0
+    monkeypatch.setenv("AI_OPS_WRITER_LOCK_POLL_SECONDS", "0")
+    assert op._writer_lock_poll_seconds() == 15.0
 
 
 def test_runner_injection_bypasses_the_lock(monkeypatch, tmp_path):

@@ -659,19 +659,43 @@ def writer_lock_path():
         tempfile.gettempdir(), "ai-ops-writer.lock")
 
 
+def _writer_lock_poll_seconds():
+    """Интервал (сек) между попытками взять занятый замок и между уведомлениями об ожидании.
+    Дефолт 15 c; переопределяется `AI_OPS_WRITER_LOCK_POLL_SECONDS` (как `writer_lock_path()` —
+    средой). Нечисло/≤0 игнорируем и берём дефолт: интервал управляет темпом уведомлений и сном,
+    а нулевой сон превратил бы ожидание в busy-loop."""
+    default = 15.0
+    raw = os.environ.get("AI_OPS_WRITER_LOCK_POLL_SECONDS")
+    if raw is None:
+        return default
+    try:
+        val = float(raw)
+    except (TypeError, ValueError):
+        return default
+    return val if val > 0 else default
+
+
 @contextlib.contextmanager
-def _writer_serialization_lock(notify=None):
+def _writer_serialization_lock(notify=None, poll_seconds=None):
     """МАШИННЫЙ ЗАМОК ПИСАТЕЛЯ (поле 02–03.09.2026): один локальный `claude -p` за раз на всю
     машину. Причина: локальный писатель — ЕДИНСТВЕННЫЙ разделяемый ресурс, и параллельные
     `run --execute` из разных worktree конкурируют за него без координации — прогоны виснут на
     старте (дочерний писатель не появляется, 0% CPU), и заезд приходится сериализовать руками.
-    Замок делает сериализацию встроенной: ждущие встают в ОЧЕРЕДЬ (блокирующий flock), а не
-    падают и не деадлочат. Освобождается при выходе И при смерти держателя (flock снимается ядром
-    на закрытии fd) — зависший прогон не запирает остальных навсегда. Держится только на время
-    самого subprocess-вызова, НЕ во время backoff — паузы не блокируют очередь.
+    Замок делает сериализацию встроенной: ждущие встают в ОЧЕРЕДЬ, а не падают и не деадлочат.
+    Освобождается при выходе И при смерти держателя (flock снимается ядром на закрытии fd) —
+    зависший прогон не запирает остальных навсегда. Держится только на время самого
+    subprocess-вызова, НЕ во время backoff и НЕ во время ожидания очереди — паузы очередь не блокируют.
+
+    ВИДИМАЯ ОЧЕРЕДЬ (#652): пока замок занят, ждём НЕ молча. Прежний код сообщал об очереди один
+    раз и уходил в блокирующий `flock(LOCK_EX)` — в поле прогон так простоял ~час, и человек не мог
+    отличить ожидание от зависания. Теперь ожидание — цикл неблокирующих попыток со сном между ними;
+    на каждом тике `notify(...)` сообщает, что писатель занят другим прогоном на этой машине, и
+    сколько уже ждём. Первое уведомление — сразу при обнаружении занятости; `yield` (старт писателя)
+    происходит ТОЛЬКО после того, как замок получен, чтобы ожидание не выглядело как фаза написания.
 
     Escape-hatch: `AI_OPS_WRITER_LOCK=0` — no-op (напр. один прогон, свой внешний планировщик).
-    Без `fcntl` (Windows) деградирует до no-op — не хуже прежнего поведения (как lifecycle_store)."""
+    Без `fcntl` (Windows) деградирует до no-op — не хуже прежнего поведения (как lifecycle_store).
+    В обоих случаях уведомлений об ожидании нет — ждать нечего."""
     if os.environ.get("AI_OPS_WRITER_LOCK", "1") == "0":
         yield
         return
@@ -680,15 +704,28 @@ def _writer_serialization_lock(notify=None):
     except ImportError:
         yield
         return
+    import time
+    interval = poll_seconds if poll_seconds is not None else _writer_lock_poll_seconds()
     f = open(writer_lock_path(), "w")
     try:
         try:
             fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)   # свободен — берём сразу
         except OSError:
-            if notify:                                              # занят — сообщаем ОДИН раз и ждём
-                notify("ai-ops: жду освобождения писателя (сериализация параллельных прогонов)…")
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)                   # блокирующая очередь
-        yield
+            # Занят: ждём в видимой очереди — периодические уведомления + сон, пока не возьмём.
+            # Счётчик — по РЕАЛЬНОМУ времени (monotonic), а не по сумме интервалов: сон неточен,
+            # а человеку важно фактическое ожидание.
+            t0 = time.monotonic()
+            while True:
+                if notify:
+                    notify("ai-ops: жду очереди — писатель занят другим прогоном на этой машине, "
+                           "~%.1f c…" % (time.monotonic() - t0))
+                time.sleep(interval)            # обязательный сон: не busy-loop, не жжём CPU
+                try:
+                    fcntl.flock(f.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    break                        # замок получен — выходим из очереди
+                except OSError:
+                    continue                     # всё ещё занят — следующий тик уведомит снова
+        yield                                    # старт писателя — ТОЛЬКО с замком в руках
     finally:
         try:
             fcntl.flock(f.fileno(), fcntl.LOCK_UN)
