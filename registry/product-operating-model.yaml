@@ -494,7 +494,8 @@ domain_model:
              evidence, delivery, outcome, budget]
       implemented_by:
         - {where: registry/product-operating-model.yaml, provides: [work_types, statuses, next_work], status: implemented}
-        - {where: ai_ops_kit/lifecycle/active_work.py, provides: [scope, dependencies, status], status: implemented}
+        - {where: ai_ops_kit/lifecycle/active_work.py, provides: [scope, dependencies, status, owner_role], status: implemented}
+        - {where: ai_ops_kit/lifecycle/role_handoff.py, provides: [owner_role, handoff], status: implemented}
         - {where: schemas/budget-contract.schema.json, provides: [budget], status: implemented}
       relations:
         - {type: selects,      to: run}
@@ -545,3 +546,17 @@ domain_model:
       backed_by:
         - "ai_ops_kit/lifecycle/active_work.py — Work как реестр (owner_role/scope/deps), переживает отдельный Run"
         - "ai_ops_kit/engine/run_handoff.py — Run привязан к WorkItem (Feature→WorkItem→Run), а не наоборот"
+
+    - id: handoff_is_role_to_role
+      rule: >-
+        Передача Work между владельцами (#639) — named-переход `owner_role` от роли к роли с явной
+        причиной/брифом: PM закончил discovery → работа передаётся дизайнеру, дизайнер закончил UX →
+        имплементатору. Работа не «лежит в backlog» без владельца — у неё есть роль на каждом этапе,
+        и смена владельца записывается в `handoffs[]` (from→to+бриф+время), атрибуция не теряется.
+      never: >-
+        Handoff НЕ передаёт работу человеку/исполнителю: `owner_role` — РОЛЬ из словаря `roles`, а
+        какой worker ей соответствует, выбирает роутер в момент Run (поле assignee запрещено). Это
+        первый ограниченный шаг, а не Team OS: сущностей Person/Worker/Availability здесь нет.
+      backed_by:
+        - "ai_ops_kit/lifecycle/role_handoff.py — apply_handoff: валидация роли по словарю + запись перехода с брифом"
+        - "ai_ops_kit/lifecycle/active_work.py — handoff_cmd: locked-переход owner_role на записи Work"
