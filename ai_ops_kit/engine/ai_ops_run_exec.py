@@ -552,8 +552,18 @@ def _run_preflight(ctx, fid, plan, bundle, payload, spec_cov, work_pkg,
                           author=ctx.author, reevaluate_only=reevaluate_only)
     (features_dir / fid / "preflight.yaml").write_text(
         yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # #633: blocked-preflight — вызов человека, у которого раньше не было durable-дома (жил только в
+    # run-report). Кладём его в шину внимания, чтобы `inbox` его показал; при прохождении — снимаем.
+    from ai_ops_kit.lifecycle import attention_bus as _ab
+    _att_key = f"preflight:{fid}"
     if not pretruth["blocked"]:
+        with contextlib.suppress(Exception):
+            _ab.resolve(child_root, _att_key)
         return pretruth, None
+    with contextlib.suppress(Exception):
+        _ab.record(child_root, key=_att_key, source="прогон: preflight",
+                   reason="работа остановлена до запуска модели: " + "; ".join(pretruth["reasons"]),
+                   kind=_ab.BLOCKED, work_id=fid)
     rep = {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
            "status": "blocked", "engine": "pipeline", "runtime": runtime,
            "provider": provider_name, "model": model, "ready_for_pr": False,

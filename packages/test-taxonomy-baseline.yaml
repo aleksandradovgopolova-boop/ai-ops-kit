@@ -23,12 +23,24 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 417
+behavioral_count: 418
 structural_count: 66
-total_count: 483
-behavioral_share_pct: 86.34
+total_count: 484
+behavioral_share_pct: 86.36
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 417
+    from_total: 483
+    to_behavioral: 418
+    to_total: 484
+    to_share_pct: 86.36
+    work: 'шина внимания — attention bus (#633)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_attention_bus.py: зовёт attention_bus.record/collect/
+      resolve и ai_ops_cli_intents._inbox_collect/_inbox_status/_inbox_render — импортирует продуктовый
+      код И исполняет его. Доля поведенческих не падает (86.34% -> 86.36%), ратчет-вниз соблюдён.
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 416
