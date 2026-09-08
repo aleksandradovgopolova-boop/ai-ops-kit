@@ -136,18 +136,24 @@ class TestFailClosedReadOnly:
 
 @pytest.mark.unit
 class TestHonestBoundary:
-    def test_declaration_does_not_fabricate_wiring(self):
-        """(г) честно: декларация в реестре НЕ = проводка в контур; модуль остаётся в KNOWN_DORMANT."""
-        assert "ai_ops_kit.ui.storybook_query" in KNOWN_DORMANT, (
-            "реестровая декларация MCP-доступа не создаёт Python-импортёра — модуль честно остаётся "
-            "дормантным до проводки живым потребителем; убирать его из KNOWN_DORMANT нельзя, пока "
-            "нет не-тестового импортёра")
-        reason = KNOWN_DORMANT["ai_ops_kit.ui.storybook_query"].lower()
-        assert "mcp" in reason and "деклар" in reason, "причина обязана называть MCP-декларацию честно"
+    def test_wiring_is_backed_by_a_real_non_test_importer(self):
+        """(г) честно: проводка заявляется ТОЛЬКО при живом не-тестовом импортёре. #613 провёл
+        storybook_query в контур (context_compiler кладёт навигацию в контекст писателя при UI-
+        изменении), поэтому модуль вышел из KNOWN_DORMANT — но выйти он вправе лишь потому, что
+        реальный импортёр существует. Проверяем оба: не в дормантных И импортёр есть (не фабрикация)."""
+        assert "ai_ops_kit.ui.storybook_query" not in KNOWN_DORMANT, (
+            "storybook_query проведён живым потребителем (#613) — он больше не дормантен")
+        # реальный не-тестовый импортёр обязан существовать (иначе выход из KNOWN_DORMANT = фабрикация)
+        cc = (REPO_ROOT / "ai_ops_kit" / "context" / "context_compiler.py").read_text(encoding="utf-8")
+        assert "storybook_query" in cc, "проводка заявлена, но живого импортёра storybook_query нет"
 
     def test_full_mcp_server_is_deferred_not_claimed(self):
-        """(г) полноценный MCP-сервер сознательно отложен — декларация его НЕ заявляет построенным."""
+        """(г) полноценный MCP-СЕРВЕР сознательно отложен — декларация его НЕ заявляет построенным.
+        При этом сам инструмент проведён in-process (#613): транспорт in_process, а не MCP-сервер."""
         e = _tool_entry()
         assert e.get("full_mcp_server") == "deferred"
-        # status инструмента — declared (объявлен), а не documented/verified: живого сервера нет.
+        # status инструмента — declared (объявлен), а не documented/verified: живого MCP-СЕРВЕРА нет.
         assert e.get("status") == "declared"
+        # но проводка in-process честно объявлена (не «сервер», а живой потребитель контекста).
+        assert e.get("transport_now") == "in_process"
+        assert "context_compiler" in (e.get("live_consumer") or "")

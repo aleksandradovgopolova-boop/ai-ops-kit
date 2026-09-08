@@ -337,6 +337,19 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
     if inc.get("skills"):
         candidates.append(("skills", "skills", "Нужные skills: " + ", ".join(inc["skills"]),
                            "релевантные skills (по стадиям)"))
+    # #613 Storybook-навигация: при UI-изменении даём агенту каталог дизайн-системы дочки (и stories,
+    # связанные с затронутыми файлами), чтобы он ПЕРЕИСПОЛЬЗОВАЛ существующие компоненты/варианты/a11y,
+    # а не изобретал заново. Живой потребитель storybook_query (был built-not-wired). Guarded и дёшев:
+    # None, если у дочки нет Storybook — на не-UI дочке не шумим.
+    if signals.get("ui_changed"):
+        try:
+            from ai_ops_kit.ui import storybook_query as _sbq
+            _nav = _sbq.navigation_context(child_root, changed_files=signals.get("changed_files"))
+            if _nav:
+                candidates.append(("storybook", "storybook-navigation", _nav,
+                                   "навигация по дизайн-системе Storybook — переиспользуй существующее (#613)"))
+        except Exception:  # noqa: BLE001,S110 — навигация это КОНТЕКСТ, не гейт: её сбой не должен ронять сборку контекста
+            pass
 
     included_items, excluded_for_budget, parts, used = [], [], [], 0
     for kind, source, text, reason in candidates:

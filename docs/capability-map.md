@@ -28,7 +28,7 @@ README ссылаются на неё, а не дублируют список �
 | — из них enforced (blocking) | 21 |
 | — из них advisory (partial) | 15 |
 | Роли в реестре | 51 |
-| **built≠wired модулей** | **2** |
+| **built≠wired модулей** | **1** |
 | planned / unsupported | 4 |
 
 ## built≠wired — построено, но не проведено в контур
@@ -41,7 +41,6 @@ README ссылаются на неё, а не дублируют список �
 | Модуль | Состояние | Проверить |
 |---|---|---|
 | `ai_ops_kit/security/security_review_cascade.py` | built≠wired | 0 не-тестовых импортёров; `tests/contracts/test_dormant_inventory.py` |
-| `ai_ops_kit/ui/storybook_query.py` | built≠wired | 0 не-тестовых импортёров; `tests/contracts/test_dormant_inventory.py` |
 
 ## Команды владельца
 

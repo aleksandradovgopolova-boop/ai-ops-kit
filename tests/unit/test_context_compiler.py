@@ -121,3 +121,35 @@ class TestBuildPayload:
     def test_payload_model_window(self, repo, eng_task):
         pay_m = build_payload(eng_task, repo, context_budget=500_000, model="deepseek-chat")
         assert pay_m["context_budget"] == MODEL_CONTEXT["deepseek-chat"]
+
+
+@pytest.mark.unit
+class TestStorybookNavigationWiring:
+    """#613: живой потребитель storybook_query — при ui_changed навигация по дизайн-системе
+    дочки попадает в контекст пишущего агента."""
+
+    def _repo_with_storybook(self, tmp_path):
+        import json as _json
+        (tmp_path / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
+        (tmp_path / "storybook-static").mkdir()
+        (tmp_path / "storybook-static" / "index.json").write_text(_json.dumps({"v": 5, "entries": {
+            "ui-button--default": {"type": "story", "id": "ui-button--default", "title": "UI/Button",
+                "name": "Default", "importPath": "./src/ui/Button.stories.tsx"}}}), encoding="utf-8")
+        return tmp_path
+
+    def test_ui_changed_injects_storybook_navigation(self, tmp_path):
+        root = self._repo_with_storybook(tmp_path)
+        p = build_payload({"task_text": "поправить кнопку", "ui_changed": True,
+                           "changed_files": ["src/ui/Button.tsx"]}, root)
+        assert "storybook-navigation" in p["text"]
+        assert "UI/Button" in p["text"]
+        assert any(i["kind"] == "storybook" for i in p["included_items"])
+
+    def test_no_storybook_section_without_ui_signal(self, tmp_path):
+        root = self._repo_with_storybook(tmp_path)
+        p = build_payload({"task_text": "починить бэкенд"}, root)   # ui_changed отсутствует
+        assert "storybook-navigation" not in p["text"]
+
+    def test_no_storybook_section_when_child_has_no_storybook(self, repo):
+        p = build_payload({"task_text": "поправить кнопку", "ui_changed": True}, repo)
+        assert "storybook-navigation" not in p["text"]   # не шумим на не-Storybook дочке
