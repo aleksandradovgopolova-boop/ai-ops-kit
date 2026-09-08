@@ -96,12 +96,15 @@ quality_gates:
   count_pinned_by_claims: [gate-count, mvp-blocking-count]   # knowledge/claims.yaml (тип count)
 
 agents:
-  registered: 51             # 38 (v1.0) + 7 ревьюеров (v1.4) + 3 research-pack (v2.1) + 3 AI Product Pack (v2.4)
-  core_target: 12            # целевой минимальный CORE после merge (Ф2-3)
+  registered: 47             # 51 − 4 растворённых источника (Тир-2 #679): repository-explorer,
+                             #  system-analyst, business-analyst, prompt-reviewer
+  core_target: 12            # целевой минимальный CORE после остальных merge (Ф2-3)
   core_target_note: >
-    В реестре 16 файлов с target_layer=core: 10 сохраняемых + 3 новых (create) + 3 merge-источника
-    (repository-explorer, system-analyst, business-analyst). После merge источники схлопываются
-    в context-builder и requirements-writer, давая итоговые 12 core-агентов.
+    Растворены 4 merge/adapt-источника (Тир-2 #679): repository-explorer -> context-builder;
+    system-analyst и business-analyst -> requirements-writer; prompt-reviewer -> plan-reviewer
+    (это и есть недостающий 4-й источник — прежняя редакция считала 3 и не сходилась к 12).
+    До core_target=12 остаётся свернуть preset-исполнителей (fullstack поглощает backend+frontend;
+    data-engineer — database/integration/migration) — отдельным заходом в #679.
 
 providers:
   status: integrated          # Ф6: реестры + декларативный routing + self-test

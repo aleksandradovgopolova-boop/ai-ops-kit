@@ -99,7 +99,7 @@
 
 ## agents/
 
-51 агент по доменам (core/product/engineering/quality/delivery/meta): ревьюеры полного цикла, команда AI-продукта (llm-architect, ai-feature-engineer, ai-red-teamer, ai-evaluator); каждый зарегистрирован в registry/agents.yaml.
+47 агентов по доменам (core/product/engineering/quality/delivery/meta): ревьюеры полного цикла, команда AI-продукта (llm-architect, ai-feature-engineer, ai-red-teamer, ai-evaluator); каждый зарегистрирован в registry/agents.yaml.
 
 - `agents/README.md`
 - `agents/core/context-builder.md`
