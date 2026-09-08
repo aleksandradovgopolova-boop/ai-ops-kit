@@ -904,6 +904,15 @@ def _resolve_models(ctx):
     # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
     if isinstance(ctx.model_resolution, dict) and ctx.model_resolution.get("preflight_blocked"):
         _kpf = ctx.model_resolution.get("key_preflight", {})
+        # #633: provider/key preflight не пройден до вызова модели — вызов человека, живший только в
+        # run-report. Кладём в шину внимания, чтобы `inbox` его показал (fail-safe, прогон не роняем).
+        with contextlib.suppress(Exception):
+            from ai_ops_kit.lifecycle import attention_bus as _ab
+            _ab.record(ctx.child_root, key=f"provider-preflight:{ctx.feature}",
+                       source="прогон: доступ к модели",
+                       reason="работа остановлена до вызова модели: "
+                              + "; ".join(_kpf.get("blocks", []) or ["ключ/ротация провайдера"]),
+                       kind=_ab.BLOCKED, work_id=ctx.feature)
         return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked-preflight",
                 "ready_for_pr": False, "provider": ctx.provider_name, "model": ctx.writer_model,
                 "model_resolution": ctx.model_resolution, "key_preflight": _kpf,

@@ -1517,6 +1517,17 @@ def _inbox_release_warnings(child_root):
              "why": "; ".join(drivers) if drivers else "см. здоровье продукта", "band": band}]
 
 
+def _inbox_attention(child_root):
+    """#633: durable сток внимания — эфемерные вызовы человека (blocked-preflight, эскалация модели,
+    граница решений), у которых нет иного durable-дома. Гарантия охвата: что записано в шину, видно
+    здесь. Read-only. -> [{key, source, reason, kind, work_id}]."""
+    from ai_ops_kit.lifecycle import attention_bus as _ab
+    try:
+        return _ab.collect(child_root)
+    except Exception:  # noqa: BLE001 — сток внимания не роняет inbox; пропавший повод вернётся
+        return []
+
+
 def _inbox_collect(child_root):
     """READ-ONLY снимок очереди владельца из всех источников. Ничего не пишет. -> dict."""
     root = Path(child_root)
@@ -1527,13 +1538,16 @@ def _inbox_collect(child_root):
     candidate = _inbox_outcome_candidate(root)   # #567: кандидат-работа из обратной петли
     findings = _inbox_findings(root)             # #585: наблюдения дочек §28 -> кандидаты + уроки
     warnings = _inbox_release_warnings(root)
+    attention = _inbox_attention(root)           # #633: шина внимания — вызовы человека из прогона
     findings_items = len((findings or {}).get("candidates") or []) + (
         1 if (findings or {}).get("precedents") else 0)
     total = (len(decisions) + len(blocked or []) + len(reviews or [])
-             + (1 if insight else 0) + (1 if candidate else 0) + findings_items + len(warnings))
+             + (1 if insight else 0) + (1 if candidate else 0) + findings_items + len(warnings)
+             + len(attention))
     return {"registry_ok": registry_ok, "total": total, "decisions": decisions,
             "blocked": blocked or [], "reviews": reviews or [], "insight": insight,
-            "candidate": candidate, "findings": findings, "warnings": warnings}
+            "candidate": candidate, "findings": findings, "warnings": warnings,
+            "attention": attention}
 
 
 def _inbox_status(queue):
@@ -1542,9 +1556,14 @@ def _inbox_status(queue):
     if not queue.get("registry_ok", True):
         return "degraded"
     findings = queue.get("findings") or {}
-    if queue["decisions"] or queue["reviews"] or queue.get("candidate") or findings.get("candidates"):
+    attention = queue.get("attention") or []
+    # #633: повод-решение из шины -> нужно решение; повод-остановка -> заблокировано.
+    att_decision = any(a.get("kind") == "decision" for a in attention)
+    att_blocked = any(a.get("kind") != "decision" for a in attention)
+    if (queue["decisions"] or queue["reviews"] or queue.get("candidate")
+            or findings.get("candidates") or att_decision):
         return "needs_input"
-    if queue["blocked"] or queue["warnings"]:
+    if queue["blocked"] or queue["warnings"] or att_blocked:
         return "blocked"
     return "ok"
 
@@ -1569,6 +1588,8 @@ def _inbox_counts(queue):
         parts.append("свежий обзор")
     if queue["warnings"]:
         parts.append(f"предупреждений о выпуске — {len(queue['warnings'])}")
+    if queue.get("attention"):
+        parts.append(f"вызовов из прогона — {len(queue['attention'])}")
     return ", ".join(parts)
 
 
@@ -1635,6 +1656,11 @@ def _inbox_render(queue, aud):
                                     f"(случаев: {p.get('case_count')}"
                                     + (f"; контексты: {ctx}" if ctx else "") + ")"))
         lines.append("    " + h("кит показывает факт и число случаев — вывод и перенос за тобой"))
+    # #633: вызовы человека из прогона (шина внимания) — durable-повод, у которого нет иного дома.
+    for att in queue.get("attention") or []:
+        lines.append("")
+        verb = "Реши" if att.get("kind") == "decision" else "Остановлено"
+        lines.append(h(f"• {verb} — {att.get('source')}: {att.get('reason')}"))
     if queue["insight"]:
         lines.append("")
         lines.append(h(f"• Есть {queue['insight']['what']}"))
