@@ -453,3 +453,92 @@ consistency:
     - "unknown не сворачивается в not_changed"
     - "not_changed не требует обновления документов (бюрократия «восемь документов на задачу» запрещена)"
     - "контур без сигнальных путей не считается зелёным"
+
+# ── Доменная модель ─────────────────────────────────────────────────────────────────────────────
+# ЗАЧЕМ (issue #630, внешнее ревью 08.09.2026). Пять корневых сущностей продукта — Product, Work,
+# Run, Decision, Outcome — уже РАБОТАЮТ, но их имена размазаны по механизмам (WorkItem — в этом
+# файле, Run — в engine, Decision — в governance, Outcome — в entities.yaml), и легко построить ещё
+# один механизм, не поняв, к какой сущности он относится. Здесь ось НАЗВАНА в одном месте как ДАННЫЕ:
+# каждая сущность ссылается (`implemented_by` + `status`) на уже существующий механизм. Это НЕ новый
+# реестр и НЕ новая стройка — тот же приём, что decision-boundary.yaml применил к границе решений.
+# Ревьюер прямо просил «не новый registry» — поэтому секция ЗДЕСЬ, а не отдельным файлом.
+#
+# ЧЕСТНОСТЬ ДЕКЛАРАЦИЙ (инвариант AGENTS.md): у каждой строки implemented_by есть status
+# (implemented|planned) и `where`; тест tests/contracts/test_domain_model.py проверяет, что названный
+# файл РЕАЛЬНО существует — связь не имеет права быть выдумкой. Валидатор модели краснеет на порче.
+#
+# Всё остальное (feature/finding/evidence/artifact/role/workflow/agent/graph) — производные или
+# supporting-сущности этих пяти. KG-словарь (registry/entities.yaml) — проекция графа поверх них,
+# а не отдельная ось: `outcome` там объявлен проекцией OutcomeContract+OutcomeReadout.
+domain_model:
+  entities:
+    - id: product
+      one_liner: "То, чем владеет человек: цели, пользователи, решения, работа, знание, исходы."
+      owns: [goals, users, decisions, work, knowledge, outcomes]
+      implemented_by:
+        - {where: registry/product-operating-model.yaml, provides: [contours, roles, work_types], status: implemented}
+        - {where: context/product/ProductOverview.md, provides: [goals, users], status: implemented}
+      relations:
+        - {type: has, to: work}
+        - {type: has, to: decision}
+        - {type: has, to: outcome}
+
+    - id: work
+      one_liner: >-
+        Единица изменения. ВЛАДЕЕТ жизненным циклом: выбирает workflow, назначает role, выбирает
+        worker, создаёт run, получает evidence/delivery/outcome.
+      owns: [intent, owner_role, participants, scope, dependencies, decisions, runs, artifacts,
+             evidence, delivery, outcome, budget]
+      implemented_by:
+        - {where: registry/product-operating-model.yaml, provides: [work_types, statuses, next_work], status: implemented}
+        - {where: ai_ops_kit/lifecycle/active_work.py, provides: [scope, dependencies, status], status: implemented}
+        - {where: schemas/budget-contract.schema.json, provides: [budget], status: implemented}
+      relations:
+        - {type: selects,      to: run}
+        - {type: targets,      to: outcome}
+        - {type: informed-by,  to: decision}
+
+    - id: run
+      one_liner: "Конкретная попытка выполнить Work. НЕ владеет Work — у Work может быть несколько Run."
+      owns: [worker, runtime, context, actions, cost, evidence, result]
+      implemented_by:
+        - {where: ai_ops_kit/engine/run_handoff.py, provides: [run, stage, step, handoff], status: implemented}
+        - {where: ai_ops_kit/shared/usage_ledger.py, provides: [cost], status: implemented}
+      relations:
+        - {type: attempts,  to: work}
+        - {type: produces,  to: evidence}
+
+    - id: decision
+      one_liner: "Человеческое решение, определяющее направление; несёт обратимость (one-way/two-way)."
+      owns: [question, evidence, options, tradeoffs, chosen, rationale, reversibility]
+      implemented_by:
+        - {where: ai_ops_kit/governance/decision_log.py, provides: [reversibility, rationale], status: implemented}
+        - {where: ai_ops_kit/intelligence/decision_loop.py, provides: [question, options, chosen], status: implemented}
+        - {where: registry/decision-boundary.yaml, provides: [class], status: implemented}
+      relations:
+        - {type: directs, to: work}
+
+    - id: outcome
+      one_liner: "Что произошло после изменения: baseline→target под guardrails и что реально измерено."
+      owns: [metric, baseline, target, guardrails, observed, verdict]
+      implemented_by:
+        - {where: ai_ops_kit/cli/post_release_loop.py, provides: [observed, verdict], status: implemented}
+        - {where: registry/entities.yaml, provides: [baseline, target, guardrails], status: implemented}
+      relations:
+        - {type: measured-by, to: metric}
+        - {type: feeds,       to: decision}
+
+  # ── Инвариант: Work владеет жизненным циклом ──────────────────────────────────────────────────
+  # Ревью п.3: очистить дальнейшее развитие — Work центр, не координационная проекция workflow/agent.
+  invariants:
+    - id: work_owns_lifecycle
+      rule: >-
+        Work владеет жизненным циклом изменения. Workflow / Agent / Run НЕ владеют Work: Work
+        выбирает Workflow → назначает Role → выбирает Worker → создаёт Run → получает
+        Evidence / Delivery / Outcome. Смена runtime/модели/агента не пересобирает Work.
+      never: >-
+        Run/Workflow/Agent не создаёт и не владеет Work; Work не принадлежит одному Run — у одной
+        работы может быть несколько попыток (Run).
+      backed_by:
+        - "ai_ops_kit/lifecycle/active_work.py — Work как реестр (owner_role/scope/deps), переживает отдельный Run"
+        - "ai_ops_kit/engine/run_handoff.py — Run привязан к WorkItem (Feature→WorkItem→Run), а не наоборот"
