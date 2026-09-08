@@ -25,7 +25,13 @@ from __future__ import annotations
 import pytest
 import yaml
 
-from ai_ops_kit.planning.repo_audit import AnswersCorrupt, answers_path, read_answers, write_question_file
+from ai_ops_kit.planning.repo_audit import (
+    AnswersCorrupt,
+    answers_path,
+    read_answers,
+    record_answer,
+    write_question_file,
+)
 
 ASK = {"questions": [{"id": "primary_user", "ask": "Кто основной пользователь продукта?"},
                      {"id": "main_goal_now", "ask": "Какая главная цель продукта сейчас?"}]}
@@ -130,3 +136,40 @@ def test_answer_survives_when_question_is_no_longer_asked(tmp_path):
     assert back.get("primary_user") == LONG, (
         f"ответ на уже не задаваемый вопрос потерян: {back}")
     yaml.safe_load(answers_path(tmp_path).read_text(encoding="utf-8"))
+
+
+# ── record_answer: запись ответа без ручной правки YAML (issue #612) ──────────────────────────────
+
+def test_record_answer_writes_value_and_basis(tmp_path):
+    """`model --answer` пишет значение и основание (why) — без редактора, читается обратно."""
+    ok, msg = record_answer(tmp_path, "primary_user", "разработчики небольших команд",
+                            ASK, why="README.md:1")
+    assert ok is True, msg
+    assert read_answers(tmp_path).get("primary_user") == "разработчики небольших команд"
+    text = answers_path(tmp_path).read_text(encoding="utf-8")
+    assert "# README.md:1" in text, "основание (why) не легло комментарием"
+    yaml.safe_load(text)                       # файл остаётся валидным YAML
+
+
+def test_record_answer_rejects_unknown_qid(tmp_path):
+    """Несуществующий вопрос отвергается со списком доступных — не пишем мусор."""
+    ok, msg = record_answer(tmp_path, "no_such_question", "x", ASK)
+    assert ok is False
+    assert "primary_user" in msg and "main_goal_now" in msg
+
+
+def test_record_answer_can_reanswer(tmp_path):
+    """Переответить законно: второе значение перезаписывает первое."""
+    record_answer(tmp_path, "primary_user", "первый", ASK)
+    ok, _ = record_answer(tmp_path, "primary_user", "второй", ASK)
+    assert ok is True
+    assert read_answers(tmp_path).get("primary_user") == "второй"
+
+
+def test_record_answer_keeps_other_answers(tmp_path):
+    """Запись одного ответа не затирает другой (слияние поверх существующего)."""
+    record_answer(tmp_path, "primary_user", "разработчики", ASK)
+    record_answer(tmp_path, "main_goal_now", "снизить время до первой ценности", ASK)
+    back = read_answers(tmp_path)
+    assert back.get("primary_user") == "разработчики"
+    assert back.get("main_goal_now") == "снизить время до первой ценности"

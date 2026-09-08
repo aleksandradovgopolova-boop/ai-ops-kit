@@ -19,15 +19,15 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1165
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1796
+  ai_ops_kit/cli/ai_ops_cli.py: 1171
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1801
   ai_ops_kit/ui/presenter.py: 944
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1068
   ai_ops_kit/ui/presenter_formatters.py: 977
-  ai_ops_kit/planning/repo_audit.py: 804
+  ai_ops_kit/planning/repo_audit.py: 805
   ai_ops_kit/engine/ai_ops_run_exec.py: 703
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 909
   ai_ops_kit/providers/orchestrator_providers.py: 909
@@ -41,6 +41,18 @@ raises:
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1165; ai_ops_cli_intents.py = 1796; repo_audit.py = 804'
+    to: 'ai_ops_cli.py = 1171; ai_ops_cli_intents.py = 1801; repo_audit.py = 805'
+    work: 'первый час: `model --answer` — запись ответа онбординга без ручной правки YAML (#612)'
+    why: >-
+      `ai_ops_cli.py` +6: флаги `--answer`/`--why` в парсере. `ai_ops_cli_intents.py` +5: 4-строчная
+      ветка в `_intent_model` (перехват в main() дал бы god-функцию — func-size ходит только вниз и
+      не поднимается, поэтому логика легла в интент, переиспользуя уже посчитанный rep). `repo_audit.py`
+      +1: ре-экспорт record_answer. САМА логика записи (валидация qid, слияние overrides, сохранение
+      оснований) — в repo_audit_answers.py (под порогом 700), а не в монолитах. Прямая цель ROADMAP
+      «владелец больше не правит YAML руками».
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 1790'
