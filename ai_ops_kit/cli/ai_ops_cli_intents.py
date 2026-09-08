@@ -293,6 +293,14 @@ def _intent_model(task, child_root, signals, a):
         ok, msg = repo_audit.record_answer(child_root, a.answer[0], a.answer[1], rep["ask"], why=a.why)
         print(msg)
         return 0 if ok else 2
+    # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА и от `--flow`. Форма ответов создаётся в ЛЮБОМ
+    # пути просмотра (обычном И первом часе): первый час не полон без места, куда человек впишет
+    # ответы. Прежде `--flow` короткозамыкал ДО записи формы, и `setup` (шаг первого часа) не
+    # оставлял «ответь на вопросы» — остаток прятался (issue #612). `--answer` выше уже вернул
+    # управление, так что здесь форму трогаем только на путях просмотра.
+    answers_file = None
+    if rep["ask"]["questions"]:
+        answers_file = repo_audit.write_question_file(child_root, rep["ask"])
     # #647: `model --flow` — оркестратор первого часа ОДНИМ нарративом: понял → знаю/не знаю →
     # (если ответы есть) направление+план → следующая работа. `--apply` записывает bootstrap.
     # Склейка готовых функций (repo_audit уже посчитан выше — переиспользуем rep), не новый движок.
@@ -301,18 +309,15 @@ def _intent_model(task, child_root, signals, a):
         res = first_hour.run(child_root, apply=bool(getattr(a, "apply", False)),
                              budget_left=getattr(a, "budget", None), understanding=rep)
         if js:
-            print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+            out = dict(res)
+            if answers_file:
+                out["answers_file"] = str(answers_file)
+            print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
         else:
             from ai_ops_kit.ui import presenter
             aud = presenter.audience_from_config(child_root)
             print(presenter.render(presenter.from_first_hour(res), audience=aud))
         return 0
-    # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА. Прежде форма ответов создавалась только в
-    # человеческой ветке: `--json` того же намерения оставлял человека без места для ответа, то
-    # есть одна команда вела себя двумя разными способами.
-    answers_file = None
-    if rep["ask"]["questions"]:
-        answers_file = repo_audit.write_question_file(child_root, rep["ask"])
     if js:
         out = dict(rep)
         if answers_file:

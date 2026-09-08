@@ -20,7 +20,7 @@ threshold: 700
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 1198
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1937
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1942
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
@@ -53,6 +53,19 @@ raises:
       concurrency-conflicts: проба + assess + record, best-effort с named-сбоем в lifecycle_errors).
       Логика не в монолитах; потолки подняты под факт, ратчет держит вниз. Пересведено при rebase
       поверх #647.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1937'
+    to: 'ai_ops_cli_intents.py = 1942'
+    work: 'setup-reaches-first-hour (#612): setup доводит до первого часа; `model --flow` — надмножество'
+    why: >-
+      Шов первого часа (#612): `ai-ops setup` теперь доходит до первого часа (шаг `model --flow`
+      + проверка целостности `doctor`), а не обрывается на форме вопросов. Чтобы `--flow` не терял
+      «ответь на вопросы», запись формы поднята НАД веткой `if a.flow` в `_intent_model` — `--flow`
+      стал надмножеством обычного `model` (пишет форму И показывает нарратив первого часа). Логики
+      это не добавляет: та же `repo_audit.write_question_file`, перемещённая выше ветвления, плюс
+      прокидка `answers_file` в JSON-вывод первого часа (+5 строк). Оркестрация по-прежнему в доноре
+      `planning/first_hour.py`, монолит не растёт функционалом. Потолок поднят под факт, ратчет держит.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'presenter_formatters.py = 988; ai_ops_cli_intents.py = 1923; ai_ops_cli.py = 1192; presenter.py = 944'
