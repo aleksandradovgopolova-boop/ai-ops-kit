@@ -119,6 +119,48 @@ def test_no_undeclared_internal_package():
     assert not undeclared, f"пакеты без объявленного уровня: {undeclared}"
 
 
+# ---------------------------------------------- ось аудитории (human/expert, #632) ---
+# Аудитория ОРТОГОНАЛЬНА совместимости: каждый интент адресован человеку-владельцу или эксперту.
+
+def _intents() -> set:
+    return set(_literal_dict_from(REPO / "ai_ops_kit" / "cli" / "ai_ops_cli.py", "INTENTS"))
+
+
+@pytest.mark.contract
+def test_audience_partitions_every_intent():
+    """Каждый интент имеет РОВНО один уровень аудитории — human или expert, без дыр и пересечений."""
+    human = set(DECL["audience"]["human"])
+    expert = set(DECL["audience"]["expert"])
+    overlap = sorted(human & expert)
+    assert not overlap, f"интенты в обоих уровнях аудитории сразу: {overlap}"
+    real = _intents()
+    missing = sorted(real - (human | expert))
+    assert not missing, f"интенты без уровня аудитории: {missing} — впишите в audience.human/expert"
+    ghosts = sorted((human | expert) - real)
+    assert not ghosts, f"в audience объявлены несуществующие интенты: {ghosts}"
+
+
+@pytest.mark.contract
+def test_human_surface_stays_small():
+    """Человеческая поверхность держится малой намеренно (ревью §12): ≤ 10 действий."""
+    human = DECL["audience"]["human"]
+    assert len(human) <= 10, (
+        f"человеческий API разросся до {len(human)} — держите ≤ 10, иначе движок торчит наружу")
+
+
+@pytest.mark.contract
+def test_human_surface_matches_marketplace_declaration():
+    """human == объявленный «интерфейс владельца 4+1» из marketplace.json — одна правда, не две."""
+    mkt = json.loads((REPO / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+    desc = mkt["plugins"][0]["description"]
+    real = _intents()
+    # интенты, названные в описании плагина (по границам слова), в порядке их появления в тексте
+    named = {w for w in re.findall(r"[a-z]+", desc) if w in real}
+    assert named == set(DECL["audience"]["human"]), (
+        f"human в public-surface.md разошёлся с marketplace.json: "
+        f"в декларации {sorted(DECL['audience']['human'])}, в плагине {sorted(named)}")
+
+
 @pytest.mark.contract
 def test_no_undeclared_advisory_gate():
     """Advisory-гейт — `experimental`: он не блокирует, и дочка вправе знать, что форма ещё меняется."""
