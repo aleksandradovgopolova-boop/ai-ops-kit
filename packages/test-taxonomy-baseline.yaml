@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 418
+behavioral_count: 419
 structural_count: 66
-total_count: 484
-behavioral_share_pct: 86.36
+total_count: 485
+behavioral_share_pct: 86.39
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 418
+    from_total: 484
+    to_behavioral: 419
+    to_total: 485
+    to_share_pct: 86.39
+    work: 'состояние знания CONFLICTING (#634, поверх #633)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_source_conflict.py: строит синтетические репозитории
+      (README против ARCHITECTURE об СУБД), зовёт planning/source_conflict.detect и repo_audit.run/
+      reconstruct/render + presenter. Поверх #633 (418/484) доля поведенческих не падает
+      (86.36% -> 86.39%), ратчет-вниз соблюдён.
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 417
