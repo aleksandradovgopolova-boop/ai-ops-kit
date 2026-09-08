@@ -42,6 +42,7 @@ STANDALONE = [
     "validate_ai_ops_child",
     "validate_bootstrap_qualification",
     "validate_budget_contract",
+    "validate_capability_policy",
     "validate_capability_scope",
     "validate_claims",
     "validate_container_assets",

@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 414
+behavioral_count: 415
 structural_count: 66
-total_count: 480
-behavioral_share_pct: 86.25
+total_count: 481
+behavioral_share_pct: 86.28
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 414
+    from_total: 480
+    to_behavioral: 415
+    to_total: 481
+    to_share_pct: 86.28
+    work: 'настройки как capability policy — 7 осей намерением (#644)'
+    why: >-
+      #644 добавил один поведенческий тест-файл (test_capability_policy — импортирует
+      checks/capability_policy И зовёт resolve/resolve_all/honesty_errors над реальным реестром),
+      структурных без изменений (66). Доля поведенческих выросла 86.25% -> 86.28% (не снижение).
+      Числа руками (--baseline лоссовый). Пересведено при rebase поверх #587 (#651).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 413
