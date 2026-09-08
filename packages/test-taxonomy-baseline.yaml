@@ -24,11 +24,25 @@ kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
 behavioral_count: 417
-structural_count: 66
-total_count: 483
-behavioral_share_pct: 86.34
+structural_count: 67
+total_count: 484
+behavioral_share_pct: 86.16
 
 raises:
+  - at: '2026-09-09'
+    what: rebaseline_after_measurement
+    from_behavioral: 417
+    from_total: 483
+    to_behavioral: 417
+    to_total: 484
+    to_share_pct: 86.16
+    work: 'Тир-2 WIRE #677: safety-валидаторы зелены на живом ките (contracts-тест)'
+    why: >-
+      Добавлен tests/contracts/test_safety_validators_green_on_live_kit.py — проводит вердикт
+      5 safety-валидаторов (model_qualification/model_roles/security_domains/security_posture/
+      sandbox_boundary) в parent-CI. Классификатор считает его структурным (проверяет exit-код
+      runnable, а не содержательное поведение) — честно: это смоук «зелёный ли на живом». Доля
+      просела 86.34%->86.16% на +1 структурный. Ровно тот ратчет-шум, который снимает #680.
   - at: '2026-09-09'
     what: rebaseline_after_measurement
     from_behavioral: 422
