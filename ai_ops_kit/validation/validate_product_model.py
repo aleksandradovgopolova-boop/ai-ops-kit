@@ -21,6 +21,9 @@
   7. КОММУНИКАЦИЯ: `default_audience` объявлен и присутствует в `audiences`; контракт сообщения
      содержит обязательные `summary` и `next`; `order` — перестановка объявленных вопросов;
   8. ПЛАН (если есть): проходит `plan.validate` без ошибок, и `ROADMAP.md` — без ошибок контракта.
+  9. ДОМЕННАЯ ОСЬ (issue #630): секция `domain_model` называет ровно пять сущностей
+     (product/work/run/decision/outcome); каждая implemented-строка `implemented_by` указывает на
+     РЕАЛЬНО существующий файл; объявлен инвариант `work_owns_lifecycle`.
 
   validate_product_model.py [<repo>] [--json]
 Тесты валидатора — в tests/unit/ (selftest не живёт в продакшн-модуле, AGENTS.md).
@@ -186,6 +189,52 @@ def check_comms(data):
     return e
 
 
+DOMAIN_ENTITIES = ("product", "work", "run", "decision", "outcome")
+
+
+def check_domain_model(data, pkg=PKG):
+    """Доменная ось Product/Work/Run/Decision/Outcome (issue #630). -> список ошибок.
+
+    Пять корневых сущностей НАЗВАНЫ данными; каждая ссылается на уже существующий механизм
+    (`implemented_by` + `status`). Инвариант честности (AGENTS.md): implemented-строка обязана
+    указывать на РЕАЛЬНО существующий файл — иначе имя висит в воздухе, а baseline врёт.
+    """
+    e = []
+    dm = (data or {}).get("domain_model")
+    if not isinstance(dm, dict):
+        return ["domain_model: секции нет или она не mapping — доменная ось не названа"]
+    ents = {x.get("id"): x for x in (dm.get("entities") or []) if isinstance(x, dict)}
+    missing = [x for x in DOMAIN_ENTITIES if x not in ents]
+    if missing:
+        e.append(f"domain_model: нет сущностей {missing} — ось Product/Work/Run/Decision/Outcome неполна")
+    extra = [x for x in ents if x not in DOMAIN_ENTITIES]
+    if extra:
+        e.append(f"domain_model: сущности вне оси {extra} — новую сущность заводят архитектурным "
+                 f"решением, а не правкой реестра")
+    for eid, ent in ents.items():
+        if not (ent.get("one_liner") or "").strip():
+            e.append(f"domain_model '{eid}': нет one_liner")
+        if not (ent.get("owns") or []):
+            e.append(f"domain_model '{eid}': пустой owns — сущность ничем не владеет")
+        rows = ent.get("implemented_by") or []
+        if not rows:
+            e.append(f"domain_model '{eid}': нет implemented_by — имя не привязано к механизму")
+        for row in rows:
+            st = row.get("status")
+            if st not in ("implemented", "planned"):
+                e.append(f"domain_model '{eid}': status '{st}' не из (implemented, planned)")
+            where = row.get("where")
+            if where is None:
+                if st != "planned":
+                    e.append(f"domain_model '{eid}': implemented без файла — where не может быть null")
+            elif not (pkg / where).exists():
+                e.append(f"domain_model '{eid}': названного файла нет — {where}")
+    invs = {x.get("id") for x in (dm.get("invariants") or []) if isinstance(x, dict)}
+    if "work_owns_lifecycle" not in invs:
+        e.append("domain_model: нет инварианта work_owns_lifecycle — Work обязан владеть жизненным циклом")
+    return e
+
+
 def _run_json(entry, args):
     """Точка входа кита ПОДПРОЦЕССОМ + машиночитаемый вывод. -> (dict|None, ошибка|None).
 
@@ -247,7 +296,9 @@ def main(argv):
 
     errs = []
     try:
-        errs += check(yaml.safe_load(MODEL.read_text(encoding="utf-8")))
+        model_doc = yaml.safe_load(MODEL.read_text(encoding="utf-8"))
+        errs += check(model_doc)
+        errs += check_domain_model(model_doc)
     except OSError:
         errs.append(f"модель контуров не найдена: {MODEL}")
     except yaml.YAMLError as exc:

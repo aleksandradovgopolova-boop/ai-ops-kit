@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 409
+behavioral_count: 410
 structural_count: 66
-total_count: 475
-behavioral_share_pct: 86.11
+total_count: 476
+behavioral_share_pct: 86.13
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 409
+    from_total: 475
+    to_behavioral: 410
+    to_total: 476
+    to_share_pct: 86.13
+    work: 'доменная ось Product/Work/Run/Decision/Outcome как данные (#630)'
+    why: >-
+      #630 добавил один поведенческий тест-файл (test_domain_model — импортирует
+      validation/validate_product_model И зовёт его check_domain_model над реальным реестром),
+      структурных без изменений (66). Доля поведенческих выросла 86.11% -> 86.13% (не снижение).
+      Числа руками (--baseline лоссовый).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 408
