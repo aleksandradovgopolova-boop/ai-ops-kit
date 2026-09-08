@@ -30,7 +30,7 @@ ceilings:
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 713
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 922
-  ai_ops_kit/providers/orchestrator_providers.py: 909
+  ai_ops_kit/providers/orchestrator_providers.py: 946
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 772
   ai_ops_kit/gates/gate_executor.py: 905
@@ -51,6 +51,21 @@ raises:
       монолитах тонкая проводка: intents +26 (8-й источник inbox: collector + статус + счёт + рендер),
       run_exec +10 (запись/снятие повода на blocked-preflight), run_lifecycle +9 (запись повода на
       provider-preflight). Логика не в монолитах; потолки подняты под факт, ратчет держит вниз.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'orchestrator_providers.py = 909'
+    to: 'orchestrator_providers.py = 946'
+    work: 'visible-writer-queue (#652): видимая очередь писателя при ожидании машинного замка'
+    why: >-
+      `orchestrator_providers.py` +37: ожидание занятого писательского замка стало ВИДИМЫМ. Прежде
+      `_writer_serialization_lock` сообщал об очереди один раз и уходил в блокирующий `flock(LOCK_EX)`
+      — в поле прогон так простоял ~час, и человек не мог отличить ожидание от зависания. Теперь при
+      занятости — цикл неблокирующих попыток `flock(LOCK_NB)` с обязательным сном между ними и
+      периодическим `notify(...)` с растущим счётчиком времени ожидания; `yield` (старт писателя) —
+      только после получения замка. Добавлен помощник `_writer_lock_poll_seconds` (интервал из
+      `AI_OPS_WRITER_LOCK_POLL_SECONDS`, дефолт 15 c) и рационале-докстринги, написанные, а не
+      срезанные. Рост оправдан новым поведением; сериализация, escape-hatch и путь без fcntl
+      сохранены. Ратчет держит рост вниз от 946.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1186; ai_ops_cli_intents.py = 1801'
