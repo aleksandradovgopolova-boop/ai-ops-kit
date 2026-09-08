@@ -81,6 +81,8 @@ def build_preview(intent, task, child_root, signals):
                       "resume": "продолжу с последнего подтверждённого шага",
                       "feedback": "запишу твоё замечание о моей работе так, чтобы его можно было "
                                   "проверить",
+                      "reach": "покажу состояние добровольной отметки о подключении (охват — "
+                               "без телеметрии, только по твоему решению)",
                       "backlog": "разберу GitHub Issues: тип, дубликаты, приоритет, зависимости"}.get(
                           intent, "выполню намерение"))
 
@@ -677,7 +679,101 @@ def _intent_onboard(task, child_root, signals, a):
         print(json.dumps({"written": str(out), "profile": prof}, ensure_ascii=False, indent=2))
     else:
         _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
+        # voluntary-child-registration: ОДИН РАЗ предлагаем отметиться. Предложение показывается,
+        # только пока решение не принято (has_decided) — так повторный онбординг не переспрашивает
+        # (идемпотентность). Ни к чему не обязывает: по умолчанию НЕ отмечаемся, отказ безопасен и
+        # молчалив, гейты от него не краснеют. Согласие — отдельной командой, руками владельца.
+        from ai_ops_kit.engops import child_registry as _reg
+        if not _reg.has_decided(child_root):
+            print("\n  Хочешь помочь честно оценить охват кита? Это ДОБРОВОЛЬНО и БЕЗ телеметрии — "
+                  "кит ничего никуда не отправляет.")
+            print("  Отметиться (имя проекта + версия кита + дата + анонимный id, без путей и почты): "
+                  "./ai-ops reach register .")
+            print("  Не хочешь — просто пропусти или скажи ./ai-ops reach decline . "
+                  "(спрошу об этом только раз).")
     return 0
+
+
+def _intent_reach(task, child_root, signals, a):
+    """Добровольная отметка о подключении и охват — БЕЗ телеметрии (voluntary-child-registration).
+
+    Подкоманда — первым словом (как у backlog/products). Всё opt-in, рукой владельца, без сети:
+      register|decline|forget|status|summary  — в дочке (child_root);
+      coverage                                  — в ките (child_root = корень кита);
+      collect                                   — списком дочек, зовётся модулем (не одним токеном).
+    Без подкоманды — показать состояние отметки. Обработчик проб-свободен (пишет обычные локальные
+    файлы `.ai/reach/*`, мутационных git-проб не несёт), поэтому живёт здесь, а не в ai_ops_cli.py.
+    """
+    from ai_ops_kit.engops import child_registry as cr
+    js = a.json
+    sub = (task or "").strip().lower()
+    root = child_root
+
+    if sub in ("", "status"):
+        rep = cr.registration_state(root)
+        print(json.dumps(rep, ensure_ascii=False, indent=2) if js else cr.render_state(rep))
+        return 1 if rep["errors"] else 0
+
+    if sub == "register":
+        p, created, rec = cr.register(root)
+        if js:
+            print(json.dumps({"path": str(p), "created": created, "registration": rec},
+                             ensure_ascii=False, indent=2))
+        else:
+            print(f"Отмечено: {rec['project']} (анонимный id {rec['id']}, версия кита "
+                  f"{rec.get('kit_version') or 'н/д'}). Запись локальна — кит её никуда не отправляет; "
+                  "поделиться можешь ты сам. Отозвать: ./ai-ops reach forget ." if created
+                  else f"Уже отмечено: {rec['project']} (id {rec['id']}).")
+        return 0
+
+    if sub == "decline":
+        cr.decline(root)
+        print(json.dumps({"decision": "declined"}, ensure_ascii=False, indent=2) if js
+              else "Отметка отклонена. Ничего не создано, онбординг это не затрагивает. "
+                   "Передумать: ./ai-ops reach register .")
+        return 0
+
+    if sub == "forget":
+        removed = cr.forget(root)
+        print(json.dumps({"removed": removed}, ensure_ascii=False, indent=2) if js
+              else f"Согласие отозвано: удалено записей — {len(removed)}.")
+        return 0
+
+    if sub == "summary":
+        # Продуктовый статус берём из УЖЕ существующего Product Passport и впрыскиваем ВНИЗ (engops
+        # не тянет planning — тот же приём, что health->contract). Паспорт с пробелом -> в сводке
+        # пробел: снимок переносит verified/inferred/unknown как есть, ничего не выдумывая.
+        ps = None
+        try:
+            from ai_ops_kit.planning import passport_generator
+            ps = cr.product_status_snapshot(passport_generator.sections(Path(root)))
+        except Exception:  # noqa: BLE001 — паспорт не обязан собираться; тогда статус честно unknown
+            ps = None
+        p, rep = cr.write_summary(root, product_status=ps)
+        if js:
+            print(json.dumps(dict(rep, saved_to=str(p)), ensure_ascii=False, indent=2))
+        else:
+            print(cr.render_summary(rep))
+            print(f"  Сохранено: {p} — поделиться можно, передав этот файл владельцу кита.")
+        return 0
+
+    if sub == "coverage":
+        rep = cr.coverage(root)
+        print(json.dumps(rep, ensure_ascii=False, indent=2) if js else cr.render_coverage(rep))
+        return 1 if rep["errors"] else 0
+
+    if sub == "collect":
+        # Сбор дочек в кит зовётся модулем (интент CLI отдаёт один токен, а collect берёт список дочек).
+        print(json.dumps({"ok": False, "reason": "collect зовётся модулем: "
+                          "python3 -m ai_ops_kit.engops.child_registry collect <kit> <child>..."},
+                         ensure_ascii=False, indent=2) if js
+              else "reach collect собирает несколько дочек и зовётся модулем:\n"
+                   "  python3 -m ai_ops_kit.engops.child_registry collect <корень-кита> <дочка> [<дочка>...]")
+        return 2
+
+    print(f"неизвестная подкоманда '{sub}'. Есть: register | decline | forget | status | "
+          "summary (в дочке) · coverage (в ките)")
+    return 1
 
 
 def _intent_team(task, child_root, signals, a):
