@@ -21,6 +21,7 @@ import pytest
 import yaml
 
 from ai_ops_kit.gates import spec_levels
+from ai_ops_kit.governance import decision_boundary as db
 from ai_ops_kit.governance import policy_engine as pe
 
 KIT = Path(__file__).resolve().parents[2]
@@ -146,3 +147,85 @@ def test_every_class_is_backed_by_some_mechanism(model):
             backed.update(row.get("provides") or [])
     for cid in _classes(model):
         assert cid in backed, f"{cid}: ни один РЕАЛИЗОВАННЫЙ механизм его не исполняет"
+
+
+# ── ЕДИНЫЙ КЛАССИФИКАТОР: три оси разом → имя класса (issue #631) ─────────────────────────────────
+# Тесты ПОВЕДЕНЧЕСКИЕ: зовут decision_boundary.evaluate и проверяют, что имя класса считается из
+# всех трёх осей вместе по правилу модели, а не описано словами.
+
+def test_all_soft_axes_give_autonomous():
+    v = db.evaluate({"risk": "low"})
+    assert v["decision_class"] == "AUTONOMOUS"
+    assert v["autonomy_level"] == "execute"
+    assert v["requires_approval"] is False
+
+
+def test_irreversible_axis_escalates_to_assisted():
+    v = db.evaluate({"risk": "low", "irreversible": True})
+    assert v["decision_class"] == "ASSISTED", "необратимость — тяжёлая ось, решение за человеком"
+    assert v["autonomy_level"] == "suggest"
+    assert v["executor"] == "human"
+
+
+def test_expensive_axis_escalates_to_assisted():
+    assert db.evaluate({"risk": "critical"})["decision_class"] == "ASSISTED"
+    assert db.evaluate({"risk": "high"})["decision_class"] == "ASSISTED"
+    assert db.evaluate({"secret_boundary": True})["decision_class"] == "ASSISTED"
+
+
+def test_wide_blast_radius_escalates_to_assisted():
+    assert db.evaluate({"risk": "low", "blast_radius": "wide"})["decision_class"] == "ASSISTED"
+    assert db.evaluate({"risk": "low", "external_consumers": True})["decision_class"] == "ASSISTED"
+
+
+def test_mixed_profile_gives_collaborative():
+    v = db.evaluate({"risk": "low", "protected_paths": True})
+    assert v["decision_class"] == "COLLABORATIVE", "защищённые пути без тяжёлой оси → совместно"
+    assert v["autonomy_level"] == "require_approval"
+    assert db.evaluate({"risk": "medium"})["decision_class"] == "COLLABORATIVE"
+
+
+def test_no_signals_fails_closed_to_collaborative():
+    """fail_closed: цену подтвердить нечем (нет risk) → не AUTONOMOUS, а COLLABORATIVE."""
+    v = db.evaluate({})
+    assert v["decision_class"] == "COLLABORATIVE"
+    assert v["requires_approval"] is True
+
+
+def test_worst_axis_escalates_among_soft():
+    """Одна тяжёлая ось среди мягких поднимает весь класс до ASSISTED."""
+    v = db.evaluate({"risk": "low", "blast_radius": "local", "irreversible": True})
+    assert v["decision_class"] == "ASSISTED"
+
+
+def test_requested_more_autonomous_is_not_silently_downgraded():
+    """never_downgraded_silently: запрос AUTONOMOUS при необратимом действии не понижает строгость."""
+    v = db.evaluate({"irreversible": True}, requested_class="AUTONOMOUS")
+    assert v["decision_class"] == "ASSISTED", "нельзя понизить строгость молча"
+    assert v["escalated_from"] == "AUTONOMOUS"
+    assert any("нельзя понизить молча" in r for r in v["reason"])
+
+
+def test_requested_stricter_is_honored():
+    """Строже — можно: запрос ASSISTED на мягком профиле принимается."""
+    v = db.evaluate({"risk": "low"}, requested_class="ASSISTED")
+    assert v["decision_class"] == "ASSISTED"
+
+
+def test_class_level_mapping_comes_from_registry(model):
+    """autonomy_level классификатора = maps_to_autonomy_level ИЗ реестра (единый источник, не дубль)."""
+    classes = _classes(model)
+    for cls_id, signals in (("AUTONOMOUS", {"risk": "low"}),
+                            ("COLLABORATIVE", {"risk": "medium"}),
+                            ("ASSISTED", {"risk": "critical"})):
+        v = db.evaluate(signals)
+        assert v["decision_class"] == cls_id
+        assert v["autonomy_level"] == classes[cls_id]["maps_to_autonomy_level"], (
+            f"{cls_id}: уровень классификатора разошёлся с реестром")
+
+
+def test_reason_is_present_and_explains(model):
+    """Вердикт объясним: причина непуста для любого действия."""
+    for signals in ({}, {"risk": "low"}, {"risk": "critical"}, {"protected_paths": True}):
+        v = db.evaluate(signals)
+        assert v["reason"] and all(isinstance(r, str) for r in v["reason"])

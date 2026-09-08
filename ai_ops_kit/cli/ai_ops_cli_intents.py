@@ -730,7 +730,7 @@ def _intent_governance(task, child_root, signals, a):
     # Governance-обзор (Фаза 4): активная политика автономии + журнал решений AI + переопределения
     # человека. ТОЛЬКО ЧТЕНИЕ: enforcement (policy_engine.enforce) сознательно не трогаем — где он
     # включается в путь исполнения, решается отдельно; здесь показываем состояние governance.
-    from ai_ops_kit.governance import decision_log, human_override, policy_engine
+    from ai_ops_kit.governance import decision_boundary, decision_log, human_override, policy_engine
     root = Path(child_root)
     try:
         policy = policy_engine.load_policy(root)
@@ -739,15 +739,21 @@ def _intent_governance(task, child_root, signals, a):
         return 1
     decisions = decision_log.ai_decisions(root)
     ovr = human_override.overrides(root)
+    # Граница решений (#631): три оси действия РАЗОМ -> имя класса + причина. Классифицируем текущее
+    # действие по сигналам вызова; без сигналов это профиль по умолчанию (fail-closed COLLABORATIVE).
+    boundary = decision_boundary.evaluate(signals)
     if js:
         print(json.dumps({"policy": policy, "ai_decisions_count": len(decisions),
                           "overrides_count": len(ovr), "recent_decisions": decisions[-5:],
-                          "overrides": ovr}, ensure_ascii=False, indent=2, default=str))
+                          "overrides": ovr, "decision_boundary": boundary},
+                         ensure_ascii=False, indent=2, default=str))
         return 0
     print(f"GOVERNANCE ПРОДУКТА ({root})")
     print(f"  политика автономии: default={policy['default']} (источник: {policy['source']})")
     for act, lvl in (policy.get("actions") or {}).items():
         print(f"    {act}: {lvl}")
+    for _ln in decision_boundary.describe(boundary):   # граница решений (#631): 3 оси -> класс
+        print(_ln)
     print(f"  решений AI в журнале: {len(decisions)}; переопределений человека: {len(ovr)}")
     for e in decisions[-5:]:
         print(f"    · {e.get('date', '?')} {e.get('id', '?')}: {str(e.get('decision', ''))[:70]}")
