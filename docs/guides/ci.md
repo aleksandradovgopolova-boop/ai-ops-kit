@@ -18,7 +18,8 @@ warning, не всякая job обязана блокировать). Табл�
 |---------------------------|----------|---------------|
 | `pr-smoke / smoke` | `pr-smoke.yml` | Быстрый critical path (~2 мин): contract-тесты, ключевые валидаторы, формат заголовка PR |
 | `package-quality / lint` | `package-quality.yml` | ruff класса «поломка» (F821/F811/B023/F841), битые `# noqa`, towncrier, `cz check` |
-| `package-quality / quality (fast)` | `package-quality.yml` | Быстрая группа pytest (`.github/ci-groups/fast.sh`) |
+| `package-quality / quality (fast-1)` | `package-quality.yml` | Быстрая группа pytest, шард 1/2 (`.github/ci-groups/fast-1.sh`, `-m "not slow" -k "test_r or test_s or test_c or test_b"`) |
+| `package-quality / quality (fast-2)` | `package-quality.yml` | Быстрая группа pytest, шард 2/2 (`.github/ci-groups/fast-2.sh`, дополнение fast-1) |
 | `package-quality / quality (selftests-a)` | `package-quality.yml` | Группа selftests-a (`selftests-a.sh`, `-m "slow and not nightly"`) |
 | `package-quality / quality (selftests-m)` | `package-quality.yml` | Группа selftests-m (`selftests-m.sh`) |
 | `package-quality / quality (contracts)` | `package-quality.yml` | Contract-группа pytest (`contracts.sh`) |
@@ -106,7 +107,8 @@ on:
 
 ```bash
 # Группы package-quality
-bash .github/ci-groups/fast.sh
+bash .github/ci-groups/fast-1.sh
+bash .github/ci-groups/fast-2.sh
 bash .github/ci-groups/selftests-a.sh
 bash .github/ci-groups/selftests-m.sh
 bash .github/ci-groups/contracts.sh
