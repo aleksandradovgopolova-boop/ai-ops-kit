@@ -102,7 +102,7 @@ change-brief'ы, отчёты аудита, ретроспективы. Запи
 
 - **Execution Engine** — единый движок «задача → draft PR» с preflight-проверками, tool-loop, evidence collection и quality gates
 - **Spec-First** — модель не запускается, пока спецификация не достаточна
-- **Quality Gates** — 36 <!-- claim:gates-total --> гейта с machine-readable контрактами
+- **Quality Gates** — 35 <!-- claim:gates-total --> гейта с machine-readable контрактами
 - **Provider-Agnostic** — работает с Anthropic, OpenAI, DeepSeek, Claude CLI, локальными моделями
 - **Fail-Closed** — сбой блокирует, а не даёт ложный green
 - **Usage Truth** — честный учёт стоимости: unavailable ≠ 0
