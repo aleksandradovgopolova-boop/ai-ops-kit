@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 416
+behavioral_count: 417
 structural_count: 66
-total_count: 482
-behavioral_share_pct: 86.31
+total_count: 483
+behavioral_share_pct: 86.34
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 416
+    from_total: 482
+    to_behavioral: 417
+    to_total: 483
+    to_share_pct: 86.34
+    work: 'добровольная регистрация дочек (voluntary-child-registration)'
+    why: >-
+      Работа добавила один поведенческий тест-файл (test_child_registry — импортирует
+      engops/child_registry И проверяет согласие/отказ/приватность/идемпотентность/паспорт-unknown/
+      счёт над синтетическими репозиториями), структурных без изменений (66). Доля поведенческих
+      выросла 86.31% -> 86.34% (не снижение). Числа руками (--baseline лоссовый).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 415
