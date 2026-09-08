@@ -1,7 +1,7 @@
 ---
 read_tier: 1
 stability: evolving
-reviewed_at: 2026-09-07
+reviewed_at: 2026-09-08
 owner: architecture
 ---
 
@@ -66,6 +66,28 @@ workflow-контракты, quality gates, маршрутизация моде�
 - `registry/` — машиночитаемые реестры (агенты, workflow-контракты, провайдеры, модели, среды,
   capability-index, routing-policy, product-operating-model, artifact-registry).
 - `quality/gates.yaml` — реестр quality gates (blocking ≤ 8).
+
+### Концептуальные слои (роль пакета)
+
+Пять слоёв выше (`foundation → … → entrypoints`) — по направлению **зависимостей**. Поверх них —
+четыре концептуальных слоя по **роли** пакета в продукте: чтобы 19 top-level пакетов читались как
+доменная модель, а не как история разработки, и чтобы не утонуть в собственных абстракциях. Слои
+ортогональны (роль-слой пакета не равен его dependency-слою), маппинг документарен — **без переезда
+файлов**; он объявлен данными в `packages/layering.yaml` (`conceptual_layers`) и там же проверяется
+ратчетом: каждый пакет отнесён ровно к одному роль-слою, новый — обязан быть классифицирован.
+
+- **DOMAIN** — продуктовые сущности и доменные контракты (Work / Run / Outcome / Decision, порты,
+  общий фундамент): `kernel`, `lifecycle`, `shared`.
+- **APPLICATION** — как ведётся работа (Workflow / Planning / Execution / Learning): `context`,
+  `engine`, `planning`, `delivery`, `engops`, `intelligence`.
+- **POLICY** — что разрешено и что проверяется (Governance / Security / Quality / Autonomy):
+  `gates`, `governance`, `security`, `checks`, `validation`.
+- **ADAPTERS** — мосты к внешним поверхностям (CLI / GitHub / Claude / Codex / Qwen / CI):
+  `cli`, `integrations`, `providers`, `ui`, `devtools`.
+
+Число top-level пакетов — **потолок** (`package_ceiling`, сейчас 19): новая capability живёт в
+существующем домене, а рост числа пакетов требует архитектурного решения (ADR/DP), а не привычки
+«каждая capability — свой пакет». Ратчет ходит вниз.
 
 ## 6. Orchestration
 

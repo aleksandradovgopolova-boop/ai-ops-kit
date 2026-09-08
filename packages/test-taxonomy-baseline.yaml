@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 411
+behavioral_count: 412
 structural_count: 66
-total_count: 477
-behavioral_share_pct: 86.16
+total_count: 478
+behavioral_share_pct: 86.19
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 411
+    from_total: 477
+    to_behavioral: 412
+    to_total: 478
+    to_share_pct: 86.19
+    work: 'потолок на число top-level пакетов + роль-слои (ратчет, #638)'
+    why: >-
+      #638 добавил один поведенческий тест-файл (test_package_ceiling — импортирует
+      validation/validate_layering И зовёт package_ceiling_errors/conceptual_layer_errors над
+      реальным деревом), структурных без изменений (66). Доля поведенческих выросла 86.16% -> 86.19%
+      (не снижение). Числа руками (--baseline лоссовый). Пересведено при rebase поверх #636 (#648).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 410
