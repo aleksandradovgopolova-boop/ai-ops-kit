@@ -16,9 +16,24 @@ mvp_blocking_gates:
   - security
   - spec_synchronization
 
+# prevents/evidence (#636, поверх прополки #616) — машиночитаемый ответ КАЖДОГО гейта на вопрос
+# «какую конкретную ошибку он предотвращает». Гейт без ответа — кандидат на снятие (не будет «Gate
+# Garden» через год). Проверяет ратчет `tests/contracts/test_gate_prevents.py`: новый гейт без
+# непустого prevents краснеет, advisory обязан нести и evidence.field.
+#   prevents — класс дефекта (короткий ключ, вынесен из прозы purpose).
+#   evidence.field ∈ proven | by_construction | human_by_nature | pending:
+#     proven          — сработал на реальном дефекте (advisory_review / живой прогон; топливо — #587);
+#     by_construction — детерминированный вердикт инструмента, ложных по конструкции нет;
+#     human_by_nature — суждение человека (judge): частота ложных машинно не определена;
+#     pending         — ждёт полевого прогона (трек/дочка).
+#   evidence.false_positives — целое ТОЛЬКО при field: proven (наблюдение); иначе unavailable
+#     (честность как в usage_ledger: неизвестное = unavailable, никогда 0).
+#   Синхронизация: field: proven <-> advisory_review.field_evidence: true (сверяет тот же ратчет).
 gates:
   intake_completeness:
     id: intake_completeness
+    prevents: unclassified_start
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: Полнота intake и классификации до старта.
     stage: intake
@@ -34,6 +49,8 @@ gates:
 
   regression_test_evidence:
     id: regression_test_evidence
+    prevents: unverified_fix
+    evidence: {field: proven, false_positives: unavailable}
     closed_by: validator
     purpose: >
       Правка ПОДТВЕРЖДЕНА: тест, приехавший вместе с ней, падает на коде ДО правки и проходит
@@ -55,6 +72,8 @@ gates:
 
   concurrency_preflight:
     id: concurrency_preflight
+    prevents: concurrent_edit_collision
+    evidence: {field: proven, false_positives: unavailable}
     closed_by: validator
     purpose: >
       До старта проверить коллизии параллельной работы: открытые PR и свежие мержи в base
@@ -73,6 +92,8 @@ gates:
 
   contour_consistency:
     id: contour_consistency
+    prevents: contour_desync
+    evidence: {field: proven, false_positives: 0}
     closed_by: validator
     purpose: >
       Связность контуров продукта (v3.35 Product Operating Model): изменение обязано быть
@@ -102,6 +123,8 @@ gates:
 
   own_medicine:
     id: own_medicine
+    prevents: self_application_gap
+    evidence: {field: proven, false_positives: unavailable}
     closed_by: validator
     purpose: >
       Кит применяет к СЕБЕ ту культуру, которую доставляет дочкам. Перечень берётся из кода
@@ -130,6 +153,8 @@ gates:
 
   event_contract_consistency:
     id: event_contract_consistency
+    prevents: event_naming_drift
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: >
       Имена событий согласованы во всех слоях: единый каталог, каноничная грамматика,
@@ -146,6 +171,8 @@ gates:
 
   surface_wiring_consistency:
     id: surface_wiring_consistency
+    prevents: surface_wiring_drift
+    evidence: {field: pending, false_positives: unavailable}
     closed_by: validator
     purpose: >
       Поверхность согласована во всех слоях: каждый путь, который умеет ядро, подключён в КАЖДОЙ
@@ -166,6 +193,8 @@ gates:
 
   requirements:
     id: requirements
+    prevents: untestable_requirements
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: Требования проверяемы, полны, тестируемы.
     stage: requirements-review
@@ -183,6 +212,8 @@ gates:
 
   specification:
     id: specification
+    prevents: incomplete_spec
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: Спецификация полна и тестируема (delta specs валидны).
     stage: specification
@@ -197,6 +228,8 @@ gates:
 
   plan_readiness:
     id: plan_readiness
+    prevents: unexecutable_plan
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: План исполним; зависимости и write-scope определены.
     stage: plan-critique
@@ -211,6 +244,8 @@ gates:
 
   implementation_verification:
     id: implementation_verification
+    prevents: broken_build_or_tests
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: Сборка/линт/тесты пройдены на конкретной ревизии.
     stage: verify
@@ -243,6 +278,8 @@ gates:
 
   code_review:
     id: code_review
+    prevents: unreviewed_code
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Независимое ревью кода (judge != writer).
     stage: review
@@ -257,6 +294,8 @@ gates:
 
   security:
     id: security
+    prevents: unsafe_change
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Проверка безопасности; блокирует рискованные/необратимые изменения.
     stage: review
@@ -270,6 +309,8 @@ gates:
 
   architecture_review:
     id: architecture_review
+    prevents: unreviewed_architecture_change
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: >
       Независимая архитектурная проверка (judge != writer) при архитектурно значимых изменениях:
@@ -289,6 +330,8 @@ gates:
 
   deploy_readiness:
     id: deploy_readiness
+    prevents: overclaimed_delivery_maturity
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: >
       ЧЕСТНАЯ зрелость поставки при изменении деплоя: лестница absent/configured/runnable/verified
@@ -310,6 +353,8 @@ gates:
 
   spec_synchronization:
     id: spec_synchronization
+    prevents: spec_desync
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: Delta specs синхронизированы с main specs (детерминированный CLI).
     stage: sync
@@ -329,6 +374,8 @@ gates:
   # --- non-blocking / для будущих workflow (объявлены) ---
   evidence:
     id: evidence
+    prevents: unsourced_claim
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Каждый существенный вывод имеет источник и статус.
     stage: fact-check
@@ -339,6 +386,8 @@ gates:
     required_evidence: [source_per_claim, capability_status]
   stakeholder_readiness:
     id: stakeholder_readiness
+    prevents: unready_for_stakeholders
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Материал готов к передаче стейкхолдерам.
     stage: stakeholder-handoff
@@ -353,6 +402,8 @@ gates:
   # инвариант writer ≠ judge, а не ослабляет проверку.
   archive_readiness:
     id: archive_readiness
+    prevents: premature_archive
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: Изменение архивируется только если проверено.
     stage: archive
@@ -373,6 +424,8 @@ gates:
   # они применимы и к QUICK/ENGINEERING — перевод после обкатки в этих workflow.
   discovery_completeness:
     id: discovery_completeness
+    prevents: undefined_discovery
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Discovery завершён — проблема, аудитория, гипотезы и метрики успеха зафиксированы.
     stage: discovery-review
@@ -385,6 +438,8 @@ gates:
 
   ux_review:
     id: ux_review
+    prevents: unreviewed_ux
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: UX проверен — flow, состояния Empty/Loading/Error/Success, responsive, copy.
     stage: design-review
@@ -401,6 +456,8 @@ gates:
 
   accessibility_review:
     id: accessibility_review
+    prevents: inaccessible_ui
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Доступность проверена — клавиатура, фокус, контраст (WCAG AA), screen-reader метки, состояния не только цветом.
     stage: accessibility-review
@@ -416,6 +473,8 @@ gates:
 
   visual_regression:
     id: visual_regression
+    prevents: visual_regression
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Изменённые экраны сверены с визуальным baseline — незапланированных регрессий нет.
     stage: verify
@@ -429,6 +488,8 @@ gates:
 
   design_system_usage:
     id: design_system_usage
+    prevents: design_system_bypass
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Использована дизайн-система — существующие компоненты и токены; новые обоснованы.
     stage: design-system-review
@@ -443,6 +504,8 @@ gates:
 
   analytics_design_readiness:
     id: analytics_design_readiness
+    prevents: unplanned_analytics
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: >
       Аналитика спроектирована ДО merge: tracking plan, event schema, product metrics,
@@ -459,6 +522,8 @@ gates:
 
   analytics_runtime_verification:
     id: analytics_runtime_verification
+    prevents: analytics_not_live_verified
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: >
       Аналитика проверена ПОСЛЕ deploy: события реально приходят, свойства корректны,
@@ -476,6 +541,8 @@ gates:
 
   documentation_updated:
     id: documentation_updated
+    prevents: docs_not_updated
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: >
       Документация обновлена вместе с изменением (Definition of Done). ПЕРЕВЕДЁН ИЗ САМОЗАЯВЛЕНИЯ
@@ -498,6 +565,8 @@ gates:
 
   release_safety:
     id: release_safety
+    prevents: unsafe_release
+    evidence: {field: pending, false_positives: unavailable}
     closed_by: judge
     purpose: Релиз безопасен — feature flag предусмотрен, rollback описан, rollout спланирован.
     stage: release
@@ -510,6 +579,8 @@ gates:
 
   ai_eval:
     id: ai_eval
+    prevents: unevaluated_ai_feature
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: AI-фича прошла eval'ы против success criteria; guardrails и регрессии проверены.
     stage: verify
@@ -524,6 +595,8 @@ gates:
 
   ai_red_team:
     id: ai_red_team
+    prevents: ai_adversarial_exposure
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: AI-фича проверена адверсариально — инъекции, jailbreak, утечки PII/промпта, границы агентности.
     stage: red-team
@@ -538,6 +611,8 @@ gates:
 
   decision_quality:
     id: decision_quality
+    prevents: unstructured_decision
+    evidence: {field: human_by_nature, false_positives: unavailable}
     closed_by: judge
     purpose: Решение принято по recommendation-first; обратимость классифицирована; сверено с принципами.
     stage: decision-review
@@ -553,6 +628,8 @@ gates:
 
   feature_decision_quality:
     id: feature_decision_quality
+    prevents: unmeasurable_feature_decision
+    evidence: {field: by_construction, false_positives: unavailable}
     closed_by: validator
     purpose: >
       Продуктовое решение, объявленное фичей (kind: feature-decision), несёт ИЗМЕРИМОЕ
@@ -575,6 +652,8 @@ gates:
 
   knowledge_integrity:
     id: knowledge_integrity
+    prevents: reference_or_claim_drift
+    evidence: {field: proven, false_positives: unavailable}
     closed_by: validator
     purpose: Ссылки пакета резолвятся и утверждения документации согласованы с кодом (drift-control).
     stage: sync
@@ -588,6 +667,8 @@ gates:
 
   knowledge_freshness:
     id: knowledge_freshness
+    prevents: stale_knowledge
+    evidence: {field: proven, false_positives: unavailable}
     closed_by: validator
     purpose: Размеченные знания не протухли (класс устаревания из FreshnessPolicy).
     stage: sync
@@ -601,6 +682,8 @@ gates:
 
   observability_readiness:
     id: observability_readiness
+    prevents: unobservable_change
+    evidence: {field: pending, false_positives: unavailable}
     closed_by: judge
     purpose: Мониторинг определён — логи, метрики, алерты, SLO для нового поведения.
     stage: release
