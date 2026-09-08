@@ -376,6 +376,9 @@ def from_repository_understanding(rep: dict) -> dict:
     known = ", ".join(k.replace("_", " ") for k, v in rep["reconstructed"].items()
                       if v["status"] in ("verified", "inferred") and v.get("value"))
     human_needed = [c["title"] for c in aud["contours"] if c["needs_human"]]
+    # Противоречие источников истины — не «известно» и не «неизвестно»: кит ВИДИТ факт, но источники
+    # спорят. Это отдельная строка доверия, и её нельзя проглотить в числах контуров.
+    conflicts = rep.get("conflicts") or []
 
     if cls == "NEW_PRODUCT":
         summary = ("Похоже, это новый продукт: работающей системы и истории разработки я не нашёл. "
@@ -404,9 +407,16 @@ def from_repository_understanding(rep: dict) -> dict:
     if not n_q:
         steps.append("после этого покажу, какую работу имеет смысл взять первой")
 
+    # Противоречие источников поднимается ДО обычного «нужны ответы»: оно требует решения владельца
+    # (какой источник актуален), а не сбора недостающего. Молчаливого выбора кит не делает.
+    conflict_line = None
+    if conflicts:
+        conflict_line = ("Источники истины противоречат друг другу — сам выбрать актуальный не "
+                         "могу: " + "; ".join(c["summary"] for c in conflicts))
+
     return message(
-        status="needs_input" if n_q else "ok",
-        summary=summary, why_it_matters=why, next_steps=steps,
+        status="needs_input" if (n_q or conflicts) else "ok",
+        summary=summary, why_it_matters=(conflict_line or why), next_steps=steps,
         decision=({"question": f"ответить на {n_q} {_q(n_q)} о продукте, направлении и границах",
                    "recommendation": "ответить сразу — дальше я работаю без остановок",
                    "on_approve": "соберу базовую модель продукта и предложу первые задачи",
@@ -419,6 +429,7 @@ def from_repository_understanding(rep: dict) -> dict:
                    "ai_can_build": ", ".join(aud["ai_can_build"]) or "—",
                    "needs_human": ", ".join(human_needed) or "—",
                    "blocking_gaps": ", ".join(aud["blocking_gaps"]) or "—",
+                   "conflicting_sources": ", ".join(c["category"] for c in conflicts) or "—",
                    "questions": n_q})
 
 

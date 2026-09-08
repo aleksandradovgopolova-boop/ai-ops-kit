@@ -118,10 +118,11 @@ def check(data, pkg=PKG):
                  f"слово сказано и «объявлять нельзя», и «объявлять можно»")
 
     ast = data.get("artifact_states") or {}
-    for need in ("verified", "inferred", "missing", "unknown", "user_confirmed", "stale", "partial"):
+    for need in ("verified", "inferred", "missing", "unknown", "user_confirmed", "stale",
+                 "partial", "conflicting"):
         if need not in ast:
             e.append(f"artifact_states: нет состояния '{need}' — различение «увидел / вывел / "
-                     f"спросил / не знаю» неполно")
+                     f"спросил / не знаю / источники спорят» неполно")
 
     tiers = data.get("gap_tiers") or []
     if not tiers:

@@ -26,8 +26,8 @@ ceilings:
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1068
-  ai_ops_kit/ui/presenter_formatters.py: 977
-  ai_ops_kit/planning/repo_audit.py: 805
+  ai_ops_kit/ui/presenter_formatters.py: 988
+  ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 713
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 922
   ai_ops_kit/providers/orchestrator_providers.py: 909
@@ -66,6 +66,19 @@ raises:
       продуктового статуса из Product Passport, счёт охвата из набора файлов реестра) вынесена
       отдельным модулем `ai_ops_kit/engops/child_registry.py` (ниже порога 700) — сюда легла только
       проводка; продуктовый статус впрыскивается вниз из passport_generator, как health в contract.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 977; repo_audit.py = 805'
+    to: 'presenter_formatters.py = 988; repo_audit.py = 837'
+    work: 'conflicting-knowledge-state (#634)'
+    why: >-
+      Восьмое состояние знания CONFLICTING (источники истины об одном факте противоречат) проведено
+      в понимание репозитория. Сам ДЕТЕКТОР вынесен в новый модуль `planning/source_conflict.py`
+      (ниже порога, донор) — сравнивает README / ARCHITECTURE / зависимости кода об СУБД и
+      поднимает состояние ТОЛЬКО при доказуемом расхождении. В монолитах — тонкая проводка:
+      repo_audit +32 (флип факта `persistence` в reconstruct, `conflicts` в run(), секция
+      «ПРОТИВОРЕЧИЯ ИСТОЧНИКОВ» в render), presenter_formatters +11 (строка доверия в `model`,
+      needs_input при споре). Логика не в монолите; потолки подняты под факт, ратчет держит вниз.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1171; pipeline_evidence.py < 700 (не в baseline)'

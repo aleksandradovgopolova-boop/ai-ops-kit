@@ -67,6 +67,10 @@ STALE_AFTER_DAYS = 180
 
 VERIFIED, INFERRED, PARTIAL, MISSING, UNKNOWN, STALE, USER_CONFIRMED = (
     "verified", "inferred", "partial", "missing", "unknown", "stale", "user_confirmed")
+# Восьмое состояние — не про уверенность в ОДНОМ источнике, а про то, что источников несколько и
+# они говорят РАЗНОЕ. Молчаливо выбрать сторону = соврать; кит объявляет CONFLICTING и перечисляет
+# расходящиеся источники. Детектор — `planning/source_conflict.py`; словарь состояний — реестр.
+CONFLICTING = "conflicting"
 
 
 def _git(root: Path, *args):
@@ -467,6 +471,22 @@ def reconstruct(child_root, evidence: dict, model: dict | None = None) -> dict:
         out["production_env"] = {"value": None, "status": UNKNOWN, "evidence": [],
                                  "note": "признаков деплоя не найдено", "asks_human": True}
 
+    # CONFLICTING — раньше owner-подтверждения (оно перебивает и его: явный выбор владельца
+    # РЕШАЕТ противоречие). Детектор сравнивает источники истины одного факта (README /
+    # ARCHITECTURE / зависимости кода) и поднимает состояние ТОЛЬКО при доказуемом расхождении.
+    # Первый охват — СУБД, а значит факт `persistence`. Молчаливого выбора нет: значение факта —
+    # перечисление голосов, а не одна сторона.
+    from ai_ops_kit.planning import source_conflict as _conflict
+    _conflicts = _conflict.detect(child_root)
+    _db_conflict = next((c for c in _conflicts if c["category"] == "database"), None)
+    if _db_conflict:
+        out["persistence"] = {
+            "value": _db_conflict["summary"], "status": CONFLICTING,
+            "evidence": [f"{c['source']} ({c['path']}): {', '.join(c['values'])}"
+                         for c in _db_conflict["claims"]],
+            "note": "источники противоречат — актуальную СУБД определяет владелец, кит не выбирает",
+            "conflicts": _conflicts}
+
     # ПОСЛЕДНИМ: подтверждение владельца перебивает и `inferred`, и `unknown`. Порядок не случаен —
     # человек сильнее любого вывода кита, и обратное затирание сделало бы подтверждение бесполезным.
     _answers = read_answers(child_root)
@@ -713,8 +733,12 @@ def run(child_root) -> dict:
     cls = classify(ev, model)
     rec = reconstruct(child_root, ev, model)
     aud = audit(child_root, ev, model)
+    # Противоречия источников истины — на верхний уровень отчёта: их поднимает reconstruct на
+    # факте, но человеку (`model`) и презентеру нужен явный список, а не раскопки в факте.
+    conflicts = (rec.get("persistence") or {}).get("conflicts") or []
     return {"schema_version": 1, "kind": "repository-understanding",
             "classification": cls, "evidence": ev, "reconstructed": rec, "audit": aud,
+            "conflicts": conflicts,
             "gap_plan": gap_plan(aud, model), "ask": question_package(aud, rec)}
 
 
@@ -740,6 +764,14 @@ def render(rep: dict) -> str:
     unknowns = [k for k, v in rep["reconstructed"].items() if v["status"] == UNKNOWN]
     if unknowns:
         L.append(f"  не знаю (и не выдумываю): {', '.join(unknowns)}")
+
+    conflicts = rep.get("conflicts") or []
+    if conflicts:
+        L.append("\nПРОТИВОРЕЧИЯ ИСТОЧНИКОВ (не выбираю сторону молча)")
+        for c in conflicts:
+            L.append(f"  ⚠ {c['category']}: {c['summary']}")
+            for cl in c["claims"]:
+                L.append(f"      {cl['source']} ({cl['path']}): {', '.join(cl['values'])}")
 
     L.append("\nКОНТУРЫ МОДЕЛИ")
     for r in rep["audit"]["contours"]:
