@@ -278,6 +278,28 @@ class TestReevaluateArtifactEvidence:
                                                               ["nonexistent_gate"])
         assert ev == {}
 
+    def test_reevaluate_specification_provides_both_required_evidence(self, child_root, monkeypatch):
+        """Живой прогон 587: на reevaluate `specification` при валидном openspec обязан отдавать ОБА
+        required_evidence — openspec_valid И requirements_covered — как путь авторинга (тот при том же
+        `openspec validate --strict OK` кладёт оба). Прежде reevaluate отдавал только openspec_valid, и
+        чистая правка кода (спека не менялась, SHA стабилен) роняла гейт «бездоказательным pass: не
+        подтверждён requirements_covered». Оба доказательства опираются на одно основание — валидный
+        openspec на стабильном SHA; асимметрия authoring↔reevaluate была дефектом."""
+        _init_git(child_root)
+        from ai_ops_kit.engine import pipeline_evidence as _pe
+        monkeypatch.setattr(_pe, "_openspec_validate", lambda root, wid: (True, True, ""))
+        ev = _pe._reevaluate_artifact_evidence(child_root, "any-wid", ["specification"])
+        assert ev["specification"]["status"] == "pass"
+        assert set(ev["specification"]["provided"]) == {"openspec_valid", "requirements_covered"}
+
+    def test_reevaluate_specification_stays_closed_when_openspec_invalid(self, child_root, monkeypatch):
+        """Fail-closed сохранён: openspec невалиден -> specification НЕ закрывается (гейт остаётся)."""
+        _init_git(child_root)
+        from ai_ops_kit.engine import pipeline_evidence as _pe
+        monkeypatch.setattr(_pe, "_openspec_validate", lambda root, wid: (True, False, "invalid"))
+        ev = _pe._reevaluate_artifact_evidence(child_root, "any-wid", ["specification"])
+        assert "specification" not in ev
+
 
 @pytest.mark.unit
 class TestRunPipelineOverallStatus:

@@ -358,21 +358,29 @@ class TestRunReview:
 
     # --- issue #614: упрощённая элицитация вердикта -------------------------------------------
 
-    def test_reviewer_prompt_asks_for_a_one_line_recommendation(self):
-        """(#614-а) Промпт ревьюера ПРОСИТ простую строку-итог `Recommendation: pass|needs_work` как
-        основную/достаточную форму вердикта — а не только тяжёлый структурный reviewer-result."""
+    def test_reviewer_prompt_splits_form_by_verdict(self):
+        """(#661-followup, живой прогон 587) Промпт РАЗВОДИТ форму по вердикту: NON-pass — простой
+        строкой-итогом `Recommendation: needs_work` (анти-таймаут #614 сохранён), а pass на
+        блокирующем гейте — ОБЯЗАТЕЛЬНО структурным reviewer-result с цитатой на изменённый файл.
+        Причина: claude-cli читает дифф из промпта и op:read не шлёт (reads всегда []), поэтому
+        прозаический pass НЕЧЕМ заземлить и Fix C держал его как рубер-штамп — гейт не закрывался
+        никогда. Цитата — единственный доступный способ заземлить pass на этом пути."""
         cap = {}
 
         def provider(prompt):
             cap["p"] = prompt
-            return "Recommendation: pass"
+            return "Recommendation: needs_work"
 
         tool_loop.make_reviewer_proposer(provider, "code_review")("=== КОНТЕКСТ ===\nдифф")
         p = cap["p"]
-        assert "Recommendation: pass" in p and "Recommendation: needs_work" in p
-        assert "строк" in p.lower(), "промпт называет форму строкой-итогом"
-        # структура остаётся ОПЦИОНАЛЬНОЙ, а не условием вердикта
-        assert "опционал" in p.lower() or "по желанию" in p.lower() or "не обязател" in p.lower()
+        low = p.lower()
+        # НЕ-pass остаётся прозаической строкой (анти-таймаут #614)
+        assert "Recommendation: needs_work" in p
+        # pass ОБЯЗАН нести цитату (структурную форму), а не быть прозаической строкой
+        assert "обязательн" in low and "цитат" in low
+        assert "evidence" in low and '"lines"' in p
+        # прежний прозаический `Recommendation: pass` больше НЕ предлагается как достаточный вердикт
+        assert "Recommendation: pass" not in p
 
     def test_reviewer_one_line_recommendation_becomes_a_verdict(self, review_deps):
         """(#614-б) Простая строка-итог ловится _last_prose_verdict и приходит вердиктом за 1 виток."""

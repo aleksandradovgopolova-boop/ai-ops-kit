@@ -36,9 +36,25 @@ ceilings:
   ai_ops_kit/gates/gate_executor.py: 905
   ai_ops_kit/engine/tool_broker.py: 762
   ai_ops_kit/planning/contours.py: 724
-  ai_ops_kit/engine/pipeline_evidence.py: 724
+  ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'pipeline_evidence.py = 724'
+    to: 'pipeline_evidence.py = 734'
+    work: 'reviewer-grounds-pass + spec-reeval-symmetry (живой прогон #587)'
+    why: >-
+      Живой прогон кита против внешнего репозитория вскрыл два дефекта, оба чинятся здесь. (1) На
+      claude-cli-пути дифф даётся ревьюеру ИНЛАЙНОМ (reads всегда []), а элицитация #614 уводила в
+      прозаический pass без цитаты — который Fix C держал как рубер-штамп: pass на блокирующем гейте
+      структурно нельзя было заземлить, гейт не закрывался НИКОГДА. Правка промпта разводит форму по
+      вердикту (needs_work — простой строкой; pass — минимальной структурой с ОДНОЙ цитатой на
+      изменённый файл), плюс тот же смысл в `_REVIEWER_VERDICT_HINT`; страж не тронут — citation-less
+      pass по-прежнему блокируется. (2) `_reevaluate_artifact_evidence`: на reevaluate `specification`
+      при валидном openspec отдавал только `openspec_valid`, теряя `requirements_covered` — асимметрия
+      с авторингом (тот отдаёт оба), из-за которой чистая правка кода роняла гейт. +10 строк —
+      разъясняющие рационале-докстринги (не логика). Потолок под факт, ратчет держит вниз.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'orchestrator_providers.py = 946; ai_ops_run_lifecycle.py = 922'
