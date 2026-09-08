@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 410
+behavioral_count: 411
 structural_count: 66
-total_count: 476
-behavioral_share_pct: 86.13
+total_count: 477
+behavioral_share_pct: 86.16
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 410
+    from_total: 476
+    to_behavioral: 411
+    to_total: 477
+    to_share_pct: 86.16
+    work: 'гейты — машиночитаемое поле prevents + evidence (ратчет, #636)'
+    why: >-
+      #636 добавил один поведенческий тест-файл (test_gate_prevents — импортирует
+      gates/gate_executor.load_gates И зовёт его, сверяя prevents/evidence реестра и синхронизацию
+      с advisory_review), структурных без изменений (66). Доля поведенческих выросла 86.13% -> 86.16%
+      (не снижение). Числа руками (--baseline лоссовый).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 409
