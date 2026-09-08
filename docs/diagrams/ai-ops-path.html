@@ -1,0 +1,636 @@
+<title>Весь путь с AI Ops</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Golos+Text:wght@400;500;600;700&family=Literata:ital,wght@0,400;0,500&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --bg:#EEEBE4; --surface:#FBFAF6; --surface-2:#F5F2EA; --sunken:#E4E0D6;
+    --ink:#242019; --muted:#6C655A; --faint:#9A9184;
+    --line:#DAD4C7; --line-strong:#C6BEAD;
+    --accent:#1F6B5D; --accent-2:#2E8676; --accent-soft:#DFEAE5;
+    --warm:#B0742A; --warm-soft:#F1E5D0;
+    --good:#3C8B5C; --good-soft:#DFECE1;
+    --shadow:0 1px 2px rgba(36,32,25,.05), 0 8px 26px rgba(36,32,25,.07);
+    --radius:14px;
+  }
+  :root:not([data-theme="light"]){
+    @media (prefers-color-scheme:dark){
+      --bg:#17140F; --surface:#211D17; --surface-2:#282318; --sunken:#0F0D09;
+      --ink:#EFEBE1; --muted:#A79E90; --faint:#726A5C;
+      --line:#332E26; --line-strong:#463F33;
+      --accent:#6FC6B4; --accent-2:#84D3C2; --accent-soft:#173029;
+      --warm:#D69E5A; --warm-soft:#2E2516;
+      --good:#69BE8A; --good-soft:#152A1D;
+      --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#17140F; --surface:#211D17; --surface-2:#282318; --sunken:#0F0D09;
+    --ink:#EFEBE1; --muted:#A79E90; --faint:#726A5C;
+    --line:#332E26; --line-strong:#463F33;
+    --accent:#6FC6B4; --accent-2:#84D3C2; --accent-soft:#173029;
+    --warm:#D69E5A; --warm-soft:#2E2516;
+    --good:#69BE8A; --good-soft:#152A1D;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 30px rgba(0,0,0,.4);
+  }
+
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--bg); color:var(--ink);
+    font-family:"Literata",Georgia,serif; font-size:16.5px; line-height:1.6; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1160px; margin:0 auto; padding:0 22px}
+  h1,h2,h3,h4,.ui,.mono,dt,th,.tag{font-family:"Golos Text",system-ui,-apple-system,sans-serif}
+  h1,h2,h3{text-wrap:balance; margin:0; letter-spacing:-.01em}
+  p{margin:0 0 13px}
+  .en{border-bottom:1px dotted var(--line-strong)}
+  .cmd{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace; font-size:10.5px;
+    background:var(--surface); border:1px solid var(--line); border-radius:5px; padding:1.5px 5px; color:var(--accent); white-space:nowrap}
+
+  header.top{background:var(--sunken); border-bottom:1px solid var(--line); padding:40px 0 32px}
+  .eyebrow{font-family:"Golos Text",sans-serif; font-size:12px; letter-spacing:.16em; text-transform:uppercase; color:var(--accent); font-weight:600; margin-bottom:15px}
+  h1{font-family:"Golos Text",sans-serif; font-size:clamp(30px,4.6vw,50px); font-weight:700; line-height:1.05}
+  header .lead{margin-top:15px; font-size:18.5px; max-width:62ch}
+  header .lead .muted{color:var(--muted)}
+
+  section{padding:34px 0}
+  .kicker{font-family:"Golos Text",sans-serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--warm); font-weight:600; margin-bottom:10px}
+  h2{font-family:"Golos Text",sans-serif; font-size:clamp(21px,2.8vw,28px); font-weight:700; margin-bottom:8px}
+  .sec-intro{color:var(--muted); max-width:66ch; margin-bottom:22px}
+
+  .howto{display:grid; grid-template-columns:repeat(auto-fit,minmax(215px,1fr)); gap:12px 22px;
+    background:var(--surface-2); border:1px solid var(--line); border-radius:var(--radius); padding:18px 22px; margin-bottom:26px}
+  .howto .li{display:flex; gap:10px; align-items:flex-start; font-size:14.5px; font-family:"Golos Text",sans-serif}
+  .howto .ic{flex:0 0 auto; font-size:18px; line-height:1.3}
+  .howto b{font-weight:600}
+  .howto span.d{color:var(--muted)}
+
+  /* overview ribbon */
+  .overview{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px 18px 16px; box-shadow:var(--shadow); margin-bottom:26px; overflow-x:auto}
+  .ovrow{display:flex; align-items:stretch; gap:8px; min-width:760px}
+  .ov-setup{flex:0 0 auto; display:flex; flex-direction:column; justify-content:center; padding:12px 15px; border-radius:10px;
+    background:var(--warm-soft); border:1px solid var(--line)}
+  .ov-setup b{font-family:"Golos Text",sans-serif; font-weight:600; font-size:14px}
+  .ov-setup small{color:var(--muted); font-size:12px; font-family:"Golos Text",sans-serif}
+  .ov-arrow{display:flex; align-items:center; color:var(--faint); font-size:16px}
+  .ov-loop{flex:1 1 auto; border:1.5px dashed var(--accent); border-radius:12px; padding:10px 12px 12px; position:relative; background:var(--accent-soft)}
+  .ov-loop .lbl{font-family:"Golos Text",sans-serif; font-size:11.5px; font-weight:600; color:var(--accent); text-transform:uppercase; letter-spacing:.05em; display:flex; align-items:center; gap:6px; margin-bottom:9px}
+  .ov-steps{display:flex; align-items:center; gap:6px; flex-wrap:nowrap}
+  .ov-step{flex:1 1 0; text-align:center; padding:8px 4px; border-radius:8px; background:var(--surface); border:1px solid var(--line);
+    font-family:"Golos Text",sans-serif; font-size:12.5px; font-weight:500}
+  .ov-step .n{display:block; color:var(--faint); font-size:10.5px; font-weight:600}
+  .ov-sep{color:var(--faint); font-size:12px; flex:0 0 auto}
+
+  /* ---- transposed swimlane ---- */
+  .swim-cap{font-family:"Golos Text",sans-serif; font-size:13.5px; color:var(--muted); margin-bottom:10px; display:flex; gap:16px; flex-wrap:wrap}
+  .swim-cap b{color:var(--ink); font-weight:600}
+  .swim-hint{font-family:"Golos Text",sans-serif; font-size:12px; color:var(--faint); margin-bottom:10px}
+  .scroller{overflow-x:auto; border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); background:var(--surface)}
+  table.swim{border-collapse:separate; border-spacing:0; width:100%; min-width:2120px}
+  table.swim th, table.swim td{border-bottom:1px solid var(--line); border-right:1px solid var(--line); vertical-align:top; text-align:left}
+
+  /* stage headers (top row) */
+  thead .sh{position:sticky; top:0; z-index:3; padding:12px 13px; min-width:200px; width:200px; background:var(--sunken); border-bottom:2px solid var(--line-strong)}
+  thead .sh .n{font-family:"Golos Text",sans-serif; font-size:11px; font-weight:700; color:var(--faint)}
+  thead .sh .nm{font-family:"Golos Text",sans-serif; font-size:16px; font-weight:700; margin:1px 0}
+  thead .sh .rus{font-family:"Golos Text",sans-serif; font-size:12px; color:var(--muted); line-height:1.3; margin-bottom:8px}
+  thead .sh .cmds{display:flex; flex-wrap:wrap; gap:4px}
+  thead .sh.setup{background:var(--warm-soft)}
+  thead .sh .once{display:inline-block; margin-top:8px; font-family:"Golos Text",sans-serif; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--warm); border:1px solid var(--line-strong); border-radius:5px; padding:1px 6px}
+
+  /* corner + lane labels (left column) */
+  thead .corner{position:sticky; left:0; top:0; z-index:5; background:var(--sunken); border-right:2px solid var(--line-strong); border-bottom:2px solid var(--line-strong);
+    width:128px; min-width:128px; padding:12px 13px; font-family:"Golos Text",sans-serif; font-size:12px; font-weight:700; color:var(--muted)}
+  .lanelbl{position:sticky; left:0; z-index:2; width:128px; min-width:128px; background:var(--surface-2); border-right:2px solid var(--line-strong);
+    padding:14px 13px; font-family:"Golos Text",sans-serif; font-size:13.5px; font-weight:700; line-height:1.3}
+  tr.lane-human .lanelbl{color:var(--warm)}
+  tr.lane-kit .lanelbl{color:var(--accent)}
+  tr.lane-repo .lanelbl{color:var(--good)}
+  tr.lane-gate .lanelbl{color:var(--muted)}
+  .lanelbl small{display:block; font-weight:400; color:var(--faint); font-size:11px; margin-top:2px}
+
+  td.c{padding:13px 13px; font-size:13.5px; line-height:1.48; min-width:200px; width:200px}
+  tr.lane-human td.c{background:color-mix(in srgb, var(--warm-soft) 42%, transparent)}
+  tr.lane-kit td.c{background:color-mix(in srgb, var(--accent-soft) 42%, transparent)}
+  tr.lane-repo td.c{background:color-mix(in srgb, var(--good-soft) 42%, transparent)}
+  tr.lane-gate td.c{background:var(--surface-2); font-family:"Golos Text",sans-serif; font-size:12.5px; color:var(--muted)}
+  tr.lane-gate td.c b{color:var(--warm); font-weight:600}
+  td.c.dim{opacity:.5}
+  td.c.dim .none{font-style:italic; color:var(--muted)}
+  tr:last-child td, tr:last-child .lanelbl{border-bottom:0}
+  .files{display:flex; flex-direction:column; gap:7px}
+  .file .fn{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink); word-break:break-word; display:block}
+  .file .fd{color:var(--muted); font-size:12px; font-family:"Golos Text",sans-serif; display:block; margin-top:1px}
+
+  /* always-on band */
+  .always{margin-top:26px; background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px 24px; box-shadow:var(--shadow)}
+  .always h3{font-family:"Golos Text",sans-serif; font-size:16px; font-weight:700; margin-bottom:4px}
+  .always .sub{color:var(--muted); font-size:14px; margin-bottom:14px; font-family:"Golos Text",sans-serif}
+  .always .items{display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px}
+  .always .it{background:var(--surface-2); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:9px; padding:12px 14px}
+  .always .it b{font-family:"Golos Text",sans-serif; font-size:14px; font-weight:600; display:block; margin-bottom:2px}
+  .always .it span{font-size:13px; color:var(--muted)}
+
+  .honesty{background:var(--warm-soft); border:1px solid var(--line); border-left:4px solid var(--warm); border-radius:var(--radius); padding:18px 22px; margin-top:26px}
+  .honesty h4{font-family:"Golos Text",sans-serif; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--warm); margin:0 0 6px}
+  .honesty p{margin:0; font-size:14.5px}
+
+  footer{padding:28px 0 46px; color:var(--faint); font-size:13px; font-family:"Golos Text",sans-serif; border-top:1px solid var(--line)}
+  a{color:var(--accent)}
+  /* ---- added capability blocks ---- */
+  .block{margin-top:38px}
+  .block > .kicker{margin-bottom:10px}
+  .block .lead2{color:var(--muted); max-width:68ch; margin-bottom:20px; font-size:16px}
+  .two{display:grid; grid-template-columns:repeat(auto-fit,minmax(290px,1fr)); gap:14px; margin-bottom:22px}
+  .lvl{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:19px 21px; box-shadow:var(--shadow)}
+  .lvl h3{font-family:"Golos Text",sans-serif; font-size:16.5px; font-weight:700; margin-bottom:8px; display:flex; align-items:center; gap:8px}
+  .lvl p{margin:0 0 9px; font-size:14.5px}
+  .lvl p:last-child{margin-bottom:0}
+  .lvl .cmds{display:flex; flex-wrap:wrap; gap:5px; margin:4px 0 4px}
+  .lvl b{font-weight:600; color:var(--ink)}
+
+  .dims{display:grid; grid-template-columns:repeat(auto-fill,minmax(228px,1fr)); gap:12px; align-items:start}
+  .dim{background:var(--surface); border:1px solid var(--line); border-radius:11px; padding:14px 16px; border-left:3px solid var(--accent)}
+  .dim.hi{border-left-color:var(--warm); background:var(--warm-soft); grid-row:span 2}
+  .dim h4{font-family:"Golos Text",sans-serif; font-size:14.5px; font-weight:700; margin:0 0 4px; display:flex; align-items:center; gap:6px}
+  .dim > p{margin:0; font-size:13px; color:var(--muted); line-height:1.45}
+  .dim .sub{margin-top:10px; display:flex; flex-direction:column; gap:8px}
+  .dim .sub .s b{font-family:"Golos Text",sans-serif; font-size:13px; font-weight:600; color:var(--ink); display:block}
+  .dim .sub .s span{font-size:12.5px; color:var(--muted); line-height:1.4}
+  .dim .fn{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--accent)}
+
+  .whojudge{margin-top:16px; font-family:"Golos Text",sans-serif; font-size:13.5px; color:var(--muted); line-height:1.5}
+  .whojudge b{color:var(--accent); font-weight:600}
+
+  .planlife{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:20px}
+  .planlife .p{flex:1 1 180px; background:var(--accent-soft); border:1px solid var(--line); border-radius:10px; padding:13px 15px}
+  .planlife .p b{font-family:"Golos Text",sans-serif; font-size:14.5px; font-weight:600; display:block; color:var(--accent); margin-bottom:2px}
+  .planlife .p small{font-family:"Golos Text",sans-serif; color:var(--muted); font-size:12.5px; line-height:1.35; display:block}
+  .artifacts2{display:grid; gap:10px}
+  .art2{display:grid; grid-template-columns:220px 1fr auto; gap:14px; align-items:baseline; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:13px 16px}
+  .art2 .fn{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--ink); word-break:break-word}
+  .art2 .fd{font-size:14px; color:var(--muted)}
+  .art2 .stg{font-family:"Golos Text",sans-serif; font-size:11.5px; font-weight:600; color:var(--warm); white-space:nowrap; text-align:right}
+  @media(max-width:640px){.art2{grid-template-columns:1fr; gap:4px}.art2 .stg{text-align:left}}
+
+  /* intro: definition + mechanisms + advantages */
+  .definition{background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:var(--radius); padding:22px 26px; box-shadow:var(--shadow); margin-bottom:8px}
+  .definition p{margin:0; font-size:18px; line-height:1.62}
+  .definition b{font-weight:600; background:var(--accent-soft); padding:0 4px; border-radius:4px}
+  .subhead{font-family:"Golos Text",sans-serif; font-size:19px; font-weight:700; margin:32px 0 14px; display:flex; align-items:baseline; gap:10px}
+  .subhead .cnt{font-family:"IBM Plex Mono",monospace; font-size:13px; color:var(--faint); font-weight:500}
+  .mechs{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:13px}
+  .mech{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:17px 19px; box-shadow:var(--shadow); position:relative; border-top:3px solid var(--accent)}
+  .mech .mnum{font-family:"Golos Text",sans-serif; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--accent)}
+  .mech h4{font-family:"Golos Text",sans-serif; font-size:16.5px; font-weight:700; margin:3px 0 6px}
+  .mech p{margin:0; font-size:14px; line-height:1.5; color:var(--ink)}
+  .mech p .g{color:var(--muted)}
+  .loopchain{margin-top:9px; font-family:"IBM Plex Mono",monospace; font-size:11.5px; line-height:1.7; color:var(--accent)}
+  .advs{display:grid; grid-template-columns:repeat(auto-fit,minmax(285px,1fr)); gap:13px}
+  .adv{background:var(--surface-2); border:1px solid var(--line); border-left:3px solid var(--warm); border-radius:11px; padding:16px 19px}
+  .adv .anum{font-family:"Golos Text",sans-serif; font-size:12px; font-weight:700; color:var(--warm)}
+  .adv h4{font-family:"Golos Text",sans-serif; font-size:15.5px; font-weight:700; margin:2px 0 6px}
+  .adv p{margin:0; font-size:13.5px; line-height:1.5; color:var(--muted)}
+  .adv p b{color:var(--ink); font-weight:600}
+
+  /* obligatory documents by contour */
+  .contours{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:13px; align-items:start}
+  .contour{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px 18px; box-shadow:var(--shadow)}
+  .contour .ct-h{display:flex; align-items:baseline; justify-content:space-between; gap:10px}
+  .contour h4{font-family:"Golos Text",sans-serif; font-size:15px; font-weight:700; line-height:1.2}
+  .contour .owner{font-family:"Golos Text",sans-serif; font-size:10.5px; font-weight:600; color:var(--accent); background:var(--accent-soft); border-radius:5px; padding:2px 7px; white-space:nowrap}
+  .contour .en2{font-family:"Golos Text",sans-serif; font-size:11px; color:var(--faint); margin-top:2px}
+  .contour .docs{margin-top:12px; display:flex; flex-direction:column; gap:9px}
+  .contour .doc{display:grid; grid-template-columns:auto 1fr; gap:9px; align-items:start}
+  .contour .doc .rq{font-family:"Golos Text",sans-serif; font-size:9px; font-weight:700; text-transform:uppercase; letter-spacing:.03em; padding:2px 5px; border-radius:4px; white-space:nowrap; margin-top:1px}
+  .contour .doc .rq.req{color:var(--warm); background:var(--warm-soft); border:1px solid var(--line-strong)}
+  .contour .doc .rq.opt{color:var(--faint); border:1px solid var(--line)}
+  .contour .doc .fn{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--ink); word-break:break-word}
+  .contour .doc .dd{font-size:12px; color:var(--muted); display:block; margin-top:1px; line-height:1.35}
+
+  /* continuous operational processes */
+  .procs{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:14px}
+  .proc{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px 21px; box-shadow:var(--shadow); border-top:3px solid var(--accent)}
+  .proc.research{border-top-color:var(--accent-2)}
+  .proc.design{border-top-color:var(--warm)}
+  .proc .cont{display:inline-flex; align-items:center; gap:6px; font-family:"Golos Text",sans-serif; font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:var(--accent); margin-bottom:8px}
+  .proc.design .cont{color:var(--warm)}
+  .proc h3{font-family:"Golos Text",sans-serif; font-size:18px; font-weight:700; margin-bottom:6px}
+  .proc > p{margin:0 0 10px; font-size:14.5px}
+  .proc > p b{font-weight:600; color:var(--ink)}
+  .proc .walk{font-size:13px; color:var(--muted); margin:0 0 11px; line-height:1.5}
+  .proc .walk b{color:var(--ink); font-weight:600}
+  .proc .cmds{display:flex; flex-wrap:wrap; gap:5px; margin-bottom:11px}
+  .proc .fn{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--accent)}
+  .proc .note{font-size:12.5px; color:var(--warm); background:var(--warm-soft); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-family:"Golos Text",sans-serif; line-height:1.45; margin:0}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<header class="top">
+  <div class="wrap">
+    <div class="eyebrow">AI Ops Kit 4.0 · главная схема</div>
+    <h1>Весь путь с&nbsp;AI&nbsp;Ops</h1>
+    <p class="lead">От момента, когда у вас есть продукт — новый или уже работающий — и вы подключаете
+      помощника, и дальше по всем этапам. <span class="muted">Видно, какие следы (артефакты) остаются
+      в репозитории, где решает человек, а где помощник делает сам.</span></p>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Открытая AI Product Operating System</div>
+    <h2>Что такое AI&nbsp;Ops Kit</h2>
+    <div class="definition">
+      <p>Открытая <b>операционная система продукта на базе ИИ</b> <span class="en">(AI Product Operating System)</span>
+        для продуктово-технологических команд. Превращает репозиторий в управляемую среду разработки:
+        от постановки проблемы и проектирования решения — до реализации, проверки, черновика правок
+        <span class="en">(PR)</span>, релиза, измерения результата и следующего цикла разведки <span class="en">(discovery)</span>.</p>
+    </div>
+
+    <div class="subhead">Пять фундаментальных механизмов <span class="cnt">внутри</span></div>
+    <div class="mechs">
+      <div class="mech">
+        <div class="mnum">1 · Product context</div>
+        <h4>Контекст продукта</h4>
+        <p>Система понимает, что это за продукт: его контуры, архитектуру, ограничения — <span class="g">и честно фиксирует, что ей неизвестно.</span></p>
+      </div>
+      <div class="mech">
+        <div class="mnum">2 · Execution</div>
+        <h4>Исполнение</h4>
+        <p>Человек формулирует задачу обычным языком → спецификация → план → рабочий пакет <span class="en">(work package)</span> → выполнение → доказательства <span class="en">(evidence)</span> → проверки → PR.</p>
+      </div>
+      <div class="mech">
+        <div class="mnum">3 · Governance</div>
+        <h4>Управление и контроль</h4>
+        <p>ИИ не может просто сказать «готово». Есть ворота качества <span class="en">(quality gates)</span>, доказательства, разделение «пишущий ≠ судящий» <span class="en">(writer ≠ judge)</span>, безопасность, политика, верификация.</p>
+      </div>
+      <div class="mech">
+        <div class="mnum">4 · Product intelligence</div>
+        <h4>Продуктовый интеллект</h4>
+        <p>Система смотрит не только на код, но и на бэклог, состояние работ, расхождения, приоритеты, перепланирование <span class="g">и исходы функций (зачем каждая существует и измерен ли результат).</span></p>
+      </div>
+      <div class="mech">
+        <div class="mnum">5 · Continuous loop</div>
+        <h4>Непрерывный цикл</h4>
+        <p>Продукт двигается по кругу:</p>
+        <div class="loopchain">Observe → Understand → Decide → Plan → Execute →<br>Verify → Release → Measure → Learn → Replan</div>
+        <p style="margin-top:7px"><span class="g">наблюдать → понять → решить → спланировать → выполнить → проверить → выпустить → измерить → извлечь урок → перепланировать.</span></p>
+      </div>
+    </div>
+
+    <div class="subhead">Главные преимущества <span class="cnt">6</span></div>
+    <div class="advs">
+      <div class="adv">
+        <div class="anum">№1</div>
+        <h4>Product-first, а не code-first</h4>
+        <p>Большинство ИИ-инструментов начинают с «какой код написать?». AI Ops начинает с <b>«какую проблему решаем и зачем?»</b>. Product First закреплён на уровне видения.</p>
+      </div>
+      <div class="adv">
+        <div class="anum">№2</div>
+        <h4>Доказательства вместо доверия</h4>
+        <p>Не «ИИ сказал, что сделал», а <b>«вот утверждение → вот доказательство → вот проверка → вот вердикт»</b>. Возможно, главный moat.</p>
+      </div>
+      <div class="adv">
+        <div class="anum">№3</div>
+        <h4>Writer ≠ Judge (пишущий ≠ судящий)</h4>
+        <p>Сильный принцип управления. Масштабируется далеко за пределы кода: <b>требования, архитектура, UX, безопасность, аналитика, релиз, продуктовые решения.</b></p>
+      </div>
+      <div class="adv">
+        <div class="anum">№4</div>
+        <h4>Не привязан к модели</h4>
+        <p>Дешёвый API как писатель, сильный (напр. Claude CLI) как основной писатель, независимый (напр. DeepSeek) как ревьюер. <b>Модель — ресурс, а не центр продукта.</b></p>
+      </div>
+      <div class="adv">
+        <div class="anum">№5</div>
+        <h4>Everything as Code (всё как код)</h4>
+        <p>Знания о продукте, планы, политики, контракты, реестры, доказательства — в репозитории. Отсюда: <b>версионирование, воспроизводимость, аудируемость, откат, ревью, совместная работа.</b></p>
+      </div>
+      <div class="adv">
+        <div class="anum">№6</div>
+        <h4>ИИ управляет системой, а не только выполняет команды</h4>
+        <p><span class="en">next → audit → replan → backlog intelligence.</span> Движение от <b>«ИИ-ассистента» к «ИИ-операционной системе».</b></p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="kicker">Одна схема · два уровня</div>
+    <h2>Как читать эту схему</h2>
+    <p class="sec-intro">Сверху — короткий обзор всего пути (охватить за пять секунд). Ниже — подробная
+      дорожка: этапы идут слева направо, а три строки показывают, кто что делает. Между этапами стоят
+      «ворота» — проверка «можно ли идти дальше».</p>
+
+    <div class="howto">
+      <div class="li"><span class="ic">👤</span><span><b>Человек</b> <span class="d">— решает и одобряет. Где его клетка тусклая — участие не нужно, помощник делает сам.</span></span></div>
+      <div class="li"><span class="ic">🧭</span><span><b>AI Ops</b> <span class="d">— помощник: ведёт задачу, раздаёт работу, проверяет.</span></span></div>
+      <div class="li"><span class="ic">📦</span><span><b>В репозитории</b> <span class="d">— файлы-следы, которые остаются на память о каждом этапе.</span></span></div>
+      <div class="li"><span class="ic">🚦</span><span><b>Ворота</b> <span class="d">— проверка перед переходом к следующему этапу.</span></span></div>
+    </div>
+
+    <div class="overview">
+      <div class="ovrow" id="ovrow"></div>
+    </div>
+
+    <div class="swim-cap">
+      <span><b>Слева направо — этапы.</b> Сверху вниз — кто участвует.</span>
+      <span><b>Столбцы «Подключение» и «Фундамент»</b> проходят один раз, остальные — по кругу на каждой задаче.</span>
+    </div>
+    <div class="swim-hint">↔ таблица прокручивается вбок — первый столбец с ролями остаётся на месте.</div>
+
+    <div class="scroller">
+      <table class="swim">
+        <thead><tr id="swim-head"></tr></thead>
+        <tbody id="swim-body"></tbody>
+      </table>
+    </div>
+
+    <!-- BLOCK: obligatory documents -->
+    <div class="block">
+      <div class="kicker">Появляются на «Фундаменте»</div>
+      <h2>Обязательные документы продукта</h2>
+      <p class="lead2">Это «контекст продукта». Помощник восстанавливает их из репозитория, а чего не хватает —
+        помечает как пробел и спрашивает. Разложены по <b>восьми контурам</b> — у каждого свой владелец-роль.
+        Всего <b>обязательных — 11</b>, остальные по желанию.</p>
+      <div class="contours" id="contours"></div>
+    </div>
+
+    <!-- BLOCK: continuous operational processes -->
+    <div class="block">
+      <div class="kicker">Идут всё время · параллельно задачам</div>
+      <h2>Непрерывные процессы поверх всего продукта</h2>
+      <p class="lead2">Кроме пути задачи (таблица выше), у помощника есть процессы, которые идут
+        <b>непрерывно</b> и охватывают <b>весь продукт целиком</b>, а не одну задачу. Они не пишут фичи —
+        они постоянно смотрят на продукт и держат его в порядке. Это отдельные операционные процессы,
+        по типу ревью: все только читают и размечают, ничего не ломают.</p>
+
+      <div class="procs">
+        <div class="proc review">
+          <span class="cont">↻ непрерывно</span>
+          <h3>🔍 Ревью и обход продукта</h3>
+          <p>В любой момент — и <b>по расписанию</b> — проходит по <b>всему репозиторию</b> и даёт снимок состояния, ничего не меняя.</p>
+          <p class="walk">Смотрит: <b>рассинхрон</b> между документацией и кодом, <b>здоровье</b> продукта,
+            риски, состояние по осям. Ночной обзор сам находит расхождения и <b>брифует владельца</b>. Что нельзя честно оценить — помечает «неизвестно», а не «хорошо».</p>
+          <div class="cmds"><span class="cmd">audit</span><span class="cmd">drift</span><span class="cmd">contract</span><span class="cmd">health</span><span class="cmd">team</span><span class="cmd">governance</span></div>
+          <p class="walk">А на каждой задаче отдельно проверяются <b>код, безопасность, архитектура,
+            аналитика, ИИ-поведение</b> — каждое своим независимым ревьюером (писавший не судит сам себя).</p>
+        </div>
+
+        <div class="proc research">
+          <span class="cont">↻ непрерывно</span>
+          <h3>🔬 Исследование</h3>
+          <p>Отдельный <b>«центр исследований»</b>. Превращает вопрос в <b>доказательства</b> и <b>пакет
+            для решения</b>, а не в отчёт.</p>
+          <p class="walk">Путь: <span class="fn">вопрос → доказательства (EV-*) → пакет решения (DP-*)</span>.
+            Постоянные «дозоры»: <b>свежесть знаний</b> (еженедельно) и <b>новизна</b>. Устаревшее помечается, но не удаляется.</p>
+          <div class="cmds"><span class="cmd">discuss</span><span class="cmd">.research/</span><span class="cmd">freshness sweep</span></div>
+          <p class="walk">Правило: сначала память, потом поиск. Автор решения не может сам объявить его
+            надёжным — нужен независимый обзор.</p>
+        </div>
+
+        <div class="proc design">
+          <span class="cont">↻ непрерывно</span>
+          <h3>🎨 Дизайн</h3>
+          <p>Держит <b>единый облик</b> продукта: любое изменение интерфейса сверяется с общим источником стиля.</p>
+          <p class="walk">Направления: <b>UX</b> (потоки и состояния экрана), <b>доступность</b>
+            (клавиатура, контраст WCAG&nbsp;AA), <b>единая дизайн-система</b>
+            (<span class="fn">DesignSystem.md</span>), <b>визуальные регрессии</b>.</p>
+          <p class="walk">Для задач с интерфейсом опыт проектируется и проверяется через <b>Storybook</b> —
+            как «визуальный контракт»: состояния экранов собираются в доказательства
+            <span class="fn">(UIEvidence)</span>. Что «про UI» — кит понимает по <span class="fn">@storybook</span> в проекте.</p>
+          <div class="cmds"><span class="cmd">VISUAL-трек</span><span class="cmd">Storybook</span><span class="cmd">DesignSystem.md</span></div>
+          <p class="note">Честно: дизайн работает как трек на каждой UI-задаче. Storybook-запрос уже написан,
+            но пока не проведён в рабочий путь («построено, но не подключено»). Полный цикл «проектирую
+            через Storybook» — направление на ROADMAP. «Storybook собрался» ≠ «дизайн готов».</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- BLOCK: tasks / plan / prioritization -->
+    <div class="block">
+      <div class="kicker">Обязательные артефакты</div>
+      <h2>Задачи, план и приоритеты</h2>
+      <p class="lead2">План — связующая нить всего пути. Из него берётся каждая следующая задача, и в него
+        возвращаются выводы. Он появляется сразу при подключении и живёт всё время.</p>
+
+      <div class="planlife">
+        <div class="p"><b>Появляется</b><small>на «Фундаменте» — первый план из фактов репозитория</small></div>
+        <div class="p"><b>Пополняется</b><small>задачами из бэклога, в т.ч. из GitHub Issues</small></div>
+        <div class="p"><b>Переприоритизируется</b><small>на «Выводах» — под реальную картину</small></div>
+      </div>
+
+      <div class="artifacts2">
+        <div class="art2"><span class="fn">planning/plan.yaml</span><span class="fd">общий план и бэклог продукта — что делаем и в каком порядке</span><span class="stg">Фундамент → живёт всегда</span></div>
+        <div class="art2"><span class="fn">ROADMAP.md · .ai-ops/ROADMAP.md</span><span class="fd">направление: что сейчас, что дальше, что потом (Now / Next / Later)</span><span class="stg">обновляется на Выводах</span></div>
+        <div class="art2"><span class="fn">.ai-ops/DELIVERY.md</span><span class="fd">план выпуска, собранный из бэклога</span><span class="stg">этап Выпуск</span></div>
+        <div class="art2"><span class="fn">history/plan-history.yaml</span><span class="fd">история изменений плана — что и когда меняли</span><span class="stg">каждое изменение</span></div>
+      </div>
+
+      <div class="whojudge">🛠 Команды, которые ведут план: <span class="cmd">backlog</span> — разобрать, убрать
+        дубли, приоритизировать и связать задачи; <span class="cmd">roadmap</span> — разложить на Now/Next/Later;
+        <span class="cmd">delivery</span> — план выпуска; <span class="cmd">next</span> — что взять следующим;
+        <span class="cmd">replan</span> — переприоритизировать под реальность.</div>
+    </div>
+
+    <div class="always">
+      <h3>Что работает всё время, на каждом этапе</h3>
+      <div class="sub">Это не отдельные шаги, а постоянные правила помощника — фон под всей дорожкой.</div>
+      <div class="items" id="always"></div>
+    </div>
+
+    <div class="honesty">
+      <h4>Что здесь правда, а что — привязка</h4>
+      <p>Этапы и артефакты — реальные, из самого помощника (сверено с его авто-картой возможностей,
+        версия 4.0.0). Раскладка «этот файл появляется именно на этом шаге» местами моя трактовка — двигаем,
+        где у вас иначе. Часть механизмов помечена честно: «построено, но не подключено» — написано, но ещё
+        не в рабочем пути. Это черновик для вычитки.</p>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Источник — исходники и авто-карта возможностей помощника на версии кита 4.0.0 (32 команды владельца,
+    36 ворот качества). Английские слова оставлены и пояснены рядом. Черновик · сентябрь 2026.
+  </div>
+</footer>
+
+<script>
+const STAGES = [
+  { kind:"setup", n:"0", name:"Подключение", rus:"ставим AI Ops на продукт", short:"Подключение",
+    cmds:["setup"], gate:"установка проверена",
+    human:{t:"Приносит продукт — новый или уже работающий — и решает подключить помощника."},
+    kit:{t:"Одной командой (setup) ставит себя в репозиторий, проверяет установку и изучает продукт: на чём написан, какими командами собирается."},
+    repo:[
+      [".ai-ops.yaml","настройки помощника в проекте"],
+      [".ai/managed/","служебные файлы помощника"],
+      ["repository-profile.yaml","как устроен ваш продукт"],
+    ]},
+
+  { kind:"setup", n:"0+", name:"Фундамент", rus:"заводим обязательные документы продукта", short:"Фундамент",
+    cmds:["model","bootstrap","audit architecture"], gate:"базовые документы на месте",
+    human:{t:"Отвечает на вопросы о продукте (направление, правила автономии) и подтверждает базовые развилки."},
+    kit:{t:"Строит модель продукта: классификация, контуры ответственности, пробелы и вопросы. Заводит обязательные документы — архитектуру (устройство системы, восстанавливается из репозитория и подтверждается владельцем), паспорт, направление, план выпуска, политику, дизайн-систему и первый план."},
+    repo:[
+      ["SystemOverview.md · RepositoryMap.md","архитектура: устройство системы и карта репозитория"],
+      ["PRODUCT_PASSPORT.md","паспорт продукта"],
+      ["ROADMAP.md","направление: сейчас / дальше / потом"],
+      ["DELIVERY.md","план выпуска"],
+      ["POLICY.yaml","правила автономии и согласований"],
+      ["DesignSystem.md","единый источник стиля"],
+      ["product-health.yaml","базовое здоровье продукта"],
+      ["planning/plan.yaml","первый план и бэклог из фактов репо"],
+    ]},
+
+  { kind:"loop", n:"1", name:"Разведка", rus:"что за задача и зачем", short:"Разведка", phase:"Discovery",
+    cmds:["discuss","specify"], gate:"понятно, что и зачем делаем",
+    human:{t:"Описывает задачу простыми словами. Отвечает на пару уточняющих вопросов."},
+    kit:{t:"Переспрашивает по-человечески, определяет тип и объём задачи, собирает короткое описание — общую договорённость «что делаем»."},
+    repo:[["spec.yaml","описание задачи"],["spec-coverage.yaml","что описанием покрыто"]]},
+
+  { kind:"loop", n:"2", name:"План", rus:"как будем делать", short:"План", phase:"Delivery",
+    cmds:["plan"], gate:"план готов и понятен",
+    human:{t:"Подтверждает подход, если помощник спрашивает.",dim:true},
+    kit:{t:"Составляет план, режет работу на части, каждой назначает свой участок кода, чтобы части не мешали друг другу, и прикидывает объём."},
+    repo:[["run-plan.yaml","план работы"],["run-settings.yaml","настройки прогона"],["context-payload.yaml","собранный контекст"]]},
+
+  { kind:"loop", n:"3", name:"Изготовление", rus:"пишем код", short:"Изготовление", phase:"Delivery",
+    cmds:["run --execute"], gate:"написано и стоит на своём месте",
+    human:{t:"Одобряет только важные развилки: публичный интерфейс, новая зависимость, необратимая правка."},
+    kit:{t:"Поручает код инструменту-исполнителю, держит его строго в рамках назначенного участка и следит, чтобы две работы не столкнулись в одном месте."},
+    repo:[["рабочая ветка","отдельная ветка под задачу"],["active-work.yaml","какие участки сейчас заняты"],["draft PR","черновик правок, ещё не в бою"]]},
+
+  { kind:"loop", n:"4", name:"Проверка", rus:"всё ли честно готово", short:"Проверка", phase:"Delivery",
+    cmds:["review"], gate:"проверено и независимо отревьюено",
+    human:{t:"Участие не требуется.",dim:true},
+    kit:{t:"Прогоняет проверки и тесты, отдельно проверяет безопасность. Ревью делает не тот, кто писал (пишущий не может судить сам себя). Сверяет результат с исходной договорённостью."},
+    repo:[["run-report.json","отчёт о проверках"],["EV-*.yaml","доказательства, что проверки прошли"]]},
+
+  { kind:"loop", n:"5", name:"Приёмка", rus:"человек смотрит и решает", short:"Приёмка", phase:"Delivery → Release",
+    cmds:["inbox"], gate:"человек принял результат",
+    human:{t:"В одной очереди решений (inbox) видит, что ждёт его, и в понятной сводке принимает или просит поправить. Отдельно подтверждает необратимое и то, что трогает доступы."},
+    kit:{t:"Показывает результат простыми словами и вопросы, где нужно ваше решение. Явно помечает необратимые шаги — их не сделает без отдельного согласия."},
+    repo:[["draft PR","готов к слиянию после согласия"]]},
+
+  { kind:"loop", n:"6", name:"Выпуск", rus:"отдаём людям", short:"Выпуск", phase:"Release",
+    cmds:[], gate:"безопасно выпускать",
+    human:{t:"Решение о выпуске — за человеком. Особенно прод-доступ и секреты."},
+    kit:{t:"Проверяет готовность к выпуску. Сам не выкатывает — но и не соврёт, что всё готово, если это не так."},
+    repo:[["DELIVERY.md","план и запись о выпуске"]]},
+
+  { kind:"loop", n:"7", name:"Замер", rus:"смотрим, как работает", short:"Замер", phase:"Measurement",
+    cmds:["health","readout"], gate:"видно, как живёт у людей",
+    human:{t:"Смотрит понятный отчёт о здоровье.",dim:true},
+    kit:{t:"Пост-релизной петлёй проверяет: дошли ли события в аналитику, каков исход и один честный вердикт — работает ли задумка в бою, а не только на бумаге."},
+    repo:[["показатели","как продукт себя ведёт"],["lifecycle-journal.jsonl","журнал событий задачи"]]},
+
+  { kind:"loop", n:"8", name:"Выводы", rus:"учимся и идём на новый круг", short:"Выводы", phase:"Insights",
+    cmds:["next","replan","graph"], gate:null,
+    human:{t:"Решает, что взять следующим."},
+    kit:{t:"Связывает исход с задачей (зачем функция существует и измерен ли результат), превращает вывод в кандидат-работу, обновляет план и следит, чтобы знания не устарели."},
+    repo:[["planning/plan.yaml","обновлённый план"],["ROADMAP.md","куда движется продукт"]],
+    loopback:true},
+];
+
+const ALWAYS = [
+  ["Понятный язык","Говорит на человеческом, не больше нескольких вопросов за раз."],
+  ["Честность о готовности","Никогда не скажет «готово», если проверено не всё."],
+  ["Участки без коллизий","Следит, чтобы две работы не столкнулись в одном месте кода."],
+  ["Свежесть знаний","Помечает устаревшие данные, чтобы не решать по старому."],
+  ["Автономия по вашей политике","Что делать самому, а что с согласия — задаёте вы."],
+  ["Одно окно решений","Что ждёт вас — одной очередью (inbox). Статус задачи простыми словами — explain."],
+];
+
+/* ---- overview ribbon ---- */
+const setups = STAGES.filter(s=>s.kind==="setup");
+const loop = STAGES.filter(s=>s.kind==="loop");
+let ov = setups.map(s=>`<div class="ov-setup"><b>${s.n} · ${s.short}</b><small>один раз</small></div>`).join(`<div class="ov-arrow">→</div>`)+
+         `<div class="ov-arrow">→</div>`+
+         `<div class="ov-loop"><div class="lbl">⟳ Дальше — по кругу на каждой задаче</div><div class="ov-steps">`;
+loop.forEach((s,i)=>{
+  ov += `<div class="ov-step"><span class="n">${s.n}</span>${s.short}</div>`;
+  if(i<loop.length-1) ov += `<span class="ov-sep">→</span>`;
+});
+ov += `<span class="ov-sep">↺</span></div></div>`;
+document.getElementById("ovrow").innerHTML = ov;
+
+/* ---- transposed swimlane ---- */
+let head = `<th class="corner">Этап →<br><span style="font-weight:400">Роль ↓</span></th>`;
+STAGES.forEach(s=>{
+  const cmds = s.cmds.length ? `<div class="cmds">${s.cmds.map(c=>`<span class="cmd">${c}</span>`).join("")}</div>` : "";
+  const once = s.kind==="setup" ? `<span class="once">один раз</span>` : "";
+  head += `<th class="sh ${s.kind}"><div class="n">${s.n}</div><div class="nm">${s.name}</div><div class="rus">${s.rus}</div>${cmds}${once}</th>`;
+});
+document.getElementById("swim-head").innerHTML = head;
+
+function humanCell(s){
+  const dim = s.human.dim ? " dim" : "";
+  const body = (s.human.dim && s.human.t==="Участие не требуется.") ? `<span class="none">— не требуется</span>` : s.human.t;
+  return `<td class="c${dim}">${body}</td>`;
+}
+function repoCell(s){
+  return `<td class="c"><div class="files">`+
+    s.repo.map(f=>`<div class="file"><span class="fn">${f[0]}</span><span class="fd">${f[1]}</span></div>`).join("")+
+    `</div></td>`;
+}
+function gateCell(s){
+  return s.gate ? `<td class="c"><b>🚦 Ворота:</b> ${s.gate}</td>`
+                : `<td class="c">↺ <b>круг замыкается</b> — снова к «Разведке»</td>`;
+}
+
+const body = document.getElementById("swim-body");
+const rHuman = `<tr class="lane-human"><th class="lanelbl">👤 Человек<small>решает</small></th>`+STAGES.map(humanCell).join("")+`</tr>`;
+const rKit   = `<tr class="lane-kit"><th class="lanelbl">🧭 AI Ops<small>делает</small></th>`+STAGES.map(s=>`<td class="c">${s.kit.t}</td>`).join("")+`</tr>`;
+const rRepo  = `<tr class="lane-repo"><th class="lanelbl">📦 В репо<small>остаётся</small></th>`+STAGES.map(repoCell).join("")+`</tr>`;
+const rGate  = `<tr class="lane-gate"><th class="lanelbl">🚦 Ворота<small>дальше</small></th>`+STAGES.map(gateCell).join("")+`</tr>`;
+body.innerHTML = rHuman + rKit + rRepo + rGate;
+
+/* ---- obligatory documents by contour ---- */
+const CONTOURS = [
+  { t:"Продукт и стратегия", en:"Product & Strategy", owner:"продукт", docs:[
+    ["ProductOverview.md","что за продукт и зачем",1],
+    ["ProductStatus.md","в каком состоянии сейчас",1],
+    ["ROADMAP.md","направление: сейчас / дальше / потом",1],
+    ["UsersAndRoles.md","пользователи и роли",0],
+  ]},
+  { t:"Исследования и решения", en:"Research & Decisions", owner:"исследователь", docs:[
+    ["decisions/registry.yaml","значимые решения и ADR",1],
+    ["research/","материалы исследований",0],
+  ]},
+  { t:"Планирование и исполнение", en:"Planning & Execution", owner:"продукт", docs:[
+    ["planning/plan.yaml","план и бэклог работ",1],
+    [".ai/runtime/active-work.yaml","оперативное состояние (ведёт кит)",0],
+  ]},
+  { t:"Система и архитектура", en:"System & Architecture", owner:"архитектор", docs:[
+    ["context/system/SystemOverview.md","из чего система и как связана",1],
+    ["context/system/RepositoryMap.md","карта репозитория",1],
+    ["context/system/IntegrationMap.md","интеграции",0],
+  ]},
+  { t:"Данные и контракты", en:"Data & Contracts", owner:"дата-инженер", docs:[
+    ["context/system/DataMap.md","какие данные и где",1],
+    ["schemas/","контракты как файлы",0],
+  ]},
+  { t:"Инженерия, качество, безопасность", en:"Engineering, Quality & Security", owner:"инженер", docs:[
+    ["context/team/DevelopmentProcess.md","как ведётся разработка",1],
+    [".ai-ops.yaml","границы, доступы, согласования",1],
+    ["security/","безопасность",0],
+  ]},
+  { t:"Выпуск и эксплуатация", en:"Delivery & Operations", owner:"релиз", docs:[
+    ["CHANGELOG.md","история изменений",0],
+    [".github/workflows/","автоматизация выпуска",0],
+    ["docs/runbooks/","инструкции эксплуатации",0],
+  ]},
+  { t:"Аналитика и обучение", en:"Analytics & Learning", owner:"аналитик", docs:[
+    ["context/product/MetricCatalog.md","каталог метрик",1],
+    ["context/product/ProductMetrics.md","показатели продукта",0],
+    ["product/product-health.yaml","здоровье продукта",0],
+  ]},
+];
+document.getElementById("contours").innerHTML = CONTOURS.map(c=>{
+  const docs = c.docs.map(d=>`<div class="doc"><span class="rq ${d[2]?'req':'opt'}">${d[2]?'обязат.':'по желанию'}</span><span class="dtxt"><span class="fn">${d[0]}</span><span class="dd">${d[1]}</span></span></div>`).join("");
+  return `<div class="contour"><div class="ct-h"><h4>${c.t}</h4><span class="owner">${c.owner}</span></div><div class="en2">${c.en}</div><div class="docs">${docs}</div></div>`;
+}).join("");
+
+/* ---- always-on ---- */
+document.getElementById("always").innerHTML = ALWAYS.map(a=>`<div class="it"><b>${a[0]}</b><span>${a[1]}</span></div>`).join("");
+</script>
