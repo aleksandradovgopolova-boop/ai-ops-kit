@@ -370,6 +370,10 @@ def main(argv):
                      provider_name=_pres["provider"], model=a.model, engine="pipeline",
                      execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base,
                      replan=a.replan, open_pr=getattr(a, "open_pr", False),
+                     # #403/deliver-only: без этого проброса флаг, объявленный подкомандой resume и
+                     # прокинутый intent-CLI из `--deliver-only`, доходил до argparse, но НЕ до движка —
+                     # resume всё равно переавторил и плодил коммит вместо доставки готового READY.
+                     reevaluate_only=getattr(a, "reevaluate_only", False),
                      takeover=getattr(a, "takeover", False),
                      takeover_reason=getattr(a, "takeover_reason", None),
                      provider_resolution={k: _pres.get(k) for k in

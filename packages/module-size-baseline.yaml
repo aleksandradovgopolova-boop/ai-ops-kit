@@ -28,7 +28,7 @@ ceilings:
   ai_ops_kit/lifecycle/active_work.py: 1116
   ai_ops_kit/ui/presenter_formatters.py: 1059
   ai_ops_kit/planning/repo_audit.py: 837
-  ai_ops_kit/engine/ai_ops_run_exec.py: 713
+  ai_ops_kit/engine/ai_ops_run_exec.py: 721
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 938
   ai_ops_kit/providers/orchestrator_providers.py: 978
   ai_ops_kit/intelligence/nightly_review.py: 1097
@@ -716,3 +716,15 @@ raises:
       сохранённых на specify сигналов, ENGINEERING не становится молча QUICK). +12 строк поверх
       сведённой вехи 4.1 (замер итога слияния: 1135 -> 1147, а не сумма раздельных); ai_ops_cli.py —
       известный кандидат на вынос, ратчет держит рост вниз.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'ai_ops_run_exec.py = 713'
+    to: 'ai_ops_run_exec.py = 721'
+    work: 'resume-deliver-only-reaches-engine: живой прогон #668'
+    why: >-
+      Симметричная дыра к записи 07.09: `--reevaluate-only` был объявлен в run-субпарсере, но НЕ в
+      resume-субпарсере, а intent-CLI прокидывает его в resume при `--deliver-only`. Итог —
+      `ai-ops resume --deliver-only` падал «unrecognized arguments: --reevaluate-only»: весь
+      deliver-only-путь resume (доставить готовый READY без переавторинга) был мёртв. +8 строк —
+      объявление флага в resume-субпарсере с рационале-докстрингом (проброс в run() — в
+      ai_ops_run.py, ниже порога 700). Логика не в модуле, потолок под факт, ратчет держит вниз.

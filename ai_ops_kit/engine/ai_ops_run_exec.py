@@ -710,4 +710,12 @@ def _build_run_arg_parser():
     rs.add_argument("--replan", action="store_true",
                     help="осознанно сменить классификацию/policy при продолжении (не resume, а replan "
                          "с ревалидацией) — иначе смена task_type/risk/write_scope блокируется")
+    # #403/deliver-only: intent-CLI прокидывает `--reevaluate-only` в resume, когда владелец зовёт
+    # `ai-ops resume --deliver-only` (доставить готовый READY-коммит без переавторинга). Подкоманда
+    # resume этот флаг НЕ объявляла — argparse падал «unrecognized arguments: --reevaluate-only», и
+    # весь deliver-only-путь resume был мёртв (объявлен CLI, не исполнялся движком). Объявляем здесь.
+    rs.add_argument("--reevaluate-only", action="store_true", dest="reevaluate_only",
+                    help="доставить готовый READY-коммит фичи БЕЗ переавторинга (0 model-вызовов, "
+                         "HEAD как committed_sha): переоценить гейты и открыть/обновить PR. "
+                         "Прокидывается из `ai-ops resume --deliver-only`. Нужен --execute + --feature")
     return ap
