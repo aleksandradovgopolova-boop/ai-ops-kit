@@ -41,6 +41,7 @@ import yaml
 
 from ai_ops_kit.shared import lifecycle_store as _ls   # v3.0.12: durable запись + fail-closed чтение общего реестра
 from ai_ops_kit.shared import gitio                    # единый вход к git с таймаутом (см. shared/gitio)
+from ai_ops_kit.lifecycle import role_handoff as _handoff  # #639: named-переход owner_role роль->роль
 
 STATUS = {"in-progress", "review", "blocked", "done", "superseded"}
 # `superseded` (18.08.2026, заявка #137): работа, изменения которой УЖЕ В БАЗЕ. Это не «done»
@@ -778,7 +779,7 @@ def _forecast_lines(confs):
 
 def register(path, wid, branch, areas, session, workitem=None, status="in-progress",
              depends=None, contracts=None, at=None, published=False, child_root=None,
-             takeover=False, takeover_reason=None):
+             takeover=False, takeover_reason=None, owner_role=None):
     if branch in (None, "", "main", "master"):
         print("ОШИБКА: работа не должна вестись в main/master — задайте ветку/worktree.")
         return 1
@@ -788,6 +789,12 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
     if not areas:
         print("ОШИБКА: нужны affected_areas (основа conflict forecast).")
         return 1
+    # #639: начальная роль-владелец, если задана, обязана быть из словаря модели (роль, не исполнитель).
+    if owner_role is not None:
+        ok, err = _handoff.validate_role(owner_role)
+        if not ok:
+            print(f"ОШИБКА: {err}")
+            return 1
     # v3.0.12: весь read-modify-write под межпроцессной блокировкой (иначе конкурентная сессия могла
     # перезаписать нашу регистрацию — last-writer-wins — и concurrency-forecast увидел бы неполную карту).
     with _locked(path):
@@ -807,6 +814,10 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
         # Наружу поле НЕ уезжает — `PUBLISHED_FIELDS` его не содержит.
         if child_root is not None:
             entry["worktree"] = str(Path(child_root).resolve())
+        # #639: роль-владелец на записи Work (закрывает дрейф модель↔код — domain_model заявляет,
+        # что Work несёт owner_role, а active_work его провайдит). Меняется потом через handoff_cmd.
+        if owner_role is not None:
+            entry["owner_role"] = owner_role
         if workitem:
             entry["workitem"] = workitem
         if depends:
@@ -1000,6 +1011,31 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
     return 0
 
 
+def handoff_cmd(path, wid, to_role, reason, session, at=None):
+    """Передать работу другой роли-владельцу — named-переход owner_role (#639). Роль→роль.
+
+    Тонкая проводка: locked read-modify-write реестра, сам переход считает `role_handoff.apply_handoff`
+    (валидация роли по словарю модели, запись перехода с брифом, атрибуция прежнего владельца). Логика
+    вынесена в донор `lifecycle/role_handoff.py`, здесь — только чтение/запись общего реестра.
+    """
+    # v3.0.12: под блокировкой (симметрично register/finish — общий реестр, чужая сессия параллельна).
+    with _locked(path):
+        data = load(path)
+        entry = next((w for w in data["active"] if w.get("id") == wid), None)
+        if entry is None:
+            print(f"ACTIVE-WORK: работа '{wid}' не найдена.")
+            return 1
+        new_entry, err = _handoff.apply_handoff(entry, to_role, reason, session, at=at)
+        if err:
+            print(f"ОШИБКА: {err}")
+            return 1
+        entry.update(new_entry)                      # тот же объект в data["active"] — сохранится ниже
+        save(path, data)
+    frm = new_entry["handoffs"][-1]["from"]
+    print(f"ACTIVE-WORK: работа '{wid}' передана {frm or '—'} → {to_role} ({reason}).")
+    return 0
+
+
 def _split(s):
     return [x.strip() for x in (s or "").split(",") if x.strip()]
 
@@ -1021,6 +1057,7 @@ def main(argv):
     r.add_argument("--repo", help="корень репозитория для чтения team_coordination (по умолчанию cwd)")
     # Перенять чужую заявку можно только СЛОВАМИ, а не молчанием: флаг + причина. Прежний держатель
     # записывается в заявку, иначе перенос выглядел бы как «работу никто не держал».
+    r.add_argument("--owner-role", help="начальная роль-владелец из словаря модели (#639)")
     r.add_argument("--takeover", action="store_true",
                    help="перенять заявку, которую держит другая сессия (осознанно)")
     r.add_argument("--takeover-reason", help="почему заявка перенимается (уходит в запись)")
@@ -1039,6 +1076,13 @@ def main(argv):
     f.add_argument("file"); f.add_argument("id")
     f.add_argument("--status", default="done"); f.add_argument("--repo")
 
+    h = sub.add_parser("handoff", help="передать работу другой роли-владельцу (#639)")
+    h.add_argument("file"); h.add_argument("id")
+    h.add_argument("--to-role", required=True, help="роль-владелец, которой передаётся работа")
+    h.add_argument("--reason", required=True, help="бриф для следующего владельца: что передаётся")
+    h.add_argument("--session", required=True)
+    h.add_argument("--at")
+
     a = ap.parse_args(argv)
     if a.cmd == "register":
         repo = getattr(a, "repo", None) or Path.cwd()
@@ -1047,7 +1091,8 @@ def main(argv):
                         a.workitem, a.status, _split(a.depends), _split(a.contracts), a.at,
                         published=pub, child_root=repo,
                         takeover=getattr(a, "takeover", False),
-                        takeover_reason=getattr(a, "takeover_reason", None))
+                        takeover_reason=getattr(a, "takeover_reason", None),
+                        owner_role=getattr(a, "owner_role", None))
     if a.cmd == "list":
         repo = getattr(a, "repo", None) or Path.cwd()
         return list_cmd(Path(a.file), a.json, published=publication_enabled(repo), child_root=repo)
@@ -1061,6 +1106,9 @@ def main(argv):
         repo = getattr(a, "repo", None) or Path.cwd()
         return finish_cmd(Path(a.file), a.id, status=getattr(a, "status", "done"),
                           child_root=repo, published=publication_enabled(repo))
+    if a.cmd == "handoff":
+        return handoff_cmd(Path(a.file), a.id, a.to_role, a.reason, a.session,
+                           at=getattr(a, "at", None))
     return 1
 
 

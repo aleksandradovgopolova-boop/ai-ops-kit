@@ -430,12 +430,16 @@ def project_work(work_id, child_root) -> dict:
 
     # current_agent — ЕДИНСТВЕННЫЙ источник — owner_session active-work. Нет записи -> None.
     current_agent = aw.get("owner_session")
-    # participants — причастные сессии/роли из того, что УЖЕ записано: owner_session (active-work) +
-    # owner_role (plan). Нового рантайма трекинга участников не заводим.
-    # TODO(#549): полноценный список участников (кто реально касался работы за её жизнь) требует
-    #   источника, которого пока нет — лога смены владельцев/ревьюеров. Пока отдаём то, что записано.
+    # #639: роль-владелец Work на ЭТОМ этапе. Живой факт (active-work, меняется через handoff) сильнее
+    # объявленного в плане — план называет стартовую роль, active-work отражает текущую после передач.
+    owner_role = aw.get("owner_role") or pi.get("owner_role")
+    # #639: журнал передач между ролями (from→to+бриф+время). Это и есть источник «кто владел работой
+    # за её жизнь», которого TODO(#549) не хватало для participants — теперь роли из него в списке.
+    handoffs = list(aw.get("handoffs") or [])
+    handoff_roles = [h.get("to") for h in handoffs if h.get("to")] + \
+                    [h.get("from") for h in handoffs if h.get("from")]
     participants = _union([aw.get("owner_session")] if aw.get("owner_session") else [],
-                          [pi.get("owner_role")] if pi.get("owner_role") else [])
+                          [owner_role] if owner_role else [], handoff_roles)
 
     # Союзы областей: work-graph + active-work + plan (все три — законные источники write-области).
     g_ws, g_dep, g_sc = _graph_scopes(work_graph, wid)
@@ -464,6 +468,8 @@ def project_work(work_id, child_root) -> dict:
         "human_approval_required": bool(wi.get("human_approval_required")),
         "branch": branch,
         "current_agent": current_agent,
+        "owner_role": owner_role,
+        "handoffs": handoffs,
         "participants": participants,
         "artifacts": artifacts,
         "evidence": evidence,

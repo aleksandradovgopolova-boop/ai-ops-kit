@@ -23,12 +23,24 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 419
+behavioral_count: 420
 structural_count: 66
-total_count: 485
-behavioral_share_pct: 86.39
+total_count: 486
+behavioral_share_pct: 86.42
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 419
+    from_total: 485
+    to_behavioral: 420
+    to_total: 486
+    to_share_pct: 86.42
+    work: 'work-role-handoff между ролями (#639, поверх #634)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_role_handoff.py: зовёт role_handoff.apply_handoff,
+      active_work.register/handoff_cmd и work_view.project_work — импортирует продуктовый код И
+      исполняет его. Поверх #634 (419/485) доля поведенческих не падает (86.39% -> 86.42%).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 418

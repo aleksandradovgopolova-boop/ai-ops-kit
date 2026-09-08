@@ -25,7 +25,7 @@ ceilings:
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
-  ai_ops_kit/lifecycle/active_work.py: 1068
+  ai_ops_kit/lifecycle/active_work.py: 1116
   ai_ops_kit/ui/presenter_formatters.py: 988
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 713
@@ -79,6 +79,18 @@ raises:
       repo_audit +32 (флип факта `persistence` в reconstruct, `conflicts` в run(), секция
       «ПРОТИВОРЕЧИЯ ИСТОЧНИКОВ» в render), presenter_formatters +11 (строка доверия в `model`,
       needs_input при споре). Логика не в монолите; потолки подняты под факт, ратчет держит вниз.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_kit/lifecycle/active_work.py = 1068'
+    to: 'ai_ops_kit/lifecycle/active_work.py = 1116'
+    work: 'work-role-handoff (#639)'
+    why: >-
+      Первый клин темы «Work путешествует между ролями-владельцами»: named-переход owner_role
+      роль→роль. Сама ЛОГИКА перехода (валидация роли по словарю модели, запись перехода с брифом,
+      атрибуция прежнего владельца) вынесена в новый донор `lifecycle/role_handoff.py` (ниже порога).
+      В active_work — тонкая проводка на живом реестре: handoff_cmd (locked read-modify-write +
+      печать), owner_role в register + его валидация, argparse-подкоманда `handoff` и диспетч. +48
+      строк glue; логика не в монолите. active_work — известный кандидат на вынос, ратчет держит вниз.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1171; pipeline_evidence.py < 700 (не в baseline)'
