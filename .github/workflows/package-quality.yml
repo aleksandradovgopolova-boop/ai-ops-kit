@@ -35,9 +35,21 @@ jobs:
       matrix:
         # v3.30: группы — разбиение pytest по маркерам, а не рукописные списки команд.
         # Проверка, добавленная как тест, попадает в свою группу сама.
+        # 2026-09-08 (#465): шард `fast` РАЗБИТ на `fast-1`/`fast-2`. Причина архитектурная: после #625
+        # `fast` держался у самой стены 180 c и не был надёжно под ней (тот же состав давал 169 c и
+        # 209 c — разброс раннера ±40 c), а остаток — объём (тысячи тестов < 10 c / 4 ядра), честно
+        # снять его маркером `slow` уже нельзя. Два шарда гонят по половине набора `not slow` на своих
+        # 4 ядрах и уходят под ~110–140 c с запасом. Партиция по `-k` полная и непересекающаяся
+        # (fast-2 = `not (набор fast-1)`), подробности — в .github/ci-groups/fast-1.sh.
+        # ⚠ ВЛАДЕЛЬЦУ: required-статусы branch protection обязан обновить человек. Старый контекст
+        # `quality (fast, .github/ci-groups/fast.sh)` больше НИКОГДА не отчитается — оставленный в
+        # required, он заблокирует каждый PR. Безопасный порядок: сделать `quality (fast-1, …)` и
+        # `quality (fast-2, …)` required → влить этот PR → снять из required старый `fast`.
         include:
-          - group: fast
-            script: .github/ci-groups/fast.sh
+          - group: fast-1
+            script: .github/ci-groups/fast-1.sh
+          - group: fast-2
+            script: .github/ci-groups/fast-2.sh
           - group: selftests-a
             script: .github/ci-groups/selftests-a.sh
           - group: selftests-m
