@@ -23,12 +23,25 @@ schema_version: 1
 kind: test-taxonomy-ratchet
 
 # Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 415
+behavioral_count: 416
 structural_count: 66
-total_count: 481
-behavioral_share_pct: 86.28
+total_count: 482
+behavioral_share_pct: 86.31
 
 raises:
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 415
+    from_total: 481
+    to_behavioral: 416
+    to_total: 482
+    to_share_pct: 86.31
+    work: 'продюсер устаревания решений (#635)'
+    why: >-
+      #635 добавил один поведенческий тест-файл (test_decision_staleness — импортирует
+      planning/decision_staleness И зовёт assess_decisions над синтетическим git-репо с решениями),
+      структурных без изменений (66). Доля поведенческих выросла 86.28% -> 86.31% (не снижение).
+      Числа руками (--baseline лоссовый).
   - at: '2026-09-08'
     what: rebaseline_after_measurement
     from_behavioral: 414
