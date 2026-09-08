@@ -93,7 +93,6 @@
 - `registry/providers.yaml`
 - `registry/routing-policy.yaml`
 - `registry/runtimes.yaml`
-- `registry/skills-catalog.yaml`
 - `registry/tracks.yaml` — quality tracks: signal->gates (base_workflow + tracks, v2.32)
 - `registry/tools.yaml`
 - `registry/workflows.yaml`

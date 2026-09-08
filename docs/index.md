@@ -122,6 +122,6 @@ python3 <path-to-ai-ops-kit>/installer/ai_ops.py init .
 
 ## Версия
 
-Текущая: **v3.39.4 qualification** — канал `qualification`, а не `stable`: `stable` требует полевых
+Текущая: **v4.0.0 qualification** — канал `qualification`, а не `stable`: `stable` требует полевых
 доказательств на живых дочках для этой версии и проверяется машиной
 (`registry/release-claims.yaml`).

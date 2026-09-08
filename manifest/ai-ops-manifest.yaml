@@ -32,7 +32,6 @@ registries:
   capability_index: registry/capability-index.yaml
   routing: config/model-routing.yaml          # расширяется на Ф6
   entities: registry/entities.yaml            # Knowledge Graph: типы и связи (v2.0)
-  skills_catalog: registry/skills-catalog.yaml # v2.12: внешние скиллы (declared), ставятся на уровне child
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]

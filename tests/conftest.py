@@ -57,17 +57,6 @@ os.environ["GIT_CONFIG_COUNT"] = str(_gc + 2)
 # ============================================================================
 
 @pytest.fixture
-def temp_repo(tmp_path):
-    """Create a minimal temporary repository structure for testing."""
-    repo = tmp_path / "test-repo"
-    repo.mkdir()
-    (repo / ".ai").mkdir()
-    (repo / ".ai" / "runtime").mkdir()
-    (repo / "features").mkdir()
-    return repo
-
-
-@pytest.fixture
 def mock_provider():
     """A simple mock provider for testing orchestrator/pipeline."""
     def _mock(prompt: str) -> str:
