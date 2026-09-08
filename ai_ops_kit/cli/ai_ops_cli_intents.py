@@ -293,6 +293,20 @@ def _intent_model(task, child_root, signals, a):
         ok, msg = repo_audit.record_answer(child_root, a.answer[0], a.answer[1], rep["ask"], why=a.why)
         print(msg)
         return 0 if ok else 2
+    # #647: `model --flow` — оркестратор первого часа ОДНИМ нарративом: понял → знаю/не знаю →
+    # (если ответы есть) направление+план → следующая работа. `--apply` записывает bootstrap.
+    # Склейка готовых функций (repo_audit уже посчитан выше — переиспользуем rep), не новый движок.
+    if getattr(a, "flow", False):
+        from ai_ops_kit.planning import first_hour
+        res = first_hour.run(child_root, apply=bool(getattr(a, "apply", False)),
+                             budget_left=getattr(a, "budget", None), understanding=rep)
+        if js:
+            print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+        else:
+            from ai_ops_kit.ui import presenter
+            aud = presenter.audience_from_config(child_root)
+            print(presenter.render(presenter.from_first_hour(res), audience=aud))
+        return 0
     # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА. Прежде форма ответов создавалась только в
     # человеческой ветке: `--json` того же намерения оставлял человека без места для ответа, то
     # есть одна команда вела себя двумя разными способами.

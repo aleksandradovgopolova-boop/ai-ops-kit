@@ -19,14 +19,14 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1192
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1923
-  ai_ops_kit/ui/presenter.py: 944
+  ai_ops_kit/cli/ai_ops_cli.py: 1198
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1937
+  ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1116
-  ai_ops_kit/ui/presenter_formatters.py: 988
+  ai_ops_kit/ui/presenter_formatters.py: 1059
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 713
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 922
@@ -39,6 +39,22 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 724
 
 raises:
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 988; ai_ops_cli_intents.py = 1923; ai_ops_cli.py = 1192; presenter.py = 944'
+    to: 'presenter_formatters.py = 1059; ai_ops_cli_intents.py = 1937; ai_ops_cli.py = 1198; presenter.py = 945'
+    work: 'first-hour-orchestrator (#647): `model --flow` — первый час одним нарративом'
+    why: >-
+      Первый час (понял репозиторий → знаю/не знаю → направление и план → следующая работа) был
+      четырьмя раздельными командами, а склейку держала только расходящаяся проза скилла. Здесь склейка
+      стала first-class В КИТЕ. Сама логика оркестрации — в новом доноре `planning/first_hour.py` (ниже
+      порога): тонкая склейка `repo_audit.run` → `product_bootstrap.plan/apply` → `next_work.compute` с
+      честными состояниями (blocked_understanding / needs_answers при блокерах или CONFLICTING / ready).
+      В монолитах — проводка и подача: presenter_formatters +71 (переводчик `from_first_hour` — первый
+      час человеческим языком, честные состояния, дисциплина записи), ai_ops_cli_intents +14 (ветка
+      `if a.flow` в `_intent_model`, переиспользует уже посчитанный rep), ai_ops_cli +6 (флаг `--flow`
+      в парсере), presenter +1 (реэкспорт формата). Логика не в монолитах; потолки подняты под факт,
+      ратчет держит вниз.
   - at: '2026-09-08'
     what: raise_ceiling
     from: 'ai_ops_cli_intents.py = 1897; ai_ops_run_exec.py = 703; ai_ops_run_lifecycle.py = 913'
