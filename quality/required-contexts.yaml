@@ -26,7 +26,13 @@ contexts:
   - pr-smoke / smoke
   # package-quality.yml
   - package-quality / lint
-  - package-quality / quality (fast)
+  # 2026-09-08 (#465): шард `fast` разбит на два параллельных (`fast-1`/`fast-2`), см.
+  # .github/ci-groups/fast-1.sh. Контекст `quality (fast)` заменён на два — оба ОБЯЗАНЫ
+  # блокировать мёрж. ⚠ Это декларация; фактические required-статусы branch protection main
+  # обновляет владелец руками (безопасный порядок — в описании PR #628): старый `quality (fast)`
+  # после слияния не отчитается никогда и, оставшись в required, повесит очередь.
+  - package-quality / quality (fast-1)
+  - package-quality / quality (fast-2)
   - package-quality / quality (selftests-a)
   - package-quality / quality (selftests-m)
   - package-quality / quality (contracts)
