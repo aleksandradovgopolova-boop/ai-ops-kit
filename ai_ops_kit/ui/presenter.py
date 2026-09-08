@@ -766,7 +766,8 @@ def from_work_view(view: dict) -> dict:
 # требует). При обращении к имени `presenter.from_*` модуль подгружается по требованию.
 _FORWARDED_FORMATTERS = (
     "from_advice", "from_bootstrap", "from_contour_consistency", "from_discovery_draft",
-    "from_doctor", "from_execution_preview", "from_intake_gap", "from_kit_feedback_recorded",
+    "from_doctor", "from_execution_preview", "from_first_hour", "from_intake_gap",
+    "from_kit_feedback_recorded",
     "from_new_feature", "from_onboarding_profile", "from_plan_built", "from_process_spend",
     "from_product_health", "from_repository_understanding", "from_review", "from_session_economy",
     "from_short_path", "from_specification", "from_subsession_decision", "_CMD_RU",

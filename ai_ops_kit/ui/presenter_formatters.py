@@ -711,6 +711,77 @@ def from_session_economy(snapshot: dict, rec: dict) -> dict:
         technical=tech)
 
 
+def from_first_hour(res: dict) -> dict:
+    """`first_hour.run()` -> UserMessage. Первый час ОДНИМ нарративом: понял репозиторий → что
+    знаю/не знаю → (если ответы есть) направление и план → следующая работа. Склейка готовых
+    функций, не новый движок; честные состояния (есть ответы / чего не хватает)."""
+    stage = res.get("stage")
+    cls = res.get("classification")
+    n_block = len(res.get("blocking_questions") or [])
+    conflicts = res.get("conflicts") or []
+
+    if stage == "blocked_understanding":
+        return message(
+            status="degraded", headline="Не смог осмотреть репозиторий",
+            summary="Прочитать содержимое репозитория не получилось — первый час я не начинаю.",
+            why_it_matters="Любой мой вывод о проекте без этого был бы выдумкой.",
+            next_steps=["проверь доступ к дереву репозитория и повтори: ./ai-ops model --flow"],
+            technical={"classification": cls})
+
+    if stage == "needs_answers":
+        parts = []
+        if conflicts:
+            parts.append("источники истины противоречат — актуальное сам определить не могу")
+        if n_block:
+            parts.append(f"есть {n_block} {_q(n_block, 'блокирующий вопрос', 'блокирующих вопроса', 'блокирующих вопросов')} о продукте, которых из кода не узнать")
+        return message(
+            status="needs_input",
+            summary="Разобрался с проектом. Чтобы собрать первое направление и план, нужны твои "
+                    "ответы: " + "; ".join(parts) + ".",
+            why_it_matters="Пока это открыто, направление за готовое я не выдам — недоказанное "
+                           "называю недоказанным.",
+            next_steps=['ответь: ./ai-ops model --answer <вопрос> "<ответ>"',
+                        "потом запусти снова: ./ai-ops model --flow --apply — соберу направление, "
+                        "план и предложу первую работу"],
+            technical={"classification": cls, "blocking_questions": n_block,
+                       "conflicts": ", ".join(c.get("category", "") for c in conflicts) or "—"})
+
+    # ready — ответов хватает.
+    boot = res.get("bootstrap") or {}
+    wi = boot.get("work_items")
+    n_work = len(wi) if isinstance(wi, list) else (wi or 0)
+    if not res.get("bootstrap_applied"):
+        will = [w for w in (boot.get("will_write") or []) if w.get("will_write")]
+        return message(
+            status="ok",
+            summary="Понял проект и готов собрать первое направление и план из фактов репозитория.",
+            why_it_matters="Ответов хватает — выдумывать ничего не нужно.",
+            next_steps=["запиши направление и план: ./ai-ops model --flow --apply",
+                        "после этого сразу назову, какую работу взять первой"],
+            technical={"classification": cls,
+                       "будет создано": ", ".join(w.get("path", "") for w in will) or "—",
+                       "работ в плане": n_work})
+
+    nxt = res.get("next") or {}
+    first = nxt.get("next_best") if isinstance(nxt, dict) else None
+    first_label = (first.get("title") or first.get("id")) if isinstance(first, dict) else None
+    steps = []
+    if first_label:
+        steps.append(f"возьми первой: {first_label}")
+    else:
+        steps.append("спроси «что дальше» — предложу работу по собранному плану")
+    steps.append("детали по любой работе — по запросу")
+    return message(
+        status="ok", headline="Первый час пройден",
+        summary=f"Понял проект, собрал направление и план ({n_work} "
+                f"{_q(n_work, 'работа', 'работы', 'работ')})"
+                + (f"; следующей имеет смысл взять «{first_label}»" if first_label else "") + ".",
+        why_it_matters="Дальше можно работать по плану, а не по догадкам.",
+        next_steps=steps,
+        technical={"classification": cls, "работ": n_work,
+                   "next": (first.get("id") if isinstance(first, dict) else None) or "—"})
+
+
 def from_bootstrap(rep: dict, applied=False) -> dict:
     """`bootstrap.plan()` / `bootstrap.apply()` -> UserMessage. Онбординг заканчивается РАБОТОЙ.
 
