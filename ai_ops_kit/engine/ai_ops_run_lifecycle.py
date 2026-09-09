@@ -26,6 +26,17 @@ from ai_ops_kit.lifecycle import active_work        # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402
 
 
+def _run_start_audience(child_root):
+    """Аудитория для служебных строк СТАРТА прогона (active-work/worktree). #708: на product их
+    id-насыщенная форма — внутренний шум; берём из communication-policy дочки (default product).
+    Сбой резолва не роняет прогон — падаем на technical (полная форма)."""
+    try:
+        from ai_ops_kit.ui import presenter
+        return presenter.audience_from_config(child_root)
+    except Exception:  # noqa: BLE001
+        return "technical"
+
+
 def _commit_barrier(rep, child_root, features_dir, fid, lifecycle_errors):
     """Commit-barrier перед доставкой: durable RunHandoff + final report + journal-checkpoint.
     K6: вынесено из run() без изменения поведения; -> (jname, handoff_ok, report_ok, plan)."""
@@ -310,11 +321,13 @@ def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
               "повторный прогон: запусти с open_pr (и GITHUB_TOKEN), либо открой PR из ветки сам")
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid, status="blocked",
-                                   reason="ждёт доставки: работа готова на ветке, новых правок нет")
+                                   reason="ждёт доставки: работа готова на ветке, новых правок нет",
+                                   audience=_run_start_audience(child_root))
         _ls.merge_bookkeeping_losses(rep)
         return rep
     with contextlib.redirect_stdout(sys.stderr):
-        active_work.finish_cmd(aw_path, fid, status=_st, reason=_why)
+        active_work.finish_cmd(aw_path, fid, status=_st, reason=_why,
+                               audience=_run_start_audience(child_root))
     _ls.merge_bookkeeping_losses(rep)   # утраченные записи журнала называются в отчёте, а не пропадают
     return rep
 
@@ -658,7 +671,8 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
                                            workitem=f"features/{fid}/workitem.yaml",
                                            child_root=child_root,
                                            takeover=takeover, takeover_reason=takeover_reason,
-                                           published=active_work.publication_enabled(child_root))
+                                           published=active_work.publication_enabled(child_root),
+                                           audience=_run_start_audience(child_root))
         except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
             lifecycle_errors.append(f"active-work register: {_e}")
             _reg_rc = 0        # сбой записи реестра уже назван выше — не путать его с отказом

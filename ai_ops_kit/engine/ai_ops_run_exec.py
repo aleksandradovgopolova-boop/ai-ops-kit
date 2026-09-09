@@ -412,18 +412,22 @@ def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, instal
             rep = _pipe(True, _fx + (("\n\n" + resume_ctx) if resume_ctx else ""))
             _fix_left -= 1
     except (KeyboardInterrupt, SystemExit):
+        from ai_ops_kit.engine.ai_ops_run_lifecycle import _run_start_audience
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid, status="blocked",
-                                   reason="прогон прерван (Ctrl-C/exit) — работа не завершена")
+                                   reason="прогон прерван (Ctrl-C/exit) — работа не завершена",
+                                   audience=_run_start_audience(ctx.child_root))
         raise
     except Exception as _e:  # noqa: BLE001
         # v3.0-rc17 (finding живого прогона): исключение провайдера/инфры (напр. HTTP 429 kimi ПОСЛЕ
         # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16),
         # одиночный прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (status=error, ready_for_pr=False, exit 2),
         # а не падать. Типизируем сбой (провайдер/сеть vs дефект движка).
+        from ai_ops_kit.engine.ai_ops_run_lifecycle import _run_start_audience
         with contextlib.redirect_stdout(sys.stderr):
             active_work.finish_cmd(aw_path, fid, status="blocked",
-                                   reason=f"прогон упал: {type(_e).__name__}")
+                                   reason=f"прогон упал: {type(_e).__name__}",
+                                   audience=_run_start_audience(ctx.child_root))
         try:
             from ai_ops_kit.engine.workpackage_executor import _classify_failure
             _fail = _classify_failure(_e)
