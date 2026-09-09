@@ -44,6 +44,34 @@ def test_resolve_removes(tmp_path):
     assert AB.resolve(tmp_path, "preflight:w1") is False   # уже снят — идемпотентно
 
 
+# ── attention_summary (#676): «сколько внимания стоил прогон» ──────────────────────────────────
+
+def test_attention_summary_counts_all_including_resolved(tmp_path):
+    # #676: снятый повод остаётся свидетельством, что внимание понадобилось — иначе метрику
+    # «человеческое внимание на результат» не посчитать. resolve помечает, а не удаляет.
+    AB.record(tmp_path, key="preflight:w1", source="s", reason="r", kind=AB.BLOCKED, work_id="w1")
+    AB.record(tmp_path, key="gov:w2", source="s", reason="r", kind=AB.DECISION, work_id="w2")
+    assert AB.resolve(tmp_path, "preflight:w1") is True     # снят -> из очереди ушёл
+
+    pending_keys = {r["key"] for r in AB.collect(tmp_path)}
+    assert pending_keys == {"gov:w2"}                        # снятого в очереди нет, второй остался
+    s = AB.attention_summary(tmp_path)
+    assert s == {"total": 2, "decision": 1, "blocked": 1, "pending": 1, "resolved": 1}
+
+
+def test_attention_summary_empty_is_zero(tmp_path):
+    assert AB.attention_summary(tmp_path) == {
+        "total": 0, "decision": 0, "blocked": 0, "pending": 0, "resolved": 0}
+
+
+def test_resolve_does_not_lose_the_record(tmp_path):
+    AB.record(tmp_path, key="preflight:w1", source="s", reason="r", kind=AB.BLOCKED)
+    AB.resolve(tmp_path, "preflight:w1")
+    # collect (для inbox) снятого не отдаёт, но замер внимания его помнит
+    assert AB.collect(tmp_path) == []
+    assert AB.attention_summary(tmp_path)["total"] == 1
+
+
 def test_missing_fields_not_recorded(tmp_path):
     assert AB.record(tmp_path, key="", source="s", reason="r") is False
     assert AB.collect(tmp_path) == []

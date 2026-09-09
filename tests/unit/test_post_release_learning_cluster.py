@@ -49,6 +49,32 @@ def test_cost_analytics_is_wired_into_runtime(tmp_path):
     assert res["cost_analytics"]["measured"] is False
 
 
+def test_attention_is_wired_into_runtime(tmp_path):
+    """#676: пост-релизный путь зовёт attention_bus — ключ attention всегда в результате, и снятый
+    повод остаётся в замере (нижняя граница человеческого внимания на путь к исходу)."""
+    from ai_ops_kit.lifecycle import attention_bus
+    root = _child(tmp_path)
+    attention_bus.record(root, key="preflight:w1", source="прогон: preflight",
+                         reason="работа остановлена", kind=attention_bus.BLOCKED, work_id="w1")
+    attention_bus.record(root, key="gov:w1", source="граница решений",
+                         reason="решение за человеком", kind=attention_bus.DECISION, work_id="w1")
+    attention_bus.resolve(root, "preflight:w1")   # снят — но замер #676 его помнит
+
+    res = prl.run_post_release(str(EXAMPLE_PRR), root)
+    att = res["attention"]
+    assert att["available"] is True
+    assert att["total"] == 2 and att["decision"] == 1 and att["blocked"] == 1 and att["pending"] == 1
+    assert "человеческое внимание: 2" in prl.render(res)
+
+
+def test_attention_zero_when_no_calls(tmp_path):
+    """Пустая шина -> 0 обращений (честный дефолт), строку в разборе не печатаем."""
+    res = prl.run_post_release(str(EXAMPLE_PRR), _child(tmp_path))
+    assert res["attention"] == {"available": True, "total": 0, "decision": 0,
+                                "blocked": 0, "pending": 0, "resolved": 0}
+    assert "человеческое внимание" not in prl.render(res)
+
+
 def test_evolution_triggers_wired_honest_default(tmp_path):
     """evolution_triggers зовётся; без ADR/health — available:false с причиной, не выдуманные триггеры."""
     res = prl.run_post_release(str(EXAMPLE_PRR), _child(tmp_path))
