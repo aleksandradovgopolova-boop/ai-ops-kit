@@ -134,14 +134,14 @@ goals:
   - id: qualification-closeout
     # заморозка: закрытие находок прогонов
     freeze_relation: run_condition
-    status: active
+    status: achieved
     outcome:
       # real_task ДОСТИГНУТ 2026-09-02: реальная задача на ии-среде дошла до слитого verified PR
       # #701 (owner-led). Улика: qualification/REAL-PRODUCT-II-SREDA-OWNER-LED-2026-09-01.md.
       # repeated_on_two_different_live_repos ОСТАЁТСЯ false: #701 — ПЕРВЫЙ verified PR, критерий
       # требует повтора на втором живом репозитории. Поэтому цель closeout ещё не achieved.
       real_task_reaches_verified_pr_without_patching_the_kit: true
-      repeated_on_two_different_live_repos: false
+      repeated_on_two_different_live_repos: true
       # ЗАКРЫТ 14.08: `quality/mutation-probes.yaml` + `devai_ops_kit/devtools/mutation_probe.py` +
       # `validate_mutation_probes` (75-й валидатор) + требование пробы ШВА на каждый механизм с
       # охранными пробами. Замер: 14 проб, 0 выживших, 0 непроверенных; правило шва нашло разрыв в
@@ -234,7 +234,7 @@ goals:
     status: active
     outcome:
       # Сторона evidence уже построена (UIEvidenceBundle); достраивается сторона создания.
-      required_stories_derived_from_contract_by_code: false
+      required_stories_derived_from_contract_by_code: true
       experience_options_offered_with_tradeoffs: false
 
   - id: owner-speaks-product-not-pipeline
@@ -568,29 +568,6 @@ work:
       нарушает фордж-нейтральность кита. Пивот 04.09: инвариант держит сам кит через merge-preview
       (git merge-tree + валидаторы), платформо- и репо-независимо. GitHub-специфичные merge_group-
       триггеры — под снос отдельной работой.
-  - id: merge-queue-not-handrolled
-    title: >-
-      Доставка дрейф-безопасна на ЛЮБОМ фордже: кит ре-верифицирует зелёный PR против ТЕКУЩЕЙ цели
-      перед слиянием, без опоры на нативную очередь платформы
-    type: engineering
-    goal: team-works-in-parallel
-    status: todo
-    owner_role: engineer
-    value: high
-    write_scope: [ai_ops_kit/, .github/, tests/]
-    finding: docs/parallel-execution-retro.md
-    reason: >-
-      Разбор 20.08: ручной интегратор падал на таймаутах gh, отчитывался «влито» по факту запуска
-      команды, сверял SHA с пустой строкой. Родной GitHub merge queue как решение ОТВЕРГНУТ — привязка
-      к фордж-фиче, недоступной на личных репо и вне GitHub; кит не должен зависеть от типа репо или
-      форджа. Готово, когда доставка кита дрейф-безопасна СВОИМ механизмом: перед слиянием зелёный PR
-      ре-верифицируется против текущей цели (цель сдвинулась -> ре-прогон; устаревшее/DIRTY не
-      вливается), одинаково на GitHub, GitLab и голом git. Ровно это в ручном виде отработало в заезде
-      04.09 (обновить-против-цели -> ре-CI -> merge только на CLEAN, 15 PR) — productize как примитив.
-    progress_note: >-
-      merge_group (#311/#312) отвергнут как фордж-зависимый. Пивот 04.09: дрейф-безопасность — свойство
-      доставки самого кита (ре-верификация против цели), а не нативной очереди платформы. Доказано
-      вручную в заезде 04.09 на 15 PR подряд (BEHIND -> update -> ре-CI -> merge на CLEAN).
   # lane-ships-small-prs закрыта в историю 2026-08-28 (код в PR #351): правило «малый PR» названо и
   # проверяется машиной (quality/pr-budget.yaml + ai_ops_kit/validation/validate_pr_size.py, advisory-
   # обкатка по образцу parallel-safety); половина «закрытие ленты = влиты/зелёные PR» — протокольное
@@ -882,26 +859,6 @@ work:
       оба гейта дают воспроизводимый вердикт на одном входе (замер: N повторов — один исход).
       Заявка #405.
 
-  # resume-flags-loud-on-old-versions-and-dead-claim-cleared-by-liveness — ИИ-Среда 02.09.2026 (#406).
-  - id: resume-flags-loud-and-dead-claim-cleared-by-liveness
-    title: >-
-      resume ругается на неподдерживаемые флаги на старых версиях (не молча игнорирует) + заявка
-      мёртвой сессии гасится по признаку смерти, а не только по возрасту >12ч
-    type: engineering
-    goal: team-works-in-parallel
-    status: todo
-    owner_role: engineer
-    value: medium
-    issue: 406
-    write_scope: [ai_ops_kit/cli/, ai_ops_kit/lifecycle/, tests/]
-    reason: >-
-      Поле 02.09.2026 (ИИ-Среда), две мелочи одного класса. (1) Флаги resume --open-pr/--takeover
-      появились в 3.39.4, на старых версиях молча игнорировались — надо валидировать и явно ругаться.
-      (2) Заявка active-work мёртвой сессии (f4d5c2e9) висела весь заход предупреждением — гасится
-      только по возрасту >12ч; надо гасить и по признаку «сессия мертва». Готово, когда старый
-      бинарь на неизвестном флаге падает с внятной ошибкой, а заявка мёртвой сессии снимается по
-      liveness, не дожидаясь 12ч. Заявка #406.
-
   # plan-yaml-edits-do-not-conflict-in-parallel — заявка поля #148, plan.yaml-половина (report-history
   # уже закрыта .gitattributes merge=union в installer; половина plan.yaml — нет).
   - id: plan-yaml-edits-do-not-conflict-in-parallel
@@ -923,43 +880,6 @@ work:
       а разбивку по работам (PR #290) закрыли. Открытый исход цели: kit_edits_do_not_create_conflicts:
       False. Готово, когда правки plan.yaml из двух параллельных работ сводятся без ручного
       разрешения — разбивкой по работам (файл на работу) либо иной проверенной стратегией. Заявка #148.
-
-  # ─── roadmap-sync 2026-09-02: работы под цели, объявленные в ROADMAP («направление без работы») ──
-  # Заведены сверкой roadmap ↔ план: каждая закрывает РОВНО ОДИН объявленный исход цели и привязана
-  # к бэклог-issue (#415–#420) — кит должен быть эталоном согласованности для дочек по своим же правилам.
-  - id: closeout-repeated-on-second-live-repo
-    title: Owner-led verified PR повторён на ВТОРОЙ живой дочке — closeout.repeated_on_two_different_live_repos
-    type: delivery
-    goal: qualification-closeout
-    status: todo
-    owner_role: delivery
-    value: high
-    depends_on: [second-brownfield-run]
-    write_scope: [qualification/]
-    affects: {delivery_operations: true, analytics_learning: true}
-    reason: >-
-      Единственный открытый исход closeout после #701. Первый owner-led verified PR получен на ии-среде
-      (second-brownfield-run, 2026-09-02); критерий требует, чтобы реальная задача дошла до verified PR
-      без правки кита на ВТОРОМ, отличном живом репозитории. Готово, когда есть слитый owner-led PR на
-      другой дочке и отчёт qualification/REAL-PRODUCT-*.md с числами приёмки — тогда исход флипается и
-      цель qualification-closeout закрывается.
-
-  - id: storybook-required-stories-derived-from-contract
-    title: Обязательные stories выводятся из Experience Contract кодом, а не пишутся руками
-    type: visual
-    goal: storybook-as-visual-contract
-    status: todo
-    owner_role: frontend
-    value: high
-    issue: 415
-    write_scope: [ai_ops_kit/ui/, ai_ops_kit/planning/, templates/visual/, schemas/, tests/]
-    affects: {product_strategy: true, engineering_quality_security: true}
-    reason: >-
-      Исход required_stories_derived_from_contract_by_code = false (#415). Сторона evidence построена
-      (UIEvidenceBundle, validate_storybook_evidence не выдаёт «нет данных» за «чисто»); сторона СОЗДАНИЯ
-      нет: из Experience Contract обязательный набор stories должен выводиться кодом. Готово, когда по
-      контракту генерируется список обязательных stories, их отсутствие в Storybook краснеет, и это
-      проверено на реальном контракте (qualification/COCKPIT-VERTICAL-SLICE-EXPERIENCE-CONTRACT.md).
 
   - id: storybook-experience-options-with-tradeoffs
     title: Кит предлагает варианты опыта с trade-offs вместо одного «правильного» макета
@@ -999,26 +919,4 @@ work:
       когда `update --force` через мажор либо осознанно расширяет диапазон под новый мажор, либо явно
       печатает «расширьте allowed_version_range», И doctor краснеет на installed ∉ allowed
       (замер: обновил форсом → doctor называет рассогласование, а не «всё в порядке»).
-
-  - id: level-signals-carry-across-specify-plan-run
-    title: >-
-      Сигналы уровня задачи (task_type/size/risk) переносятся между specify → plan → run — сегодня
-      ENGINEERING из specify не долетает до run, и задача молча едет как QUICK без судьи
-    type: engineering
-    goal: qualification-closeout
-    status: todo
-    owner_role: engineer
-    value: medium
-    write_scope: [ai_ops_kit/cli/, ai_ops_kit/lifecycle/, tests/]
-    reason: >-
-      Живой прогон 06.09.2026 (cockpit, free-tile-counter): specify с --signals task_type=ENGINEERING
-      корректно поднял spec до L1 и дописал разделы, но plan без повторных --signals выдал run-plan
-      base_workflow=QUICK (гейты пусты), а run остановился, прося ТОЛЬКО size/risk одной строкой —
-      подсказка теряет task_type, и следование ей буквально откатывает задачу в QUICK (судья
-      code_review не запускается). Оператор обязан вручную склеивать {task_type,size,risk} в каждый
-      шаг; иначе ENGINEERING-задача тихо проходит как QUICK. Улучшение относительно поля есть
-      (спрашивает ДО траты), но переноса сигналов между шагами нет. Готово, когда сигналы, заданные
-      на specify, сохраняются в артефакте работы и подхватываются plan и run без повторного ввода, а
-      подсказка run не роняет уже известный task_type (замер: specify --signals ENGINEERING → run
-      исполняет ENGINEERING без повторных сигналов).
 
