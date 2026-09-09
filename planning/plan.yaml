@@ -779,7 +779,6 @@ work:
 
   # ─── Phase 0: «контроль качества честен» (аудит 2026-08-25) ───────────────────────────────────
 
-
   # parallel-safety-allows-kit-own-update-prs — заявка поля #384 (2026-09-01). При взятии в дело —
   # freeze-exception: это найденный полем дефект механизма parallel-safety, блокирующий раскатку кита.
   - id: parallel-safety-allows-kit-own-update-prs
@@ -895,27 +894,6 @@ work:
       только по возрасту >12ч; надо гасить и по признаку «сессия мертва». Готово, когда старый
       бинарь на неизвестном флаге падает с внятной ошибкой, а заявка мёртвой сессии снимается по
       liveness, не дожидаясь 12ч. Заявка #406.
-
-  # run-execute-names-unavailable-provider-instead-of-traceback — заявка поля #160 (18.08.2026).
-  - id: run-execute-names-unavailable-provider-not-traceback
-    title: >-
-      run --execute при структурно недоступном claude-cli (запуск изнутри сессии Claude) даёт внятное
-      сообщение и путь, а не RuntimeError после 5 бессмысленных ретраев
-    type: engineering
-    goal: trustworthy-core
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 160
-    write_scope: [ai_ops_kit/providers/, ai_ops_kit/engine/, tests/]
-    reason: >-
-      Поле 18.08.2026 (ИИ-Среда, 3.36.12): при запуске изнутри активной сессии Claude Code вложенный
-      claude -p возвращается мгновенно с api_error и 0 токенов, не доходя до API — провайдер
-      claude-cli структурно нерабочий в этой среде, ретраи бессмысленны. Кит делает 5 попыток и
-      падает RuntimeError, работа blocked, пользователь получает общий трейс без объяснения и
-      альтернативы. Готово, когда кит детектит именно этот отказ (api_error + 0 токенов +
-      duration_api_ms:0), не ретраит его и выдаёт понятное сообщение с путём (запусти вне сессии
-      или укажи --provider с ключом). Заявка #160; НЕ дубль #161 (issue остался OPEN).
 
   # plan-yaml-edits-do-not-conflict-in-parallel — заявка поля #148, plan.yaml-половина (report-history
   # уже закрыта .gitattributes merge=union в installer; половина plan.yaml — нет).
@@ -1043,31 +1021,6 @@ work:
       — отдавать по MCP нечего, пока реестры и проверки не наполнены. Готово, когда MCP-сервер отдаёт
       данные волны 2 и вердикты волны 3, и это проверено живым вызовом.
 
-  # ─── Находки живого прогона 06.09.2026 (cockpit на ките 4.x, фича free-tile-counter, commit
-  #     8293fe54, provider claude-cli). Обкатка мажорного update --force + детский green-path.
-  #     Каждая работа названа полевым замером этого прогона, не пересказом. ───────────────────────
-  - id: code-review-reviewer-renders-a-parseable-verdict
-    title: >-
-      Гейт code_review закрываем: независимый ревьюер (claude-cli) выдаёт разбираемый вердикт, а не
-      «нет заключения» — сегодня гейт не проходит по построению, независимо от качества правки
-    type: engineering
-    goal: trustworthy-core
-    status: todo
-    owner_role: engineer
-    value: high
-    write_scope: [ai_ops_kit/gates/, ai_ops_kit/providers/, tests/]
-    reason: >-
-      Живой прогон 06.09.2026 (cockpit на ките 4.x, free-tile-counter, commit 8293fe54, provider
-      claude-cli): приёмочный судья вынес вердикт met, заземлённый на файл (Fix C работает), а гейт
-      code_review упал с blocker «нет заключения reviewer (code-reviewer) — гейт не пройден»,
-      evidence пуст, reviews:null. Это НЕ дубль закрытой работы про сообщение «почему вердикта нет»
-      (evidence_from_no_verdict в gates/gate_executor.py): та улучшила ФОРМУЛИРОВКУ отказа, а здесь
-      ревьюер не рождает вердикт вовсе — гейт не закрывается ни на какой правке, и автономный green
-      по построению недостижим. Тот же класс, что поле 2026-08-20 (obs «ревьюер не вынес вердикт»),
-      живой на 4.x. Готово, когда на живом прогоне claude-cli гейт code_review закрывается настоящим
-      вердиктом ревьюера (pass/needs_work с evidence на изменённый файл), а «нет заключения» остаётся
-      только для случая, когда ревьюер реально недоступен — отделённого от «ревьюер позван, но молчит».
-
   - id: forced-major-update-reconciles-allowed-version-range
     title: >-
       После `update --force` через мажор конфиг согласован: installed_version попадает в
@@ -1113,58 +1066,3 @@ work:
       подсказка run не роняет уже известный task_type (замер: specify --signals ENGINEERING → run
       исполняет ENGINEERING без повторных сигналов).
 
-  # ─── Реальная среда команды: Клод в приложении/терминале (решение владельца 07.09.2026) ────────
-  - id: code-review-reviewer-works-inside-a-claude-session
-    title: >-
-      Гейт code_review закрывается настоящим вердиктом, когда кит запущен ВНУТРИ сессии Клода
-      (приложение/терминал) — реальная среда команды, где вложенный claude-cli-ревьюер молчит
-    type: engineering
-    goal: trustworthy-core
-    status: todo
-    owner_role: engineer
-    value: high
-    depends_on: [code-review-reviewer-renders-a-parseable-verdict]
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, ai_ops_kit/gates/, tests/]
-    reason: >-
-      Решение владельца 07.09.2026: вся команда работает с Клодом в приложении/терминале, ключ
-      ANTHROPIC_API_KEY не используется — значит вложенный claude-cli это ПОСТОЯННАЯ среда исполнения
-      кита, а не тестовый край. Замер живого прогона 06.09 (cockpit на ките 4.x, free-tile-counter):
-      ревьюер code_review как отдельный `claude -p` внутри активной сессии Клода возвращает ПУСТО (18
-      входных токенов, 0 вывода; #160), поэтому гейт даёт «нет заключения reviewer» и не закрывается
-      НИ НА КАКОЙ правке. code-review-reviewer-renders-a-parseable-verdict (надёжный разбор вердикта)
-      необходим, но НЕ достаточен: парсить нечего, когда ответ пуст. Это и есть реальная стена к
-      автономному green для того, как работает команда. Готово, когда code_review закрывается
-      настоящим вердиктом при запуске ИЗНУТРИ сессии Клода — ревьюер идёт каналом, который в этой
-      среде отвечает (сессия/субагент Клода как ревьюер вместо вложенного `claude -p`), ЛИБО пустой
-      ответ провайдера честно передаётся человеку/оркестратору как «нужно ревью», а не в no-verdict;
-      проверено живым прогоном дочки, запущенным из приложения/терминала Клода (не через внешний ключ).
-
-  # ─── Follow-up к #570: handoff построен, но не проведён в реальный поток (живая проверка 07.09) ──
-  - id: handoff-verdict-consumed-by-resume-and-reevaluate
-    title: >-
-      Вердикт-артефакт оркестратора реально ЗАКРЫВАЕТ code_review через CLI resume/reevaluate —
-      сегодня artifact-first юнит-корректен, но в фактическом потоке не достигается (built≠wired)
-    type: engineering
-    goal: trustworthy-core
-    status: todo
-    owner_role: engineer
-    value: high
-    depends_on: [code-review-reviewer-works-inside-a-claude-session]
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, tests/]
-    reason: >-
-      Живая проверка #570 07.09.2026 (cockpit на ките с #570, free-tile-counter, из сессии Клода):
-      механизм handoff юнит-корректен (`load_verdict` принимает заземлённый writer≠judge-вердикт на
-      нужном SHA), НО в фактическом потоке code_review НЕ закрывается. Три разрыва, все воспроизведены:
-      (a) авто-`awaiting_reviewer` ловит только ПОЛНУЮ env-сигнатуру, а реальный in-session пустой —
-      мягкий `empty_answer` (ProviderRefusal), поэтому кит даёт generic «нет заключения reviewer», а не
-      запрос на ревью; (b) записанный валидный вердикт-артефакт НЕ потребляется через `ai-ops resume`
-      (перезапускает писателя) и `run --reevaluate-only` — `code_review` остаётся «нет заключения»
-      (artifact-first в `_run_reviews` в этом потоке не достигается: гейт скипается `if gid in gate_ev`
-      до artifact-first, либо `_run_reviews` не зовётся с proposer на reevaluate); (c) `--reevaluate-only`
-      не поднят в CLI-обёртке (только флаг движка) и без `--signals` падает в QUICK, где code_review нет.
-      ПОДТВЕРЖДЕНО ценным: оркестратор-ревьюер поймал реальный баг писателя (инверсия свободных/занятых
-      плиток), который немой claude-cli пропустил, и приёмка честно отметила AC невыполненным (0 false-green).
-      Готово, когда на ЖИВОМ прогоне дочки ИЗ сессии Клода: пустой ревьюер (в т.ч. мягкий empty_answer)
-      ведёт в awaiting_reviewer с запросом; записанный оркестратором вердикт-артефакт закрывает code_review
-      через штатный resume/reevaluate CLI-поток; и это покрыто тестом ЧЕРЕЗ реальный CLI-поток, а не только
-      юнит `_run_reviews`.

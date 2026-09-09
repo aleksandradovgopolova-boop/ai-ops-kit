@@ -4989,3 +4989,57 @@ work:
     # РАЗБОР: type: engineering; goal: kit-release-strategy; owner_role: engineer; value: medium;
     #   write_scope: [ai_ops_kit/devtools/, tests/]. Реализация — #392; здесь закрыта acceptance-
     #   проверка «оба валидатора зелены», которой не было в исходном тесте.
+
+  - id: run-execute-names-unavailable-provider-not-traceback
+    title: >-
+      run --execute при структурно недоступном claude-cli (запуск изнутри сессии Claude) даёт внятное
+      сообщение и путь, а не RuntimeError после 5 бессмысленных ретраев
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 483
+    issue: 160
+    result: >-
+      Кит детектит именно этот отказ (api_error + 0 токенов + duration_api_ms:0), не ретраит его и
+      выдаёт понятное сообщение с путём (запусти вне сессии Клода или укажи --provider с ключом),
+      а не общий RuntimeError после пяти бессмысленных попыток. Код влит 0399c5e7 (#483).
+
+  - id: code-review-reviewer-renders-a-parseable-verdict
+    title: >-
+      Гейт code_review получает РАЗБИРАЕМЫЙ вердикт ревьюера (а не молчание/прозу), в т.ч. на
+      claude-cli-пути, где дифф даётся инлайном и reads пусты
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 667
+    result: >-
+      Внутренний ревьюер сам заземляет pass и рендерит разбираемый вердикт: прозаический pass без
+      цитаты больше не держится стражем как рубер-штамп, а grounded-форма (pass = цитата) разводится
+      в промпте tool_loop. Код влит b18026f3 (#667); подтверждено ЖИВЫМ прогоном #668 (durationkit/
+      slugkit доведены до READY_FOR_PR, 0 ложных green).
+
+  - id: code-review-reviewer-works-inside-a-claude-session
+    title: >-
+      Гейт code_review закрывается настоящим вердиктом, когда кит запущен ВНУТРИ сессии Клода —
+      реальная среда команды, где вложенный claude-cli-ревьюер прежде молчал
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 570
+    result: >-
+      code_review закрывается настоящим заземлённым вердиктом при запуске ИЗНУТРИ сессии Клода без
+      внешнего ключа (ревьюер идёт каналом, который в этой среде отвечает). Код влит c21d2b3e (#570);
+      ПОДТВЕРЖДЕНО живым прогоном #668 09.09: durationkit (20/20) и slugkit (16/16) доведены из
+      сессии Клода до verified-PR вердиктом самого кита, 0 ложных green.
+
+  - id: handoff-verdict-consumed-by-resume-and-reevaluate
+    title: >-
+      Handoff-вердикт code_review проводится в реальный поток resume/reevaluate (не только юнит)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 580
+    result: >-
+      Handoff-вердикт закрывает code_review через штатный resume/reevaluate CLI-поток и покрыт тестом
+      ЧЕРЕЗ реальный CLI-поток, а не только юнит `_run_reviews`. Код влит a16fb92a (#580); reevaluate-
+      путь довершён this session #683 (resume --deliver-only доводит флаг reevaluate-only до движка).
