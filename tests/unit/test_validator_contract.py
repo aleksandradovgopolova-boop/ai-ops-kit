@@ -51,6 +51,7 @@ UNIFORM_CHECK_VALIDATORS = [
     "validate_release_claims",
     "validate_requirements_artifact",
     "validate_reviewer_result",
+    "validate_run_handoff",   # v3.38-приём: check() ре-экспортирован из checks/run_handoff (#678)
     "validate_sandbox_boundary",
     "validate_security_domains",
     "validate_spec_artifact",
