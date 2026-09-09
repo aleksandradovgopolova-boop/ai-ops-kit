@@ -875,13 +875,21 @@ def from_intake_gap(missing, hint_command=None) -> dict:
     names = {"size": "насколько большая задача", "risk": "насколько рискованная",
              "task_type": "какого рода работа"}
     human = [names.get(m.get("signal"), m.get("signal")) for m in miss]
-    steps = ["ответь одной строкой: " + hint_command] if hint_command else []
+    # Человеку — не «ответь этим JSON», а «скопируй строку, а если задача крупнее — поменяй два
+    # слова». Механизм тот же (--signals), но подан так, чтобы не знать его формат было не нужно.
+    if hint_command:
+        steps = ["если задача небольшая и обычная — просто скопируй эту строку в команду:  "
+                 + hint_command,
+                 "если она крупнее или рискованнее — поменяй в строке size (small/medium/large) "
+                 "и risk (low/medium/high)"]
+    else:
+        steps = ["скажи размер и риск задачи — например «небольшая, не рискованная»"]
     return message(
         status="needs_input", headline="Пары слов о задаче не хватает",
         summary="Прежде чем запускать, мне нужно понять: " + ", ".join(human) + ".",
         why_it_matters="Из кода это не выводится, а без этого прогон остановится на проверке — "
                        "уже потратив время. Спрашиваю секундой, а не часом.",
-        next_steps=steps or ["скажи размер и риск задачи"],
+        next_steps=steps,
         technical={m.get("signal"): " | ".join(m.get("allowed") or []) or "значение"
                    for m in miss})
 
