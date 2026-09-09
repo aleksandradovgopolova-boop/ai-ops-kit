@@ -34,6 +34,7 @@ UNIFORM_CHECK_VALIDATORS = [
     "validate_bootstrap_qualification",
     "validate_budget_contract",
     "validate_context_architecture",
+    "validate_context_bundle",   # v3.38-приём: check() ре-экспортирован из checks/context_bundle (#678)
     "validate_duties",
     "validate_feature_learning",
     "validate_key_lifecycle",

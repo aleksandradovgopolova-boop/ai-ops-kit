@@ -153,3 +153,39 @@ class TestStorybookNavigationWiring:
     def test_no_storybook_section_when_child_has_no_storybook(self, repo):
         p = build_payload({"task_text": "поправить кнопку", "ui_changed": True}, repo)
         assert "storybook-navigation" not in p["text"]   # не шумим на не-Storybook дочке
+
+
+# ─── #678: генератор сам проверяет форму собранного ContextBundle (validate-and-warn) ──────────
+
+class TestCompileBundleValidatesItsOwnShape:
+    def test_valid_bundle_emits_no_warning_and_check_is_green(self, repo, eng_task):
+        """Реальный compile_bundle -> валидный ContextBundle: ни предупреждения, ни ошибок check()."""
+        import warnings as _w
+
+        from ai_ops_kit.checks.context_bundle import check
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            b = compile_bundle(eng_task, repo)
+        assert not [x for x in caught if issubclass(x.category, RuntimeWarning)], \
+            [str(x.message) for x in caught]
+        assert check(b) == []
+
+    def test_overflow_bundle_also_green(self, repo, eng_task):
+        """Ветка overflow (крохотный бюджет) тоже даёт валидный bundle — без ложного warn."""
+        import warnings as _w
+
+        from ai_ops_kit.checks.context_bundle import check
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            b = compile_bundle(eng_task, repo, context_budget=10)
+        assert not [x for x in caught if issubclass(x.category, RuntimeWarning)], \
+            [str(x.message) for x in caught]
+        assert check(b) == []
+
+    def test_warn_helper_fires_on_malformed_bundle(self):
+        """Битый ContextBundle -> генератор ГРОМКО предупреждает (bundle становится payload модели)."""
+        from ai_ops_kit.context.context_compiler import _warn_if_bundle_malformed
+        bad = {"kind": "ContextBundle", "workitem_id": "x", "included": "не объект",
+               "excluded": [], "estimated_tokens": 1, "context_budget": 1}
+        with pytest.warns(RuntimeWarning, match="нарушением формы"):
+            _warn_if_bundle_malformed(bad)
