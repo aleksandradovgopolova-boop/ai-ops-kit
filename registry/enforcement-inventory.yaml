@@ -1,0 +1,58 @@
+# Инвентарь «объявлено → исполняется» (аудит 2026-09-09, §6 — КОРЕНЬ, а не находка).
+#
+# ЗАЧЕМ. Класс дефекта «объявлено, но не исполняется» рос молча и держался на памяти владельца:
+# mypy стоит в [dev] и не запускается НИГДЕ; ruff когда-то стоял и не гонялся; число в README не
+# было подключено к заверению; гейт слоёв исполнялся, но мерил не предмет. Каждый раз это ловил
+# внешний глаз, а не машина. Здесь класс держится машиной: `validate_enforcement_inventory.py`
+# сверяет ОХВАТ (каждый объявленный dev-инструмент и каждый ратчет-baseline перечислен здесь) и
+# РЕЗОЛЮЦИЮ доказательства (enforced_at реально находит вызов; consumed_by реально читает baseline).
+#
+# ПРАВИЛО. Объявленный механизм обязан быть либо `enforced` с доказательством, где он вызывается,
+# либо честно `unenforced` с причиной и ссылкой на работу. Тихое «есть в зависимостях, а нигде не
+# запускается» краснеет. Реестр вправе только пополняться синхронно с объявлениями: новый
+# dev-инструмент или baseline без записи здесь — красный.
+#
+# ГРАНИЦА v1. Покрыты две самые острые оси: dev-инструменты (requirements-dev.txt + pyproject [dev])
+# и ратчет-baseline'ы (packages/*baseline*.yaml). Pre-commit-хуки (их зеркала в CI vs local-only) —
+# отдельным срезом; внешний кластер аудита (доступ внешних контрибьюторов) отклонён владельцем.
+schema_version: 1
+kind: enforcement-inventory
+
+# Каждый инструмент из requirements-dev.txt / pyproject [dev] обязан быть здесь.
+dev_tools:
+  - name: pytest
+    status: enforced
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "pytest"}
+  - name: pytest-cov
+    status: enforced
+    enforced_at: {file: .github/workflows/nightly-coverage.yml, pattern: "pytest-cov"}
+  - name: pytest-xdist
+    status: enforced
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "pytest-xdist"}
+  - name: hypothesis
+    status: enforced
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "hypothesis"}
+  - name: ruff
+    status: enforced
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "ruff check"}
+  - name: pre-commit
+    status: enforced
+    # pre-commit — исполнитель хуков; его работа = сконфигурированные хуки, а ruff-хук ещё и зеркалён
+    # в CI (джоба lint). Доказательство — наличие конфигурации, без которой инструмент бездействует.
+    enforced_at: {file: .pre-commit-config.yaml, pattern: "repo:"}
+  - name: mypy
+    status: unenforced
+    reason: >-
+      Объявлен в [dev] и requirements-dev, но [tool.mypy] нет, pre-commit-хука нет, шага в CI нет,
+      py.typed нет — не запускается нигде (F-05 внешнего аудита). Честно unenforced, а не тихо «есть
+      в зависимостях». Решение — работа `types-enforced-on-foundation-or-mypy-removed`: настроить на
+      фундаменте (kernel+shared) с ратчетом либо убрать из зависимостей с записанным решением.
+
+# Каждый packages/*baseline*.yaml обязан читаться валидатором (который сам гоняется рантайм-контрактом).
+ratchet_baselines:
+  - name: packages/module-size-baseline.yaml
+    consumed_by: ai_ops_kit/validation/validate_module_size.py
+  - name: packages/func-size-baseline.yaml
+    consumed_by: ai_ops_kit/validation/validate_func_size.py
+  - name: packages/test-taxonomy-baseline.yaml
+    consumed_by: ai_ops_kit/validation/validate_test_taxonomy.py

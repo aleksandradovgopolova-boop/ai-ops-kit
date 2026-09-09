@@ -49,6 +49,7 @@ STANDALONE = [
     "validate_context_qualification",
     "validate_decisions",
     "validate_duties",
+    "validate_enforcement_inventory",   # инвентарь «объявлено->исполняется»: standalone, читает registry/enforcement-inventory.yaml + дерево
     "validate_engops_policy",
     "validate_event_catalog",
     "validate_feature_learning",
