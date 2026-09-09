@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1222
+  ai_ops_kit/cli/ai_ops_cli.py: 1224
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1947
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
@@ -42,7 +42,7 @@ raises:
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1214; presenter_formatters.py = 1070'
-    to: 'ai_ops_cli.py = 1222; presenter_formatters.py = 1074'
+    to: 'ai_ops_cli.py = 1224; presenter_formatters.py = 1074'
     work: 'humanize превью do/run (#708): «запускаю сейчас» вместо «запускай, когда готов»'
     why: >-
       Карта трения #708 (пункт 2): `do`/`run --execute` печатали превью с «Дальше: запускай, когда

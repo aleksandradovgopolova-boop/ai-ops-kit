@@ -36,7 +36,7 @@ scopes:
     max_function_lines: 150
     max_function: _main_run_execute
     max_function_file: ai_ops_cli.py
-    max_function_lineno: 1011
+    max_function_lineno: 1047
 
   # planning/ — контур Planning & Execution.
   - path: ai_ops_kit/planning/
