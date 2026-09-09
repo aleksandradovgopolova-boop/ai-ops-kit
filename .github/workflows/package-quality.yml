@@ -283,3 +283,19 @@ jobs:
       - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
+
+  # macOS advisory (F-10): разработка идёт на macOS, а CI её не видел — платформа владельца не
+  # проверялась. Джоба НАБЛЮДАЕТ её на быстром срезе (critical_path), но НЕ блокирует
+  # (continue-on-error): реальные отличия macOS/Linux (NFC/NFD имён, case-sensitivity) станут видны,
+  # а не спрячутся. НЕ в required-контекстах branch protection — красный здесь PR не держит.
+  smoke-macos:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.12"}
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
+      - name: "macOS advisory: critical_path на платформе владельца (не блокирует)"
+        run: python3 -m pytest -m critical_path -q
