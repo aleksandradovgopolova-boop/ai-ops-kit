@@ -511,7 +511,7 @@ goals:
       # dangling rule/token/namespace/local), схема uiux-registry.schema.json признаёт оба kind.
       tokens_contract_and_capability_registries_available: true
       # Волна 3 — ревьюеры и ui-health углублены содержанием Конституции.
-      reviewers_and_ui_health_deepened_from_constitution: false
+      reviewers_and_ui_health_deepened_from_constitution: true
       # Волна 4 — MCP-доступ к UI-системе (get_*/validate_*).
       mcp_access_to_ui_system: false
 
@@ -985,24 +985,6 @@ work:
       источник, гейты цитируют ID) достигнута 28.08. Готово, когда токены объявлены контрактом со
       стабильными ID, реестры возможностей (компоненты/паттерны/шаблоны) читаются агентом из данных, а
       не из прозы, и валидатор ловит расхождение реестра с Конституцией.
-
-  - id: uiux-reviewers-and-ui-health-deepened
-    title: Волна 3 — роли-ревьюеры и UI-health углублены содержанием Конституции
-    type: quality
-    goal: uiux-standard-as-product
-    status: todo
-    owner_role: reviewer
-    value: high
-    issue: 419
-    depends_on: [uiux-tokens-contract-and-capability-registries]
-    write_scope: [standards/uiux/, agents/, rules/design/, ai_ops_kit/intelligence/, tests/]
-    affects: {engineering_quality_security: true}
-    reason: >-
-      Исход reviewers_and_ui_health_deepened_from_constitution = false (#419). Гейты ux_review/
-      accessibility_review/design_system_usage уже цитируют ID (волна 1), но содержание проверок
-      тонкое. Готово, когда ревьюеры судят по правилам стандарта (UI-/AI-/UI-FORBIDDEN- с ID), а
-      UI-health считает покрытие реестров волны 2. Blocking/severity гейтов не меняются — advisory до
-      обкатки на дочках (правило движения по roadmap).
 
   - id: uiux-mcp-access-to-ui-system
     title: Волна 4 — MCP-доступ к UI-системе (get_*/validate_*)
