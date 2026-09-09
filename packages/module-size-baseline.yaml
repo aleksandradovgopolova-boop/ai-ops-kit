@@ -1,4 +1,4 @@
-# Ратчет размера МОДУЛЯ (файла) в ai_ops_kit/ — заморозить монолиты вниз.
+# Ратчет размера МОДУЛЯ (файла) в ai_ops_kit/ И installer/ (F-06) — заморозить монолиты вниз.
 #
 # ЗАЧЕМ. func-size (packages/func-size-baseline.yaml) стережёт максимум ФУНКЦИИ, но не размер ФАЙЛА:
 # god-функцию можно расщепить на десять мелких, а модуль при этом останется на 1800 строк. Мы дорого
@@ -37,8 +37,20 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
+  installer/ai_ops.py: 3926
 
 raises:
+  - at: '2026-09-09'
+    what: cover_installer
+    from: 'installer/ вне гейта (SOURCE_ROOT только ai_ops_kit)'
+    to: 'installer/ai_ops.py = 3926 (потолок = текущий размер)'
+    work: 'F-06 внешнего аудита: installer под module-size/func-size ратчеты'
+    why: >-
+      installer/ai_ops.py (3926 строк) — крупнейший файл репозитория и ЕДИНСТВЕННЫЙ код, запускаемый
+      пользователем ДО появления кита, — оставался вне всех архитектурных гейтов: validate_module_size
+      обходил только SOURCE_ROOT="ai_ops_kit". Теперь корней два. Потолок = текущий размер: чинить
+      прямо сейчас не нужно, но рост монолита установщика больше не пройдёт незамеченным. Расщепление
+      на модули по фазам — отдельной работой.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'tool_broker.py = 762'

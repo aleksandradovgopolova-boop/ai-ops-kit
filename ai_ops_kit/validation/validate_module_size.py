@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ратчет размера МОДУЛЯ (файла) в ai_ops_kit/ — заморозить монолиты вниз.
 
-Считает СТРОКИ каждого `ai_ops_kit/**/*.py`. Порог — 700 строк: файл на пороге или выше обязан
+Считает СТРОКИ каждого `ai_ops_kit/**/*.py` И `installer/**/*.py` (F-06). Порог — 700 строк: файл на пороге или выше обязан
 быть перечислен в baseline (`packages/module-size-baseline.yaml`, секция `ceilings:`) с потолком,
 равным его текущему размеру. Правило семантики — ПОТОЛОК ПО «≤»:
 
@@ -37,7 +37,10 @@ import yaml
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
            Path(__file__).resolve().parents[1])
-SOURCE_ROOT = "ai_ops_kit"
+# ДВА корня, а не один (F-06 внешнего аудита): installer/ai_ops.py — крупнейший файл репозитория и
+# единственный код, который пользователь запускает ДО появления кита, а SOURCE_ROOT="ai_ops_kit"
+# оставлял его вне гейта. Ключи baseline остаются относительными к pkg_root (installer/ai_ops.py).
+SOURCE_ROOTS = ("ai_ops_kit", "installer")
 BASELINE_FILE = PKG / "packages" / "module-size-baseline.yaml"
 
 # Порог: файл на пороге или выше обязан быть заморожен в baseline. Ниже порога — не ограничен.
@@ -52,13 +55,14 @@ def measure_modules(pkg_root: Path = PKG) -> list[dict]:
     строки). Нечитаемый файл пропускается, обход не роняет.
     """
     results = []
-    root = pkg_root / SOURCE_ROOT
-    for f in sorted(root.rglob("*.py")):
-        try:
-            lines = len(f.read_text(encoding="utf-8").splitlines())
-        except OSError:
-            continue
-        results.append({"path": f.relative_to(pkg_root).as_posix(), "lines": lines})
+    for source_root in SOURCE_ROOTS:
+        root = pkg_root / source_root
+        for f in sorted(root.rglob("*.py")):
+            try:
+                lines = len(f.read_text(encoding="utf-8").splitlines())
+            except OSError:
+                continue
+            results.append({"path": f.relative_to(pkg_root).as_posix(), "lines": lines})
     return results
 
 

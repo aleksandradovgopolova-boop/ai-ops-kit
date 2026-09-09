@@ -1030,19 +1030,6 @@ work:
       disallow_untyped_defs (~107 подписей) и счётчик ошибок mypy по не-фундаменту; py.typed (маркер
       «весь пакет типизирован» при 29% покрытия был бы над-заявлением). Это ратчет-ВВЕРХ, отдельно.
 
-  - id: installer-under-size-and-func-gates
-    title: installer/ включён в module-size и func-size ратчеты; текущие 3918 строк заморожены потолком
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    value: medium
-    write_scope: [ai_ops_kit/validation/, packages/, tests/]
-    reason: >-
-      installer/ai_ops.py (3918 строк) — крупнейший файл репозитория и единственный код, запускаемый
-      пользователем ДО появления кита, вне всех архитектурных гейтов (SOURCE_ROOT="ai_ops_kit").
-      Готово, когда installer/ входит в module-size/func-size с замороженным потолком (ратчет вниз);
-      расщепление на модули по фазам — отдельной работой.
 
   - id: library-layers-return-data-not-print
     title: >-
