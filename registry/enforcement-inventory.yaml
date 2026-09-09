@@ -41,12 +41,11 @@ dev_tools:
     # в CI (джоба lint). Доказательство — наличие конфигурации, без которой инструмент бездействует.
     enforced_at: {file: .pre-commit-config.yaml, pattern: "repo:"}
   - name: mypy
-    status: unenforced
-    reason: >-
-      Объявлен в [dev] и requirements-dev, но [tool.mypy] нет, pre-commit-хука нет, шага в CI нет,
-      py.typed нет — не запускается нигде (F-05 внешнего аудита). Честно unenforced, а не тихо «есть
-      в зависимостях». Решение — работа `types-enforced-on-foundation-or-mypy-removed`: настроить на
-      фундаменте (kernel+shared) с ратчетом либо убрать из зависимостей с записанным решением.
+    status: enforced
+    # F-05 ЗАКРЫТ (2026-09-09): замер решил спор «включить vs убрать» — обычный проход нашёл 8
+    # реальных проблем на фундаменте, типы окупаются. Включён на kernel+shared ([tool.mypy]), шаг в
+    # джобе lint. Полная аннотация (disallow_untyped_defs) — отдельный ратчет-вверх.
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "mypy==2.3.1"}
 
 # Каждый packages/*baseline*.yaml обязан читаться валидатором (который сам гоняется рантайм-контрактом).
 ratchet_baselines:

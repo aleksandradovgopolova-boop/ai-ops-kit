@@ -117,7 +117,7 @@ def cmd_scaffold(feature_dir: Path, stage: str | None):
     bp = load_blueprint(feature_dir)
     fid = bp["feature"]["id"]
     gen = load_generation(feature_dir)
-    created = []
+    created: list = []
     for st, entries in (bp.get("artifacts") or {}).items():
         if stage and st != stage:
             continue
@@ -148,7 +148,7 @@ def cmd_add(feature_dir: Path, stage: str, rel_path: str, template: str):
     bp_path.write_text(yaml.safe_dump(bp, allow_unicode=True, sort_keys=False, width=110),
                        encoding="utf-8")
     gen = load_generation(feature_dir)
-    created = []
+    created: list = []
     scaffold_entry(feature_dir, bp["feature"]["id"], entry, gen, created)
     save_generation(feature_dir, gen)
     print(f"добавлен и создан: {rel_path}" if created else f"добавлен в blueprint: {rel_path}")

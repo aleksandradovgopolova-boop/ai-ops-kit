@@ -32,6 +32,7 @@ if _root is not None and str(_root) not in _sys.path:
 import json
 import sys
 from pathlib import Path
+from typing import cast
 
 from ai_ops_kit.shared.contracts import UsageRecord  # noqa: E402
 
@@ -73,7 +74,7 @@ def check(rec: UsageRecord) -> list[str]:
     return e
 
 
-def normalize(rec: dict, run_id: str = None, workitem_id: str = None) -> UsageRecord:
+def normalize(rec: dict, run_id: str | None = None, workitem_id: str | None = None) -> UsageRecord:
     """Привести сырую запись _record_call к UsageRecord (заполнить недостающие ключи None, влить контекст)."""
     out = {k: rec.get(k) for k in FIELDS}
     if out.get("run_id") is None:
@@ -83,7 +84,9 @@ def normalize(rec: dict, run_id: str = None, workitem_id: str = None) -> UsageRe
     # cost может прийти как cost_usd_est (назад-совместимость)
     if out.get("cost") is None and rec.get("cost_usd_est") is not None:
         out["cost"] = rec.get("cost_usd_est")
-    return out
+    # out собран по ключам FIELDS (== поля UsageRecord); comprehension теряет TypedDict-тип — cast
+    # возвращает его: функция для того и есть, чтобы привести сырую запись к форме UsageRecord.
+    return cast(UsageRecord, out)
 
 
 def _task_path(child_root, wid):
