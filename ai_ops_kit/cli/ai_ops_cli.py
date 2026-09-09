@@ -1020,6 +1020,8 @@ def main(argv):
     if (intent == "run" and a.execute) or intent == "do":
         from ai_ops_kit.engine import pipeline_helpers as _ph
         _blocked_on_intake = bool(_ph.missing_intake_signals(signals))
+    # #708: do и run --execute запускают немедленно — превью не должно звать «запускай, когда готов».
+    pv["executing"] = bool(intent == "do" or (intent == "run" and getattr(a, "execute", False)))
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
     elif not _blocked_on_intake:

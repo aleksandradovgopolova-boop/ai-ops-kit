@@ -75,6 +75,12 @@ def from_execution_preview(pv: dict) -> dict:
                       "on_reject": "предложу вариант, который этого не трогает"},
             next_steps=steps or None, technical=tech)
 
+    if pv.get("executing"):
+        # #708: do (и run --execute) запускают ПРЯМО СЕЙЧАС — «запускай, когда готов» противоречит
+        # немедленному старту (следом кит печатает «— запускаю —»). Не ждём человека: заголовок про
+        # запуск, а «Дальше» не навязываем (совет разбить задачу, если он есть, остаётся).
+        return message(status="ok", headline="Запускаю — вот что делаю", summary=summary,
+                       next_steps=steps or None, technical=tech)
     return message(status="ok", headline="Вот что я сделаю", summary=summary,
                    next_steps=steps or ["запускай, когда готов"], technical=tech)
 
@@ -686,8 +692,8 @@ def from_session_economy(snapshot: dict, rec: dict) -> dict:
         return message(
             status="degraded", headline="Прежде чем тратить — стоит сменить сессию",
             summary=f"{head}.",
-            why_it_matters="Каждый следующий запрос заново оплачивает перечитывание этой истории. "
-                           "Дальше будет только дороже, а пользы от старой переписки уже нет.",
+            why_it_matters="Каждый следующий запрос заново оплачивает перечитывание этой истории — "
+                           "дальше только дороже.",
             decision={"question": "начинать работу здесь или в чистой сессии?",
                       "recommendation": advice,
                       "on_approve": "выполни команду ниже и повтори задачу",

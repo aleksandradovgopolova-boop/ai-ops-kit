@@ -513,3 +513,19 @@ def test_bootstrap_preview_names_the_apply_command():
     body = PR.render(pf.from_bootstrap(rep, applied=False), audience="product")
     assert "bootstrap --apply" in body, "сухой прогон не назвал команду создать план"
 
+
+
+def test_executing_preview_does_not_wait_for_the_human():
+    """#708: `do` (и `run --execute`) запускают немедленно — превью не должно звать «запускай,
+    когда готов» (следом кит печатает «— запускаю —»). Плейн `run`/`preview` — по-прежнему ждёт."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+
+    base = {"intent": "do", "understood": {}, "will_do": {}, "data_used": {},
+            "expected_result": "добавлю фильтр по статусу"}
+    executing = PR.render(pf.from_execution_preview({**base, "executing": True}), audience="product")
+    assert "запускай, когда готов" not in executing, executing
+    assert "Запускаю" in executing
+
+    waiting = PR.render(pf.from_execution_preview({**base, "intent": "run", "executing": False}),
+                        audience="product")
+    assert "запускай, когда готов" in waiting, waiting
