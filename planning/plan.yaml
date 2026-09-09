@@ -569,7 +569,7 @@ work:
       без опоры на фичу форджа
     type: engineering
     goal: checks-that-run
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/, .github/, tests/]

@@ -84,3 +84,22 @@ def delivered_footprint_verdict(delivered_bytes, ceiling, fraction):
     breached = ceiling > 0 and delivered_bytes >= ceiling
     thin = reserve_is_thin(delivered_bytes, ceiling, fraction)
     return {"breached": breached, "thin": thin, "reserve": ceiling - delivered_bytes}
+
+
+def delivered_filecount_verdict(delivered_files, files_ceiling, fraction):
+    """Вердикт по ЧИСЛУ доставляемых файлов итога слияния против потолка substantive_files. -> dict.
+
+    ЗАЧЕМ ОТДЕЛЬНАЯ ОСЬ. Дрейф, ради которого заведена работа (разбор 20.08: main тихо ушёл 490->498
+    ФАЙЛОВ между слияниями), — про ЧИСЛО файлов, а не про байты: набор мелких файлов пробивает потолок
+    файлов, не тронув потолок объёма. Байтовая ось (`delivered_footprint_verdict`) его не ловит,
+    поэтому счёт файлов итога слияния судится своим потолком.
+
+    Строгость та же, что у объёмной оси и у блокирующего assert поставки в `test_installer.py`
+    (`substantive < substantive_files`): пробой — `delivered_files >= files_ceiling`, тонкий запас —
+    мягкое предупреждение ДО пробоя. Форма результата совпадает с байтовой осью (breached/thin/reserve),
+    но reserve здесь — в ФАЙЛАХ.
+
+    -> {"breached": bool, "thin": bool, "reserve": int}."""
+    breached = files_ceiling > 0 and delivered_files >= files_ceiling
+    thin = reserve_is_thin(delivered_files, files_ceiling, fraction)
+    return {"breached": breached, "thin": thin, "reserve": files_ceiling - delivered_files}

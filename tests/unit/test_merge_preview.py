@@ -339,7 +339,7 @@ def test_delivered_footprint_cli_is_advisory_exit_zero(tmp_path, monkeypatch):
     (root / "shipped.py").write_text("s" * 5000, encoding="utf-8")
     target_head = _commit_all(root, "pr")
 
-    monkeypatch.setattr(dmf, "_load_budget", lambda: (4000, 0.10))     # потолок ниже доставляемого
+    monkeypatch.setattr(dmf, "_load_budget", lambda: (4000, 0.10, None))  # объём ниже доставляемого
     monkeypatch.setattr(dmf, "_load_managed_rels", lambda: {"shipped.py"})
 
     code = dmf.main(["--base", target_head, "--head", "pr", "--root", str(root)])
@@ -347,6 +347,124 @@ def test_delivered_footprint_cli_is_advisory_exit_zero(tmp_path, monkeypatch):
 
     code_strict = dmf.main(["--base", target_head, "--head", "pr", "--root", str(root), "--strict"])
     assert code_strict == 1, "--strict: пробой доставляемого объёма краснеет"
+
+
+# ─── файловая ось: ЧИСЛО доставляемых файлов итога слияния против substantive_files ────────────────
+# Дрейф, ради которого заведена работа `gate-measures-merge-result` (разбор 20.08: main тихо ушёл
+# 490->498 ФАЙЛОВ между слияниями), — про ЧИСЛО файлов, а не про байты. Байтовая ось его не ловит:
+# набор мелких файлов пробивает потолок файлов, не тронув потолок объёма.
+
+
+def test_filecount_breaches_on_merge_result_though_branch_alone_fits(tmp_path):
+    """ФЛАГМАН файловой оси: ветка PR по числу файлов под потолком, а ИТОГ СЛИЯНИЯ — нет.
+
+    volume_bytes заведомо огромен (объёмная ось НЕ виновата); substantive_files мал. Ветка PR
+    добавляет мало доставляемых файлов и в одиночку помещается; итог слияния с target пробивает
+    потолок ЧИСЛА файлов. Если бы механизм считал ветку, а не merge-tree, files_breached был бы False.
+    """
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+
+    # managed-поверхность: четыре доставляемых файла. Потолок числа файлов — 4 (пробой при >= 4).
+    managed = {"a.py", "b.py", "c.py", "d.py"}
+    files_ceiling = 4
+
+    # Ветка PR добавляет ДВА доставляемых файла — в одиночку это 2 < 4, помещается.
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "a.py").write_text("a", encoding="utf-8")
+    (root / "b.py").write_text("b", encoding="utf-8")
+    _commit_all(root, "pr: two managed files")
+
+    # target (дрейф main) добавляет ещё два доставляемых файла.
+    _git(root, "checkout", "-q", "main")
+    (root / "c.py").write_text("c", encoding="utf-8")
+    (root / "d.py").write_text("d", encoding="utf-8")
+    target = _commit_all(root, "target: two more managed files")
+    _git(root, "checkout", "-q", "pr")
+
+    res = dmf.delivered_merge_footprint(str(root), target, "pr", managed,
+                                        ceiling=10_000_000, fraction=0.10,
+                                        files_ceiling=files_ceiling)
+    assert res["ok"] is True, res
+    # ИТОГ СЛИЯНИЯ несёт все четыре доставляемых файла -> число пробивает потолок.
+    assert res["delivered_files"] == 4, res
+    assert res["files_breached"] is True, "число файлов итога (4) обязано пробить потолок 4"
+    # А объёмная ось НЕ виновата: байты крошечные под огромным потолком.
+    assert res["breached"] is False, res
+
+    # КОНТРАСТ: ветка PR В ОДИНОЧКУ несёт лишь 2 доставляемых файла — под потолком. Если бы механизм
+    # мерил ветку вместо merge-tree, files_breached выше был бы False и проба покраснела бы.
+    pr_tree = _git(root, "rev-parse", "pr^{tree}")
+    branch_entries = merge_preview.merge_preview_entries(str(root), pr_tree)
+    branch_managed = [p for p, _ in branch_entries if p in managed]
+    assert len(branch_managed) == 2 < files_ceiling, (
+        "ветка PR в одиночку обязана помещаться по числу файлов — иначе проба не различает "
+        "'ветка' и 'итог слияния'")
+
+
+def test_filecount_axis_off_when_no_files_ceiling(tmp_path):
+    """files_ceiling не передан -> файловая ось не считается (обратная совместимость): files_breached=False."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "a.py").write_text("a", encoding="utf-8")
+    _commit_all(root, "pr")
+    _git(root, "checkout", "-q", "main")
+    (root / "b.py").write_text("b", encoding="utf-8")
+    target = _commit_all(root, "target")
+    _git(root, "checkout", "-q", "pr")
+
+    res = dmf.delivered_merge_footprint(str(root), target, "pr", {"a.py", "b.py"},
+                                        ceiling=10_000_000, fraction=0.10)  # files_ceiling по умолчанию None
+    assert res["ok"] is True, res
+    assert res["files_ceiling"] is None and res["files_breached"] is False, res
+    assert res["files_reserve"] is None, res
+
+
+def test_filecount_breach_is_fail_closed_on_conflict(tmp_path):
+    """Fail-closed по файловой оси: конфликт -> ok=False, files_breached=False (пробой не утверждаем)."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "seed.txt").write_text("PR\n", encoding="utf-8")
+    _commit_all(root, "pr edits seed")
+    _git(root, "checkout", "-q", "main")
+    (root / "seed.txt").write_text("MAIN\n", encoding="utf-8")
+    target = _commit_all(root, "target edits same line")
+    _git(root, "checkout", "-q", "pr")
+
+    res = dmf.delivered_merge_footprint(str(root), target, "pr", {"seed.txt"},
+                                        ceiling=10_000, fraction=0.10, files_ceiling=1)
+    assert res["ok"] is False, res
+    assert res["files_breached"] is False, "итог не посчитан -> пробой числа файлов не утверждается"
+
+
+def test_cli_strict_reddens_on_filecount_breach_alone(tmp_path, monkeypatch):
+    """--strict краснеет на пробое ТОЛЬКО файловой оси (объём в пределах); advisory остаётся exit 0."""
+    dmf = _load_orchestrator()
+    root = tmp_path / "repo"
+    root.mkdir()
+    _make_base(root, 10_000_000)
+    _git(root, "checkout", "-q", "-b", "pr")
+    (root / "a.py").write_text("a", encoding="utf-8")
+    (root / "b.py").write_text("b", encoding="utf-8")
+    target_head = _commit_all(root, "pr: two tiny managed files")
+
+    # Огромный потолок объёма (объём НЕ виноват), потолок числа файлов = 2 -> два файла пробивают.
+    monkeypatch.setattr(dmf, "_load_budget", lambda: (10_000_000, 0.10, 2))
+    monkeypatch.setattr(dmf, "_load_managed_rels", lambda: {"a.py", "b.py"})
+
+    code = dmf.main(["--base", target_head, "--head", "pr", "--root", str(root)])
+    assert code == 0, "advisory: пробой числа файлов НЕ блокирует PR"
+
+    code_strict = dmf.main(["--base", target_head, "--head", "pr", "--root", str(root), "--strict"])
+    assert code_strict == 1, "--strict: пробой ЧИСЛА файлов краснеет так же, как пробой объёма"
 
 
 def test_ci_wires_the_delivered_footprint_advisory_job():

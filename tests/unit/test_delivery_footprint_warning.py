@@ -127,3 +127,32 @@ class TestDeliveredFootprintVerdict:
         v = dfw.delivered_footprint_verdict(100, ceiling=1000, fraction=0.10)
         assert v["breached"] is False and v["thin"] is False, v
         assert v["reserve"] == 900, v
+
+
+class TestDeliveredFilecountVerdict:
+    """ЧИСЛО файлов итога слияния судится своим потолком (substantive_files) — ось дрейфа 490->498.
+
+    positive/fail-closed/thin — та же строгость, что у объёмной оси, но reserve в ФАЙЛАХ."""
+
+    def test_breach_when_filecount_reaches_ceiling(self):
+        # число доставляемых файлов >= потолок substantive_files — пробой (граница «>=» как у поставки)
+        assert dfw.delivered_filecount_verdict(584, files_ceiling=584, fraction=0.10)["breached"] is True
+        assert dfw.delivered_filecount_verdict(600, files_ceiling=584, fraction=0.10)["breached"] is True
+
+    def test_thin_reserve_below_ceiling_is_a_warning_not_a_breach(self):
+        # осталось 5 файлов из 100 (5%) при пороге 10% — тонко, но ещё не пробой
+        v = dfw.delivered_filecount_verdict(95, files_ceiling=100, fraction=0.10)
+        assert v["breached"] is False and v["thin"] is True, v
+        assert v["reserve"] == 5, v
+
+    def test_comfortable_reserve_passes_clean(self):
+        v = dfw.delivered_filecount_verdict(490, files_ceiling=584, fraction=0.10)
+        assert v["breached"] is False and v["thin"] is False, v
+        assert v["reserve"] == 94, v
+
+    def test_filecount_axis_is_independent_of_bytes(self):
+        # ключевая причина отдельной оси: много мелких файлов пробивают ПОТОЛОК ФАЙЛОВ,
+        # тогда как байтовый вердикт на тех же данных остался бы «в пределах».
+        v_files = dfw.delivered_filecount_verdict(500, files_ceiling=500, fraction=0.10)
+        v_bytes = dfw.delivered_footprint_verdict(10_000, ceiling=5_000_000, fraction=0.10)
+        assert v_files["breached"] is True and v_bytes["breached"] is False
