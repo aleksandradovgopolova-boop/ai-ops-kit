@@ -14,17 +14,70 @@ from __future__ import annotations
 from ai_ops_kit.engine.pipeline_helpers import work_produced, _stacks_human   # noqa: E402
 
 
-def _print_pipeline(r):
+def _print_pipeline_product(r):
+    """СВОДКА прогона для человека (аудитория product): что произошло → честные оговорки → шаг.
+
+    Тех-разбор (SHA, tool-loop, worktree, context-токены, spec-level) сюда НЕ идёт — он «по запросу».
+    Но ОГОВОРКИ («готово ≠ проверено») сохраняются целиком: подменять признание утверждением значит
+    зеленить непроверенное — это и есть кардинальный запрет кита.
+    """
+    ready = r.get("ready_for_pr")
+    commit = r.get("commit") or {}
+    n_files = len(commit.get("changed_files") or []) if commit.get("sha") else 0
+    gates = r.get("gates") or {}
+    files = f" Файлов изменено: {n_files}." if n_files else ""
+    if ready:
+        print("Готово: изменение внесено, проверки закрыты." + files)
+    else:
+        unmet = gates.get("unmet") or []
+        tail = (f" Не закрыто: {', '.join(unmet)}." if unmet else "")
+        print("Пока не готово к PR." + files + tail)
+
+    # Честные оговорки — «готово» не должно читаться как «сверено с ожиданием».
+    _ac = r.get("acceptance_criteria") or {}
+    if not _ac.get("declared") and ready:
+        print("  ⚠ критериев приёмки не было — «готово» значит «внесено и проверки закрыты», "
+              "а не «сверено с тем, что ты ждал».")
+    elif _ac.get("declared") and not _ac.get("verified"):
+        print("  ⚠ критерии приёмки не сверялись с результатом.")
+    elif _ac.get("declared") and not _ac.get("met_all"):
+        print(f"  ⚠ критерии приёмки: не выполнено {len(_ac.get('unmet') or [])} из {_ac.get('count')}.")
+    if r.get("tests_warn"):
+        print("  ⚠ тестов в стеке нет — проверка тестами пропущена.")
+    if (r.get("isolation") or {}).get("sandboxed") is False and work_produced(r):
+        print("  ⚠ прогон шёл без песочницы — изоляция условна (управляемость, не защита).")
+    if (r.get("work_package") or {}).get("should_decompose"):
+        print("  ⚠ задача крупновата — стоит разбить на части.")
+
+    # Следующий шаг.
+    pr = r.get("draft_pr") or {}
+    if pr.get("url"):
+        print(f"\nДальше: черновик PR открыт — {pr['url']}.")
+    elif ready:
+        print("\nДальше: открыть черновик PR — ai-ops run --open-pr. Изменения в отдельной ветке, "
+              "main не тронут.")
+    else:
+        print("\nДальше: закрыть оставшееся (см. оговорки выше) и повторить.")
+    print("\nТехнические детали прогона — по запросу («покажи технические детали»).")
+    _print_contour_consistency(r)
+
+
+def _print_pipeline(r, audience="technical"):
     """Человекочитаемый вывод отчёта собранного движка (kind=execution-pipeline).
 
     finding аудита (P0.1): print_human безусловно читал ключи controller-отчёта
     (status/execution/required_tracks) и падал KeyError на pipeline-отчёте. Формат отчёта
     движка иной (loop/commit/checks/gates/ready_for_pr) — печатаем его явно.
+
+    #702-work: `audience="product"` печатает СВОДКУ (вердикт + файлы + честные оговорки + шаг),
+    а не тех-разбор. Дефолт `technical` — полная стена (и для тестов, зовущих напрямую).
     """
     if r.get("status") == "error":
         print(f"ai-ops run (pipeline) → WorkItem {r.get('workitem_id')} [ОШИБКА]")
         print(f"  {r.get('error')}")
         return
+    if audience == "product":
+        return _print_pipeline_product(r)
     loop = r.get("loop") or {}
     commit = r.get("commit") or {}
     gates = r.get("gates") or {}
@@ -193,7 +246,15 @@ def _print_contour_consistency(r):
 def print_human(r):
     # pipeline-отчёт имеет свою форму — не смешиваем с controller-отчётом (P0.1)
     if r.get("kind") == "execution-pipeline":
-        return _print_pipeline(r)
+        # #702-work: на аудитории product человек видит СУТЬ результата (готово/нет + что изменилось
+        # + честные оговорки + следующий шаг), тех-разбор — «по запросу» (communication-policy:
+        # technical_details: on_request). Тесты зовут _print_pipeline напрямую -> дефолт technical.
+        try:
+            from ai_ops_kit.ui import presenter
+            _aud = presenter.audience_from_config(r.get("child_root") or ".")
+        except Exception:  # noqa: BLE001 — печать результата не роняет прогон
+            _aud = "technical"
+        return _print_pipeline(r, audience=_aud)
     # Минимальный отчёт (например, отказ active-work/preflight ДО классификации) не несёт
     # base_workflow/треков. Раньше вывод для человека падал на нём KeyError('base_workflow') —
     # прогон завершался, а печать результата роняла процесс (замер поля 01.09.2026). Печатаем коротко.
