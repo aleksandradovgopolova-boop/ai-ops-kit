@@ -29,5 +29,5 @@ freshness:
 reliability:
   level: medium
   rationale: "Вторичный источник (агрегатор, но листинг официального провайдера); в независимых обзорах противоречивые цифры; первичная страница недоступна."
-status: active
-superseded_by: null
+status: superseded
+superseded_by: EV-107
