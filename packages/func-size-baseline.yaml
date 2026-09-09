@@ -58,3 +58,10 @@ scopes:
     max_function: run_scenarios
     max_function_file: validate_product_qualification.py
     max_function_lineno: 63
+  # F-06 внешнего аудита: installer/ — крупнейший файл репозитория, первое, что запускает пользователь,
+  # оставался вне func-size. Потолок = текущий максимум (cmd_doctor 264); расщепление — отдельной работой.
+  - path: installer/
+    max_function_lines: 264
+    max_function: cmd_doctor
+    max_function_file: ai_ops.py
+    max_function_lineno: 3030

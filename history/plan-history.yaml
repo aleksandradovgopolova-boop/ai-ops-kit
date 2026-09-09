@@ -19,6 +19,22 @@ kind: delivery-plan-history
 
 
 work:
+  - id: installer-under-size-and-func-gates
+    title: installer/ включён в module-size и func-size ратчеты; текущие 3926 строк заморожены потолком
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_module_size.py
+    result: >-
+      ЗАКРЫТО 2026-09-09 (F-06 внешнего аудита). installer/ai_ops.py (3926 строк) — крупнейший файл
+      репозитория и ЕДИНСТВЕННЫЙ код, запускаемый пользователем ДО появления кита, — оставался вне всех
+      архитектурных гейтов: validate_module_size обходил только SOURCE_ROOT="ai_ops_kit". Теперь корней
+      ДВА (ai_ops_kit + installer): installer/ai_ops.py заморожен потолком 3926 в module-size-baseline
+      (запись cover_installer в ленте raises), и заведён func-size scope installer/ (max cmd_doctor
+      264 строки). Оба ратчета ходят только вниз: чинить сейчас не нужно, но рост монолита установщика
+      больше не пройдёт незамеченным. Расщепление installer на модули по фазам — возможная отдельная
+      работа, не заведена.
+
   - id: uiux-constitution-is-source
     title: >-
       Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
