@@ -5043,3 +5043,19 @@ work:
       Handoff-вердикт закрывает code_review через штатный resume/reevaluate CLI-поток и покрыт тестом
       ЧЕРЕЗ реальный CLI-поток, а не только юнит `_run_reviews`. Код влит a16fb92a (#580); reevaluate-
       путь довершён this session #683 (resume --deliver-only доводит флаг reevaluate-only до движка).
+
+  - id: uiux-reviewers-and-ui-health-deepened
+    title: Волна 3 — роли-ревьюеры и UI-health углублены содержанием Конституции
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-09-09'
+    pr: 530
+    issue: 419
+    evidence: tests/unit/test_constitution_coverage_deepens_health_and_reviewers.py
+    result: >-
+      Ревьюеры судят по правилам стандарта (ID UI-/AI-/UI-FORBIDDEN- цитируются гейтами ux_review/
+      accessibility_review/design_system_usage, волна 1), а UI-health СЧИТАЕТ покрытие Конституции:
+      донор ai_ops_kit/ui/constitution_coverage.py (выводит покрытие из rules.yaml, automated_uncovered
+      называет пробелы поимённо, fail-closed) вшит в ui_readiness.py (поле constitution_coverage) и
+      через него — в pipeline_setup и deploy_readiness. Код влит 634055f7 (#530/#419). Blocking/severity
+      гейтов не менялись — advisory до обкатки на дочках (правило движения по roadmap).
