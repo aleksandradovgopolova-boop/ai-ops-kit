@@ -21,11 +21,12 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from pathlib import Path
 
 GIT_TIMEOUT_DEFAULT = 90   # сек: обычные plumbing-команды завершаются мгновенно; потолок против зависаний
 
 
-def run(args, *, cwd=None, timeout=GIT_TIMEOUT_DEFAULT):
+def run(args: list[str], *, cwd: str | Path | None = None, timeout: int = GIT_TIMEOUT_DEFAULT) -> tuple[int, str, str]:
     """git <args...> (без подстановки `-C`) -> (returncode, stdout.strip(), stderr.strip()).
 
     Для форм, не сводимых к `git -C <root>`: `git clone <src> <dst>` и команды, задающие рабочий
@@ -39,12 +40,12 @@ def run(args, *, cwd=None, timeout=GIT_TIMEOUT_DEFAULT):
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
-def git(root, *args, timeout=GIT_TIMEOUT_DEFAULT):
+def git(root: str | Path, *args: str, timeout: int = GIT_TIMEOUT_DEFAULT) -> tuple[int, str, str]:
     """git -C <root> <args...> -> (returncode, stdout.strip(), stderr.strip()). Таймаут -> (124, '', reason)."""
     return run(["-C", str(root), *args], timeout=timeout)
 
 
-def committed_changed_files(root, sha):
+def committed_changed_files(root: str | Path, sha: str) -> list[str]:
     """Файлы, изменённые коммитом sha относительно его первого родителя. -> [path] (пусто при ошибке).
 
     ПЕРЕЕХАЛА СЮДА 2026-08-12 из `engine/pipeline_git.py`, где называлась `_committed_changed_files`
@@ -71,7 +72,7 @@ def committed_changed_files(root, sha):
     return [ln for ln in out.split("\0") if ln.strip()]
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="gitio.py")
     ap.add_argument("--selftest", action="store_true")
     ap.parse_args(argv)          # разбор ради проверки аргументов; результат не нужен
