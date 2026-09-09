@@ -2194,48 +2194,48 @@ def _assets_report_line(assets: dict) -> str:
         out += (" Back-fill контекста (черновики status: draft): " + ", ".join(created) + ".")
     out += _ci_report_line(assets.get("ci_workflows") or [])
     if assets.get("zone_markers"):
-        out += (" Пустые зоны `.ai/` получили README, чтобы раскладка пережила клон: "
+        out += ("\nПустые зоны `.ai/` получили README, чтобы раскладка пережила клон: "
                 + ", ".join(assets["zone_markers"]) + ".")
     # Названо, а не сделано молча: `.gitignore` — документ владельца, и дописку в него он обязан
     # увидеть в отчёте, а не обнаружить в диффе.
     if assets.get("gitignore") in ("created", "appended"):
-        out += (" `.gitignore` " + ("создан" if assets["gitignore"] == "created" else "дополнен")
+        out += ("\n`.gitignore` " + ("создан" if assets["gitignore"] == "created" else "дополнен")
                 + ": служебное состояние кита (.ai/worktrees/, runtime-локи и active-work,"
                   " локальный учёт стоимости, кеши, байткод, записанные замечания о ките)"
                   " скрыто от git."
                   " Продуктовые артефакты кита не затронуты.")
     # Та же причина, что у `.gitignore`: дописка в документ владельца обязана быть в отчёте.
     if assets.get("gitattributes") in ("created", "appended"):
-        out += (" `.gitattributes` " + ("создан" if assets["gitattributes"] == "created"
+        out += ("\n`.gitattributes` " + ("создан" if assets["gitattributes"] == "created"
                                         else "дополнен")
                 + ": журналы отчётов (.ai/project/report-history/*.jsonl) сводятся при слиянии"
                   " сами — они дописываются, а не переписываются. Структурные файлы не"
                   " затронуты: там склейка строк дала бы битый документ.")
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
-        out += (" Политика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
+        out += ("\nПолитика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
     migrated = [x["artifact"] for x in (assets.get("roadmap_migrated") or [])
                 if x.get("action") == "migrated-from-legacy"]
     if migrated:
-        out += (" Направление продукта перенесено в " + ", ".join(migrated)
+        out += ("\nНаправление продукта перенесено в " + ", ".join(migrated)
                 + ": прежний путь в `.ai-ops/` уходит, чтобы направление жило в одном месте. "
                   "Содержимое сохранено, старый файл не удалён.")
     arch_migrated = [x["artifact"] for x in (assets.get("architecture_migrated") or [])
                      if x.get("action") == "migrated-from-legacy"]
     if arch_migrated:
-        out += (" Архитектура собрана в ARCHITECTURE.md из прежних context/system/*: "
+        out += ("\nАрхитектура собрана в ARCHITECTURE.md из прежних context/system/*: "
                 "единый источник правды об архитектуре. Содержимое сохранено, старые файлы не удалены.")
     seeded = [x["artifact"] for x in (assets.get("planning_seeded") or [])
               if x.get("action") == "created-draft"]
     if seeded:
-        out += (" Back-fill модели продукта (черновики, заполнить вам): " + ", ".join(seeded)
+        out += ("\nBack-fill модели продукта (черновики, заполнить вам): " + ", ".join(seeded)
                 + ". Дальше: `./ai-ops model` покажет, что кит понял о проекте, и спросит "
                   "недостающее одним пакетом.")
     pl = assets.get("product_layer_seeded") or []
     made = [x["artifact"] for x in pl if x.get("action") in ("created", "generated")]
     if made:
         gen = [x["artifact"] for x in pl if x.get("action") == "generated"]
-        out += (" Product Operating Layer создан (`.ai-ops/`): " + ", ".join(made) + "."
+        out += ("\nProduct Operating Layer создан (`.ai-ops/`): " + ", ".join(made) + "."
                 + (f" Product Passport собран из фактического состояния репозитория; проверьте "
                    f"разделы, помеченные «неизвестно» — их знает только владелец." if gen else ""))
     return out
@@ -2622,9 +2622,14 @@ def _ci_report_line(acts) -> str:
     left = [a for a in acts if a["action"] == "left-alone" and not a.get("broken_before")]
     out = ""
     if done:
-        out += (" CI ребёнка обновлён вместе с китом: "
-                + ", ".join(f"{a['file']} ({a['action']})" for a in done) + ".")
         _rep = [a for a in done if a["action"] == "repaired"]
+        # Частый случай (первая установка): все workflow просто поставлены. Не вываливаем стену из
+        # имён файлов — называем числом; чинёные/особые ниже показываются явно (там детали важны).
+        if not _rep and all(a["action"] == "installed" for a in done):
+            out += f" Настроен CI и защита репозитория ({len(done)} workflow)."
+        else:
+            out += (" CI ребёнка обновлён вместе с китом: "
+                    + ", ".join(f"{a['file']} ({a['action']})" for a in done) + ".")
         if _rep:
             out += (" Починены сломанные (звали то, чего в ките нет): "
                     + "; ".join(
@@ -2949,6 +2954,8 @@ def _onboarding_summary(onboarding_path):
         "  • кит честен: чего не умеет или не проверено — говорит прямо.\n"
         "Кит работает С человеком, а не вместо него — ускоряет и страхует, приёмка за вами."
         + where
+        + "\n\nДальше — просто наберите:  ai-ops   (кит покажет простым языком, что можно попросить)."
+        "\nНовый репозиторий? Первый шаг:  ai-ops model   — соберу понимание о проекте и предложу задачи."
     )
 
 
