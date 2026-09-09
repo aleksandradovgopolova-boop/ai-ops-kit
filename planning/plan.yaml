@@ -1026,9 +1026,10 @@ work:
       TypedDict, необъявленные переменные, widening _CI_PATTERNS до object) — типы окупаются, значит
       ВКЛЮЧЁН, а не удалён. Восемь починены; [tool.mypy] на kernel+shared (follow_imports=silent), шаг
       в джобе lint (mypy==2.3.1), инвентарь enforcement-inventory: mypy enforced. Уровень — «реальные
-      типовые ошибки = 0». ОСТАЁТСЯ (потому in_progress, а не done): «ратчет вниз по остальному» —
-      disallow_untyped_defs (~107 подписей) и счётчик ошибок mypy по не-фундаменту; py.typed (маркер
-      «весь пакет типизирован» при 29% покрытия был бы над-заявлением). Это ратчет-ВВЕРХ, отдельно.
+      типовые ошибки = 0». РАТЧЕТ-ВВЕРХ ПОШЁЛ (2026-09-10): kernel уже полностью типизирован —
+      включён строгий disallow_untyped_defs на `ai_ops_kit.kernel.*` (per-module override), новая
+      untyped-функция в ядре краснит. ОСТАЁТСЯ (потому in_progress): disallow на shared (99 подписей —
+      отдельный шаг) и py.typed (маркер «весь пакет типизирован» при 29% был бы над-заявлением).
 
 
   - id: config-is-config-history-in-decisions
