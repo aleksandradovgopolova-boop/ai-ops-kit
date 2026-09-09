@@ -1011,15 +1011,24 @@ work:
       растёт» по остальному — либо удалён из зависимостей с записанным решением
     type: engineering
     goal: checks-that-run
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: medium
-    write_scope: [pyproject.toml, .pre-commit-config.yaml, .github/, ai_ops_kit/]
+    write_scope: [pyproject.toml, .github/, ai_ops_kit/, registry/]
     reason: >-
       mypy в [dev] и requirements-dev, но [tool.mypy] нет, хука нет, шага в CI нет, py.typed нет;
       аннотировано ~29% слотов на 80k строк — тот же класс «объявлено, не исполняется», что кит
       вычистил у ruff. Полный --strict на 80k не окупится. Готово, когда типы проверяются машиной на
       фундаменте (kernel+shared) с ратчетом вниз по остальному — либо mypy убран и решение записано.
+    progress_note: >-
+      ЯДРО ВЫПОЛНЕНО (2026-09-09, «реши mypy»): спор «включить vs убрать» решён замером — обычный
+      проход нашёл 8 РЕАЛЬНЫХ проблем на фундаменте (implicit-Optional, рассогласование возврата с
+      TypedDict, необъявленные переменные, widening _CI_PATTERNS до object) — типы окупаются, значит
+      ВКЛЮЧЁН, а не удалён. Восемь починены; [tool.mypy] на kernel+shared (follow_imports=silent), шаг
+      в джобе lint (mypy==2.3.1), инвентарь enforcement-inventory: mypy enforced. Уровень — «реальные
+      типовые ошибки = 0». ОСТАЁТСЯ (потому in_progress, а не done): «ратчет вниз по остальному» —
+      disallow_untyped_defs (~107 подписей) и счётчик ошибок mypy по не-фундаменту; py.typed (маркер
+      «весь пакет типизирован» при 29% покрытия был бы над-заявлением). Это ратчет-ВВЕРХ, отдельно.
 
   - id: installer-under-size-and-func-gates
     title: installer/ включён в module-size и func-size ратчеты; текущие 3918 строк заморожены потолком

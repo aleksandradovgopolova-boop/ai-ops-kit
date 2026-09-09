@@ -168,7 +168,7 @@ def _journal_scan(journal_path):
 # двенадцатый вызов приедет без проверки. Здесь регистрируется САМ факт утраты, у источника; отчёт
 # потом сливает накопленное (`drain_bookkeeping_losses`). Образец взят в этом же репозитории:
 # `orchestrator_usage.drain_call_stats` — та же форма «накопили у источника, слили в отчёт».
-_BOOKKEEPING_LOSSES = []
+_BOOKKEEPING_LOSSES: list[dict] = []
 _BOOKKEEPING_LIMIT = 50
 
 

@@ -33,11 +33,17 @@ def test_real_repository_inventory_is_valid(capsys):
     assert "ENFORCEMENT-INVENTORY-OK" in out, out
 
 
-def test_mypy_is_honestly_unenforced():
-    """Именно предмет F-05: mypy объявлен и не запускается — инвентарь называет это, а не прячет."""
+def test_mypy_is_now_enforced_with_resolving_evidence():
+    """F-05 ЗАКРЫТ: mypy включён на фундаменте, и его доказательство исполнения РЕАЛЬНО резолвится.
+
+    До «реши mypy» инвентарь честно звал его unenforced; теперь звал бы ложью, если бы enforced_at
+    не находился. Тест держит именно связку «enforced -> доказательство существует», а не слово.
+    """
     spec = vei.load_spec()
     mypy = next(t for t in spec["dev_tools"] if t["name"] == "mypy")
-    assert mypy["status"] == "unenforced" and mypy.get("reason"), mypy
+    assert mypy["status"] == "enforced", mypy
+    ea = mypy["enforced_at"]
+    assert vei._resolves(vei.PKG, ea["file"], ea["pattern"]), ea
 
 
 def test_declared_dev_tools_reads_both_sources():

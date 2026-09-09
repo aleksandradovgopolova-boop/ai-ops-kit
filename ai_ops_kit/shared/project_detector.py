@@ -161,7 +161,7 @@ def _make_targets(d: Path):
 
 # Что РЕАЛЬНО запускается в CI. Строка берётся как есть и только если она С НЕЁ начинается —
 # `cd x && pytest` или `ruff check . || true` не считаются доказательством команды гейта.
-_CI_PATTERNS = {
+_CI_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
     "python": {
         "test": (r"(?:python3?\s+-m\s+)?pytest\b", r"tox\b"),
         "lint": (r"(?:python3?\s+-m\s+)?ruff\s+check\b", r"(?:python3?\s+-m\s+)?flake8\b"),
@@ -187,7 +187,7 @@ def _ci_commands(root: Path):
     Берём только шаги, падение которых что-то значит: continue-on-error и `|| true` пропускаем,
     иначе гейт «пройдёт» на команде, которой разрешено падать. Шаблоны ${{ }} не берём — их
     нельзя выполнить вне GitHub."""
-    out = {}
+    out: dict[str, dict[str, tuple[str, str]]] = {}
     wf_dir = root / ".github" / "workflows"
     if not wf_dir.is_dir():
         return out
