@@ -237,29 +237,61 @@ def open_prs_overlapping(repo, paths):
     return open_prs_via_rest(repo, paths)   # REST-фоллбэк или честный unavailable
 
 
-def active_work_overlap(active_work_path, areas):
-    if not areas or not active_work_path:
+def _local_active(active_work_path):
+    """Список локальных активных работ из реестра одного рабочего дерева (или []). """
+    if not active_work_path:
         return []
     p = Path(active_work_path)
     if not p.exists():
         return []
     import yaml
     data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    want = set(areas)
+    return [w for w in data.get("active", []) if w.get("status") != "done"]
+
+
+def active_work_overlap(active_work_path, areas, child_root=None, published=False, branch=None):
+    """Пересечения с реестром активных работ.
+
+    Два независимых сигнала:
+      · по ЗОНАМ (`areas`) — среди ЛОКАЛЬНЫХ работ этого дерева (у них есть `affected_areas`);
+      · по ВЕТКЕ (`branch`) — среди работ ДРУГИХ держателей (соседние копии + при публикации другие
+        машины) через `team_view`. Ветка — публикуемое поле (`PUBLISHED_FIELDS`), поэтому этот сигнал
+        работает и кросс-машинно; зоны в опубликованную заявку по решению владельца НЕ уезжают
+        (`ep-2026-08-18-published-carrier-file-per-work`), поэтому cross-machine пересечение ПО ЗОНАМ
+        здесь недостижимо без нового решения о составе публикуемых полей — и мы его не выдумываем.
+    """
+    local = _local_active(active_work_path)
     out = []
-    for w in data.get("active", []):
-        if w.get("status") == "done":
-            continue
+    want = set(areas or [])
+    for w in local:
         shared = sorted(want & set(w.get("affected_areas") or []))
         if shared:
             out.append({"id": w.get("id"), "branch": w.get("branch"), "shared_areas": shared})
+    # Кросс-держатель по ветке: соседняя копия/другая машина держит ту же ветку — реальная коллизия,
+    # видимая в пределах опубликованных полей. Только чужие держатели (team_view вычитает свои).
+    if child_root and branch:
+        try:
+            from ai_ops_kit.lifecycle import active_work as _aw
+            team = _aw.team_view(child_root, local, published)
+        except (ImportError, OSError):
+            team = []
+        local_ids = {(w.get("machine"), w.get("id")) for w in local}
+        for r in team:
+            if (r.get("machine"), r.get("id")) in local_ids:
+                continue
+            if r.get("branch") == branch:
+                out.append({"id": r.get("id"), "branch": r.get("branch"),
+                            "shared_branch": branch, "machine": r.get("machine"),
+                            "origin": "published" if r.get("_published") else "copy"})
     return out
 
 
-def preflight(repo, base, paths, areas=None, active_work_path=None):
+def preflight(repo, base, paths, areas=None, active_work_path=None,
+             child_root=None, published=False, branch=None):
     bc = base_changes(repo, base, paths)
     prs = open_prs_overlapping(repo, paths)
-    aw = active_work_overlap(active_work_path, areas)
+    aw = active_work_overlap(active_work_path, areas, child_root=child_root,
+                             published=published, branch=branch)
 
     collision = bool(bc) or bool(prs.get("prs")) or bool(aw)
     result = {
@@ -302,7 +334,13 @@ def print_human(r):
     elif status == "checked":
         print(f"  · открытые PR проверены (via {prs.get('via', '?')}): пересечений нет")
     for a in r["active_work_overlap"]:
-        print(f"  ⚠ активная работа '{a['id']}' (ветка {a['branch']}): зоны {', '.join(a['shared_areas'])}")
+        if a.get("shared_branch"):
+            who = a.get("machine") or "?"
+            print(f"  ⚠ ту же ветку '{a['shared_branch']}' держит другой ({a.get('origin')}, "
+                  f"машина {who}), работа '{a['id']}'")
+        else:
+            print(f"  ⚠ активная работа '{a['id']}' (ветка {a['branch']}): "
+                  f"зоны {', '.join(a['shared_areas'])}")
     for rec in r.get("recommendation", []):
         print(f"  → {rec}")
 
@@ -314,11 +352,22 @@ def main(argv):
     ap.add_argument("--repo", default=".")
     ap.add_argument("--areas", help="зоны для сверки с реестром активных работ")
     ap.add_argument("--active-work", dest="active_work")
+    ap.add_argument("--branch", help="ветка этой работы — для сверки, не держит ли её другой держатель "
+                                     "(соседняя копия / при публикации другая машина)")
     ap.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     paths = [x.strip() for x in a.paths.split(",") if x.strip()]
     areas = [x.strip() for x in (a.areas or "").split(",") if x.strip()]
-    r = preflight(Path(a.repo), a.base, paths, areas, a.active_work)
+    # Кросс-держатель по ветке виден в пределах опубликованных полей: копии — всегда, другие машины —
+    # только при включённой публикации (её и спрашиваем у active_work, чтобы не выдать локальное за
+    # командное — тот же честный контур, что в team_view).
+    try:
+        from ai_ops_kit.lifecycle import active_work as _aw
+        _published = _aw.publication_enabled(Path(a.repo))
+    except (ImportError, OSError):
+        _published = False
+    r = preflight(Path(a.repo), a.base, paths, areas, a.active_work,
+                  child_root=Path(a.repo), published=_published, branch=a.branch)
     if a.json:
         print(json.dumps(r, ensure_ascii=False, indent=2))
     else:

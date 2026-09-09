@@ -74,6 +74,31 @@ class TestPreflight:
         r = preflight(git_repo, "origin/nonexistent", ["f.txt"])
         assert isinstance(r["base_changes"], str)
 
+    def _publish_claim(self, repo, machine, wid, branch):
+        d = repo / ".ai" / "claims"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / f"{machine}__{wid}.yaml").write_text(
+            f"schema_version: 1\nkind: published-claim\nid: {wid}\nbranch: {branch}\n"
+            f"machine: {machine}\nowner_session: s\nstatus: in-progress\n", encoding="utf-8")
+
+    def test_cross_holder_same_branch_surfaces_when_published(self, git_repo):
+        """#669 исход №1/№3: чужой держатель ТОЙ ЖЕ ветки (доехавшая опубликованная заявка другой
+        машины) виден в preflight — по ветке (публикуемое поле), кросс-машинно."""
+        self._publish_claim(git_repo, "otherbox", "y", "feature")
+        r = preflight(git_repo, "main", ["other.txt"], areas=["z"],
+                      child_root=git_repo, published=True, branch="feature")
+        assert r["verdict"] == "collision"
+        hit = [a for a in r["active_work_overlap"] if a.get("shared_branch") == "feature"]
+        assert hit and hit[0]["machine"] == "otherbox" and hit[0]["origin"] == "published", r
+
+    def test_other_machine_claim_hidden_when_publication_off(self, git_repo):
+        """Честная граница гибрида: при ВЫКЛЮЧЕННОЙ публикации заявку другой машины кит НЕ показывает
+        (её и неоткуда взять как командную) — локальное не выдаётся за координацию."""
+        self._publish_claim(git_repo, "otherbox", "y", "feature")
+        r = preflight(git_repo, "main", ["other.txt"], areas=["z"],
+                      child_root=git_repo, published=False, branch="feature")
+        assert not any(a.get("shared_branch") for a in r["active_work_overlap"]), r
+
 
 @pytest.mark.unit
 class TestRestFallback:
