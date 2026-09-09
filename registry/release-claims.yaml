@@ -157,6 +157,9 @@ authoritative_version:
 # его исчезновение даёт ОШИБКУ «проверка ослепла», не тишину.
 derived_numbers_in_docs:
   - {file: README.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
+  # F-04 (аудит 2026-09-09): README писал «51 роль» при agents_count=42 — число было в реестре, но
+  # ни к одному доку не привязано (built≠wired). Теперь заверяется, как и gates_count.
+  - {file: README.md, pattern: '(\d+)\s*<!-- claim:agents-total -->', claim: agents_count}
   - {file: ROADMAP.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
   - {file: docs/index.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
   - {file: docs/architecture/execution-engine.md, pattern: '(\d+)\s*<!-- claim:gates-total -->', claim: gates_count}
