@@ -332,9 +332,9 @@ roles:
   product:       {contour: product_strategy,              agents: [product-manager, product-reviewer]}
   researcher:    {contour: research_decisions,             agents: [user-researcher, experiment-designer]}
   architect:     {contour: system_architecture,            agents: [solution-architect, llm-architect, architecture-reviewer]}
-  data-engineer: {contour: data_contracts,                 agents: [database-engineer, migration-engineer, integration-engineer]}
-  engineer:      {contour: engineering_quality_security,   agents: [backend-developer, fullstack-developer, implementation-integrator]}
-  frontend:      {contour: engineering_quality_security,   agents: [frontend-developer, ui-ux-designer]}
+  data-engineer: {contour: data_contracts,                 agents: [data-engineer]}
+  engineer:      {contour: engineering_quality_security,   agents: [fullstack-developer, implementation-integrator]}
+  frontend:      {contour: engineering_quality_security,   agents: [fullstack-developer, ui-ux-designer]}
   qa:            {contour: engineering_quality_security,   agents: [test-engineer, regression-analyst]}
   security:      {contour: engineering_quality_security,   agents: [security-reviewer, ai-red-teamer]}
   reviewer:      {contour: engineering_quality_security,   agents: [code-reviewer, performance-reviewer, requirements-reviewer]}

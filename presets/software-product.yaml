@@ -7,12 +7,10 @@ note: 'Декларативный preset: агенты подключаются 
 agents:
 - accessibility-reviewer
 - architecture-reviewer
-- backend-developer
 - code-reviewer
 - design-system-reviewer
 - devops-engineer
 - documentation-reviewer
-- frontend-developer
 - fullstack-developer
 - incident-analyst
 - observability-engineer
