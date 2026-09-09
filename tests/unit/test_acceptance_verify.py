@@ -329,6 +329,36 @@ def test_a_refuted_absence_claim_confirms_unmet_instead_of_erasing_it(tmp_path):
     assert "В ФАЙЛЕ ЕСТЬ" in rep2["criteria"][0]["reason"]
 
 
+def test_absence_proof_must_be_tied_to_the_same_file_not_any_removed_line(tmp_path):
+    """ЗУБЫ пробы acceptance-absence-tied-to-same-file (третье и четвёртое ревью PR #118).
+
+    Доказательство отсутствия — самое сильное основание — обязано относиться к ТОМУ ЖЕ файлу:
+    фрагмент удалён ИЗ ЭТОГО источника и в нём его больше нет. Если основание принимать по
+    объединению удалённых строк ВСЕХ файлов (own_removed -> any_removed), обход не закрывается, а
+    отодвигается на шаг: строку удалили из ЧУЖОГО файла, а критерий об отсутствии в README закрывается
+    как машинно-доказанный. Здесь `public/media` удалена из app.py, а источник критерия — README.md,
+    где её и не было: связь удаления с ЭТИМ файлом не доказана.
+
+    Правильный код НЕ выдаёт absence-proof — основание judge-only, quote_verified=0. С мутантом
+    `any_removed` основание стало бы absence-proof, а quote_verified=1 — тогда тест краснеет, убивая
+    мутанта.
+    """
+    (tmp_path / "README.md").write_text("# Проект\n", encoding="utf-8")  # цитаты тут нет
+    ctx = ("diff --git a/app.py b/app.py\n@@ -1,2 +1,1 @@\n"
+           "-public/media/ — старый каталог\n+чисто\n")
+    crit = [{"id": "AC-1", "text": "в README больше нет строк с `public/media`"}]
+    prov = _provider([_read(), _verdict([
+        {"id": "AC-1", "status": "met", "evidence": "absent", "quote": "public/media",
+         "source": "README.md"}])])
+
+    rep = av.verify(tmp_path, crit, prov, revision="abc", change_context=ctx)
+
+    assert rep["quote_verified"] == 0, "отсутствие в ЧУЖОМ файле посчитано машинным доказательством"
+    assert rep["criteria"][0]["basis"] == "judge-only"
+    assert rep["criteria"][0]["grounded"] is False
+    assert rep["judge_only"] == ["AC-1"]
+
+
 def test_owner_check_required_is_in_the_report_not_only_in_stdout(tmp_path):
     """Пятое ревью: «выполнены все» при нуле подтверждённых оснований жило только в терминале.
 
