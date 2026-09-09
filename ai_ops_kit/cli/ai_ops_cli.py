@@ -594,6 +594,13 @@ def _session_identity(child_root) -> str:
     return f"pid:{_os.getpid()}"
 
 
+def _announce_start(child_root):
+    """#708: маркер старта «— запускаю —» держим на technical/debug — там он ориентир в логе. На
+    product смысл «запускаю сейчас» уже несёт превью, а дублирующая техно-ремарка только шумит."""
+    if _audience(child_root) != "product":
+        print("— запускаю —")
+
+
 def _session_guard_before_start(child_root, task, signals, feature=None):
     """v3.22 Culture Runtime Integration: session guard ДО старта задачи.
     1. snapshot — текущее состояние сессии (контекст и расход — measured по транскрипту сессии)
@@ -1017,9 +1024,12 @@ def main(argv):
     # «вот что я сделаю / запускай когда готов» — оно противоречит следующему сообщению «данных не
     # хватает». Пусть говорит одно: чего не хватает (это скажет intake-gap в _main_run_execute).
     _blocked_on_intake = False
-    if (intent == "run" and a.execute) or intent == "do":
+    _will_execute_now = (intent == "run" and a.execute) or intent == "do"
+    if _will_execute_now:
         from ai_ops_kit.engine import pipeline_helpers as _ph
         _blocked_on_intake = bool(_ph.missing_intake_signals(signals))
+    # #708: немедленный старт (do/run --execute) -> превью говорит «запускаю сейчас», не «когда готов».
+    pv["will_execute_now"] = _will_execute_now
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
     elif not _blocked_on_intake:
@@ -1156,7 +1166,7 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
                     return 0
                 return 1 if seq["executed_all"] else 2
             print("— задача атомарна: последовательное исполнение не требуется, обычный прогон —")
-        print("— запускаю —")
+        _announce_start(Path(child_root))
         # v3.22: session guard ДО старта — snapshot + relation по факту + delegation
         _session_guard_before_start(Path(child_root), task, signals, a.feature)
         # v2.120: канонический вход ПРОВОДИТ провайдера/модель/base/open-pr/max-steps/require-fix в движок

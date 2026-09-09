@@ -513,3 +513,31 @@ def test_bootstrap_preview_names_the_apply_command():
     body = PR.render(pf.from_bootstrap(rep, applied=False), audience="product")
     assert "bootstrap --apply" in body, "сухой прогон не назвал команду создать план"
 
+
+
+# ── #708: превью не зовёт «запускай, когда готов», когда движок стартует сразу ─────────────────
+
+def _preview(**over):
+    pv = {"intent": "do", "understood": {"task": "t", "task_type": "QUICK"},
+          "will_do": {"stages": []}, "data_used": {"agents": []},
+          "expected_result": "выполню намерение"}
+    pv.update(over)
+    return pv
+
+
+def test_preview_says_starting_now_when_execution_is_immediate():
+    """`do`/`run --execute` запускают движок ПРЯМО СЕЙЧАС — превью обещает «запускаю сейчас»,
+    а не «запускай, когда готов» (следом идёт старт — иначе противоречие, карта трения #708)."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+    body = PR.render(pf.from_execution_preview(_preview(will_execute_now=True)), audience="product")
+    assert "запускаю сейчас" in body, body
+    assert "запускай, когда готов" not in body, body
+
+
+def test_preview_says_when_ready_for_a_dry_preview():
+    """Голый `run` (без --execute) — это превью: ожидание «запускай, когда готов» здесь верно."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+    body = PR.render(pf.from_execution_preview(_preview(intent="run", will_execute_now=False)),
+                     audience="product")
+    assert "запускай, когда готов" in body, body
+    assert "запускаю сейчас" not in body, body
