@@ -476,3 +476,25 @@ def test_masking_changes_language_not_facts():
     # product видит перевод, а не пустоту: плоский эквивалент на месте термина.
     product = PR.render(msg, audience="product").lower()
     assert "покрытие тестами" in product and "объём поставки" in product
+
+
+# ── #675: просьба масштаба/риска (do/run) читается по-человечески, не «ответь JSON» ────────────
+
+def test_intake_gap_asks_in_human_words_not_raw_json():
+    """Живой проход человеком: кит просил ответить сырым JSON `--signals '{...}'` — язык
+    разработчика. Теперь та же механика подаётся по-человечески: «скопируй строку; если крупнее —
+    поменяй size/risk». JSON остаётся как готовая строка для копирования, но не как инструкция."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+
+    hint = "--signals '{\"task_type\":\"QUICK\", \"size\":\"small\", \"risk\":\"low\"}'"
+    msg = pf.from_intake_gap([{"signal": "size", "allowed": ["small", "medium", "large"]},
+                              {"signal": "risk", "allowed": ["low", "medium", "high"]}],
+                             hint_command=hint)
+    steps = " ".join(msg["next"])
+    # человеку объясняют, ЧТО делать со строкой (скопировать / поменять), а не «ответь одной строкой:»
+    assert "скопируй" in steps
+    assert "поменяй" in steps and "size" in steps and "risk" in steps
+    assert "ответь одной строкой:" not in steps
+    # без готовой строки — просто человеческая просьба, без обломанного JSON
+    msg2 = pf.from_intake_gap([{"signal": "size"}], hint_command=None)
+    assert "--signals" not in " ".join(msg2["next"])

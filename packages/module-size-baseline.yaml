@@ -26,7 +26,7 @@ ceilings:
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1116
-  ai_ops_kit/ui/presenter_formatters.py: 1059
+  ai_ops_kit/ui/presenter_formatters.py: 1067
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 721
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 938
@@ -39,6 +39,18 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 1059'
+    to: 'presenter_formatters.py = 1067'
+    work: 'humanize do/run intake-gap — просьба масштаба/риска без сырого JSON'
+    why: >-
+      Живой проход сценария человеком (свежий репозиторий → `do "задача"`) показал: кит просил
+      ответить сырым JSON `--signals '{"task_type":...}'` — язык разработчика, на котором человек
+      застревает. `from_intake_gap` теперь подаёт ту же механику по-человечески: «если задача
+      небольшая и обычная — просто скопируй эту строку; если крупнее/рискованнее — поменяй size и
+      risk». +8 строк — это ТЕКСТ пользовательского сообщения (два человеческих next_steps вместо
+      одного JSON-указания), не рост логики. Механизм (`--signals`) не менялся. Ратчет держит вниз.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1198'
