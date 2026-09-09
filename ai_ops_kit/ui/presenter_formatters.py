@@ -681,7 +681,10 @@ def from_session_economy(snapshot: dict, rec: dict) -> dict:
 
     human_ctx = f"{ctx / 1000:.0f}k" if ctx else "н/д"
     measured = "измерено" if status == "measured" else "оценка"
-    head = f"Сессия читает {human_ctx} на каждом запросе ({measured}); прочитала всего {spend}"
+    # #708: session_spend несёт внутренний тег состояния — «… из … [over_budget]». В детали (tech) он
+    # уходит целиком, а в текст человеку — без тега: [over_budget] — это жаргон состояния, а не число.
+    spend_human = spend.rsplit(" [", 1)[0] if spend.endswith("]") and " [" in spend else spend
+    head = f"Сессия читает {human_ctx} на каждом запросе ({measured}); прочитала всего {spend_human}"
 
     if outcome in ("new_session", "compact", "clear"):
         advice = {"new_session": "начать чистую сессию",

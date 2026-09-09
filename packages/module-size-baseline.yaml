@@ -26,7 +26,7 @@ ceilings:
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1135
-  ai_ops_kit/ui/presenter_formatters.py: 1074
+  ai_ops_kit/ui/presenter_formatters.py: 1077
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
@@ -39,6 +39,16 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 1074'
+    to: 'presenter_formatters.py = 1077'
+    work: 'humanize расход сессии (#708): текст без внутреннего тега состояния [over_budget]'
+    why: >-
+      Карта трения #708 (пункт 3): сообщение о расходе сессии показывало человеку
+      «прочитала всего 266.0M из 20.0M [over_budget]» — тег состояния [over_budget] это жаргон, а
+      не число. Теперь в текст идёт число без тега, а полный session_spend (с тегом) остаётся в
+      деталях (tech) — ничего не потеряно. +3 строки: срез хвоста + комментарий, не логика.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1214; presenter_formatters.py = 1070'
