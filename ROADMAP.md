@@ -93,11 +93,16 @@ owner: product-team
   кодом (`required_story_specs`/`required_stories_coverage`, #452), и с 09.09 `required_stories`
   входит в UIEvidenceBundle и в `evidence_for_gate` — объявленного контрактом опыта нет в собранном
   Storybook → `ux_review` краснеет ДЕТЕРМИНИРОВАННО (built≠wired закрыт). Варианты опыта с trade-offs
-  (`generate_design_options`, #416) построены и проведены в engineering_advisor; исход держится честно
-  недоказанным на живом прогоне. Остаётся (упирается во внешнее, не в код кита): прогон на РЕАЛЬНОМ
-  markdown-контракте, переведённом в YAML, и живой e2e — нужен собранный Storybook-индекс дочки
-  (`ai-ops-cockpit`), которого в этом дереве нет; сделать субъективную часть blocking сверх advisory —
-  решение владельца об enforcement-политике (дизайн-гейты advisory «сначала полевые доказательства»).
+  (`generate_design_options`, #416) построены и проведены в engineering_advisor. ЖИВОЙ e2e ПОЛУЧЕН
+  09.09 на реальной UI-дочке `ai-ops-cockpit` (экран Active Work: настоящий Experience Contract +
+  собранный Storybook-индекс + evidence, кит из origin/main): полный контракт → `ux_review: pass`
+  (заземлён на точный SHA, `validate_storybook_evidence` чист); убрать обязательную story «error» →
+  `required_stories.missing=[active-work-error]` → `ux_review: fail` детерминированно. Волна 3 на том
+  же репо: `constitution_coverage` доступен (65 правил, 18 автоматизируемых, 7 покрыто, 11 названы).
+  Оговорка «синтетика, не реальный контракт» СНЯТА. Контракт-проверка ДЕТЕРМИНИРОВАННА (не субъективна)
+  и потому блокирует по существу; «advisory» касается СУБЪЕКТИВНОЙ части (flow/copy/tone) — оставлено
+  advisory решением владельца 09.09 (`ep-2026-09-09-direction-wave-owner-calls`, «сначала полевые
+  доказательства»; теперь они есть). Дальше — уже интеграция в постоянный UI-репозиторий команды.
 
 - `uiux-standard-as-product` — дочерний репозиторий получает единый ПРОВЕРЯЕМЫЙ UI/UX-стандарт, а не
   тонкий набор чек-листов: правила со стабильными ID (`UI-`/`AI-`/`UI-FORBIDDEN-`), токены-контракт,
