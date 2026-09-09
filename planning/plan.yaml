@@ -430,14 +430,19 @@ goals:
     # процесса (оговорка решения ep-2026-08-17). Суть: контроль качества честен (Phase 0) + ядро
     # вырезано как отдельный слой (Phase B), чтобы полное меню росло, не обрушивая друг друга.
     freeze_relation: run_condition
-    # ДОСТИГНУТА 2026-09-09 (#670, PR #689; флип восстановлен после потери в merge #697-серии): оба
-    # проверяемых исхода верны по коду. Phase 0 — 11 лент влиты, findings аудита закрыты. Phase B —
-    # mutual_pairs=0 (кольцо capabilities — DAG), фазы pipeline — отдельные функции. Стена
+    # ДОСТИГНУТА 2026-09-09 (#670, PR #689). Phase 0 — 11 лент влиты, findings аудита закрыты.
+    # Phase B — ядро вырезано отдельным dependency-слоем (три кольца: kernel НЕ зависит от
+    # intelligence — проверяется validate_layering), фазы pipeline — отдельные функции. Стена
     # code_review-ревьюера в сессии Клода подтверждена живьём #668. 4 работы — в history/plan-history.yaml.
+    # ПОПРАВКА F-03 (аудит 2026-09-09): прежняя подпись «mutual_pairs=0, кольцо capabilities — DAG»
+    # была неправдой — гейт не видел __import__ и занижал связность до нуля. Честно: 5 взаимных пар
+    # внутри capabilities. Вырез слоя (три кольца) этим не отменяется, но ВНУТРЕННИЙ DAG capabilities
+    # НЕ достигнут — это остаток, разбираемый отдельными работами (бэклог аудита F-03).
     status: achieved
     outcome:
       quality_control_is_honest: true       # Phase 0
-      core_carved_as_separate_layer: true   # Phase B (mutual_pairs=0, фазы pipeline — функции)
+      core_carved_as_separate_layer: true   # Phase B: три кольца (kernel⊥intelligence), фазы pipeline —
+                                             # функции. Внутренний DAG capabilities НЕ достигнут (F-03: 5 пар).
 
   # ─── История релизов 3.40/4.0 (04.09.2026) и хвосты, ждущие следующей сессии ──────────────────
   # ВЫПУЩЕНО: 3.40.0 (warn-минор о сносе плоского слоя tools/) и 4.0.0 МАЖОР (tools/ снят физически,

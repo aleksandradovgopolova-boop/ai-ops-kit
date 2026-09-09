@@ -157,60 +157,59 @@ rules:
 # `validation`, — `devtools` (тот же слой entrypoints, это разрешено). Новых нарушений нет.
 #
 # v3.38 (W3.2): engine -> engops СНЯТО — session recommendation через событие run_completed.
-# Нарушений больше нет; known_violations пуст.
-known_violations: []
+# F-03 (внешний аудит 2026-09-09): вскрыто ОДНО нарушение kernel-boundary, спрятанное от анализатора
+# динамическим импортом — gates грузит engops.environment_map через __import__ (deploy_readiness).
+# Ребро было всегда, но validate_layering не видел __import__; теперь видит. Заморожено как известное
+# нарушение, развязка — отдельной работой; реестр вправе только сокращаться.
+known_violations:
+  - "gates -> engops: deploy_readiness грузит engops.environment_map через __import__ (F-03); развязать отдельной работой"
 
 # Цифры замера — ПОТОЛОК, а не заметка на память: с v3.34 их читает ratchet_errors в
 # validate_layering.py. Ратчет ходит только ВНИЗ: превышение краснеет, снижение обязано быть
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 0          # КРАТНОСТЬ НУЛЬ. Кольцо capabilities стало DAG (v3.38 K5).
-                           # v3.38 (K1): engine<->gates СНЯТА. 5 -> 4.
-                           # v3.38 (K2): context<->engine СНЯТА. 4 -> 3.
-                           # v3.38 (K3): delivery<->engine СНЯТА. 3 -> 2.
-                           # v3.38 (K4): engops<->gates СНЯТА. 2 -> 1.
-                           # v3.38 (K5): engine<->lifecycle СНЯТА — workitem/active_work
-                           # загружают engine-модули через __import__. 1 -> 0.
+  mutual_pairs: 5          # ЧЕСТНОЕ ЧИСЛО (F-03, аудит 2026-09-09). Здесь стоял 0 с подписью «кольцо
+                           # стало DAG» — и это было неправдой: пять взаимных пар внутри capabilities
+                           # никуда не делись, их СПРЯТАЛИ от анализатора, загрузив engine-модули через
+                           # __import__. Строка K5 в прежней подписи сама это признавала («workitem/
+                           # active_work загружают engine-модули через __import__»). validate_layering
+                           # видел только ast.Import/ImportFrom и печатал 0. Теперь он считает и
+                           # __import__/import_module со строковым литералом — и показывает пять пар:
+                           #   context<->engine, delivery<->engine, engine<->gates,
+                           #   engops<->gates, engine<->lifecycle.
+                           # K1..K5 «СНЯТА» из прежней подписи — не развязка, а сокрытие ребра; отменено.
+                           # Пара engine<->gates держится ровно одним ребром: evidence_collector.main
+                           # (CLI-вход) грузит engine.tool_broker; библиотечный путь развязан через DI —
+                           # поэтому K1 первый кандидат на полное снятие/исключение.
                            #
-                           # 12 -> 7 (2026-08-12), четырьмя переездами и без правки логики. Правило
-                           # одно: модуль, который НИЧЕГО не импортирует из кита и нужен многим,
-                           # лежит в foundation, а не в том пакете, где его когда-то написали.
-                           #   usage_ledger (252) providers -> shared: учёт, не провайдер.
-                           #     Снял gates<->providers и engops<->providers.
-                           #   gitio (39) engine -> shared: обёртка над git, инфраструктура.
-                           #     Снял engine<->engops.
-                           #   budget (68) engine -> shared: примитив бюджета прогона.
-                           #     Снял engine<->providers.
-                           #   lifecycle_store (404) lifecycle -> shared: durable-запись и
-                           #     fail-closed чтение — инфраструктура надёжности. Снял
-                           #     gates<->lifecycle и почти половину оставшихся циклов.
-                           #
-                           # ГРАНИЦА ПРАВИЛА НАЗВАНА: `ai_route` (317 строк) тоже не зависит ни от
-                           # кого, и переезд в `shared` снял бы engine<->lifecycle одним `git mv`.
-                           # Не сделано осознанно: это классификация по реестрам, то есть предметная
-                           # логика, а не фундамент. Сложить её в foundation ради счётчика значило бы
-                           # сделать ровно то, что этот срез исправляет, — положить модуль не туда.
-                           # Пару engine<->lifecycle снимает не переезд, а решение «кто классифицирует»
-                           # (`workitem` не должен звать роутер сам), и это проектирование.
-  cycles_longer_than_two: 0    # v3.38 (K2): 6 -> 0 — снятие context<->engine разомкнуло
-                               # оставшиеся циклы. Кольцо capabilities стало DAG.
-                               # v3.38 (K1): 11 -> 6 — снятие engine<->gates убрало циклы через
-                               # evidence_collector -> tool_broker.
-                               # v3.38 (лента №4): 52 -> 28 — снятие security<->validation убрало
-                               # все циклы, проходившие через это ребро (одно ребро держало многие).
-                               # v3.38 (лента №5): 28 -> 17 — снятие engine->validation и
-                               # providers->validation убрало циклы через validation (validation
-                               # больше не участвует ни в одном цикле ядра).
-                               # v3.38 (лента №5, шаг 2): 17 -> 11 — снятие lifecycle->validation.
+                           # ЧТО БЫЛО РАЗВЯЗАНО ПО-НАСТОЯЩЕМУ (переезды в foundation, 2026-08-12) — это
+                           # сняло ПЕРЕСЕКАВШИЕ СЛОИ пары, а не эти пять внутри capabilities:
+                           #   usage_ledger (252) providers -> shared: снял gates<->providers, engops<->providers.
+                           #   gitio (39) engine -> shared: снял engine<->engops.
+                           #   budget (68) engine -> shared: снял engine<->providers.
+                           #   lifecycle_store (404) lifecycle -> shared: снял gates<->lifecycle.
+                           # Правило: модуль, который НИЧЕГО не импортирует из кита и нужен многим, лежит
+                           # в foundation. Настоящая развязка этих пяти — отдельная работа (напр.
+                           # `ai_route` (317) ни от кого не зависит; но пару снимает не переезд, а
+                           # решение «кто классифицирует» — workitem не должен звать роутер сам).
+  cycles_longer_than_two: 9    # ЧЕСТНОЕ ЧИСЛО (F-03). Стоял 0 «кольцо стало DAG» — той же слепотой:
+                               # циклы через __import__-рёбра (evidence_collector, review_branch,
+                               # context_compiler, active_work, workitem, deploy_readiness) анализатор
+                               # не видел. Сняв слепоту, видим 9 элементарных циклов длиннее двух.
+                               # Настоящие развязки ПЕРЕСЕКАВШИХ слои циклов остаются в силе:
+                               # security<->validation (лента №4), engine/providers/lifecycle->validation
+                               # (лента №5) — validation больше не участвует ни в одном цикле ядра.
+                               # Разбор оставшихся внутрикольцевых циклов — отдельными срезами.
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
-    ВСЕ пять оставшихся взаимных пар лежат ВНУТРИ слоя capabilities (context<->engine,
-    delivery<->engine, engine<->gates, engops<->gates, engine<->lifecycle) и текущими правилами не
-    запрещены — это осознанная граница. Обе пары, ПЕРЕСЕКАВШИЕ слои, сняты: security<->validation
-    (лента №4) и engine<->validation (лента №5) — обе тем, что чистую логику валидаторов вынесли
-    вниз в `checks`, а рантайм перестал тянуть `validation` (entrypoints) вверх. Разбор оставшихся
-    внутрикольцевых циклов идёт отдельными срезами.
+    Пять взаимных пар лежат ВНУТРИ слоя capabilities (context<->engine, delivery<->engine,
+    engine<->gates, engops<->gates, engine<->lifecycle), правилами слоёв не запрещены (осознанная
+    граница) и теперь ЧЕСТНО СОСЧИТАНЫ — до F-03 они были спрятаны за __import__ и показывались нулём.
+    Пары, ПЕРЕСЕКАВШИЕ слои, сняты по-настоящему: security<->validation (лента №4) и
+    engine<->validation (лента №5) — чистую логику валидаторов вынесли вниз в `checks`, а рантайм
+    перестал тянуть `validation` (entrypoints) вверх. Разбор этих пяти внутрикольцевых пар — отдельными
+    срезами; ратчет держит их как потолок вниз.
   raised_in_3_34: >
     Потолок ПОДНЯТ в том же срезе, где введён: 9 -> 12 пар, 31 -> 210 циклов. Связей в коде при
     этом не прибавилось ни одной. Пока `validation` не был пакетом, шесть пакетов ядра импортировали
