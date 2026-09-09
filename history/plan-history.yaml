@@ -19,6 +19,21 @@ kind: delivery-plan-history
 
 
 work:
+  - id: ci-supply-chain-pinned
+    title: Тестовые зависимости и actions пинованы (SHA), dependabot включён
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: .github/dependabot.yml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-09 внешнего аудита). (1) Тест-зависимости запинены по мажору во всех 7
+      workflow'ах: 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'pytest-cov==7.*' 'pyyaml==6.*'
+      — мажорный релиз больше не покрасит CI на невиновном коммите (тот же довод, что уже был у
+      ruff/towncrier/commitizen). (2) Действия actions/checkout@v4 и actions/setup-python@v5 закреплены
+      на commit SHA (OpenSSF Pinned-Dependencies) с комментарием # v4/# v5. (3) Заведён
+      .github/dependabot.yml (github-actions + pip): двигает SHA и версии PR'ами на ревью, ничего не
+      мержит само. Инвариант «рантайм кита = stdlib+pyyaml» не затронут — это фордж-конфигурация.
+
   - id: repo-topology-legible-for-the-team
     title: Таблица «где что» в README — команда находит нужное в 41-каталожном корне без 50-КБ индекса
     goal: checks-that-run

@@ -18,13 +18,13 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       # 2026-08-12: pytest-cov здесь больше не нужен — `--cov` ушёл из addopts pytest.ini в
       # отдельную джобу `coverage` (package-quality.yml), где у покрытия есть порог. Прежде
       # addopts требовал пакет от ЛЮБОГО запуска, и джобы падали с «unrecognized arguments».
-      - run: pip install pyyaml pytest hypothesis
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'hypothesis==6.*'
 
       # ЗАГОЛОВОК PR — ЭТО ТЕМА БУДУЩЕГО КОММИТА. Замер 20.08.2026: PR #211 влит squash'ем, и его
       # человекочитаемый заголовок стал темой коммита на main. `cz check` в ветке смотрел коммиты
@@ -76,9 +76,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужна история для git diff против origin/main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "PR не смешивает код с координационным файлом"
@@ -95,9 +95,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужна история для git diff против origin/main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "размер PR: одна работа = один малый PR (advisory)"
