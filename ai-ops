@@ -8,14 +8,18 @@
 set -e
 here=$(cd "$(dirname "$0")" && pwd)
 
-# Интерпретатор с pyyaml (единственная зависимость).
+# Интерпретатор с pyyaml (единственная зависимость) И НЕ НИЖЕ ПОЛА 3.12 (F-10).
+# Проверка версии — часть отбора, а не только `import yaml`: раньше перебор доходил до python3.9,
+# выбирал его и падал ПОЗЖЕ и невнятнее (на 3.9 пакет не ставится, requires-python = ">=3.12").
+# Один вызов проверяет и pyyaml, и версию: пол совпадает с pyproject, а не «что нашлось».
+_ok() { "$1" -c 'import sys, yaml; sys.exit(0 if sys.version_info >= (3, 12) else 1)' 2>/dev/null; }
 find_python() {
   if [ -n "${AI_OPS_PYTHON:-}" ]; then
-    if "$AI_OPS_PYTHON" -c 'import yaml' 2>/dev/null; then echo "$AI_OPS_PYTHON"; return 0; fi
+    if _ok "$AI_OPS_PYTHON"; then echo "$AI_OPS_PYTHON"; return 0; fi
     return 1
   fi
-  for cand in python3 python3.13 python3.12 python3.11 python3.10 python3.9 python; do
-    if command -v "$cand" >/dev/null 2>&1 && "$cand" -c 'import yaml' 2>/dev/null; then
+  for cand in python3.13 python3.12 python3 python; do
+    if command -v "$cand" >/dev/null 2>&1 && _ok "$cand"; then
       echo "$cand"; return 0
     fi
   done

@@ -19,6 +19,25 @@ kind: delivery-plan-history
 
 
 work:
+  - id: ci-sees-owner-platform
+    title: >-
+      CI видит платформу владельца (macOS advisory); ./ai-ops не выбирает интерпретатор ниже пола;
+      имена файлов findings — ASCII
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: .github/workflows/package-quality.yml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-10 внешнего аудита), три части. (1) macOS: разработка идёт на macOS, а CI
+      её не видел — заведена advisory-джоба smoke-macos (macos-latest, critical_path, continue-on-error,
+      НЕ в required): наблюдает платформу владельца, но красный не держит PR — реальные отличия
+      macOS/Linux станут видны, а не спрячутся. (2) Пол интерпретатора: обёртка ./ai-ops перебирала
+      python3.9 и выбрала бы его (requires-python=">=3.12"), падая позже и невнятно — перебор сведён к
+      3.13/3.12 + bare, и отбор теперь проверяет ВЕРСИЮ (sys.version_info>=(3,12)), а не только import
+      yaml. (3) NFC/NFD: 13 кириллических имён в findings/from-children/ переименованы в ASCII
+      (obs-<дата>-<хэш>.yaml — описание внутри файла), ссылки в plan/history обновлены, git mv сохранил
+      историю.
+
   - id: ci-supply-chain-pinned
     title: Тестовые зависимости и actions пинованы (SHA), dependabot включён
     goal: checks-that-run
@@ -3873,7 +3892,7 @@ work:
     #     status: todo
     #     owner_role: engineer
     #     value: high
-    #     finding: findings/from-children/obs-2026-08-20-когда-у-провайдера-claud-99aa67ef.yaml
+    #     finding: findings/from-children/obs-2026-08-20-99aa67ef.yaml
     #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, ai_ops_kit/intelligence/, tests/]
     #     reason: >-
     #       НАХОДКА ПОЛЯ, прогон ⌘K в ai-ops-cockpit 20.08.2026 (obs 99aa67ef, 346c4324). В ДВУХ местах
@@ -3907,7 +3926,7 @@ work:
     #     status: todo
     #     owner_role: engineer
     #     value: medium
-    #     finding: findings/from-children/obs-2026-08-20-кит-останавливает-повтор-2dbfc337.yaml
+    #     finding: findings/from-children/obs-2026-08-20-2dbfc337.yaml
     #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/cli/, tests/]
     #     reason: >-
     #       НАХОДКА ПОЛЯ (obs 2dbfc337). Остановив повторный прогон, кит советует «передай --resume», но
@@ -4413,7 +4432,7 @@ work:
     status: done
     closed_at: '2026-08-27'
     pr: 336
-    finding: findings/from-children/obs-2026-08-20-главное-за-прогон-кит-са-fad8d07f.yaml
+    finding: findings/from-children/obs-2026-08-20-fad8d07f.yaml
     evidence: tests/unit/test_no_verdict_is_an_honest_refusal.py
     result: >-
       ЗАКРЫТО 2026-08-27 (PR #336, волна 6). Находка поля P0 (obs fad8d07f): на 'живом' пути прогона
@@ -4847,7 +4866,7 @@ work:
     closed_at: '2026-08-28'
     pr: 355
     evidence: tests/unit/test_process_spend.py
-    finding: findings/from-children/obs-2026-08-20-потолок-траты-на-разбор--487d952b.yaml
+    finding: findings/from-children/obs-2026-08-20-487d952b.yaml
     result: >-
       ЗАКРЫТО 2026-08-28 (код в PR #355; закрытие плана — отдельный учётный PR). Полевой дефект
       obs 487d952b: на шаге plan свежей работы кит показывал ~559k против 50k ДО описания задачи —

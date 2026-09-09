@@ -693,7 +693,7 @@ work:
     # делается отдельно, не бол том.
     owner_role: engineer
     value: high
-    finding: findings/from-children/obs-2026-08-20-run-plan-yaml-для-работы-64a4840a.yaml
+    finding: findings/from-children/obs-2026-08-20-64a4840a.yaml
     write_scope: [ai_ops_kit/engine/, ai_ops_kit/intelligence/, tests/]
     reason: >-
       НАХОДКА ПОЛЯ (obs 64a4840a, d48fd639, 8a891ce7, e09fe515). Три расхождения между тем, что кит
@@ -1046,22 +1046,6 @@ work:
       git log и decisions/registry.yaml; чтобы узнать включённые правила ruff, надо проскроллить 90
       строк прозы. Объяснение «почему правило такое» сохранить ОБЯЗАТЕЛЬНО (защита от вредной правки).
       Готово, когда хронология («v3.28.0 R16»…) переехала в реестр решений, в конфиге — инвариант и граница.
-
-  - id: ci-sees-owner-platform
-    title: >-
-      macos-latest в основной джобе; перебор интерпретаторов в ./ai-ops приведён к полу 3.12;
-      кириллические имена файлов findings заменены ASCII-слагом
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    value: low
-    write_scope: [.github/, ai-ops, findings/]
-    reason: >-
-      Все джобы ubuntu-latest; разработка на macOS — платформа владельца в CI не проверяется (Python
-      3.13 уже покрыт compat-матрицей, ОС — нет). Обёртка ./ai-ops перебирает интерпретаторы ниже пола
-      (3.9), выберет и упадёт невнятно. 13 кириллических имён в findings/from-children/ — риск NFC/NFD
-      между macOS и Linux. Готово, когда macOS в матрице, перебор совпадает с полом, имена ASCII.
 
   - id: commit-contract-runs-in-ci
     title: commit-contract.sh гоняется по диапазону коммитов PR, а не только в локальном хуке
