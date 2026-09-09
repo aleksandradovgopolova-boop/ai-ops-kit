@@ -281,3 +281,5 @@ standard_catalog:
      ai_check: "Промпты и версии моделей зафиксированы и версионируются; исполняемая версия совпадает с объявленной."}
   - {id: ai_incident_runbooks, name: AI incident runbooks, tier: tier3, path: docs/runbooks/ai/,
      ai_check: "Для AI-инцидентов (галлюцинация, утечка, деградация качества) есть runbook с шагами остановки и отката."}
+  - {id: issue_template, name: ISSUE TEMPLATE, tier: tier3, path: .github/ISSUE_TEMPLATE/,
+     ai_check: "Есть шаблон issue с заголовком «<slug>: <исход>» и секциями Что / Зачем / Проверяемо / Границы; задачи оформлены единообразно, чтобы ориентироваться в них как в истории коммитов. Культура, не блокирующий гейт."}
