@@ -5092,3 +5092,73 @@ work:
       от которой владелец уходил («минимальный адаптер, а не центр», registry/tools.yaml). ТРИГГЕР
       пересмотра: реальный дизайн-агент в дочке, которому нужны live-запросы UI-системы (собирать экран/
       валидировать на лету) и чтения файлов не хватает — по замеру, не по ощущению.
+
+  - id: closeout-repeated-on-second-live-repo
+    title: Closeout повторён на втором живом репозитории вердиктом кита
+    goal: qualification-closeout
+    status: done
+    closed_at: '2026-09-09'
+    issue: 668
+    evidence: qualification/qualification-closeout (ROADMAP.md, ep-2026-09-09-direction-wave-owner-calls)
+    result: >-
+      Реальная продуктовая задача доведена до verified-PR вердиктом самого кита на ДВУХ новых
+      сторонних репозиториях БЕЗ правок кита: durationkit (parse_duration, PR durationkit-live-668#1,
+      20/20 тестов) и slugkit (slugify, PR slugkit-live-668#1, 16/16), оба на неизменённом origin/main,
+      11/11 гейтов, 0 ложных green (сверено настоящим pytest). Issue #668 закрыт. Прежняя формулировка
+      критерия («owner-led СЛИТЫЙ PR + отчёт REAL-PRODUCT-*.md») перекрыта подходом #668: закрытие
+      достигается ВЕРДИКТОМ КИТА на verified-PR (то, что владелец принял, закрыв #668), а не ручным
+      owner-led-слиянием. Семь чисел прогона — в ROADMAP и session-памяти.
+
+  - id: level-signals-carry-across-specify-plan-run
+    title: Сигналы уровня переносятся через specify -> plan -> run
+    goal: qualification-closeout
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_level_signals_carry.py
+    result: >-
+      Сигналы уровня (task_type/size/risk) сохраняются в features/<wid>/spec.yaml (spec_levels.py:372
+      create_spec пишет блок signals) и читаются на plan/run/reevaluate (cli:217 _build_signals сливает
+      сохранённое+явное, явный побеждает). ENGINEERING не превращается молча в QUICK. Тесты
+      test_level_signals_carry.py (plan_after_specify_sees_engineering, run_without_signals_reaches_engine).
+
+  - id: merge-queue-not-handrolled
+    title: Дрейф-безопасная доставка своим механизмом, а не ручной очередью слияния
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_delivery_drift_reverify.py
+    result: >-
+      Дрейф-безопасная ре-верификация построена фордж-нейтрально: merge_preview.py git merge-tree
+      --write-tree (GitHub/GitLab/голый git); pipeline_git._reverify_against_current_target вшит в
+      mainline-доставку (execution_pipeline.py, ai_ops_run_lifecycle.py) fail-closed — сдвинулась
+      цель -> stale-needs-reverify, Intent не создаётся, PR не открывается. Тесты
+      test_delivery_drift_reverify.py (moved_target_blocks_pr / unmoved_target_opens_pr).
+
+  - id: resume-flags-loud-and-dead-claim-cleared-by-liveness
+    title: resume-флаги громко отказывают без --execute; заявка мёртвой сессии снимается по живости
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-09'
+    evidence: newsfragments/resume-flags-and-dead-session-claim.fix.md
+    result: >-
+      Обе половины на main. Громкий отказ: ai_ops_run.py:305 (#406) — resume --open-pr/--takeover без
+      --execute даёт явную ошибку, не молчит. Снятие по живости: active_work.py:464 _pid_is_dead / :524
+      holder_is_gone по owner_pid (register пишет os.getpid()). Кромка (документированная граница):
+      copy-claim (.git/ai-ops/claims/) не несёт owner_pid — снимается по существованию worktree, не по
+      pid; сессионная заявка из критерия pid несёт и гасится. Строго по критерию «заявка мёртвой сессии» — done.
+
+  - id: storybook-required-stories-derived-from-contract
+    title: Обязательные stories выводятся из Experience Contract кодом и влияют на гейт
+    goal: storybook-as-visual-contract
+    status: done
+    closed_at: '2026-09-09'
+    pr: 690
+    issue: 415
+    evidence: tests/unit/test_storybook_adapter.py
+    result: >-
+      Обязательные stories выводятся из контракта кодом (experience_contract.py:179 required_story_specs,
+      :216 required_stories_coverage) и ВПЛЕТЕНЫ в гейт: storybook_adapter.py:307 build_bundle кладёт
+      required_stories в UIEvidenceBundle, :379 evidence_for_gate читает их — объявленного контрактом
+      опыта нет в собранном Storybook -> ux_review краснеет детерминированно (#452 + проводка #690).
+      ДОКАЗАНО живьём на реальной UI-дочке ai-ops-cockpit (#697): полный контракт -> ux_review pass,
+      убрать обязательную story -> required_stories.missing -> ux_review fail. Оговорка «синтетика» снята.
