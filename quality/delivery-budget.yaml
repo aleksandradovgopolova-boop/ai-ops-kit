@@ -46,7 +46,8 @@ ceilings:
   # 2026-09-08: 4960000 -> 4975000 под настройки как capability policy (#644): три новых доставляемых файла (registry/capability-policy.yaml + checks/capability_policy.py + validation/validate_capability_policy.py). Реальная установка 4953004 -> 4963030.
   # 2026-09-08: 4975000 -> 4990000 под продюсер устаревания решений (#635): один доставляемый модуль planning/decision_staleness.py + поле related_files в схеме решений. Реальная установка 4963082 -> 4969780.
   # 2026-09-08: 4990000 -> 5025000 под добровольную регистрацию дочек (voluntary-child-registration): один доставляемый модуль engops/child_registry.py (~660 строк, зовётся В дочке командой `ai-ops reach`) + рост cli_intents.py под хендлер reach и однократное предложение при онбординге. Реальная установка объединённого дерева 4969780 -> 5014765.
-  volume_bytes: 5090000
+  # 2026-09-09: 5090000 -> 5110000 под #678 — два доставляемых валидатора формы политик дочки: validation/validate_access_filter.py + validation/validate_key_lifecycle.py (стерегут .ai/policies/access-filter.yaml / key-lifecycle.yaml, зовутся advisory из child_doctor ПРОЦЕССОМ). Реальная установка объединённого дерева 5080639 -> 5092259 (+2 файла, +11.6 КБ).
+  volume_bytes: 5110000
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -1773,3 +1774,20 @@ raises:
       orchestrator_providers (проба замка) и ai_ops_run_lifecycle; сам `quality/delivery-budget.yaml`
       тоже доставляется, и его лента подросла записями этой работы. Реальная установка (метод теста —
       сумма `.ai/managed`): main 5066378 -> ветка 5078416, потолок 5090000 с видимым запасом.
+  - at: '2026-09-09'
+    what: volume
+    from_bytes: 5090000
+    to_bytes: 5110000
+    measured_before: 5080639        # установка main (перед #678)
+    measured_after: 5092259         # установка ветки main + #678
+    work: 'wire-policy-form-validators (#678)'
+    files:
+      - ai_ops_kit/validation/validate_access_filter.py
+      - ai_ops_kit/validation/validate_key_lifecycle.py
+    why_it_works_in_the_child: >-
+      Оба валидатора формы политик теперь едут в поставку (RUNTIME_VALIDATORS) и зовутся advisory из
+      lifecycle/child_doctor ПРОЦЕССОМ (слой-инвариант: рантайм не импортит validation) против
+      РЕАЛЬНЫХ политик дочки — .ai/policies/access-filter.yaml и key-lifecycle.yaml, которые читает её
+      рантайм (load_child_policies / _load_klp_by_env). Раньше форму этих политик сверял только
+      parent-CI по примерам кита — форму политики самой дочки не проверял никто (built≠wired). Оба
+      standalone (stdlib+pyyaml). Реальная установка: main 5080639 -> ветка 5092259 (+2 файла), потолок 5110000.

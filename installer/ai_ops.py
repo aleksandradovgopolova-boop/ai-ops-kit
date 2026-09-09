@@ -848,6 +848,14 @@ RUNTIME_VALIDATORS = frozenset({
     # validate_acceptance_result. Оба standalone (stdlib+pyyaml, `import _bootstrap` не нужен). Поймано
     # тестом test_delivered_engine_does_not_import_undelivered_validators, а не рассуждением.
     "validate_post_release_readout", "validate_product_objects",
+    # #678 (built≠wired -> wired): access-filter и key-lifecycle стерегут РЕАЛЬНЫЕ политики ДОЧКИ
+    # (.ai/policies/access-filter.yaml, .ai/policies/key-lifecycle.yaml — их читает рантайм:
+    # load_child_policies / _load_klp_by_env). Раньше форму этих политик сверял только parent-CI по
+    # ПРИМЕРАМ кита; форму политики дочки не проверял никто. Теперь едут в поставку и зовутся advisory
+    # из `child_doctor` ПРОЦЕССОМ (не импортом — слой-инвариант рантайм↛validation). Оба standalone
+    # (stdlib+pyyaml). budget_contract/context_architecture НЕ вносим: у дочки нет BudgetContract/CAD
+    # (её `budget.yaml` — токенный бюджет, другой kind), они остаются parent-only (parent-CI).
+    "validate_access_filter", "validate_key_lifecycle",
 })
 
 
