@@ -107,16 +107,23 @@ def record(child_root, *, key, source, reason, kind=BLOCKED, work_id=None, at=No
 
 
 def resolve(child_root, key) -> bool:
-    """Снять повод (причина устранена). -> True если запись была и снята. Idempotent."""
+    """Снять повод (причина устранена): ПОМЕЧАЕТ запись `status=resolved`, СОХРАНЯЯ её, а не удаляет.
+
+    Раньше resolve удалял запись — и «сколько внимания понадобилось за прогон» посчитать было нечем
+    (снятые поводы исчезали). Теперь снятый повод остаётся durable-свидетельством, что человека
+    звали (#676): `attention_summary` считает и его. Для inbox ничего не меняется — `collect`
+    по-прежнему фильтрует по pending, так что снятый повод из очереди уходит.
+    -> True если запись была pending и снята сейчас; False если её нет или уже снята (идемпотентно)."""
     if child_root is None or not key:
         return False
     path = _store_path(child_root)
     with _locked(path):
         data = _load(path)
-        before = len(data["records"])
-        data["records"] = [r for r in data["records"] if r.get("key") != key]
-        if len(data["records"]) == before:
+        rec = next((r for r in data["records"] if r.get("key") == key), None)
+        if rec is None or rec.get("status") == "resolved":
             return False
+        rec["status"] = "resolved"
+        rec["resolved_at"] = _now_iso()
         _ls.durable_write(path, data, require_keys=("kind", "records"))
         return True
 
@@ -125,6 +132,24 @@ def collect(child_root) -> list:
     """READ-ONLY: поводы, ждущие человека (status pending). Ничего не пишет. Для inbox."""
     data = _load(_store_path(child_root))
     return [r for r in data["records"] if r.get("status", "pending") == "pending"]
+
+
+def attention_summary(child_root) -> dict:
+    """#676: сколько РАЗ кит звал человека за жизнь этой дочки — durable-замер «внимания».
+
+    Считает ВСЕ записи (pending + resolved): снятый повод остаётся свидетельством, что внимание
+    понадобилось, поэтому замер переживает resolve. Разрез по типу (decision/blocked) и статусу.
+    Это НИЖНЯЯ граница внимания: ловит только то, что код провёл через `record`
+    (blocked-preflight, эскалация модели, граница решений governance), а не каждую ручную правку."""
+    recs = _load(_store_path(child_root)).get("records", [])
+    pending = sum(1 for r in recs if r.get("status", "pending") == "pending")
+    return {
+        "total": len(recs),
+        "decision": sum(1 for r in recs if r.get("kind") == DECISION),
+        "blocked": sum(1 for r in recs if r.get("kind") == BLOCKED),
+        "pending": pending,
+        "resolved": len(recs) - pending,
+    }
 
 
 def main(argv) -> int:

@@ -393,6 +393,7 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     #     развития (ADR↔health). Оба были дормантны; здесь у них появляется рантайм-импортёр.
     cost_analytics = _assess_cost_analytics(child_root)
     evolution = _assess_evolution(child_root)
+    attention = _assess_attention(child_root)
 
     # (j) #586: из измеренного инсайта рождается ПРЕЦЕДЕНТ (факт + число случаев + контекст), без
     #     утверждения причинности. Один живой релиз = один случай ("прецедент, 1 случай", не "правило").
@@ -454,6 +455,8 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
         # #584: кластер обучения проведён в контур — стоимостная аналитика и триггеры развития.
         "cost_analytics": cost_analytics,
         "evolution_triggers": evolution,
+        # #676: человеческое внимание на путь к исходу — из durable-шины внимания (нижняя граница).
+        "attention": attention,
         # #586: прецедент из измеренного исхода (факт + число случаев, без причинности). None без замера.
         "precedent": precedent,
         "notes": notes,
@@ -465,6 +468,16 @@ _OUTCOME_CONTRACT_GLOBS = ("outcome-contract.yaml", ".ai/project/readout/outcome
                            "features/*/outcome-contract.yaml")
 _OUTCOME_READOUT_GLOBS = ("outcome-readout.yaml", ".ai/project/readout/outcome-readout.yaml",
                           "features/*/outcome-readout.yaml")
+
+
+def _assess_attention(child_root: Path) -> dict:
+    """#676: замер человеческого внимания на путь к исходу — из durable-шины внимания (attention_bus).
+
+    «Внимание на verified-результат» из внешнего ревью: оптимизируем не токены, а сколько раз кит
+    вынужден был позвать человека. Read-only; всегда доступен (пустая шина = 0 обращений). Нижняя
+    граница — ловит только проведённое через attention_bus.record (preflight/эскалация/governance)."""
+    from ai_ops_kit.lifecycle import attention_bus
+    return {"available": True, **attention_bus.attention_summary(child_root)}
 
 
 def discover_and_run(child_root) -> dict | None:
@@ -521,6 +534,11 @@ def render(result: dict) -> str:
         L.append(f"  продуктовый статус: {ps['label']} "
                  f"(доставка {'подтверждена' if ps.get('delivery_verified') else 'не подтверждена'}, "
                  f"итог {ps.get('outcome_verdict')})")
+    att = result.get("attention") or {}
+    if att.get("total"):
+        L.append(f"  человеческое внимание: {att['total']} обращений кита к человеку "
+                 f"({att['decision']} за решением, {att['blocked']} остановок; не снято {att['pending']}) "
+                 "— нижняя граница по durable-шине внимания")
     ins, cand, rec = result.get("insight"), result.get("candidate_work"), result.get("recommendation")
     if ins:
         L.append(f"  инсайт {ins.get('id')}: {ins.get('headline')} (уверенность {ins.get('confidence')})")
