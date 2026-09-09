@@ -1035,10 +1035,13 @@ work:
       TypedDict, необъявленные переменные, widening _CI_PATTERNS до object) — типы окупаются, значит
       ВКЛЮЧЁН, а не удалён. Восемь починены; [tool.mypy] на kernel+shared (follow_imports=silent), шаг
       в джобе lint (mypy==2.3.1), инвентарь enforcement-inventory: mypy enforced. Уровень — «реальные
-      типовые ошибки = 0». РАТЧЕТ-ВВЕРХ ПОШЁЛ (2026-09-10): kernel уже полностью типизирован —
-      включён строгий disallow_untyped_defs на `ai_ops_kit.kernel.*` (per-module override), новая
-      untyped-функция в ядре краснит. ОСТАЁТСЯ (потому in_progress): disallow на shared (99 подписей —
-      отдельный шаг) и py.typed (маркер «весь пакет типизирован» при 29% был бы над-заявлением).
+      типовые ошибки = 0». РАТЧЕТ-ВВЕРХ ИДЁТ (2026-09-10): под строгим disallow_untyped_defs теперь
+      kernel.* (был чист) + два чистых утиль-модуля shared: gitio, budget (реально аннотированы,
+      0 ошибок). ОСТАЮТСЯ 6 файлов shared (project_detector 26, lifecycle_store 16, path_hygiene 14,
+      generate_runtime 13, generate_artifacts 10, usage_ledger 10 подписей) — это НЕ batch-пункт:
+      каждая типизированная подпись вскрывает каскад ошибок ТЕЛА (agg как dict[str,object],
+      TypedDict-ключи, tuple-арность), и честная дотипизация ≠ Any-спам. Отдельная типизационная
+      работа, а не заливка Any. py.typed — при росте покрытия. Потому in_progress.
 
 
   - id: config-is-config-history-in-decisions
