@@ -84,6 +84,13 @@ def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
                 "loop": None, "isolation": {"worktree": None}, "gates": None, "overall_status": "error"}}
     if isolate:
         from ai_ops_kit.engine import worktree as _wt
+        # #708: на product-аудитории строку про отдельную копию даёт active-work одной человеческой
+        # фразой — id-насыщенный дубль WORKTREE здесь глушим (quiet). Сбой резолва -> полная форма.
+        try:
+            from ai_ops_kit.ui import presenter
+            _wt_quiet = presenter.audience_from_config(child_root) == "product"
+        except Exception:  # noqa: BLE001
+            _wt_quiet = False
         branch = f"ai-ops/{wid}"
         wp = child_root / ".ai" / "worktrees" / wid
         branch_exists = _wt._branch_exists(child_root, branch)
@@ -92,7 +99,7 @@ def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
         if (resume or reevaluate_only) and (branch_exists or wp.is_dir()):
             if not wp.is_dir() and branch_exists:
                 # worktree утерян, но ветка (коммиты) на месте -> пере-подключаем worktree к ветке
-                rc = _wt.add(child_root, wid, branch)
+                rc = _wt.add(child_root, wid, branch, quiet=_wt_quiet)
                 if rc != 0:
                     return {"error": {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": wid,
                             "status": "error",
@@ -143,7 +150,8 @@ def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
                 _wt.remove(child_root, wid, force=True)
                 _git(child_root, "worktree", "prune")
                 _git(child_root, "branch", "-D", branch)
-            rc = _wt.add(child_root, wid, branch, base=(base_sha or "HEAD"))   # v3.0.1: форк от base_sha
+            rc = _wt.add(child_root, wid, branch, base=(base_sha or "HEAD"),   # v3.0.1: форк от base_sha
+                         quiet=_wt_quiet)
             if rc == 0:
                 work_root = wp
                 worktree_rel = wp.relative_to(child_root).as_posix()

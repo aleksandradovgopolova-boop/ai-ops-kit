@@ -83,6 +83,74 @@ def test_register_prints_reach_when_local(aw, tmp_path, capsys):
     assert "только этой машины" in out.lower() or "только эту машину" in out.lower(), out
 
 
+# --------------------------------------------------- product-аудитория: без внутренних id (#708)
+
+def test_product_audience_hides_internal_ids(aw, tmp_path, capsys):
+    """На product человеку не нужны wi-…/сессия/машина/ветка старта — только суть: работа началась
+    в отдельной копии, main не тронут. id-насыщенная строка ACTIVE-WORK здесь не печатается."""
+    reg = tmp_path / "active-work.yaml"
+    aw.register(reg, "wi-abc123", "ai-ops/wi-abc123", ["core"], "session:deadbeef",
+                published=False, audience="product")
+    out = capsys.readouterr().out
+    assert "отдельной копии" in out and "main не трогаю" in out, out
+    assert "ACTIVE-WORK" not in out, "внутренний заголовок координации на product утёк: " + out
+    assert "wi-abc123" not in out and "session:deadbeef" not in out, "id утёк на product: " + out
+    assert "ai-ops/wi-abc123" not in out, "имя ветки утекло на product: " + out
+
+
+def test_technical_audience_still_names_the_claim(aw, tmp_path, capsys):
+    """Умолчание (technical) — полная координационная форма с id: пара к product, одна без другой
+    ничего не доказывает."""
+    reg = tmp_path / "active-work.yaml"
+    aw.register(reg, "wi-abc123", "ai-ops/wi-abc123", ["core"], "session:deadbeef", published=False)
+    out = capsys.readouterr().out
+    assert "ACTIVE-WORK: зарегистрирована работа 'wi-abc123'" in out, out
+    assert "только этой машины" in out.lower() or "только эту машину" in out.lower(), out
+
+
+def test_finish_product_hides_id_keeps_reason(aw, tmp_path, capsys):
+    """finish на product: без wi-…/жаргона «ACTIVE-WORK», но ПРИЧИНА остановки сохраняется —
+    человек должен понять, почему работа не доведена."""
+    reg = tmp_path / "active-work.yaml"
+    aw.register(reg, "wi-abc123", "ai-ops/wi-abc123", ["core"], "sess-1", published=False)
+    capsys.readouterr()
+    aw.finish_cmd(reg, "wi-abc123", status="blocked",
+                  reason="код не написан — правок 0", audience="product")
+    out = capsys.readouterr().out
+    assert "код не написан" in out, out
+    assert "ACTIVE-WORK" not in out and "wi-abc123" not in out, "id/жаргон утёк на product: " + out
+
+
+def test_finish_product_done_without_reason_is_silent(aw, tmp_path, capsys):
+    """Успех без причины на product — молчим: итог «готово» уже сказан отчётом, дубль не нужен."""
+    reg = tmp_path / "active-work.yaml"
+    aw.register(reg, "wi-abc123", "ai-ops/wi-abc123", ["core"], "sess-1", published=False)
+    capsys.readouterr()
+    aw.finish_cmd(reg, "wi-abc123", status="done", child_root=tmp_path, audience="product")
+    out = capsys.readouterr().out
+    assert out.strip() == "", "на product успешный finish не должен дублировать отчёт: " + out
+
+
+def test_finish_technical_still_names_id(aw, tmp_path, capsys):
+    """Умолчание (technical) — полная форма с id (пара к product)."""
+    reg = tmp_path / "active-work.yaml"
+    aw.register(reg, "wi-abc123", "ai-ops/wi-abc123", ["core"], "sess-1", published=False)
+    capsys.readouterr()
+    aw.finish_cmd(reg, "wi-abc123", status="done", child_root=tmp_path)
+    out = capsys.readouterr().out
+    assert "ACTIVE-WORK: работа 'wi-abc123' помечена done" in out, out
+
+
+def test_product_audience_still_surfaces_publication(aw, tmp_path, capsys):
+    """Публикация ОТПРАВЛЯЕТ данные с машины — это не «шум про выключенную фичу», а факт, который
+    человек должен видеть и на product (честность важнее краткости)."""
+    reg = tmp_path / "active-work.yaml"
+    aw.register(reg, "wi-abc123", "ai-ops/wi-abc123", ["core"], "session:deadbeef",
+                child_root=tmp_path, published=True, audience="product")
+    out = capsys.readouterr().out
+    assert ".ai/claims/" in out, "на product скрыли, что заявка публикуется наружу: " + out
+
+
 def test_list_empty_still_names_reach(aw, tmp_path, capsys):
     """«Активных работ нет» на локальном реестре — это про одну машину, и это надо сказать."""
     reg = tmp_path / "active-work.yaml"

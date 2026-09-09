@@ -25,11 +25,11 @@ ceilings:
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
-  ai_ops_kit/lifecycle/active_work.py: 1116
+  ai_ops_kit/lifecycle/active_work.py: 1137
   ai_ops_kit/ui/presenter_formatters.py: 1070
   ai_ops_kit/planning/repo_audit.py: 837
-  ai_ops_kit/engine/ai_ops_run_exec.py: 721
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 938
+  ai_ops_kit/engine/ai_ops_run_exec.py: 725
+  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
   ai_ops_kit/providers/orchestrator_providers.py: 978
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 772
@@ -39,6 +39,21 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'active_work.py = 1116; ai_ops_run_lifecycle.py = 938; ai_ops_run_exec.py = 721'
+    to: 'active_work.py = 1137; ai_ops_run_lifecycle.py = 952; ai_ops_run_exec.py = 725'
+    work: 'humanize старт/финиш прогона (#708): без внутренних id на product-аудитории'
+    why: >-
+      Карта трения #708: старт прогона сыпал внутренние идентификаторы координации
+      (ACTIVE-WORK 'wi-…', сессия, машина, ветка; строка WORKTREE), а финиш — «работа 'wi-…'
+      помечена blocked». Человеку на product-аудитории это шум: суть — «работа началась в
+      отдельной копии, main не трогаю» и, если что-то не доведено, ПРИЧИНА. Добавлены
+      product-ветки в active_work.register/finish_cmd (id-строки заменены одной человеческой,
+      честность сохранена: пересечения и публикация — остаются; причина остановки — остаётся) и
+      quiet у worktree.add; аудитория берётся из communication-policy дочки через новый
+      _run_start_audience. Прибавка — текст веток + проводка аудитории в точки вызова, не логика
+      координации. Ратчет держит вниз.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'presenter_formatters.py = 1067'

@@ -779,7 +779,7 @@ def _forecast_lines(confs):
 
 def register(path, wid, branch, areas, session, workitem=None, status="in-progress",
              depends=None, contracts=None, at=None, published=False, child_root=None,
-             takeover=False, takeover_reason=None, owner_role=None):
+             takeover=False, takeover_reason=None, owner_role=None, audience="technical"):
     if branch in (None, "", "main", "master"):
         print("ОШИБКА: работа не должна вестись в main/master — задайте ветку/worktree.")
         return 1
@@ -890,6 +890,18 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
         # Носитель копий — ВСЕГДА, когда его есть где разместить: он не отправляет данные с машины,
         # поэтому флагом публикации не гатится (замер 20.08.2026).
         claim_to_copies(child_root, entry)
+    if audience == "product":
+        # #708: на product-аудитории человеку не нужны wi-…/сессия/машина/ветка — это внутренние
+        # идентификаторы координации. Суть одна: работа началась в отдельной копии, main не тронут.
+        # Прогноз-пересечения (реальный сигнал) и публикацию (данные УХОДЯТ с машины) — сохраняем;
+        # заметку о досягаемости в соло-случае опускаем как шум про выключенную фичу.
+        print("  Начал работу в отдельной копии проекта — main не трогаю.")
+        for line in _forecast_lines(confs):
+            print(line)
+        if published:
+            print("  опубликовано в .ai/claims/: " + ", ".join(PUBLISHED_FIELDS)
+                  + " — содержимое файлов не уходит.")
+        return 0
     print(f"ACTIVE-WORK: зарегистрирована работа '{wid}' "
           f"(ветка {branch}, сессия {session}, машина {entry['machine']}).")
     for line in _forecast_lines(confs):
@@ -970,7 +982,8 @@ def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_jso
     return 0
 
 
-def finish_cmd(path, wid, status="done", reason=None, child_root=None, published=False):
+def finish_cmd(path, wid, status="done", reason=None, child_root=None, published=False,
+               audience="technical"):
     """Снять работу с учёта. status — из STATUS; 'done' ТОЛЬКО когда работа действительно закончена.
 
     v3.28.x (F-012, находка живой квалификации на niti): прогон помечал работу `done` независимо
@@ -1006,6 +1019,14 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
             # С ОБОИХ носителей: оставленная заявка держала бы работу для соседней копии после её
             # закрытия — тот же «список страшилок» (#137).
             withdraw_claim_from_copies(child_root, _m, wid)
+    if audience == "product":
+        # #708: на product человеку не нужны wi-…/жаргон «ACTIVE-WORK». Итог прогона он уже видит в
+        # отчёте; здесь важна лишь ПРИЧИНА остановки, если она есть (реальный сигнал). Успех без
+        # причины — молчим, чтобы не дублировать «готово» отчёта.
+        _human = {"blocked": "приостановлена", "done": "завершена"}.get(status, status)
+        if reason:
+            print(f"  Работа {_human}: {reason}.")
+        return 0
     print(f"ACTIVE-WORK: работа '{wid}' помечена {status}"
           f"{' — ' + reason if reason else ''}.")
     return 0
