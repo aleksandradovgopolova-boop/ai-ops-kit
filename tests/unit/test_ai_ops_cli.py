@@ -605,6 +605,8 @@ class TestExplainIntent:
             audience="product")
         assert "не измерена" in out
         assert "$0.00" not in out
+        # грамматика читаема (не «работа модель ещё не тратила»): фраза про обращения к модели
+        assert "обращений к модели по этой задаче ещё не было" in out
 
     def test_blocker_is_a_consequence_not_a_gate_id(self):
         """Блокер назван последствием простыми словами — без имени гейта/трейсбека."""

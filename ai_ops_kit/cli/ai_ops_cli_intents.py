@@ -1248,7 +1248,7 @@ def _explain_living_note(doc):
 def _explain_cost_line(cost):
     """Человеческая строка о стоимости для summary."""
     if not cost.get("measured"):
-        return "Стоимость пока не измерена — работа модель ещё не тратила."
+        return "Стоимость пока не измерена — обращений к модели по этой задаче ещё не было."
     usd, calls = cost.get("cost_usd"), cost.get("calls") or 0
     if usd is None or (not usd and not cost.get("cost_complete")):
         return f"Обращений к модели: {calls}; их стоимость пока не измерена."
