@@ -19,6 +19,22 @@ kind: delivery-plan-history
 
 
 work:
+  - id: commit-contract-runs-in-ci
+    title: commit-contract.sh гоняется по коммитам PR в CI, а не только в локальном хуке
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: .github/workflows/package-quality.yml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-13 внешнего аудита). CommitContract (commit_policy: охват коммита,
+      заглушки, секреты, ссылка на WorkItem) жил ТОЛЬКО в локальном хуке commit-msg — внешний PR его
+      не проходил, а в CI зеркалились лишь cz check и towncrier. «Половина проверки хуже
+      отсутствующей» — вот та половина. Добавлен шаг в джобу lint: цикл по каждому коммиту диапазона
+      base..HEAD PR, для каждого подставляются его сообщение и файлы (COMMIT_CONTRACT_FILES —
+      объявленный шов), COMMIT_CONTRACT_SKIP_CLAIMS=1 (реестра заявок машины в CI нет). Сегодня
+      enforce=advise: rc красит ТОЛЬКО настоящие нарушения (секреты/заглушки), broad_scope и
+      no_workitem печатаются советом — ужесточение остаётся решением владельца.
+
   - id: ci-sees-owner-platform
     title: >-
       CI видит платформу владельца (macOS advisory); ./ai-ops не выбирает интерпретатор ниже пола;
