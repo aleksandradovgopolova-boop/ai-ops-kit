@@ -312,21 +312,21 @@ def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
     else:
         _st, _why = "blocked", "код не написан — правок 0 (нужен живой провайдер или внешний исполнитель)"
     # B2-20 (повтор B2-12, живой прогон 14.08.2026): `resume` завершённой-но-НЕДОСТАВЛЕННОЙ работы
-    # заново звал писателя, получал ноль правок — потому что делать уже нечего — и хоронил готовый
-    # READY_FOR_PR в `blocked: код не написан`. Работа с коммитом на ветке пропадала из активного
-    # состояния, и владелец видел «кит не справился» там, где кит справился и ждал доставки.
-    # Продолжение поверх существующей ветки без новых правок — это НЕ «код не написан».
+    # заново звал писателя, получал ноль правок (делать уже нечего) и хоронил готовый READY_FOR_PR в
+    # `blocked: код не написан`. Продолжение поверх ветки без новых правок — это НЕ «код не написан».
     if _st == "blocked" and delivery_pending(rep):
+        # #695: называем ОДНУ автономную команду доставки готового (printed-commands-are-runnable).
         print("  работа прошлого прогона на ветке, дописывать нечего — нужна ДОСТАВКА, а не "
-              "повторный прогон: запусти с open_pr (и GITHUB_TOKEN), либо открой PR из ветки сам")
+              "повторный прогон. Одной командой доведёт до открытого PR (нужен GITHUB_TOKEN):\n"
+              f"    ./ai-ops resume {child_root} {fid} --deliver-only --open-pr --execute")
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid, status="blocked",
+            active_work.finish_cmd(aw_path, fid, status="blocked", child_root=child_root,  # #695
                                    reason="ждёт доставки: работа готова на ветке, новых правок нет",
                                    audience=_run_start_audience(child_root))
         _ls.merge_bookkeeping_losses(rep)
         return rep
     with contextlib.redirect_stdout(sys.stderr):
-        active_work.finish_cmd(aw_path, fid, status=_st, reason=_why,
+        active_work.finish_cmd(aw_path, fid, status=_st, reason=_why, child_root=child_root,  # #695
                                audience=_run_start_audience(child_root))
     _ls.merge_bookkeeping_losses(rep)   # утраченные записи журнала называются в отчёте, а не пропадают
     return rep

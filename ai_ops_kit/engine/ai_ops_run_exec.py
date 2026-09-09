@@ -414,18 +414,17 @@ def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, instal
     except (KeyboardInterrupt, SystemExit):
         from ai_ops_kit.engine.ai_ops_run_lifecycle import _run_start_audience
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid, status="blocked",
-                                   reason="прогон прерван (Ctrl-C/exit) — работа не завершена",
+            active_work.finish_cmd(aw_path, fid, status="blocked", child_root=ctx.child_root,
+                                   reason="прогон прерван (Ctrl-C/exit) — работа не завершена",  # #695
                                    audience=_run_start_audience(ctx.child_root))
         raise
     except Exception as _e:  # noqa: BLE001
         # v3.0-rc17 (finding живого прогона): исключение провайдера/инфры (напр. HTTP 429 kimi ПОСЛЕ
-        # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16),
-        # одиночный прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (status=error, ready_for_pr=False, exit 2),
-        # а не падать. Типизируем сбой (провайдер/сеть vs дефект движка).
+        # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16), одиночный
+        # прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (exit 2), а не падать. Типизируем сбой ниже.
         from ai_ops_kit.engine.ai_ops_run_lifecycle import _run_start_audience
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid, status="blocked",
+            active_work.finish_cmd(aw_path, fid, status="blocked", child_root=ctx.child_root,  # #695
                                    reason=f"прогон упал: {type(_e).__name__}",
                                    audience=_run_start_audience(ctx.child_root))
         try:
@@ -693,6 +692,7 @@ def _build_run_arg_parser():
     rs = sub.add_parser("resume")
     rs.add_argument("child_root"); rs.add_argument("feature")
     rs.add_argument("--base", default=None); rs.add_argument("--json", action="store_true")
+    rs.add_argument("--session", default="cli")  # #695: intent-CLI подаёт измеренную личность, как run
     rs.add_argument("--task", help="задача-продолжение (по умолчанию — next_action из RunHandoff)")
     rs.add_argument("--signals", default="{}")
     rs.add_argument("--execute", action="store_true",
