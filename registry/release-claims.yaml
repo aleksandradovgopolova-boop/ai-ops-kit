@@ -96,7 +96,7 @@ field_evidence:
 # каждую дочку, где их не читает ни одна строка кода. Здесь остался тот, кого дочка
 # ЧИТАЕТ: `channel` (его смотрит `installer.package_channel` из `init`/`update`/`doctor`).
 checks_count: 0
-agents_count: 43
+agents_count: 42
 # Числа гейтов — DERIVED. ПОПРАВКА к формулировке v3.28.x: claim'ы gate-count/mvp-blocking-count,
 # на которые ссылается ROADMAP, существуют — они в knowledge/claims.yaml и их проверяет
 # validate_claims. Здешние счётчики их ДУБЛИРУЮТ по значению, но добавляют то, чего там нет:

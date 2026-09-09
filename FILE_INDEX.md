@@ -103,7 +103,6 @@
 
 - `agents/README.md`
 - `agents/core/context-builder.md`
-- `agents/core/development-orchestrator.md`
 - `agents/core/final-verifier.md`
 - `agents/core/implementation-integrator.md`
 - `agents/core/intake-classifier.md`
@@ -446,7 +445,6 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/agents/context-builder.md`
 - `evaluations/agents/data-engineer.md`
 - `evaluations/agents/design-system-reviewer.md`
-- `evaluations/agents/development-orchestrator.md`
 - `evaluations/agents/devops-engineer.md`
 - `evaluations/agents/documentation-reviewer.md`
 - `evaluations/agents/documentation-steward.md`
