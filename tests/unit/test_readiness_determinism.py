@@ -11,11 +11,14 @@ verification_strategy. Здесь — синтетика (без live-прого
 """
 from __future__ import annotations
 
+import copy
+import json
+
 import pytest
 
 from ai_ops_kit.engine.pipeline_readiness import _assess_readiness
 from ai_ops_kit.engine.pipeline_failure import _diff_checks, _baseline_status_flips
-from ai_ops_kit.gates import spec_levels
+from ai_ops_kit.gates import gate_executor, spec_levels
 
 
 def _readiness_input():
@@ -127,3 +130,67 @@ class TestArtifactCreditDeterministic:
         a = spec_levels.provided_from_artifacts(tmp_path, "rep", work_root=tmp_path)
         b = spec_levels.provided_from_artifacts(tmp_path, "rep", work_root=tmp_path)
         assert a == b
+
+    def test_verification_strategy_credit_stable_over_n(self, tmp_path):
+        """#405 ЗАМЕР для verification_strategy: кредит раздела на ОДНОМ plan.yaml не чередуется.
+
+        verification_strategy закрывается артефактом .ai/runplan/<wid>/plan.yaml. Именно этот
+        credit флипал `complete`<->не-`complete`, когда файл читался частично записанным. N
+        повторов на НЕИЗМЕННОМ файле обязаны дать один статус — раздельно для валидного и пустого.
+        """
+        self._plan_path(tmp_path, "ok").write_text("steps:\n  - do x\n", encoding="utf-8")
+        self._plan_path(tmp_path, "empty").write_text("", encoding="utf-8")
+        ok = {spec_levels.provided_from_artifacts(tmp_path, "ok", work_root=tmp_path)
+              .get("verification_strategy", {}).get("status") for _ in range(25)}
+        empty = {spec_levels.provided_from_artifacts(tmp_path, "empty", work_root=tmp_path)
+                 .get("verification_strategy", {}).get("status") for _ in range(25)}
+        assert ok == {"complete"}          # валидный план -> всегда complete
+        assert "complete" not in empty     # пустой план -> НИКОГДА не complete (не флип)
+
+
+@pytest.mark.unit
+class TestGateVerdictDeterministic:
+    """#405 ПРЯМОЙ ЗАМЕР приёмки: сам вердикт гейта implementation_verification воспроизводим.
+
+    Полевой отчёт (ИИ-Среда, 02.09) чередовал READY/NOT_READY на НЕИЗМЕННОМ входе, упираясь в
+    implementation_verification / verification_strategy. Пробы выше фиксируют детерминизм агрегации
+    readiness и кредита раздела; здесь — прогон САМОГО пути вердикта гейта (`evaluate`) N раз на
+    одном evidence. Это дословно «Замер: N повторов одного входа -> один и тот же исход».
+    """
+    N = 25
+    SIG = {"task_type": "ENGINEERING", "size": "small", "risk": "low"}
+    IV = "implementation_verification"
+    FULL = ["build_passed", "lint_passed", "typecheck_passed", "tests_passed", "tested_revision"]
+
+    def _evaluate(self, provided):
+        # deepcopy на входе: замеряем вердикт, а не накопление состояния между прогонами.
+        ev = {self.IV: {"status": "pass", "provided": list(provided)}}
+        return gate_executor.evaluate(
+            "QUICK", evidence=copy.deepcopy(ev), gate_ids=[self.IV],
+            signals=self.SIG, tested_revision="rev-1")
+
+    def _verdict_fingerprints(self, provided):
+        return {json.dumps(self._evaluate(provided), sort_keys=True, ensure_ascii=False)
+                for _ in range(self.N)}
+
+    def test_met_verdict_identical_over_n_repeats(self):
+        """(positive) полный evidence -> ровно ОДИН вердикт «закрыт» на всех N прогонах."""
+        assert len(self._verdict_fingerprints(self.FULL)) == 1
+        r = self._evaluate(self.FULL)
+        assert r["blocked"] is False and r["unmet_gates"] == []
+
+    def test_fail_closed_verdict_identical_over_n_repeats(self):
+        """(fail-closed) без tests_passed -> гейт незакрыт КАЖДЫЙ прогон, не флип в pass."""
+        missing = ["build_passed", "lint_passed", "typecheck_passed", "tested_revision"]
+        assert len(self._verdict_fingerprints(missing)) == 1
+        r = self._evaluate(missing)
+        assert r["blocked"] is True and r["unmet_gates"] == [self.IV]
+
+    def test_verdict_does_not_mutate_input_evidence(self):
+        """(side-effect) вердикт не правит переданный evidence — скрытая мутация = дрейф повтора."""
+        ev = {self.IV: {"status": "pass", "provided": list(self.FULL)}}
+        snapshot = copy.deepcopy(ev)
+        for _ in range(self.N):
+            gate_executor.evaluate("QUICK", evidence=ev, gate_ids=[self.IV],
+                                   signals=self.SIG, tested_revision="rev-1")
+        assert ev == snapshot
