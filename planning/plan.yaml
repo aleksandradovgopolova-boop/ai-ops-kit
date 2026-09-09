@@ -73,6 +73,12 @@ goals:
       linter_runs_on_the_engine_package: true
       every_declared_entry_point_works: true
       swallowed_exceptions_reviewed: true
+      # ОСТАЁТСЯ false 2026-09-10: внешний аудит (#721) расширил смысл цели — «проверки
+      # исполняются» ещё не полно, пока открыт его бэклог (типы на фундаменте, CI supply-chain
+      # запинен, форматтер с blame-ignore, топология репозитория…). Раньше контракт перечислял
+      # только первоначальные исходы (все true), из-за чего кит считал цель достигнутой при
+      # открытой работе. Этот исход держит контракт честным до закрытия бэклога.
+      external_audit_backlog_is_closed: false
 
   - id: advisory-gates-obkatka
     # заморозка: обкатка новых гейтов расширяет умения; цель на паузе
@@ -132,6 +138,11 @@ goals:
     outcome:
       ci_lint_job_green: true
       evidence_scope_named_not_implied: true
+      # ОСТАЁТСЯ false 2026-09-10: инфра-исходы достигнуты, но поле вскрыло остаток за ними, и
+      # раньше контракт этого не отражал — кит считал цель достигнутой (2/2), пока прогон ещё
+      # отдавал невоспроизводимый вердикт и немёржабельный PR.
+      verdict_is_reproducible_on_unchanged_input: false   # #405: READY/NOT_READY чередуются на одном входе
+      run_hands_over_only_mergeable_pr: false             # #404: прогон валит собственный status-freshness гейт
 
   # ─── этап Product OS (решение владельца 14.08.2026, ep-2026-08-14-product-os) ───────────────
   - id: qualification-closeout
