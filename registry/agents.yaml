@@ -7,7 +7,7 @@ contract_version: 1
 generated_note: Bootstrap-реестр из фактических файлов agents/ (тела не менялись). layer/action/target
   — план миграции (component-classification).
 counts:
-  agents: 47
+  agents: 43
 agents:
 - schema_version: 1
   id: context-builder
@@ -238,44 +238,6 @@ agents:
   migration_phase: 7
   migration_note: RELEASE readiness (Ф7)
 - schema_version: 1
-  id: backend-developer
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: preset
-  preset: software-product
-  file: agents/engineering/backend-developer.md
-  domain: engineering
-  purpose: Реализует серверную логику, API и работу с данными с учётом совместимости, безопасности и эксплуатационных
-    рисков
-  review_mode: writer
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: preset
-  target_preset: software-product
-  action: move-later
-  migration_phase: 7
-  migration_note: ENGINEERING исполнитель (Ф7)
-- schema_version: 1
-  id: database-engineer
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: preset
-  preset: data-and-integrations
-  file: agents/engineering/database-engineer.md
-  domain: engineering
-  purpose: Проектирует и проверяет изменения схемы, индексов, миграций и backfill с учётом объёма данных,
-    блокировок, совместимости и rollback
-  review_mode: writer
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: preset
-  target_preset: data-and-integrations
-  action: move-later
-  migration_phase: 7
-  migration_note: изменения БД (Ф7)
-- schema_version: 1
   id: devops-engineer
   version: 2.0.0
   contract_version: 1
@@ -295,24 +257,6 @@ agents:
   migration_phase: 7
   migration_note: CI/CD delivery (Ф7)
 - schema_version: 1
-  id: frontend-developer
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: preset
-  preset: software-product
-  file: agents/engineering/frontend-developer.md
-  domain: engineering
-  purpose: Реализует клиентскую часть строго в утверждённом scope и с переиспользованием дизайн-системы
-  review_mode: writer
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: preset
-  target_preset: software-product
-  action: move-later
-  migration_phase: 7
-  migration_note: ENGINEERING исполнитель (Ф7)
-- schema_version: 1
   id: fullstack-developer
   version: 2.0.0
   contract_version: 1
@@ -321,8 +265,8 @@ agents:
   preset: software-product
   file: agents/engineering/fullstack-developer.md
   domain: engineering
-  purpose: Выполняет небольшую сквозную задачу, когда контракты уже определены, архитектура не меняется
-    и количество затрагиваемых компонентов ограничено
+  purpose: Основной инженерный исполнитель серверной и клиентской части, когда контракты определены и
+    архитектура не меняется (поглощает backend-developer и frontend-developer)
   review_mode: writer
   vendor_neutral: true
   source_version: '2.0'
@@ -330,17 +274,18 @@ agents:
   target_preset: software-product
   action: move-later
   migration_phase: 7
-  migration_note: ENGINEERING исполнитель (Ф7)
+  migration_note: 'ENGINEERING исполнитель; поглощает backend-developer + frontend-developer (#679)'
 - schema_version: 1
-  id: integration-engineer
+  id: data-engineer
   version: 2.0.0
   contract_version: 1
   entity_type: agent
   layer: preset
   preset: data-and-integrations
-  file: agents/engineering/integration-engineer.md
+  file: agents/engineering/data-engineer.md
   domain: engineering
-  purpose: Проектирует и реализует надёжное взаимодействие с внешними и внутренними системами
+  purpose: Отвечает за данные и их движение — схему, миграции и backfill, а также интеграции с внешними
+    и внутренними системами (поглощает database-engineer, migration-engineer, integration-engineer)
   review_mode: writer
   vendor_neutral: true
   source_version: '2.0'
@@ -348,26 +293,7 @@ agents:
   target_preset: data-and-integrations
   action: move-later
   migration_phase: 7
-  migration_note: интеграции/контракты (Ф7)
-- schema_version: 1
-  id: migration-engineer
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: preset
-  preset: data-and-integrations
-  file: agents/engineering/migration-engineer.md
-  domain: engineering
-  purpose: Планирует безопасный переход между старыми и новыми версиями данных, API или компонентов без
-    остановки критичных процессов
-  review_mode: writer
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: preset
-  target_preset: data-and-integrations
-  action: move-later
-  migration_phase: 7
-  migration_note: миграции данных (Ф7)
+  migration_note: 'DATA/INTEGRATION исполнитель; поглощает database-engineer + integration-engineer + migration-engineer (#679)'
 - schema_version: 1
   id: solution-architect
   version: 2.0.0

@@ -27,7 +27,7 @@ README ссылаются на неё, а не дублируют список �
 | Quality gates — всего | 35 |
 | — из них enforced (blocking) | 21 |
 | — из них advisory (partial) | 14 |
-| Роли в реестре | 47 |
+| Роли в реестре | 43 |
 | **built≠wired модулей** | **1** |
 | planned / unsupported | 4 |
 
@@ -126,13 +126,13 @@ README ссылаются на неё, а не дублируют список �
 
 ## Роли
 
-47 ролей объявлено в `registry/agents.yaml` (контракты владения и ревью). По домену:
+43 ролей объявлено в `registry/agents.yaml` (контракты владения и ревью). По домену:
 
 | Домен | Роли |
 |---|---|
 | core | context-builder, development-orchestrator, final-verifier, implementation-integrator, intake-classifier, plan-reviewer, requirements-writer, task-planner |
 | delivery | documentation-steward, incident-analyst, observability-engineer, release-manager |
-| engineering | ai-feature-engineer, backend-developer, database-engineer, devops-engineer, frontend-developer, fullstack-developer, integration-engineer, llm-architect, migration-engineer, solution-architect |
+| engineering | ai-feature-engineer, data-engineer, devops-engineer, fullstack-developer, llm-architect, solution-architect |
 | meta | agent-creator, repository-memory-curator, workflow-designer |
 | product | adoption-manager, experiment-designer, product-analyst, product-manager, ui-ux-designer, user-researcher |
 | quality | accessibility-reviewer, ai-evaluator, ai-red-teamer, analytics-reviewer, architecture-reviewer, code-reviewer, design-system-reviewer, documentation-reviewer, observability-reviewer, performance-reviewer, product-reviewer, regression-analyst, requirements-reviewer, security-reviewer, test-engineer, ux-reviewer |

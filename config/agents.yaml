@@ -14,12 +14,8 @@ agent_groups:
     - experiment-designer
   engineering:
     - solution-architect
-    - frontend-developer
-    - backend-developer
     - fullstack-developer
-    - database-engineer
-    - integration-engineer
-    - migration-engineer
+    - data-engineer
     - devops-engineer
   quality:
     - test-engineer
