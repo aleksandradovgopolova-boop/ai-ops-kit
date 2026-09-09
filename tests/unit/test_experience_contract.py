@@ -150,6 +150,79 @@ def test_empty_option_set_is_rejected():
 
 
 @pytest.mark.unit
+def test_owner_chooses_one_offered_option_and_it_lands_in_the_contract():
+    """#416 (фаза выбора, positive): на UI-задачу предложено ≥2 варианта с trade-offs, владелец
+    выбирает ОДИН, и выбор ЗАПИСЫВАЕТСЯ в Experience Contract с названной ценой."""
+    c = _contract()
+    options = ec.offer_design_options(c)
+    assert len(options) >= 2, "выбирать не из чего — это не выбор"
+    pick = options[0]["id"]
+    chosen = ec.record_experience_choice(c, pick, rationale="ближе к цели пользователя")
+    ch = ec.chosen_experience_option(chosen)
+    assert ch and ch["option"] == pick, ch
+    assert ch["tradeoff"], "в контракт записан выбор без названной цены"
+    assert ch["rationale"] == "ближе к цели пользователя"
+    # Вход задним числом не переписан: исходный контракт остаётся без выбора.
+    assert ec.chosen_experience_option(c) is None, "запись выбора мутировала исходный контракт"
+
+
+@pytest.mark.unit
+def test_the_choice_is_the_input_for_stories():
+    """#416 (side-effect): выбор становится ВХОДОМ для stories — каждая story рисуется под
+    выбранный опыт; пока выбор не сделан, ключа нет (отсутствие ≠ выбран дефолт)."""
+    c = _contract()
+    before = ec.generate_stories(c)
+    assert all("experience" not in s.get("parameters", {}) for s in before), (
+        "story несёт выбор опыта, которого ещё не сделали")
+    chosen = ec.record_experience_choice(c, "minimal")
+    after = ec.generate_stories(chosen)
+    assert after and all(s["parameters"].get("experience") == "minimal" for s in after), (
+        "выбор опыта не дошёл до stories — значит он не вход, а мёртвая запись")
+
+
+@pytest.mark.unit
+def test_choosing_an_option_the_kit_never_offered_is_rejected_fail_closed():
+    """#416 (fail-closed, а): выбрать можно ТОЛЬКО из предложенного. Несуществующий вариант —
+    ошибка, а не молчаливая запись опыта, которого никто не предлагал."""
+    c = _contract()
+    with pytest.raises(ValueError, match="не из предложенных"):
+        ec.record_experience_choice(c, "does-not-exist")
+
+
+@pytest.mark.unit
+def test_choice_is_closed_when_the_offer_itself_is_invalid(monkeypatch):
+    """#416 (fail-closed, б): если набор предлагать нельзя (вариант без названной цены / пусто),
+    выбор невозможен — ворота закрыты на фазе предложения, а не отдают псевдовыбор в контракт."""
+    bad = [{"id": "x", "name": "Без цены", "description": "макет", "tradeoffs": {"pros": ["ok"]}}]
+    monkeypatch.setattr(ec, "generate_design_options", lambda _c: bad)
+    with pytest.raises(ValueError, match="осознанного компромисса"):
+        ec.record_experience_choice(_contract(), "x")
+    # И пустой набор — тоже нечем выбирать.
+    monkeypatch.setattr(ec, "generate_design_options", lambda _c: [])
+    with pytest.raises(ValueError):
+        ec.record_experience_choice(_contract(), "x")
+
+
+@pytest.mark.unit
+def test_process_contract_surfaces_the_choice_next_to_stories(tmp_path):
+    """Вывод process_contract показывает записанный выбор рядом со stories, а его отсутствие —
+    честно как «не выбран», а не как выбранный дефолт."""
+    import yaml as _yaml
+    c = ec.record_experience_choice(_contract(), "progressive")
+    p = tmp_path / "contract.yaml"
+    p.write_text(_yaml.safe_dump(c, allow_unicode=True), encoding="utf-8")
+    out = ec.process_contract(p)
+    assert out["experience_choice"]["option"] == "progressive", out.get("experience_choice")
+    assert out["summary"]["experience_chosen"] is True
+    assert all(s["parameters"].get("experience") == "progressive" for s in out["stories"])
+    # А без выбора — честное None / False.
+    p2 = tmp_path / "plain.yaml"
+    p2.write_text(_yaml.safe_dump(_contract(), allow_unicode=True), encoding="utf-8")
+    out2 = ec.process_contract(p2)
+    assert out2["experience_choice"] is None and out2["summary"]["experience_chosen"] is False
+
+
+@pytest.mark.unit
 def test_the_schema_matches_the_fields_the_code_requires():
     """Схема и код требуют ОДНО. Разойдутся — контракт будет валиден для одного и нет для другого."""
     schema = json.loads((PKG_ROOT / "schemas" / "experience-contract.schema.json")
