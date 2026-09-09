@@ -55,3 +55,5 @@ ratchet_baselines:
     consumed_by: ai_ops_kit/validation/validate_func_size.py
   - name: packages/test-taxonomy-baseline.yaml
     consumed_by: ai_ops_kit/validation/validate_test_taxonomy.py
+  - name: packages/print-discipline-baseline.yaml
+    consumed_by: ai_ops_kit/validation/validate_print_discipline.py

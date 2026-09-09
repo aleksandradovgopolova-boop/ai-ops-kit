@@ -73,6 +73,7 @@ STANDALONE = [
     "validate_pipeline_e2e",
     "validate_post_release_readout",
     "validate_presets",
+    "validate_print_discipline",   # F-08: standalone, читает layering.yaml (entrypoints) + print-discipline-baseline
     "validate_product_model",
     "validate_product_qualification",
     "validate_promotion_qualification",
