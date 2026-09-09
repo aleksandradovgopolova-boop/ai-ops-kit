@@ -30,7 +30,8 @@ def main() -> None:
 
     argv = sys.argv[1:]
     if not argv or argv[0] in ("-h", "--help", "help"):
-        sys.exit(ai_ops_cli._main_guarded([]))
+        # #675 Human API: показать человеческую дверь; хвост (напр. --all) сохраняем.
+        sys.exit(ai_ops_cli._main_guarded(["help", *argv[1:]]))
 
     intent, rest = argv[0], argv[1:]
     sys.exit(ai_ops_cli._main_guarded([intent, *rest, os.getcwd()]))
