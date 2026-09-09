@@ -25,7 +25,7 @@ ceilings:
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
-  ai_ops_kit/lifecycle/active_work.py: 1137
+  ai_ops_kit/lifecycle/active_work.py: 1135
   ai_ops_kit/ui/presenter_formatters.py: 1070
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
@@ -42,7 +42,7 @@ raises:
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'active_work.py = 1116; ai_ops_run_lifecycle.py = 938; ai_ops_run_exec.py = 721'
-    to: 'active_work.py = 1137; ai_ops_run_lifecycle.py = 952; ai_ops_run_exec.py = 725'
+    to: 'active_work.py = 1135; ai_ops_run_lifecycle.py = 952; ai_ops_run_exec.py = 725'
     work: 'humanize старт/финиш прогона (#708): без внутренних id на product-аудитории'
     why: >-
       Карта трения #708: старт прогона сыпал внутренние идентификаторы координации
