@@ -333,3 +333,36 @@ def test_pipeline_tests_warn_reaches_the_human(capsys):
     _print_pipeline(r)
     out = capsys.readouterr().out
     assert "тесты не запускались: нет тестового окружения" in out
+
+
+# ── #702-work: результат прогона на аудитории product — СВОДКА, а не техническая стена ─────────
+
+def test_pipeline_product_shows_a_human_summary_not_the_technical_wall(capsys):
+    """Человек, попросивший задачу, видит вердикт + что изменилось + шаг, а тех-разбор
+    (tool-loop/SHA/base_workflow/spec-level/context-токены) — «по запросу»."""
+    _print_pipeline(_pipeline_report(ready_for_pr=True, acceptance_criteria={"declared": False}),
+                    audience="product")
+    out = capsys.readouterr().out
+    assert "Готово" in out and "Файлов изменено" in out
+    assert "по запросу" in out  # техника не вываливается, а предлагается
+    # внутренние термины НЕ на первом экране человека
+    for term in ("tool-loop", "base_workflow", "spec-level", "abc123def456789", "изоляция:"):
+        assert term not in out, f"тех-термин «{term}» просочился в product-сводку"
+
+
+def test_pipeline_product_keeps_the_honesty_caveats(capsys):
+    """«Готово» не должно читаться как «проверено»: оговорки (нет критериев приёмки, нет тестов)
+    сохраняются в product-сводке — иначе это зелёный на непроверенном."""
+    r = _pipeline_report(ready_for_pr=True, acceptance_criteria={"declared": False},
+                         tests_warn="нет тестов в стеке")
+    _print_pipeline(r, audience="product")
+    out = capsys.readouterr().out
+    assert "критериев приёмки не было" in out
+    assert "тестов в стеке нет" in out
+
+
+def test_pipeline_technical_audience_still_shows_the_full_report(capsys):
+    """Дефолт/technical — полная стена цела (для отладки и тестов)."""
+    _print_pipeline(_pipeline_report(ready_for_pr=True))  # default technical
+    out = capsys.readouterr().out
+    assert "tool-loop" in out and "base_workflow" in out

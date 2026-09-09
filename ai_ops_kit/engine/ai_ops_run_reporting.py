@@ -254,6 +254,10 @@ def _enrich_run_report(rep, *, runtime, provider_name, provider_resolution, chil
     from ai_ops_kit.engine.ai_ops_run import _profile_for_report
     rep["runtime"] = runtime
     rep["engine"] = "pipeline"
+    # #702-work: отчёт несёт свой child_root, чтобы печать для человека выбрала аудиторию по
+    # ЕГО communication-policy, а не по CWD процесса. Без этого поля печать остаётся на technical
+    # (синтетические отчёты тестов и минимальные отчёты честно видят полную стену).
+    rep["child_root"] = str(child_root)
     rep["provider"] = provider_name
     # P0-1 side-effect proof: КАК выбран провайдер — в отчёте (и в run-report.json на диске),
     # а не только в stdout: иначе решение резолва невозможно проверить постфактум.
