@@ -368,6 +368,9 @@ def main(argv):
             return 2
         report = run(task, json.loads(a.signals), Path(a.child_root),
                      provider_name=_pres["provider"], model=a.model, engine="pipeline",
+                     # #695: та же измеренная личность, что и у run (intent-CLI подаёт `--session`) —
+                     # иначе resume регистрируется под "cli" и не узнаёт свою же работу.
+                     session=getattr(a, "session", "cli"),
                      execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base,
                      replan=a.replan, open_pr=getattr(a, "open_pr", False),
                      # #403/deliver-only: без этого проброса флаг, объявленный подкомандой resume и

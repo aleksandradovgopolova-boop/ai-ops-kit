@@ -1009,14 +1009,14 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
             return 1
         entry = next((w for w in data["active"] if w.get("id") == wid), None)
         save(path, data)
-        # Закрытая работа снимается и с носителя — иначе опубликованная заявка «висит» у команды
-        # после завершения. Снимаем только СВОЮ пару (машина, работа).
-        if status == "done" and entry is not None:
+        if entry is not None:
             _m = entry.get("machine") or _machine()
-            unpublish_claim(child_root, _m, wid)
-            # С ОБОИХ носителей: оставленная заявка держала бы работу для соседней копии после её
-            # закрытия — тот же «список страшилок» (#137).
+            # #695: носитель копий координирует ТОЛЬКО идущий прогон — снимаем на ВЫХОДЕ любым исходом
+            # (done/blocked/прерван). Заявка там без `owner_pid` → `holder_is_gone` судила её лишь по
+            # возрасту (12ч) и блокировала следующую команду (замер 01.09); локальный реестр сохраняется.
             withdraw_claim_from_copies(child_root, _m, wid)
+            if status == "done":                      # опубликованную (наружу) — только на завершении
+                unpublish_claim(child_root, _m, wid)
     if audience == "product":
         # #708: на product человеку не нужны wi-…/жаргон «ACTIVE-WORK». Итог прогона он уже видит в
         # отчёте; здесь важна лишь ПРИЧИНА остановки, если она есть (реальный сигнал). Успех без

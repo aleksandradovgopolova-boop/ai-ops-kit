@@ -941,9 +941,9 @@ def main(argv):
             child_root, task = task, rest.pop(0)
         # v2.109 Real Resume: --execute реально продолжает прогон (не рестарт); без флага — preflight.
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
-        # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
-        # `ai-ops resume --provider X` молча уходил в mock. F-026: провайдера НЕ подставляем (было
-        # `a.provider or "mock"` — заглушка ЯВНО); не задан — решает та же логика, что у `run --execute`.
+        argv2 += ["--session", _session_identity(child_root)]   # #695: та же личность, что у `run`
+        # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume (иначе
+        # `--provider X` молча уходил в mock). F-026: провайдера НЕ подставляем — решает та же логика run.
         argv2 += ["--signals", a.signals]
         if a.provider:
             argv2 += ["--provider", a.provider]
