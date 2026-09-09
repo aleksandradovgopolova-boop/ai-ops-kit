@@ -249,11 +249,14 @@ def print_human(r):
         # #702-work: на аудитории product человек видит СУТЬ результата (готово/нет + что изменилось
         # + честные оговорки + следующий шаг), тех-разбор — «по запросу» (communication-policy:
         # technical_details: on_request). Тесты зовут _print_pipeline напрямую -> дефолт technical.
-        try:
-            from ai_ops_kit.ui import presenter
-            _aud = presenter.audience_from_config(r.get("child_root") or ".")
-        except Exception:  # noqa: BLE001 — печать результата не роняет прогон
-            _aud = "technical"
+        _aud = "technical"
+        _cr = r.get("child_root")
+        if _cr:
+            try:
+                from ai_ops_kit.ui import presenter
+                _aud = presenter.audience_from_config(_cr)
+            except Exception:  # noqa: BLE001 — печать результата не роняет прогон
+                _aud = "technical"
         return _print_pipeline(r, audience=_aud)
     # Минимальный отчёт (например, отказ active-work/preflight ДО классификации) не несёт
     # base_workflow/треков. Раньше вывод для человека падал на нём KeyError('base_workflow') —
