@@ -994,7 +994,7 @@ work:
       начиная с дешёвых: gates→engops и engine↔gates (только CLI-вход)
     type: engineering
     goal: layering-ring-is-a-dag
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: medium
     write_scope: [ai_ops_kit/, packages/, tests/]
@@ -1004,6 +1004,15 @@ work:
       gates→engops (deploy_readiness, уже в known_violations) и engine↔gates (держится одним
       evidence_collector.main) — самые дешёвые. Готово, когда ратчет mutual_pairs опускается ПО ФАКТУ
       снятых рёбер, known_violations сокращается, и это развязка, а не перенос импорта в функцию.
+    progress_note: >-
+      K1 engine↔gates РАЗВЯЗАНА ПО-НАСТОЯЩЕМУ (2026-09-10): CLI-обёртка evidence_collector, строившая
+      broker через __import__ engine, вынесена в ai_ops_kit/devtools/evidence_collect_cli.py (devtools
+      это entrypoints — engine импортить можно); библиотечный collect() давно принимает broker
+      параметром. Гейт больше не зависит от engine ни статически, ни динамически — это перенос
+      проводки в точку входа, а НЕ сокрытие. mutual_pairs 5→4, cycles 9→5 честно (каскад claim-маркеров
+      сведён). ОСТАЮТСЯ 4 пары, каждая — проектное решение, а не хирургия: context↔engine (run_plan),
+      delivery↔engine (git/worktree/pipeline), engine↔lifecycle («кто классифицирует»), engops↔gates
+      (deploy_readiness нуждается в environment_map — «куда положить»). Их брать отдельными срезами.
 
   - id: types-enforced-on-foundation-or-mypy-removed
     title: >-
