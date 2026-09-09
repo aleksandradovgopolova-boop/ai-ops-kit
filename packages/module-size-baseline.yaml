@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1204
+  ai_ops_kit/cli/ai_ops_cli.py: 1207
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1942
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
@@ -42,15 +42,16 @@ raises:
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1198'
-    to: 'ai_ops_cli.py = 1204'
+    to: 'ai_ops_cli.py = 1207'
     work: 'человеческая «передняя дверь» CLI (#675 Human API)'
     why: >-
       `ai-ops` без аргументов и `ai-ops help` теперь показывают короткий человеческий набор команд
       владельца, а не argparse-стену из 36 интентов и 30 флагов (человек, не знающий внутренней
       механики кита, тонул). СУТЬ вынесена отдельным модулем `ai_ops_kit/cli/human_help.py`, чтобы
       вход-CLI не рос монолитом; в самом `ai_ops_cli.py` остался лишь тонкий хук — импорт модуля и
-      3-строчный вызов `human_help.handle(argv, INTENTS)` в начале `main`. +6 строк — это residue
-      входа, а не рост логики; логика двери в новом модуле. Ратчет держит вниз.
+      вызов `human_help.handle(argv, INTENTS)` в начале `main`, плюс регистрация флага `--all` в
+      парсере (чтобы `help --all` был настоящим флагом — того требует test_printed_commands_are_runnable).
+      +9 строк — это residue входа, а не рост логики; логика двери в новом модуле. Ратчет держит вниз.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'pipeline_evidence.py = 724'

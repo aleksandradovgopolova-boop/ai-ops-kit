@@ -845,6 +845,9 @@ def _build_cli_arg_parser():
                     choices=["defect", "friction", "question", "idea"],
                     help="feedback: дефект / трение / вопрос / идея (по умолчанию выводится из улик)")
     ap.add_argument("--json", action="store_true")
+    # #675: `help --all` — показать весь список команд, а не только человеческую дверь. Разбирается
+    # в human_help.handle ДО argparse; объявлен здесь, чтобы флаг был настоящим (printed-commands-runnable).
+    ap.add_argument("--all", action="store_true", help="help: показать все команды, не только дверь")
     return ap
 
 
