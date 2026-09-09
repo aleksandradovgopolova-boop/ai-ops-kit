@@ -53,8 +53,35 @@ def module_owners(surface=SURFACE):
     return owners
 
 
+def _dynamic_import_literal(node):
+    """Строковый литерал первого аргумента у `__import__("x")` / `importlib.import_module("x")`.
+
+    Возвращает имя модуля или None. Ловится только СТРОКОВЫЙ литерал: динамику по переменной
+    (`__import__(name)`) статически разрешить нельзя, и её граф не покажет — это честная граница
+    инструмента, а не сокрытие. Форма `import_module` распознаётся и как атрибут
+    (`importlib.import_module`), и как имя (`from importlib import import_module`).
+    """
+    if not isinstance(node, ast.Call) or not node.args:
+        return None
+    fn = node.func
+    is_builtin = isinstance(fn, ast.Name) and fn.id == "__import__"
+    is_import_module = ((isinstance(fn, ast.Attribute) and fn.attr == "import_module")
+                        or (isinstance(fn, ast.Name) and fn.id == "import_module"))
+    if not (is_builtin or is_import_module):
+        return None
+    first = node.args[0]
+    if isinstance(first, ast.Constant) and isinstance(first.value, str):
+        return first.value
+    return None
+
+
 def _imported_names(src, filename=None):
-    """Имена верхнего уровня из import/from — через AST, а не регуляркой по строкам."""
+    """Имена верхнего уровня из import/from И динамических __import__/import_module — через AST.
+
+    Динамическая загрузка со строковым литералом — такое же ребро зависимости, как статический
+    импорт, и меряется одинаково, где бы ни стояла (F-03): раньше `__import__("ai_ops_kit....")`
+    внутри функции был невидим графу, и взаимные пути ядра занижались до нуля. Считаем и её.
+    """
     try:
     # Имя файла — часть сообщения интерпретатора (F-022): без него предупреждение
     # подписывается `<unknown>`, и владелец не может понять, чей файл его вызвал.
@@ -67,6 +94,10 @@ def _imported_names(src, filename=None):
             names += [a.name for a in node.names]
         elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
             names.append(node.module)
+        else:
+            dynamic = _dynamic_import_literal(node)
+            if dynamic:
+                names.append(dynamic)
     return names
 
 
