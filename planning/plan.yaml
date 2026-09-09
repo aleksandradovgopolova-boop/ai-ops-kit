@@ -1044,33 +1044,4 @@ work:
       работа, а не заливка Any. py.typed — при росте покрытия. Потому in_progress.
 
 
-  - id: config-is-config-history-in-decisions
-    title: >-
-      Хронология ревизий из pyproject.toml/workflows перенесена в decisions/registry.yaml со ссылками;
-      в конфиге остаются инвариант и граница правила
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    value: low
-    write_scope: [pyproject.toml, .github/, decisions/]
-    reason: >-
-      pyproject.toml 23 КБ и package-quality.yml 24 КБ — преимущественно нарратив-хроника, дублирующий
-      git log и decisions/registry.yaml; чтобы узнать включённые правила ruff, надо проскроллить 90
-      строк прозы. Объяснение «почему правило такое» сохранить ОБЯЗАТЕЛЬНО (защита от вредной правки).
-      Готово, когда хронология («v3.28.0 R16»…) переехала в реестр решений, в конфиге — инвариант и граница.
-
-  - id: formatter-adopted-with-blame-ignore
-    title: ruff format одним коммитом + .git-blame-ignore-revs + хук и шаг в CI
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    value: low
-    write_scope: [.pre-commit-config.yaml, .github/]
-    reason: >-
-      Форматтера нет: 528/901 файла не отформатированы, line-length=110 не проверяет ничего. Возражение
-      «один коммит на 45k строк топит blame» снято .git-blame-ignore-revs (нативно git/GitHub). Ценно
-      для консистентности стиля ВНУТРИ команды: без него правки разных людей приезжают в разном стиле.
-      Готово, когда ruff format исполняется хуком и в CI, blame читаем через ignore-revs.
 
