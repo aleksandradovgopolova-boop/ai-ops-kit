@@ -118,16 +118,13 @@ class TestTheBaselineHasOneHome:
         assert isinstance(b.get("behavioral_count"), int), b
         assert isinstance(b.get("total_count"), int) and b["total_count"] > 0, b
 
-    def test_baseline_matches_the_measurement(self):
-        """Числа в реестре обязаны совпасть с фактическим замером кита: иначе baseline устарел молча
-        и защищает не ту границу."""
-        b = load_baseline()
-        cur = measure()
-        assert b["behavioral_count"] == cur["behavioral_count"], (
-            f"baseline behavioral {b['behavioral_count']} != замер {cur['behavioral_count']} — "
-            f"пересчитайте: validate_test_taxonomy.py --baseline")
-        assert b["total_count"] == cur["total_count"], (
-            f"baseline total {b['total_count']} != замер {cur['total_count']}")
+    # ТОЧНОЕ РАВЕНСТВО baseline == замер СНЯТО (issue #680). Оно форсило ре-снап baseline на ЛЮБОЕ
+    # изменение состава тестов — даже когда доля поведенческих не падала (14 ре-базлайнов за 08.09).
+    # Это был налог, а не защита: реальная граница — НИЖНЯЯ (доля не падает ниже baseline), и её
+    # держат `test_current_share_meets_baseline` (замер кита не ниже floor -> baseline не завышен) и
+    # `check()` в валидаторе (перекрёстное умножение). baseline теперь = ПОЛ доли, обновляемый
+    # записью в `raises` только когда доля законно падает, а не снимок, совпадающий по числам.
+    # Устаревший-вниз baseline безвреден (пол консервативен); устаревший-вверх ловит share-floor.
 
 
 # ─── fail-closed: падение доли ниже baseline ОТКЛОНЯЕТСЯ ────────────────────────────────────────
