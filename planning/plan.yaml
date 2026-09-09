@@ -430,7 +430,14 @@ goals:
     # процесса (оговорка решения ep-2026-08-17). Суть: контроль качества честен (Phase 0) + ядро
     # вырезано как отдельный слой (Phase B), чтобы полное меню росло, не обрушивая друг друга.
     freeze_relation: run_condition
-    status: active
+    # ДОСТИГНУТА 2026-09-09 (#670, PR #689; флип восстановлен после потери в merge #697-серии): оба
+    # проверяемых исхода верны по коду. Phase 0 — 11 лент влиты, findings аудита закрыты. Phase B —
+    # mutual_pairs=0 (кольцо capabilities — DAG), фазы pipeline — отдельные функции. Стена
+    # code_review-ревьюера в сессии Клода подтверждена живьём #668. 4 работы — в history/plan-history.yaml.
+    status: achieved
+    outcome:
+      quality_control_is_honest: true       # Phase 0
+      core_carved_as_separate_layer: true   # Phase B (mutual_pairs=0, фазы pipeline — функции)
 
   # ─── История релизов 3.40/4.0 (04.09.2026) и хвосты, ждущие следующей сессии ──────────────────
   # ВЫПУЩЕНО: 3.40.0 (warn-минор о сносе плоского слоя tools/) и 4.0.0 МАЖОР (tools/ снят физически,
@@ -497,7 +504,7 @@ goals:
     # Storybook-сторона создания идёт через цель `storybook-as-visual-contract`.
     # заморозка: единый UI/UX-стандарт как продукт кита — новое умение, внедряется волнами.
     freeze_relation: extension
-    status: active
+    status: achieved
     outcome:
       # Волна 1 — Конституция становится источником; гейты дизайна ссылаются на её ID (наблюдение).
       # ДОСТИГНУТО 2026-08-28: обе половины влиты — источник (#345, uiux-constitution-is-source) и
@@ -969,39 +976,6 @@ work:
       Исход experience_options_offered_with_tradeoffs = false (#416). Готово, когда на UI-задачу кит
       выдаёт не менее двух вариантов опыта с названными trade-offs и владелец выбирает ОДИН — выбор
       записывается в Experience Contract и становится входом для stories.
-
-  - id: uiux-tokens-contract-and-capability-registries
-    title: Волна 2 — токены-контракт и реестры компонентов/паттернов/шаблонов доступны агенту
-    type: visual
-    goal: uiux-standard-as-product
-    status: todo
-    owner_role: frontend
-    value: high
-    issue: 418
-    write_scope: [standards/uiux/, scripts/, schemas/, tests/]
-    affects: {engineering_quality_security: true, product_strategy: true}
-    reason: >-
-      Исход tokens_contract_and_capability_registries_available = false (#418). Волна 1 (Конституция —
-      источник, гейты цитируют ID) достигнута 28.08. Готово, когда токены объявлены контрактом со
-      стабильными ID, реестры возможностей (компоненты/паттерны/шаблоны) читаются агентом из данных, а
-      не из прозы, и валидатор ловит расхождение реестра с Конституцией.
-
-  - id: uiux-mcp-access-to-ui-system
-    title: Волна 4 — MCP-доступ к UI-системе (get_*/validate_*)
-    type: engineering
-    goal: uiux-standard-as-product
-    status: todo
-    owner_role: engineer
-    value: medium
-    issue: 420
-    depends_on: [uiux-reviewers-and-ui-health-deepened]
-    write_scope: [ai_ops_kit/, standards/uiux/, tests/]
-    affects: {system_architecture: true}
-    reason: >-
-      Исход mcp_access_to_ui_system = false (#420). Последняя волна: агент читает токены, реестры и
-      валидирует экран через MCP (get_*/validate_*) вместо чтения файлов стандарта. Зависит от волн 2–3
-      — отдавать по MCP нечего, пока реестры и проверки не наполнены. Готово, когда MCP-сервер отдаёт
-      данные волны 2 и вердикты волны 3, и это проверено живым вызовом.
 
   - id: forced-major-update-reconciles-allowed-version-range
     title: >-

@@ -5059,3 +5059,36 @@ work:
       называет пробелы поимённо, fail-closed) вшит в ui_readiness.py (поле constitution_coverage) и
       через него — в pipeline_setup и deploy_readiness. Код влит 634055f7 (#530/#419). Blocking/severity
       гейтов не менялись — advisory до обкатки на дочках (правило движения по roadmap).
+
+  - id: uiux-tokens-contract-and-capability-registries
+    title: Волна 2 — токены-контракт и реестры компонентов/паттернов/шаблонов доступны агенту
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-09-09'
+    pr: 451
+    issue: 418
+    evidence: standards/uiux/scripts/validate-registries.py
+    result: >-
+      Контракт-реестры добавлены как ПРОВЕРЯЕМЫЕ данные: standards/uiux/registries/{tokens,capabilities,
+      components,patterns,templates}.yaml + design/tokens/*.json; ссылочную целостность проверяет
+      validate-registries.py (dangling rule/token/namespace, unsubstantiated_guarantee). Код влит #451/#418.
+      Доставка в дочку РЕШЕНА владельцем 09.09 (ep-2026-09-09-direction-wave-owner-calls): дочке едут
+      СХЕМЫ (schemas/*.json — против них валидирует свои токены), эталонные ДАННЫЕ остаются в ките (возить
+      в каждую дочку = раздувание, пакет-скоуп доставки — opt-in, дефолт грузит всё). Исход
+      tokens_contract_and_capability_registries_available = true.
+
+  - id: uiux-mcp-access-to-ui-system
+    title: Волна 4 — MCP-доступ к UI-системе (get_*/validate_*)
+    goal: uiux-standard-as-product
+    status: dropped
+    closed_at: '2026-09-09'
+    issue: 420
+    result: >-
+      ОТЛОЖЕНО решением владельца 09.09 (парковка с триггером, не «сделано»). На main — минимальный
+      MCP-адаптер storybook-query (#529); полный MCP-сервер (get_*/validate_* по токенам/реестрам) НЕ
+      строится сейчас: агент уже дотягивается до стандарта данными (правила/схемы едут, evidence-путь
+      читает и выдаёт заземлённый вердикт — ДОКАЗАНО живьём на ai-ops-cockpit, #697); MCP меняет лишь
+      СПОСОБ доступа (запрос vs чтение файла), не суть, а «центр» без реального потребителя — та ловушка,
+      от которой владелец уходил («минимальный адаптер, а не центр», registry/tools.yaml). ТРИГГЕР
+      пересмотра: реальный дизайн-агент в дочке, которому нужны live-запросы UI-системы (собирать экран/
+      валидировать на лету) и чтения файлов не хватает — по замеру, не по ощущению.
