@@ -55,6 +55,7 @@ from pathlib import Path
 
 from ai_ops_kit.engine import tool_loop
 from ai_ops_kit.engine import tool_broker
+from ai_ops_kit.engine import reviewer_prompt
 
 # Сколько файлов ревьюеру разрешено прочитать поверх диффа. Дифф он получает целиком (со stat), так
 # что чтения нужны для проверки контекста, а не для знакомства с изменением.
@@ -483,12 +484,16 @@ def make_acceptance_proposer(provider, criteria, revision=None):
     listing = "\n".join(f'  {c["id"]}: {c["text"]}' for c in criteria)
 
     def propose(context):
-        prompt = (
+        # XML-якорная разметка (reviewer_prompt.assemble): `<task>`/`<criteria>`/`<output_format>` —
+        # наш каркас, а недоверенная нагрузка (дифф + журнал чтений) изолирована в ЭКРАНИРОВАННОМ
+        # `<context>`. Дифф — чужой текст: строка-маркер или поддельный acceptance-result внутри него
+        # не должны вытечь за границу секции и подделать вердикт/инструкцию (эпик #744).
+        task = (
             "Ты НЕЗАВИСИМЫЙ ревьюер приёмки (не автор изменения). Только чтение.\n"
             f"Проверяемая ревизия: {revision or 'HEAD'}.\n"
             "Задача: по КАЖДОМУ критерию приёмки сказать, выполнен ли он В ЭТОМ изменении, и "
-            "привести ЦИТАТУ-основание.\n\n"
-            f"Критерии приёмки:\n{listing}\n\n"
+            "привести ЦИТАТУ-основание.")
+        output_format = (
             "На каждом шаге верни РОВНО ОДИН JSON:\n"
             '  {"op":"read","path":"..."}  — прочитать файл, чтобы удостовериться\n'
             '  {"kind":"acceptance-result","criteria":[{"id":"AC-1","status":"met|unmet|'
@@ -510,8 +515,13 @@ def make_acceptance_proposer(provider, criteria, revision=None):
             "нашёл X, которого не должно быть — unmet и цитируй найденное (evidence=present);\n"
             "* честность симметрична: не выдумывай ни met, ни unmet. Не хватило прочитанного — "
             "undetermined с причиной, это законный ответ;\n"
-            "* только JSON, без пояснений вокруг.\n\n"
-            "=== КОНТЕКСТ (изменение и журнал чтений) ===\n" + context)
+            "* только JSON, без пояснений вокруг.")
+        prompt = reviewer_prompt.assemble([
+            ("task", task),
+            ("criteria", f"Критерии приёмки:\n{listing}"),
+            ("output_format", output_format),
+            ("context", context),
+        ])
         return tool_loop.parse_action(provider(prompt))
     return propose
 
