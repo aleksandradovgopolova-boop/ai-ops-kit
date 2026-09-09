@@ -971,10 +971,10 @@ work:
       pre-commit-хук и каждый ратчет имеет машинное доказательство «вызывается вот здесь»
     type: engineering
     goal: checks-that-run
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
-    write_scope: [ai_ops_kit/validation/, packages/, tests/]
+    write_scope: [ai_ops_kit/validation/, packages/, tests/, registry/]
     reason: >-
       КОРЕНЬ, а не находка. Три из трёх старших находок аудита — один класс «объявлено, но не
       исполняется», в местах, куда чистка не дошла: mypy (объявлен, не запускается), README-счётчик
@@ -982,6 +982,11 @@ work:
       этого класса держится на памяти владельца, а не на машине. Готово, когда есть инвентарь (гейт
       ~40 строк): каждый dev-инструмент, хук и ратчет либо имеет доказательство запуска, либо помечен
       «выключен, причина EP-XXXX»; новый объявленный-но-не-запущенный краснеет.
+    progress_note: >-
+      v1 доставлен: validate_enforcement_inventory + registry/enforcement-inventory.yaml покрывают две
+      острые оси — dev-инструменты (requirements-dev + pyproject [dev]) и ратчет-baseline'ы
+      (packages/*baseline*.yaml). Сразу называет mypy честно unenforced (F-05). Под рантайм-контрактом
+      (STANDALONE) — гоняется в CI. Остаётся третья ось: pre-commit-хуки (зеркала в CI vs local-only).
 
   - id: layering-pairs-decoupled-by-substance
     title: >-
