@@ -19,8 +19,8 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1207
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1942
+  ai_ops_kit/cli/ai_ops_cli.py: 1214
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1947
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
@@ -39,6 +39,20 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1207; ai_ops_cli_intents.py = 1942'
+    to: 'ai_ops_cli.py = 1214; ai_ops_cli_intents.py = 1947'
+    work: 'humanize model/do (#702): --answer вместо правки YAML; do без двойной реплики'
+    why: >-
+      Живой проход человеком (карта трения #702). (1) `model` печатал вопросы онбординга и звал
+      править YAML-файл руками, значки ⚠/· не объяснял; теперь показывает id вопроса в [скобках],
+      легенду «⚠ ответить сейчас, · позже», и ведёт лёгким путём `model --answer <id> "ответ"`
+      (правка YAML — как альтернатива). ai_ops_cli_intents +5 — текст подсказки. (2) `do`/`run`
+      печатал превью «вот что я сделаю / запускай когда готов» И СРАЗУ «данных не хватает» —
+      противоречие; теперь превью гасится, если прогон упрётся в недостающие intake-сигналы
+      (одна ясная реплика). ai_ops_cli +7 — гард `_blocked_on_intake` перед превью. Оба — подача,
+      не логика; механика не менялась. Ратчет держит вниз.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'presenter_formatters.py = 1059'
