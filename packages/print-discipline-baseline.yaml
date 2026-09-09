@@ -1,0 +1,34 @@
+# Ратчет ДИСЦИПЛИНЫ ВЫВОДА: print в библиотечных слоях заморожен вниз (F-08 внешнего аудита).
+#
+# ЗАЧЕМ. `print()` печатает в stdout. В точке входа (cli/devtools/validation — слой `entrypoints`
+# в packages/layering.yaml) это её работа: показать человеку в терминал. Но библиотечный пакет,
+# который печатает сам, нельзя переиспользовать из MCP-сервера, web-UI или как библиотеку в чужом CI
+# без перехвата stdout, и у владельца дочки нет ручки «покажи подробнее» — единственный режим тот,
+# что решил печатать автор функции. `ui/presenter.py` для того и построен, но сотни print в
+# capabilities/foundation/intelligence его обходят.
+#
+# ПРАВИЛО. print разрешён ТОЛЬКО в пакетах слоя `entrypoints` (аллоу-лист берётся из layering.yaml —
+# один источник, не хардкод). В любом другом пакете ai_ops_kit число print заморожено ПОТОЛКОМ на
+# текущем значении и ходит ТОЛЬКО ВНИЗ: новый print сверх потолка или в пакете без записи краснеет,
+# перевод print -> возврат данных / logging опускает потолок. Не заставляет чинить сейчас — не даёт
+# расти. Измеряется: validate_print_discipline.py (AST-счёт вызовов print на пакет).
+schema_version: 1
+kind: print-discipline-ratchet
+
+# По одному потолку на библиотечный пакет (замер AST 2026-09-09). Пакеты слоя entrypoints
+# (cli/devtools/validation) сюда НЕ входят — им print разрешён.
+ceilings:
+  planning: 154
+  engine: 139
+  intelligence: 88
+  lifecycle: 66
+  gates: 54
+  engops: 42
+  context: 31
+  shared: 27
+  security: 25
+  providers: 19
+  governance: 18
+  ui: 16
+  integrations: 7
+  delivery: 4

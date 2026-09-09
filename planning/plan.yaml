@@ -1031,22 +1031,6 @@ work:
       «весь пакет типизирован» при 29% покрытия был бы над-заявлением). Это ратчет-ВВЕРХ, отдельно.
 
 
-  - id: library-layers-return-data-not-print
-    title: >-
-      print разрешён в cli/validation/devtools/installer; в capabilities/foundation/intelligence —
-      возврат данных или logging, текущие числа заморожены ратчетом
-    type: engineering
-    goal: owner-speaks-product-not-pipeline
-    status: todo
-    owner_role: engineer
-    value: medium
-    write_scope: [ai_ops_kit/, tests/]
-    reason: >-
-      1379 print в продакшне при 1 import logging; ~346 в библиотечных слоях (shared/security/context/
-      gates/lifecycle/engops/intelligence). Библиотечный пакет, печатающий в stdout, нельзя переиспользовать
-      из MCP/web без перехвата, и у дочки нет ручки «покажи подробнее». Готово, когда правило-ратчет
-      держит: библиотечные пакеты возвращают данные или логируют, печать — только в точках входа.
-
   - id: config-is-config-history-in-decisions
     title: >-
       Хронология ревизий из pyproject.toml/workflows перенесена в decisions/registry.yaml со ссылками;

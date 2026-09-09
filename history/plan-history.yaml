@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: library-layers-return-data-not-print
+    title: >-
+      print разрешён в точках входа; в библиотечных пакетах ai_ops_kit заморожен ратчетом вниз к 0
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_print_discipline.py
+    result: >-
+      ЗАКРЫТО 2026-09-09 (F-08 внешнего аудита) — установлен РАТЧЕТ, не переписаны 1365 print.
+      validate_print_discipline (AST-счёт print на пакет) заморозил 690 библиотечных print в 14
+      пакетах (planning 154, engine 139, intelligence 88, lifecycle 66, gates 54, engops 42, …) на
+      packages/print-discipline-baseline.yaml; ратчет ходит ТОЛЬКО ВНИЗ — новый print в библиотечном
+      слое или пакет без записи краснеет, перевод print -> возврат/logging опускает потолок. Аллоу-лист
+      (cli/devtools/validation) берётся из слоя entrypoints layering.yaml — один источник, не хардкод.
+      Проведён в контур: STANDALONE рантайм-контракта, инвентарь enforcement-inventory (новый baseline
+      он сам и потребовал — сработал). Фактический перевод print->данные идёт ратчетом со временем.
+
   - id: installer-under-size-and-func-gates
     title: installer/ включён в module-size и func-size ратчеты; текущие 3926 строк заморожены потолком
     goal: checks-that-run
