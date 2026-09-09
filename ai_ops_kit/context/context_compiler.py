@@ -237,7 +237,7 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None):
         except OSError:
             pass
 
-    return {
+    bundle = {
         "schema_version": 1, "kind": "ContextBundle",
         "workitem_id": wid, "base_workflow": base_wf,
         "revision": _git_head(child_root),
@@ -259,6 +259,29 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None):
         "context_budget": budget,
         "overflow": overflow,
     }
+    _warn_if_bundle_malformed(bundle)
+    return bundle
+
+
+def _warn_if_bundle_malformed(bundle):
+    """#678: провести вердикт формы ContextBundle в детерминированный генератор (validate-and-warn).
+
+    compile_bundle ОБЯЗАН давать валидный ContextBundle; нарушение — баг генератора, о котором нельзя
+    молчать: этот bundle становится payload для модели. WARN, а НЕ блок: компиляция контекста не
+    срывается. Логика check() лежит в слое `checks` (primitives), импорт идёт ВНИЗ (context -> checks),
+    без восходящего ребра context -> validation (v3.38-приём). Guard на ImportError оборонительный."""
+    try:
+        from ai_ops_kit.checks.context_bundle import check
+    except ImportError:
+        return
+    errs = check(bundle)
+    if errs:
+        import warnings
+        warnings.warn(
+            "ContextBundle собран с нарушением формы (" + "; ".join(errs)
+            + ") — контекст модели может быть неполным/нечестным",
+            RuntimeWarning, stacklevel=3,
+        )
 
 
 def _git_head(root):
