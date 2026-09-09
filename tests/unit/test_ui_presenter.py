@@ -541,3 +541,21 @@ def test_preview_says_when_ready_for_a_dry_preview():
                      audience="product")
     assert "запускай, когда готов" in body, body
     assert "запускаю сейчас" not in body, body
+
+
+# ── #708: расход сессии человеку — без внутреннего тега состояния ──────────────────────────────
+
+def test_session_spend_hides_state_tag_on_product():
+    """session_spend несёт тег состояния («… [over_budget]») для деталей; человеку на product текст
+    показывает число без жаргонного тега, а в debug тег остаётся (ничего не потеряно)."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+    snap = {"context_current": 50000, "context_status": "measured",
+            "session_total_tokens": 266000000, "session_id": "s1"}
+    rec = {"outcome": "new_session", "session_spend": "266.0M из 20.0M [over_budget]",
+           "spend_state": "over_budget", "context_state": "ok", "command": "claude",
+           "handoff": "записан"}
+    msg = pf.from_session_economy(snap, rec)
+    body = PR.render(msg, audience="product")
+    assert "266.0M из 20.0M" in body, body
+    assert "[over_budget]" not in body, "внутренний тег состояния утёк в текст человеку: " + body
+    assert "[over_budget]" in PR.render(msg, audience="debug"), "тег потерян в деталях"
