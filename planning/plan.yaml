@@ -1047,20 +1047,6 @@ work:
       строк прозы. Объяснение «почему правило такое» сохранить ОБЯЗАТЕЛЬНО (защита от вредной правки).
       Готово, когда хронология («v3.28.0 R16»…) переехала в реестр решений, в конфиге — инвариант и граница.
 
-  - id: commit-contract-runs-in-ci
-    title: commit-contract.sh гоняется по диапазону коммитов PR, а не только в локальном хуке
-    type: engineering
-    goal: checks-that-run
-    status: todo
-    owner_role: engineer
-    value: low
-    write_scope: [.github/, scripts/]
-    reason: >-
-      commit-contract.sh (охват коммита, заглушки, секреты, ссылка на WorkItem) работает только у
-      того, кто сделал pre-commit install; в CI зеркалированы лишь cz check и towncrier. Для правила
-      «половина проверки хуже отсутствующей» это та половина — и на КОМАНДНЫХ PR тоже. Готово, когда
-      джоба гоняет скрипт по коммитам PR.
-
   - id: formatter-adopted-with-blame-ignore
     title: ruff format одним коммитом + .git-blame-ignore-revs + хук и шаг в CI
     type: engineering

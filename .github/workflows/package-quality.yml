@@ -177,6 +177,28 @@ jobs:
             echo "::error::формат сообщений коммитов нарушен (код $rc)"
             exit 1
           fi
+      # CommitContract по коммитам PR (F-13). До этого контракт (commit_policy: охват коммита,
+      # заглушки, секреты, ссылка на WorkItem) жил ТОЛЬКО в локальном хуке commit-msg — внешний PR
+      # его не проходил, а в CI зеркалились лишь cz check и towncrier. «Половина проверки хуже
+      # отсутствующей» — вот та половина. Здесь контракт гоняется по каждому коммиту диапазона PR.
+      # Сегодня enforce=advise: rc красит ТОЛЬКО настоящие нарушения (секреты/заглушки); broad_scope
+      # и no_workitem печатаются советом. SKIP_CLAIMS=1 — реестра заявок машины в CI нет.
+      - if: ${{ github.event_name == 'pull_request' }}
+        run: pip install 'pyyaml==6.*'
+      - name: "CommitContract по коммитам PR (охват + осмысленность сообщения; advise)"
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          COMMIT_CONTRACT_SKIP_CLAIMS: "1"
+        run: |
+          rc=0
+          for sha in $(git rev-list "${{ github.event.pull_request.base.sha }}..HEAD"); do
+            msg=$(mktemp); git log -1 --format=%B "$sha" > "$msg"
+            files=$(git diff-tree --no-commit-id --name-only -r "$sha" | tr '\n' ' ')
+            [ -z "$files" ] && continue
+            COMMIT_CONTRACT_FILES="$files" scripts/commit-contract.sh "$msg" || rc=$?
+          done
+          if [ "$rc" -ne 0 ]; then echo "::error::CommitContract нашёл нарушение в коммите PR"; exit 1; fi
+          echo "CommitContract: коммиты PR проверены (советы, если были, — выше)"
 
   # Lane A2: кит гоняет собственный security-scan против диффа PR.
   # Только на PR (не push в main): `--base origin/main` требует наличия базы для сравнения.
