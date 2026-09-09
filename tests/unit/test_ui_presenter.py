@@ -498,3 +498,18 @@ def test_intake_gap_asks_in_human_words_not_raw_json():
     # без готовой строки — просто человеческая просьба, без обломанного JSON
     msg2 = pf.from_intake_gap([{"signal": "size"}], hint_command=None)
     assert "--signals" not in " ".join(msg2["next"])
+
+
+# ── #702-work: путь «есть понимание → есть работа» называет КОМАНДЫ, а не «скажи мне» ──────────
+
+def test_bootstrap_preview_names_the_apply_command():
+    """Второй живой проход (фаза работы): `bootstrap` рекомендовал создать план, но команду
+    `--apply` не называл — человек не знал, как сказать «согласен», и застревал. Теперь превью
+    ведёт действием: создать план — `./ai-ops bootstrap --apply`."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+
+    rep = {"will_write": ["planning/plan.yaml"],
+           "work_items": [{"title": "Описать: Engineering"}], "actions": []}
+    body = PR.render(pf.from_bootstrap(rep, applied=False), audience="product")
+    assert "bootstrap --apply" in body, "сухой прогон не назвал команду создать план"
+

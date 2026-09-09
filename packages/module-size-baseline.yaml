@@ -26,7 +26,7 @@ ceilings:
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1116
-  ai_ops_kit/ui/presenter_formatters.py: 1067
+  ai_ops_kit/ui/presenter_formatters.py: 1070
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 721
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 938
@@ -39,6 +39,17 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 1067'
+    to: 'presenter_formatters.py = 1070'
+    work: 'humanize bootstrap: сухой прогон называет команду создать план (--apply)'
+    why: >-
+      Второй живой проход человеком (фаза РАБОТЫ, не первые минуты): `bootstrap` РЕКОМЕНДОВАЛ создать
+      план, но команду `--apply` не называл — человек не знал, как сказать «согласен», и застревал в
+      петле (model -> bootstrap-превью -> next «плана нет» -> bootstrap-превью). Теперь «Дальше:»
+      ведёт действием «создать план: ./ai-ops bootstrap --apply» первым шагом. +3 строки — текст
+      next_steps, не логика; механика не менялась. Ратчет держит вниз.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'ai_ops_cli.py = 1207; ai_ops_cli_intents.py = 1942'

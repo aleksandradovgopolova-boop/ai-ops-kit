@@ -859,7 +859,10 @@ def from_bootstrap(rep: dict, applied=False) -> dict:
                   "recommendation": "создать — существующие файлы я не перезаписываю",
                   "on_approve": "создам и сразу скажу, какую работу брать первой",
                   "on_reject": "ничего не пишу; понимание проекта останется, плана не будет"},
-        next_steps=[f"первой пойдёт «{items[0]['title']}»"] if items else None,
+        # #702-work: сухой прогон РЕКОМЕНДУЕТ создать, но команду не называл — человек не знал, как
+        # сказать «согласен» (магическое слово `--apply`) и застревал. Действие идёт первым шагом.
+        next_steps=(["создать план: ./ai-ops bootstrap --apply"]
+                    + ([f"первой пойдёт «{items[0]['title']}»"] if items else [])),
         technical={a["path"]: a["why"] for a in (rep.get("actions") or [])})
 
 
