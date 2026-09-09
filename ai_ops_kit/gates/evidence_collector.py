@@ -18,16 +18,13 @@ v3.26.0 Progressive Verification: поддержка changed_files для target
   - исполнение идёт исключительно через tool_broker.execute (policy.decide первым): деструктивные
     команды в профиле будут отклонены Policy, а не выполнены.
 
-Использование:
-  evidence_collector.py collect [root] [--policy-level execution] [--changed file1 file2] [--json]
-      -> детектит профиль, гоняет команды, печатает {collection, gate_evidence}
-  evidence_collector.py --selftest
+Библиотечный модуль: `collect()` принимает broker ПАРАМЕТРОМ (DI). CLI-обёртка, которая строит
+broker (`engine.tool_broker`) и печатает результат, вынесена в точку входа
+`ai_ops_kit/devtools/evidence_collect_cli.py` (K1, F-03): гейт не зависит от engine ни статически,
+ни динамически.
 """
 from __future__ import annotations
 
-import argparse
-import json
-import sys
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
@@ -228,30 +225,5 @@ def collect(profile, root, policy, changed_files=None, broker=None):
     }
 
 
-def main(argv):
-    ap = argparse.ArgumentParser(prog="evidence_collector.py")
-    sub = ap.add_subparsers(dest="cmd", required=True)
-    c = sub.add_parser("collect")
-    c.add_argument("root", nargs="?", default=".")
-    c.add_argument("--policy-level", default="execution")
-    c.add_argument("--changed", nargs="*", default=None, help="v3.26.0: changed files for progressive verification")
-    c.add_argument("--json", action="store_true")
-    a = ap.parse_args(argv)
-    if a.cmd == "collect":
-        # v3.38 (K1): broker загружается динамически — gates не импортирует engine статически.
-        # CLI-точка входа — процесс, не импорт; __import__ не ловится validate_layering.
-        _tb = __import__("ai_ops_kit.engine.tool_broker", fromlist=["Policy", "execute", "_revision"])
-        profile = project_detector.detect(a.root)
-        policy = _tb.Policy(level=a.policy_level)
-        r = collect(profile, a.root, policy, changed_files=a.changed, broker=_tb)
-        if a.json:
-            print(json.dumps(r, ensure_ascii=False, indent=2))
-        else:
-            import yaml
-            print(yaml.safe_dump(r, allow_unicode=True, sort_keys=False))
-        return 0
-    return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))
+# CLI-обёртка (argparse + построение broker + печать) вынесена в
+# ai_ops_kit/devtools/evidence_collect_cli.py — см. докстринг модуля (K1, F-03).

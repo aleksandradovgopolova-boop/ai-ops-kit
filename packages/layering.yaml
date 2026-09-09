@@ -169,19 +169,18 @@ known_violations:
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 5          # ЧЕСТНОЕ ЧИСЛО (F-03, аудит 2026-09-09). Здесь стоял 0 с подписью «кольцо
-                           # стало DAG» — и это было неправдой: пять взаимных пар внутри capabilities
-                           # никуда не делись, их СПРЯТАЛИ от анализатора, загрузив engine-модули через
-                           # __import__. Строка K5 в прежней подписи сама это признавала («workitem/
-                           # active_work загружают engine-модули через __import__»). validate_layering
-                           # видел только ast.Import/ImportFrom и печатал 0. Теперь он считает и
-                           # __import__/import_module со строковым литералом — и показывает пять пар:
-                           #   context<->engine, delivery<->engine, engine<->gates,
-                           #   engops<->gates, engine<->lifecycle.
-                           # K1..K5 «СНЯТА» из прежней подписи — не развязка, а сокрытие ребра; отменено.
-                           # Пара engine<->gates держится ровно одним ребром: evidence_collector.main
-                           # (CLI-вход) грузит engine.tool_broker; библиотечный путь развязан через DI —
-                           # поэтому K1 первый кандидат на полное снятие/исключение.
+  mutual_pairs: 4          # ЧЕСТНОЕ ЧИСЛО. F-03 (аудит 2026-09-09) вскрыл 5 пар, спрятанных за
+                           # __import__ (validate_layering видел только ast.Import/ImportFrom и печатал
+                           # 0 с ложной подписью «кольцо стало DAG»). Теперь гейт считает и динамику,
+                           # и одна пара РАЗВЯЗАНА ПО-НАСТОЯЩЕМУ (2026-09-10):
+                           #   K1 engine<->gates СНЯТА: CLI-обёртка evidence_collector (строила broker
+                           #   через __import__ engine) вынесена в ai_ops_kit/devtools/evidence_collect_cli.py
+                           #   — devtools это entrypoints, ему engine импортить можно; библиотечный
+                           #   collect() давно принимает broker параметром. Гейт больше не зависит от
+                           #   engine ни статически, ни динамически. Это НЕ сокрытие (как прежнее
+                           #   «K1 снята» через __import__), а перенос проводки в точку входа. 5 -> 4.
+                           # Остаются четыре взаимные пары внутри capabilities:
+                           #   context<->engine, delivery<->engine, engops<->gates, engine<->lifecycle.
                            #
                            # ЧТО БЫЛО РАЗВЯЗАНО ПО-НАСТОЯЩЕМУ (переезды в foundation, 2026-08-12) — это
                            # сняло ПЕРЕСЕКАВШИЕ СЛОИ пары, а не эти пять внутри capabilities:
@@ -193,19 +192,21 @@ baseline:
                            # в foundation. Настоящая развязка этих пяти — отдельная работа (напр.
                            # `ai_route` (317) ни от кого не зависит; но пару снимает не переезд, а
                            # решение «кто классифицирует» — workitem не должен звать роутер сам).
-  cycles_longer_than_two: 9    # ЧЕСТНОЕ ЧИСЛО (F-03). Стоял 0 «кольцо стало DAG» — той же слепотой:
-                               # циклы через __import__-рёбра (evidence_collector, review_branch,
-                               # context_compiler, active_work, workitem, deploy_readiness) анализатор
-                               # не видел. Сняв слепоту, видим 9 элементарных циклов длиннее двух.
+  cycles_longer_than_two: 5    # ЧЕСТНОЕ ЧИСЛО. F-03 вскрыл 9 циклов, спрятанных за __import__; снятие
+                               # пары K1 (engine<->gates, CLI evidence_collector в devtools) убрало
+                               # циклы через это ребро: 9 -> 5. Стоял 0 «кольцо стало DAG» — слепота
+                               # анализатора к динамике; validation больше не в циклах ядра.
                                # Настоящие развязки ПЕРЕСЕКАВШИХ слои циклов остаются в силе:
                                # security<->validation (лента №4), engine/providers/lifecycle->validation
                                # (лента №5) — validation больше не участвует ни в одном цикле ядра.
                                # Разбор оставшихся внутрикольцевых циклов — отдельными срезами.
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
-    Пять взаимных пар лежат ВНУТРИ слоя capabilities (context<->engine, delivery<->engine,
-    engine<->gates, engops<->gates, engine<->lifecycle), правилами слоёв не запрещены (осознанная
-    граница) и теперь ЧЕСТНО СОСЧИТАНЫ — до F-03 они были спрятаны за __import__ и показывались нулём.
+    Четыре взаимные пары лежат ВНУТРИ слоя capabilities (context<->engine, delivery<->engine,
+    engops<->gates, engine<->lifecycle), правилами слоёв не запрещены (осознанная граница) и честно
+    сосчитаны. Пятая, engine<->gates (K1), РАЗВЯЗАНА ПО-НАСТОЯЩЕМУ (2026-09-10): CLI-проводку engine
+    вынесли из гейта в точку входа devtools, а не спрятали за __import__. До F-03 все пять
+    показывались нулём.
     Пары, ПЕРЕСЕКАВШИЕ слои, сняты по-настоящему: security<->validation (лента №4) и
     engine<->validation (лента №5) — чистую логику валидаторов вынесли вниз в `checks`, а рантайм
     перестал тянуть `validation` (entrypoints) вверх. Разбор этих пяти внутрикольцевых пар — отдельными
