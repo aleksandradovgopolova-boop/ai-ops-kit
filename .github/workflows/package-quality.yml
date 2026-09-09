@@ -59,15 +59,15 @@ jobs:
     env:
       AI_OPS_DIFF_BASE: ${{ github.event.pull_request.base.sha || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # история нужна eval-гейту для diff изменённых агентов
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest pytest-xdist hypothesis
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -85,9 +85,9 @@ jobs:
     steps:
       # fetch-depth: 0 — не украшение: `towncrier check --compare-with origin/main` сравнивает
       # ветку с базой, и на shallow-клоне базы просто нет (гейт молча не нашёл бы diff).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       # ВЕРСИЯ ПИНУЕТСЯ, и это замер, а не аккуратность. Здесь стояло `pip install ruff`
       # (то есть последний), а `.pre-commit-config.yaml` пинит v0.8.0 — два РАЗНЫХ линтера.
@@ -186,9 +186,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужна история для git diff против origin/main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "Security scan: секреты, зависимости, injection-surface"
@@ -204,9 +204,9 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужен origin/main как база превью слияния
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "Advisory: footprint доставляемого итога слияния (merge-preview ∩ managed_set)"
@@ -233,8 +233,8 @@ jobs:
     # required-contexts). Совместимость с 3.13 доказывает `pipeline-e2e (3.13)` — полный прогон
     # набора на 3.13; механика чистой установки (копирование файлов) версие-независима.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml          # РОВНО рантайм-зависимость, ничего сверх
       - name: "Установка в чистый репозиторий без кита рядом"
@@ -253,9 +253,9 @@ jobs:
     # `upgrade-path (3.12)` осиротило бы required-контекст `upgrade-path` в branch protection.
     # 3.13 покрывает `pipeline-e2e (3.13)`; механика обновления версие-независима.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}          # нужны ТЕГИ: обновляемся с предыдущего выпуска
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml         # РОВНО рантайм-зависимость, как у пользователя
       - name: "Обновление предыдущий выпуск -> рабочее дерево"
@@ -272,14 +272,14 @@ jobs:
         # на раннерах (у кита на ней локально OOM в xdist), арбитр совместимости — этот CI.
         python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "${{ matrix.python-version }}"}
       # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest pytest-xdist hypothesis
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
