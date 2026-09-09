@@ -10,7 +10,7 @@ scope: "ai-ops-kit: конкурентный ландшафт + стратеги
 candidates:
   - {name: Open SWE, url: "https://github.com/langchain-ai/open-swe", claim: "асинхронный coding agent (Slack/Linear/GitHub -> sandbox -> draft PR), MIT; validation prompt-driven; главный продуктовый референс/конкурент", category: product-analog, priority: high}
   - {name: OpenHands, url: "https://github.com/OpenHands/OpenHands", claim: "agent runtime: SDK/CLI/GUI/REST, benchmark-инфраструктура; ядро MIT, enterprise source-available; кандидат в execution backend", category: runtime-reference, priority: high}
-  - {name: SWE-agent + mini-SWE-agent, url: "https://github.com/SWE-agent/SWE-agent", claim: "研究-ориентированный агент под SWE-Bench; сами рекомендуют mini-версию; референс qualification/Bench", category: eval-reference}
+  - {name: SWE-agent + mini-SWE-agent, url: "https://github.com/SWE-agent/SWE-agent", claim: "исследовательский агент под SWE-Bench; сами рекомендуют mini-версию; референс qualification/Bench", category: eval-reference}
   - {name: SWE-ReX, url: "https://github.com/SWE-agent/SWE-ReX", claim: "единый интерфейс к sandboxed shell environments (локально/облако, параллельно), MIT; кандидат в runtime adapter Tool Broker'а", category: sandbox-reference, priority: high}
   - {name: Continue, url: "https://github.com/continuedev/continue", claim: "пивот в source-controlled AI checks (.continue/checks/*.md, статусы на PR), Apache-2.0; референс 'gates as code' и простоты DX", category: gates-reference, priority: high}
   - {name: Cline, url: "https://github.com/cline/cline", claim: "IDE/CLI/SDK агент; Kanban-режим: worktrees, auto-commit, dependency chains; Apache-2.0; UX-референс WorkItems", category: ux-reference}
