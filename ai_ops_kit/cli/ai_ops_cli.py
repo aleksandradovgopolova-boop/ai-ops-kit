@@ -1013,9 +1013,16 @@ def main(argv):
     _understood_type = (pv.get("understood") or {}).get("task_type")
     if _understood_type and not signals.get("task_type"):
         signals["task_type"] = _understood_type
+    # #702: если do/run --execute сейчас упрётся в недостающие intake-сигналы, НЕ показываем превью
+    # «вот что я сделаю / запускай когда готов» — оно противоречит следующему сообщению «данных не
+    # хватает». Пусть говорит одно: чего не хватает (это скажет intake-gap в _main_run_execute).
+    _blocked_on_intake = False
+    if (intent == "run" and a.execute) or intent == "do":
+        from ai_ops_kit.engine import pipeline_helpers as _ph
+        _blocked_on_intake = bool(_ph.missing_intake_signals(signals))
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
-    else:
+    elif not _blocked_on_intake:
         # Смысл — всегда; внутренний разбор превью (стадии, флаги, бюджет) — на technical/debug,
         # как у `next` и `model`. Разбор не выброшен: без него не отладить неверный подбор режима.
         _say(Path(child_root), "from_execution_preview", pv)

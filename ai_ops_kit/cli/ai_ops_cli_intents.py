@@ -330,21 +330,26 @@ def _intent_model(task, child_root, signals, a):
         if aud != "product":
             print()
             print(repo_audit.render(rep))
-        for q in rep["ask"]["questions"]:
+        qs = rep["ask"]["questions"]
+        if qs:
+            print("\n  ⚠ — ответить сейчас; · — можно позже. В [скобках] — id для ответа командой.")
+        for q in qs:
             mark = "⚠" if q["blocks_work"] else "·"
-            print(f"  {mark} {q['ask']}")
+            print(f"  {mark} [{q['id']}] {q['ask']}")
             if q["proposal"]:
                 print(f"      предполагаю: {q['proposal']['value']} — подтвердить?")
         # ВОПРОСАМ НУЖНО МЕСТО. Прежде кит печатал их и завершался: куда отвечать — не сказано,
-        # интерактива нет, человек в тупике на главном шаге первого сценария.
+        # интерактива нет, человек в тупике на главном шаге первого сценария. И проще всего —
+        # по одному, командой, а не правкой YAML-файла руками (её оставляем как альтернативу).
         if answers_file:
             try:
                 shown = answers_file.relative_to(Path(child_root))
             except ValueError:
                 shown = answers_file
-            print(f"\n  Ответы впишите здесь: {shown}")
-            print("  Потом запустите снова: ./ai-ops model — ответы станут подтверждёнными "
-                  "фактами и больше не будут переспрашиваться.")
+            print("\n  Ответить проще всего по одному, не открывая файл:")
+            print('    ./ai-ops model --answer <id> "твой ответ"   (id — из [скобок] выше)')
+            print(f"  Или впиши все ответы сразу в {shown} и запусти снова: ./ai-ops model —")
+            print("  ответы станут подтверждёнными фактами и больше не будут переспрашиваться.")
     return 0
 
 

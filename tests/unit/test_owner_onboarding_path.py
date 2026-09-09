@@ -124,6 +124,11 @@ def test_onboarding_path(child):
         "команда создала файл и не сказала где — владелец найдёт его в `git status` как незнакомый")
     asked_before = _questions_asked(first.stdout)
     assert asked_before > 0, f"не названо число вопросов:\n{first.stdout[-400:]}"
+    # #702: форма читается человеком — легенда значков, id вопроса в [скобках] и ЛЁГКИЙ путь ответа
+    # командой (а не только «правьте YAML руками»), иначе новичок застревает на главном шаге.
+    assert "ответить сейчас" in first.stdout and "можно позже" in first.stdout, "нет легенды ⚠/·"
+    assert "--answer" in first.stdout, "не предложен лёгкий путь ответа командой (только правка YAML)"
+    assert re.search(r"\[[a-z_]+\]", first.stdout), "не показан id вопроса для --answer"
 
     # ── шаг 2: владелец отвечает ────────────────────────────────────────────────────────────────
     text = (child / ANSWERS).read_text(encoding="utf-8")
@@ -223,3 +228,13 @@ def test_model_flow_writes_answer_form_as_superset(tmp_path, monkeypatch, capsys
     # Путь имени файла попадает в JSON-вывод первого часа — видно, куда отвечать.
     out = json.loads(capsys.readouterr().out)
     assert out.get("answers_file", "").endswith("onboarding-answers.yaml")
+
+
+def test_do_without_signals_gives_one_clear_message_not_a_contradiction(child):
+    """#702: `do` без масштаба/риска не печатает превью «вот что я сделаю / запускай, когда готов»
+    И СРАЗУ «данных не хватает» — это противоречие, на котором новичок теряется. Одна ясная реплика:
+    чего именно не хватает (intake-gap), без ложного обещания запуска."""
+    out = _ai_ops(child, "do", "добавить подсчёт строк").stdout
+    assert "не хватает" in out, f"intake-gap не прозвучал:\n{out[-400:]}"
+    assert "запускай, когда готов" not in out, "превью обещает запуск, хотя данных не хватает"
+    assert "Вот что я сделаю" not in out, "показано превью поверх «данных не хватает» — противоречие"
