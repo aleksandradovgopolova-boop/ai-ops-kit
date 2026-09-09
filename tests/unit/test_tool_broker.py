@@ -449,3 +449,66 @@ class TestP0SelfHostEngineProtected:
         policy = tool_broker.Policy(level="controlled-write",
                                     write_scope=["ai_ops_kit/"], child_root=str(child))
         assert policy.decide({"op": "write", "path": "ai_ops_kit/x.py"})["allow"] is True
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestSymlinkTargetContainment:
+    """R-42: симлинк внутри корня не должен обходить protected_paths/write_scope.
+
+    decide() судит НАПИСАННЫЙ путь, но write_text РАЗЫМЕНОВЫВАЕТ симлинк. Симлинк, чья цель не
+    покидает корень (`src/out -> migrations/destructive`), проходил _within_root (та стережёт только
+    ПОБЕГ за корень) и переписывал protected-цель мимо политики. Замер — по СОДЕРЖИМОМУ на диске
+    (не по вердикту): контроль доказывает, что проба дошла до места.
+    """
+
+    def _repo(self, tmp_path):
+        (tmp_path / "migrations" / "destructive").mkdir(parents=True)
+        victim = tmp_path / "migrations" / "destructive" / "drop_users.sql"
+        victim.write_text("SAFE-ORIGINAL", encoding="utf-8")
+        (tmp_path / "src").mkdir()
+        pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                 child_root=str(tmp_path))
+        return victim, pol
+
+    def test_dir_symlink_to_protected_is_denied_and_file_intact(self, tmp_path):
+        import os
+        victim, pol = self._repo(tmp_path)
+        os.symlink("../migrations/destructive", tmp_path / "src" / "out")   # каталог-симлинк в корне
+        ev = tool_broker.execute({"op": "write", "path": "src/out/drop_users.sql",
+                                  "content": "PWNED"}, tmp_path, pol)
+        assert ev["allowed"] is False, ev
+        assert "symlink-target-guard" in ev["reason"], ev
+        assert victim.read_text(encoding="utf-8") == "SAFE-ORIGINAL", "protected-файл перезаписан через симлинк"
+
+    def test_file_symlink_to_protected_is_denied_and_file_intact(self, tmp_path):
+        import os
+        victim, pol = self._repo(tmp_path)
+        os.symlink("../migrations/destructive/drop_users.sql", tmp_path / "src" / "alias.sql")
+        ev = tool_broker.execute({"op": "write", "path": "src/alias.sql", "content": "PWNED"},
+                                 tmp_path, pol)
+        assert ev["allowed"] is False, ev
+        assert victim.read_text(encoding="utf-8") == "SAFE-ORIGINAL"
+
+    def test_symlink_escaping_root_is_contained(self, tmp_path):
+        import os
+        outside = tmp_path.parent / "outside-target.sql"
+        outside.write_text("OUTSIDE", encoding="utf-8")
+        (tmp_path / "src").mkdir()
+        os.symlink(str(outside), tmp_path / "src" / "escape.sql")   # цель ЗА корнем
+        pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                 child_root=str(tmp_path))
+        ev = tool_broker.execute({"op": "write", "path": "src/escape.sql", "content": "PWNED"},
+                                 tmp_path, pol)
+        assert ev["allowed"] is False, ev
+        assert outside.read_text(encoding="utf-8") == "OUTSIDE"
+
+    def test_legit_write_in_scope_still_allowed(self, tmp_path):
+        """Изоляция слоя: страж цели НЕ рубит обычную запись без симлинка (не fail-closed)."""
+        (tmp_path / "src").mkdir()
+        pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                 child_root=str(tmp_path))
+        ev = tool_broker.execute({"op": "write", "path": "src/legit.py", "content": "x = 1"},
+                                 tmp_path, pol)
+        assert ev["allowed"] is True and ev["ok"] is True, ev
+        assert (tmp_path / "src" / "legit.py").read_text(encoding="utf-8") == "x = 1"

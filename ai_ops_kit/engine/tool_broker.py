@@ -185,7 +185,10 @@ def _canon_rel(rel: str) -> str:
 
     ЧЕСТНО про границы: нормализация ЛЕКСИЧЕСКАЯ. Регистр она не трогает — им заведует
     `_under(ignore_case=...)`, потому что для запрета и для разрешения ответ РАЗНЫЙ (см. ниже).
-    Симлинки — тоже не сюда: их ловит физическая проверка `_within_root` в execute()."""
+    Симлинки сюда НЕ входят и `_within_root` их НЕ ловит (R-42): та проверяет лишь ПОБЕГ за корень,
+    поэтому симлинк, чья цель остаётся ВНУТРИ корня (`src/out -> migrations/destructive`), проходил
+    и переписывал protected-цель. Их ловит отдельный symlink-target-guard в execute(): он судит
+    РАЗЫМЕНОВАННУЮ цель записи по deny-стороне (protected + побег), не трогая write_scope."""
     p = (rel or "").strip().strip("/")
     if not p:
         return ""
@@ -678,6 +681,26 @@ def execute(action: dict, root, policy: Policy) -> dict:
             ev["allowed"] = False
             ev["reason"] = "traversal-guard: путь вне корня"
             return ev
+        # R-42 (novelty-Watch): decide() судит НАПИСАННЫЙ путь, но write_text РАЗЫМЕНОВЫВАЕТ симлинк.
+        # Симлинк, чья цель не покидает корень (`src/out -> migrations/destructive`), проходил
+        # _within_root (тот стережёт только ПОБЕГ за корень) и переписывал protected-цель мимо
+        # protected_paths/write_scope. Судим ЦЕЛЬ по DENY-стороне (protected + побег через симлинк);
+        # write_scope остаётся на НАПИСАННОМ пути — симметрия R-37: судить цель на allow-стороне
+        # сделало бы write_scope fail-open (`вне-зоны -> src` прошёл бы как «в зоне»).
+        if op == "write":
+            _resolved = (root / action["path"]).resolve()
+            try:
+                _tgt_rel = _resolved.relative_to(root.resolve()).as_posix()
+            except ValueError:
+                ev.update({"ok": False, "error": "цель симлинка вне корня (containment)",
+                           "allowed": False, "reason": "symlink-target-guard: цель вне корня"})
+                return ev
+            if _tgt_rel != action["path"]:
+                _why = policy.path_violation(_tgt_rel, check_scope=False)
+                if _why:
+                    ev.update({"ok": False, "error": f"симлинк ведёт в '{_tgt_rel}': {_why}",
+                               "allowed": False, "reason": f"symlink-target-guard: {_why}"})
+                    return ev
         if op == "read":
             p = root / action["path"]
             text = p.read_text(encoding="utf-8", errors="ignore") if p.exists() else ""

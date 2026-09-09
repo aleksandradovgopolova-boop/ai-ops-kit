@@ -34,11 +34,23 @@ ceilings:
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 772
   ai_ops_kit/gates/gate_executor.py: 905
-  ai_ops_kit/engine/tool_broker.py: 762
+  ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'tool_broker.py = 762'
+    to: 'tool_broker.py = 785'
+    work: 'R-42 fix: симлинк-target-guard в execute() (P0 security)'
+    why: >-
+      Находка novelty-Watch R-42 (P0): симлинк внутри корня (`src/out -> migrations/destructive`)
+      обходил protected_paths И write_scope — decide() судил НАПИСАННЫЙ путь, а write_text
+      разыменовывал симлинк; _within_root стерёг только побег ЗА корень. Добавлен symlink-target-guard
+      в execute(): судит РАЗЫМЕНОВАННУЮ цель записи по deny-стороне (protected + побег), оставив
+      write_scope на написанном пути (симметрия R-37, иначе write_scope=fail-open). Замер пробой по
+      содержимому на диске: 3 вектора симлинка → deny+файл цел, легитимная запись → allow.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'presenter_formatters.py = 1074'
