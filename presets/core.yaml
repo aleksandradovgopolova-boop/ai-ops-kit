@@ -5,7 +5,6 @@ id: core
 description: Обязательное ядро (устанавливается всегда).
 agents:
 - context-builder
-- development-orchestrator
 - documentation-steward
 - final-verifier
 - implementation-integrator

@@ -4,7 +4,6 @@ agent_groups:
   core:
     - context-builder
     - task-planner
-    - development-orchestrator
     - implementation-integrator
     - final-verifier
   product:

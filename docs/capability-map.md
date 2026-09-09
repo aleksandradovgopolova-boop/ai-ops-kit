@@ -27,7 +27,7 @@ README ссылаются на неё, а не дублируют список �
 | Quality gates — всего | 35 |
 | — из них enforced (blocking) | 21 |
 | — из них advisory (partial) | 14 |
-| Роли в реестре | 43 |
+| Роли в реестре | 42 |
 | **built≠wired модулей** | **1** |
 | planned / unsupported | 4 |
 
@@ -126,11 +126,11 @@ README ссылаются на неё, а не дублируют список �
 
 ## Роли
 
-43 ролей объявлено в `registry/agents.yaml` (контракты владения и ревью). По домену:
+42 ролей объявлено в `registry/agents.yaml` (контракты владения и ревью). По домену:
 
 | Домен | Роли |
 |---|---|
-| core | context-builder, development-orchestrator, final-verifier, implementation-integrator, intake-classifier, plan-reviewer, requirements-writer, task-planner |
+| core | context-builder, final-verifier, implementation-integrator, intake-classifier, plan-reviewer, requirements-writer, task-planner |
 | delivery | documentation-steward, incident-analyst, observability-engineer, release-manager |
 | engineering | ai-feature-engineer, data-engineer, devops-engineer, fullstack-developer, llm-architect, solution-architect |
 | meta | agent-creator, repository-memory-curator, workflow-designer |

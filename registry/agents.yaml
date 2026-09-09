@@ -7,7 +7,7 @@ contract_version: 1
 generated_note: Bootstrap-реестр из фактических файлов agents/ (тела не менялись). layer/action/target
   — план миграции (component-classification).
 counts:
-  agents: 43
+  agents: 42
 agents:
 - schema_version: 1
   id: context-builder
@@ -28,25 +28,6 @@ agents:
   action: merge
   migration_phase: 2
   migration_note: поглощает repository-explorer (Ф2)
-- schema_version: 1
-  id: development-orchestrator
-  version: 2.0.0
-  contract_version: 1
-  entity_type: agent
-  layer: core
-  preset: null
-  file: agents/core/development-orchestrator.md
-  domain: core
-  purpose: Координирует выполнение утверждённого плана, распределяет work packages, следит за зависимостями,
-    quality gates и состоянием задачи. Не подменяет аналитика, архитектора или разработчика
-  review_mode: writer
-  vendor_neutral: true
-  source_version: '2.0'
-  target_layer: core
-  target_preset: null
-  action: adapt
-  migration_phase: 2
-  migration_note: EXECUTION orchestrator (Ф2)
 - schema_version: 1
   id: final-verifier
   version: 2.0.0
@@ -84,7 +65,7 @@ agents:
   target_preset: null
   action: adapt
   migration_phase: 2
-  migration_note: integration owner (Ф2)
+  migration_note: 'integration owner; поглощает development-orchestrator (инертен — оркестрацию стадий делает generic-orchestrator движка) (#679)'
 - schema_version: 1
   id: intake-classifier
   version: 0.1.0
