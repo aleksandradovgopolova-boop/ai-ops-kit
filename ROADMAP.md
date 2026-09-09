@@ -87,12 +87,17 @@ owner: product-team
   агент проходит ослабленный набор, дефекты всплывают на CI, а не внутри прогона (#468).
 
 - `storybook-as-visual-contract` — UI-задача проектируется, согласуется и проверяется через
-  Storybook. Сторона evidence уже построена (`ui/storybook_adapter.py` собирает UIEvidenceBundle,
-  `validate_storybook_evidence.py` не даёт выдать «нет данных» за «чисто»); сторона СОЗДАНИЯ начата:
-  обязательные stories теперь выводятся из Experience Contract кодом (`required_story_specs`/
-  `required_stories_coverage`, #452 слит), краснея при пропуске контрактной story. Оговорка: покрыто
-  на синтетическом контракте, не на реальном markdown-контракте, и механизм не в обязательном гейте.
-  Остаётся: варианты опыта с trade-offs вместо одного «правильного» макета (#416). Гейты advisory.
+  Storybook. Сторона evidence построена и проведена в контур (`ui/storybook_adapter.py` собирает
+  UIEvidenceBundle, `validate_storybook_evidence.py` не даёт выдать «нет данных» за «чисто»); сторона
+  СОЗДАНИЯ построена И теперь ВПЛЕТЕНА в гейт: обязательные stories выводятся из Experience Contract
+  кодом (`required_story_specs`/`required_stories_coverage`, #452), и с 09.09 `required_stories`
+  входит в UIEvidenceBundle и в `evidence_for_gate` — объявленного контрактом опыта нет в собранном
+  Storybook → `ux_review` краснеет ДЕТЕРМИНИРОВАННО (built≠wired закрыт). Варианты опыта с trade-offs
+  (`generate_design_options`, #416) построены и проведены в engineering_advisor; исход держится честно
+  недоказанным на живом прогоне. Остаётся (упирается во внешнее, не в код кита): прогон на РЕАЛЬНОМ
+  markdown-контракте, переведённом в YAML, и живой e2e — нужен собранный Storybook-индекс дочки
+  (`ai-ops-cockpit`), которого в этом дереве нет; сделать субъективную часть blocking сверх advisory —
+  решение владельца об enforcement-политике (дизайн-гейты advisory «сначала полевые доказательства»).
 
 - `uiux-standard-as-product` — дочерний репозиторий получает единый ПРОВЕРЯЕМЫЙ UI/UX-стандарт, а не
   тонкий набор чек-листов: правила со стабильными ID (`UI-`/`AI-`/`UI-FORBIDDEN-`), токены-контракт,
