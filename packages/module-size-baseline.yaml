@@ -19,14 +19,14 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1214
+  ai_ops_kit/cli/ai_ops_cli.py: 1222
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1947
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1135
-  ai_ops_kit/ui/presenter_formatters.py: 1070
+  ai_ops_kit/ui/presenter_formatters.py: 1074
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
@@ -39,6 +39,18 @@ ceilings:
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1214; presenter_formatters.py = 1070'
+    to: 'ai_ops_cli.py = 1222; presenter_formatters.py = 1074'
+    work: 'humanize превью do/run (#708): «запускаю сейчас» вместо «запускай, когда готов»'
+    why: >-
+      Карта трения #708 (пункт 2): `do`/`run --execute` печатали превью с «Дальше: запускай, когда
+      готов», а следом «— запускаю —» и запускали движок — противоречие. Теперь превью выбирает шаг
+      по признаку немедленного старта (pv.will_execute_now): «запускаю сейчас — результат ниже» для
+      do/run --execute, «запускай, когда готов» — только для голого run (превью). На product
+      дублирующая техно-ремарка «— запускаю —» заглушена (её роль взяло превью), на technical/debug
+      оставлена как маркер старта. Прибавка — текст веток + проброс признака, не логика прогона.
   - at: '2026-09-09'
     what: raise_ceiling
     from: 'active_work.py = 1116; ai_ops_run_lifecycle.py = 938; ai_ops_run_exec.py = 721'

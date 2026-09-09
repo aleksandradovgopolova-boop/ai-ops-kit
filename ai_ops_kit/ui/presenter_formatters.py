@@ -75,8 +75,12 @@ def from_execution_preview(pv: dict) -> dict:
                       "on_reject": "предложу вариант, который этого не трогает"},
             next_steps=steps or None, technical=tech)
 
+    # #708: если движок стартует сразу (do / run --execute), не зовём «запускай, когда готов» —
+    # это противоречит немедленному запуску. Для превью (голый run) ожидание запуска верно.
+    _default_step = ("запускаю сейчас — результат ниже" if pv.get("will_execute_now")
+                     else "запускай, когда готов")
     return message(status="ok", headline="Вот что я сделаю", summary=summary,
-                   next_steps=steps or ["запускай, когда готов"], technical=tech)
+                   next_steps=steps or [_default_step], technical=tech)
 
 
 # Внутреннее имя команды -> то, как её называет человек. Нужно потому, что пробел в профиле надо

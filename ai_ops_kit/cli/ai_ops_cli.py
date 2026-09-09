@@ -1017,9 +1017,14 @@ def main(argv):
     # «вот что я сделаю / запускай когда готов» — оно противоречит следующему сообщению «данных не
     # хватает». Пусть говорит одно: чего не хватает (это скажет intake-gap в _main_run_execute).
     _blocked_on_intake = False
-    if (intent == "run" and a.execute) or intent == "do":
+    _will_execute_now = (intent == "run" and a.execute) or intent == "do"
+    if _will_execute_now:
         from ai_ops_kit.engine import pipeline_helpers as _ph
         _blocked_on_intake = bool(_ph.missing_intake_signals(signals))
+    # #708: `do`/`run --execute` запускают движок ПРЯМО СЕЙЧАС — превью не должно звать «запускай,
+    # когда готов» (следом идёт «— запускаю —», выходило противоречие). Голый `run` (без --execute) —
+    # это превью, там ожидание запуска верно. Признак ведёт форматтер и глушилку «— запускаю —».
+    pv["will_execute_now"] = _will_execute_now
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
     elif not _blocked_on_intake:
@@ -1156,7 +1161,10 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
                     return 0
                 return 1 if seq["executed_all"] else 2
             print("— задача атомарна: последовательное исполнение не требуется, обычный прогон —")
-        print("— запускаю —")
+        # #708: на product превью уже сказало «запускаю сейчас — результат ниже»; дублирующая
+        # техно-ремарка «— запускаю —» тут только шумит. На technical/debug оставляем как маркер старта.
+        if _audience(Path(child_root)) != "product":
+            print("— запускаю —")
         # v3.22: session guard ДО старта — snapshot + relation по факту + delegation
         _session_guard_before_start(Path(child_root), task, signals, a.feature)
         # v2.120: канонический вход ПРОВОДИТ провайдера/модель/base/open-pr/max-steps/require-fix в движок
