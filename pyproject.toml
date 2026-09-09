@@ -22,8 +22,8 @@ dependencies = ["pyyaml"]
 ai-ops = "ai_ops_kit.cli.entry:main"
 
 [project.optional-dependencies]
-test = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0"]
-dev = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0", "ruff>=0.16.2", "mypy>=1.0", "pre-commit>=3.0"]
+test = ["pytest>=9.1.1", "pytest-cov>=4.0", "hypothesis>=6.0"]
+dev = ["pytest>=9.1.1", "pytest-cov>=4.0", "hypothesis>=6.0", "ruff>=0.16.2", "mypy>=1.0", "pre-commit>=3.0"]
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}
