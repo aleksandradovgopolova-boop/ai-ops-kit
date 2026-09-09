@@ -67,6 +67,8 @@ cd /path/to/project
 
 ## Дальше
 
+- **Вся документация — [docs/index.md](docs/index.md).** Одна дверь: четыре уровня (START / USE /
+  EXTEND / ARCHITECT) — найдите строку по тому, что делаете сейчас, и идите по ссылкам.
 - Полевые находки и история разработки — **[DEVELOPMENT-HISTORY.md](DEVELOPMENT-HISTORY.md)**
 - Куда идёт продукт — **[ROADMAP.md](ROADMAP.md)**
 - Организующий тезис — **[VISION.md](VISION.md)**

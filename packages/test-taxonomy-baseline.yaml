@@ -26,12 +26,29 @@ kind: test-taxonomy-ratchet
 # ТОЛЬКО когда доля законно падает (напр. удалили поведенческие тесты вместе с их предметом), а НЕ
 # на каждое изменение состава: точное равенство baseline==замер снято (issue #680) — оно форсило
 # ре-снап даже когда доля не падала. Устаревший-вниз пол безвреден; устаревший-вверх ловит валидатор.
-behavioral_count: 417
-structural_count: 67
-total_count: 484
-behavioral_share_pct: 86.16
+behavioral_count: 418
+structural_count: 68
+total_count: 486
+behavioral_share_pct: 86.01
 
 raises:
+  - at: '2026-09-09'
+    what: baseline_lowered
+    from_behavioral: 418
+    from_total: 485
+    to_behavioral: 418
+    to_total: 486
+    to_share_pct: 86.01
+    work: 'docs-index-coverage guard (точка входа docs/index.md вместо вики)'
+    why: >-
+      ОСОЗНАННОЕ снижение доли (86.19% -> 86.01%): вместо отдельной вики находимость решена одной
+      дверью docs/index.md, а её ОХВАТ теперь держит структурный тест-файл
+      tests/unit/test_docs_index_coverage.py. Он законно структурный — обходит ссылки в docs/ и
+      утверждает «каждый документ достижим из индекса», продуктовый код ai_ops_kit/ НЕ импортирует
+      и НЕ зовёт (тот же класс, что test_derived_numbers_coverage / test_no_mega_test_file).
+      Поведенческих не убыло (418 без изменений), прибавился один структурный (67 -> 68). Не
+      деградация поведенческого теста, а новый структурный контракт охвата; снижение зафиксировано
+      записью, а не проехало молча.
   - at: '2026-09-09'
     what: rebaseline_after_measurement
     from_behavioral: 417

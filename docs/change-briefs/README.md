@@ -14,10 +14,10 @@
 
 ## Что здесь есть
 
-- `3.34-distribution-boundary-cleanup.md` — срез 3.34: `validation` переехал в `ai_ops_kit/`,
-  замер циклов ядра стал ратчетом.
-- `3.35-product-operating-model.md` — срез 3.35: контур Planning & Execution, модель контуров
-  продукта, Human Communication Layer.
+- [`3.34-distribution-boundary-cleanup.md`](3.34-distribution-boundary-cleanup.md) — срез 3.34:
+  `validation` переехал в `ai_ops_kit/`, замер циклов ядра стал ратчетом.
+- [`3.35-product-operating-model.md`](3.35-product-operating-model.md) — срез 3.35: контур
+  Planning & Execution, модель контуров продукта, Human Communication Layer.
 
 Ревизия репозитория 2026-08-11 своего брифа не имеет намеренно: бриф пишется ДО кода и объявляет
 замысел, а ревизия идёт от найденного — замысел ей предшествовать не мог. Её эквивалент, с теми

@@ -28,6 +28,8 @@ AI сопровождает продукт на всём жизненном ци
   `init → doctor → onboard → specify → plan → run --execute`.
 - [ONBOARDING.md](ONBOARDING.md) — что кит даёт и зачем, простым языком, без терминов.
 - [WALKTHROUGH.md](WALKTHROUGH.md) — сквозной сценарий: от обычной фразы до вердикта.
+- [diagrams/README.md](diagrams/README.md) — весь путь продукта одной картинкой, для человека без
+  техбэкграунда: подключение → фундамент → цикл задач.
 - [guides/installation.md](guides/installation.md) — установка подробно, требования и варианты.
 
 ### USE — каждый день
@@ -45,6 +47,11 @@ AI сопровождает продукт на всём жизненном ци
 - **Уровни общения.** Как кит разговаривает с человеком (product / technical / debug) — задаётся
   в `.ai-ops.yaml` и в `registry/communication-policy.yaml`; краткая памятка — в `CLAUDE.md`
   репозитория.
+- [capability-map.md](capability-map.md) — одна достоверная витрина «что кит умеет сейчас»,
+  выведенная из кода и реестров: у каждой возможности состояние built / built≠wired / partial /
+  planned и способ проверки.
+- [decision-boundary.md](decision-boundary.md) — что кит решает сам, а что всегда за человеком:
+  почему одно идёт в `inbox` на ваше решение, а другое кит делает без вопроса.
 - [adoption-guide.md](adoption-guide.md) — гайд внедрения по ролям.
 - [platform-model.md](platform-model.md) — модель платформы на одном экране.
 - [release-channels.md](release-channels.md) — каналы релиза и как зарабатывается `stable`.
