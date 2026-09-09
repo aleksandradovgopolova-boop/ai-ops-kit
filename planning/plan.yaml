@@ -63,6 +63,9 @@ goals:
   - id: checks-that-run
     # заморозка: ловит класс «объявлено — не исполняется», найденный полем
     freeze_relation: run_condition
+    # ОСТАЁТСЯ active 2026-09-09: четыре ПЕРВОНАЧАЛЬНЫХ исхода верны, но внешний аудит (#721) завёл
+    # под эту цель бэклог из 9 работ (типы/CI-supply-chain/форматтер/топология/…) — «объявленные
+    # проверки исполняются» ещё не полно, пока эти находки открыты. Выведена в ROADMAP «Сейчас».
     status: active
     outcome:
       # Замеры — в docs/audit-report.md §1. Первые три закрыты ревизией.
@@ -253,7 +256,10 @@ goals:
     # + latest + receipt: произведён ≠ доставлен), а не печатью в stdout. Два других исхода
     # `false_positive_rate_is_named` остаётся открыт (#423); `no_direct_writes_to_main_ever` ЗАКРЫТ
     # 2026-09-04 (#422): проверяемый инвариант доставлен.
-    status: active
+    # ПАУЗА 2026-09-09: механизм доставлен (2/3 исхода верны, ночной прогон отработал живьём), но
+    # активной работы под последним исходом (#423 false_positive_rate) сейчас нет — держать active
+    # значило бы объявлять занятость, которой нет. В ROADMAP стоит под «Дальше»; вернётся с работой.
+    status: paused
     outcome:
       # ФЛИПНУТ 2026-09-06 ЖИВЫМ ПРОГОНОМ (#421, PR #533): расписание обзора реально поставлено на
       # main (CI-workflow `nightly-review.yml`, `schedule: cron 0 3 * * *` + `workflow_dispatch`),
@@ -619,6 +625,25 @@ work:
       правильно и уже делается). Границы: НЕ трогаем JSON-схемы на диске; не меняем формат ВЫВОДА;
       речь только о разметке ВХОДА судейского промпта. Территория пересекается с линией C —
       согласовать, чтобы не столкнуться в промпте ревьюера.
+
+  - id: wire-decision-gate-into-mandatory-contour
+    title: >-
+      Гейт продуктового решения (baseline/target/guardrails) проведён в ОБЯЗАТЕЛЬНЫЙ контур —
+      фич-решение проверяется на каждой работе, а не только существует функцией
+    type: engineering
+    goal: product-decision-loop
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/intelligence/, ai_ops_kit/gates/, ai_ops_kit/engine/, tests/]
+    reason: >-
+      Механизм ЕСТЬ и доказан детерминированно (#417): check_feature_target отказывает решению без
+      полной тройки, gate_feature_decisions краснит неполную фичу (test_decision_feature_target 6/6).
+      Но модуль decision_loop пока unwired — его никто не гоняет ни в CI, ни в run-гейтах, поэтому
+      исход `feature_has_baseline_target_and_guardrails` честно держится false. Готово, когда гейт
+      подключён к обязательному контуру: фич-решение не доходит до READY_FOR_PR без пройденной тройки,
+      и это краснеет на живом прогоне, а не только в юнит-тесте. Симметрично проводке #424
+      (analytics producer → гейт): true будет по ФАКТУ обязательной проверки, а не «код написан».
 
   - id: release-strategy-assembled-releases-and-update-menu
     title: >-
