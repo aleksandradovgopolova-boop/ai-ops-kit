@@ -444,6 +444,16 @@ goals:
       core_carved_as_separate_layer: true   # Phase B: три кольца (kernel⊥intelligence), фазы pipeline —
                                              # функции. Внутренний DAG capabilities НЕ достигнут (F-03: 5 пар).
 
+  - id: layering-ring-is-a-dag
+    # F-03 (аудит 2026-09-09): гейт слоёв стал честным (5 пар видны, гейт считает __import__). Теперь —
+    # свести связность к нулю ПО СУЩЕСТВУ, а не сокрытием: каждая пара развязывается DI/переносом/
+    # решением «кто зовёт». Ратчет mutual_pairs ходит только вниз. Это честное продолжение того, что
+    # Phase B цели trustworthy-core прежде объявляла достигнутым на слепой метрике.
+    freeze_relation: run_condition
+    status: active
+    outcome:
+      capabilities_ring_is_a_dag: false
+
   # ─── История релизов 3.40/4.0 (04.09.2026) и хвосты, ждущие следующей сессии ──────────────────
   # ВЫПУЩЕНО: 3.40.0 (warn-минор о сносе плоского слоя tools/) и 4.0.0 МАЖОР (tools/ снят физически,
   # точки входа только `-m ai_ops_kit…`; MIGRATION_GUIDE_4.0.md; обновление через границу мажора —
@@ -924,4 +934,180 @@ work:
       когда `update --force` через мажор либо осознанно расширяет диапазон под новый мажор, либо явно
       печатает «расширьте allowed_version_range», И doctor краснеет на installed ∉ allowed
       (замер: обновил форсом → doctor называет рассогласование, а не «всё в порядке»).
+
+  # ─── Бэклог внешнего аудита 2026-09-09 (F-03 гейт + гигиена ВЛИТЫ; остаток ниже) ────────────────
+  # Внешний кластер аудита (F-01 CONTRIBUTING/SECURITY/CODEOWNERS для внешних, англ-README) ОТКЛОНЁН
+  # решением владельца ep-2026-09-09-external-contributors-not-a-goal-now: кит — для своей команды,
+  # по-русски. Ниже — то, что служит честности и ясности ДЛЯ КОМАНДЫ.
+
+  - id: declared-tools-and-gates-prove-they-run
+    title: >-
+      Инвентарь «объявлено → исполняется»: каждый инструмент из [dev]-зависимостей, каждый
+      pre-commit-хук и каждый ратчет имеет машинное доказательство «вызывается вот здесь»
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/validation/, packages/, tests/]
+    reason: >-
+      КОРЕНЬ, а не находка. Три из трёх старших находок аудита — один класс «объявлено, но не
+      исполняется», в местах, куда чистка не дошла: mypy (объявлен, не запускается), README-счётчик
+      (заверение есть, число не подключено), гейт слоёв (исполнялся, но мерил не предмет). Ревизия
+      этого класса держится на памяти владельца, а не на машине. Готово, когда есть инвентарь (гейт
+      ~40 строк): каждый dev-инструмент, хук и ратчет либо имеет доказательство запуска, либо помечен
+      «выключен, причина EP-XXXX»; новый объявленный-но-не-запущенный краснеет.
+
+  - id: layering-pairs-decoupled-by-substance
+    title: >-
+      Пять взаимных пар capabilities развязываются по существу (DI/перенос/решение «кто зовёт»),
+      начиная с дешёвых: gates→engops и engine↔gates (только CLI-вход)
+    type: engineering
+    goal: layering-ring-is-a-dag
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [ai_ops_kit/, packages/, tests/]
+    reason: >-
+      После F-03 гейт честен: 5 пар видны как есть (context↔engine, delivery↔engine, engine↔gates,
+      engops↔gates, engine↔lifecycle). Развязка — настоящая, а не сокрытие через __import__:
+      gates→engops (deploy_readiness, уже в known_violations) и engine↔gates (держится одним
+      evidence_collector.main) — самые дешёвые. Готово, когда ратчет mutual_pairs опускается ПО ФАКТУ
+      снятых рёбер, known_violations сокращается, и это развязка, а не перенос импорта в функцию.
+
+  - id: types-enforced-on-foundation-or-mypy-removed
+    title: >-
+      mypy настроен и исполняется на kernel+shared (disallow_untyped_defs) с ратчетом «ошибок не
+      растёт» по остальному — либо удалён из зависимостей с записанным решением
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [pyproject.toml, .pre-commit-config.yaml, .github/, ai_ops_kit/]
+    reason: >-
+      mypy в [dev] и requirements-dev, но [tool.mypy] нет, хука нет, шага в CI нет, py.typed нет;
+      аннотировано ~29% слотов на 80k строк — тот же класс «объявлено, не исполняется», что кит
+      вычистил у ruff. Полный --strict на 80k не окупится. Готово, когда типы проверяются машиной на
+      фундаменте (kernel+shared) с ратчетом вниз по остальному — либо mypy убран и решение записано.
+
+  - id: installer-under-size-and-func-gates
+    title: installer/ включён в module-size и func-size ратчеты; текущие 3918 строк заморожены потолком
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [ai_ops_kit/validation/, packages/, tests/]
+    reason: >-
+      installer/ai_ops.py (3918 строк) — крупнейший файл репозитория и единственный код, запускаемый
+      пользователем ДО появления кита, вне всех архитектурных гейтов (SOURCE_ROOT="ai_ops_kit").
+      Готово, когда installer/ входит в module-size/func-size с замороженным потолком (ратчет вниз);
+      расщепление на модули по фазам — отдельной работой.
+
+  - id: library-layers-return-data-not-print
+    title: >-
+      print разрешён в cli/validation/devtools/installer; в capabilities/foundation/intelligence —
+      возврат данных или logging, текущие числа заморожены ратчетом
+    type: engineering
+    goal: owner-speaks-product-not-pipeline
+    status: todo
+    owner_role: engineer
+    value: medium
+    write_scope: [ai_ops_kit/, tests/]
+    reason: >-
+      1379 print в продакшне при 1 import logging; ~346 в библиотечных слоях (shared/security/context/
+      gates/lifecycle/engops/intelligence). Библиотечный пакет, печатающий в stdout, нельзя переиспользовать
+      из MCP/web без перехвата, и у дочки нет ручки «покажи подробнее». Готово, когда правило-ратчет
+      держит: библиотечные пакеты возвращают данные или логируют, печать — только в точках входа.
+
+  - id: config-is-config-history-in-decisions
+    title: >-
+      Хронология ревизий из pyproject.toml/workflows перенесена в decisions/registry.yaml со ссылками;
+      в конфиге остаются инвариант и граница правила
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: low
+    write_scope: [pyproject.toml, .github/, decisions/]
+    reason: >-
+      pyproject.toml 23 КБ и package-quality.yml 24 КБ — преимущественно нарратив-хроника, дублирующий
+      git log и decisions/registry.yaml; чтобы узнать включённые правила ruff, надо проскроллить 90
+      строк прозы. Объяснение «почему правило такое» сохранить ОБЯЗАТЕЛЬНО (защита от вредной правки).
+      Готово, когда хронология («v3.28.0 R16»…) переехала в реестр решений, в конфиге — инвариант и граница.
+
+  - id: repo-topology-legible-for-the-team
+    title: >-
+      Таблица «где что» на ~10 строк в README/AGENTS; данные при желании под 2-3 зонтика без переезда
+      на src-layout
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: low
+    write_scope: [README.md, AGENTS.md]
+    reason: >-
+      41 каталог в корне, код (2 каталога) не отделён от данных (39); FILE_INDEX.md 50 КБ — следствие
+      проблемы, не решение. Для СВОЕЙ команды «всё должно быть понятно» нужна короткая карта, а не
+      50-КБ индекс. src-layout НЕ делаем (ломает installer/managed/checksums/пути). Готово, когда в
+      README есть 10-строчная таблица «где что».
+
+  - id: ci-supply-chain-pinned
+    title: Тестовые зависимости и actions пинованы (SHA), dependabot включён
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: low
+    write_scope: [.github/]
+    reason: >-
+      pytest/hypothesis/pytest-xdist/pyyaml ставятся без версий в 6 джобах (ruff/towncrier/commitizen
+      уже пинованы — тот же довод). Actions на подвижных @v4/@v5; dependabot нет. Мажор pytest покрасит
+      CI на невиновном коммите. Готово, когда тест-зависимости пинованы, actions по SHA, dependabot
+      приносит обновления.
+
+  - id: ci-sees-owner-platform
+    title: >-
+      macos-latest в основной джобе; перебор интерпретаторов в ./ai-ops приведён к полу 3.12;
+      кириллические имена файлов findings заменены ASCII-слагом
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: low
+    write_scope: [.github/, ai-ops, findings/]
+    reason: >-
+      Все джобы ubuntu-latest; разработка на macOS — платформа владельца в CI не проверяется (Python
+      3.13 уже покрыт compat-матрицей, ОС — нет). Обёртка ./ai-ops перебирает интерпретаторы ниже пола
+      (3.9), выберет и упадёт невнятно. 13 кириллических имён в findings/from-children/ — риск NFC/NFD
+      между macOS и Linux. Готово, когда macOS в матрице, перебор совпадает с полом, имена ASCII.
+
+  - id: commit-contract-runs-in-ci
+    title: commit-contract.sh гоняется по диапазону коммитов PR, а не только в локальном хуке
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: low
+    write_scope: [.github/, scripts/]
+    reason: >-
+      commit-contract.sh (охват коммита, заглушки, секреты, ссылка на WorkItem) работает только у
+      того, кто сделал pre-commit install; в CI зеркалированы лишь cz check и towncrier. Для правила
+      «половина проверки хуже отсутствующей» это та половина — и на КОМАНДНЫХ PR тоже. Готово, когда
+      джоба гоняет скрипт по коммитам PR.
+
+  - id: formatter-adopted-with-blame-ignore
+    title: ruff format одним коммитом + .git-blame-ignore-revs + хук и шаг в CI
+    type: engineering
+    goal: checks-that-run
+    status: todo
+    owner_role: engineer
+    value: low
+    write_scope: [.pre-commit-config.yaml, .github/]
+    reason: >-
+      Форматтера нет: 528/901 файла не отформатированы, line-length=110 не проверяет ничего. Возражение
+      «один коммит на 45k строк топит blame» снято .git-blame-ignore-revs (нативно git/GitHub). Ценно
+      для консистентности стиля ВНУТРИ команды: без него правки разных людей приезжают в разном стиле.
+      Готово, когда ruff format исполняется хуком и в CI, blame читаем через ignore-revs.
 
