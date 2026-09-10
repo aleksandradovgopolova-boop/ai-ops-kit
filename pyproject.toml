@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=70.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,7 +11,7 @@ requires-python = ">=3.12"   # пол = версия, на которой РЕА
                              # джоба python39-compat лишь ловила современный синтаксис (решение
                              # ep-2026-08-20-python-floor-3.12). Цель — человек не думает про версию.
 license = {text = "MIT"}
-dependencies = ["pyyaml"]
+dependencies = ["pyyaml>=6.0.3"]
 
 [project.scripts]
 # Консольный вход для pip/pipx: `ai-ops <интент>` (next/status/inbox/explain/do/run/…).
@@ -22,8 +22,8 @@ dependencies = ["pyyaml"]
 ai-ops = "ai_ops_kit.cli.entry:main"
 
 [project.optional-dependencies]
-test = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0"]
-dev = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0", "ruff>=0.16.2", "mypy>=1.0", "pre-commit>=3.0"]
+test = ["pytest>=8.0", "pytest-cov>=5.0", "hypothesis>=6.100"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "hypothesis>=6.100", "ruff>=0.16.2", "mypy>=1.8", "pre-commit>=3.5"]
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}
