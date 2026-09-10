@@ -37,7 +37,7 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 3258
+  installer/ai_ops.py: 2937
 
 raises:
   - at: '2026-09-10'
@@ -913,3 +913,15 @@ raises:
       ai_ops и читаются через `_ao()` (живые глобалы кладёт загрузчик). Сателлит ниже порога 700 —
       в baseline не заводится. func-size без изменений: cmd_doctor (264) остаётся под префиксом
       `installer/`, максимум каталога не вырос.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 3258'
+    to: 'installer/ai_ops.py = 2937'
+    work: 'split-installer-monolith: вспомогательные подкоманды вынесены в сателлит'
+    why: >-
+      12 тонких обработчиков подкоманд `ai-ops` (subsession, delivery-proof, usage, session, method,
+      engops, audit, drift, ui-status, migrate, verify-capabilities, resolve-ref), делегирующих в
+      подсистемы ai_ops_kit и зовущихся только из диспетчера main, вынесены в installer/aux_commands.py
+      (379 строк). Чистый перенос, поведение байт-в-байт то же; в ai_ops.py остался ленивый загрузчик
+      _aux_commands() и вызовы из диспетчера. Общие с ядром функции читаются через _ao(). Сателлит ниже
+      порога 700 — в baseline не заводится.
