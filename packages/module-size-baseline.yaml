@@ -21,7 +21,7 @@ threshold: 700
 ceilings:
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/execution_pipeline.py: 789
-  ai_ops_kit/planning/repo_audit.py: 837
+  ai_ops_kit/planning/repo_audit.py: 854
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
   ai_ops_kit/providers/orchestrator_providers.py: 978
@@ -1098,3 +1098,15 @@ raises:
       разбирал cmd_init только в ai_ops.py и только bare-name вызовы — после выноса он бы ослеп на
       шаги установки. Добавлен хелпер `_cmd_init_fn` (парсит cmd_init из setup_ops) и `init_only_calls`
       теперь собирает и attr-имена. +7 строк — цена сохранения самопроверки, а не роста монолита.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/repo_audit.py = 837'
+    to: 'ai_ops_kit/planning/repo_audit.py = 854'
+    work: 'onboarding-classifier-uses-doc-schema-signals (#818)'
+    why: >-
+      Классификатор онбординга теперь учитывает собранные doc/schema/manifest-сигналы. Добавлен
+      хелпер `_maturity` (читает состав и веса сигналов зрелости из реестра
+      `classification.maturity_signals`, суммирует вес присутствующих) и переписаны ветки
+      EXISTING_PRODUCT в `classify`, чтобы вес зрелости, а не зашитая в код четвёрка признаков,
+      решал класс. +17 строк — цена того, что зрелый brownfield с документацией и API-схемами, но
+      короткой историей, перестаёт деградировать в EARLY_PRODUCT; правила остаются данными реестра.
