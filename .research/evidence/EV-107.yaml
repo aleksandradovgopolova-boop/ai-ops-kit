@@ -1,0 +1,59 @@
+schema_version: 1
+kind: research.evidence
+id: EV-107
+request_id: RR-001
+statement: >
+  Kimi K2.6 у ОФИЦИАЛЬНОГО провайдера Moonshot AI (листинг OpenRouter, ре-фетч 2026-09-10):
+  $0.95 вход / $4.00 выход / $0.16 чтение кэша за 1M токенов; контекст 262,144 токена,
+  максимальный выход 262,144. Цена $0.66/$3.41 из EV-104 у Moonshot больше не наблюдается:
+  сегодня в этой полосе стоит сторонний провайдер CoreWeave ($0.65 / $3.41). Самый дешёвый
+  маршрут к той же модели на OpenRouter — Chutes ($0.58 / $3.40); Baidu Qianfan и StreamLake
+  дают $0.5795 / $2.44 и $0.5985 / $2.52 по скидкам 39% и 37% от базовых $0.95 / $4.00.
+  Следствие: официальная цена K2.6 в 1,44 раза выше входа и в 1,17 раза выше выхода, чем
+  заложено в EV-104 и в расчёт EV-106.
+evidence_type: documented_fact
+source:
+  title: "OpenRouter — moonshotai/kimi-k2.6 (таблица провайдеров)"
+  url: "https://openrouter.ai/moonshotai/kimi-k2.6"
+  type: vendor_page
+  published_at: null
+  is_primary: false
+citation:
+  locator: "карточка модели, таблица Providers, строка «Moonshot AI» (колонки Input /M, Output /M, Cache read /M); контекст — блок FAQ «What is the context length of Kimi K2.6?»"
+  quote: "Moonshot AI $0.95 $4.00 $0.16"
+captured_at: "2026-09-10"
+captured_by: "freshness-Watch (scheduled task, прогон 2026-09-10)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-11"
+reliability:
+  level: medium
+  rationale: >
+    Вторичный источник (агрегатор), но строка именно официального провайдера, снятая живым
+    re-fetch; цена подтверждена дословной цитатой строки таблицы, контекст 262,144 —
+    отдельным предложением FAQ на той же странице. Ограничение: первичная страница платформы
+    Kimi по-прежнему цену K2.6 не отдаёт, поэтому уровень не high. Второе ограничение: почему
+    цифры расходятся с EV-104 — подорожание с 2026-07-22 или изначальная ошибка атрибуции
+    строки таблицы у EV-104 — по внешним данным задним числом не устанавливается.
+conflicts_with:
+  - evidence_id: EV-104
+    claim: "EV-104: официальный провайдер Moonshot отдаёт K2.6 за $0.66 вход / $3.41 выход за 1M токенов."
+    source: "https://openrouter.ai/moonshotai/kimi-k2.6 (снимок 2026-07-22)"
+    status: resolved
+    note: >
+      EV-104 переведён в status: superseded (superseded_by: EV-107). Контекст 262K из EV-104
+      подтверждён и сохраняется; расходится только цена.
+  - claim: "Kimi K2.6 стоит $0.95 вход / $4.00 выход за 1M токенов."
+    source: "веб-обзор (deepinfra.com pricing guide)"
+    status: resolved
+    note: >
+      Это противоречие числилось у EV-104 как unresolved — ре-фетч 2026-09-10 его закрывает:
+      $0.95 / $4.00 и есть базовая официальная цена Moonshot.
+  - claim: "Kimi K2.6 на официальном API стоит $0.60 вход / $2.50 выход за 1M токенов."
+    source: "веб-обзор (secondtalent.com, июль 2026)"
+    status: unresolved
+    note: >
+      Ни у одного из 20 провайдеров в таблице такой пары нет; ближе всего скидочные $0.5795 /
+      $2.44 у Baidu Qianfan, но это сторонний провайдер, а не официальный API.
+status: active
+superseded_by: null
