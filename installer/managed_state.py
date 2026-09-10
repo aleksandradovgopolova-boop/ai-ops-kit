@@ -277,7 +277,6 @@ SMOKE_CHECKS = [
 def bump_child_config(version):
     """Обновить только parent.installed_version в .ai-ops.yaml (единственное разрешённое поле)."""
     text = _ao().CHILD_CONFIG.read_text(encoding="utf-8")
-    import re
     new = re.sub(r"(installed_version:\s*)\S+", rf"\g<1>{version}", text, count=1)
     _ao().CHILD_CONFIG.write_text(new, encoding="utf-8")
 
@@ -295,7 +294,6 @@ def widen_allowed_range(version):
     Способ — тот же, что `cmd_init` (re.sub по полю), чтобы форматирование конфига владельца не
     переписывалось целиком. -> новый диапазон (str), либо None, если поля в конфиге нет.
     """
-    import re
     text = _ao().CHILD_CONFIG.read_text(encoding="utf-8")
     new_range = _core().compatible_range_for(version)
     new_text, n = re.subn(r'(allowed_version_range:\s*)"[^"]*"',
