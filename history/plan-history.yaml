@@ -5382,3 +5382,15 @@ work:
     pr: 792
     result: >-
       ЗАКРЫТО 2026-09-10 (#792). Названное меню стратегий обновления (pr/manual/scheduled-batch/auto-stable) + резолвер, который читает выбор дочки и НАЗЫВАЕТ доступность, ничего не применяя; auto-stable доступна только на канале stable и при явном opt-in (по умолчанию выключена). Взяты 2 из 3 исходов цели: продукт выбирает стратегию из меню; режимы сверх pr/manual существуют. ОСТАЁТСЯ (не закрыто, будущая работа): полное ИСПОЛНЕНИЕ scheduled-batch/auto-stable (планировщик/автоприменение) и сборка релиза с бампом версии + авто-проводкой в CI — release_assembly называет состав по триггеру, но версию не бампает. Третий исход releases_are_assembled_not_reactively остаётся false.
+  - id: release-assembly-derives-target-version
+    title: 'Осознанная сборка релиза называет целевую версию: уровень SemVer из состава newsfragments'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    evidence: ai_ops_kit/devtools/release_assembly.py
+    result: >-
+      ЗАКРЫТО 2026-09-10. Третий исход kit-release-strategy взят: release_assembly.assemble по вехе/
+      расписанию теперь выводит уровень бампа из состава (feat→minor, иначе→patch) и называет целевую
+      версию (current→target из VERSION), замыкая осознанную сборку — не реактивно и без ручного
+      угадывания X.Y.Z. МАЖОР сборка НЕ выводит: смена мажора остаётся осознанным решением владельца
+      (breaking = ep-решение). release_assembly — dev-инструмент (devtools/), в дочку не едет.

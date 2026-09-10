@@ -62,3 +62,46 @@ def test_empty_backlog_under_a_trigger_assembles_nothing(tmp_path):
     (root / "newsfragments").mkdir(parents=True)
     res = ra.assemble(root, milestone="4.3")
     assert res["ready"] is False and res["count"] == 0
+
+
+# ── вывод целевой версии из состава (исход releases_are_assembled_…) ──
+
+def _repo_with_version(tmp_path, version, frags):
+    root = tmp_path / "repo"
+    (root / "newsfragments").mkdir(parents=True)
+    for name in frags:
+        (root / "newsfragments" / name).write_text("запись\n", encoding="utf-8")
+    (root / "VERSION").write_text(version + "\n", encoding="utf-8")
+    return root
+
+
+def test_next_version_levels():
+    assert ra.next_version("4.2.7", "patch") == "4.2.8"
+    assert ra.next_version("4.2.7", "minor") == "4.3.0"
+    assert ra.next_version("4.2.7", "major") == "5.0.0"
+    assert ra.next_version("4.0.0-qualification", "patch") == "4.0.1"  # pre-release-суффикс снят
+
+
+def test_feat_drives_minor_others_patch():
+    assert ra._bump_level({"feat": ["x"], "fix": ["y"]}) == "minor"
+    assert ra._bump_level({"fix": ["y"], "chore": ["z"]}) == "patch"
+
+
+def test_assemble_names_target_version(tmp_path):
+    root = _repo_with_version(tmp_path, "4.2.7", ("add-login.feat.md", "fix-crash.fix.md"))
+    res = ra.assemble(root, milestone="M1")
+    assert res["ready"] and res["bump_level"] == "minor"
+    assert res["current_version"] == "4.2.7" and res["target_version"] == "4.3.0"
+
+
+def test_assemble_patch_when_no_feature(tmp_path):
+    root = _repo_with_version(tmp_path, "4.2.7", ("fix-crash.fix.md", "tidy.chore.md"))
+    res = ra.assemble(root, milestone="M1")
+    assert res["bump_level"] == "patch" and res["target_version"] == "4.2.8"
+
+
+def test_major_is_never_auto_derived(tmp_path):
+    # даже с feat уровень не выше minor — мажор остаётся осознанным решением владельца
+    root = _repo_with_version(tmp_path, "4.9.9", ("big.feat.md",))
+    res = ra.assemble(root, milestone="M1")
+    assert res["bump_level"] == "minor" and res["target_version"] == "4.10.0"
