@@ -254,6 +254,22 @@ def discover(child_root) -> dict:
     return ev
 
 
+def _maturity(evidence: dict, model: dict) -> tuple[int, list[str]]:
+    """Суммарный вес присутствующих сигналов зрелости и их человекочитаемые метки.
+
+    Состав сигналов и веса — ДАННЫМИ из реестра (`classification.maturity_signals`), а не в коде:
+    инвариант кита требует, чтобы правила класса правились данными живых прогонов. `id` каждого
+    сигнала — ключ, который производит `discover()`. Fail-open: если реестр не объявил сигналов,
+    вес нулевой и класс определяют только пороги по истории — отсутствие данных не роняет онбординг.
+    """
+    weight, labels = 0, []
+    for sig in (((model.get("classification") or {}).get("maturity_signals")) or []):
+        if bool(evidence.get(sig.get("id"))):
+            weight += int(sig.get("weight", 0))
+            labels.append(sig.get("label") or sig.get("id"))
+    return weight, labels
+
+
 def classify(evidence: dict, model: dict | None = None) -> dict:
     """CLASSIFY — новый продукт, ранний, существующий или неизвестно.
 
@@ -273,8 +289,6 @@ def classify(evidence: dict, model: dict | None = None) -> dict:
 
     has_ci = bool(evidence.get("ci"))
     has_tests = bool(evidence.get("test_files"))
-    has_migr = bool(evidence.get("migrations"))
-    has_rel = bool(evidence.get("release_history"))
     reasons = []
 
     if src <= th.get("new_max_source_files", 10) and not has_ci and not has_tests:
@@ -291,16 +305,19 @@ def classify(evidence: dict, model: dict | None = None) -> dict:
         return {"class": "NEW_PRODUCT", "confidence": conf, "reasons": reasons,
                 "onboarding": "product_bootstrap"}
 
-    strong = sum([has_ci, has_tests, has_migr, has_rel])
-    if commits is not None and commits >= th.get("existing_min_commits", 50) and strong >= 1:
+    # Вес зрелости — из реестра (`classification.maturity_signals`), не зашит в код. Включает и
+    # инфраструктуру (CI/тесты/миграции/релизы), и собранные ранее doc/schema/manifest-факты (#818).
+    cls_cfg = model.get("classification") or {}
+    min_weight = cls_cfg.get("maturity_min_weight", 6)
+    weight, live = _maturity(evidence, model)
+    if commits is not None and commits >= th.get("existing_min_commits", 50) and weight >= 1:
         reasons.append(f"коммитов {commits}, файлов кода {src}")
-        reasons.append("признаки живой системы: " + ", ".join(
-            n for n, v in (("CI", has_ci), ("тесты", has_tests), ("миграции", has_migr),
-                           ("релизы", has_rel)) if v))
+        reasons.append("признаки живой системы: " + ", ".join(live))
         return {"class": "EXISTING_PRODUCT", "confidence": "high", "reasons": reasons,
                 "onboarding": "reconstruct_first"}
-    if strong >= 3:
-        reasons.append("история короткая или не читается, но CI, тесты и данные на месте")
+    if weight >= min_weight:
+        reasons.append("история короткая или не читается, но признаки зрелой системы на месте: "
+                       + ", ".join(live))
         return {"class": "EXISTING_PRODUCT", "confidence": "medium", "reasons": reasons,
                 "onboarding": "reconstruct_first"}
 

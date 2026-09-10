@@ -89,12 +89,34 @@ classification:
   # а часть остальных собиралась, но в классификации не участвовала: реестр перечислял сигналы,
   # которых нет. Список описывает то, что ДЕЙСТВИТЕЛЬНО решает класс.
   signals: [tree_readable, source_files, test_files, commits, ci, migrations, release_history]
-  collected_but_not_classifying: [containers, dependency_manifests, product_docs,
-                                  architecture_docs, decisions, env_configs, api_schemas]
-  collected_but_not_classifying_note: >
-    Собираются в discover() и попадают в reconstruct()/audit(), но класс репозитория по ним не
-    определяется. Названы отдельно, чтобы «сигнал класса» и «наблюдение о репозитории» не читались
-    как одно и то же.
+  # Сигналы ЗРЕЛОСТИ и их ВКЛАД в класс — данными, не в коде. Прежде `classify()` считал зашитую в
+  # код четвёрку [ci, test_files, migrations, release_history] (каждый вес 1, порог 3), а
+  # doc/schema/manifest-факты СОБИРАЛИСЬ в discover(), но класс по ним не поднимался (#818): зрелый
+  # brownfield с документацией, API-схемами и манифестами, но короткой/squash-историей деградировал
+  # в EARLY_PRODUCT — уже собранные факты не использовались. Теперь их суммарный вес участвует в
+  # решении. `id` — РОВНО ключи, которые производит discover(). Вес отражает СИЛУ признака: рабочий
+  # CI или миграции доказывают живую систему сильнее, чем ubiquitous README, — но набор
+  # «намеренных» артефактов зрелости (описанная архитектура, API-схемы, ADR) суммарно тоже поднимает
+  # класс. Правится данными живых прогонов, как `thresholds` рядом.
+  maturity_signals:
+    - {id: ci,                   weight: 2, label: "CI",                    note: "конвейер ПРОДУКТА (не свой, F-019) — сильнейший признак живой системы"}
+    - {id: test_files,           weight: 2, label: "тесты",                 note: "тесты в дереве"}
+    - {id: migrations,           weight: 2, label: "миграции",              note: "миграции схемы данных — признак живой БД"}
+    - {id: release_history,      weight: 2, label: "релизы",                note: "теги релизов — продукт доходил до выпуска"}
+    - {id: architecture_docs,    weight: 2, label: "описание архитектуры",  note: "ARCHITECTURE.md, docs/architecture, context/system — намеренный артефакт зрелости"}
+    - {id: api_schemas,          weight: 2, label: "API-схемы",             note: "openapi/graphql/proto — зафиксированный контракт наружу"}
+    - {id: decisions,            weight: 2, label: "ADR-решения",           note: "decisions/, docs/adr — зафиксированные архитектурные решения"}
+    - {id: product_docs,         weight: 1, label: "документация",          note: "README/docs/context/product — есть у большинства репозиториев, слабый признак"}
+    - {id: dependency_manifests, weight: 1, label: "манифест зависимостей", note: "package.json/pyproject/… — управляемые зависимости, а не свалка файлов"}
+    - {id: containers,           weight: 1, label: "контейнеры",            note: "Dockerfile/compose — воспроизводимая упаковка среды"}
+    - {id: env_configs,          weight: 1, label: "конфиг среды",          note: ".env.example/config — оформленная конфигурация среды"}
+  # Порог суммы весов для EXISTING_PRODUCT, когда история КОРОТКАЯ или не читается. Прежняя «тройка
+  # сильных признаков» = 3 при весе 1 → теперь три инфрапризнака по весу 2 дают 6, поэтому порог 6
+  # сохраняет прежнее поведение по инфраструктуре (CI+тесты+миграции = 6 → EXISTING). Мягкий README
+  # с манифестом (1+1) на порог не тянет; набор намеренных артефактов зрелости — описанная
+  # архитектура + API-схемы + документация + манифест (2+2+1+1) = 6 — переводит brownfield в
+  # EXISTING, даже когда коммитов мало. Так собранные doc/schema/manifest-факты наконец решают класс.
+  maturity_min_weight: 6
   rule: >
     UNKNOWN, если ни один сигнал не читается (нет доступа к дереву или к истории) — это не
     «пустой репозиторий». Пустой репозиторий читается и даёт нули; нечитаемый не даёт ничего, и
