@@ -309,3 +309,108 @@ def test_strict_passes_a_kit_update_pr_that_migrates_the_plan(tmp_path):
     (plain / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
     git2("add", "-A"); git2("commit", "-qm", "feature + plan")
     assert ps.main(["x", str(plain), "--base", base2, "--strict"]) == 1
+
+
+@pytest.mark.unit
+def test_kit_update_markers_read_from_registry_with_safe_fallback(tmp_path):
+    """#764: признак апдейта кита — ДАННЫЕ реестра (`kit_update_markers`), а не хардкод.
+
+    Без ключа — безопасный дефолт `.ai/managed/VERSION` (прежнее поведение, не «признака нет»).
+    С ключом — ровно из реестра; дочка расширяет своим `.ai/project/coordination-files.yaml`."""
+    root = tmp_path / "r"
+    (root / "registry").mkdir(parents=True)
+    # без ключа -> дефолт
+    (root / "registry" / "coordination-files.yaml").write_text(
+        "schema_version: 1\npaths: [planning/plan.yaml]\n", encoding="utf-8")
+    assert ps.kit_update_markers(root) == [".ai/managed/VERSION"]
+    # с ключом -> из реестра
+    (root / "registry" / "coordination-files.yaml").write_text(
+        "schema_version: 1\npaths: [planning/plan.yaml]\n"
+        "kit_update_markers: [ops/stamp, .ai/managed/VERSION]\n", encoding="utf-8")
+    assert ps.kit_update_markers(root) == [".ai/managed/VERSION", "ops/stamp"]
+    # дочка расширяет своим списком
+    (root / ".ai" / "project").mkdir(parents=True)
+    (root / ".ai" / "project" / "coordination-files.yaml").write_text(
+        "schema_version: 1\nkit_update_markers: [child/marker]\n", encoding="utf-8")
+    assert ps.kit_update_markers(root) == [".ai/managed/VERSION", "child/marker", "ops/stamp"]
+
+
+@pytest.mark.unit
+def test_is_kit_update_diff_honours_custom_markers():
+    """is_kit_update_diff читает переданный список признаков; None -> безопасный дефолт."""
+    assert ps.is_kit_update_diff(["ops/stamp"], markers=["ops/stamp"]) is True
+    assert ps.is_kit_update_diff(["ops/stamp"]) is False              # дефолт .ai/managed/VERSION
+    assert ps.is_kit_update_diff([".ai/managed/VERSION"]) is True     # дефолт срабатывает
+
+
+@pytest.mark.unit
+def test_kit_update_marker_comes_from_registry_data_not_hardcode(tmp_path):
+    """#764: тот же смешанный дифф проходит или валится в зависимости от того, ОБЪЯВИЛ ли реестр
+    тронутый файл признаком апдейта. Так доказано: распознаватель управляется реестром, не кодом.
+
+    Дифф трогает `ops/kit-stamp` + код + план. Реестр ОБЪЯВЛЯЕТ `ops/kit-stamp` -> апдейт -> зелёный;
+    реестр БЕЗ него (дефолт `.ai/managed/VERSION`, а его дифф не трогает) -> смешение -> красный."""
+    def repo(declare_marker):
+        root = tmp_path / ("m" if declare_marker else "n")
+        (root / "registry").mkdir(parents=True)
+        (root / "planning").mkdir(); (root / "ops").mkdir()
+        markers = "kit_update_markers: [ops/kit-stamp]\n" if declare_marker else ""
+        (root / "registry" / "coordination-files.yaml").write_text(
+            "schema_version: 1\npaths: [planning/plan.yaml]\n" + markers, encoding="utf-8")
+
+        def git(*a):
+            subprocess.run(["git", "-C", str(root), *a], check=True, capture_output=True)
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "t@t.t"); git("config", "user.name", "t")
+        (root / "code.py").write_text("x=1\n", encoding="utf-8")
+        (root / "planning" / "plan.yaml").write_text("kind: delivery-plan\n", encoding="utf-8")
+        (root / "ops" / "kit-stamp").write_text("3.0\n", encoding="utf-8")
+        git("add", "-A"); git("commit", "-qm", "base")
+        base = subprocess.run(["git", "-C", str(root), "rev-parse", "HEAD"],
+                              capture_output=True, text=True).stdout.strip()
+        # смешанный дифф: код + план + тронутый признак
+        (root / "code.py").write_text("x=2\n", encoding="utf-8")
+        (root / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+        (root / "ops" / "kit-stamp").write_text("4.0\n", encoding="utf-8")
+        git("add", "-A"); git("commit", "-qm", "mixed")
+        return root, base
+
+    root, base = repo(True)
+    assert ps.main(["x", str(root), "--base", base, "--strict"]) == 0    # объявлен -> зелёный
+    root2, base2 = repo(False)
+    assert ps.main(["x", str(root2), "--base", base2, "--strict"]) == 1  # не объявлен -> красный
+
+
+@pytest.mark.unit
+def test_field_kit_landing_passes_strict_without_manual_git_rm(tmp_path):
+    """DONE-WHEN #764 (поле, wow-repo 01.09.2026): заезд кита на репозиторий БЕЗ кита — апдейт-PR с
+    кодом + planning/plan.yaml + history/plan-history.yaml + managed-маркером — проходит --strict
+    БЕЗ ручного git rm координационных. Обычный PR с тем же смешением (без маркера) — валится.
+
+    Дочка своего registry/coordination-files.yaml не имеет: и координационные пути, и признак
+    апдейта приходят из клона кита через --defaults — контур дочки, каким он идёт в её CI."""
+    kit = tmp_path / "kit" / "registry"; kit.mkdir(parents=True)
+    (kit / "coordination-files.yaml").write_text(
+        "schema_version: 1\n"
+        "paths: [planning/plan.yaml, history/plan-history.yaml]\n"
+        "kit_update_markers: [.ai/managed/VERSION]\n", encoding="utf-8")
+    defaults = str(kit / "coordination-files.yaml")
+
+    # АПДЕЙТ кита на голую дочку: managed VERSION + план + история + код -> зелёный без git rm
+    upd = tmp_path / "child-update"; git, base = _git_repo_with_base(upd, coord_registry=False)
+    (upd / ".ai" / "managed").mkdir(parents=True)
+    (upd / ".ai" / "managed" / "VERSION").write_text("3.39.0\n", encoding="utf-8")
+    (upd / "history").mkdir()
+    (upd / "history" / "plan-history.yaml").write_text("kind: plan-history\n", encoding="utf-8")
+    (upd / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    (upd / "code.py").write_text("x=2\n", encoding="utf-8")
+    git("add", "-A"); git("commit", "-qm", "chore(ai-ops): update 3.39.0")
+    assert ps.coordination_paths(upd) == []            # у дочки своего реестра нет
+    assert ps.main(["x", str(upd), "--base", base, "--defaults", defaults, "--strict"]) == 0
+
+    # ОБЫЧНЫЙ PR дочки с тем же смешением, но БЕЗ managed-маркера -> по-прежнему красный
+    plain = tmp_path / "child-plain"; git2, base2 = _git_repo_with_base(plain, coord_registry=False)
+    (plain / "code.py").write_text("x=2\n", encoding="utf-8")
+    (plain / "planning" / "plan.yaml").write_text("kind: delivery-plan\nwork: []\n", encoding="utf-8")
+    git2("add", "-A"); git2("commit", "-qm", "feature + plan")
+    assert ps.main(["x", str(plain), "--base", base2, "--defaults", defaults, "--strict"]) == 1
