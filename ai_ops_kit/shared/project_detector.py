@@ -28,6 +28,7 @@ import json
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 
 import yaml
 
@@ -50,14 +51,14 @@ _WATCHED_GLOBS = ("*/package.json", "apps/*/package.json", "packages/*/package.j
                   ".github/workflows/*.yml", ".github/workflows/*.yaml")
 
 
-def _read_json(p):
+def _read_json(p: Path) -> dict:
     try:
         return json.loads(p.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return {}
 
 
-def _text(p):
+def _text(p: Path) -> str:
     """Текст файла или '' — детектор не падает на нечитаемом манифесте."""
     try:
         return p.read_text(encoding="utf-8", errors="ignore")
@@ -65,7 +66,7 @@ def _text(p):
         return ""
 
 
-def _has_py_tests(d: Path):
+def _has_py_tests(d: Path) -> bool:
     """Есть ли в репозитории python-тесты (test_*.py / *_test.py в tests|test или в корне)."""
     for base in (d / "tests", d / "test"):
         if base.is_dir():
@@ -78,7 +79,7 @@ def _has_py_tests(d: Path):
     return False
 
 
-def manifest_fingerprint(root):
+def manifest_fingerprint(root: Path) -> str:
     """sha256 по составу и содержимому манифестов, участвующих в детекции.
 
     Дёшево (манифесты маленькие, каталоги не обходятся целиком) и честно: хеш меняется ровно
@@ -88,7 +89,7 @@ def manifest_fingerprint(root):
     h = hashlib.sha256()
     h.update(b"repository-profile/manifest-hash/v1\n")
 
-    def _feed(rel, path):
+    def _feed(rel: str, path: Path) -> None:
         h.update(rel.encode("utf-8")); h.update(b"=")
         try:
             h.update(hashlib.sha256(path.read_bytes()).digest())
@@ -119,21 +120,22 @@ class _Slots:
     put() без источника не проходит — так команда физически не может появиться в профиле
     «из воздуха» (failure mode #4)."""
 
-    def __init__(self):
-        self.cmd, self.src = {}, {}
+    def __init__(self) -> None:
+        self.cmd: dict = {}
+        self.src: dict = {}
 
-    def put(self, slot, command, source):
+    def put(self, slot: str, command: str | None, source: str | None) -> None:
         if command and source and not self.cmd.get(slot):
             self.cmd[slot] = command
             self.src[slot] = source
 
 
-def _has_section(txt, section):
+def _has_section(txt: str | None, section: str) -> bool:
     """Есть ли в ini/toml-тексте секция [section] (объявлена явно, а не упомянута в комментарии)."""
     return re.search(r"(?m)^\s*\[" + re.escape(section) + r"\]", txt or "") is not None
 
 
-def _precommit_hooks(d: Path):
+def _precommit_hooks(d: Path) -> set:
     """Реально объявленные хуки .pre-commit-config.yaml -> множество id (ruff, mypy, black, …)."""
     txt = _text(d / ".pre-commit-config.yaml")
     if not txt:
@@ -150,7 +152,7 @@ def _precommit_hooks(d: Path):
     return ids
 
 
-def _make_targets(d: Path):
+def _make_targets(d: Path) -> tuple:
     """Явные цели Makefile -> (множество целей, имя файла|None). Присваивания VAR := x не цели."""
     for name in ("Makefile", "makefile"):
         txt = _text(d / name)
@@ -181,7 +183,7 @@ _CI_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
 }
 
 
-def _ci_commands(root: Path):
+def _ci_commands(root: Path) -> dict:
     """Команды из GitHub Actions -> {язык: {slot: (команда, файл-источник)}}.
 
     Берём только шаги, падение которых что-то значит: continue-on-error и `|| true` пропускаем,
@@ -225,7 +227,7 @@ _MAKE_ALIASES = {"build": ("build",), "lint": ("lint",),
                  "typecheck": ("typecheck", "type-check", "types"), "test": ("test", "tests")}
 
 
-def _finalize(stack, root: Path, ci_for_lang, make_targets, make_file):
+def _finalize(stack: dict, root: Path, ci_for_lang: dict | None, make_targets: set, make_file: str | None) -> dict:
     """Добить пустые слоты общерепозиторными фактами (Makefile, CI) и запечатать инвариант
     честности: команда без файла-источника снимается в None."""
     cmds = dict(stack.get("commands") or {})
@@ -237,7 +239,7 @@ def _finalize(stack, root: Path, ci_for_lang, make_targets, make_file):
                     cmds[slot], ev[slot] = f"make {target}", make_file
                     break
         if not cmds.get(slot) and (ci_for_lang or {}).get(slot):
-            cmds[slot], ev[slot] = ci_for_lang[slot]
+            cmds[slot], ev[slot] = (ci_for_lang or {})[slot]
         # инвариант честности: нет файла-источника -> команда выдумана, снимаем
         if cmds.get(slot) and not ev.get(slot):
             cmds[slot] = None
@@ -254,7 +256,7 @@ def _finalize(stack, root: Path, ci_for_lang, make_targets, make_file):
     return stack
 
 
-def _node_pm(d: Path):
+def _node_pm(d: Path) -> str:
     if (d / "pnpm-lock.yaml").exists():
         return "pnpm"
     if (d / "yarn.lock").exists():
@@ -264,7 +266,7 @@ def _node_pm(d: Path):
     return "npm"
 
 
-def _node_stack(d: Path, root: Path):
+def _node_stack(d: Path, root: Path) -> dict:
     pkg = _read_json(d / "package.json")
     deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
     scripts = pkg.get("scripts", {}) or {}
@@ -280,7 +282,7 @@ def _node_stack(d: Path, root: Path):
 
     slots = _Slots()
 
-    def cmd(slot, *names):
+    def cmd(slot: str, *names: str) -> str | None:
         # источник — package.json: команда взята из реально объявленного scripts-таргета
         for n in names:
             if n in scripts:
@@ -311,7 +313,7 @@ def _node_stack(d: Path, root: Path):
     }
 
 
-def _python_commands(d: Path, dep_src):
+def _python_commands(d: Path, dep_src: Callable) -> "_Slots":
     """Команды python-стека ТОЛЬКО по фактам репозитория -> _Slots.
 
     Порядок доказательств: конфиг инструмента в манифесте > отдельный конфиг-файл >
@@ -387,7 +389,7 @@ def _python_commands(d: Path, dep_src):
     return s
 
 
-def _python_stack(d: Path):
+def _python_stack(d: Path) -> dict:
     fw, src = [], []
     deps_text = ""
     for rel in ("pyproject.toml", "requirements.txt", "requirements-dev.txt"):
@@ -395,7 +397,7 @@ def _python_stack(d: Path):
             src.append(rel); deps_text += _text(d / rel)
     low = deps_text.lower()
 
-    def dep_src(name):
+    def dep_src(name: str) -> str | None:
         """В каком манифесте упомянута зависимость — честный evidence для выведенной команды."""
         for rel in ("pyproject.toml", "requirements.txt", "requirements-dev.txt"):
             if name in _text(d / rel).lower():
@@ -430,7 +432,7 @@ def _python_stack(d: Path):
     }
 
 
-def _simple_stack(lang, files, d: Path, commands, source=None):
+def _simple_stack(lang: str, files: list, d: Path, commands: dict, source: str | None = None) -> dict:
     """Стек, команды которого заданы самим тулчейном (go/rust/maven/gradle). Источник команд —
     манифест стека: без него команда не считается выведенной."""
     src = [f for f in files if (d / f).exists()]
@@ -440,7 +442,7 @@ def _simple_stack(lang, files, d: Path, commands, source=None):
             "_command_evidence": {k: source for k, v in commands.items() if v and source}}
 
 
-def _detect_monorepo(root: Path):
+def _detect_monorepo(root: Path) -> tuple:
     """v2.84: усиленный детект монорепо -> (is_monorepo, reason|None). Кроме node workspaces —
     pnpm-workspace / lerna / turbo / nx и несколько package.json в apps|packages|подкаталогах."""
     pkg = _read_json(root / "package.json")
@@ -458,7 +460,7 @@ def _detect_monorepo(root: Path):
     return False, None
 
 
-def detect(root):
+def detect(root: Path) -> dict:
     root = Path(root)
     stacks, undetermined = [], []
     # node
@@ -541,7 +543,7 @@ def detect(root):
     }
 
 
-def load_or_detect(root, write=True):
+def load_or_detect(root: Path, write: bool = True) -> dict:
     """Единая точка детекции: кеш `.ai/repository-profile.yaml`, если он свежий, иначе detect().
 
     Свежесть — сверка `manifest_hash` с текущим состоянием манифестов. Протухший (или битый,
@@ -571,7 +573,7 @@ def load_or_detect(root, write=True):
     return profile
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="project_detector.py")
     sub = ap.add_subparsers(dest="cmd", required=True)
     d = sub.add_parser("detect")

@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: types-enforced-on-foundation-or-mypy-removed
+    title: mypy включён и строгий на всём фундаменте (kernel+shared под disallow_untyped_defs)
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: pyproject.toml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-05 внешнего аудита). Спор «включить vs убрать» решён замером — обычный
+      mypy нашёл 8 РЕАЛЬНЫХ проблем на фундаменте, типы окупаются → включён. Доведено до строгого
+      `disallow_untyped_defs` на ВСЁМ фундаменте: `ai_ops_kit.kernel.*` + `ai_ops_kit.shared.*`
+      (per-module override, mypy в джобе lint, `mypy==2.3.1`). Все 8 файлов shared аннотированы
+      РЕАЛЬНЫМИ типами (99 подписей + каскад ошибок тел — agg=dict[str,Any], TypedDict-cast,
+      Iterator для contextmanager, разноарные tuple — закрыты, НЕ залиты Any). Новая untyped-функция
+      в фундаменте теперь краснит. ВНЕ ЭТОЙ РАБОТЫ (отдельно): disallow по остальному пакету
+      (context/engine/gates/… — там свой каскад) и py.typed (маркер «весь пакет типизирован» при
+      неполном покрытии остального был бы над-заявлением). Граница «где типы обязательны» — вверх.
+
   - id: formatter-adopted-with-blame-ignore
     title: ruff format — ОТКЛОНЁН замером (раздувает код, ломает 30 потолков размера)
     goal: checks-that-run

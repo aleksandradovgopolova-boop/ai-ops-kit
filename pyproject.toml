@@ -186,11 +186,11 @@ ignore_missing_imports = true
 follow_imports = "silent"
 
 # Ратчет-ВВЕРХ (F-05 доводка 2026-09-10): kernel уже ПОЛНОСТЬЮ типизирован, поэтому на нём включён
-# строгий `disallow_untyped_defs` — новая функция без аннотаций в ядре краснит. shared: два чистых утиль-модуля (gitio, budget)
-# уже под строгим disallow; остальные 6 файлов — 99 подписей + каскад ошибок тел, отдельный
+# строгий `disallow_untyped_defs` — новая функция без аннотаций в ядре краснит. shared: ВСЕ файлы под строгим disallow (99 подписей + каскад ошибок тел закрыты,
+# реальными типами, не Any). Дальше по коду — отдельный
 # шаг ратчета, когда охват вырастет. Так граница «где типы обязательны» ходит только вверх.
 [[tool.mypy.overrides]]
-module = ["ai_ops_kit.kernel.*", "ai_ops_kit.shared.gitio", "ai_ops_kit.shared.budget"]
+module = ["ai_ops_kit.kernel.*", "ai_ops_kit.shared.*"]
 disallow_untyped_defs = true
 
 # towncrier: ЕДИНСТВЕННЫЙ из шести рассмотренных инструментов, у кого есть гейт «в этой ветке
