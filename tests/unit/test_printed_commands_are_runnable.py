@@ -26,7 +26,10 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]
 #: У `ai-ops` ДВЕ поверхности, и обе настоящие: интент-CLI движка и установщик в child-репозитории.
 #: Проверять по одной значило бы объявлять несуществующим флаг, который у человека работает.
-CLI_SURFACES = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py", PKG / "installer" / "ai_ops.py")
+#: `installer/doctor.py` — сателлит команды `doctor` (разрез монолита): флаг `--remove-path-belt`
+#: разбирается там, поэтому поверхность флагов включает и его.
+CLI_SURFACES = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py", PKG / "installer" / "ai_ops.py",
+                PKG / "installer" / "doctor.py")
 #: Что кит печатает как «наберите это». Команда ограничена ОДНОЙ строкой: без этого регулярка
 #: съедала полдокстринга и «находила» флаг, стоящий абзацем ниже (найдено этим же тестом).
 CMD_RE = re.compile(r"ai-ops[ \t]+([a-z][a-z-]*)((?:[ \t]+[^\s`'\"]+)*)")
