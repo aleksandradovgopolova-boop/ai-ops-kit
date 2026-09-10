@@ -559,7 +559,6 @@ goals:
       # Волна 3 — ревьюеры и ui-health углублены содержанием Конституции.
       reviewers_and_ui_health_deepened_from_constitution: true
       # Волна 4 — MCP-доступ к UI-системе (get_*/validate_*).
-      mcp_access_to_ui_system: false
 
 # ЧТО ЗДЕСЬ ЛЕЖИТ, А ЧТО НЕТ (`plan-as-control-plane`, 2026-08-14). Активный план — это ответ на
 # четыре вопроса управления: где мы, что идёт сейчас, что блокирует и чем, какую работу взять
