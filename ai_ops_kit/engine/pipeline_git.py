@@ -125,70 +125,12 @@ def _head_advanced(root, base_sha):
     return (head != str(base_sha).strip() and bool(head)), (head or None)
 
 
+# K5 (2026-09-10): тело резолвера базы переехало в shared/gitio.resolve_base (чистый git-запрос,
+# его звали и engine, и lifecycle через границу пакета). Здесь — алиас: внутренние вызовы engine
+# (execution_pipeline, pipeline_setup, review_branch) не меняются, а lifecycle зовёт shared напрямую.
 def _resolve_base(root, base_ref):
-    """v3.0.2/v3.0.7 (finding аудита P0): разрешение base-ветки. ТОЛЬКО ветка (локальная/origin), не tag/SHA.
-
-    v3.0.7 BaseResolver v3 — два режима:
-    * base_ref=None -> AUTO: текущая ветка -> upstream (@{u}) -> remote default (origin/HEAD).
-      Никакого хардкода 'main'. Порядок «текущая ветка первой» — F-014: работа продолжается с того
-      места, где стоит пользователь, поэтому последовательные задачи строятся друг на друге.
-      Не резолвится только detached HEAD без upstream/origin/HEAD (база обязана быть веткой).
-    * base_ref задан -> EXPLICIT: обязана существовать (refs/heads/<ref> или origin/<ref>); иначе
-      resolved=False (вызывающий обязан заблокировать прогон ДО модели — не выполнять от HEAD).
-    -> {base_ref, base_sha, source, mode, resolved, reason}."""
-    if _git(root, "rev-parse", "--is-inside-work-tree")[0] != 0:
-        return {"base_ref": base_ref, "resolved": False, "mode": "explicit" if base_ref else "auto",
-                "reason": "не git-репозиторий"}
-    if base_ref:   # EXPLICIT — строго ветка
-        rc_l, sha_l, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/heads/{base_ref}")
-        if rc_l == 0 and (sha_l or "").strip():
-            return {"base_ref": base_ref, "base_sha": sha_l.strip(), "source": "explicit-local",
-                    "mode": "explicit", "resolved": True}
-        rc_r, sha_r, _ = _git(root, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{base_ref}")
-        if rc_r == 0 and (sha_r or "").strip():
-            return {"base_ref": base_ref, "base_sha": sha_r.strip(), "source": "explicit-remote",
-                    "mode": "explicit", "resolved": True}
-        return {"base_ref": base_ref, "resolved": False, "mode": "explicit",
-                "reason": f"явная base '{base_ref}' не найдена ни локально (refs/heads), ни в origin"}
-    # AUTO: текущая ветка -> upstream -> remote default.
-    # v3.28.x (F-014, находка живой квалификации на niti): порядок был обратный — upstream/origin/HEAD
-    # шли первыми, и worktree создавался от УСТАРЕВШЕЙ базы. Пользователь стоял на ветке с уже
-    # принятыми задачами, а каждый следующий прогон её не видел: вторая задача правила те же файлы
-    # от старой версии (гарантированный конфликт при слиянии), и приходилось руками делать
-    # `git reset --hard` в managed-worktree. Ветка, на которой стоит пользователь, — это и есть
-    # заявленное намерение; удалённая база нужна для ДОСТАВКИ, и её отдельно проверяет
-    # _verify_remote_base (fail-closed: расхождение с origin PR не откроет).
-    rc_c, cur, _ = _git(root, "rev-parse", "--abbrev-ref", "HEAD")
-    cur = (cur or "").strip()
-    if rc_c == 0 and cur and cur != "HEAD":      # 'HEAD' = detached: имя ветки не получено
-        rc_h, head, _ = _git(root, "rev-parse", "--verify", "--quiet", "HEAD")
-        if rc_h == 0 and (head or "").strip():
-            return {"base_ref": cur, "base_sha": head.strip(), "source": "current-branch",
-                    "mode": "auto", "resolved": True}
-    rc_u, up, _ = _git(root, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{u}")
-    if rc_u == 0 and (up or "").strip():
-        ref = up.strip()
-        rc_s, sha, _ = _git(root, "rev-parse", "--verify", "--quiet", ref)
-        if rc_s == 0 and (sha or "").strip():
-            br = ref.split("origin/", 1)[1] if ref.startswith("origin/") else ref
-            return {"base_ref": br, "base_sha": sha.strip(), "source": "upstream",
-                    "mode": "auto", "resolved": True}
-    rc_d, dref, _ = _git(root, "symbolic-ref", "--quiet", "refs/remotes/origin/HEAD")
-    if rc_d == 0 and (dref or "").strip():
-        rc_s, sha, _ = _git(root, "rev-parse", "--verify", "--quiet", dref.strip())
-        if rc_s == 0 and (sha or "").strip():
-            br = dref.strip().split("refs/remotes/origin/", 1)[-1]
-            return {"base_ref": br, "base_sha": sha.strip(), "source": "remote-default",
-                    "mode": "auto", "resolved": True}
-    # сюда попадаем только при detached HEAD без upstream и без origin/HEAD. Прежний код возвращал
-    # здесь base_ref='HEAD' — это не ветка, а контракт резолвера требует именно ветку: дальше по
-    # цепочке такая «база» ищется как refs/heads/HEAD и доставка врёт. Честный отказ.
-    if cur == "HEAD":
-        return {"base_ref": None, "resolved": False, "mode": "auto",
-                "reason": "detached HEAD без upstream и origin/HEAD — база не ветка; "
-                          "переключись на ветку или задай --base <ветка>"}
-    return {"base_ref": None, "resolved": False, "mode": "auto",
-            "reason": "не удалось определить base автоматически (нет текущей ветки/upstream/remote-default)"}
+    from ai_ops_kit.shared import gitio
+    return gitio.resolve_base(root, base_ref)
 
 
 def _verify_remote_base(root, base_ref, base_sha):

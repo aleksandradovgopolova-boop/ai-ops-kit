@@ -20,7 +20,7 @@ import contextlib
 import sys
 
 from ai_ops_kit.engine.pipeline_helpers import work_produced, delivery_pending  # noqa: E402
-from ai_ops_kit.engine import work_areas as _work_areas       # noqa: E402
+from ai_ops_kit.shared import work_areas as _work_areas       # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work        # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402

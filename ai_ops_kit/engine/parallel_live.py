@@ -132,7 +132,7 @@ def _github_remote(child_root):
     return url if (r.returncode == 0 and ("github.com" in url or url.endswith(".git"))) else None
 
 
-from ai_ops_kit.engine import work_areas as _work_areas   # noqa: E402 — #138: одна формула зон
+from ai_ops_kit.shared import work_areas as _work_areas   # noqa: E402 — #138: одна формула зон
 
 
 def _pkg_signals(base_signals, pkg):

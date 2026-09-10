@@ -117,7 +117,7 @@ providers:
   tools: registry/tools.yaml
   capability_index: registry/capability-index.yaml
   routing_policy: registry/routing-policy.yaml
-  routing_engine: ai_ops_kit/engine/ai_route.py
+  routing_engine: ai_ops_kit/shared/ai_route.py
   capability_selftest: ai_ops_kit/validation/ai_capability_selftest.py
   first_class: [anthropic, openai]
   live_executor_providers: [anthropic, openai, openai-compatible]  # v2.39: openai-compatible (DeepSeek/local) через OPENAI_COMPATIBLE_BASE_URL+ключ

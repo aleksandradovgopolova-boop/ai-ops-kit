@@ -70,6 +70,11 @@ ALLOWLIST_MODULES: dict[str, str] = {
     f"{PKG}.planning.plan_merge_driver":
         "git merge-driver для plan.yaml: git запускает процессом по `merge.ai-ops-plan.driver` "
         "(как console_scripts), а не импортом — нулевой импортер норма по устройству",
+    f"{PKG}.engine.ai_route":
+        "ре-экспорт-шим (K5, 2026-09-10): маршрутизатор переехал в shared/ai_route; старый путь "
+        "оставлен для кросс-версионного импорта `from ai_ops_kit.engine import ai_route` — так его "
+        "зовёт smoke-валидатор ПРЕЖНЕГО тега при апдейте дочки. 0 импортёров внутри кита — норма по "
+        "устройству: рантайм (workitem/run_plan/валидаторы) зовёт shared/ai_route напрямую.",
 }
 
 # --- Замороженный потолок генуинно-дормантных модулей (2026-09-05, аудит 10 ролей). ---

@@ -50,7 +50,7 @@ ENGINE_MODULES = [
     "ai_ops_kit/gates/evidence_collector.py", "ai_ops_kit/shared/project_detector.py",
     "ai_ops_kit/shared/budget.py", "ai_ops_kit/lifecycle/workitem.py",
     "ai_ops_kit/lifecycle/active_work.py", "ai_ops_kit/engine/worktree.py",
-    "ai_ops_kit/engine/ai_route.py",
+    "ai_ops_kit/shared/ai_route.py",
 ]
 ENGINE_DATA = [
     "config/protected-paths.yaml", "quality/gates.yaml",

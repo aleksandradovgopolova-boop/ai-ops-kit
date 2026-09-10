@@ -29,7 +29,7 @@ merge_lifecycle,refusal_paths,session_thresholds}) — их сняли (2026-09-
   PolicyPort         — решение о допустимости действия (автономия/HITL).
                        governance/policy_engine, engine/tool_broker.
   ClassifierPort     — классификация задачи (роль/workflow/риск).
-                       engine/ai_route.
+                       shared/ai_route (foundation: чистая классификация, зовут lifecycle+engine).
 
 Только аннотации, без runtime-логики. Structural typing (Protocol), stdlib только.
 """
@@ -253,7 +253,7 @@ class PolicyPort(Protocol):
 class ClassifierPort(Protocol):
     """Классификация задачи — детерминированно, по реестрам.
 
-    Реализация: engine/ai_route.
+    Реализация: shared/ai_route (foundation).
     Ядро зовёт classify() для определения workflow/риск/роль ДО исполнения.
     """
 

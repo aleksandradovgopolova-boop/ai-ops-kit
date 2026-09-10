@@ -22,12 +22,15 @@
 """
 from __future__ import annotations
 
+from collections.abc import Iterable
+from typing import Any
+
 # Честный ответ «зоны неизвестны». Значение ОСТАЁТСЯ — но неизвестность не является пересечением,
 # и это стережёт `active_work.classify` (там же — почему).
 UNSPECIFIED = "unspecified"
 
 
-def zone_of(path):
+def zone_of(path: object) -> str | None:
     """Одна запись `write_scope` -> зона (каталог). -> строка или None, если зоны нет.
 
     Зона — самый глубокий КАТАЛОГ записи: глоб-сегменты и имя файла отбрасываются, потому что зона
@@ -49,12 +52,12 @@ def zone_of(path):
     return "/".join(segs) or None
 
 
-def from_write_scope(write_scope):
+def from_write_scope(write_scope: Iterable[object] | None) -> list[str]:
     """`write_scope` -> зоны работы. -> отсортированный список; [] если выводить нечего."""
     return sorted({z for z in (zone_of(p) for p in (write_scope or [])) if z})
 
 
-def areas_for(signals=None, write_scope=None):
+def areas_for(signals: dict[str, Any] | None = None, write_scope: Iterable[object] | None = None) -> list[str]:
     """Зоны для регистрации и сверки: объявленные -> выведенные из scope -> честная заглушка.
 
     Порядок именно такой: явные `affected_areas` — заявление человека, оно главнее; вывод из scope —
@@ -69,7 +72,7 @@ def areas_for(signals=None, write_scope=None):
     return derived or [UNSPECIFIED]
 
 
-def _named(zones):
+def _named(zones: Iterable[str] | None) -> list[str]:
     """Только НАЗВАННЫЕ зоны. `unspecified` отбрасывается ЗДЕСЬ, в одном месте, и это осознанно:
     когда тот же фильтр стоял на обеих сторонах сравнения, ни одна из двух строк не была несущей —
     снятие любой из них оставляло тесты зелёными (поймано пробой `areas-unknown-is-not-a-match`,
@@ -78,7 +81,7 @@ def _named(zones):
     return [z for z in (zones or []) if z and z != UNSPECIFIED]
 
 
-def areas_overlap(mine, theirs):
+def areas_overlap(mine: Iterable[str] | None, theirs: Iterable[str] | None) -> list[str]:
     """Пересечение зон: совпадение ИЛИ вложенность каталогов. -> отсортированный список общих зон.
 
     `unspecified` из сравнения ИСКЛЮЧЁН: неизвестность не является пересечением. Ровно это и было

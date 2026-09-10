@@ -170,10 +170,11 @@ known_violations: []
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 1          # ЧЕСТНОЕ ЧИСЛО. F-03 (аудит 2026-09-09) вскрыл 5 пар, спрятанных за
-                           # __import__ (validate_layering видел только ast.Import/ImportFrom и печатал
-                           # 0 с ложной подписью «кольцо стало DAG»). Теперь гейт считает и динамику,
-                           # и ЧЕТЫРЕ пары РАЗВЯЗАНЫ ПО-НАСТОЯЩЕМУ (2026-09-10):
+  mutual_pairs: 0          # НАСТОЯЩИЙ НОЛЬ (2026-09-10). F-03 (аудит 2026-09-09) вскрыл 5 пар,
+                           # спрятанных за __import__ (validate_layering видел только ast.Import/ImportFrom
+                           # и печатал 0 с ложной подписью «кольцо стало DAG»). Теперь гейт считает и
+                           # динамику — и все ПЯТЬ пар РАЗВЯЗАНЫ ПО-НАСТОЯЩЕМУ: ноль теперь не слепота,
+                           # а факт. Кольцо capabilities стало DAG по-честному.
                            #   K1 engine<->gates СНЯТА: CLI-обёртка evidence_collector (строила broker
                            #   через __import__ engine) вынесена в ai_ops_kit/devtools/evidence_collect_cli.py
                            #   — devtools это entrypoints, ему engine импортить можно; библиотечный
@@ -198,8 +199,16 @@ baseline:
                            #   print) вынесена в devtools/branch_review_cli.py. Акт доставки (draft PR)
                            #   остался в delivery/pr_open — направление engine->delivery естественно
                            #   и сохранено. 2 -> 1.
-                           # Остаётся ОДНА взаимная пара внутри capabilities:
-                           #   engine<->lifecycle.
+                           # K5 engine<->lifecycle СНЯТА (2026-09-10): lifecycle тянул engine ВВЕРХ тремя
+                           #   динамическими __import__ — workitem->ai_route.route (маршрутизация),
+                           #   active_work->pipeline_git._resolve_base (git-база), active_work->
+                           #   work_areas.areas_overlap (зоны). Все три — чистые сущности без зависимостей
+                           #   от кита, нужные многим: по правилу foundation они переехали ВНИЗ в shared
+                           #   (ai_route -> shared/ai_route + CLI в devtools; _resolve_base -> shared/gitio
+                           #   с алиасом в pipeline_git; work_areas -> shared/work_areas). Теперь и
+                           #   lifecycle, и engine зовут их ВНИЗ; lifecycle не тянет engine ни одним ребром.
+                           #   1 -> 0. Кольцо стало DAG.
+                           # ВСЕ ПЯТЬ ПАР РАЗВЯЗАНЫ. Внутри capabilities взаимных пар не осталось.
                            #
                            # ЧТО БЫЛО РАЗВЯЗАНО ПО-НАСТОЯЩЕМУ (переезды в foundation, 2026-08-12) — это
                            # сняло ПЕРЕСЕКАВШИЕ СЛОИ пары, а не эти пять внутри capabilities:
@@ -208,29 +217,35 @@ baseline:
                            #   budget (68) engine -> shared: снял engine<->providers.
                            #   lifecycle_store (404) lifecycle -> shared: снял gates<->lifecycle.
                            # Правило: модуль, который НИЧЕГО не импортирует из кита и нужен многим, лежит
-                           # в foundation. Настоящая развязка этих пяти — отдельная работа (напр.
-                           # `ai_route` (317) ни от кого не зависит; но пару снимает не переезд, а
-                           # решение «кто классифицирует» — workitem не должен звать роутер сам).
+                           # в foundation. По нему и снята K5: ai_route (317), work_areas и резолвер базы
+                           # переехали в shared, и «кто классифицирует» решилось само — workitem зовёт
+                           # маршрутизатор ВНИЗ, а не тянет engine вверх.
+                           # ПРИМЕЧАНИЕ K5: в engine/ai_route.py оставлен ТОНКИЙ ре-экспорт из
+                           # shared/ai_route — для кросс-версионного импорта по старому пути (smoke-
+                           # валидатор прошлого тега при апдейте дочки зовёт `from ai_ops_kit.engine
+                           # import ai_route`). Пару НЕ восстанавливает: ре-экспорт импортит shared
+                           # ВНИЗ, а lifecycle его не трогает — mutual_pairs остаётся 0 (проверено).
   cycles_longer_than_two: 0    # ЧЕСТНОЕ ЧИСЛО. F-03 вскрыл 9 циклов, спрятанных за __import__; снятие
                                # пары K1 (engine<->gates) убрало циклы через это ребро (9 -> 5), а снятие
                                # K2 (context<->engine, 2026-09-10) убрало ОСТАВШИЕСЯ длинные циклы: они все
                                # проходили через ребро context->engine. Стало 0 — но теперь это ПРАВДА
                                # (гейт считает и динамику), а не прежняя слепота анализатора, печатавшая
-                               # «кольцо стало DAG» при живых __import__. Остаётся лишь ОДНА взаимная пара
-                               # длины два (engine<->lifecycle) — она считается в
-                               # mutual_pairs, а не здесь. Настоящие развязки ПЕРЕСЕКАВШИХ слои циклов
+                               # «кольцо стало DAG» при живых __import__. Взаимных пар длины два тоже не
+                               # осталось (K5 сняла последнюю, engine<->lifecycle) — mutual_pairs=0.
+                               # Настоящие развязки ПЕРЕСЕКАВШИХ слои циклов
                                # остаются в силе: security<->validation (лента №4), engine/providers/
                                # lifecycle->validation (лента №5).
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
-    Одна взаимная пара лежит ВНУТРИ слоя capabilities (engine<->lifecycle), правилами слоёв не
-    запрещена (осознанная граница) и честно сосчитана. Четыре из пяти исходных РАЗВЯЗАНЫ
-    ПО-НАСТОЯЩЕМУ (2026-09-10): engine<->gates (K1, CLI evidence_collector в devtools),
+    Взаимных пар внутри capabilities НЕ ОСТАЛОСЬ (mutual_pairs=0, 2026-09-10): кольцо стало DAG.
+    Все пять исходных пар РАЗВЯЗАНЫ
+    ПО-НАСТОЯЩЕМУ: engine<->gates (K1, CLI evidence_collector в devtools),
     engops<->gates (K4, environment_map -> checks), context<->engine (K2, RunPlan приходит в
     compile_bundle извне), delivery<->engine (K3, review_branch — запуск движковых ревью-гейтов —
-    переехал в engine, а delivery/pr_open остался актом доставки). Ни одна не спрятана за
-    динамическим импортом — проводка перенесена туда, где ей место. До F-03 все пять показывались
-    нулём.
+    переехал в engine, а delivery/pr_open остался актом доставки), engine<->lifecycle (K5, ai_route /
+    резолвер базы / work_areas переехали в shared — foundation). Ни одна не спрятана за динамическим
+    импортом — проводка перенесена туда, где ей место. До F-03 все пять показывались нулём (слепота
+    анализатора к __import__); теперь ноль — факт.
     Пары, ПЕРЕСЕКАВШИЕ слои, сняты по-настоящему: security<->validation (лента №4) и
     engine<->validation (лента №5) — чистую логику валидаторов вынесли вниз в `checks`, а рантайм
     перестал тянуть `validation` (entrypoints) вверх. Разбор этих пяти внутрикольцевых пар — отдельными
