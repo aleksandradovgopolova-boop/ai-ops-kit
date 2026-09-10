@@ -596,9 +596,9 @@ probes:
 - id: security-report-sequential-carries-findings
   kind: seam
   covers:
-  - ai_ops_kit/engine/workpackage_executor.py
+  - ai_ops_kit/engine/sequence_aggregate.py
   - ai_ops_kit/security/security_pack.py
-  file: ai_ops_kit/engine/workpackage_executor.py
+  file: ai_ops_kit/engine/sequence_aggregate.py
   find: '                "security_scan": _sp2.for_report(agg_sec),'
   replace_with: '                "security_scan": None,'
   tests:
