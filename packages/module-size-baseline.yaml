@@ -32,7 +32,7 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 2601
+  installer/ai_ops.py: 2454
 
 raises:
   - at: '2026-09-10'
@@ -1003,3 +1003,14 @@ raises:
       сателлитов (само-сравнение установки), а ленивый импорт там повесил бы ModuleNotFoundError.
       Чистый перенос, поведение байт-в-байт то же; общие с ядром функции читаются через _ao().
       Сателлит ниже порога 700 — в baseline не заводится.
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2601'
+    to: 'installer/ai_ops.py = 2454'
+    work: 'split-installer-monolith: offline self-test вынесен в сателлит'
+    why: >-
+      Offline self-test установщика (сценарий транзакционного отката установки, крупнейший непокрытый
+      блок) вынесен в installer/selftest_ops.py (199 строк). Зовётся только из диспетчера main. Чистый
+      перенос, поведение байт-в-байт то же; временную подмену глобалов установщика (REPO_ROOT/AI_DIR/…)
+      selftest теперь пишет через _ao() (живой namespace, view с __setattr__), поэтому cmd_init видит
+      подмену. Сателлит ниже порога 700 — в baseline не заводится.

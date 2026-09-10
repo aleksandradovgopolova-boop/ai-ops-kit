@@ -146,6 +146,15 @@ def _update_ops():
     return update_ops
 
 
+def _selftest_ops():
+    """Сателлит offline self-test установщика (installer/selftest_ops.py)."""
+    if str(HERE.parent) not in sys.path:
+        sys.path.insert(0, str(HERE.parent))
+    import selftest_ops
+    selftest_ops._AO_NS = globals()
+    return selftest_ops
+
+
 class ChildConfigError(Exception):
     """Битый/нечитаемый .ai-ops.yaml. Отдельный тип — чтобы main() показал ВНЯТНУЮ причину
     с именем файла, а не уронил пользователя трейсбеком yaml.parser."""
@@ -2363,162 +2372,6 @@ def _debt_recorded(root: Path = None):
     return {str(f.get("id")): f for f in (data.get("features") or []) if isinstance(f, dict)}
 
 
-def selftest():
-    """Offline self-test инсталлера: диапазоны версий + e2e init во временный child,
-    затем прогон child-валидатора на свежей установке (главный путь пользователя)."""
-    import tempfile, io, contextlib
-    ok = True
-
-    def expect(name, cond):
-        nonlocal ok
-        ok = ok and cond
-        print(f"{'PASS' if cond else 'FAIL'} {name}")
-
-    # 1. семантика диапазонов
-    expect("2.14.1 ∈ '>=2.0.0 <3.0.0'", version_in_range("2.14.1", ">=2.0.0 <3.0.0"))
-    expect("2.14.1 ∉ '>=1.0.0 <2.0.0'", not version_in_range("2.14.1", ">=1.0.0 <2.0.0"))
-    expect("пустой диапазон -> без ограничений", version_in_range("9.9.9", ""))
-    expect("compatible_range_for(2.14.1)", compatible_range_for("2.14.1") == ">=2.0.0 <3.0.0")
-
-    # 1b. per-package install (3.0-срез 2): фильтр по выбору пакетов, аддитивно
-    own = package_ownership()
-    expect("ownership читает декларации пакетов (registry -> core)",
-           own.get("registry/agents.yaml") == "ai-ops-core")
-    sample = [(None, "registry/agents.yaml"),      # core
-              (None, "agents/core/context-builder.md"),  # product
-              (None, "security/permission-levels.yaml")]  # не назначен ни пакету
-    only_core = filter_by_packages(sample, ["ai-ops-core"], own)
-    only_core_rels = {rel for _, rel in only_core}
-    expect("выбор [core] оставляет core-файл", "registry/agents.yaml" in only_core_rels)
-    expect("выбор [core] отсекает product-файл", "agents/core/context-builder.md" not in only_core_rels)
-    expect("неназначенный файл ставится ВСЕГДА (честность до срез 3)",
-           "security/permission-levels.yaml" in only_core_rels)
-    expect("selected=None -> ставится всё (обратная совместимость)",
-           len(filter_by_packages(sample, None, own)) == len(sample))
-
-    # 2. e2e: init во временный child, затем child-валидатор
-    with tempfile.TemporaryDirectory() as td:
-        child = Path(td) / "child"
-        # child обязан быть git-репозиторием (init это требует — движок работает через worktree)
-        child.mkdir(parents=True, exist_ok=True)
-        subprocess.run(["git", "-C", str(child), "init", "-q"], capture_output=True)
-        with contextlib.redirect_stdout(io.StringIO()):
-            rc = cmd_init(str(child))
-        expect("init вернул 0", rc == 0)
-        with contextlib.redirect_stdout(io.StringIO()):
-            rc_nogit = cmd_init(str(Path(td) / "not-a-repo"))
-        expect("init в несуществующий/не-git каталог -> rc=2 (fail-closed)", rc_nogit == 2)
-        cfg = yaml.safe_load((child / ".ai-ops.yaml").read_text(encoding="utf-8"))
-        prov = json.loads((child / ".ai" / "managed" / ".provenance.json").read_text(encoding="utf-8"))
-        expect("config.installed_version == версия пакета",
-               str((cfg.get("parent") or {}).get("installed_version")) == pkg_version())
-        expect("provenance.installed_version == версия пакета",
-               str(prov.get("installed_version")) == pkg_version())
-        expect("allowed_version_range покрывает текущую версию",
-               version_in_range(pkg_version(), (cfg.get("parent") or {}).get("allowed_version_range")))
-        exp_src = parent_source()
-        if exp_src:
-            expect("parent.source заполнен реальным URL (без плейсхолдера и кредов)",
-                   str((cfg.get("parent") or {}).get("source")) == exp_src
-                   and "<" not in exp_src and "@" not in exp_src)
-        expect("runtime-команда установлена в .claude/commands/",
-               (child / ".claude" / "commands" / "ai-engineering.md").exists())
-        expect("единая точка входа /ai-start-task установлена",
-               (child / ".claude" / "commands" / "ai-start-task.md").exists())
-        # полные контракты (тела агентов, правила, шаблоны) доезжают в child managed
-        expect("тело агента установлено в .ai/managed/agents/",
-               (child / ".ai" / "managed" / "agents" / "core" / "context-builder.md").exists())
-        expect("правило установлено в .ai/managed/rules/",
-               (child / ".ai" / "managed" / "rules" / "core" / "DefinitionOfDone.md").exists())
-        expect("шаблон установлен в .ai/managed/templates/",
-               any((child / ".ai" / "managed" / "templates").rglob("*.md")))
-        # Codex: при заданном CODEX_HOME промпты реально ставятся в $CODEX_HOME/prompts
-        import os as _os
-        codex_home = child / ".codex-home"
-        _old = _os.environ.get("CODEX_HOME")
-        _os.environ["CODEX_HOME"] = str(codex_home)
-        try:
-            _mat = materialize_runtime(child)
-            expect("Codex-промпты установлены в $CODEX_HOME/prompts при заданном CODEX_HOME",
-                   _mat["codex_prompts"] > 0 and (codex_home / "prompts" / "ai-engineering.md").exists())
-        finally:
-            _os.environ.pop("CODEX_HOME", None) if _old is None else _os.environ.update(CODEX_HOME=_old)
-        r = subprocess.run([sys.executable, str(CI / "validate_ai_ops_child.py")],
-                           cwd=str(child), capture_output=True, text=True)
-        expect("validate_ai_ops_child PASS на свежей установке", r.returncode == 0)
-        if r.returncode != 0:
-            print("  " + (r.stdout + r.stderr).strip()[-600:])
-
-        # cross-OS (Windows-патч): ключи checksums — только POSIX '/', ни одного '\'
-        cs_doc = json.loads((child / ".ai" / "managed" / ".checksums.json").read_text(encoding="utf-8"))
-        cs_keys = list((cs_doc.get("files") or {}).keys())
-        expect("checksums: ключи только с '/' (нет '\\', кросс-ОС)",
-               cs_keys and not any("\\" in k for k in cs_keys))
-        # cross-OS инвариант: checksums со '\'-ключами (как с Windows) не дают ложного дрейфа
-        managed_child = child / ".ai" / "managed"
-        win_style = {"schema_version": cs_doc.get("schema_version", 1),
-                     "files": {k.replace("/", "\\"): v for k, v in cs_doc["files"].items()}}
-        (managed_child / ".checksums.json").write_text(
-            json.dumps(win_style, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
-        expect("cross-OS: Windows-стиль ключей ('\\') -> нет ложного дрейфа",
-               detect_drift(managed_child) == [])
-
-        # 2b. shipped skill с локальной правкой -> backup перед перезаписью (не теряем молча)
-        skills_dir = child / ".claude" / "skills"
-        some = sorted(p.name for p in skills_dir.iterdir() if p.is_dir()) if skills_dir.is_dir() else []
-        if some:
-            sid = some[0]
-            edited = skills_dir / sid / "SKILL.md"
-            if edited.exists():
-                edited.write_text(edited.read_text(encoding="utf-8") + "\n<!-- local edit -->\n",
-                                  encoding="utf-8")
-                with contextlib.redirect_stdout(io.StringIO()):
-                    sync_skills(child)
-                backup = child / ".ai" / "runtime" / "backups" / "skills" / sid
-                expect("skill-drift: локальная правка сохранена в backup", backup.exists())
-                expect("skill-drift: shipped-скилл перезаписан из пакета",
-                       "<!-- local edit -->" not in edited.read_text(encoding="utf-8"))
-                expect("skill-drift: backup содержит правку",
-                       backup.exists() and "<!-- local edit -->" in (backup / "SKILL.md").read_text(encoding="utf-8"))
-
-        # 3. rollback-safe update: провал smoke -> откат managed-слоя и версии
-        global REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED
-        saved = (REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED)
-        REPO_ROOT = child
-        CHILD_CONFIG = child / ".ai-ops.yaml"
-        AI_DIR = child / ".ai"
-        MANAGED = AI_DIR / "managed"
-        try:
-            # эмулируем более старую установку, чтобы тело update отработало (inst != target)
-            import re as _re
-            t = CHILD_CONFIG.read_text(encoding="utf-8")
-            t = _re.sub(r"(installed_version:\s*)\S+", r"\g<1>2.0.0", t, count=1)
-            CHILD_CONFIG.write_text(t, encoding="utf-8")
-            before = sha256(MANAGED / ".checksums.json")
-            # sentinel в runtime-ассете (.claude/commands) — update перезапишет, откат обязан вернуть
-            cmd_file = child / ".claude" / "commands" / "ai-engineering.md"
-            cmd_file.write_text("SENTINEL-PRE-UPDATE", encoding="utf-8")
-            # `in_place=True` НАЗЫВАЕТ проверяемый путь (F-022): предмет здесь —
-            # транзакционный откат применённого обновления, а не политика доставки.
-            rc = _update_ops().cmd_update(force=False, smoke_checks=[["__does_not_exist__.py"]],
-                            in_place=True)
-            rep = json.loads((AI_DIR / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
-            cfg_after = yaml.safe_load(CHILD_CONFIG.read_text(encoding="utf-8"))
-            expect("provalen smoke -> rc=1", rc == 1)
-            expect("статус rolled_back", rep["status"] == "rolled_back")
-            expect("версия в конфиге откачена к 2.0.0",
-                   str((cfg_after.get("parent") or {}).get("installed_version")) == "2.0.0")
-            expect("managed-слой восстановлен (checksums без изменений)",
-                   sha256(MANAGED / ".checksums.json") == before)
-            expect("runtime-ассет (.claude/commands) откачен транзакционно",
-                   cmd_file.read_text(encoding="utf-8") == "SENTINEL-PRE-UPDATE")
-        finally:
-            REPO_ROOT, CHILD_CONFIG, AI_DIR, MANAGED = saved
-
-    print("ai_ops selftest:", "PASS" if ok else "FAIL")
-    return 0 if ok else 1
-
-
 def _force_utf8_stdio():
     """Windows-консоль (cp1251/cp866) роняет UnicodeEncodeError на рамках/галочках/кириллице
     в выводе. Форсируем UTF-8 (Python >=3.7). errors=replace — не падаем, если терминал не тянет."""
@@ -2545,7 +2398,7 @@ def _dispatch(argv):
         print(__doc__); return 0
     cmd = argv[1]
     if cmd in ("selftest", "--selftest"):
-        return selftest()
+        return _selftest_ops().selftest()
     if cmd == "status":
         return _update_ops().cmd_status()
     if cmd == "diff":
