@@ -22,7 +22,6 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 1224
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/execution_pipeline.py: 786
-  ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1135
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
@@ -51,6 +50,24 @@ raises:
       файл) продолжал сторожить запрет прямой записи в main. Сателлиты импортируются самим
       nightly_review (ре-экспорт сохраняет доступ `nightly_review.<имя>` для тестов). Логика байт-в-байт
       та же. Файл упал ниже порога 700 → снят из ceilings, ратчет держит вниз.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'ai_ops_kit/planning/delivery_plan.py = 1135'
+    to: 'ai_ops_kit/planning/delivery_plan.py = 602 (ниже порога 700 — снят из ceilings)'
+    work: разрез монолита delivery_plan — вынос модели и валидации в модули-соседи
+    why: >-
+      Монолит delivery_plan.py разрежён на два когезивных кластера. Модель плана (словарь схемы,
+      аксессоры work/goals, живость целей и политика заморозки умений) перенесена в
+      ai_ops_kit/planning/plan_model.py (282 строки), валидация (структура, семантика, контракт
+      истории, id-хелперы движка) — в ai_ops_kit/planning/plan_validate.py (304 строки). Оба ниже
+      порога 700, поэтому в ceilings НЕ вносятся. Поведение не менялось — чистый перенос байт-в-байт
+      + ре-экспорт именами delivery_plan (все прежние импортёры и `delivery_plan.<name>` работают).
+      Соседи не импортируют delivery_plan (цикла нет): plan_validate читает plan_model, delivery_plan
+      читает оба. delivery_plan.py 1135 -> 602 ушёл ниже порога и снят из ceilings (ратчет вниз).
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: 'installer/ai_ops.py = 3926'
+    to: 'installer/ai_ops.py = 4023'
     work: 'release update-strategy menu (#750): названное меню стратегий обновления + резолвер'
     why: >-
       Новая возможность инсталлятора: названное меню стратегий обновления (pr/manual/scheduled-batch/

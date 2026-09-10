@@ -191,7 +191,7 @@ probes:
     и для `execution_pipeline.py`, где живут охранные пробы сверки.'
 - id: plan-closed-work-not-in-active
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_validate.py
   find: '    elif st in CLOSED_DECLARABLE:'
   replace_with: '    elif False:'
   tests:
@@ -209,7 +209,7 @@ probes:
     «неизвестной» и блокирует весь план.'
 - id: plan-done-needs-a-place-to-recheck
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_validate.py
   find: '        if w.get("status") == "done" and not any(w.get(k) for k in ("pr", "commit", "evidence",
     "finding")):'
   replace_with: '        if False:'
@@ -1007,7 +1007,7 @@ probes:
     конвейер до него не доходит.'
 - id: freeze-state-is-fail-closed
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_model.py
   find: '        return {"frozen": True, "applies": True, "readable": False, "decision": FREEZE_DECISION,'
   replace_with: '        return {"frozen": False, "applies": True, "readable": False, "decision": FREEZE_DECISION,'
   tests:
@@ -1018,7 +1018,7 @@ probes:
     которого стоит весь контур.'
 - id: freeze-lift-by-outcome-needs-evidence
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_model.py
   find: '    if fz.get("applies") and fz.get("outcome_reached") and not _field_evidence_present(root):'
   replace_with: '    if False:'
   tests:
@@ -1051,6 +1051,7 @@ probes:
   covers:
   - ai_ops_kit/planning/next_work.py
   - ai_ops_kit/planning/delivery_plan.py
+  - ai_ops_kit/planning/plan_model.py
   file: ai_ops_kit/planning/next_work.py
   find: '        ready = [r for r in ready if r["id"] not in frozen]'
   replace_with: '        pass'
@@ -1066,7 +1067,7 @@ probes:
     решению; такой совет хуже отсутствия совета, потому что выглядит как санкция.'
 - id: taking-frozen-work-is-an-error
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_validate.py
   find: '        if st == "in_progress" and w.get("id") in _frozen_ids:'
   replace_with: '        if False and w.get("id") in _frozen_ids:'
   tests:
@@ -1198,7 +1199,7 @@ probes:
     снова падает в общий отказ, называющий нужным того, кого на этом уровне не запускают.'
 - id: goal-liveness-outranks-file-order
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_model.py
   find: '                   key=lambda i: (_GOAL_LIVENESS.get(gs[i].get("status") or "active", 0), i))'
   replace_with: '                   key=lambda i: (0, i))'
   tests:
@@ -1209,7 +1210,7 @@ probes:
     прогона.'
 - id: goal-is-live-tells-the-truth
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_model.py
   find: '            return _GOAL_LIVENESS.get(g.get("status") or "active", 0) == 0'
   replace_with: '            return True'
   tests:
@@ -1218,7 +1219,7 @@ probes:
     вечно-утвердительным: закрытых целей как будто нет, и забытая под ними работа снова невидима.'
 - id: unknown-goal-status-is-an-error
   kind: guard
-  file: ai_ops_kit/planning/delivery_plan.py
+  file: ai_ops_kit/planning/plan_validate.py
   find: '        if st is not None and st not in GOAL_STATUSES:'
   replace_with: '        if False:'
   tests:
@@ -1231,6 +1232,7 @@ probes:
   covers:
   - ai_ops_kit/planning/next_work.py
   - ai_ops_kit/planning/delivery_plan.py
+  - ai_ops_kit/planning/plan_model.py
   file: ai_ops_kit/planning/next_work.py
   find: '    if not _plan.goal_is_live(plan, gid):'
   replace_with: '    if False:'
@@ -1460,6 +1462,19 @@ probes:
     Валидатор релизных заявлений судит то, чем кит объявляет собственную готовность; вне контракта он
     остаётся «объявлено, но не исполняется» — и тогда охраны выше проверяют текст, который никто не
     читает.'
+- id: plan-validation-reaches-the-validate-command
+  kind: seam
+  covers:
+  - ai_ops_kit/planning/plan_validate.py
+  file: ai_ops_kit/planning/delivery_plan.py
+  find: '        rep = validate(plan, closed=closed, root=root)'
+  replace_with: '        rep = {"errors": [], "warnings": []}'
+  tests:
+  - tests/unit/test_plan_control_plane.py::test_the_validate_command_surfaces_structural_errors
+  why: 'ШОВ: сам `validate()` вынесен в `plan_validate`, и в CI он попадает только через команду
+    `validate` (её читает `validate_product_model`). Мутация оставляет механизм на месте, но отвязывает
+    его вызов из команды: структурная ошибка плана молча не доезжает до человека, а модульные тесты
+    `validate()` зелены, потому что зовут механизм напрямую. Ровно «объявлено, но не исполняется».'
 - id: plan-git-disagreement-reaches-validate
   kind: seam
   covers:

@@ -42,8 +42,8 @@ scopes:
   - path: ai_ops_kit/planning/
     max_function_lines: 157
     max_function: validate
-    max_function_file: delivery_plan.py
-    max_function_lineno: 440
+    max_function_file: plan_validate.py
+    max_function_lineno: 148
 
   # providers/ — адаптеры исполнителей и оркестрация workflow.
   - path: ai_ops_kit/providers/
