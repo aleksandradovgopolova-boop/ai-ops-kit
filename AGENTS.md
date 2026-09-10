@@ -11,7 +11,7 @@ child-репозиториев. Здесь разрабатывается сам
 |---|---|---|
 | `registry/` | Машиночитаемые реестры: агенты, workflow-контракты, провайдеры, модели, среды, capability-index, routing-policy | Да, но только синхронно с файлами, на которые они ссылаются |
 | `agents/` | Агенты (markdown) | Да; новый/изменённый агент требует записи в `registry/agents.yaml` и eval-кейсов в `evaluations/agents/` |
-| `quality/gates.yaml` | Реестр quality gates | Да, blocking-гейтов MVP ≤ 8 |
+| `quality/gates.yaml` | Реестр quality gates | Да; blocking-гейтов MVP-хребта ≤ 8; доменные гейты блокируют условно (по применимости) |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
 | `ai_ops_kit/` | **Код движка**: модули в пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новая capability живёт в СУЩЕСТВУЮЩЕМ домене (top-level пакетов — потолок 19, `package_ceiling` в `packages/layering.yaml`; новый пакет = архитектурное решение + ADR/DP, а не привычка). Модуль обязан уложиться в слои `packages/layering.yaml` и быть отнесён к одному из четырёх роль-слоёв (`conceptual_layers`). Запуск скриптом — `python3 -m ai_ops_kit.<pkg>.<mod>` (плоский слой `tools/` снят в 4.0) |
