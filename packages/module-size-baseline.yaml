@@ -26,7 +26,6 @@ ceilings:
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1135
-  ai_ops_kit/ui/presenter_formatters.py: 1077
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
@@ -925,3 +924,16 @@ raises:
       (379 строк). Чистый перенос, поведение байт-в-байт то же; в ai_ops.py остался ленивый загрузчик
       _aux_commands() и вызовы из диспетчера. Общие с ядром функции читаются через _ao(). Сателлит ниже
       порога 700 — в baseline не заводится.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'ai_ops_kit/ui/presenter_formatters.py = 1077'
+    to: 'ai_ops_kit/ui/presenter_formatters.py = 541 (ниже порога 700 — снят из ceilings)'
+    work: 'split-presenter-formatters-monolith: когезивный кластер вынесен в модуль-сосед'
+    why: >-
+      Более крупная, «ход и решения работы» часть переводчиков внутренних отчётов (экономика сессии,
+      первый час, bootstrap, недостающие intake-сигналы, короткий путь, трата на разбор, запись
+      обратной связи, doctor) уехала в `ai_ops_kit/ui/presenter_report_formatters.py` (571 строка).
+      Чистый перенос, поведение байт-в-байт то же; presenter_formatters реэкспортирует функции
+      обратно, поэтому `presenter.from_*` и `presenter_formatters.from_*` продолжают работать. Файл
+      опустился до 541 строки — ниже порога 700, поэтому из ceilings убран. Сосед тоже ниже порога —
+      в baseline не заводится. Ратчет ходит вниз.
