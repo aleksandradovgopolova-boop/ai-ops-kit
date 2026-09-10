@@ -20,19 +20,31 @@ threshold: 700
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
   ai_ops_kit/ui/presenter.py: 945
-  ai_ops_kit/engine/execution_pipeline.py: 786
+  ai_ops_kit/engine/execution_pipeline.py: 789
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
   ai_ops_kit/providers/orchestrator_providers.py: 978
   ai_ops_kit/validation/validate_own_medicine.py: 795
   ai_ops_kit/gates/gate_executor.py: 905
-  ai_ops_kit/engine/tool_broker.py: 785
+  ai_ops_kit/engine/tool_broker.py: 805
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
   installer/ai_ops.py: 2168
 
 raises:
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 785; ai_ops_kit/engine/execution_pipeline.py = 786'
+    to: 'ai_ops_kit/engine/tool_broker.py = 805; ai_ops_kit/engine/execution_pipeline.py = 789'
+    work: 'fix(broker): сторож не заявляет успех отката, которого не было (R-43, #786)'
+    why: >-
+      Закрыт R-43: пост-фактум сторож shell мог заявить успешный откат записи в защищённый путь,
+      которого на деле не было (запись в игнорируемый файл сторож не видит). Честный отчёт требует
+      проверить результат отката по факту, а не по намерению — это добавило ветку разбора в
+      tool_broker.py (785 -> 805) и проброс её итога в execution_pipeline.py (786 -> 789). Оба
+      остаются под порогом монолита; поднятие потолка записью в ledger, ратчет держит вниз для
+      остального.
   - at: '2026-09-11'
     what: lower_ceiling
     from: 'ai_ops_kit/lifecycle/active_work.py = 1135'
