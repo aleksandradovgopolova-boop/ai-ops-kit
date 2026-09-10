@@ -37,7 +37,7 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 4040
+  installer/ai_ops.py: 3605
 
 raises:
   - at: '2026-09-10'
@@ -885,3 +885,16 @@ raises:
       импорт вешал бы copy-guard, если сателлит не доставлен), правило в `_GITATTRIBUTES_RULES`, вызов в
       deliver_assets и строка отчёта. ai_ops.py — известный кандидат на вынос (крупнейший файл), ратчет
       держит рост вниз; логика самого драйвера в отдельном модуле.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 4040'
+    to: 'installer/ai_ops.py = 3605'
+    work: 'split-installer-monolith: два когезивных кластера вынесены в сателлиты'
+    why: >-
+      Синхронизация CI-workflow (`ci_workflow_state`/`sync_ci_workflows`/`_ci_report_line` + хелперы)
+      уехала в `installer/ci_setup.py` (228 строк), скаффолдинг/сидинг дочки (`_seed_product_layer`,
+      `_seed_planning_contour`, `_migrate_legacy_*`, `_backfill_required_context`, `_planning_gaps`,
+      `_context_gaps` и др.) — в `installer/child_scaffolding.py` (299 строк). Чистый перенос,
+      поведение байт-в-байт то же; в ai_ops.py остались ленивые sibling-загрузчики (`_ci_setup`,
+      `_child_scaffolding`) — тот же приём, что `plan_merge_setup`. Оба сателлита ниже порога 700 —
+      в baseline не заводятся. Ратчет ходит вниз: потолок снят до нового факта.

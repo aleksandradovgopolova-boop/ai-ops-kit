@@ -194,7 +194,7 @@ def _probe_path(pattern: str) -> str:
 
 
 def check_context_backfilled(root, mod):
-    docs = list(mod._required_context_docs())
+    docs = list(mod._child_scaffolding()._required_context_docs())
     missing = [d for d in docs if not (root / ".ai" / "project" / "context" / d).is_file()]
     if missing:
         return NOT_APPLIED, f"нет обязательных документов контекста: {', '.join(missing)}", ""
@@ -354,7 +354,7 @@ def check_planning_seeded(root, mod):
     if missing:
         return NOT_APPLIED, f"нет артефактов планирования: {', '.join(missing)}", ""
     # Существование != заполненность: F-018/F-027 — заготовка кита считалась заполненной.
-    drafts = [r for r in required if mod._is_unfilled_planning_artifact(root / r)]
+    drafts = [r for r in required if mod._child_scaffolding()._is_unfilled_planning_artifact(root / r)]
     if drafts:
         return NOT_APPLIED, (f"артефакты планирования лежат ЗАГОТОВКАМИ: {', '.join(drafts)} "
                              f"(это F-018 в собственном репозитории: файл есть, направления нет)"), ""
@@ -494,7 +494,7 @@ INIT_CHECKS = {
 # записана: пустая строка здесь означала бы «не применимо» без причины, а это не исход.
 NOT_CULTURE = {
     "deliver_assets": "разобран пошагово выше — это и есть перечень доставки",
-    "_backfill_required_context": "шаг `context_backfilled` из `deliver_assets`",
+    "_child_scaffolding": "загрузчик сателлита; шаг — back-fill контекста, проверен в DELIVERY_CHECKS",
     "ensure_zone_markers": "шаг `zone_markers` из `deliver_assets`",
     "_assets_report_line": "печатает отчёт о доставке; в репозиторий не пишет",
     "_onboarding_summary": "печатает приветствие; в репозиторий не пишет",

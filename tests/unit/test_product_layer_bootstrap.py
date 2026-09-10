@@ -47,7 +47,7 @@ def _repo(tmp_path):
 
 def test_bootstrap_creates_all_registry_artifacts_valid(installer, tmp_path):
     r = _repo(tmp_path)
-    installer._seed_product_layer(r)
+    installer._child_scaffolding()._seed_product_layer(r)
     for art in AR.artifacts(REG):
         st = PT.state_of(r, art, REG)
         assert st["state"] == PT.VALID, f"{art['id']}: {st}"
@@ -55,7 +55,7 @@ def test_bootstrap_creates_all_registry_artifacts_valid(installer, tmp_path):
 
 def test_bootstrap_passport_is_generated_and_filled(installer, tmp_path):
     r = _repo(tmp_path)
-    installer._seed_product_layer(r)
+    installer._child_scaffolding()._seed_product_layer(r)
     passport = (r / ".ai-ops" / "PRODUCT_PASSPORT.md").read_text(encoding="utf-8")
     req = AR.artifact(REG, "product_passport")["structure"]["required_sections"]
     filled, empty = PG.is_filled(passport, req)
@@ -65,7 +65,7 @@ def test_bootstrap_passport_is_generated_and_filled(installer, tmp_path):
 
 def test_templates_dir_synced_with_kit_versions(installer, tmp_path):
     r = _repo(tmp_path)
-    installer._seed_product_layer(r)
+    installer._child_scaffolding()._seed_product_layer(r)
     tdir = r / ".ai-ops" / "templates"
     assert (tdir / "PRODUCT_PASSPORT.md").is_file()
     # копия соответствует версии кита
@@ -83,7 +83,7 @@ def test_existing_owner_files_are_not_overwritten(installer, tmp_path):
     d.mkdir()
     owner = "<!-- template-version: 1 -->\n# Моя доставка\nсвоё содержание\n"
     (d / "DELIVERY.md").write_text(owner, encoding="utf-8")
-    rep = installer._seed_product_layer(r)
+    rep = installer._child_scaffolding()._seed_product_layer(r)
     assert (d / "DELIVERY.md").read_text(encoding="utf-8") == owner
     assert any(x["artifact"].endswith("DELIVERY.md") and x["action"] == "exists" for x in rep)
 
@@ -91,7 +91,7 @@ def test_existing_owner_files_are_not_overwritten(installer, tmp_path):
 def test_missing_registry_does_not_crash_install(installer, tmp_path, monkeypatch):
     """Нет реестра -> установка не падает, а честно сообщает пропуск (fail-open по данным, fail-closed по факту)."""
     monkeypatch.setattr(installer, "PKG", tmp_path)    # PKG без registry/artifact-registry.yaml
-    rep = installer._seed_product_layer(tmp_path)
+    rep = installer._child_scaffolding()._seed_product_layer(tmp_path)
     assert rep and "skipped-no-registry" in rep[0]["action"]
 
 
@@ -100,7 +100,7 @@ def test_missing_registry_does_not_crash_install(installer, tmp_path, monkeypatc
 def test_composition_comes_from_registry_not_hardcode(installer, tmp_path):
     """Каждый document/config артефакт реестра получает файл — состав определяет РЕЕСТР."""
     r = _repo(tmp_path)
-    installer._seed_product_layer(r)
+    installer._child_scaffolding()._seed_product_layer(r)
     for art in AR.artifacts(REG):
         if art.get("kind") in ("document", "config"):
             assert (r / art["path"]).is_file(), f"{art['id']} не создан"

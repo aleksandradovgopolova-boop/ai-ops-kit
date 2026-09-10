@@ -102,7 +102,7 @@ def test_passport_no_longer_reads_either(tmp_path):
 def test_product_layer_no_longer_seeds_roadmap(tmp_path):
     """`.ai-ops/ROADMAP.md` больше не сеется слоем (реестр .ai-ops/ не содержит roadmap)."""
     mod = _load_installer()
-    mod._seed_product_layer(tmp_path)  # читает реестр из PKG кита, сеет в tmp_path/.ai-ops/
+    mod._child_scaffolding()._seed_product_layer(tmp_path)  # читает реестр из PKG кита, сеет в tmp_path/.ai-ops/
     assert not (tmp_path / ".ai-ops" / "ROADMAP.md").exists(), \
         "слой .ai-ops/ не должен сеять роадмап — он снят из реестра (SR-2)"
 
@@ -112,7 +112,7 @@ def test_migration_moves_filled_legacy_to_canonical(tmp_path):
     mod = _load_installer()
     _ai_ops(tmp_path)
     (tmp_path / ".ai-ops" / "ROADMAP.md").write_text(LEGACY_RM, encoding="utf-8")
-    out = mod._migrate_legacy_roadmap(tmp_path)
+    out = mod._child_scaffolding()._migrate_legacy_roadmap(tmp_path)
     assert out and out[0]["action"] == "migrated-from-legacy"
     assert (tmp_path / "ROADMAP.md").is_file()
     assert "уходящий" in (tmp_path / "ROADMAP.md").read_text(encoding="utf-8")
@@ -124,7 +124,7 @@ def test_migration_is_idempotent_when_canonical_exists(tmp_path):
     (tmp_path / "ROADMAP.md").write_text(ROOT_RM, encoding="utf-8")
     _ai_ops(tmp_path)
     (tmp_path / ".ai-ops" / "ROADMAP.md").write_text(LEGACY_RM, encoding="utf-8")
-    assert mod._migrate_legacy_roadmap(tmp_path) == []
+    assert mod._child_scaffolding()._migrate_legacy_roadmap(tmp_path) == []
     assert "корневой" in (tmp_path / "ROADMAP.md").read_text(encoding="utf-8")
 
 
@@ -147,5 +147,5 @@ def test_migration_skips_empty_legacy(tmp_path):
     mod = _load_installer()
     _ai_ops(tmp_path)
     (tmp_path / ".ai-ops" / "ROADMAP.md").write_text("   \n", encoding="utf-8")
-    assert mod._migrate_legacy_roadmap(tmp_path) == []
+    assert mod._child_scaffolding()._migrate_legacy_roadmap(tmp_path) == []
     assert not (tmp_path / "ROADMAP.md").exists()
