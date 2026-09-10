@@ -120,7 +120,7 @@ def test_remaining_names_config_placeholders_in_process(child):
     r = _run_cli(child, "setup", ".")
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     installer = _load_installer()
-    remaining = installer._setup_remaining(child)
+    remaining = installer._setup_ops()._setup_remaining(child)
     joined = "\n".join(remaining)
     assert ".ai-ops.yaml" in joined, "остаток не называет конфиг с плейсхолдерами"
     assert any("коммит" in item.lower() for item in remaining), \
