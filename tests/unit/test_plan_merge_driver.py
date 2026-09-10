@@ -258,7 +258,10 @@ def test_end_to_end_conflict_on_same_id(tmp_path):
 def test_installer_registers_driver(tmp_path):
     """ensure_plan_merge_driver прописывает merge.ai-ops-plan.driver в git config дочки."""
     import importlib.util
-    spec = importlib.util.spec_from_file_location("ai_ops_installer", PKG_ROOT / "installer" / "ai_ops.py")
+    # Функция живёт в сателлите installer/plan_merge_setup.py; ai_ops.py грузит её ЛЕНИВО
+    # (модульный импорт вешал бы copy-guard, если сателлит не доставлен), поэтому зовём из сателлита.
+    spec = importlib.util.spec_from_file_location(
+        "plan_merge_setup", PKG_ROOT / "installer" / "plan_merge_setup.py")
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
     root = _make_repo(tmp_path)
