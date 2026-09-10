@@ -236,16 +236,16 @@ def test_doctor_verdict_names_the_blocking_reason():
     sys.path.insert(0, str(PKG / "installer"))
     import ai_ops as inst
 
-    verdict = inst._doctor_verdict(
+    verdict = inst._doctor()._doctor_verdict(
         ["версии: установлено 3.34.0 / пакет 3.35.0 ⟳ нужен update", "зона managed: ✓"],
         blockers=["установлена версия 3.34.0, а рядом лежит 3.35.0 — нужен update"])
     assert "3.35.0" in verdict and "update" in verdict, verdict
     assert "доказывает" in verdict, "не сказано, почему остальному выводу нельзя верить"
 
-    clean = inst._doctor_verdict(["зона managed: ✓", "движок: ✓"], blockers=[])
+    clean = inst._doctor()._doctor_verdict(["зона managed: ✓", "движок: ✓"], blockers=[])
     assert "порядке" in clean or "работает" in clean, clean
     assert "✗" not in clean
 
-    warned = inst._doctor_verdict(["контекст: ✗ нет обязательного документа"], blockers=[])
+    warned = inst._doctor()._doctor_verdict(["контекст: ✗ нет обязательного документа"], blockers=[])
     assert "замечани" in warned.lower(), warned
     assert "OK" not in warned, "вердикт снова не следует за худшей строкой"

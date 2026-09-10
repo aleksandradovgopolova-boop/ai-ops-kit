@@ -1077,10 +1077,10 @@ probes:
 - id: doctor-asks-about-the-config
   kind: seam
   covers:
-  - installer/ai_ops.py
+  - installer/doctor.py
   - ai_ops_kit/validation/validate_child_config_filled.py
-  file: installer/ai_ops.py
-  find: '        _dprint(_cfgfill.summary_line(str(REPO_ROOT)))'
+  file: installer/doctor.py
+  find: '        _dprint(_cfgfill.summary_line(str(_ao().REPO_ROOT)))'
   replace_with: '        pass'
   tests:
   - tests/unit/test_doctor_requires_a_real_project_name.py

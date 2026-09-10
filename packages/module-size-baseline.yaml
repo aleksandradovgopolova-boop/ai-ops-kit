@@ -37,7 +37,7 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 3605
+  installer/ai_ops.py: 3258
 
 raises:
   - at: '2026-09-10'
@@ -898,3 +898,18 @@ raises:
       поведение байт-в-байт то же; в ai_ops.py остались ленивые sibling-загрузчики (`_ci_setup`,
       `_child_scaffolding`) — тот же приём, что `plan_merge_setup`. Оба сателлита ниже порога 700 —
       в baseline не заводятся. Ратчет ходит вниз: потолок снят до нового факта.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 3605'
+    to: 'installer/ai_ops.py = 3258'
+    work: 'split-installer-monolith: кластер диагностики (doctor) вынесен в сателлит'
+    why: >-
+      Команда `doctor` (крупнейшая функция файла `cmd_doctor` = 264 строки + doctor-only хелперы
+      `_dprint`/`_blocker`/`_path_hygiene`/`_doctor_report_update_strategy`/`_doctor_state`/
+      `_doctor_verdict` и буферы `_DOCTOR_LINES`/`_DOCTOR_BLOCKERS`) уехала в `installer/doctor.py`
+      (408 строк). Чистый перенос, поведение байт-в-байт то же; в ai_ops.py остался ленивый
+      sibling-загрузчик `_doctor()` и вызов из диспетчера main. Общие с другими командами функции
+      (`detect_drift`, `channel_gap`, `source_identity`, `_released_without_proof`, …) остались в
+      ai_ops и читаются через `_ao()` (живые глобалы кладёт загрузчик). Сателлит ниже порога 700 —
+      в baseline не заводится. func-size без изменений: cmd_doctor (264) остаётся под префиксом
+      `installer/`, максимум каталога не вырос.
