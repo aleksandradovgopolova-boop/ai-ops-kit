@@ -5366,3 +5366,19 @@ work:
     pr: 537
     result: >-
       ЗАКРЫТО (уже в main #537, подтверждено 2026-09-10). update --force через мажор расширяет allowed_version_range под новый мажор и говорит вслух (widen_allowed_range); doctor краснит на installed вне диапазона. Замер до/после 5/5 зелёный.
+  - id: wire-decision-gate-into-mandatory-contour
+    title: 'Гейт продуктового решения (baseline/target/guardrails) проведён в ОБЯЗАТЕЛЬНЫЙ контур — фич-решение проверяется на каждой работе, а не только существует функцией'
+    goal: product-decision-loop
+    status: done
+    closed_at: '2026-09-10'
+    pr: 791
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#791). Гейт feature_decision_quality проведён в ОБЯЗАТЕЛЬНЫЙ (blocking) контур: фича, объявленная целью без измеримого обязательства (baseline/target/guardrails), теперь КРАСНИТ прогон и называет нехватку, а не проходит с предупреждением. Решение ENFORCE обосновано: гейт by_construction/validator (детерминированный, без риска ложных срабатываний), прецедент — десяток блокирующих валидаторов того же типа; фичит только kind:feature-decision, для остальных explainable skip. Число advisory-гейтов сведено везде (14->13).
+  - id: release-strategy-assembled-releases-and-update-menu
+    title: 'Кит собирает релизы осознанно (веха/расписание) + владелец-facing меню стратегий обновления дочки (канал × политика, + scheduled/auto-stable)'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    pr: 792
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#792). Названное меню стратегий обновления (pr/manual/scheduled-batch/auto-stable) + резолвер, который читает выбор дочки и НАЗЫВАЕТ доступность, ничего не применяя; auto-stable доступна только на канале stable и при явном opt-in (по умолчанию выключена). Взяты 2 из 3 исходов цели: продукт выбирает стратегию из меню; режимы сверх pr/manual существуют. ОСТАЁТСЯ (не закрыто, будущая работа): полное ИСПОЛНЕНИЕ scheduled-batch/auto-stable (планировщик/автоприменение) и сборка релиза с бампом версии + авто-проводкой в CI — release_assembly называет состав по триггеру, но версию не бампает. Третий исход releases_are_assembled_not_reactively остаётся false.
