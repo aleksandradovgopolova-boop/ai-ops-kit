@@ -5402,3 +5402,24 @@ work:
     pr: 798
     result: >-
       ЗАКРЫТО 2026-09-10 (#798). Кастомный git merge-driver для planning/plan.yaml (installer прописывает merge=ai-ops-plan + merge.ai-ops-plan.driver): непересекающиеся параллельные правки (разные work/goal id) сводятся АВТОМАТИЧЕСКИ, на любой неоднозначности (один id обеими сторонами, дубли, нераспознанная структура, нет pyyaml) — ОБЫЧНЫЙ конфликт с маркерами. Безопасность: финальный backstop перепарсивает итог (валидный YAML, нет дублей id, множества id совпадают) — битый YAML не рождается никогда. Кит применяет драйвер к себе (own_medicine). Union (merge=union) остаётся ТОЛЬКО на JSONL-журналах — структурному YAML он склеил бы битьё. Исход kit_edits_do_not_create_conflicts взят. Живого слияния двух реальных веток на 82-КБ plan.yaml не гоняли — способность на синтетике + сквозной git-merge.
+  - id: layering-pairs-decoupled-by-substance
+    title: 'Пять взаимных пар capabilities развязаны по существу (перенос проводки в правильный слой, не сокрытие через __import__)'
+    goal: layering-ring-is-a-dag
+    status: done
+    closed_at: '2026-09-10'
+    pr: 795
+    result: >-
+      ЗАКРЫТО 2026-09-10 (K1 #780, K4 #788, K2 #790, K3 #793, K5 #795). Все ПЯТЬ взаимных пар слоя
+      capabilities, вскрытых внешним аудитом F-03, развязаны ПО СУЩЕСТВУ — переносом проводки туда,
+      где ей место, а не сокрытием за динамическим импортом. K1 engine↔gates: CLI evidence_collector
+      → devtools. K4 engops↔gates: environment_map → checks (primitives). K2 context↔engine:
+      compile_bundle получает RunPlan извне (plan= или build_plan=), а CLI → devtools; это ребро
+      замыкало все длинные циклы → cycles 5→0. K3 delivery↔engine: review_branch (запуск движковых
+      ревью-гейтов) → engine, CLI → devtools; delivery/pr_open остался актом доставки. K5
+      engine↔lifecycle (последняя): ai_route / резолвер базы / work_areas — чистые сущности без
+      зависимостей от кита — переехали в shared (foundation), workitem зовёт маршрутизатор ВНИЗ.
+      Замер validate_layering: mutual_pairs 5→0, cycles_longer_than_two 9→0. Кольцо стало DAG, и
+      теперь это ПРАВДА (гейт считает и динамику), а не прежний слепой ноль. K5 потребовал доводки до
+      зелёного CI: аннотации типов перенесённых shared-модулей (disallow_untyped_defs), тонкий
+      ре-экспорт-шим engine/ai_route для кросс-версионного апдейта дочки (пару НЕ восстанавливает,
+      объявлен легит-входом в инвентаре). Цель layering-ring-is-a-dag достигнута.
