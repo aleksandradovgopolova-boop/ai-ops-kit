@@ -3110,6 +3110,20 @@ def _dprint(*args, **kwargs):
     print(line, **kwargs)
 
 
+def _doctor_report_update_strategy(dprint):
+    """Стратегия обновления вслух в doctor: называет выбор и доступность, НЕ применяет. -> ok:bool.
+
+    Владелец выбирает стратегию из названного меню; doctor обязан показать, ЧТО прочитано и доступно
+    ли оно. Неизвестная стратегия или недоступная auto-stable — замечание (ok=False), но не действие.
+    """
+    strat = resolve_update_strategy()
+    if strat["known"] and strat["available"]:
+        dprint(f"{strat['message']} ✓")
+        return True
+    dprint(f"⚠ {strat['message']}")
+    return False
+
+
 def cmd_doctor(argv=()):
     inst, avail = installed_version(), pkg_version()
     ok = True
@@ -3187,18 +3201,9 @@ def cmd_doctor(argv=()):
         ok = False
     else:
         _dprint(f"{_chan['message']} ✓")
-    # СТРАТЕГИЯ ОБНОВЛЕНИЯ говорится вслух: владелец выбирает её из названного меню, и doctor обязан
-    # показать, ЧТО прочитано и доступно ли оно. Неизвестная стратегия и недоступная auto-stable —
-    # замечание (ok=False), но НЕ применение: кит здесь только называет, а не действует.
-    _strat = resolve_update_strategy()
-    if _strat["known"] and _strat["available"]:
-        _dprint(f"{_strat['message']} ✓")
-    else:
-        _dprint(f"⚠ {_strat['message']}")
+    if not _doctor_report_update_strategy(_dprint):
         ok = False
-    # ОТКУДА ПОСТАВЛЕНО — говорится ВСЛУХ (наблюдение владельца 14.08.2026). Кит ставился из копии
-    # на черновой ветке и молчал об этом, хотя знает источник. Владелец вправе знать, что у него
-    # стоит непроверенная версия: «работает и работает» — не то же самое, что «объявлено готовым».
+    # ОТКУДА ПОСТАВЛЕНО — вслух (14.08.2026): владелец вправе знать, что стоит непроверенная версия.
     _src = source_identity()
     if _src.get("is_release"):
         _dprint(f"источник: {_src['path']} · выпуск {_src['tag']} ({_src['sha']})")
