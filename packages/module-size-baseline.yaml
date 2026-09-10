@@ -37,9 +37,21 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 3926
+  installer/ai_ops.py: 4023
 
 raises:
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: 'installer/ai_ops.py = 3926'
+    to: 'installer/ai_ops.py = 4023'
+    work: 'release update-strategy menu (#750): названное меню стратегий обновления + резолвер'
+    why: >-
+      Новая возможность инсталлятора: названное меню стратегий обновления (pr/manual/scheduled-batch/
+      auto-stable) и РЕЗОЛВЕР, который читает выбор дочки и НАЗЫВАЕТ доступность, ничего не применяя
+      (update_strategy_menu / child_update_strategy / _child_strategy_opt_in / resolve_update_strategy
+      + вывод в doctor через хелпер _doctor_report_update_strategy). Резолвер читает конфиг дочки и
+      канал пакета — это концерн инсталлятора, живёт в ai_ops.py. cmd_doctor удержан под своим func-size
+      потолком (блок вынесен в хелпер). Ратчет держит вниз.
   - at: '2026-09-10'
     what: raise_ceiling
     from: 'ai_ops_cli_intents.py = 1947'

@@ -39,6 +39,20 @@
             "manual"
           ]
         },
+        "update_strategy": {
+          "type": "string",
+          "description": "Выбор из НАЗВАННОГО меню стратегий обновления (registry/release-claims.yaml -> update_strategies): pr (дефолт) | manual | scheduled-batch | auto-stable. Необязательное: отсутствие читается как 'pr'. auto-stable требует канал stable И update_strategy_opt_in: true. Это выбор владельца, кит его лишь называет — обновление к репозиторию сам не применяет.",
+          "enum": [
+            "pr",
+            "manual",
+            "scheduled-batch",
+            "auto-stable"
+          ]
+        },
+        "update_strategy_opt_in": {
+          "type": "boolean",
+          "description": "Явное включение стратегии, объявленной выключенной (auto-stable, enabled: false). Без него такая стратегия резолвится как недоступная."
+        },
         "auto_update": {
           "type": "boolean"
         }

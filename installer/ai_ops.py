@@ -244,6 +244,89 @@ def package_channel(pkg_root=None):
     return ch if ch in CHANNEL_ORDER else None
 
 
+def update_strategy_menu(pkg_root=None):
+    """Названное меню стратегий обновления (release-claims.yaml -> update_strategies). -> dict.
+
+    Пустой dict означает «не прочитали» — резолвер отвечает на это отдельным «не знаю», а не молча
+    подставляет дефолт. Меню — источник истины по составу и СВОЙСТВАМ стратегий (`requires_channel`,
+    `enabled`); код их не зашивает, чтобы декларация оставалась в реестре, а не в двух местах.
+    """
+    p = Path(pkg_root or PKG) / "registry" / "release-claims.yaml"
+    if not p.is_file():
+        return {}
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    menu = doc.get("update_strategies")
+    return menu if isinstance(menu, dict) else {}
+
+
+def child_update_strategy():
+    """`parent.update_strategy` из .ai-ops.yaml — СЫРОЙ выбор владельца, без резолва. -> str.
+
+    Отсутствие читается как 'pr' — это дефолт меню и совместимость: до названного меню выбор жил в
+    `update_policy: pr|manual`, и его отсутствие уже трактовалось как 'pr'. Неизвестное значение
+    сюда проходит КАК ЕСТЬ — судит его `resolve_update_strategy` (тихого дефолта на неизвестном нет).
+    """
+    cfg = _read_child_cfg()
+    val = str((cfg.get("parent") or {}).get("update_strategy", "") or "").strip().lower()
+    return val or "pr"
+
+
+def _child_strategy_opt_in():
+    """`parent.update_strategy_opt_in` из .ai-ops.yaml — явное включение стратегии, что по
+    декларации выключена (`enabled: false`). -> bool. Отсутствие — не включено."""
+    cfg = _read_child_cfg()
+    return bool((cfg.get("parent") or {}).get("update_strategy_opt_in", False))
+
+
+def resolve_update_strategy(pkg_root=None):
+    """Резолвит выбор дочки против названного меню. НИЧЕГО не применяет — только называет. -> dict.
+
+    {"name", "known": bool|None, "available": bool|None, "what", "requires_channel",
+     "error": str|None, "message"}. По исходам:
+      · меню не прочитано  -> known=None (отдельный «не знаю», не дефолт);
+      · неизвестное имя    -> known=False, error называет доступные (не тихий дефолт);
+      · auto-stable без stable-канала пакета ИЛИ без явного opt-in -> available=False с причиной.
+    """
+    name = child_update_strategy()
+    menu = update_strategy_menu(pkg_root)
+    if not menu:
+        return {"name": name, "known": None, "available": None, "what": "",
+                "requires_channel": "", "error": "меню стратегий не прочитано",
+                "message": ("стратегия обновления: меню не прочитано "
+                            "(registry/release-claims.yaml -> update_strategies) — это «не знаю»")}
+    if name not in menu:
+        avail = ", ".join(sorted(menu))
+        err = f"неизвестная стратегия обновления '{name}'; доступны: {avail}"
+        return {"name": name, "known": False, "available": False, "what": "",
+                "requires_channel": "", "error": err,
+                "message": (f"стратегия обновления '{name}' не из меню — обновление НЕ выполняется. "
+                            f"Выберите одну из: {avail} в .ai-ops.yaml -> parent.update_strategy")}
+    props = menu[name] or {}
+    what = str(props.get("what") or "")
+    req_ch = str(props.get("requires_channel") or "").strip().lower()
+    reasons = []
+    # Требование канала: пакет должен ЗАРАБОТАТЬ нужный канал (package_channel), а не объявить.
+    if req_ch in CHANNEL_ORDER:
+        offers = package_channel(pkg_root)
+        if offers is None or CHANNEL_ORDER.index(offers) < CHANNEL_ORDER.index(req_ch):
+            got = offers or "не прочитан"
+            reasons.append(f"требует канал '{req_ch}', а пакет даёт '{got}'")
+    # Явный opt-in для стратегии, объявленной выключенной.
+    if props.get("enabled", True) is False and not _child_strategy_opt_in():
+        reasons.append("по декларации выключена — включите явно parent.update_strategy_opt_in: true")
+    available = not reasons
+    if available:
+        msg = f"стратегия обновления: '{name}' — {what}"
+    else:
+        msg = (f"стратегия обновления '{name}' объявлена, но НЕДОСТУПНА: "
+               + "; ".join(reasons) + ". Обновление по ней НЕ выполняется")
+    return {"name": name, "known": True, "available": available, "what": what,
+            "requires_channel": req_ch, "error": None, "message": msg}
+
+
 def channel_gap(pkg_root=None):
     """Дочка просит канал X, пакет заработал Y. -> dict.
 
@@ -3027,6 +3110,20 @@ def _dprint(*args, **kwargs):
     print(line, **kwargs)
 
 
+def _doctor_report_update_strategy(dprint):
+    """Стратегия обновления вслух в doctor: называет выбор и доступность, НЕ применяет. -> ok:bool.
+
+    Владелец выбирает стратегию из названного меню; doctor обязан показать, ЧТО прочитано и доступно
+    ли оно. Неизвестная стратегия или недоступная auto-stable — замечание (ok=False), но не действие.
+    """
+    strat = resolve_update_strategy()
+    if strat["known"] and strat["available"]:
+        dprint(f"{strat['message']} ✓")
+        return True
+    dprint(f"⚠ {strat['message']}")
+    return False
+
+
 def cmd_doctor(argv=()):
     inst, avail = installed_version(), pkg_version()
     ok = True
@@ -3104,9 +3201,9 @@ def cmd_doctor(argv=()):
         ok = False
     else:
         _dprint(f"{_chan['message']} ✓")
-    # ОТКУДА ПОСТАВЛЕНО — говорится ВСЛУХ (наблюдение владельца 14.08.2026). Кит ставился из копии
-    # на черновой ветке и молчал об этом, хотя знает источник. Владелец вправе знать, что у него
-    # стоит непроверенная версия: «работает и работает» — не то же самое, что «объявлено готовым».
+    if not _doctor_report_update_strategy(_dprint):
+        ok = False
+    # ОТКУДА ПОСТАВЛЕНО — вслух (14.08.2026): владелец вправе знать, что стоит непроверенная версия.
     _src = source_identity()
     if _src.get("is_release"):
         _dprint(f"источник: {_src['path']} · выпуск {_src['tag']} ({_src['sha']})")
