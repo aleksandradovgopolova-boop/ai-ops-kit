@@ -32,7 +32,7 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 2937
+  installer/ai_ops.py: 2601
 
 raises:
   - at: '2026-09-10'
@@ -991,3 +991,15 @@ raises:
       sequence-report -> ai_ops_kit/engine/sequence_aggregate.py. Имена ре-экспортированы из шапки
       workpackage_executor, поэтому внешние импортёры и мутационные пробы не тронуты. Файл 1066 -> 681
       строк, ушёл ниже порога 700 — снят из ceilings (оба соседа < 700, в baseline не вносятся).
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2937'
+    to: 'installer/ai_ops.py = 2601'
+    work: 'split-installer-monolith: команды update/status/diff вынесены в сателлит'
+    why: >-
+      Команды `update`/`status`/`diff` и отложенное обновление через worktree (`_deferred_update`)
+      вынесены в installer/update_ops.py (400 строк). Гейт отставания `check-update` (cmd_check_update/
+      lag_report/build_diff) ОСТАВЛЕН в ai_ops.py: он обязан работать из одинокой копии ai_ops.py без
+      сателлитов (само-сравнение установки), а ленивый импорт там повесил бы ModuleNotFoundError.
+      Чистый перенос, поведение байт-в-байт то же; общие с ядром функции читаются через _ao().
+      Сателлит ниже порога 700 — в baseline не заводится.

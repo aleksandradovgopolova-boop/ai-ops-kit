@@ -23,6 +23,7 @@ PKG = Path(__file__).resolve().parents[2]
 WRAPPER = PKG / "templates" / "runtime" / "ai-ops-entry.sh"
 INSTALLER = PKG / "installer" / "ai_ops.py"
 DOCTOR = PKG / "installer" / "doctor.py"        # cmd_doctor вынесен сюда (разрез монолита)
+UPDATE = PKG / "installer" / "update_ops.py"    # cmd_update/status/diff вынесены сюда
 
 
 # ─── B2-15 ─────────────────────────────────────────────────────────────────────────────────────
@@ -158,7 +159,8 @@ def test_status_compares_content_not_only_version_numbers():
     изменений — версия не менялась, менялось содержимое. Владелец, поверивший первому ответу, не
     получал ничего из влитой работы.
     """
-    src = INSTALLER.read_text(encoding="utf-8")
+    # cmd_status/cmd_diff вынесены в сателлит installer/update_ops.py (разрез монолита).
+    src = UPDATE.read_text(encoding="utf-8")
     head = src[src.index("def cmd_status():"):src.index("def cmd_diff():")]
 
     assert "build_diff()" in head, "status снова не смотрит на содержимое"

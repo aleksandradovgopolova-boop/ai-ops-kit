@@ -230,7 +230,7 @@ def test_out_of_range_update_is_a_soft_skip_not_a_failure(monkeypatch):
     captured = {}
     monkeypatch.setattr(installer, "write_report",
                         lambda rep: captured.update(rep) or "report.json")
-    rc = installer.cmd_update(force=False, in_place=True)
+    rc = installer._update_ops().cmd_update(force=False, in_place=True)
     assert rc == 0, "выход за диапазон обязан быть мягким пропуском, а не rc=1"
     assert captured.get("status") == "skipped", captured
     assert "4.0.0" in captured.get("report", ""), captured
