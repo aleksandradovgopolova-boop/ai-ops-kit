@@ -237,3 +237,115 @@ class TestSpecifyPathAddsSections:
         for sid in out["coverage"]["blocking_missing"]:
             assert sid in doc["sections"], (
                 f"`ai-ops specify` зовёт заполнить {sid}, а раздела в файле нет")
+
+
+def _workflow_gates(wid):
+    from ai_ops_kit.engine import run_plan
+    return run_plan.load("registry/workflows.yaml")["workflows"][wid]["quality_gates"]
+
+
+@pytest.mark.unit
+class TestPlanTellsTruthAboutTheRun:
+    """План говорит правду о прогоне (работа the-plan-tells-the-truth-about-the-run, issue #768).
+
+    Поле 2026-08-20, та же дочка `ai-ops-cockpit`. Три расхождения между тем, что кит ОБЕЩАЕТ, и
+    что ДЕЛАЕТ, все — на пути человека `specify -> plan -> run`:
+
+    * **obs 64a4840a** — run-plan.yaml перечислил 3 гейта, а прогон применил 11. Гейты применяются
+      верно (gate_executor получает gate_ids=plan["gates"]) — врал плановый файл: он выдавал
+      предварительные 3 гейта за окончательный набор, потому что уровень определялся только на run.
+    * **obs 8a891ce7** — specify выдал форму L0 (6 разделов), а run потребовал L1 (ещё 9), человек
+      заполнил не ту форму и узнал после.
+    * **obs 64a4840a (часть 2) / d48fd639** — визуальный и документационный треки отключались
+      причиной в ПРОШЕДШЕМ времени о ненаписанном коде («UI не менялся»).
+    * **obs e09fe515** — подсказка «Дальше» после specify вела сразу на `run --execute`, минуя plan.
+    """
+
+    # Сигналы, при которых ai_route не видит тяжести (size/risk не заявлены) и выбирает QUICK с
+    # низкой уверенностью — ровно ситуация находки: продуктовая задача, поданная без размера/риска.
+    _PROVISIONAL = {"task_text": "владелец открывает Окошко из палитры команд"}
+
+    def test_provisional_plan_names_all_gates_the_run_would_apply(self):
+        """obs 64a4840a: план не выдаёт 3 гейта за окончательные — называет и эскалацию до 11."""
+        from ai_ops_kit.engine import run_plan
+        plan = run_plan.build_plan(self._PROVISIONAL)
+        assert plan["base_workflow"] == "QUICK"
+        assert plan["classification_provisional"] is True, (
+            "классификация без сигнала тяжести обязана быть помечена предварительной")
+        disc = plan["escalation_disclosure"]
+        assert disc and disc["escalation_workflow"] == "ENGINEERING"
+        # Ровно те гейты, что превращают QUICK(3) в ENGINEERING(11) — план их НАЗЫВАЕТ,
+        # а не прячет за молчаливой эскалацией на шаге run.
+        applied_after_escalation = set(plan["gates"]) | set(disc["gates_if_escalated"])
+        assert applied_after_escalation == set(_workflow_gates("ENGINEERING"))
+        assert set(plan["gates"]).isdisjoint(disc["gates_if_escalated"]), (
+            "эскалационные гейты не должны дублировать уже названные")
+
+    def test_run_applies_exactly_the_gates_the_plan_names(self):
+        """Один источник истины: gate_executor оценивает РОВНО plan['gates'], без второго списка."""
+        from ai_ops_kit.engine import run_plan
+        from ai_ops_kit.gates import gate_executor
+        # Тяжесть заявлена -> классификация окончательная, раскрытия эскалации нет.
+        plan = run_plan.build_plan({"task_text": "миграция схемы заказов", "size": "large",
+                                    "risk": "high"})
+        assert plan["classification_provisional"] is False
+        assert plan["escalation_disclosure"] is None
+        rep = gate_executor.evaluate(plan["base_workflow"], {}, gate_ids=plan["gates"])
+        assert rep["evaluated_gates"] == plan["gates"], (
+            "прогон обязан применить ровно те гейты, что назвал план")
+        assert run_plan.validate_plan(plan) == []
+
+    def test_final_plan_carries_no_stale_escalation_disclosure(self):
+        """Валидатор краснеет, если окончательный план несёт раскрытие эскалации (снова обещал бы не то)."""
+        from ai_ops_kit.engine import run_plan
+        plan = run_plan.build_plan({"task_type": "ENGINEERING", "task_text": "x"})
+        plan["escalation_disclosure"] = {"escalation_workflow": "ENGINEERING", "gates_if_escalated": []}
+        errs = run_plan.validate_plan(plan)
+        assert any("escalation_disclosure" in e for e in errs)
+
+    def test_provisional_plan_discloses_the_form_before_it_is_filled(self):
+        """obs 8a891ce7: уровень и форма известны ДО заполнения — план называет, до какой формы
+        (L1) дорастёт specify при эскалации, вместе с разделами, а не после того как их заполнили."""
+        from ai_ops_kit.engine import run_plan
+        from ai_ops_kit.gates import spec_levels
+        disc = run_plan.build_plan(self._PROVISIONAL)["escalation_disclosure"]
+        assert disc["spec_level_if_escalated"] == "L1 ENGINEERING"
+        # Ровно разделы L1, которых нет в форме L0 — те самые «ещё 9», о которых человек узнавал поздно.
+        l0 = set(spec_levels.required_sections(0))
+        expected = [s for s in spec_levels.required_sections(1) if s not in l0]
+        assert disc["spec_sections_if_escalated"] == expected
+        assert expected, "форма L1 обязана добавлять разделы к L0"
+
+    def test_skipped_track_reason_is_about_signals_not_past_tense_code_facts(self):
+        """obs 64a4840a/d48fd639: причина отключённого трека не утверждает факт о ненаписанном коде."""
+        from ai_ops_kit.engine import run_plan
+        # Никаких зон не заявлено -> визуальный и документационный треки отключены.
+        plan = run_plan.build_plan({"task_type": "ENGINEERING", "task_text": "рефактор внутри модуля"})
+        reasons = {t["track"]: t["reason"] for t in plan["skipped_tracks"]}
+        for track in ("VISUAL", "DOCUMENTATION"):
+            r = reasons[track]
+            # Причина — про ЗАЯВКУ в сигналах, а не про свершившийся факт о коде, которого ещё нет.
+            assert "не заявлен" in r, f"{track}: причина должна быть о сигнале задачи, не о коде: {r!r}"
+            for lie in ("UI не менялся", "не менялся", "изменений нет",
+                        "нет пользовательски-заметных изменений"):
+                assert lie not in r, f"{track}: причина утверждает факт о ненаписанном коде: {r!r}"
+
+    def test_all_track_skip_reasons_avoid_past_tense_code_claims(self):
+        """Реестровая охрана: каждый skip_reason в tracks.yaml — о заявке в сигналах, не о коде."""
+        from ai_ops_kit.engine import run_plan
+        tracks = run_plan.load("registry/tracks.yaml")["tracks"]
+        for name, t in tracks.items():
+            sr = t.get("skip_reason", "")
+            assert "не заявлен" in sr, f"трек {name}: skip_reason должен быть о заявке в сигналах: {sr!r}"
+
+    def test_specify_hint_routes_through_plan_not_straight_to_run(self, tmp_path, capsys):
+        """obs e09fe515: подсказка «Дальше» после specify ведёт на plan, а не прыгает на run --execute."""
+        (tmp_path / ".ai-ops.yaml").write_text("project: {name: t}\n", encoding="utf-8")
+        rc = ai_ops_cli.main(["specify", str(tmp_path), "--feature", "wi-1",
+                              "--signals", json.dumps({"task_type": "QUICK"})])
+        assert rc == 0
+        out = capsys.readouterr().out
+        hint = next((l for l in out.splitlines() if l.startswith("Дальше")), "")
+        assert "plan" in hint, f"подсказка обязана назвать шаг plan: {hint!r}"
+        assert "--execute" not in hint, (
+            f"подсказка после specify не должна прыгать на run --execute, минуя plan: {hint!r}")
