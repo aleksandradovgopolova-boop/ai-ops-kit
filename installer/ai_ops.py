@@ -86,6 +86,15 @@ AI_DIR = REPO_ROOT / ".ai"
 MANAGED = AI_DIR / "managed"
 META = {".checksums.json", ".provenance.json", ".update-lock"}
 
+# Сателлит установщика рядом; installer/ — не пакет. Грузим ЛЕНИВО (внутри функции доставки), а не на
+# уровне модуля: `deliver_assets` бежит в РОДИТЕЛЕ при установке (сателлит на месте), а из копии дочки
+# ai_ops.py может запускаться БЕЗ него — модульный импорт повесил бы даже copy-guard.
+def _plan_merge_setup():
+    if str(HERE.parent) not in sys.path:
+        sys.path.insert(0, str(HERE.parent))
+    import plan_merge_setup
+    return plan_merge_setup
+
 
 class ChildConfigError(Exception):
     """Битый/нечитаемый .ai-ops.yaml. Отдельный тип — чтобы main() показал ВНЯТНУЮ причину
@@ -2261,6 +2270,8 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         # Рядом с `gitignore` и по той же причине: существующие дочки — те, на которых находка
         # и случилась, — получают правило обновлением, а не переустановкой.
         "gitattributes": ensure_gitattributes(root),
+        # Атрибут merge=ai-ops-plan без записи в git config бездействует — прописываем драйвер локально.
+        "plan_merge_driver": _plan_merge_setup().ensure_plan_merge_driver(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
         # ДО посева планирования (SR-2): перенести заполненный уходящий `.ai-ops/ROADMAP.md` в
@@ -2300,8 +2311,9 @@ def _assets_report_line(assets: dict) -> str:
         out += ("\n`.gitattributes` " + ("создан" if assets["gitattributes"] == "created"
                                         else "дополнен")
                 + ": журналы отчётов (.ai/project/report-history/*.jsonl) сводятся при слиянии"
-                  " сами — они дописываются, а не переписываются. Структурные файлы не"
-                  " затронуты: там склейка строк дала бы битый документ.")
+                  " сами — они дописываются, а не переписываются. А planning/plan.yaml получил"
+                  " понимающий структуру merge-driver (см. ниже).")
+    out += _plan_merge_setup().plan_merge_report_line(assets.get("plan_merge_driver"))
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += ("\nПолитика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
@@ -2393,10 +2405,16 @@ _GITATTRIBUTES_RULES = """
 # коммиты не конфликтуют. Правило ниже остаётся страховкой для СТАРОГО плоского `<фича>.jsonl`,
 # который ещё может лежать в давно заведённых дочках: там git сведёт строки сам.
 #
-# ПОЧЕМУ ТОЛЬКО JSONL-ЖУРНАЛЫ. `union` склеивает СТРОКИ, а не структуру: на `planning/plan.yaml` или
-# `decisions/registry.yaml` он дал бы синтаксически битый или удвоенный документ. Структурные файлы
-# кита здесь не перечислены сознательно — их конфликт решается разбивкой, а не стратегией слияния.
+# ПОЧЕМУ ТОЛЬКО JSONL-ЖУРНАЛЫ ИДУТ ЧЕРЕЗ union. `union` склеивает СТРОКИ, а не структуру: на
+# `decisions/registry.yaml` он дал бы синтаксически битый или удвоенный документ. Такие структурные
+# файлы здесь через union не идут.
 .ai/project/report-history/*.jsonl merge=union
+
+# СТРУКТУРНЫЙ ПЛАН (#148). `planning/plan.yaml` (самый правимый файл кита) union НЕЛЬЗЯ — склеил бы
+# строки в битый YAML. У него отдельный ПОНИМАЮЩИЙ СТРУКТУРУ merge-driver: непересекающиеся правки
+# сводит сам, на сомнении отдаёт обычный конфликт (см. installer/plan_merge_setup.py). Драйвер
+# прописывает в git config `ensure_plan_merge_driver`; без записи атрибут бездействует (built≠wired).
+planning/plan.yaml merge=ai-ops-plan
 """
 
 _GITIGNORE_RULES = """
@@ -2494,9 +2512,8 @@ def ensure_gitattributes(root: Path = None):
     документ владельца, как и `.gitignore`. Повторный вызов ничего не делает (маркер уже есть),
     поэтому `init` и `update` могут звать функцию свободно.
 
-    ГРАНИЦА, НАЗВАННАЯ ЯВНО: `union` перечислен ТОЛЬКО для JSONL-журналов. Он склеивает строки, и на
-    структурном YAML (`planning/plan.yaml`) дал бы битый документ — там конфликт лечится разбивкой
-    (`derived-state-out-of-tracked-files`), а не стратегией слияния.
+    ГРАНИЦА: `union` — ТОЛЬКО для JSONL-журналов. `planning/plan.yaml` идёт через отдельный
+    merge-driver `merge=ai-ops-plan` (понимает структуру, на сомнении — обычный конфликт).
     """
     root = Path(root or REPO_ROOT)
     path = root / ".gitattributes"

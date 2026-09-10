@@ -67,6 +67,9 @@ ALLOWLIST_MODULES: dict[str, str] = {
     f"{PKG}.cli.entry":
         "точка входа `ai-ops` из pyproject.toml -> [project.scripts]; console_scripts запускает "
         "процессом (pip/pipx), а не импортом — нулевой импортер здесь норма по устройству",
+    f"{PKG}.planning.plan_merge_driver":
+        "git merge-driver для plan.yaml: git запускает процессом по `merge.ai-ops-plan.driver` "
+        "(как console_scripts), а не импортом — нулевой импортер норма по устройству",
 }
 
 # --- Замороженный потолок генуинно-дормантных модулей (2026-09-05, аудит 10 ролей). ---
