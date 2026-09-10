@@ -26,12 +26,30 @@ kind: test-taxonomy-ratchet
 # ТОЛЬКО когда доля законно падает (напр. удалили поведенческие тесты вместе с их предметом), а НЕ
 # на каждое изменение состава: точное равенство baseline==замер снято (issue #680) — оно форсило
 # ре-снап даже когда доля не падала. Устаревший-вниз пол безвреден; устаревший-вверх ловит валидатор.
-behavioral_count: 418
-structural_count: 68
-total_count: 486
-behavioral_share_pct: 86.01
+behavioral_count: 426
+structural_count: 70
+total_count: 496
+behavioral_share_pct: 85.89
 
 raises:
+  - at: '2026-09-11'
+    what: baseline_lowered
+    from_behavioral: 418
+    from_total: 486
+    to_behavioral: 426
+    to_total: 496
+    to_share_pct: 85.89
+    work: 'Архитектурная конституция — зеркало-тест источника (#823)'
+    why: >-
+      ОСОЗНАННОЕ снижение доли (86.01% -> 85.89%): добавлен структурный тест-файл
+      tests/unit/test_architecture_constitution_source.py — зеркало источника standards/architecture/
+      (пересборка rules.yaml/arch.rules.md совпадает с закоммиченным; honesty gate/enforced_in).
+      Он законно структурный — гоняет автономный генератор через subprocess и утверждает на форме
+      генерата, продуктовый код ai_ops_kit/ НЕ импортирует и НЕ зовёт: тот же класс, что уже
+      принятый test_uiux_constitution_source.py. Поведенческих не убыло; прибавились структурные
+      мирроры. Не деградация поведенческого теста, а новый структурный контракт зеркала; снижение
+      зафиксировано записью, а не проехало молча. Долг «завести продуктового потребителя rules.yaml»
+      (constitution_coverage-стиль) — в #825, тогда часть тестов станет поведенческой.
   - at: '2026-09-09'
     what: baseline_lowered
     from_behavioral: 418
