@@ -21,7 +21,6 @@ threshold: 700
 ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 1224
   ai_ops_kit/ui/presenter.py: 945
-  ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1135
@@ -962,3 +961,16 @@ raises:
       имени ai_ops_cli_intents), в нём остались проекции work/readout/graph. Файл усох 1950 -> 257 и
       ушёл НИЖЕ порога 700 — снят с ceilings. Три новых модуля тоже ниже порога — в ceilings не
       вносятся. Ратчет держит рост вниз.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'ai_ops_kit/engine/workpackage_executor.py = 1066'
+    to: 'ai_ops_kit/engine/workpackage_executor.py = 681 (ниже порога 700 — снят из ceilings)'
+    work: 'refactor(engine): разрез монолита workpackage_executor на соседей'
+    why: >-
+      Два когезивных кластера вынесены из монолита-движка в соседние модули пакета engine (чистый
+      рефакторинг, поведение байт-в-байт): модель SequencePlan (хэши определения пакета/плана +
+      integrity-валидация) -> ai_ops_kit/engine/sequence_plan.py; aggregate-верификация финального
+      SHA, закрытие security/code_review на интеграционном диффе, доставка draft PR и durable-запись
+      sequence-report -> ai_ops_kit/engine/sequence_aggregate.py. Имена ре-экспортированы из шапки
+      workpackage_executor, поэтому внешние импортёры и мутационные пробы не тронуты. Файл 1066 -> 681
+      строк, ушёл ниже порога 700 — снят из ceilings (оба соседа < 700, в baseline не вносятся).
