@@ -189,3 +189,54 @@ class TestShellPathGuardBoundaries:
         assert ev["allowed"] is True
         assert ev["fs_guard"]["violations"] == []
         assert (git_repo / "production" / "app.conf").read_text().strip() == "одобрено"
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestRevertReportIsHonest:
+    """R-43 (#786): отчёт не имеет права заявлять успех отката, которого не было.
+
+    Раньше причина собиралась безусловно как «правка откачена» — в том числе когда
+    `_revert_violations` вернул непустой `failed` и правка ОСТАЛАСЬ на диске. Отчёт,
+    называющий дыру закрытой, опаснее самой дыры: читающий «откачено» не идёт смотреть диск.
+    """
+
+    def test_failed_revert_is_named_and_file_stays(self, git_repo):
+        """Откат физически невозможен -> причина говорит это, а не рапортует успех.
+
+        Замер, а не вердикт: проверяется и текст причины, и ФАЙЛ НА ДИСКЕ. Каталог делается
+        r-x тем же вызовом, что создаёт файл, поэтому unlink даёт EACCES.
+        """
+        policy = tool_broker.Policy(level="execution", child_root=str(git_repo))
+        try:
+            ev = tool_broker.execute(
+                {"op": "shell",
+                 "command": "python3 -c \"__import__('pathlib')"
+                            ".Path('production/injected.conf').write_text('PAYLOAD') and "
+                            "__import__('os').chmod('production', 0o500)\""},
+                git_repo, policy)
+
+            assert ev["fs_guard"]["reverted"]["failed"], (
+                "проба не дошла до дефекта: откат обязан был провалиться", ev)
+            assert (git_repo / "production" / "injected.conf").exists(), (
+                "предпосылка теста: правка осталась на диске")
+            assert ev["fs_guard"]["revert_complete"] is False
+            assert "ОТКАТ НЕ УДАЛСЯ" in ev["reason"], ev["reason"]
+            assert "откачено" not in ev["reason"], (
+                "причина не имеет права заявлять успех при провалившемся откате", ev["reason"])
+            assert ev["allowed"] is False
+        finally:
+            (git_repo / "production").chmod(0o700)
+
+    def test_successful_revert_names_what_was_reverted(self, git_repo):
+        """Успех перечисляет откаченное: сторож видит не всё, и список позволяет это заметить."""
+        policy = tool_broker.Policy(level="execution", child_root=str(git_repo))
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo взломано > production/app.conf"}, git_repo, policy)
+
+        assert ev["fs_guard"]["revert_complete"] is True
+        assert ev["fs_guard"]["reverted"]["failed"] == []
+        assert "production/app.conf" in ev["reason"]
+        assert "откачено" in ev["reason"], ev["reason"]
+        assert "ОТКАТ НЕ УДАЛСЯ" not in ev["reason"]
+        assert (git_repo / "production" / "app.conf").read_text().strip() == "real=1"
