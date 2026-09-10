@@ -49,16 +49,21 @@ def _ao():
     return ai_ops
 
 
+def _core():
+    """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
+    return _ao()._core()
+
+
 def _ci_dst(root: Path, name: str) -> Path:
     """Куда в дочке ложится CI-шаблон. По умолчанию `.github/workflows/<name>`; Dependabot — особый
     (`.github/dependabot.yml`), потому что GitHub читает его только оттуда."""
-    rel = _ao().CI_TEMPLATE_DEST.get(name, ("workflows", name))
+    rel = _core().CI_TEMPLATE_DEST.get(name, ("workflows", name))
     return Path(root) / ".github" / Path(*rel)
 
 
 def _ci_prints_path(root: Path = None) -> Path:
     ao = _ao()
-    return Path(root or ao.REPO_ROOT) / ao.CI_PRINTS_REL
+    return Path(root or ao.REPO_ROOT) / _core().CI_PRINTS_REL
 
 
 def _ci_prints(root: Path = None) -> dict:
@@ -75,7 +80,7 @@ def _remember_ci(name: str, text: str, root: Path = None) -> None:
     """Запомнить, что этот файл написал кит и с тех пор его никто не менял."""
     p = _ci_prints_path(root)
     data = _ci_prints(root)
-    data[name] = _ao()._sha(text)
+    data[name] = _core()._sha(text)
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -91,7 +96,7 @@ def _ci_broken_refs(text: str):
     переезд, а не только известные случаи.
     """
     ao = _ao()
-    bad = sorted({rel for rel in (m.group(1) for m in ao._KIT_PATH_RE.finditer(text))
+    bad = sorted({rel for rel in (m.group(1) for m in _core()._KIT_PATH_RE.finditer(text))
                   if not (ao.PKG / rel).exists()})
     if "/tmp/ai-ops-kit" in text:
         bad.append("клон в общий /tmp (нужен $RUNNER_TEMP)")
@@ -109,7 +114,7 @@ def ci_workflow_state(root: Path = None):
     ao = _ao()
     root = Path(root or ao.REPO_ROOT)
     prints, out = _ci_prints(root), []
-    for name in ao.CI_TEMPLATES:
+    for name in _core().CI_TEMPLATES:
         src = ao.PKG / "templates" / "ci" / name
         dst = _ci_dst(root, name)
         if not src.is_file():
@@ -133,7 +138,7 @@ def ci_workflow_state(root: Path = None):
         broken = _ci_broken_refs(cur)
         if cur == tpl:
             state, detail = "current", "совпадает с шаблоном кита"
-        elif prints.get(name) == ao._sha(cur):
+        elif prints.get(name) == _core()._sha(cur):
             state, detail = "stale-ours", "писал кит, с тех пор не менялся — шаблон новее"
         elif name not in prints:
             # Отпечатков не было до 3.36.2, поэтому у КАЖДОГО подключённого ребёнка происхождение
@@ -185,7 +190,7 @@ def sync_ci_workflows(root: Path = None, refresh: bool = False):
                 # Копию кладём, ТОЛЬКО если прежнего содержимого негде взять. В git-репозитории оно
                 # в истории и в `git diff`, а лишний `.before-…` файл — мусор в чужом рабочем
                 # дереве: человек всё равно удалит его руками перед коммитом.
-                if ao._tracked_by_git(dst):
+                if _core()._tracked_by_git(dst):
                     backup = "git"
                 else:
                     backup = dst.with_suffix(dst.suffix + ".before-ai-ops-update")

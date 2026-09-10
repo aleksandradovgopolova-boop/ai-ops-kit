@@ -51,6 +51,11 @@ def _ao():
     return ai_ops
 
 
+def _core():
+    """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
+    return _ao()._core()
+
+
 _DOCTOR_LINES = []
 # ПОЧЕМУ работать нельзя — названо, а не сосчитано. Прежде блокирующий исход печатался как
 # «ЕСТЬ ПРОБЛЕМЫ — 2 блокирующих»: число строк с `✗`, которое к настоящей причине (например,
@@ -96,7 +101,7 @@ def _doctor_report_update_strategy(dprint):
     Владелец выбирает стратегию из названного меню; doctor обязан показать, ЧТО прочитано и доступно
     ли оно. Неизвестная стратегия или недоступная auto-stable — замечание (ok=False), но не действие.
     """
-    strat = _ao().resolve_update_strategy()
+    strat = _core().resolve_update_strategy()
     if strat["known"] and strat["available"]:
         dprint(f"{strat['message']} ✓")
         return True
@@ -142,7 +147,7 @@ def _doctor_verdict(lines, blockers=()):
 
 
 def cmd_doctor(argv=()):
-    inst, avail = _ao().installed_version(), _ao().pkg_version()
+    inst, avail = _core().installed_version(), _core().pkg_version()
     ok = True
     _DOCTOR_LINES.clear()
     _DOCTOR_BLOCKERS.clear()
@@ -179,7 +184,7 @@ def cmd_doctor(argv=()):
     # оно легко стоит на слитой ветке; дочка с 3.36.10 получала «нужен update» против 3.36.8, и
     # выполнение совета ПОНИЗИЛО бы её. Понижение — не обновление. Плюс путь называется: «рядом»
     # без адреса не позволяет понять, о какой копии речь.
-    if _ao().parse_version(inst or "0") < _ao().parse_version(avail):
+    if _core().parse_version(inst or "0") < _core().parse_version(avail):
         ok = _blocker(f"установлена версия {inst or '—'}, а в источнике {_ao().PKG} лежит {avail} — "
                       f"нужен update")
     elif inst != avail:
@@ -192,11 +197,11 @@ def cmd_doctor(argv=()):
     # инструмент, который для этого и существует, об этом не сказал. Проверка рантайма: сверяем
     # ФАКТ (installed) с ФАКТОМ (диапазон из конфига), а не наличие поля.
     try:
-        _allowed = _ao().child_allowed_range()
+        _allowed = _core().child_allowed_range()
     except _ao().ChildConfigError as _e:  # noqa: BLE001 — битый конфиг не роняет doctor, но и не молчит
         _dprint(f"⚠ диапазон версий: НЕ ПРОВЕРЕНО ({_e}) — это не «в порядке»")
     else:
-        if inst and _allowed and not _ao().version_in_range(inst, _allowed):
+        if inst and _allowed and not _core().version_in_range(inst, _allowed):
             _dprint(f"диапазон версий: ✗ установлена {inst}, но разрешённый диапазон "
                     f"'{_allowed}' её не покрывает — следующее обновление молча пропустится как "
                     f"вне диапазона; расширьте parent.allowed_version_range в .ai-ops.yaml "
@@ -209,7 +214,7 @@ def cmd_doctor(argv=()):
     # `stable` и получала `edge` — молча. Здесь это перестаёт быть молчаливым.
     # Обновление НЕ блокируется: сегодня пакет честно стоит на `qualification`, и блокировка
     # заморозила бы каждую дочку. Замечание — да; запрет — решение владельца, не установщика.
-    _chan = _ao().channel_gap()
+    _chan = _core().channel_gap()
     if _chan["satisfied"] is False:
         _dprint(f"⚠ {_chan['message']}")
         ok = False
@@ -221,7 +226,7 @@ def cmd_doctor(argv=()):
     if not _doctor_report_update_strategy(_dprint):
         ok = False
     # ОТКУДА ПОСТАВЛЕНО — вслух (14.08.2026): владелец вправе знать, что стоит непроверенная версия.
-    _src = _ao().source_identity()
+    _src = _core().source_identity()
     if _src.get("is_release"):
         _dprint(f"источник: {_src['path']} · выпуск {_src['tag']} ({_src['sha']})")
     else:
@@ -254,7 +259,7 @@ def cmd_doctor(argv=()):
         _dprint(f"зона {zone}: {'✓' if exists else '✗ отсутствует'}")
         if not exists:
             ok = _blocker(f"каталог {zone} отсутствует — установка неполная")
-    drift = _ao().detect_drift() or []
+    drift = _core().detect_drift() or []
     _dprint(f"целостность managed: {'✓' if not drift else '✗ drift (' + str(len(drift)) + ')'}")
     ok = ok and not drift
     # v2.82 Standalone Child: движок должен быть в .ai/managed, чтобы `ai-ops run` работал без
@@ -321,8 +326,8 @@ def cmd_doctor(argv=()):
     # потому, что находка валидатора стала advisory — если о ней молчать и здесь, «выпущено без
     # доказательства» превратится в «в порядке», а это подмена признания утверждением.
     try:
-        _unproven = _ao()._released_without_proof(_ao().REPO_ROOT)
-        _known = _ao()._debt_recorded(_ao().REPO_ROOT)
+        _unproven = _core()._released_without_proof(_ao().REPO_ROOT)
+        _known = _core()._debt_recorded(_ao().REPO_ROOT)
     except Exception as _e:                       # noqa: BLE001 — учёт долга не роняет doctor
         _dprint(f"поставка без доказательства: НЕ ПРОВЕРЕНО ({_e}) — это не «долга нет»")
     else:

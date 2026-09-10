@@ -397,7 +397,7 @@ probes:
     не доехавшая до ответа, равна отсутствующей.'
 - id: gitattributes-marker-keeps-it-idempotent
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/asset_ops.py
   find: '    if _GITATTRIBUTES_MARK in current:'
   replace_with: '    if False:'
   tests:
@@ -418,9 +418,9 @@ probes:
 - id: gitattributes-seam-delivery-calls-it
   kind: seam
   covers:
-  - installer/ai_ops.py
+  - installer/asset_ops.py
   - ai_ops_kit/intelligence/effect_metrics.py
-  file: installer/ai_ops.py
+  file: installer/asset_ops.py
   find: '        "gitattributes": ensure_gitattributes(root),'
   replace_with: '        "gitattributes": "present",'
   tests:
@@ -429,6 +429,21 @@ probes:
     `init` и `update`. Функцию можно написать и покрыть тестами, оставив мёртвой: так уже было с
     `from_doctor` и со всей политикой экономии сессии до 13.08.2026. Здесь цена шва выше обычной —
     существующие дочки получают правило ТОЛЬКО обновлением.'
+- id: managed-set-reaches-the-install-copy
+  kind: seam
+  covers:
+  - installer/delivery_ops.py
+  file: installer/setup_ops.py
+  find: '    for src, rel in _core().managed_set():'
+  replace_with: '    for src, rel in []:'
+  tests:
+  - tests/unit/test_installer_delivery.py
+  why: 'ШОВ: состав поставки (managed_set + is_runtime_asset + фильтр пакетов, installer/delivery_ops.py)
+    решает, ЧТО едет в дочку, но добирается до неё только потому, что цикл установки в `cmd_init` его
+    перебирает и КОПИРУЕТ файлы в `.ai/managed`. Список можно посчитать верно и оставить неподключённым
+    — установка тогда создаёт пустой managed-слой, а модульные тесты состава остаются зелёными.
+    Мутация оставляет managed_set на месте и обрывает копирование: интеграционный тест доставки
+    краснеет, потому что рантайм-валидаторы в поставленной дочке не оказались.'
 - id: publication-defaults-to-local
   kind: guard
   file: ai_ops_kit/lifecycle/active_work.py
@@ -760,7 +775,7 @@ probes:
     модульный отказ остаётся зелёным — потому что путь до него доходит уже как «текст».'
 - id: child-feedback-hidden-from-child-history
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/asset_ops.py
   find: '.ai/kit-feedback/'
   replace_with: '.ai/kit-feedback-DISABLED/'
   tests:
@@ -1091,7 +1106,7 @@ probes:
     ровно то состояние, в котором находка B2-25 и жила — проверить было чем, никто не проверял.'
 - id: config-check-reaches-the-child
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/delivery_ops.py
   find: '    "validate_child_config_filled",'
   replace_with: '    "validate_child_config_filled_not_delivered",'
   tests:
@@ -1429,7 +1444,7 @@ probes:
     сравнение ветки с самой собой.'
 - id: release-prose-does-not-ship
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/delivery_ops.py
   find: '    if rel.startswith(DEV_ONLY_PREFIXES) or rel in DEV_ONLY_FILES:'
   replace_with: '    if rel.startswith(DEV_ONLY_PREFIXES):'
   tests:
@@ -1512,7 +1527,7 @@ probes:
     выдавалась бы за зелёное.'
 - id: raise-must-name-shipping-files
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/delivery_ops.py
   find: '            elif shipped is not None and rel not in shipped:'
   replace_with: '            elif False:'
   tests:
@@ -1523,7 +1538,7 @@ probes:
     версия стояла в тесте и проба ВЫЖИЛА (позитив без отрицательного случая непробиваем).'
 - id: raise-headroom-is-not-a-reason
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/delivery_ops.py
   find: '        if any(f in why for f in BUDGET_NON_REASONS):'
   replace_with: '        if False:'
   tests:
@@ -1532,7 +1547,7 @@ probes:
     настолько, насколько о нём помнили. Мутация снимает единственную строку, делающую его проверяемым.'
 - id: ceiling-matches-the-last-raise
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/delivery_ops.py
   find: '            vol[-1].get("to_bytes") != ceilings["volume_bytes"]:'
   replace_with: '            False:'
   tests:
@@ -1542,7 +1557,7 @@ probes:
     двух блоках одного файла.'
 - id: breach-message-shows-what-occupies-delivery
   kind: guard
-  file: installer/ai_ops.py
+  file: installer/delivery_ops.py
   find: '    return "\n".join([head, rule, "Что занимает поставку сейчас:"] +'
   replace_with: '    return "\n".join([head, rule] +'
   tests:

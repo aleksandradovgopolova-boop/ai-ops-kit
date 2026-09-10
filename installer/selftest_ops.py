@@ -55,6 +55,11 @@ def _ao():
     return ai_ops
 
 
+def _core():
+    """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
+    return _ao()._core()
+
+
 def selftest():
     """Offline self-test инсталлера: диапазоны версий + e2e init во временный child,
     затем прогон child-валидатора на свежей установке (главный путь пользователя)."""
@@ -67,26 +72,26 @@ def selftest():
         print(f"{'PASS' if cond else 'FAIL'} {name}")
 
     # 1. семантика диапазонов
-    expect("2.14.1 ∈ '>=2.0.0 <3.0.0'", _ao().version_in_range("2.14.1", ">=2.0.0 <3.0.0"))
-    expect("2.14.1 ∉ '>=1.0.0 <2.0.0'", not _ao().version_in_range("2.14.1", ">=1.0.0 <2.0.0"))
-    expect("пустой диапазон -> без ограничений", _ao().version_in_range("9.9.9", ""))
-    expect("_ao().compatible_range_for(2.14.1)", _ao().compatible_range_for("2.14.1") == ">=2.0.0 <3.0.0")
+    expect("2.14.1 ∈ '>=2.0.0 <3.0.0'", _core().version_in_range("2.14.1", ">=2.0.0 <3.0.0"))
+    expect("2.14.1 ∉ '>=1.0.0 <2.0.0'", not _core().version_in_range("2.14.1", ">=1.0.0 <2.0.0"))
+    expect("пустой диапазон -> без ограничений", _core().version_in_range("9.9.9", ""))
+    expect("_core().compatible_range_for(2.14.1)", _core().compatible_range_for("2.14.1") == ">=2.0.0 <3.0.0")
 
     # 1b. per-package install (3.0-срез 2): фильтр по выбору пакетов, аддитивно
-    own = _ao().package_ownership()
+    own = _core().package_ownership()
     expect("ownership читает декларации пакетов (registry -> core)",
            own.get("registry/agents.yaml") == "ai-ops-core")
     sample = [(None, "registry/agents.yaml"),      # core
               (None, "agents/core/context-builder.md"),  # product
               (None, "security/permission-levels.yaml")]  # не назначен ни пакету
-    only_core = _ao().filter_by_packages(sample, ["ai-ops-core"], own)
+    only_core = _core().filter_by_packages(sample, ["ai-ops-core"], own)
     only_core_rels = {rel for _, rel in only_core}
     expect("выбор [core] оставляет core-файл", "registry/agents.yaml" in only_core_rels)
     expect("выбор [core] отсекает product-файл", "agents/core/context-builder.md" not in only_core_rels)
     expect("неназначенный файл ставится ВСЕГДА (честность до срез 3)",
            "security/permission-levels.yaml" in only_core_rels)
     expect("selected=None -> ставится всё (обратная совместимость)",
-           len(_ao().filter_by_packages(sample, None, own)) == len(sample))
+           len(_core().filter_by_packages(sample, None, own)) == len(sample))
 
     # 2. e2e: init во временный child, затем child-валидатор
     with tempfile.TemporaryDirectory() as td:
@@ -103,12 +108,12 @@ def selftest():
         cfg = yaml.safe_load((child / ".ai-ops.yaml").read_text(encoding="utf-8"))
         prov = json.loads((child / ".ai" / "managed" / ".provenance.json").read_text(encoding="utf-8"))
         expect("config.installed_version == версия пакета",
-               str((cfg.get("parent") or {}).get("installed_version")) == _ao().pkg_version())
+               str((cfg.get("parent") or {}).get("installed_version")) == _core().pkg_version())
         expect("provenance.installed_version == версия пакета",
-               str(prov.get("installed_version")) == _ao().pkg_version())
+               str(prov.get("installed_version")) == _core().pkg_version())
         expect("allowed_version_range покрывает текущую версию",
-               _ao().version_in_range(_ao().pkg_version(), (cfg.get("parent") or {}).get("allowed_version_range")))
-        exp_src = _ao().parent_source()
+               _core().version_in_range(_core().pkg_version(), (cfg.get("parent") or {}).get("allowed_version_range")))
+        exp_src = _core().parent_source()
         if exp_src:
             expect("parent.source заполнен реальным URL (без плейсхолдера и кредов)",
                    str((cfg.get("parent") or {}).get("source")) == exp_src
@@ -130,7 +135,7 @@ def selftest():
         _old = _os.environ.get("CODEX_HOME")
         _os.environ["CODEX_HOME"] = str(codex_home)
         try:
-            _mat = _ao().materialize_runtime(child)
+            _mat = _core().materialize_runtime(child)
             expect("Codex-промпты установлены в $CODEX_HOME/prompts при заданном CODEX_HOME",
                    _mat["codex_prompts"] > 0 and (codex_home / "prompts" / "ai-engineering.md").exists())
         finally:
@@ -153,7 +158,7 @@ def selftest():
         (managed_child / ".checksums.json").write_text(
             json.dumps(win_style, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
         expect("cross-OS: Windows-стиль ключей ('\\') -> нет ложного дрейфа",
-               _ao().detect_drift(managed_child) == [])
+               _core().detect_drift(managed_child) == [])
 
         # 2b. shipped skill с локальной правкой -> backup перед перезаписью (не теряем молча)
         skills_dir = child / ".claude" / "skills"
@@ -165,7 +170,7 @@ def selftest():
                 edited.write_text(edited.read_text(encoding="utf-8") + "\n<!-- local edit -->\n",
                                   encoding="utf-8")
                 with contextlib.redirect_stdout(io.StringIO()):
-                    _ao().sync_skills(child)
+                    _core().sync_skills(child)
                 backup = child / ".ai" / "runtime" / "backups" / "skills" / sid
                 expect("skill-drift: локальная правка сохранена в backup", backup.exists())
                 expect("skill-drift: shipped-скилл перезаписан из пакета",
@@ -187,7 +192,7 @@ def selftest():
             t = _ao().CHILD_CONFIG.read_text(encoding="utf-8")
             t = _re.sub(r"(installed_version:\s*)\S+", r"\g<1>2.0.0", t, count=1)
             _ao().CHILD_CONFIG.write_text(t, encoding="utf-8")
-            before = _ao().sha256(_ao().MANAGED / ".checksums.json")
+            before = _core().sha256(_ao().MANAGED / ".checksums.json")
             # sentinel в runtime-ассете (.claude/commands) — update перезапишет, откат обязан вернуть
             cmd_file = child / ".claude" / "commands" / "ai-engineering.md"
             cmd_file.write_text("SENTINEL-PRE-UPDATE", encoding="utf-8")
@@ -202,7 +207,7 @@ def selftest():
             expect("версия в конфиге откачена к 2.0.0",
                    str((cfg_after.get("parent") or {}).get("installed_version")) == "2.0.0")
             expect("managed-слой восстановлен (checksums без изменений)",
-                   _ao().sha256(_ao().MANAGED / ".checksums.json") == before)
+                   _core().sha256(_ao().MANAGED / ".checksums.json") == before)
             expect("runtime-ассет (.claude/commands) откачен транзакционно",
                    cmd_file.read_text(encoding="utf-8") == "SENTINEL-PRE-UPDATE")
         finally:

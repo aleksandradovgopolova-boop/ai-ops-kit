@@ -200,7 +200,8 @@ def test_doctor_names_the_debt(repo):
     inst = _installer(repo)
     unproven = inst._released_without_proof(repo)
     assert unproven == ["onboarding"]
-    # doctor вынесен в сателлит installer/doctor.py; общие функции читаются через `_ao()`.
+    # doctor вынесен в сателлит installer/doctor.py; долг/бюджет-хаб читается через `_core()`
+    # (эти функции переехали в installer/core.py финальным разрезом монолита).
     src = (KIT / "installer" / "doctor.py").read_text(encoding="utf-8")
-    assert "_ao()._released_without_proof(_ao().REPO_ROOT)" in src, "doctor не считает долг"
+    assert "_core()._released_without_proof(_ao().REPO_ROOT)" in src, "doctor не считает долг"
     assert "поставка без доказательства" in src, "doctor не называет долг словами"

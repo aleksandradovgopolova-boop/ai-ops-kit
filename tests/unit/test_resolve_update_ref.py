@@ -28,7 +28,12 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "installer"))
 
-import ai_ops as installer  # noqa: E402 — путь ставится выше
+import ai_ops  # noqa: E402 — путь ставится выше
+
+# resolve_update_ref и его зависимости (installed_version/child_allowed_range/channel_gap/…) переехали
+# в хаб installer/core.py; и вход, и monkeypatch внутренних вызовов должны идти по нему — иначе патч на
+# ai_ops не виден: хаб зовёт свои функции по имени внутри своего модуля.
+installer = ai_ops._core()  # noqa: E402
 
 CHANNELS_VOCAB = {
     "edge": {"requires": []},
@@ -230,7 +235,7 @@ def test_out_of_range_update_is_a_soft_skip_not_a_failure(monkeypatch):
     captured = {}
     monkeypatch.setattr(installer, "write_report",
                         lambda rep: captured.update(rep) or "report.json")
-    rc = installer._update_ops().cmd_update(force=False, in_place=True)
+    rc = ai_ops._update_ops().cmd_update(force=False, in_place=True)
     assert rc == 0, "выход за диапазон обязан быть мягким пропуском, а не rc=1"
     assert captured.get("status") == "skipped", captured
     assert "4.0.0" in captured.get("report", ""), captured

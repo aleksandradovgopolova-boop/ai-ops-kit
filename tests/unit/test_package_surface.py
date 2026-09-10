@@ -49,7 +49,7 @@ def _aliases():
 
 
 def _dev_only():
-    src = (PKG / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+    src = (PKG / "installer" / "delivery_ops.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     for node in ast.walk(tree):
         if isinstance(node, ast.Assign) and any(

@@ -54,6 +54,11 @@ def _ao():
     return ai_ops
 
 
+def _core():
+    """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
+    return _ao()._core()
+
+
 def cmd_resolve_ref(argv):
     """`ai-ops resolve-ref [--channel X] [--repo DIR] [--json]` — какую ревизию брать под канал.
 
@@ -69,7 +74,7 @@ def cmd_resolve_ref(argv):
             repo = next(it, None)
         elif a == "--json":
             js = True
-    res = _ao().resolve_update_ref(ch or _ao().child_update_channel(), repo)
+    res = _core().resolve_update_ref(ch or _core().child_update_channel(), repo)
     if js:
         print(json.dumps(res, ensure_ascii=False))
         return 0 if (res["ref"] or res["kind"] == "branch") else 2
@@ -88,8 +93,8 @@ def cmd_delivery_proof(argv=()):
     """
     apply = "--apply" in argv
     root = _ao().REPO_ROOT
-    unproven = _ao()._released_without_proof(root)
-    known = _ao()._debt_recorded(root)
+    unproven = _core()._released_without_proof(root)
+    known = _core()._debt_recorded(root)
     fresh = [f for f in unproven if f not in known]
     closed = [f for f in known if f not in unproven]
 
@@ -125,7 +130,7 @@ def cmd_delivery_proof(argv=()):
         entries.append({"id": fid, "status_at_record": "released",
                         "recorded_at": prev.get("recorded_at")
                         or datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-                        "kit_version_at_record": prev.get("kit_version_at_record") or _ao().pkg_version()})
+                        "kit_version_at_record": prev.get("kit_version_at_record") or _core().pkg_version()})
     doc = {
         "schema_version": 1, "kind": "DeliveryProofDebt",
         "reason": "released_before_delivery_receipts",
@@ -137,11 +142,11 @@ def cmd_delivery_proof(argv=()):
                  "а не проверенный китом факт)."),
         "features": entries,
     }
-    out = root / _ao().DEBT_REL
+    out = root / _core().DEBT_REL
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
     print("")
-    print(f"Записано: {_ao().DEBT_REL} — признано {len(entries)} "
+    print(f"Записано: {_core().DEBT_REL} — признано {len(entries)} "
           f"{'функция' if len(entries) == 1 else 'функций'}.")
     print("  Это признание отсутствия доказательства, а не доказательство. Долг виден в doctor.")
     return 0
@@ -350,7 +355,7 @@ def cmd_ui_status(argv):
 
 
 def cmd_migrate():
-    chain = _ao().manifest().get("package_migrations", {}).get("chain", []) or []
+    chain = _core().manifest().get("package_migrations", {}).get("chain", []) or []
     if not chain:
         print("цепочка миграций пуста — применять нечего (механизм готов, см. migrations/).")
         return 0

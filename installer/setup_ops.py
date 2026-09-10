@@ -57,6 +57,11 @@ def _ao():
     return ai_ops
 
 
+def _core():
+    """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
+    return _ao()._core()
+
+
 def cmd_init(target_dir):
     """Установка в новый child (для второго пилота)."""
     root = Path(target_dir).resolve()
@@ -66,7 +71,7 @@ def cmd_init(target_dir):
     if not root.is_dir():
         print(f"ОШИБКА: каталога {root} нет — создайте его и инициализируйте git (git init).")
         return 2
-    if not _ao()._is_git_worktree(root):
+    if not _core()._is_git_worktree(root):
         print(f"ОШИБКА: {root} — не git-репозиторий (или git недоступен). Кит ставится в "
               f"git-репозиторий: движок работает через worktree/коммит и собирает evidence "
               f"на точном SHA. Выполните `git init` (и первый коммит), затем повторите init.")
@@ -76,16 +81,16 @@ def cmd_init(target_dir):
         print(f"{ai} уже существует — используйте update."); return 1
     for zone in ("managed", "project", "custom", "generated", "runtime"):
         (ai / zone).mkdir(parents=True, exist_ok=True)
-    _ao().ensure_zone_markers(root)
-    for src, rel in _ao().managed_set():
+    _core().ensure_zone_markers(root)
+    for src, rel in _core().managed_set():
         dst = ai / "managed" / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
     # checksums/provenance в целевом корне
     saved = _ao().MANAGED
     _ao().MANAGED = ai / "managed"
-    n = _ao().write_checksums(_ao().MANAGED)
-    _ao().write_provenance(_ao().pkg_version(), _ao().MANAGED, note="Initial install by ai-ops init.")
+    n = _core().write_checksums(_ao().MANAGED)
+    _core().write_provenance(_core().pkg_version(), _ao().MANAGED, note="Initial install by ai-ops init.")
     # v3.35.1: back-fill обязательного контекста делает и `init`, а не только `update`. Прежде свежая
     # установка ОСТАВЛЯЛА ЗА СОБОЙ известный пробел (`✗ нет в оверлее: ProductStatus.md, now.md`),
     # который закрывал лишь следующий `update` — а вердикт doctor его игнорировал и печатал `OK`.
@@ -106,12 +111,12 @@ def cmd_init(target_dir):
         text = example.read_text(encoding="utf-8")
         # подставить актуальную версию и совместимый диапазон, иначе provenance (пакет)
         # разойдётся с конфигом и validate упадёт сразу после install (см. child-валидатор)
-        text = re.sub(r"(installed_version:\s*)\S+", rf"\g<1>{_ao().pkg_version()}", text, count=1)
+        text = re.sub(r"(installed_version:\s*)\S+", rf"\g<1>{_core().pkg_version()}", text, count=1)
         text = re.sub(r'(allowed_version_range:\s*)"[^"]*"',
-                      rf'\g<1>"{_ao().compatible_range_for(_ao().pkg_version())}"', text, count=1)
+                      rf'\g<1>"{_core().compatible_range_for(_core().pkg_version())}"', text, count=1)
         # parent.source: реальный URL parent-репо из git remote (иначе CI-автообновление
         # не сможет склонировать parent — в заготовке остаётся плейсхолдер)
-        psrc = _ao().parent_source()
+        psrc = _core().parent_source()
         if psrc:
             text = re.sub(r"(^\s*source:\s*)\S+", rf"\g<1>{psrc}", text, count=1, flags=re.M)
         # КАНАЛ ПИШЕМ ТОТ, ЧТО РЕАЛЬНО ОТДАЁМ (19.08.2026, аудит). В заготовке стоит `stable`, и
@@ -120,30 +125,30 @@ def cmd_init(target_dir):
         # объявление строже реальности и никак об этом не узнавал.
         # Поднять канал — одна строка в `.ai-ops.yaml`, и `doctor` скажет, выполнимо ли это
         # сегодня. Писать за владельца обещание, которого мы не держим, — нельзя.
-        _pc = _ao().package_channel()
+        _pc = _core().package_channel()
         if _pc:
             text = re.sub(r"(^\s*update_channel:\s*)\S+", rf"\g<1>{_pc}", text, count=1, flags=re.M)
         # SR-4: дочка объявляет версию стандарта, под которую установлена (не версию пакета).
-        _sv = _ao().package_standard_version()
+        _sv = _core().package_standard_version()
         if _sv is not None:
             text = re.sub(r"(^standard:\n(?:.*\n)*?\s*version:\s*)\S+", rf"\g<1>{_sv}",
                           text, count=1, flags=re.M)
         cfg.write_text(text, encoding="utf-8")
         edit_hint = "project.name и providers" if psrc else "project.name, providers и parent.source"
-        print(f"создана заготовка {cfg} (версия {_ao().pkg_version()}; "
+        print(f"создана заготовка {cfg} (версия {_core().pkg_version()}; "
               f"source {'из git remote' if psrc else 'placeholder — заполните'}) — отредактируйте {edit_hint}.")
     # ТА ЖЕ доставка, что и в `update` (v3.36.2): установка и обновление зовут одну функцию,
     # поэтому разойтись не могут. Прежде эти шаги были выписаны здесь по одному, а в `update`
     # часть из них стояла за ранним выходом — и не выполнялась вовсе.
-    _assets = _ao().deliver_assets(root)
-    _line = _ao()._assets_report_line(_assets)
+    _assets = _core().deliver_assets(root)
+    _line = _core()._assets_report_line(_assets)
     if _line.strip():
         print(_line.strip())
-    synced = _ao().sync_skills(root)
+    synced = _core().sync_skills(root)
     if synced:
         print(f"синхронизированы скиллы в .claude/skills/: {', '.join(synced)}")
     # подключить runtime: сгенерировать и установить команды туда, где их видит раннер
-    mat = _ao().materialize_runtime(root)
+    mat = _core().materialize_runtime(root)
     if mat["claude_commands"]:
         print(f"установлены команды runtime в .claude/commands/ ({mat['claude_commands']} шт.) "
               "— среда (Claude Code) видит маршруты сразу.")
@@ -157,7 +162,7 @@ def cmd_init(target_dir):
     ob_dst = root / "AI-OPS-ONBOARDING.md"      # не затираем собственный ONBOARDING.md репо
     if ob_src.exists() and not ob_dst.exists():
         shutil.copy2(ob_src, ob_dst)
-    print(f"установлено в {root} (версия {_ao().pkg_version()}, {n} файлов). Закоммитьте и настройте CI.")
+    print(f"установлено в {root} (версия {_core().pkg_version()}, {n} файлов). Закоммитьте и настройте CI.")
     print(_onboarding_summary(ob_dst if ob_dst.exists() else None))
     return 0
 
@@ -261,7 +266,7 @@ def cmd_setup(target_dir, *, apply=True):
     if not root.is_dir():
         print(f"ОШИБКА: каталога {root} нет — создайте его и инициализируйте git (git init).")
         return 2
-    if not _ao()._is_git_worktree(root):
+    if not _core()._is_git_worktree(root):
         print(f"ОШИБКА: {root} — не git-репозиторий (или git недоступен). Кит ставится в "
               f"git-репозиторий: движок работает через worktree/коммит и собирает evidence "
               f"на точном SHA. Выполните `git init` (и первый коммит), затем повторите setup.")

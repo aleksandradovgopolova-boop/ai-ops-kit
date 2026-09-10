@@ -222,7 +222,9 @@ def test_required_fields_of_stable_schemas_did_not_change():
 @pytest.mark.contract
 def test_declared_ai_layout_is_what_the_installer_really_writes():
     """Раскладка `.ai/` — контракт: `.ai/project/` и `.ai/custom/` обновление не трогает."""
-    src = (REPO / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+    # Установщик разрезан на под-хабы (installer/*.py за фасадом core.py) — литералы раскладки
+    # разошлись по ним (зоны/gitignore — asset_ops, footprint — managed_state, посев — setup_ops).
+    src = "".join(p.read_text(encoding="utf-8") for p in sorted((REPO / "installer").glob("*.py")))
     missing = [path for path in DECL["stable"]["ai_layout"] if path.rstrip("/") not in src]
     assert not missing, (
         f"объявленные каталоги `.ai/` установщику неизвестны: {missing} — либо декларация "

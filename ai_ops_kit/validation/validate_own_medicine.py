@@ -74,14 +74,6 @@ LIMITATIONS = [
 
 # ─── источник истины: разбор кода доставки ────────────────────────────────────────────────────
 
-def _installer_ast(pkg: Path):
-    """AST установщика -> (дерево, множество имён функций верхнего уровня)."""
-    src = (pkg / "installer" / "ai_ops.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
-    return tree, names, src
-
-
 def _func(tree, name):
     for n in tree.body:
         if isinstance(n, ast.FunctionDef) and n.name == name:
@@ -96,8 +88,9 @@ def delivery_steps(pkg: Path = PKG):
     отчёт установки (`_assets_report_line`). Функция может быть переименована без смысловой правки,
     ключ — нет.
     """
-    tree, _, _ = _installer_ast(pkg)
-    fn = _func(tree, "deliver_assets")
+    # deliver_assets вынесена в под-хаб installer/asset_ops.py (финальный разрез монолита).
+    src = (pkg / "installer" / "asset_ops.py").read_text(encoding="utf-8")
+    fn = _func(ast.parse(src), "deliver_assets")
     if fn is None:
         return []
     out = []
@@ -115,16 +108,23 @@ def _cmd_init_fn(pkg: Path = PKG):
     return _func(ast.parse(src), "cmd_init"), src
 
 
+_HUB_FILES = ("ai_ops.py", "version_ops.py", "delivery_ops.py", "managed_state.py", "asset_ops.py")
+
+
 def init_only_calls(pkg: Path = PKG):
     """Функции установщика, которые зовёт `cmd_init` СВЕРХ `deliver_assets`. -> отсортированный список.
 
-    Ядро `cmd_init` теперь зовёт через `_ao().<имя>` (сателлит), поэтому собираем и bare-, и attr-имена."""
-    names = _installer_ast(pkg)[1]
+    Собираем bare- и attr-имена вызовов и пересекаем с полной хаб-поверхностью (cmd_init зовёт хаб
+    через `_ao().<имя>`/`_core().<имя>`). Загрузчики `_ao`/`_core` — доступ, не шаг доставки: отсекаем."""
+    names = set()
+    for f in _HUB_FILES:
+        names |= {n.name for n in ast.parse((pkg / "installer" / f).read_text(encoding="utf-8")).body
+                  if isinstance(n, ast.FunctionDef)}
     fn = _cmd_init_fn(pkg)[0]
     if fn is None:
         return []
-    return sorted({getattr(n.func, "id", "") or getattr(n.func, "attr", "")
-                   for n in ast.walk(fn) if isinstance(n, ast.Call)} & names)
+    return sorted(({getattr(n.func, "id", "") or getattr(n.func, "attr", "")
+                    for n in ast.walk(fn) if isinstance(n, ast.Call)} & names) - {"_ao", "_core"})
 
 
 def _installer_module(pkg: Path):

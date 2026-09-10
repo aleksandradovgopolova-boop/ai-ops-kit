@@ -30,9 +30,25 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 868
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 2168
 
 raises:
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2168'
+    to: 'installer/ai_ops.py = 349 (ниже порога 700 — снят из ceilings); installer/version_ops.py = 563, installer/delivery_ops.py = 588, installer/managed_state.py = 403, installer/asset_ops.py = 553, installer/core.py = 43 (все ниже порога 700 — в ceilings не вносятся)'
+    work: 'refactor(installer): финальный вынос общего хаба из монолита ai_ops в под-хабы за фасадом'
+    why: >-
+      Последний многотысячник кита (installer/ai_ops.py = 2168 — критичный код в каждой дочке) разрезан
+      так, чтобы ни один файл не остался ≥1000. В ai_ops.py остались тонкий диспетч `main`/`_dispatch`,
+      ленивые загрузчики сателлитов и хаба, self-contained развилка гейта отставания `_lag_guard` (она
+      ОБЯЗАНА работать из одинокой копии `ai_ops.py` без сателлитов рядом — copy-guard `check-update`) и
+      прозрачный `__getattr__`-реэкспорт хаба. Общий код доставки/сверки вынесен в четыре когезивных
+      под-хаба (версии-каналы, состав/бюджет поставки, целостность/лаг managed-слоя, доставка ассетов),
+      каждый под порогом. Тонкий фасад `core.py` маршрутизирует `_core().X` к нужному под-хабу и на
+      каждом обращении переставляет живой экземпляр установщика — монолит НЕ возрождён одним core.py.
+      Тела и докстринги перенесены байт-в-байт; глобалы установщика читаются через `_ao()`, кросс-хаб
+      вызовы — через `_core()`. Все файлы упали ниже порога 700 → сняты/не внесены в ceilings, ратчет
+      держит вниз.
   - at: '2026-09-11'
     what: raise_ceiling
     from: 'ai_ops_kit/engine/tool_broker.py = 805'

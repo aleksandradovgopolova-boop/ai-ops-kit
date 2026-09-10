@@ -121,7 +121,8 @@ class TestObservationsAreHiddenFromTheChildHistory:
     def test_hidden_state_is_named_to_the_owner(self):
         """Дописка в `.gitignore` владельца обязана быть НАЗВАНА в отчёте установки — иначе кит
         меняет чужой документ молча."""
-        src = (KIT_ROOT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+        # Отчёт доставки (`_assets_report_line`) вынесен в под-хаб installer/asset_ops.py.
+        src = (KIT_ROOT / "installer" / "asset_ops.py").read_text(encoding="utf-8")
         assert "записанные замечания о ките" in src, \
             "новая строка ignore не попала в человеческий отчёт установки"
 

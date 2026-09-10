@@ -56,15 +56,20 @@ def _ao():
     return ai_ops
 
 
+def _core():
+    """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
+    return _ao()._core()
+
+
 def cmd_status():
-    inst, avail = _ao().installed_version(), _ao().pkg_version()
-    drift = _ao().detect_drift() or []
+    inst, avail = _core().installed_version(), _core().pkg_version()
+    drift = _core().detect_drift() or []
     # B2-17 (пере-прогон 14.08.2026): сравнение ТОЛЬКО номеров говорило «✓ актуально», а `diff` тут
     # же перечислял 20 изменений — версия не менялась, менялось СОДЕРЖИМОЕ. Владелец, поверивший
     # первому ответу, не получал ничего из влитой работы. Два ответа одной CLI об одном состоянии
     # расходились; теперь `status` считает то же, что показывает `diff`.
     try:
-        pending = len(_ao().build_diff())
+        pending = len(_core().build_diff())
     except Exception:                                  # noqa: BLE001 — сравнить содержимое не вышло:
         pending = None                                 #   это «не знаю», а не «чисто»
     if inst != avail:
@@ -77,7 +82,7 @@ def cmd_status():
         verdict = "✓ актуально"
     print(f"установлено: {inst or '—'}   пакет: {avail}   {verdict}")
     # SR-4: версия СТАНДАРТА отдельно от версии пакета — «на какой версии требований репозиторий».
-    _csv, _psv = _ao().child_standard_version(), _ao().package_standard_version()
+    _csv, _psv = _core().child_standard_version(), _core().package_standard_version()
     if _psv is not None:
         if _csv is None:
             print(f"стандарт: дочка версию не объявила   доступно: {_psv}   "
@@ -94,7 +99,7 @@ def cmd_status():
 
 
 def cmd_diff():
-    changes = _ao().build_diff()
+    changes = _core().build_diff()
     if not changes:
         print("diff пуст — managed-слой соответствует пакету.")
         return 0
@@ -122,7 +127,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
     # которую нельзя выполнить, хуже отсутствующей.
     _base = subprocess.run(["git", "-C", str(_ao().REPO_ROOT), "rev-parse", "--abbrev-ref", "HEAD"],
                            capture_output=True, text=True).stdout.strip() or "HEAD"
-    if not _ao()._is_git_worktree(_ao().REPO_ROOT):
+    if not _core()._is_git_worktree(_ao().REPO_ROOT):
         print(f"ОШИБКА: {_ao().REPO_ROOT} — не git-репозиторий, а `update_policy: pr` требует ветки и PR. "
               f"Либо инициализируйте git, либо поставьте `parent.update_policy: manual` осознанно.")
         return 2
@@ -213,7 +218,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
                                 f"({len(staged)} файлов); рабочее дерево не тронуто "
                                 f"(кроме .ai/runtime/last-update-report.json — в gitignore). "
                                 f"Откройте PR: git push -u origin {branch} && gh pr create --fill")})
-        _ao().write_report(_rep)
+        _core().write_report(_rep)
     finally:
         subprocess.run(["git", "-C", str(_ao().REPO_ROOT), "worktree", "remove", "--force", str(wt)],
                        capture_output=True)
@@ -230,7 +235,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
 
 
 def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False):
-    inst, target = _ao().installed_version(), _ao().pkg_version()
+    inst, target = _core().installed_version(), _core().pkg_version()
     # F-022: политика дочки ЧИТАЕТСЯ и исполняется. `pr` -> обновление уходит в ветку, а не в
     # рабочее дерево; `manual` -> владелец сам решает, когда обновляться, применение на месте
     # легитимно. `--in-place` — явное согласие или CI-путь (`templates/ci/ai-ops-update.yml`
@@ -240,10 +245,10 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # объявляла `stable` и молча принимала то, что лежит в ветке по умолчанию.
     # НЕ БЛОКИРУЕМ: пакет сегодня честно стоит на `qualification`, и блокировка заморозила бы
     # каждую дочку. Сказать — обязанность кита; решить — право владельца.
-    _chan = _ao().channel_gap()
+    _chan = _core().channel_gap()
     if _chan["satisfied"] is not True:
         print(f"⚠ {_chan['message']}")
-    if not in_place and _ao().child_update_policy() == "pr":
+    if not in_place and _core().child_update_policy() == "pr":
         return _deferred_update(inst, target, force=force, refresh_ci=refresh_ci)
     report = {"schema_version": 1, "command": "update", "from_version": inst,
               "to_version": target, "status": "ok", "compatibility": "compatible",
@@ -253,8 +258,8 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
               "human_approval_required": False, "report": ""}
 
     # совместимость: target обязан попадать в allowed_version_range из .ai-ops.yaml
-    allowed = _ao().child_allowed_range()
-    if not _ao().version_in_range(target, allowed):
+    allowed = _core().child_allowed_range()
+    if not _core().version_in_range(target, allowed):
         report["compatibility"] = "incompatible"
         if not force:
             # МЯГКИЙ ПРОПУСК, А НЕ ПАДЕНИЕ (P1, аудит 04.09.2026). Раньше здесь стоял `return 1`, и
@@ -268,19 +273,19 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
                           report=f"Целевая версия {target} вне allowed_version_range "
                                  f"'{allowed}'. Обновление пропущено — мажор-переход осознанный: "
                                  f"расширьте диапазон в .ai-ops.yaml или запустите с --force.")
-            out = _ao().write_report(report)
+            out = _core().write_report(report)
             print(f"⚠ {report['report']}"); print(f"отчёт: {out}")
             return 0
         report["compatibility"] = "incompatible-forced"
 
-    drift = _ao().detect_drift() or []
+    drift = _core().detect_drift() or []
     if drift and not force:
         report.update(status="blocked", human_approval_required=True,
                       direct_edits_detected=[{k: v for k, v in d.items() if k != "kind"} | {}
                                              for d in drift],
                       report="Обнаружена прямая правка managed-слоя; обновление остановлено. "
                              "Перенесите правку в .ai/custom/ (overlay) или запустите с --force.")
-        out = _ao().write_report(report)
+        out = _core().write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
 
@@ -290,43 +295,43 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # состояние любого репозитория, где кит уже стоит: именно так исправленный шаблон CI и не
     # доехал ни до кого. Все шаги идемпотентны и читают исходник кита, а не managed-слой ребёнка,
     # поэтому их порядок относительно замены managed-файлов роли не играет.
-    _assets = _ao().deliver_assets(_ao().REPO_ROOT, refresh_ci=refresh_ci)
+    _assets = _core().deliver_assets(_ao().REPO_ROOT, refresh_ci=refresh_ci)
     report.update(_assets)
-    _ci_line = _ao()._assets_report_line(_assets)
+    _ci_line = _core()._assets_report_line(_assets)
 
     # Первый диф — только для РЕШЕНИЯ «есть ли что делать». Исполнять по нему нельзя: миграции
     # ниже переносят файлы, и список удаляемых, посчитанный до них, указывает на старые пути.
-    changes = _ao().build_diff()
+    changes = _core().build_diff()
     if not changes and inst == target:
         msg = "Обновление не требуется." + _ci_line
-        report.update(report=msg); _ao().write_report(report)
+        report.update(report=msg); _core().write_report(report)
         print(msg); return 0
 
     # backup: снимок ВСЕГО install footprint (managed + .claude/skills + .claude/commands
     # + .ai/generated + .ai-ops.yaml) — чтобы откат был транзакционным, а не частичным.
     backup = _ao().AI_DIR / "runtime" / "backups" / (inst or "unknown")
-    footprint = _ao().snapshot_footprint(backup)
+    footprint = _core().snapshot_footprint(backup)
     report["backup_ref"] = backup.relative_to(_ao().REPO_ROOT).as_posix()
 
     # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
     # Раньше цепочка лишь переписывалась в отчёт как "applied" — теперь помечаем applied
     # только по факту успешного запуска up.py; при падении откатываемся из backup и стоп.
-    chain = _ao().manifest().get("package_migrations", {}).get("chain", []) or []
+    chain = _core().manifest().get("package_migrations", {}).get("chain", []) or []
     applied = []
     for step in chain:
         up = _ao().PKG / "migrations" / step / "up.py"
         if not up.exists():
             report.update(status="failed", migrations_applied=applied,
                           report=f"миграция {step}: нет {up} — обновление прервано.")
-            out = _ao().write_report(report); print(report["report"]); print(f"отчёт: {out}")
+            out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")
             return 1
         r = subprocess.run([sys.executable, str(up), str(_ao().REPO_ROOT)])
         if r.returncode != 0:
-            _ao().restore_footprint(backup, footprint)
+            _core().restore_footprint(backup, footprint)
             report.update(status="failed", migrations_applied=applied,
                           report=f"миграция {step} провалена — install footprint восстановлен из "
                                  f"backup, обновление прервано.")
-            out = _ao().write_report(report); print(report["report"]); print(f"отчёт: {out}")
+            out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")
             return 1
         applied.append(step)
     report["migrations_applied"] = applied
@@ -336,9 +341,9 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # запись «удалить validation/x.py» указывала на путь, которого уже нет, а копия по новому пути
     # оставалась навсегда — и попадала под контроль целостности как managed. У ии-среды так осталось
     # 47 валидаторов кита (8152 строки мёртвого груза), и вычистило их только СЛЕДУЮЩЕЕ обновление.
-    changes = _ao().build_diff()
+    changes = _core().build_diff()
     # заменить managed-файлы
-    for src, rel in _ao().managed_set():
+    for src, rel in _core().managed_set():
         dst = _ao().MANAGED / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
@@ -351,9 +356,9 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # В отчёт идёт то, что РЕАЛЬНО применено, а не то, что планировалось до миграций.
     report["managed_changes"] = changes
 
-    n = _ao().write_checksums()
-    _ao().write_provenance(target, note=f"Updated {inst} -> {target} by ai-ops CLI.")
-    _ao().bump_child_config(target)
+    n = _core().write_checksums()
+    _core().write_provenance(target, note=f"Updated {inst} -> {target} by ai-ops CLI.")
+    _core().bump_child_config(target)
     # МАЖОР-ПЕРЕХОД ЧЕРЕЗ --force СОГЛАСУЕТ И ДИАПАЗОН, А НЕ ТОЛЬКО installed_version (замер
     # 06.09.2026, дочка cockpit 3.39.0 -> 4.0.0). Иначе installed=4.0.0 остаётся ВНЕ своего же
     # allowed_version_range '>=3.0.0 <4.0.0': следующий штатный in-range апдейт молча пропустится
@@ -364,28 +369,28 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # Отложенный PR-путь применяет обновление вложенным `--in-place` в worktree, где REPO_ROOT — тот
     # worktree, так что расширенный диапазон попадает и в подготовленную ветку.
     if report["compatibility"] == "incompatible-forced":
-        _new_range = _ao().widen_allowed_range(target)
+        _new_range = _core().widen_allowed_range(target)
         if _new_range:
             report["allowed_range_widened"] = _new_range
             print(f"⚠ allowed_version_range расширен до \"{_new_range}\" — мажор-переход "
                   f"осознанный (--force). Без этого установленная {target} осталась бы вне своего "
                   f"же диапазона, и следующее обновление молча пропустилось бы как несовместимое.")
-    report["skills_synced"] = _ao().sync_skills(_ao().REPO_ROOT)
-    report["commands_installed"] = _ao().materialize_runtime(_ao().REPO_ROOT)
+    report["skills_synced"] = _core().sync_skills(_ao().REPO_ROOT)
+    report["commands_installed"] = _core().materialize_runtime(_ao().REPO_ROOT)
     # v3.35: блок политики общения обновляется вместе с китом — «правьте политику и
     # перегенерируйте» стало правдой, а не обещанием в шаблоне. Текст вне маркеров не трогается.
 
     # smoke: валидаторы. При провале — ТРАНЗАКЦИОННЫЙ ОТКАТ всего footprint (managed,
     # .claude/skills, .claude/commands, .ai/generated, .ai-ops.yaml) к снимку из backup.
-    report["smoke_tests"] = _ao().run_validators(smoke_checks or _ao().SMOKE_CHECKS)
+    report["smoke_tests"] = _core().run_validators(smoke_checks or _core().SMOKE_CHECKS)
     if any(t["status"] == "fail" for t in report["smoke_tests"]):
-        _ao().restore_footprint(backup, footprint)
+        _core().restore_footprint(backup, footprint)
         report.update(status="rolled_back",
                       report=f"Smoke-валидаторы упали после применения — обновление ОТКАЧЕНО: "
                              f"весь install footprint (managed + runtime-ассеты + версия) "
                              f"восстановлен к {inst or '—'} из backup ({report['backup_ref']}). "
                              f"Полу-обновлённого состояния не осталось.")
-        out = _ao().write_report(report)
+        out = _core().write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
@@ -395,6 +400,6 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
                         # а файл, о котором не сказано, читается как подложенный молча.
                         + _ci_line
                         + " Создайте PR с этим diff — silent update запрещён.")
-    out = _ao().write_report(report)
+    out = _core().write_report(report)
     print(report["report"]); print(f"отчёт: {out}")
     return 0 if report["status"] == "ok" else 1
