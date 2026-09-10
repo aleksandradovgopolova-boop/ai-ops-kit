@@ -466,10 +466,17 @@ goals:
     # свести связность к нулю ПО СУЩЕСТВУ, а не сокрытием: каждая пара развязывается DI/переносом/
     # решением «кто зовёт». Ратчет mutual_pairs ходит только вниз. Это честное продолжение того, что
     # Phase B цели trustworthy-core прежде объявляла достигнутым на слепой метрике.
+    # ДОСТИГНУТА 2026-09-10: все ПЯТЬ взаимных пар capabilities развязаны ПО СУЩЕСТВУ (K1 engine↔gates,
+    # K4 engops↔gates, K2 context↔engine, K3 delivery↔engine, K5 engine↔lifecycle) — переносом
+    # проводки в правильный слой, не сокрытием за __import__. Замер validate_layering: mutual_pairs=0,
+    # cycles_longer_than_two=0. Кольцо стало DAG, и теперь это ПРАВДА (гейт считает и динамику), а не
+    # прежний слепой ноль. Работа `layering-pairs-decoupled-by-substance` доведена и уехала в историю.
+    # Остаток `internal_imports_by_flat_name` (переход на пакетные имена) — НЕ часть контракта этой
+    # цели (это стиль импортов, не связность): отдельный срез, отдельная цель при необходимости.
     freeze_relation: run_condition
-    status: active
+    status: achieved
     outcome:
-      capabilities_ring_is_a_dag: false
+      capabilities_ring_is_a_dag: true
 
   # ─── История релизов 3.40/4.0 (04.09.2026) и хвосты, ждущие следующей сессии ──────────────────
   # ВЫПУЩЕНО: 3.40.0 (warn-минор о сносе плоского слоя tools/) и 4.0.0 МАЖОР (tools/ снят физически,
@@ -758,60 +765,3 @@ work:
       (packages/*baseline*.yaml). Сразу называет mypy честно unenforced (F-05). Под рантайм-контрактом
       (STANDALONE) — гоняется в CI. Остаётся третья ось: pre-commit-хуки (зеркала в CI vs local-only).
 
-  - id: layering-pairs-decoupled-by-substance
-    title: >-
-      Пять взаимных пар capabilities развязываются по существу (DI/перенос/решение «кто зовёт»),
-      начиная с дешёвых: gates→engops и engine↔gates (только CLI-вход)
-    type: engineering
-    goal: layering-ring-is-a-dag
-    status: in_progress
-    owner_role: engineer
-    value: medium
-    write_scope: [ai_ops_kit/, packages/, tests/]
-    reason: >-
-      После F-03 гейт честен: 5 пар видны как есть (context↔engine, delivery↔engine, engine↔gates,
-      engops↔gates, engine↔lifecycle). Развязка — настоящая, а не сокрытие через __import__:
-      gates→engops (deploy_readiness, уже в known_violations) и engine↔gates (держится одним
-      evidence_collector.main) — самые дешёвые. Готово, когда ратчет mutual_pairs опускается ПО ФАКТУ
-      снятых рёбер, known_violations сокращается, и это развязка, а не перенос импорта в функцию.
-    progress_note: >-
-      K1 engine↔gates РАЗВЯЗАНА ПО-НАСТОЯЩЕМУ (2026-09-10): CLI-обёртка evidence_collector, строившая
-      broker через __import__ engine, вынесена в ai_ops_kit/devtools/evidence_collect_cli.py (devtools
-      это entrypoints — engine импортить можно); библиотечный collect() давно принимает broker
-      параметром. Гейт больше не зависит от engine ни статически, ни динамически — это перенос
-      проводки в точку входа, а НЕ сокрытие. mutual_pairs 5→4, cycles 9→5 честно (каскад claim-маркеров
-      сведён).
-      K4 engops↔gates РАЗВЯЗАНА (2026-09-10): deploy_readiness звал engops.environment_map через
-      __import__ («куда положить»). environment_map — чистый ассессмент окружения без зависимостей от
-      engops, поэтому переехал git mv в ai_ops_kit/checks/ (primitives, вниз от gates), а deploy_readiness
-      импортирует его статически. engops→gates ребро снято; было единственным в known_violations →
-      known_violations теперь []. mutual_pairs 4→3, cycles 5 честно. Это перенос по существу: модуль
-      живёт там, где ему место, а не спрятан в функции. mutual_pairs 4→3, cycles 5.
-      K2 context↔engine РАЗВЯЗАНА (2026-09-10): context_compiler.compile_bundle строил RunPlan сам
-      через __import__ engine.run_plan, когда план не передан. Теперь план ОБЯЗАН прийти извне —
-      готовым (plan=) или инъекцией строителя (build_plan=run_plan.build_plan); без него — явная
-      ошибка, а не тихий импорт. context_compiler не упоминает engine ни статически, ни динамически
-      (тест на исходник это стережёт). CLI-обёртка, которой нужен построитель, вынесена в
-      ai_ops_kit/devtools/context_compile_cli.py (entrypoints). Инъекторы: engine.atomic_planner,
-      validate_context_qualification, тесты. Это ребро замыкало ВСЕ длинные циклы →
-      mutual_pairs 3→2, cycles_longer_than_two 5→0 (ноль теперь настоящий).
-      K3 delivery↔engine РАЗВЯЗАНА (2026-09-10): review_branch был ЕДИНСТВЕННЫМ держателем всех трёх
-      рёбер delivery→engine (_resolve_base, worktree, _run_reviews/_reviewable_gates). Он ЗАПУСКАЕТ
-      движковые ревью-гейты над worktree ветки — это исполнение, не доставка. Переехал git mv
-      delivery→engine, __import__ стали внутрипакетными static-импортами; delivery больше не
-      зависит от engine ни одним ребром. CLI-обёртка с print вынесена в
-      ai_ops_kit/devtools/branch_review_cli.py. Обратное направление engine→delivery (pr_open —
-      акт доставки) естественно и сохранено. Обновлены cli-импорт, 2 теста, ports.py,
-      mutation-probes.yaml, print-потолок delivery 4→1. mutual_pairs 2→1.
-      K5 engine↔lifecycle РАЗВЯЗАНА (2026-09-10) — ПОСЛЕДНЯЯ пара. lifecycle тянул engine ВВЕРХ тремя
-      динамическими __import__: workitem→ai_route.route (маршрутизация), active_work→pipeline_git.
-      _resolve_base (git-база), active_work→work_areas.areas_overlap (зоны). Все три — чистые
-      сущности без зависимостей от кита, нужные многим; по правилу foundation переехали ВНИЗ в shared:
-      ai_route→shared/ai_route (+ CLI в devtools/ai_route_cli, 2 print из engine), _resolve_base→
-      shared/gitio.resolve_base (алиас в pipeline_git для внутренних вызовов engine), work_areas→
-      shared/work_areas. Теперь и lifecycle, и engine зовут их ВНИЗ; workitem не тянет engine ради
-      маршрутизации — «кто классифицирует» решилось переносом маршрутизатора в основание. Обновлены
-      manifest (routing_engine), ENGINE_MODULES, ports.py, тесты, пробы, print-потолок engine 139→137.
-      mutual_pairs 1→0, cycles 0. ВСЕ ПЯТЬ ПАР РАЗВЯЗАНЫ — кольцо capabilities стало DAG ПО ЧЕСТНОМУ
-      замеру. Деятельность работы завершена; формальное закрытие цели (outcome→true, перенос в
-      историю) — отдельным сверочным PR, чтобы не смешивать код и план и не ловить дрейф на слиянии.
