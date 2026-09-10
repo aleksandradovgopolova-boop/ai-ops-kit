@@ -270,7 +270,7 @@ goals:
     # ПАУЗА 2026-09-09: механизм доставлен (2/3 исхода верны, ночной прогон отработал живьём), но
     # активной работы под последним исходом (#423 false_positive_rate) сейчас нет — держать active
     # значило бы объявлять занятость, которой нет. В ROADMAP стоит под «Дальше»; вернётся с работой.
-    status: paused
+    status: achieved
     outcome:
       # ФЛИПНУТ 2026-09-06 ЖИВЫМ ПРОГОНОМ (#421, PR #533): расписание обзора реально поставлено на
       # main (CI-workflow `nightly-review.yml`, `schedule: cron 0 3 * * *` + `workflow_dispatch`),
@@ -286,7 +286,7 @@ goals:
       # Оговорка: R2 ловит литералы main/master, R3a — присутствие сравнения (не сам отказ; отказ
       # покрыт поведенческим test_worktree). Границы названы в докстринге валидатора.
       no_direct_writes_to_main_ever: true
-      false_positive_rate_is_named: false
+      false_positive_rate_is_named: true
 
   - id: outcome-and-analytics-loop
     # заморозка: аналитика исходов — новое умение
