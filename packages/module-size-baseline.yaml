@@ -20,7 +20,6 @@ threshold: 700
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 1224
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1950
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
@@ -947,3 +946,19 @@ raises:
       обратно, поэтому `presenter.from_*` и `presenter_formatters.from_*` продолжают работать. Файл
       опустился до 541 строки — ниже порога 700, поэтому из ceilings убран. Сосед тоже ниже порога —
       в baseline не заводится. Ратчет ходит вниз.
+  - at: '2026-09-10'
+    what: drop_below_threshold
+    from: 'ai_ops_cli_intents.py = 1950; ai_ops_cli_product.py / ai_ops_cli_lifecycle.py / ai_ops_cli_report.py — не существовали'
+    to: 'ai_ops_cli_intents.py = 257 (НИЖЕ порога 700, снят с ceilings); три новых модуля = 681 / 415 / 653 (все НИЖЕ порога 700, в ceilings не вносятся)'
+    work: 'refactor-cli-intents-monolith: разрез монолита intent-хендлеров на когезивные соседние модули'
+    why: >-
+      Монолит проб-свободных intent-хендлеров ai_ops_cli_intents.py (1950 строк) разрезан по
+      когезивным группам на три соседних модуля пакета ai_ops_kit.cli: ai_ops_cli_product.py
+      (продукт/поставка/бэклог: build_preview, _run_backlog, products/delivery/model/contract/inspect/
+      plan/session), ai_ops_cli_lifecycle.py (онбординг/governance: onboard/reach/team/replan/
+      governance/bootstrap/health/roadmap/doctor/new/discuss) и ai_ops_cli_report.py (read-only
+      отчётность explain/inbox). Поведение не менялось — чистый построчный перенос; ai_ops_cli_intents.py
+      импортирует имена из соседей и ре-экспортирует их (ai_ops_cli и тесты резолвят обработчики по
+      имени ai_ops_cli_intents), в нём остались проекции work/readout/graph. Файл усох 1950 -> 257 и
+      ушёл НИЖЕ порога 700 — снят с ceilings. Три новых модуля тоже ниже порога — в ceilings не
+      вносятся. Ратчет держит рост вниз.

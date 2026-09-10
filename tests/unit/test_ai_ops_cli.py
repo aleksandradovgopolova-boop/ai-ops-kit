@@ -556,6 +556,7 @@ class TestDegradedContextIsVisible:
 import os
 
 from ai_ops_kit.cli import ai_ops_cli_intents as _intents
+from ai_ops_kit.cli import ai_ops_cli_report as _report
 from ai_ops_kit.ui import presenter as _presenter
 
 
@@ -812,15 +813,15 @@ class TestInboxIntent:
 
     def test_release_warning_from_red_health(self, tmp_path, monkeypatch):
         """Предупреждение о выпуске выводится из красного здоровья продукта (read-only источник)."""
-        monkeypatch.setattr(_intents, "_product_health_report",
+        monkeypatch.setattr(_report, "_product_health_report",
                             lambda root: {"band": "red", "reasons": ["CI красный"]})
         warns = _intents._inbox_release_warnings(tmp_path)
         assert len(warns) == 1
         assert "рискованно" in warns[0]["what"]
         # Зелёное/нет данных -> предупреждения нет (не выдумываем).
-        monkeypatch.setattr(_intents, "_product_health_report", lambda root: {"band": "green"})
+        monkeypatch.setattr(_report, "_product_health_report", lambda root: {"band": "green"})
         assert _intents._inbox_release_warnings(tmp_path) == []
-        monkeypatch.setattr(_intents, "_product_health_report", lambda root: None)
+        monkeypatch.setattr(_report, "_product_health_report", lambda root: None)
         assert _intents._inbox_release_warnings(tmp_path) == []
 
     def test_corrupt_registry_says_it_does_not_know(self, tmp_path):
