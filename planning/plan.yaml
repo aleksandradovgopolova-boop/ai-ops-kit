@@ -190,7 +190,7 @@ goals:
       # Проверено на ДВУХ настоящих копиях (`git worktree` и `git clone`), а не на одной.
       next_excludes_work_others_hold: true
       # Правки самого кита не создают конфликтов в файлах, которые трогает каждая работа.
-      kit_edits_do_not_create_conflicts: false
+      kit_edits_do_not_create_conflicts: true
       # Два условия владельца: она не проектирует эту работу, участник не сомневается в нужности
       # своей задачи и не дублирует чужую.
       owner_does_not_design_the_parallelism: false
@@ -735,26 +735,6 @@ work:
 
   # delivery-of-ready-work-is-one-autonomous-command — замер owner-led прогона ii-sreda 01.09.2026:
   # готовую-на-ветке работу нельзя довести до ОТКРЫТОГО verified PR одной автономной командой.
-  - id: plan-yaml-edits-do-not-conflict-in-parallel
-    title: >-
-      Правки plan.yaml из параллельных работ не порождают ручных конфликтов слияния — разбивка по
-      работам либо явная стратегия (report-history уже закрыт union, остаётся структурный plan.yaml)
-    type: engineering
-    goal: team-works-in-parallel
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 148
-    write_scope: [ai_ops_kit/planning/, installer/, tests/]
-    reason: >-
-      Поле 17.08.2026 (ii-sreda): plan.yaml — самый правимый файл кита (25 коммитов/неделю), его
-      меняет каждый срез работы, и параллельные ветки дают ручной конфликт на одной строке.
-      Append-only журналы (report-history/*.jsonl) уже закрыты — installer ставит .gitattributes
-      merge=union. Но к структурному plan.yaml union сознательно не применяют (склеит в битый YAML),
-      а разбивку по работам (PR #290) закрыли. Открытый исход цели: kit_edits_do_not_create_conflicts:
-      False. Готово, когда правки plan.yaml из двух параллельных работ сводятся без ручного
-      разрешения — разбивкой по работам (файл на работу) либо иной проверенной стратегией. Заявка #148.
-
   - id: declared-tools-and-gates-prove-they-run
     title: >-
       Инвентарь «объявлено → исполняется»: каждый инструмент из [dev]-зависимостей, каждый
