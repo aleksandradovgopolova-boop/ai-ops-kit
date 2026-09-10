@@ -443,6 +443,11 @@ update_policy:
     # Пакетно принадлежит `ai-ops-quality` (там же `rules/design/**`), поэтому карта едет ровно
     # туда, куда едут цитирующие её чек-листы, и не грузит дочку без дизайн-гейтов.
     - "standards/uiux/rules.yaml"
+    # Архитектурная конституция (#825): в дочку едет ТОЛЬКО компактный машинный реестр статей
+    # `rules.yaml` (карта `constitution_id -> статья` с полями gate/enforced_in для гейтов и резолва),
+    # как uiux. Тяжёлый источник ARCHITECTURE_CONSTITUTION.md и оперативный слой arch.rules.md —
+    # родительские (footprint-бюджет доставки узкий). Пакетно принадлежит `ai-ops-quality`.
+    - "standards/architecture/rules.yaml"
     - "templates/**/*"
     - "context/**/*"
     - "workflows/*.md"
