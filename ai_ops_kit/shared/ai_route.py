@@ -7,16 +7,16 @@ execution_mode / fallbacks и возвращает МАШИНОЧИТАЕМОЕ 
 (декларативно), возможности — из registry/{providers,runtimes,workflows}.yaml.
 Названия конкретных моделей в workflow не зашиты — используется model_class.
 
-Использование:
-  ai_route.py '<json-инпуты>'   — вывести решение (JSON)
-  ai_route.py --selftest        — прогнать примеры и проверить форму решения (exit 1 при ошибке)
+Живёт в слое `shared` (foundation): маршрутизатор — чистая классификация из signals + registry,
+зависит только от stdlib и yaml. Его зовут lifecycle (workitem), engine (run_plan) и validation;
+модуль без зависимостей от кита, нужный многим, лежит в основании — и тогда `workitem` больше не
+тянет engine вверх ради маршрутизации (K5-развязка engine<->lifecycle). CLI-обёртка — в точке
+входа: ai_ops_kit/devtools/ai_route_cli.py.
 
 Требует pyyaml.
 """
 from __future__ import annotations
 
-import json
-import sys
 from pathlib import Path
 
 import yaml
@@ -304,14 +304,3 @@ SCENARIOS = [
 ]
 
 
-def main(argv):
-    if len(argv) > 1:
-        inp = json.loads(argv[1])
-        print(json.dumps(route(inp), ensure_ascii=False, indent=2))
-        return 0
-    print(__doc__)
-    return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv))

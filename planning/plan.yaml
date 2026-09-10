@@ -822,5 +822,16 @@ work:
       зависит от engine ни одним ребром. CLI-обёртка с print вынесена в
       ai_ops_kit/devtools/branch_review_cli.py. Обратное направление engine→delivery (pr_open —
       акт доставки) естественно и сохранено. Обновлены cli-импорт, 2 теста, ports.py,
-      mutation-probes.yaml, print-потолок delivery 4→1. mutual_pairs 2→1. ОСТАЁТСЯ 1 пара:
-      engine↔lifecycle («кто классифицирует» — workitem не должен звать роутер сам). Отдельным срезом.
+      mutation-probes.yaml, print-потолок delivery 4→1. mutual_pairs 2→1.
+      K5 engine↔lifecycle РАЗВЯЗАНА (2026-09-10) — ПОСЛЕДНЯЯ пара. lifecycle тянул engine ВВЕРХ тремя
+      динамическими __import__: workitem→ai_route.route (маршрутизация), active_work→pipeline_git.
+      _resolve_base (git-база), active_work→work_areas.areas_overlap (зоны). Все три — чистые
+      сущности без зависимостей от кита, нужные многим; по правилу foundation переехали ВНИЗ в shared:
+      ai_route→shared/ai_route (+ CLI в devtools/ai_route_cli, 2 print из engine), _resolve_base→
+      shared/gitio.resolve_base (алиас в pipeline_git для внутренних вызовов engine), work_areas→
+      shared/work_areas. Теперь и lifecycle, и engine зовут их ВНИЗ; workitem не тянет engine ради
+      маршрутизации — «кто классифицирует» решилось переносом маршрутизатора в основание. Обновлены
+      manifest (routing_engine), ENGINE_MODULES, ports.py, тесты, пробы, print-потолок engine 139→137.
+      mutual_pairs 1→0, cycles 0. ВСЕ ПЯТЬ ПАР РАЗВЯЗАНЫ — кольцо capabilities стало DAG ПО ЧЕСТНОМУ
+      замеру. Деятельность работы завершена; формальное закрытие цели (outcome→true, перенос в
+      историю) — отдельным сверочным PR, чтобы не смешивать код и план и не ловить дрейф на слиянии.

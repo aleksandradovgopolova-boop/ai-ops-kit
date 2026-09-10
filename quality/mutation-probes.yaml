@@ -608,7 +608,7 @@ probes:
     разные правды об одном вопросе, причём вторая молчит.'
 - id: areas-unknown-is-not-a-match
   kind: guard
-  file: ai_ops_kit/engine/work_areas.py
+  file: ai_ops_kit/shared/work_areas.py
   find: '    return [z for z in (zones or []) if z and z != UNSPECIFIED]'
   replace_with: '    return list(zones or [])'
   tests:
@@ -621,7 +621,7 @@ probes:
 - id: areas-seam-registry-gets-derived-zones
   kind: seam
   covers:
-  - ai_ops_kit/engine/work_areas.py
+  - ai_ops_kit/shared/work_areas.py
   - ai_ops_kit/engine/ai_ops_run.py
   file: ai_ops_kit/engine/ai_ops_run.py
   find: '    areas = _work_areas.areas_for(signals, write_scope)   # #138: вывод, а не заглушка (см. work_areas)'
@@ -635,7 +635,7 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/lifecycle/active_work.py
-  - ai_ops_kit/engine/work_areas.py
+  - ai_ops_kit/shared/work_areas.py
   file: ai_ops_kit/lifecycle/active_work.py
   find: '        shared_areas = _work_areas.areas_overlap(areas, w.get("affected_areas"))'
   replace_with: '        shared_areas = sorted(set(areas) & set(w.get("affected_areas") or []))'

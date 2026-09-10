@@ -49,7 +49,7 @@
 |--------|-----------------|
 | `ai_ops_kit/engine/execution_pipeline.py` | Главная execution chain (detect → worktree → install → checks → spec → tool loop → commit → gates → report) |
 | `ai_ops_kit/engine/ai_ops_run.py` | Транзакционный контроллер: вызывает pipeline + delivery после фиксации |
-| `ai_ops_kit/engine/ai_route.py` | Классификация work item по реестрам (317 строк) — **предметная логика, не infrastructure** |
+| `ai_ops_kit/shared/ai_route.py` | Классификация work item по реестрам (317 строк) — чистая функция от signals+registry; переехала в `shared` (foundation, K5 2026-09-10), чтобы lifecycle не тянул engine вверх ради маршрутизации. CLI-обёртка — `ai_ops_kit/devtools/ai_route_cli.py` |
 | `ai_ops_kit/engine/tool_broker.py` | Исполнение инструментов (shell, file, git) по policy |
 | `ai_ops_kit/engine/tool_loop.py` | Model proposes → policy decides → broker executes |
 | `ai_ops_kit/engine/workpackage_executor.py` | Исполнение work packages (параллельные задачи) |
@@ -61,7 +61,7 @@
 | `ai_ops_kit/engine/worktree.py` | Git worktree isolation |
 
 **Проблемы:**
-- `ai_route.py` — предметная логика (классификация по реестрам), но лежит в engine. Это корень mutual pair engine ↔ lifecycle (workitem → ai_route). Переезд в `shared` формально решил бы цикл, но положил бы domain-логику в foundation (нарушение AC-01). **Решение — не переезд, а проектирование: «кто классифицирует» (AC-03).**
+- ~~`ai_route.py` — корень mutual pair engine ↔ lifecycle.~~ РЕШЕНО (K5, 2026-09-10): `ai_route` переехал в `shared` (foundation) — замер показал чистую функцию от signals+registry без зависимостей от кита, нужную трём пакетам; это не domain-модель, а детерминированная классификация (тот же класс, что `gitio`/`budget`), поэтому AC-01 не нарушен. `workitem` зовёт маршрутизатор ВНИЗ, пара снята.
 - `execution_pipeline.py` (1193 строки) — слишком крупный. Содержит и orchestration, и evidence collection, и gate invocation. Кандидат на разделение.
 
 #### Пакет gates (13 модулей, ~2000 строк)
@@ -93,7 +93,7 @@
 | `ai_ops_kit/lifecycle/merge_memory.py` | Память о мержах |
 
 **Проблемы:**
-- `workitem.py` импортирует `engine.ai_route` — корень mutual pair. Workitem знает слишком много: и про routing, и про gates, и про status derivation.
+- ~~`workitem.py` импортирует `engine.ai_route` — корень mutual pair.~~ РЕШЕНО (K5, 2026-09-10): `ai_route` переехал в `shared`, `workitem` зовёт его ВНИЗ по слоям. Пара engine ↔ lifecycle снята; `active_work` больше не тянет `engine.pipeline_git`/`engine.work_areas` (резолвер базы и зоны тоже переехали в `shared`).
 
 #### Пакет context (9 модулей, ~1200 строк)
 
@@ -242,11 +242,7 @@ review ветки, который ЗАПУСКАЕТ движковые ревь
 
 ### 1. ai_route — engine или domain?
 
-`ai_ops_kit/engine/ai_route.py` (317 строк) — классификация work item по реестрам. Это предметная логика (domain), но лежит в engine. `ai_ops_kit/lifecycle/workitem.py` импортирует его — и это создаёт mutual pair engine ↔ lifecycle.
-
-**Проблема:** Переезд в `shared` снимает цикл, но нарушает AC-01 (domain не должен быть в foundation). Переезд в `checks` (primitives) — возможный компромисс, но classification — не check.
-
-**Рекомендация:** Проектирование, а не переезд. Решить «кто классифицирует» (AC-03): если workitem не должен звать роутер сам — классификация становится отдельным шагом, и цикл исчезает.
+РЕШЕНО (K5, 2026-09-10): `ai_ops_kit/shared/ai_route.py` (317 строк) — классификация work item по реестрам. Замер показал, что это ЧИСТАЯ функция от signals + registry без единой зависимости от кита, и её звали три пакета (lifecycle/workitem, engine/run_plan, validation). Такой модуль по правилу foundation лежит в основании — там он и оказался (`shared`), а CLI-обёртка ушла в точку входа (`ai_ops_kit/devtools/ai_route_cli.py`). Взаимная пара engine ↔ lifecycle снята: `workitem` зовёт маршрутизатор ВНИЗ по слоям, а не тянет engine вверх. «Кто классифицирует» решилось не переездом ради переезда, а признанием, что классификация — общая инфраструктура. AC-01 не нарушен: в foundation попала не доменная модель, а детерминированная классификация из данных — тот же класс, что `gitio`/`budget`.
 
 ### 2. deploy_readiness — engops или gates?
 

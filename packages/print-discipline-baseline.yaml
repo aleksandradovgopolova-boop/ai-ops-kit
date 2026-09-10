@@ -19,7 +19,7 @@ kind: print-discipline-ratchet
 # (cli/devtools/validation) сюда НЕ входят — им print разрешён.
 ceilings:
   planning: 154
-  engine: 139
+  engine: 137     # 139->137 (2026-09-10): CLI ai_route.main (2 print) уехал в devtools, а route() — в shared (K5)
   intelligence: 88
   lifecycle: 66
   gates: 52     # 54->52 (2026-09-10): 2 print уехали с CLI evidence_collector в devtools (K1-развязка)
