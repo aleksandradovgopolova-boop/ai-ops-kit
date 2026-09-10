@@ -84,7 +84,7 @@ class TestDecisionDoesNotContradictTheCode:
     def test_the_writing_rule_matches_the_code(self):
         """Сужение 19.08 сказало: состояние пишется, когда кит советует смену сессии. Проверяем, что
         код пишет ровно на этих исходах, а не на каждом завершении работы."""
-        src = (KIT / "ai_ops_kit" / "cli" / "ai_ops_cli.py").read_text(encoding="utf-8")
+        src = (KIT / "ai_ops_kit" / "cli" / "ai_ops_cli_commands.py").read_text(encoding="utf-8")
         assert 'rec.get("outcome") in ("new_session", "clear")' in src, \
             "условие записи состояния изменилось — сверьте с решением 19.08, иначе они разойдутся"
 

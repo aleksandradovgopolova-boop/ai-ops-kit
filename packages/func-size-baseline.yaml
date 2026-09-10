@@ -32,11 +32,14 @@ scopes:
   # run --execute/do вынесены в _build_cli_arg_parser/_main_run_execute (ратчет опущен 348 -> 154).
   # #587: разбор позиционных вынесен из main в _parse_task_and_root -> худшая функция теперь
   # _main_run_execute (150); ратчет опущен 154 -> 150.
+  # refactor(cli): слой реализации команд вынесен в ai_ops_cli_commands.py; _main_run_execute (150,
+  # без изменений тела) переехал туда и остаётся максимумом каталога cli/ — потолок тот же, обновлён
+  # лишь указатель файла/строки.
   - path: ai_ops_kit/cli/
     max_function_lines: 150
     max_function: _main_run_execute
-    max_function_file: ai_ops_cli.py
-    max_function_lineno: 1047
+    max_function_file: ai_ops_cli_commands.py
+    max_function_lineno: 476
 
   # planning/ — контур Planning & Execution.
   - path: ai_ops_kit/planning/

@@ -28,7 +28,9 @@ PKG = Path(__file__).resolve().parents[2]
 #: Проверять по одной значило бы объявлять несуществующим флаг, который у человека работает.
 #: `installer/doctor.py` — сателлит команды `doctor` (разрез монолита): флаг `--remove-path-belt`
 #: разбирается там, поэтому поверхность флагов включает и его.
-CLI_SURFACES = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py", PKG / "installer" / "ai_ops.py",
+CLI_SURFACES = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py",
+                PKG / "ai_ops_kit" / "cli" / "ai_ops_cli_commands.py",
+                PKG / "installer" / "ai_ops.py",
                 PKG / "installer" / "doctor.py")
 #: Что кит печатает как «наберите это». Команда ограничена ОДНОЙ строкой: без этого регулярка
 #: съедала полдокстринга и «находила» флаг, стоящий абзацем ниже (найдено этим же тестом).

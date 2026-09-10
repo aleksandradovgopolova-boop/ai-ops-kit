@@ -29,7 +29,7 @@ from ai_ops_kit.intelligence import decision_loop
 pytestmark = pytest.mark.unit
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
-ROUTE_FILE = PKG_ROOT / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
+ROUTE_FILE = PKG_ROOT / "ai_ops_kit" / "cli" / "ai_ops_cli_commands.py"
 
 FULL_TARGET = {
     "baseline": {"metric": "p95_latency_ms", "value": 800},
