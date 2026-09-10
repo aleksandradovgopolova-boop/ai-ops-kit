@@ -856,6 +856,14 @@ work:
       engops, поэтому переехал git mv в ai_ops_kit/checks/ (primitives, вниз от gates), а deploy_readiness
       импортирует его статически. engops→gates ребро снято; было единственным в known_violations →
       known_violations теперь []. mutual_pairs 4→3, cycles 5 честно. Это перенос по существу: модуль
-      живёт там, где ему место, а не спрятан в функции. ОСТАЮТСЯ 3 пары, каждая — проектное решение:
-      context↔engine (run_plan), delivery↔engine (git/worktree/pipeline), engine↔lifecycle
-      («кто классифицирует»). Их брать отдельными срезами.
+      живёт там, где ему место, а не спрятан в функции. mutual_pairs 4→3, cycles 5.
+      K2 context↔engine РАЗВЯЗАНА (2026-09-10): context_compiler.compile_bundle строил RunPlan сам
+      через __import__ engine.run_plan, когда план не передан. Теперь план ОБЯЗАН прийти извне —
+      готовым (plan=) или инъекцией строителя (build_plan=run_plan.build_plan); без него — явная
+      ошибка, а не тихий импорт. context_compiler не упоминает engine ни статически, ни динамически
+      (тест на исходник это стережёт). CLI-обёртка, которой нужен построитель, вынесена в
+      ai_ops_kit/devtools/context_compile_cli.py (entrypoints). Инъекторы: engine.atomic_planner,
+      validate_context_qualification, тесты. Это ребро замыкало ВСЕ длинные циклы →
+      mutual_pairs 3→2, cycles_longer_than_two 5→0 (ноль теперь настоящий). ОСТАЮТСЯ 2 пары длины
+      два: delivery↔engine (git/worktree/pipeline), engine↔lifecycle («кто классифицирует»). Их
+      брать отдельными срезами.

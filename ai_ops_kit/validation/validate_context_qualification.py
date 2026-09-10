@@ -34,6 +34,7 @@ except ImportError:                                # запуск скрипто
     import _bootstrap                              # noqa: F401 — и положить его может только он сам
 from ai_ops_kit.context import context_compiler   # noqa: E402
 from ai_ops_kit.engine import atomic_planner     # noqa: E402
+from ai_ops_kit.engine.run_plan import build_plan as _build_plan  # noqa: E402
 from ai_ops_kit.engine import run_handoff        # noqa: E402
 from ai_ops_kit.gates import spec_levels        # noqa: E402
 from ai_ops_kit.security import security_pack      # noqa: E402
@@ -66,7 +67,7 @@ def run_scenarios():
         root = _repo(td, {"package.json": '{"dependencies":{"react":"^18"}}'})
 
         # Q1 context filtering
-        b = context_compiler.compile_bundle(eng, root)
+        b = context_compiler.compile_bundle(eng, root, build_plan=_build_plan)
         ok("Q1 context filtering: включены только агенты RunPlan, остальное excluded с причиной",
            len(b["included"]["agents"]) > 0 and b["excluded"]
            and all(e.get("reason") for e in b["excluded"]))
@@ -77,7 +78,7 @@ def run_scenarios():
            and pay["payload_budget"] < pay["context_budget"])
 
         # Q2 context overflow -> декомпозиция (не молча) + КОНКРЕТНЫЕ пакеты (v2.111)
-        b_of = context_compiler.compile_bundle(eng, root, context_budget=10)
+        b_of = context_compiler.compile_bundle(eng, root, context_budget=10, build_plan=_build_plan)
         wp = atomic_planner.decompose(eng, wid="q2", child_root=root, bundle=b_of, budget=10)
         ok("Q2 context overflow: overflow + авто-декомпозиция by-context-budget (open_question, не молча)",
            b_of["overflow"] is True and wp["should_decompose"]

@@ -4,15 +4,23 @@
 """
 from __future__ import annotations
 
+import functools
+
 import pytest
 
 from ai_ops_kit.context.context_compiler import (
     CONTEXT_BUDGET_DEFAULT,
     MODEL_CONTEXT,
     Path,
-    build_payload,
-    compile_bundle,
 )
+from ai_ops_kit.context.context_compiler import build_payload as _build_payload
+from ai_ops_kit.context.context_compiler import compile_bundle as _compile_bundle
+from ai_ops_kit.engine.run_plan import build_plan as _build_plan
+
+# K2: context не строит RunPlan сам — план инъецируется. В тестах строитель настоящий
+# (engine.run_plan.build_plan), поэтому подставляем его по умолчанию, а вызовы остаются как есть.
+compile_bundle = functools.partial(_compile_bundle, build_plan=_build_plan)
+build_payload = functools.partial(_build_payload, build_plan=_build_plan)
 
 
 @pytest.fixture
@@ -189,3 +197,19 @@ class TestCompileBundleValidatesItsOwnShape:
                "excluded": [], "estimated_tokens": 1, "context_budget": 1}
         with pytest.warns(RuntimeWarning, match="нарушением формы"):
             _warn_if_bundle_malformed(bad)
+
+
+@pytest.mark.unit
+class TestContextDoesNotImportEngine:
+    """K2-развязка слоёв: context не строит RunPlan сам и не импортирует engine."""
+
+    def test_compile_bundle_requires_plan_or_builder(self, repo, eng_task):
+        """Без plan и без build_plan — явная ошибка, а не тихий импорт engine."""
+        with pytest.raises(ValueError, match="context не импортирует engine"):
+            _compile_bundle(eng_task, repo)
+
+    def test_source_has_no_engine_import(self):
+        """В исходнике context_compiler нет ссылки на engine — ни статической, ни динамической."""
+        src = (Path(__file__).resolve().parents[2] / "ai_ops_kit" / "context"
+               / "context_compiler.py").read_text(encoding="utf-8")
+        assert "ai_ops_kit.engine" not in src, "context_compiler не должен упоминать engine"
