@@ -5310,3 +5310,59 @@ work:
       опыта нет в собранном Storybook -> ux_review краснеет детерминированно (#452 + проводка #690).
       ДОКАЗАНО живьём на реальной UI-дочке ai-ops-cockpit (#697): полный контракт -> ux_review pass,
       убрать обязательную story -> required_stories.missing -> ux_review fail. Оговорка «синтетика» снята.
+  - id: gate-measures-merge-result
+    title: 'coverage и footprint меряются против ИТОГА СЛИЯНИЯ, а не ветки PR — механизмом самого кита, без опоры на фичу форджа'
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    pr: 777
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#777). Гейт объёма/охвата меряет против ИТОГА СЛИЯНИЯ (git merge-tree ветки PR с main), фордж-нейтрально. Добавлена вторая ось — ЧИСЛО файлов — поверх той же merge-preview: дрейф 490->498 файлов (мелкие файлы пробивают потолок файлов, не объёма) виден на PR-виновнике, а не на следующем невиновном. Advisory; промоут — отдельным решением.
+  - id: reviewer-prompt-uses-xml-anchors-measured
+    title: 'Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не принято на веру'
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-09-10'
+    pr: 785
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#785). Промпт судьи размечен XML-якорями, недоверенный дифф изолирован в экранированном context — поддельный вердикт внутри диффа не подделывает границу секций (инъекция при ревью своего кода). Замер восстановимости границ на корпусе: XML 6/6 против 2/6 у плоских маркеров. Живая половина — за владельцем через gate_eval_live.
+  - id: delivery-of-ready-work-is-one-autonomous-command
+    title: 'Готовую-на-ветке работу доставка доводит до ОТКРЫТОГО verified PR + DeliveryReceipt одной автономной командой, без ручного подбора флагов'
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-09-10'
+    pr: 784
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#784). Готовая-на-ветке работа доводится до открытого PR одной командой: resume прокидывает open-pr/takeover, session стабилен run-resume, active-work заявка снимается на выходе (в т.ч. прерванного) прогона. По пути найден и починен баг: finish_cmd не получал child_root — носитель заявки не снимался НИКОГДА. Доказано на фикстурах; живой e2e через gh не гонялся.
+  - id: run-updates-status-docs-or-names-the-exception
+    title: 'Прогон обновляет статус-доки репозитория (или явно пишет причину-исключение) — сгенерированный PR не валит собственный status-freshness гейт'
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-09-10'
+    pr: 487
+    result: >-
+      ЗАКРЫТО (уже в main #426+#487, подтверждено 2026-09-10). Прогон на commit зовёт living_status.refresh, тело PR через living_status.describe либо «статус-док свеж», либо «причина-исключение». Сгенерированный PR не валит status-freshness. 33 теста зелёные, дифф против main пуст.
+  - id: writer-verdict-is-deterministic
+    title: 'Вердикт implementation_verification / verification_strategy стабилен на одном входе — READY не чередуется с NOT_READY между дорогими прогонами'
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-09-10'
+    pr: 779
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#779). Механизм воспроизводимости вердикта уже в main; добавлен прямой замер-сторож: путь вердикта N=25 раз на одном входе даёт один отпечаток (met и fail-closed идентичны), вход не мутируется. Регресс недетерминизма краснит. Живая модель не гонялась.
+  - id: storybook-experience-options-with-tradeoffs
+    title: 'Кит предлагает варианты опыта с trade-offs вместо одного «правильного» макета'
+    goal: storybook-as-visual-contract
+    status: done
+    closed_at: '2026-09-10'
+    pr: 778
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#778). Кит предлагает >=2 варианта опыта с названными trade-offs, владелец выбирает один, выбор записан в Experience Contract (иммутабельно, fail-closed на чужой вариант) и стал входом для каждой story. Обязательный набор stories и гейт ux_review не тронуты.
+  - id: forced-major-update-reconciles-allowed-version-range
+    title: 'После `update --force` через мажор конфиг согласован: installed_version попадает в allowed_version_range, а doctor краснеет, если нет — сегодня версия молча остаётся вне диапазона'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    pr: 537
+    result: >-
+      ЗАКРЫТО (уже в main #537, подтверждено 2026-09-10). update --force через мажор расширяет allowed_version_range под новый мажор и говорит вслух (widen_allowed_range); doctor краснит на installed вне диапазона. Замер до/после 5/5 зелёный.
