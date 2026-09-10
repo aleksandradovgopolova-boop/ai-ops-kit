@@ -126,6 +126,9 @@ experimental:
     # collect`). Регистрация несёт только имя проекта + версию кита + дату + анонимный id (без путей/
     # почты/кода). Форма записи и сводки ещё уточняется — дочка вправе пользоваться, зная это.
     - reach
+    # roadmap: без подкоманды — Now/Next/Later из плана (read-only); `roadmap sync-issues`
+    # [--apply] сводит GitHub Issues с роадмапом (эпик на направление + подзадача на открытую
+    # работу). Сухой прогон по умолчанию; нет доступа к GitHub — код 2 «не проверено».
     - roadmap
     - delivery
     # Backlog Intelligence (Фаза 2): `backlog classify|dedup|prioritize|graph` над GitHub Issues

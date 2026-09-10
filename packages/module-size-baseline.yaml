@@ -20,7 +20,7 @@ threshold: 700
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 1224
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 1947
+  ai_ops_kit/cli/ai_ops_cli_intents.py: 1950
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
   ai_ops_kit/engine/execution_pipeline.py: 786
@@ -40,6 +40,16 @@ ceilings:
   installer/ai_ops.py: 3926
 
 raises:
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1947'
+    to: 'ai_ops_cli_intents.py = 1950'
+    work: 'roadmap sync-issues (#742): подкоманда сверки issue-трекера с роадмапом'
+    why: >-
+      Новая подкоманда `roadmap sync-issues`. Основная масса (gh-адаптер GhIssueClient +
+      оркестрация run_roadmap_sync, ~103 строки) ВЫНЕСЕНА в отдельный модуль
+      ai_ops_kit/cli/roadmap_sync_cli.py; в интентах остался лишь 3-строчный диспетч подкоманды
+      (if + ленивый import + вызов). +3 — неснижаемая цена нового входа, не логика. Ратчет держит вниз.
   - at: '2026-09-09'
     what: cover_installer
     from: 'installer/ вне гейта (SOURCE_ROOT только ai_ops_kit)'

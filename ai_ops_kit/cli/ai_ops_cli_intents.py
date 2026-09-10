@@ -939,6 +939,9 @@ def _intent_health(task, child_root, signals, a):
 
 def _intent_roadmap(task, child_root, signals, a):
     js = a.json
+    if (task or "").strip().lower() == "sync-issues":   # реализация в roadmap_sync_cli (ратчет размера)
+        from ai_ops_kit.cli.roadmap_sync_cli import run_roadmap_sync
+        return run_roadmap_sync(child_root, a)
     # PR-7 (лента 4): roadmap Now/Next/Later ВЫВОДИТСЯ из плана (цели + исходы), а не пишется
     # руками. Команда read-only: строит три горизонта и сверяет их с авторским ROADMAP.md.
     # Авторскую сторону разбирает существующий roadmap.py — второй правды об одном горизонте нет.
