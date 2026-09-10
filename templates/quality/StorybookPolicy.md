@@ -25,7 +25,7 @@ UI-гейтов закрывается детерминированно, а ре
 
 - Схема: `schemas/ui-evidence-bundle.schema.json` (`UIEvidenceBundle`).
 - Сборка: `ai_ops_kit/ui/storybook_adapter.py --build <child_root> [--changed a.tsx,b.tsx] [--sha SHA]`.
-- Валидация: `validation/validate_storybook_evidence.py <bundle.json>` (структура + семантика:
+- Валидация: `ai_ops_kit/validation/validate_storybook_evidence.py <bundle.json>` (структура + семантика:
   статус нельзя разойтись с цифрами — нельзя фабриковать `pass`).
 
 ### Артефакты child-репо, которые агрегирует адаптер
@@ -70,7 +70,7 @@ a11y-нарушения по-прежнему блокируют (см. матр
   субъективный reviewer `warn` по UI-гейту НЕ блокирует, когда гейт advisory (internal low-risk) ИЛИ
   механика подтверждена детерминированным evidence (`evidence=pass`); `evidence=fail` (реальная
   регрессия/дефект) блокирует ВСЕГДА, даже при reviewer `pass` (усиление). `GateResult v2`
-  (`tools/gate_result_v2.py`, +`not_applicable`/`abstain`) + адаптер v2→v1 для старых потребителей.
+  (`ai_ops_kit/gates/gate_result_v2.py`, +`not_applicable`/`abstain`) + адаптер v2→v1 для старых потребителей.
   **NO-OP без богатых сигналов:** легаси `ui_changed`→`user_facing`+нет evidence→fail-closed == как
   раньше. Доказано на Bench Lite v0.3 (реальный A/B): block-rate 0.667→0.333 (−50%),
   `residual_false_fail_rate=0.0` (≤0.10), `false_green=0`, safety-регрессии (evidence=fail)
