@@ -1021,6 +1021,12 @@ work:
       это entrypoints — engine импортить можно); библиотечный collect() давно принимает broker
       параметром. Гейт больше не зависит от engine ни статически, ни динамически — это перенос
       проводки в точку входа, а НЕ сокрытие. mutual_pairs 5→4, cycles 9→5 честно (каскад claim-маркеров
-      сведён). ОСТАЮТСЯ 4 пары, каждая — проектное решение, а не хирургия: context↔engine (run_plan),
-      delivery↔engine (git/worktree/pipeline), engine↔lifecycle («кто классифицирует»), engops↔gates
-      (deploy_readiness нуждается в environment_map — «куда положить»). Их брать отдельными срезами.
+      сведён).
+      K4 engops↔gates РАЗВЯЗАНА (2026-09-10): deploy_readiness звал engops.environment_map через
+      __import__ («куда положить»). environment_map — чистый ассессмент окружения без зависимостей от
+      engops, поэтому переехал git mv в ai_ops_kit/checks/ (primitives, вниз от gates), а deploy_readiness
+      импортирует его статически. engops→gates ребро снято; было единственным в known_violations →
+      known_violations теперь []. mutual_pairs 4→3, cycles 5 честно. Это перенос по существу: модуль
+      живёт там, где ему место, а не спрятан в функции. ОСТАЮТСЯ 3 пары, каждая — проектное решение:
+      context↔engine (run_plan), delivery↔engine (git/worktree/pipeline), engine↔lifecycle
+      («кто классифицирует»). Их брать отдельными срезами.

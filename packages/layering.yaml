@@ -161,15 +161,16 @@ rules:
 # динамическим импортом — gates грузит engops.environment_map через __import__ (deploy_readiness).
 # Ребро было всегда, но validate_layering не видел __import__; теперь видит. Заморожено как известное
 # нарушение, развязка — отдельной работой; реестр вправе только сокращаться.
-known_violations:
-  - "gates -> engops: deploy_readiness грузит engops.environment_map через __import__ (F-03); развязать отдельной работой"
+# K4 РАЗВЯЗАНА (2026-09-10): environment_map переехал engops -> checks (примитив детекции), ребро
+# gates -> engops снято. Нарушений kernel-boundary больше нет.
+known_violations: []
 
 # Цифры замера — ПОТОЛОК, а не заметка на память: с v3.34 их читает ratchet_errors в
 # validate_layering.py. Ратчет ходит только ВНИЗ: превышение краснеет, снижение обязано быть
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 4          # ЧЕСТНОЕ ЧИСЛО. F-03 (аудит 2026-09-09) вскрыл 5 пар, спрятанных за
+  mutual_pairs: 3          # ЧЕСТНОЕ ЧИСЛО. F-03 (аудит 2026-09-09) вскрыл 5 пар, спрятанных за
                            # __import__ (validate_layering видел только ast.Import/ImportFrom и печатал
                            # 0 с ложной подписью «кольцо стало DAG»). Теперь гейт считает и динамику,
                            # и одна пара РАЗВЯЗАНА ПО-НАСТОЯЩЕМУ (2026-09-10):
@@ -179,8 +180,11 @@ baseline:
                            #   collect() давно принимает broker параметром. Гейт больше не зависит от
                            #   engine ни статически, ни динамически. Это НЕ сокрытие (как прежнее
                            #   «K1 снята» через __import__), а перенос проводки в точку входа. 5 -> 4.
-                           # Остаются четыре взаимные пары внутри capabilities:
-                           #   context<->engine, delivery<->engine, engops<->gates, engine<->lifecycle.
+                           # K4 engops<->gates СНЯТА (2026-09-10): environment_map — примитив
+                           # детекции окружения — переехал engops -> checks (слой primitives), gates
+                           # и engops зовут его ВНИЗ по слоям, ребро gates->engops исчезло. 4 -> 3.
+                           # Остаются ТРИ взаимные пары внутри capabilities:
+                           #   context<->engine, delivery<->engine, engine<->lifecycle.
                            #
                            # ЧТО БЫЛО РАЗВЯЗАНО ПО-НАСТОЯЩЕМУ (переезды в foundation, 2026-08-12) — это
                            # сняло ПЕРЕСЕКАВШИЕ СЛОИ пары, а не эти пять внутри capabilities:
@@ -202,8 +206,8 @@ baseline:
                                # Разбор оставшихся внутрикольцевых циклов — отдельными срезами.
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
-    Четыре взаимные пары лежат ВНУТРИ слоя capabilities (context<->engine, delivery<->engine,
-    engops<->gates, engine<->lifecycle), правилами слоёв не запрещены (осознанная граница) и честно
+    Три взаимные пары лежат ВНУТРИ слоя capabilities (context<->engine, delivery<->engine,
+    engine<->lifecycle), правилами слоёв не запрещены (осознанная граница) и честно
     сосчитаны. Пятая, engine<->gates (K1), РАЗВЯЗАНА ПО-НАСТОЯЩЕМУ (2026-09-10): CLI-проводку engine
     вынесли из гейта в точку входа devtools, а не спрятали за __import__. До F-03 все пять
     показывались нулём.
