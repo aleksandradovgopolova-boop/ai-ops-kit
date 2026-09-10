@@ -150,7 +150,7 @@ def test_dry_run_writes_nothing(repo, capsys):
     _feature(repo, "onboarding")
     inst = _installer(repo)
 
-    rc = inst.cmd_delivery_proof(())
+    rc = inst._aux_commands().cmd_delivery_proof(())
 
     assert rc == 0
     assert not (repo / DEBT_REL).exists(), "сухой прогон записал файл в чужой репозиторий"
@@ -164,7 +164,7 @@ def test_apply_records_only_the_facts_of_today(repo, capsys):
     _feature(repo, "in-work", status="in-progress")     # не released -> не долг
     inst = _installer(repo)
 
-    inst.cmd_delivery_proof(("--apply",))
+    inst._aux_commands().cmd_delivery_proof(("--apply",))
 
     data = yaml.safe_load((repo / DEBT_REL).read_text(encoding="utf-8"))
     assert data["kind"] == "DeliveryProofDebt"
@@ -174,7 +174,7 @@ def test_apply_records_only_the_facts_of_today(repo, capsys):
 
     # Повторный прогон не растит список сам и не переписывает дату признания.
     before = (repo / DEBT_REL).read_text(encoding="utf-8")
-    inst.cmd_delivery_proof(("--apply",))
+    inst._aux_commands().cmd_delivery_proof(("--apply",))
     assert (repo / DEBT_REL).read_text(encoding="utf-8") == before, "повторный прогон изменил запись"
 
 
@@ -182,13 +182,13 @@ def test_closed_debt_leaves_the_list(repo):
     """Доказательство появилось — запись о долге уходит, иначе долг вечен на бумаге."""
     d = _feature(repo, "onboarding")
     inst = _installer(repo)
-    inst.cmd_delivery_proof(("--apply",))
+    inst._aux_commands().cmd_delivery_proof(("--apply",))
     assert "onboarding" in (repo / DEBT_REL).read_text(encoding="utf-8")
 
     (d / "delivery-receipt.yaml").write_text(yaml.safe_dump({
         "schema_version": 1, "kind": "DeliveryReceipt", "sha_verified": True,
         "commit_sha": "b" * 40}, allow_unicode=True), encoding="utf-8")
-    inst.cmd_delivery_proof(("--apply",))
+    inst._aux_commands().cmd_delivery_proof(("--apply",))
 
     data = yaml.safe_load((repo / DEBT_REL).read_text(encoding="utf-8"))
     assert [f["id"] for f in data["features"]] == [], "закрытый долг остался в списке"
