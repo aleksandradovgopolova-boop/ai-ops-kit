@@ -76,7 +76,7 @@ lessons:
       До слов о результате прогона: путь запуска и путь загруженного модуля названы и совпадают с
       деревом правки. Проверка, которая сама себе стелет `PYTHONPATH`, проверяет не то, что обещает.
     grounding:
-      - {file: installer/ai_ops.py, contains: "а не от глобального"}
+      - {file: installer/asset_ops.py, contains: "а не от глобального"}
       - {file: DEVELOPMENT-HISTORY.md, contains: "«работает локально» из-за editable-установки"}
       - {file: tests/unit/test_validator_runtime_contract.py, contains: "сама себе стелет путь"}
 

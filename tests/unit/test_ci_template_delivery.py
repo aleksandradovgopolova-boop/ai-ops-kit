@@ -207,7 +207,8 @@ def test_install_and_update_deliver_the_same_things():
     проверяется, а не подразумевается.
     """
     import ast
-    src = (KIT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+    # deliver_assets вынесена в под-хаб installer/asset_ops.py (финальный разрез монолита); парсим её там.
+    src = (KIT / "installer" / "asset_ops.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     # cmd_update -> installer/update_ops.py, cmd_init -> installer/setup_ops.py (разрез монолита) —
     # парсим каждую там, где она живёт; собираем и bare-name, и Attribute-вызовы (доставка через `_ao().`).

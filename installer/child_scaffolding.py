@@ -52,9 +52,14 @@ def _ao():
     return ai_ops
 
 
+def _core():
+    """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
+    return _ao()._core()
+
+
 def _required_context_docs():
     """v3.12.0 Startup Context Budget: обязательные документы контекста из манифеста (не хардкод)."""
-    ls = ((_ao().manifest().get("session_orchestration") or {}).get("living_status") or {})
+    ls = ((_core().manifest().get("session_orchestration") or {}).get("living_status") or {})
     return list(ls.get("required_context_docs") or [])
 
 
@@ -90,7 +95,7 @@ def _backfill_required_context(today=None, dry=False):
         dst = proj_ctx / doc
         if dst.exists() or (ao.AI_DIR / "custom" / "context" / doc).exists():
             continue                                   # уже заполнено репозиторием — не трогаем
-        src = ao._delivery_source("context", doc)     # кит первым: см. _delivery_source (F-032)
+        src = _core()._delivery_source("context", doc)     # кит первым: см. _delivery_source (F-032)
         if not src.is_file():
             out.append({"doc": doc, "action": "skipped-no-template"}); continue
         if not dry:
@@ -175,7 +180,7 @@ def _seed_planning_contour(root: Path, dry=False):
     """
     import datetime as _dt
     ao = _ao()
-    pom = ((ao.manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
+    pom = ((_core().manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
     required = list(pom.get("required_repo_artifacts") or [])
     templates = pom.get("templates") or {}
     by_name = {Path(v).name: v for v in templates.values()}
@@ -299,7 +304,7 @@ def _planning_gaps(root: Path):
     Незаполненная заготовка считается пробелом: файл есть, а направления и плана нет. См.
     `_is_unfilled_planning_artifact` — почему «существует» это не «на месте».
     """
-    pom = ((_ao().manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
+    pom = ((_core().manifest().get("session_orchestration") or {}).get("product_operating_model") or {})
     req = list(pom.get("required_repo_artifacts") or [])
     gaps, unfilled = [], []
     for r in req:
