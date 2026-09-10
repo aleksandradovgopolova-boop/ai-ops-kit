@@ -465,7 +465,7 @@ probes:
     константу; тест сценария status обязан заметить, что ответ перестал зависеть от конфигурации.'
 - id: publish-only-declared-fields
   kind: guard
-  file: ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/work_claims.py
   find: '    payload = {k: entry.get(k) for k in PUBLISHED_FIELDS if entry.get(k) is not None}'
   replace_with: '    payload = dict(entry)'
   tests:
@@ -484,7 +484,7 @@ probes:
     закрытого продукта без явного решения владельца (родительское решение ep-2026-08-18-claim-medium-hybrid).'
 - id: team-view-off-shows-only-local
   kind: guard
-  file: ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/work_claims.py
   # ОБРАЗЕЦ ОБНОВЛЁН 20.08.2026: `team_view` перестал быть «локальные или локальные+чужие» и стал
   # сложением трёх источников с одним дедупом. Охрана та же и стоит на том же месте — включённая
   # публикация и ТОЛЬКО она подаёт заявки других машин.
@@ -646,7 +646,7 @@ probes:
     `unspecified`, а вложенность каталогов перестаёт считаться конфликтом.'
 - id: registry-merged-work-detected-by-content
   kind: guard
-  file: ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/work_reconcile.py
   find: '        merged = gitio.git(child_root, "merge-base", "--is-ancestor", branch, base_ref)[0] == 0'
   replace_with: '        merged = gitio.git(child_root, "merge-base", "--is-ancestor2", branch, base_ref)[0] == 0'
   tests:
@@ -670,6 +670,7 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/lifecycle/work_reconcile.py
   - ai_ops_kit/cli/ai_ops_cli.py
   file: ai_ops_kit/cli/ai_ops_cli.py
   find: '    team = active_work.reconcile_with_base(team, child_root)'
@@ -1361,9 +1362,9 @@ probes:
 - id: copies-carrier-is-read-by-the-team-view
   kind: seam
   covers:
-  - ai_ops_kit/lifecycle/active_work.py
+  - ai_ops_kit/lifecycle/work_claims.py
   - ai_ops_kit/planning/next_work.py
-  file: ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/work_claims.py
   find: '    sources = [load_copy_claims(child_root)]'
   replace_with: '    sources = []'
   tests:
@@ -1396,7 +1397,7 @@ probes:
     из него единственное, что делает его решаемым.'
 - id: carrier-needs-an-explicit-root
   kind: guard
-  file: ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/work_claims.py
   find: '    if start is None:'
   replace_with: '    if False:'
   tests:
@@ -1406,7 +1407,7 @@ probes:
     показали заявки из живого кита. «Держатель назван, но не тот» опаснее, чем «держатель не назван».'
 - id: removed-copy-releases-its-claim
   kind: guard
-  file: ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/work_claims.py
   find: '        if wt and not Path(wt).is_dir():'
   replace_with: '        if False:'
   tests:
@@ -1416,7 +1417,7 @@ probes:
     страшилок, ради которого его перестают читать (#137).'
 - id: base-equal-to-the-branch-proves-nothing
   kind: guard
-  file: ai_ops_kit/lifecycle/active_work.py
+  file: ai_ops_kit/lifecycle/work_reconcile.py
   find: '        if _same_ref(child_root, branch, base_ref):'
   replace_with: '        if False:'
   tests:
