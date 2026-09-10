@@ -24,7 +24,7 @@ from pathlib import Path
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 def _env_recommendation(child_root):
     """Layer 1: какие окружения использовать."""
-    from ai_ops_kit.engops import environment_map
+    from ai_ops_kit.checks import environment_map
     from ai_ops_kit.gates import deploy_readiness
     recs = []
     try:

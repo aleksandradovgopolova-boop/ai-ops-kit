@@ -3269,7 +3269,7 @@ def cmd_doctor(argv=()):
     # v3.20.0 EngOps срез 2: окружения и зрелость поставки. `not_detected`/`absent` НЕ маскируем —
     # для библиотеки/CLI это норма; расхождение «CI деплоит в необъявленное окружение» — сообщаем.
     try:
-        from ai_ops_kit.engops import environment_map
+        from ai_ops_kit.checks import environment_map
         _dprint(environment_map.summary_line("."))
     except Exception as _e:  # noqa: BLE001
         _dprint(f"окружения: недоступно ({_e})")
@@ -3585,7 +3585,7 @@ def cmd_engops(argv):
         from ai_ops_kit.engops import branch_policy
         return branch_policy.main(["."] + rest)
     if sub == "env":
-        from ai_ops_kit.engops import environment_map
+        from ai_ops_kit.checks import environment_map
         return environment_map.main(["."] + rest)
     if sub == "deploy":
         from ai_ops_kit.gates import deploy_readiness
@@ -3598,7 +3598,7 @@ def cmd_engops(argv):
     from ai_ops_kit.engops import branch_policy
     from ai_ops_kit.engops import commit_policy
     from ai_ops_kit.gates import deploy_readiness
-    from ai_ops_kit.engops import environment_map
+    from ai_ops_kit.checks import environment_map
     print(commit_policy.summary_line("."))
     print(branch_policy.summary_line("."))
     print(environment_map.summary_line("."))
