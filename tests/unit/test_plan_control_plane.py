@@ -79,6 +79,26 @@ def test_history_of_the_kit_itself_is_valid_and_complete():
     assert prep["errors"] == [], prep["errors"]
 
 
+def test_the_validate_command_surfaces_structural_errors(tmp_path, capsys):
+    """ШОВ: команда `validate` обязана ПРОГОНЯТЬ сам `validate()` (вынесен в plan_validate) и
+    доводить структурную ошибку плана до человека. Если вызов отвязать, отчёт молча зеленеет, а
+    модульные тесты `validate()` остаются зелёными, потому что зовут механизм напрямую, а не командой.
+    """
+    (tmp_path / "planning").mkdir()
+    (tmp_path / "planning" / "plan.yaml").write_text(
+        __import__("yaml").safe_dump({
+            "schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "g1", "status": "active"}],
+            "work": [{"id": "w1", "title": "T", "type": "quality",
+                      "owner_role": "no-such-role", "status": "todo", "goal": "g1",
+                      "write_scope": ["ai_ops_kit/"]}],
+        }, allow_unicode=True), encoding="utf-8")
+    rc = dp.main(["validate", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert rc == 1, out
+    assert "owner_role" in out, out
+
+
 # ─── fail-closed ───────────────────────────────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("status", ["done", "dropped"])
