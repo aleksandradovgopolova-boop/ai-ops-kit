@@ -139,7 +139,7 @@ mvp_blocking_count: 8
 # Связность ядра: ДЕРИВИРУЕТСЯ из packages/layering.yaml (см. derived_layering_counts).
 # Появились 2026-08-13: числа жили в прозе и не сверялись ничем, поэтому документы кита
 # говорили 12/210 при фактическом ратчете 7/52 — и CI был зелёным.
-layering_mutual_pairs: 2
+layering_mutual_pairs: 1
 layering_cycles_longer_than_two: 0
 
 qualified_on: >
