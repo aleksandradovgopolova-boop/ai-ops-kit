@@ -30,7 +30,6 @@ ceilings:
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
   ai_ops_kit/providers/orchestrator_providers.py: 978
-  ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 788
   ai_ops_kit/gates/gate_executor.py: 905
   ai_ops_kit/engine/tool_broker.py: 785
@@ -40,9 +39,20 @@ ceilings:
 
 raises:
   - at: '2026-09-10'
-    what: raise_ceiling
-    from: 'installer/ai_ops.py = 3926'
-    to: 'installer/ai_ops.py = 4023'
+    what: lower_ceiling
+    from: 'ai_ops_kit/intelligence/nightly_review.py = 1097'
+    to: 'ai_ops_kit/intelligence/nightly_review.py = 665 (ниже порога 700 — снят из ceilings)'
+    work: 'refactor(intelligence): вынос read-only кластеров из nightly_review в сателлиты'
+    why: >-
+      Монолит ночного обзора (1097 строк) расщеплён: read-only сбор сигналов дельты (git/репозиторий
+      + прогон валидаторов run_checks) вынесен в `intelligence/nightly_collectors.py` (300 строк,
+      донор ниже порога), расписание и доставка брифа — в `intelligence/nightly_schedule.py` (184
+      строки, донор ниже порога). nightly_review остался ОРКЕСТРАТОРОМ (collect_delta/format_brief/
+      run_nightly/confirm_review) и ЕДИНСТВЕННЫМ держателем git-пишущего пути автофикса класса A —
+      его намеренно НЕ трогали, чтобы validate_nightly_no_direct_main_write (R1: сканирует ровно этот
+      файл) продолжал сторожить запрет прямой записи в main. Сателлиты импортируются самим
+      nightly_review (ре-экспорт сохраняет доступ `nightly_review.<имя>` для тестов). Логика байт-в-байт
+      та же. Файл упал ниже порога 700 → снят из ceilings, ратчет держит вниз.
     work: 'release update-strategy menu (#750): названное меню стратегий обновления + резолвер'
     why: >-
       Новая возможность инсталлятора: названное меню стратегий обновления (pr/manual/scheduled-batch/
