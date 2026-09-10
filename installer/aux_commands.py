@@ -9,7 +9,8 @@
 
 `installer/` — НЕ пакет; модуль грузится по sibling-пути. Общие с ядром функции и глобалы (`PKG`,
 `AI_DIR`, `REPO_ROOT`, `manifest`, `pkg_version`, `resolve_update_ref`, `_released_without_proof`,
-`_onboarding_summary`, …) остаются в `ai_ops` и читаются через `_ao()`. Загрузчик
+…) остаются в `ai_ops` и читаются через `_ao()`; функции сателлитов — через их геттеры
+(`ui-status` берёт `_onboarding_summary` из `_ao()._setup_ops()`, куда та переехала в #815). Загрузчик
 `ai_ops._aux_commands()` кладёт сюда ЖИВЫЕ глобалы работающего экземпляра установщика (`_AO_NS`).
 Ленивый импорт — как у соседних сателлитов: модульный повесил бы запуск `ai_ops.py` из копии дочки
 без сателлита рядом.
@@ -335,7 +336,7 @@ def cmd_ui_status(argv):
     (`ai_ops_kit/cli/ai_ops_cli.py`) определяет стек репозитория — это другое действие, а обёртка
     `./ai-ops onboard` ведёт именно в него. Одно имя на два поведения убрано."""
     ob = Path(".") / "AI-OPS-ONBOARDING.md"
-    print(_ao()._onboarding_summary(ob if ob.exists() else None))
+    print(_ao()._setup_ops()._onboarding_summary(ob if ob.exists() else None))
     print()
     for _root in (Path(".") / ".ai" / "managed", _ao().PKG):
         if (_root / "ai_ops_kit" / "ui" / "ui_readiness.py").is_file() and str(_root) not in sys.path:
