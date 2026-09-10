@@ -28,11 +28,15 @@ PR (например #425) ложным «PR смешивает код с коо
 ИСКЛЮЧЕНИЕ — install/update-PR кита (#384, замер 01.09.2026). Апдейт САМ мигрирует план/историю, а
 первый заезд на голый репозиторий неизбежно вносит весь план-стор: эти координационные правки —
 вывод машинной миграции, а не рука параллельной ленты. Такой PR распознаётся по правке
-`.ai/managed/VERSION` (обычная работа его не трогает) и смешением не считается. Без исключения гейт
-по построению не пропускал бы НИ ОДИН апдейт кита с миграцией и НИ ОДИН первый заезд на новую дочку.
+файла-признака (по умолчанию `.ai/managed/VERSION`, обычная работа его не трогает) и смешением не
+считается. Без исключения гейт по построению не пропускал бы НИ ОДИН апдейт кита с миграцией и НИ
+ОДИН первый заезд на новую дочку.
 
-Список координационных файлов — в `registry/coordination-files.yaml` (дочка расширяет своим
-`.ai/project/coordination-files.yaml`), а не зашит здесь: два источника одной правды разошлись бы.
+Список координационных файлов И признаков апдейта кита (`kit_update_markers`) — в
+`registry/coordination-files.yaml` (дочка расширяет обоими списками через
+`.ai/project/coordination-files.yaml`), а не зашит здесь: реестр — источник истины, иначе два
+источника одной правды разошлись бы. Код держит лишь безопасный дефолт признака на случай реестра
+без ключа.
 """
 from __future__ import annotations
 
@@ -47,21 +51,40 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 
 _REG = "registry/coordination-files.yaml"
 _CHILD_REG = ".ai/project/coordination-files.yaml"
-# #384: файл-признак машинного install/update-PR кита. Обычная фиче-работа его не трогает.
+# #384: файл-признак машинного install/update-PR кита. ДЕФОЛТ на случай реестра без ключа
+# `kit_update_markers` — источник истины сам список в registry/coordination-files.yaml, не этот код.
 _UPDATE_MARKER = ".ai/managed/VERSION"
 
 
-def _read_paths(p: Path, out: set) -> None:
-    """Прочитать paths: из одного реестра в накопитель. Молча пропускает отсутствующий/битый файл."""
+def _read_list_key(p: Path, key: str, out: set) -> None:
+    """Прочитать список строк из ключа `key` одного реестра в накопитель.
+
+    Молча пропускает отсутствующий/битый файл и не-строковые элементы — как и остальной fail-open
+    этого гейта (битый реестр не роняет проверку, а сужает её до читаемого)."""
     if not p.is_file():
         return
     try:
         doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
         return
-    for x in doc.get("paths") or []:
+    for x in doc.get(key) or []:
         if isinstance(x, str) and x.strip():
             out.add(x.strip())
+
+
+def _read_paths(p: Path, out: set) -> None:
+    """Прочитать paths: из одного реестра в накопитель. Молча пропускает отсутствующий/битый файл."""
+    _read_list_key(p, "paths", out)
+
+
+def _collect(root: Path, key: str, defaults=None) -> set:
+    """Собрать список из ключа `key`: базовый реестр (`defaults`) + пакетный + расширение дочки."""
+    out: set = set()
+    if defaults:
+        _read_list_key(Path(defaults), key, out)
+    for rel in (_REG, _CHILD_REG):
+        _read_list_key(Path(root) / rel, key, out)
+    return out
 
 
 def coordination_paths(root: Path, defaults=None) -> list:
@@ -70,12 +93,18 @@ def coordination_paths(root: Path, defaults=None) -> list:
     `defaults` — путь к базовому реестру ВНЕ дерева `root` (в дочкином CI это клон кита:
     у свежей дочки своего `registry/coordination-files.yaml` нет, и без базы проверка структурно
     не может покраснеть). Дочка всё так же расширяет список своим `.ai/project/...`."""
-    out = set()
-    if defaults:
-        _read_paths(Path(defaults), out)
-    for rel in (_REG, _CHILD_REG):
-        _read_paths(Path(root) / rel, out)
-    return sorted(out)
+    return sorted(_collect(root, "paths", defaults=defaults))
+
+
+def kit_update_markers(root: Path, defaults=None) -> list:
+    """Признаки install/update-PR кита (#384) — ДАННЫМИ из реестра, не хардкодом. -> отсорт. список.
+
+    Читаются из того же `registry/coordination-files.yaml` (+ базового `--defaults` клона кита в
+    контуре дочки + расширения дочки `.ai/project/...`), что и координационные пути: реестр —
+    источник истины. Если ключ `kit_update_markers` нигде не объявлен, откатываемся к безопасному
+    дефолту `.ai/managed/VERSION` — прежнее поведение, а не «нет признака -> любой апдейт краснит»."""
+    found = _collect(root, "kit_update_markers", defaults=defaults)
+    return sorted(found) if found else [_UPDATE_MARKER]
 
 
 def _norm(p: str) -> str:
@@ -111,18 +140,19 @@ def changed_files(root: Path, base: str) -> list | None:
     return [l.strip() for l in r.stdout.splitlines() if l.strip()]
 
 
-def is_kit_update_diff(changed: list) -> bool:
-    """PR — install/update кита? Признак — правка `.ai/managed/VERSION` (#384).
+def is_kit_update_diff(changed: list, markers=None) -> bool:
+    """PR — install/update кита? Признак — правка одного из `markers` (данные реестра, #384).
 
     Установщик апдейта меняет managed-слой (в дочке — `.ai/managed/VERSION`) и в ТОМ ЖЕ коммите
     мигрирует план/историю; при ПЕРВОМ заезде на голый репозиторий managed-слой ДОБАВЛЯЕТСЯ целиком.
-    Обычная фиче-работа `.ai/managed/VERSION` не трогает — файл принадлежит машине апдейта, не руке
-    ленты. Значит его наличие в диффе отличает машинный апдейт от параллельной работы."""
-    marker = _norm(_UPDATE_MARKER)  # _norm срезает ведущую точку — нормализуем обе стороны
-    return any(_norm(f) == marker for f in changed)
+    Обычная фиче-работа этих файлов не трогает — они принадлежат машине апдейта, не руке ленты.
+    Значит их наличие в диффе отличает машинный апдейт от параллельной работы. `markers` — список
+    признаков из реестра; None -> безопасный дефолт `[_UPDATE_MARKER]` (прежнее поведение)."""
+    marks = {_norm(m) for m in (markers if markers is not None else [_UPDATE_MARKER])}
+    return any(_norm(f) in marks for f in changed)  # _norm срезает ведущую точку с обеих сторон
 
 
-def diff_mixes_code_with_coordination(changed: list, coord: list) -> dict:
+def diff_mixes_code_with_coordination(changed: list, coord: list, markers=None) -> dict:
     """PR смешивает код с координационным файлом? -> {"mixed","coordination","code","docs","kit_update"}."""
     coord_n = {_norm(c) for c in coord}
     coord_hits, code_hits, doc_hits = [], [], []
@@ -143,8 +173,9 @@ def diff_mixes_code_with_coordination(changed: list, coord: list) -> dict:
     # неизбежно вносит и весь план-стор — эти координационные правки суть вывод миграции апдейта, а
     # НЕ рука параллельной ленты. Такой PR машинный (одна рука), DIRTY-дорожки N² не создаёт. Без
     # исключения гейт по построению не пропускал бы НИ ОДИН апдейт кита с миграцией и НИ ОДИН первый
-    # заезд на новую дочку. Признак апдейта структурный — `.ai/managed/VERSION` в диффе.
-    kit_update = is_kit_update_diff(changed)
+    # заезд на новую дочку. Признак апдейта структурный — файл из `kit_update_markers` реестра в
+    # диффе (по умолчанию `.ai/managed/VERSION`); `markers=None` -> тот же безопасный дефолт.
+    kit_update = is_kit_update_diff(changed, markers=markers)
     return {"mixed": bool(coord_hits) and bool(code_hits) and not kit_update,
             "coordination": sorted(coord_hits), "code": sorted(code_hits),
             "docs": sorted(doc_hits), "kit_update": kit_update}
@@ -168,7 +199,8 @@ def assess(root, base=None, defaults=None) -> dict:
             rep["findings"].append(f"дифф против '{base}' не прочитан — смешение кода и координации "
                                    f"не проверено (не «чисто»)")
         else:
-            mix = diff_mixes_code_with_coordination(changed, coord)
+            markers = kit_update_markers(root, defaults=defaults)
+            mix = diff_mixes_code_with_coordination(changed, coord, markers=markers)
             rep["diff"] = {"base": base, "available": True, **mix}
             if mix["mixed"]:
                 rep["findings"].append(
@@ -179,7 +211,7 @@ def assess(root, base=None, defaults=None) -> dict:
             elif mix["kit_update"] and mix["coordination"] and mix["code"]:
                 # #384: не нарушение — install/update кита. Пометка, чтобы пропуск был назван, а не молчал.
                 rep["notes"] = rep.get("notes", []) + [
-                    "install/update-PR кита (меняет .ai/managed/VERSION): правки "
+                    "install/update-PR кита (правит файл-признак из kit_update_markers): правки "
                     f"{', '.join(mix['coordination'])} — миграция апдейта, а не параллельная работа; "
                     "смешение DIRTY не взводит (#384)."]
     return rep
