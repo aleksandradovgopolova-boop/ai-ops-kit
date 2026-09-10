@@ -86,10 +86,14 @@ AI_DIR = REPO_ROOT / ".ai"
 MANAGED = AI_DIR / "managed"
 META = {".checksums.json", ".provenance.json", ".update-lock"}
 
-# Сателлит установщика рядом; installer/ — не пакет, грузим по имени, добавив свой каталог в путь.
-if str(HERE.parent) not in sys.path:
-    sys.path.insert(0, str(HERE.parent))
-from plan_merge_setup import ensure_plan_merge_driver, plan_merge_report_line  # noqa: E402
+# Сателлит установщика рядом; installer/ — не пакет. Грузим ЛЕНИВО (внутри функции доставки), а не на
+# уровне модуля: `deliver_assets` бежит в РОДИТЕЛЕ при установке (сателлит на месте), а из копии дочки
+# ai_ops.py может запускаться БЕЗ него — модульный импорт повесил бы даже copy-guard.
+def _plan_merge_setup():
+    if str(HERE.parent) not in sys.path:
+        sys.path.insert(0, str(HERE.parent))
+    import plan_merge_setup
+    return plan_merge_setup
 
 
 class ChildConfigError(Exception):
@@ -2267,7 +2271,7 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         # и случилась, — получают правило обновлением, а не переустановкой.
         "gitattributes": ensure_gitattributes(root),
         # Атрибут merge=ai-ops-plan без записи в git config бездействует — прописываем драйвер локально.
-        "plan_merge_driver": ensure_plan_merge_driver(root),
+        "plan_merge_driver": _plan_merge_setup().ensure_plan_merge_driver(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
         # ДО посева планирования (SR-2): перенести заполненный уходящий `.ai-ops/ROADMAP.md` в
@@ -2309,7 +2313,7 @@ def _assets_report_line(assets: dict) -> str:
                 + ": журналы отчётов (.ai/project/report-history/*.jsonl) сводятся при слиянии"
                   " сами — они дописываются, а не переписываются. А planning/plan.yaml получил"
                   " понимающий структуру merge-driver (см. ниже).")
-    out += plan_merge_report_line(assets.get("plan_merge_driver"))
+    out += _plan_merge_setup().plan_merge_report_line(assets.get("plan_merge_driver"))
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += ("\nПолитика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")

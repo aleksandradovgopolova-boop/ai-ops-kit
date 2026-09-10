@@ -37,7 +37,7 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 4036
+  installer/ai_ops.py: 4040
 
 raises:
   - at: '2026-09-10'
@@ -875,12 +875,13 @@ raises:
   - at: '2026-09-10'
     what: raise_ceiling
     from: 'installer/ai_ops.py = 4023'
-    to: 'installer/ai_ops.py = 4036'
+    to: 'installer/ai_ops.py = 4040'
     work: 'plan-yaml-edits-do-not-conflict-in-parallel (#148): merge-driver для planning/plan.yaml'
     why: >-
       Установщик прописывает merge-driver planning/plan.yaml (атрибут merge=ai-ops-plan +
       merge.ai-ops-plan.driver в git config дочки) — без записи в конфиге атрибут бездействует. ТЯЖЁЛУЮ
       логику вынес в сателлит `installer/plan_merge_setup.py` (монолит не растим ради функций); в
-      ai_ops.py остались только неизбежные +13 строк проводки: sibling-импорт, правило в
-      `_GITATTRIBUTES_RULES`, вызов в deliver_assets и строка отчёта. ai_ops.py — известный кандидат на
-      вынос (крупнейший файл), ратчет держит рост вниз; логика самого драйвера в отдельном модуле.
+      ai_ops.py остались только неизбежные строки проводки: ЛЕНИВЫЙ sibling-импорт сателлита (модульный
+      импорт вешал бы copy-guard, если сателлит не доставлен), правило в `_GITATTRIBUTES_RULES`, вызов в
+      deliver_assets и строка отчёта. ai_ops.py — известный кандидат на вынос (крупнейший файл), ратчет
+      держит рост вниз; логика самого драйвера в отдельном модуле.
