@@ -24,6 +24,9 @@ import pytest
 
 PKG = Path(__file__).resolve().parents[2]
 CLI = PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
+# Слой реализации команд вынесен из монолита входа в модуль-сосед — большинство вызовов `_say`
+# живёт теперь там (обработчики намерений и путь run/do), поэтому корпус проверки имён включает оба.
+CLI_COMMANDS = PKG / "ai_ops_kit" / "cli" / "ai_ops_cli_commands.py"
 PRESENTER = PKG / "ai_ops_kit" / "ui" / "presenter.py"
 # Переводчики вынесены в модули-соседи: переводчик — это `from_*` в любом из файлов слоя, и все они
 # исключаются из «корпуса, где кит говорит», чтобы `def from_X` не засчитывался как вызов сам себя.
@@ -89,7 +92,8 @@ def test_no_translator_is_allowed_to_stay_unwired():
 def test_every_name_passed_to_say_exists_in_presenter():
     """`_say` берёт переводчика по имени-строке — значит опечатка возможна, и она обязана краснеть."""
     from ai_ops_kit.ui import presenter
-    tree = ast.parse(CLI.read_text(encoding="utf-8"))
+    src = CLI.read_text(encoding="utf-8") + "\n" + CLI_COMMANDS.read_text(encoding="utf-8")
+    tree = ast.parse(src)
     names = [n.args[1].value for n in ast.walk(tree)
              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_say"
              and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant)]

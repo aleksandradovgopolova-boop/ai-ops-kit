@@ -375,7 +375,7 @@ probes:
   covers:
   - ai_ops_kit/engops/session_guardrails.py
   - ai_ops_kit/engops/session_handoff.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '                _h = session_handoff.write('
   replace_with: '                _h = None; _skip = (lambda *a, **k: None)('
   tests:
@@ -451,10 +451,10 @@ probes:
 - id: reach-honesty-seam-status-asks-publication
   kind: seam
   covers:
-  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
   - ai_ops_kit/ui/presenter.py
   - ai_ops_kit/lifecycle/active_work.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '    pub = active_work.publication_enabled(child_root)'
   replace_with: '    pub = False  # SEAM MUTATION'
   tests:
@@ -497,9 +497,9 @@ probes:
 - id: publish-seam-status-surfaces-team
   kind: seam
   covers:
-  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
   - ai_ops_kit/lifecycle/active_work.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '    team = active_work.team_view(child_root, data.get("active") or [], pub)'
   replace_with: '    team = data.get("active") or []'
   tests:
@@ -557,8 +557,8 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/engine/review_branch.py
-  - ai_ops_kit/cli/ai_ops_cli.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '    rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)'
   replace_with: '    rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base="main")'
   tests:
@@ -671,8 +671,8 @@ probes:
   covers:
   - ai_ops_kit/lifecycle/active_work.py
   - ai_ops_kit/lifecycle/work_reconcile.py
-  - ai_ops_kit/cli/ai_ops_cli.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '    team = active_work.reconcile_with_base(team, child_root)'
   replace_with: '    team = team'
   tests:
@@ -747,9 +747,9 @@ probes:
 - id: feedback-seam-command-shows-fate
   kind: seam
   covers:
-  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
   - ai_ops_kit/engops/kit_feedback.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '    if _txt and Path(_txt).is_dir():'
   replace_with: '    if False:'
   tests:
@@ -783,10 +783,10 @@ probes:
 - id: status-asks-the-plan-too
   kind: seam
   covers:
-  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
   - ai_ops_kit/planning/delivery_plan.py
   - ai_ops_kit/ui/presenter.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '        cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())'
   replace_with: '        cross = None'
   tests:
@@ -833,7 +833,7 @@ probes:
     написанным и модульно зелёным, а работа всё равно начинается.'
 - id: holder-identity-is-measured
   kind: guard
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '        return f"session:{str(sid)[:8]}"'
   replace_with: '        return "cli"'
   tests:
@@ -891,9 +891,9 @@ probes:
 - id: next-seam-identity-reaches-selection
   kind: seam
   covers:
-  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
   - ai_ops_kit/planning/next_work.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '                                me=_session_identity(child_root))'
   replace_with: '                                me=None)'
   tests:
@@ -944,9 +944,9 @@ probes:
 - id: narrowed-writing-rule-matches-the-code
   kind: seam
   covers:
-  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
   - decisions/registry.yaml
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '        if rec.get("outcome") in ("new_session", "clear"):'
   replace_with: '        if False:'
   tests:
@@ -1120,7 +1120,7 @@ probes:
     против которого стоит весь doctor. Мутация выдаёт нечитаемый конфиг за проверенный и чистый.'
 - id: top-up-exemption-is-narrow
   kind: guard
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '    if check["blocks"] and top_up["missing"]:'
   replace_with: '    if check["blocks"]:'
   tests:
@@ -1132,9 +1132,9 @@ probes:
 - id: specify-consults-pending-sections
   kind: seam
   covers:
-  - ai_ops_kit/cli/ai_ops_cli.py
+  - ai_ops_kit/cli/ai_ops_cli_commands.py
   - ai_ops_kit/gates/spec_levels.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '        top_up = spec_levels.pending_sections(child_root, wid, signals)'
   replace_with: '        top_up = {"missing": []}'
   tests:

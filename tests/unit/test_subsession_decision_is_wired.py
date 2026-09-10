@@ -23,7 +23,7 @@ from pathlib import Path
 
 from ai_ops_kit.ui import presenter
 
-CLI = Path(__file__).resolve().parents[2] / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
+CLI = Path(__file__).resolve().parents[2] / "ai_ops_kit" / "cli" / "ai_ops_cli_commands.py"
 
 
 def _guard_source():

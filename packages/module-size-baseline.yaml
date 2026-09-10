@@ -19,7 +19,6 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 1224
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/execution_pipeline.py: 786
   ai_ops_kit/planning/repo_audit.py: 837
@@ -52,6 +51,23 @@ raises:
       `active_work.<имя>` и прежние импорты внешних потребителей продолжают работать. Тела и
       докстринги перенесены байт-в-байт. Файл упал ниже порога 700 → снят из ceilings, ратчет держит
       вниз.
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 1224'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 627 (ниже порога 700 — снят из ceilings); ai_ops_cli_commands.py = 625 (ниже порога 700 — в ceilings не вносится)'
+    work: 'refactor(cli): вынос слоя реализации команд из монолита ai_ops_cli в ai_ops_cli_commands'
+    why: >-
+      Монолит входа CLI (1224 строки) разрезан: тонкий диспетч `main`, парсер argparse и декларации
+      INTENTS/DIRECT_INTENTS остались в ai_ops_cli.py, а РЕАЛИЗАЦИЯ команд переехала в соседний
+      ai_ops_kit/cli/ai_ops_cli_commands.py (625 строк, ниже порога). Туда вынесены проб-несущие
+      обработчики намерений (backlog/feedback/status/next/review/advise + read-only помощник
+      _enrich_running_with_work_view), путь реального запуска движка _main_run_execute и сессионные
+      стражи перед стартом (_session_identity/_announce_start/_session_guard_before_start/_process_gate),
+      а также общие хелперы вывода/идентификации (_say/_audience/_wid_for/_intake_command_carrying_task_type).
+      Поведение байт-в-байт то же — чистый перенос. Ребро импорта одностороннее (сосед НЕ импортирует
+      ai_ops_cli), имена ре-экспортируются из ai_ops_cli, регистрация обработчиков — в реестре
+      ai_ops_cli. Мутационные пробы, чьи find уехали в сосед, перенацелены (file/covers). Потолок cli
+      опущен под факт 1224 -> 627 (ратчет вниз).
   - at: '2026-09-10'
     what: lower_ceiling
     from: 'ai_ops_kit/intelligence/nightly_review.py = 1097'
