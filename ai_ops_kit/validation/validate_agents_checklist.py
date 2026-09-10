@@ -62,6 +62,11 @@ ALLOWED = (
     # покрыта юнит-тестами (test_nightly_review), проводка расписания — тестом генератора
     # workflow там же. Путь допускает префикс дочки `.ai/managed/` (в дочке скрипт едет из поставки).
     re.compile(r"^python3?\s+(?:\.ai/managed/)?ai_ops_kit/intelligence/nightly_review\.py\b"),
+    # Ночная сверка issue-трекера с роадмапом — операционная джоба, а не проверка: она ПРОИЗВОДИТ
+    # побочный эффект (заводит/обновляет/закрывает GitHub Issues по расписанию), у неё нет вердикта
+    # pass/fail, обернуть в pytest нельзя. Логика сверки покрыта юнит-тестами (test_roadmap_issue_sync),
+    # ядро — чистая функция на инъектируемом порте.
+    re.compile(r"^python3?\s+-m\s+ai_ops_kit\.cli\.ai_ops_cli\s+roadmap\s+sync-issues\b"),
 )
 
 
