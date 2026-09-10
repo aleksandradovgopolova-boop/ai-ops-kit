@@ -5423,3 +5423,28 @@ work:
       зелёного CI: аннотации типов перенесённых shared-модулей (disallow_untyped_defs), тонкий
       ре-экспорт-шим engine/ai_route для кросс-версионного апдейта дочки (пару НЕ восстанавливает,
       объявлен легит-входом в инвентаре). Цель layering-ring-is-a-dag достигнута.
+
+  - id: declared-tools-and-gates-prove-they-run
+    title: >-
+      Инвентарь «объявлено → исполняется»: каждый dev-инструмент, pre-commit-хук и ратчет доказывает
+      «вызывается вот здесь»
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-11'
+    pr: 841
+    evidence: ai_ops_kit/validation/validate_enforcement_inventory.py
+    result: >-
+      ЗАКРЫТО 2026-09-11 (последняя работа внешнего аудит-бэклога checks-that-run → цель achieved).
+      Корень класса «объявлено, но не исполняется» построен ранее (#723): validate_enforcement_inventory
+      + registry/enforcement-inventory.yaml покрыли две оси — dev-инструменты (requirements-dev +
+      pyproject [dev]) и ратчет-baseline'ы (packages/*baseline*.yaml), с энфорсом ПОЛНОТЫ (объявленный,
+      но не внесённый в инвентарь → красный) и РЕЗОЛЮЦИИ доказательств (enforced_at реально находит
+      вызов, consumed_by реально читает baseline). #841 добавил ТРЕТЬЮ ось — pre-commit-хуки: секция
+      pre_commit_hooks в реестре + declared_hooks() из .pre-commit-config.yaml + энфорс полноты
+      симметрично dev-инструментам. Каждый из 11 хуков несёт enforced_at (ruff/selftest-smoke/
+      commit-contract — зеркала в CI, резолвятся) либо честный local_only+причина (гигиена файлов и
+      python-compat — гоняются локально, отдельной pre-commit-джобы в CI нет; не выдуманный enforced_at).
+      Итог валидатора: «7 dev + 11 хуков (8 local_only) + 4 baseline — все объявления покрыты,
+      доказательства резолвятся». 14 поведенческих тестов, вкл. мутацию «хук объявлен, но не в
+      инвентаре → красит». Новый объявленный-но-не-инвентаризованный dev-инструмент/хук/ратчет теперь
+      краснит — ревизия класса держится машиной, не памятью владельца.
