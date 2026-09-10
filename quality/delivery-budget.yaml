@@ -47,7 +47,8 @@ ceilings:
   # 2026-09-08: 4975000 -> 4990000 под продюсер устаревания решений (#635): один доставляемый модуль planning/decision_staleness.py + поле related_files в схеме решений. Реальная установка 4963082 -> 4969780.
   # 2026-09-08: 4990000 -> 5025000 под добровольную регистрацию дочек (voluntary-child-registration): один доставляемый модуль engops/child_registry.py (~660 строк, зовётся В дочке командой `ai-ops reach`) + рост cli_intents.py под хендлер reach и однократное предложение при онбординге. Реальная установка объединённого дерева 4969780 -> 5014765.
   # 2026-09-09: 5090000 -> 5110000 под #678 — два доставляемых валидатора формы политик дочки: validation/validate_access_filter.py + validation/validate_key_lifecycle.py (стерегут .ai/policies/access-filter.yaml / key-lifecycle.yaml, зовутся advisory из child_doctor ПРОЦЕССОМ). Реальная установка объединённого дерева 5080639 -> 5092259 (+2 файла, +11.6 КБ).
-  volume_bytes: 5110000
+  # 2026-09-10: 5110000 -> 5120000 под строгую типизацию фундамента (F-05): аннотации типов на 6 доставляемых shared-модулях (~1.7 КБ символов, поведение не меняется). Новых ФАЙЛОВ нет.
+  volume_bytes: 5120000
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -123,6 +124,7 @@ warnings:
 raises:
   # Порядок: первым идёт подъём ОБЪЁМА (fail-closed проба test_a_raise_that_does_not_raise мутирует
   # raises[0] как volume-запись). Подъём числа файлов Фазы 1 — в конце ленты.
+  # ПОСЛЕДНЯЯ volume-запись (`vol[-1]`) обязана вести к текущему потолку — её место в КОНЦЕ ленты.
   - at: '2026-08-20'
     what: volume
     from_bytes: 3879731            # 3.7 МБ
@@ -1791,3 +1793,22 @@ raises:
       рантайм (load_child_policies / _load_klp_by_env). Раньше форму этих политик сверял только
       parent-CI по примерам кита — форму политики самой дочки не проверял никто (built≠wired). Оба
       standalone (stdlib+pyyaml). Реальная установка: main 5080639 -> ветка 5092259 (+2 файла), потолок 5110000.
+  - at: '2026-09-10'
+    what: volume
+    from_bytes: 5110000
+    to_bytes: 5120000
+    measured_before: 5110000
+    measured_after: 5111736
+    work: mypy-strict-on-full-foundation
+    files:
+      - ai_ops_kit/shared/usage_ledger.py
+      - ai_ops_kit/shared/generate_artifacts.py
+      - ai_ops_kit/shared/generate_runtime.py
+      - ai_ops_kit/shared/path_hygiene.py
+      - ai_ops_kit/shared/lifecycle_store.py
+      - ai_ops_kit/shared/project_detector.py
+    why_it_works_in_the_child: >-
+      Прибавка ~1.7 КБ — это АННОТАЦИИ ТИПОВ на доставляемых shared-модулях (disallow_untyped_defs на
+      фундаменте, F-05). Аннотации поведение не меняют, но добавляют символы; они едут в дочку вместе
+      с модулями и там так же безвредны — документация контракта, а не логика. Реальный замер доставки
+      5111736 < потолка 5120000.

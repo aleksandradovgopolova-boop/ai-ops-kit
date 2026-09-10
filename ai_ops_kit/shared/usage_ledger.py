@@ -32,7 +32,7 @@ if _root is not None and str(_root) not in _sys.path:
 import json
 import sys
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from ai_ops_kit.shared.contracts import UsageRecord  # noqa: E402
 
@@ -89,19 +89,19 @@ def normalize(rec: dict, run_id: str | None = None, workitem_id: str | None = No
     return cast(UsageRecord, out)
 
 
-def _task_path(child_root, wid):
+def _task_path(child_root: str | Path, wid: str | int) -> Path:
     return Path(child_root) / "features" / str(wid) / "usage-ledger.jsonl"
 
 
-def _product_path(child_root):
+def _product_path(child_root: str | Path) -> Path:
     return Path(child_root) / ".ai" / "usage" / "product-ledger.jsonl"
 
 
-def append(child_root, workitem_id, records, run_id=None, extra_context=None):
+def append(child_root: str | Path, workitem_id: str, records: list[dict] | None, run_id: str | None = None, extra_context: dict | None = None) -> int:
     """Записать UsageRecords в ledger задачи И продукта (append-only). Возвращает число записанных.
     v3.24.0: extra_context — dict дополнительных полей (task_type, workflow, stack, risk, size, writer_tier,
     execution_mode, architecture_impact), которые штампуется на ВСЕ записи (если в записи поле None)."""
-    recs = [normalize(r, run_id=run_id, workitem_id=workitem_id) for r in (records or [])]
+    recs: list[dict] = [dict(normalize(r, run_id=run_id, workitem_id=workitem_id)) for r in (records or [])]
     # v3.24.0: штампуем extra_context на записи, где поля ещё не заполнены
     if extra_context:
         for rec in recs:
@@ -118,7 +118,7 @@ def append(child_root, workitem_id, records, run_id=None, extra_context=None):
     return len(recs)
 
 
-def _load(path):
+def _load(path: Path) -> list[dict]:
     if not path.exists():
         return []
     out = []
@@ -132,19 +132,19 @@ def _load(path):
     return out
 
 
-def load_task(child_root, wid):
+def load_task(child_root: str | Path, wid: str | int) -> list[dict]:
     return _load(_task_path(child_root, wid))
 
 
-def load_product(child_root):
+def load_product(child_root: str | Path) -> list[dict]:
     return _load(_product_path(child_root))
 
 
-def aggregate(records):
+def aggregate(records: list[dict] | None) -> dict:
     """Агрегат ЧЕСТНО: суммы токенов/стоимости ТОЛЬКО по записям с данными; unavailable считается отдельно
     (не как 0). -> {calls, measured/estimated/unavailable counts, input/output_tokens, cost,
     cost_complete (нет ли unavailable-стоимости), by_role/by_trigger/by_provider/by_task_type/by_workflow/by_writer_tier}."""
-    agg = {"calls": 0, "usage_measured": 0, "usage_unavailable": 0,
+    agg: dict[str, Any] = {"calls": 0, "usage_measured": 0, "usage_unavailable": 0,
            "input_tokens": 0, "output_tokens": 0, "cost": 0.0,
            "cost_measured": 0, "cost_estimated": 0, "cost_unavailable": 0,
            "by_role": {}, "by_trigger": {}, "by_provider": {},
@@ -179,7 +179,7 @@ def aggregate(records):
     return agg
 
 
-def merge_ledgers(child_root, source_roots):
+def merge_ledgers(child_root: str | Path, source_roots: list) -> int:
     """v3.24.0 Parallel Ledger Fan-In: свести usage-ledger из нескольких клонов (source_roots) в основной
     child_root. Читает features/*/usage-ledger.jsonl и .ai/usage/product-ledger.jsonl из каждого клона,
     дедуплицирует по (run_id, role, latency, input_tokens, output_tokens), дозаписывает в основной.
@@ -191,7 +191,7 @@ def merge_ledgers(child_root, source_roots):
     main_product = _product_path(child_root)
     if main_product.exists():
         for rec in _load(main_product):
-            key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"), rec.get("output_tokens"), rec.get("latency"))
+            key: tuple = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"), rec.get("output_tokens"), rec.get("latency"))
             seen.add(key)
     # Собираем из клонов
     for src in source_roots:
@@ -226,7 +226,7 @@ def merge_ledgers(child_root, source_roots):
     return added
 
 
-def _fmt_agg(title, a):
+def _fmt_agg(title: str, a: dict) -> str:
     lines = [f"{title}: вызовов {a['calls']} (measured {a['usage_measured']}, unavailable {a['usage_unavailable']})"]
     lines.append("  токены (measured): in=%d out=%d" % (a["input_tokens"], a["output_tokens"]))
     _c = "$%.4f" % a["cost"]
@@ -239,7 +239,7 @@ def _fmt_agg(title, a):
     return "\n".join(lines)
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     args = [a for a in argv if not a.startswith("--")]
     if not args:
         print("usage: usage_ledger.py <child_root> [--workitem <wid>] [--json]"); return 2

@@ -46,7 +46,7 @@ _RENDER_PROFILES = {
 }
 
 
-def _load_generated_command_runtimes():
+def _load_generated_command_runtimes() -> tuple:
     """Рантаймы для генерации — из registry/runtimes.yaml: объявленные с
     adapter_depth: generated-commands И имеющие профиль рендера. Порядок — реестровый.
     Так новый рантайм подключается ОБЪЯВЛЕНИЕМ в реестре (+ профиль), а не правкой хардкода;
@@ -63,18 +63,18 @@ def _load_generated_command_runtimes():
 RUNTIMES = _load_generated_command_runtimes()
 
 
-def sha256_file(p: Path):
+def sha256_file(p: Path) -> str:
     return hashlib.sha256(p.read_bytes()).hexdigest()
 
 
-def load_sources():
+def load_sources() -> tuple:
     wf = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents = {a["id"]: a for a in ag.get("agents", [])}
     return wf.get("workflows", {}), agents
 
 
-def render_command(wid, w, agents, runtime):
+def render_command(wid: str, w: dict, agents: dict, runtime: str) -> str:
     """Единый human-readable текст команды; фронтматтер зависит от runtime."""
     stages_lines = []
     for s in w.get("stages", []):
@@ -115,7 +115,7 @@ def render_command(wid, w, agents, runtime):
 """
 
 
-def render_start_task(runtime, workflows):
+def render_start_task(runtime: str, workflows: dict) -> str:
     """Единая точка входа: пользователь описывает задачу словами, маршрут выбирается сам.
     Команда генерируется (adapter_depth: generated-commands) — раннтайм исполняет шаги по
     реестрам в .ai/managed/ (routing-policy + workflows), вручную workflow выбирать не нужно."""
@@ -177,7 +177,7 @@ def render_start_task(runtime, workflows):
 """
 
 
-def render_ai_run(runtime, workflows):
+def render_ai_run(runtime: str, workflows: dict) -> str:
     """КАНОНИЧЕСКИЙ вход (3.0-срез 1): задача -> контролируемое исполнение -> отчёт одной
     транзакцией через контроллер ai_ops_kit/engine/ai_ops_run.py. `ai-start-task` сохраняется как
     совместимый алиас (та же спина route->RunPlan->WorkItem->preflight->active-work)."""
@@ -223,7 +223,7 @@ SHA, exit codes, структурный reviewer-result), а не факт вы�
 """
 
 
-def render_ai_ops_init(runtime):
+def render_ai_ops_init(runtime: str) -> str:
     """Разговорная установка/онбординг: «подключи AI Ops» → адаптер исполняет установку и
     первичный онбординг репозитория. Реальную установку делает installer/ai_ops.py; онбординг
     (черновики context/*) — скилл repo-onboarding; выбор рантайма/включение — человек."""
@@ -258,7 +258,7 @@ def render_ai_ops_init(runtime):
 """
 
 
-def _active_runtimes(runtimes):
+def _active_runtimes(runtimes: list | None) -> tuple:
     """v3.14.0 Startup Context Budget: адаптеры генерируются ТОЛЬКО для настроенных рантаймов
     (не эмитим codex/prompts, если codex не включён). None/пусто -> все известные (back-compat)."""
     if not runtimes:
@@ -267,12 +267,12 @@ def _active_runtimes(runtimes):
     return active or RUNTIMES
 
 
-def _keep_command(name, command_filter):
+def _keep_command(name: str, command_filter: set | None) -> bool:
     """command_filter=None -> экспортировать всё; иначе только имена из набора (выбор репозитория)."""
     return command_filter is None or name in command_filter
 
 
-def generate(child_root: Path, verbose=True, runtimes=None, command_filter=None):
+def generate(child_root: Path, verbose: bool = True, runtimes: list | None = None, command_filter: set | None = None) -> list:
     workflows, agents = load_sources()
     out_files = []
     active = _active_runtimes(runtimes)
@@ -320,7 +320,7 @@ def generate(child_root: Path, verbose=True, runtimes=None, command_filter=None)
     return out_files
 
 
-def check_drift(child_root: Path):
+def check_drift(child_root: Path) -> bool:
     """True, если генерация устарела относительно источников (adapter drift)."""
     meta_p = child_root / ".ai" / "generated" / ".generation.json"
     if not meta_p.exists():
@@ -332,7 +332,7 @@ def check_drift(child_root: Path):
     return False
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     root = Path(argv[1]).resolve() if len(argv) > 1 else Path.cwd()
     generate(root)
     return 0

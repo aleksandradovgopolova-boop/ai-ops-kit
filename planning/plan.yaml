@@ -1013,35 +1013,3 @@ work:
       сведён). ОСТАЮТСЯ 4 пары, каждая — проектное решение, а не хирургия: context↔engine (run_plan),
       delivery↔engine (git/worktree/pipeline), engine↔lifecycle («кто классифицирует»), engops↔gates
       (deploy_readiness нуждается в environment_map — «куда положить»). Их брать отдельными срезами.
-
-  - id: types-enforced-on-foundation-or-mypy-removed
-    title: >-
-      mypy настроен и исполняется на kernel+shared (disallow_untyped_defs) с ратчетом «ошибок не
-      растёт» по остальному — либо удалён из зависимостей с записанным решением
-    type: engineering
-    goal: checks-that-run
-    status: in_progress
-    owner_role: engineer
-    value: medium
-    write_scope: [pyproject.toml, .github/, ai_ops_kit/, registry/]
-    reason: >-
-      mypy в [dev] и requirements-dev, но [tool.mypy] нет, хука нет, шага в CI нет, py.typed нет;
-      аннотировано ~29% слотов на 80k строк — тот же класс «объявлено, не исполняется», что кит
-      вычистил у ruff. Полный --strict на 80k не окупится. Готово, когда типы проверяются машиной на
-      фундаменте (kernel+shared) с ратчетом вниз по остальному — либо mypy убран и решение записано.
-    progress_note: >-
-      ЯДРО ВЫПОЛНЕНО (2026-09-09, «реши mypy»): спор «включить vs убрать» решён замером — обычный
-      проход нашёл 8 РЕАЛЬНЫХ проблем на фундаменте (implicit-Optional, рассогласование возврата с
-      TypedDict, необъявленные переменные, widening _CI_PATTERNS до object) — типы окупаются, значит
-      ВКЛЮЧЁН, а не удалён. Восемь починены; [tool.mypy] на kernel+shared (follow_imports=silent), шаг
-      в джобе lint (mypy==2.3.1), инвентарь enforcement-inventory: mypy enforced. Уровень — «реальные
-      типовые ошибки = 0». РАТЧЕТ-ВВЕРХ ИДЁТ (2026-09-10): под строгим disallow_untyped_defs теперь
-      kernel.* (был чист) + два чистых утиль-модуля shared: gitio, budget (реально аннотированы,
-      0 ошибок). ОСТАЮТСЯ 6 файлов shared (project_detector 26, lifecycle_store 16, path_hygiene 14,
-      generate_runtime 13, generate_artifacts 10, usage_ledger 10 подписей) — это НЕ batch-пункт:
-      каждая типизированная подпись вскрывает каскад ошибок ТЕЛА (agg как dict[str,object],
-      TypedDict-ключи, tuple-арность), и честная дотипизация ≠ Any-спам. Отдельная типизационная
-      работа, а не заливка Any. py.typed — при росте покрытия. Потому in_progress.
-
-
-
