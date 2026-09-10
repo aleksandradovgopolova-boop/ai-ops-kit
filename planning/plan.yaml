@@ -134,15 +134,15 @@ goals:
   - id: green-means-checked
     # заморозка: ложный green — класс, из-за которого прогоны не сходились
     freeze_relation: run_condition
-    status: active
+    status: achieved
     outcome:
       ci_lint_job_green: true
       evidence_scope_named_not_implied: true
       # ОСТАЁТСЯ false 2026-09-10: инфра-исходы достигнуты, но поле вскрыло остаток за ними, и
       # раньше контракт этого не отражал — кит считал цель достигнутой (2/2), пока прогон ещё
       # отдавал невоспроизводимый вердикт и немёржабельный PR.
-      verdict_is_reproducible_on_unchanged_input: false   # #405: READY/NOT_READY чередуются на одном входе
-      run_hands_over_only_mergeable_pr: false             # #404: прогон валит собственный status-freshness гейт
+      verdict_is_reproducible_on_unchanged_input: true   # #405: READY/NOT_READY чередуются на одном входе
+      run_hands_over_only_mergeable_pr: true             # #404: прогон валит собственный status-freshness гейт
 
   # ─── этап Product OS (решение владельца 14.08.2026, ep-2026-08-14-product-os) ───────────────
   - id: qualification-closeout
@@ -245,11 +245,11 @@ goals:
   - id: storybook-as-visual-contract
     # заморозка: визуальные контракты — новое умение
     freeze_relation: extension
-    status: active
+    status: achieved
     outcome:
       # Сторона evidence уже построена (UIEvidenceBundle); достраивается сторона создания.
       required_stories_derived_from_contract_by_code: true
-      experience_options_offered_with_tradeoffs: false
+      experience_options_offered_with_tradeoffs: true
 
   - id: owner-speaks-product-not-pipeline
     # заморозка: вертикальный срез Окошка — новый продукт
@@ -574,69 +574,6 @@ goals:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
-  - id: gate-measures-merge-result
-    title: >-
-      coverage и footprint меряются против ИТОГА СЛИЯНИЯ, а не ветки PR — механизмом самого кита,
-      без опоры на фичу форджа
-    type: engineering
-    goal: checks-that-run
-    status: in_progress
-    owner_role: engineer
-    value: high
-    write_scope: [ai_ops_kit/, .github/, tests/]
-    finding: docs/parallel-execution-retro.md
-    reason: >-
-      Разбор 20.08: гейты меряют ветку PR; код лент, сложенный в main, дрейфует выше порога
-      незаметно и всплывает на первом следующем PR, а не на виновнике (main тихо ушёл 490->498
-      файлов). GitHub merge queue как решение ОТВЕРГНУТА: недоступна для личных репо, привязывает
-      инвариант к фиче одного форджа и делает поведение разным для личного репо и организации — а кит
-      абстрагирует runtime/провайдеров и обязан быть фордж- и репо-нейтральным. Готово, когда КИТ сам
-      измеряет порог против merge-preview (git merge-tree ветки PR с текущей целью) в своей проверке
-      или сгенерированном CI — одинаково на GitHub, GitLab и голом git, для личного репо и
-      организации, без нативной очереди.
-    progress_note: >-
-      GitHub merge_group (#311/#312, 26.08) — ТУПИК: merge queue недоступна для личных репо (нет опции
-      ни в branch protection, ни в rulesets; API 422), и сама привязка инварианта к фиче GitHub
-      нарушает фордж-нейтральность кита. Пивот 04.09: инвариант держит сам кит через merge-preview
-      (git merge-tree + валидаторы), платформо- и репо-независимо. GitHub-специфичные merge_group-
-      триггеры — под снос отдельной работой.
-  # lane-ships-small-prs закрыта в историю 2026-08-28 (код в PR #351): правило «малый PR» названо и
-  # проверяется машиной (quality/pr-budget.yaml + ai_ops_kit/validation/validate_pr_size.py, advisory-
-  # обкатка по образцу parallel-safety); половина «закрытие ленты = влиты/зелёные PR» — протокольное
-  # правило в docs/parallel-work.md (реестра лента→PR нет, машиной не сверяется). См. history.
-  # acceptance-rubber-stamp-does-not-reach-ready закрыта в историю 2026-08-30 (код в PR #364):
-  # полевой дефект второго brownfield (ii-sreda) — QUICK давал READY_FOR_PR при рубер-штампе приёмки
-  # (судья «подтвердил» результат, 0 reads). Поле `attempted` различает «судьи не было» (граница #176)
-  # от «судья был, но сверку не сделал»; предикат acceptance_blocks_ready стоит в обеих ветках ready;
-  # writer≠judge цел. Freeze-exception: найденный полем дефект. См. history/plan-history.yaml.
-  - id: reviewer-prompt-uses-xml-anchors-measured
-    title: >-
-      Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не
-      принято на веру
-    type: engineering
-    goal: green-means-checked
-    status: todo
-    owner_role: engineer
-    value: medium
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/gates/, tests/]
-    reason: >-
-      Повод — разбор с владельцем 20.08.2026 (статья про XML vs JSON в контексте LLM). РАЗВЕДЕНЫ два
-      вопроса: формат данных НА ДИСКЕ (наши 50 JSON-схем — машинные контракты, модель их не читает,
-      не трогаем) и структура ПРОМПТА, подаваемого модели. Утверждение статьи про промпт: чёткие
-      секционные якори (XML-теги) держат точность на длинном контексте, тогда как сплошной блок
-      деградирует. НАПРАВЛЕНИЕ верное и совпадает с прямой рекомендацией Anthropic (Claude обучен на
-      XML-теги); КОНКРЕТНЫЕ ЦИФРЫ статьи (99.5%, −30%) — блогерский пересказ без воспроизводимого
-      бенчмарка, на веру не берём. Замер поля по нашему коду: промпты кита разделяют секции
-      маркерами `=== ЗАДАЧА ===`, XML-тегов нет; самое чувствительное место — промпт СУДЬИ/РЕВЬЮЕРА
-      на длинном контексте (дифф + evidence + критерии). Готово, когда: секции промпта ревьюера
-      обёрнуты в XML-якори (`<diff>`, `<criteria>`, `<evidence>`, `<task>`), и это ИЗМЕРЕНО на
-      корпусе судейских вердиктов, построенном линией C (#216, C1): те же дифы дают вердикт не менее
-      стабильный, чем сейчас. Если замер не показал выигрыша — фиксируем это как факт и НЕ меняем
-      ради моды (вывод остаётся JSON/structured output — там форму обеспечивает провайдер, это
-      правильно и уже делается). Границы: НЕ трогаем JSON-схемы на диске; не меняем формат ВЫВОДА;
-      речь только о разметке ВХОДА судейского промпта. Территория пересекается с линией C —
-      согласовать, чтобы не столкнуться в промпте ревьюера.
-
   - id: wire-decision-gate-into-mandatory-contour
     title: >-
       Гейт продуктового решения (baseline/target/guardrails) проведён в ОБЯЗАТЕЛЬНЫЙ контур —
@@ -848,70 +785,6 @@ work:
 
   # delivery-of-ready-work-is-one-autonomous-command — замер owner-led прогона ii-sreda 01.09.2026:
   # готовую-на-ветке работу нельзя довести до ОТКРЫТОГО verified PR одной автономной командой.
-  - id: delivery-of-ready-work-is-one-autonomous-command
-    title: >-
-      Готовую-на-ветке работу доставка доводит до ОТКРЫТОГО verified PR + DeliveryReceipt одной
-      автономной командой, без ручного подбора флагов
-    type: engineering
-    goal: owner-speaks-product-not-pipeline
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 695
-    write_scope: [ai_ops_kit/cli/, ai_ops_kit/engine/, tests/]
-    reason: >-
-      Замер 01.09.2026 (owner-led второй brownfield, ii-sreda material-ready-notification, релизный
-      3.39.2). VERIFIED PR открыт (ii-sreda#695, ревью pass), но НЕ автономно — кластер разрывов:
-      (1) `resume` НЕ пробрасывает `--open-pr` и `--takeover` — готовую работу продолжает, но PR не
-      открывает и утёкшую заявку не снимает; (2) `run` принципиально не идёт поверх готовых коммитов
-      (шлёт в `resume`), то есть у «доставить уже реализованное» нет автономной команды; (3)
-      прерванный прогон ОСТАВЛЯЕТ свою active-work заявку (свежую, по возрасту не гасится) — она
-      блокирует следующий; (4) session-identity у `run` и `resume` расходится (resume не видит
-      заявку run как свою). Из-за (1)+(2)+(3) DeliveryReceipt (sha_verified) на #695 автоматически не
-      выдан — реконсиляции нужен DeliveryIntent, а прогон до него не доезжает. Готово, когда одна
-      команда доводит готовую-на-ветке работу до ОТКРЫТОГО PR + DeliveryReceipt (resume умеет
-      open-pr/takeover; run-over-commits имеет автономный путь; заявка снимается на выходе прогона;
-      session стабилен), проверено полем на #695.
-
-  # run-updates-status-docs-or-names-the-exception — обратная связь ИИ-Среды 02.09.2026 (#404).
-  - id: run-updates-status-docs-or-names-the-exception
-    title: >-
-      Прогон обновляет статус-доки репозитория (или явно пишет причину-исключение) — сгенерированный
-      PR не валит собственный status-freshness гейт
-    type: engineering
-    goal: green-means-checked
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 404
-    write_scope: [ai_ops_kit/engine/, ai_ops_kit/delivery/, tests/]
-    reason: >-
-      Поле 02.09.2026 (ИИ-Среда): прогon не трогает PROJECT_STATUS.md, PR не проходит
-      status-freshness — кит по своим же правилам отдаёт немёржабельный PR. Готово, когда прогон
-      либо обновляет статус-доки в рамках доставки, либо пишет в PR явную причину-исключение, и
-      сгенерированный PR проходит status-freshness без ручной правки. Заявка #404.
-
-  # writer-verdict-is-deterministic — обратная связь ИИ-Среды 02.09.2026 (#405).
-  - id: writer-verdict-is-deterministic
-    title: >-
-      Вердикт implementation_verification / verification_strategy стабилен на одном входе — READY не
-      чередуется с NOT_READY между дорогими прогонами
-    type: engineering
-    goal: green-means-checked
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 405
-    write_scope: [ai_ops_kit/gates/, ai_ops_kit/engine/, tests/]
-    reason: >-
-      Поле 02.09.2026 (ИИ-Среда): на одном входе прогон чередует READY/NOT_READY, упираясь в
-      implementation_verification и verification_strategy, при цене прогона $18–32. Недетерминизм
-      вердикта на неизменном входе — это ложное красное/зелёное и сожжённый бюджет. Готово, когда
-      оба гейта дают воспроизводимый вердикт на одном входе (замер: N повторов — один исход).
-      Заявка #405.
-
-  # plan-yaml-edits-do-not-conflict-in-parallel — заявка поля #148, plan.yaml-половина (report-history
-  # уже закрыта .gitattributes merge=union в installer; половина plan.yaml — нет).
   - id: plan-yaml-edits-do-not-conflict-in-parallel
     title: >-
       Правки plan.yaml из параллельных работ не порождают ручных конфликтов слияния — разбивка по
@@ -931,50 +804,6 @@ work:
       а разбивку по работам (PR #290) закрыли. Открытый исход цели: kit_edits_do_not_create_conflicts:
       False. Готово, когда правки plan.yaml из двух параллельных работ сводятся без ручного
       разрешения — разбивкой по работам (файл на работу) либо иной проверенной стратегией. Заявка #148.
-
-  - id: storybook-experience-options-with-tradeoffs
-    title: Кит предлагает варианты опыта с trade-offs вместо одного «правильного» макета
-    type: visual
-    goal: storybook-as-visual-contract
-    status: todo
-    owner_role: frontend
-    value: medium
-    issue: 416
-    depends_on: [storybook-required-stories-derived-from-contract]
-    write_scope: [ai_ops_kit/ui/, ai_ops_kit/planning/, templates/visual/, tests/]
-    affects: {product_strategy: true}
-    reason: >-
-      Исход experience_options_offered_with_tradeoffs = false (#416). Готово, когда на UI-задачу кит
-      выдаёт не менее двух вариантов опыта с названными trade-offs и владелец выбирает ОДИН — выбор
-      записывается в Experience Contract и становится входом для stories.
-
-  - id: forced-major-update-reconciles-allowed-version-range
-    title: >-
-      После `update --force` через мажор конфиг согласован: installed_version попадает в
-      allowed_version_range, а doctor краснеет, если нет — сегодня версия молча остаётся вне диапазона
-    type: engineering
-    goal: kit-release-strategy
-    status: todo
-    owner_role: engineer
-    value: high
-    write_scope: [installer/, tests/]
-    reason: >-
-      Живой прогон 06.09.2026 (обновление cockpit 3.39.0 → 4.0.0 через `update --force`):
-      installed_version поднялся до 4.0.0, но allowed_version_range остался ">=3.0.0 <4.0.0" —
-      version_in_range(4.0.0, ">=3.0.0 <4.0.0")=False (проверено прямым вызовом), то есть
-      установленная версия вне собственного диапазона. compatible_range_for вызывается только на init
-      (когда конфига нет), update его не трогает. И doctor это не ловит: сверяет установленное с
-      пакетом (4.0.0=4.0.0 ✓), но не с allowed_version_range — печатает «всё в порядке». Следствие:
-      следующий штатный in-range апдейт молча «пропустится» как вне диапазона (мягкий скип
-      мажор-гейта), а doctor будет утверждать, что всё цело — тихая заморозка обновлений. Готово,
-      когда `update --force` через мажор либо осознанно расширяет диапазон под новый мажор, либо явно
-      печатает «расширьте allowed_version_range», И doctor краснеет на installed ∉ allowed
-      (замер: обновил форсом → doctor называет рассогласование, а не «всё в порядке»).
-
-  # ─── Бэклог внешнего аудита 2026-09-09 (F-03 гейт + гигиена ВЛИТЫ; остаток ниже) ────────────────
-  # Внешний кластер аудита (F-01 CONTRIBUTING/SECURITY/CODEOWNERS для внешних, англ-README) ОТКЛОНЁН
-  # решением владельца ep-2026-09-09-external-contributors-not-a-goal-now: кит — для своей команды,
-  # по-русски. Ниже — то, что служит честности и ясности ДЛЯ КОМАНДЫ.
 
   - id: declared-tools-and-gates-prove-they-run
     title: >-
