@@ -67,7 +67,7 @@ def test_an_older_neighbour_copy_does_not_block_the_child():
     # cmd_doctor вынесен в сателлит installer/doctor.py; общие функции читаются через `_ao()`.
     src = DOCTOR.read_text(encoding="utf-8")
 
-    assert '_ao().parse_version(inst or "0") < _ao().parse_version(avail)' in src, (
+    assert '_core().parse_version(inst or "0") < _core().parse_version(avail)' in src, (
         "сравнение версий в doctor снова строгое неравенство — понижение будет считаться апдейтом")
     assert "понижение версии обновлением не является" in src
 

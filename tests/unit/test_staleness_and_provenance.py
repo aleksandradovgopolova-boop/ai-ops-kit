@@ -140,7 +140,7 @@ def test_source_identity_names_branch_tag_and_release_status():
 
 def test_provenance_no_longer_writes_a_placeholder_source():
     """В провенансе стояла литеральная заглушка `git+<ai-ops-kit-repo-url>` — то есть ничего."""
-    src = (PKG / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+    src = (PKG / "installer" / "managed_state.py").read_text(encoding="utf-8")
 
     assert '"source": "git+<ai-ops-kit-repo-url>"' not in src, "заглушка вернулась"
     assert '"source_identity": src' in src, "настоящий источник не записывается"

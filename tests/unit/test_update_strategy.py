@@ -23,7 +23,7 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "installer"))
 
-import ai_ops as installer  # noqa: E402 — путь ставится выше
+import version_ops as installer  # noqa: E402 — стратегии обновления переехали в под-хаб хаба
 
 
 def _pkg(tmp_path, *, channel="qualification"):
