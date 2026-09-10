@@ -21,135 +21,34 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 import uuid
 
 import yaml
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
-
-def _git(root: Path, *args) -> tuple[int, str, str]:
-    """Git command wrapper."""
-    try:
-        result = subprocess.run(
-            ["git", *args],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
-        return result.returncode, result.stdout, result.stderr
-    # Узкий тип (фаза 0, 19.08.2026): запуск может не состояться (нет бинаря, права, битый
-    # симлинк) или не уложиться в timeout. Любое ДРУГОЕ исключение здесь — дефект вызова, и он
-    # обязан всплыть, а не превратиться в «rc=1» и молча стать «команда не сработала».
-    # Тип ошибки НАЗЫВАЕТСЯ в тексте: «не смогли запустить» и «команда вернула ошибку» —
-    # разные ответы, и по голому str(e) их не различить.
-    except (OSError, subprocess.SubprocessError) as e:
-        return 1, "", f"{type(e).__name__}: {e}"
-
-
-def _get_recent_commits(root: Path, since: str | None = None) -> list[dict]:
-    """Get commits since last review (or last 24h)."""
-    if since:
-        range_spec = f"{since}..HEAD"
-    else:
-        # Last 24 hours
-        since_time = (datetime.now() - timedelta(hours=24)).isoformat()
-        range_spec = f"--since={since_time}"
-
-    rc, out, _ = _git(root, "log", range_spec, "--pretty=format:%H|%s|%an|%ai", "--no-merges")
-    if rc != 0 or not out.strip():
-        return []
-
-    commits = []
-    for line in out.strip().split("\n"):
-        parts = line.split("|", 3)
-        if len(parts) == 4:
-            commits.append({
-                "sha": parts[0][:8],
-                "message": parts[1],
-                "author": parts[2],
-                "date": parts[3],
-            })
-    return commits
-
-
-def _get_changed_files(root: Path, since: str | None = None) -> list[str]:
-    """Get list of changed files since last review."""
-    if since:
-        range_spec = f"{since}..HEAD"
-    else:
-        since_time = (datetime.now() - timedelta(hours=24)).isoformat()
-        # Get files from commits in last 24h
-        rc, out, _ = _git(root, "log", f"--since={since_time}", "--name-only", "--pretty=format:")
-        if rc != 0:
-            return []
-        files = set()
-        for line in out.strip().split("\n"):
-            line = line.strip()
-            if line and not line.startswith("|"):
-                files.add(line)
-        return sorted(files)
-
-    rc, out, _ = _git(root, "diff", range_spec, "--name-only")
-    if rc != 0:
-        return []
-    return [f for f in out.strip().split("\n") if f]
-
-
-def _check_plan_status(root: Path) -> dict:
-    """Check plan.yaml for status changes."""
-    plan_path = root / "planning" / "plan.yaml"
-    if not plan_path.exists():
-        return {"exists": False}
-
-    try:
-        with open(plan_path, encoding="utf-8") as f:
-            plan = yaml.safe_load(f)
-        work = plan.get("work", [])
-        by_status = {}
-        for w in work:
-            s = w.get("status", "unknown")
-            by_status[s] = by_status.get(s, 0) + 1
-        return {"exists": True, "total": len(work), "by_status": by_status}
-    # Узкий тип: файл может не читаться, YAML — не разбираться, а пустой документ даёт None и
-    # падает на `.get`. Причина НАЗЫВАЕТСЯ: «план не прочитали» и «работ нет» — разные ответы,
-    # и обзор, который их путает, отчитается о тишине там, где была поломка.
-    except (OSError, yaml.YAMLError, AttributeError) as e:
-        return {"exists": True, "error": f"план не разобран ({type(e).__name__}: {e})"}
-
-
-def _check_ci_status(root: Path) -> dict:
-    """Check if CI workflows exist (actual status requires GitHub API)."""
-    workflows_dir = root / ".github" / "workflows"
-    if not workflows_dir.exists():
-        return {"workflows": 0}
-    workflows = list(workflows_dir.glob("*.yml")) + list(workflows_dir.glob("*.yaml"))
-    return {"workflows": len(workflows)}
-
-
-def _check_open_prs(root: Path) -> dict:
-    """Check for open PRs (requires gh CLI)."""
-    try:
-        result = subprocess.run(
-            ["gh", "pr", "list", "--state", "open", "--json", "number,title"],
-            cwd=root,
-            capture_output=True,
-            text=True,
-            timeout=10,
-        )
-        if result.returncode == 0:
-            prs = json.loads(result.stdout)
-            return {"open_prs": len(prs), "prs": prs[:5]}  # First 5
-        return {"open_prs": None, "unavailable": f"gh вернул код {result.returncode}"}
-    # Узкий тип: gh может отсутствовать, не уложиться в timeout или отдать не-JSON.
-    # Здесь стоял `pass`, и причина исчезала совсем; отсутствие данных выглядело так же, как
-    # «открытых PR нет». `None` вместо `-1` — тот же инвариант, что и у usage: unavailable не
-    # число и не ноль, а отдельное состояние, и оно названо в `unavailable`.
-    except (OSError, subprocess.SubprocessError, ValueError) as e:
-        return {"open_prs": None, "unavailable": f"{type(e).__name__}: {e}"}
+# Read-only сбор сигналов дельты вынесен в сателлит nightly_collectors; ре-экспорт сохраняет
+# доступ `nightly_review.<имя>` для оркестрации (collect_delta/confirm_review) и тестов.
+from ai_ops_kit.intelligence.nightly_collectors import (  # noqa: F401
+    _check_ci_status,
+    _check_open_prs,
+    _check_plan_status,
+    _get_changed_files,
+    _get_recent_commits,
+    _git,
+    run_checks,
+)
+# Расписание и доставка брифа вынесены в сателлит nightly_schedule; run_nightly (оркестрация)
+# остаётся здесь и зовёт deliver_brief отсюда.
+from ai_ops_kit.intelligence.nightly_schedule import (  # noqa: F401
+    SCHEDULE_WORKFLOW_REL,
+    BRIEFS_DIR_REL,
+    deliver_brief,
+    format_schedule_status,
+    install_schedule,
+    schedule_status,
+)
 
 
 # ТОЧКА ОТСЧЁТА — ПОСЛЕДНИЙ ПОДТВЕРЖДЁННЫЙ ОБЗОР, А НЕ «24 ЧАСА» (v0, 20.08.2026).
@@ -330,162 +229,6 @@ def review_baseline(root: Path) -> dict:
                 "reason": "в записи о последнем обзоре нет commit_sha — точка отсчёта неизвестна"}
     return {"since": sha, "kind": "confirmed",
             "reason": f"дельта с последнего подтверждённого обзора ({rec.get('confirmed_at')})"}
-
-
-# НАХОДКИ, А НЕ КОЛИЧЕСТВА (v0, 20.08.2026).
-#
-# Скелет обзора считал коммиты и файлы. «5 коммитов, 12 файлов» не расхождение: человеку нечего с
-# этим делать, и бриф из таких строк перестают читать через неделю. Работа обещает НАХОДИТЬ
-# расхождения — с документацией, тестами, архитектурой, Storybook, планом.
-#
-# СВОЮ АНАЛИТИКУ НЕ ПИШЕМ. В поставку дочки уже едут 24 валидатора, каждый из которых умеет
-# отвечать на свой вопрос. Обзор — АГРЕГАТОР: он запускает их процессом (так же, как CI дочки) и
-# собирает ответы. Писать вторую реализацию тех же проверок значило бы завести вторую правду —
-# ровно то, что кит запрещает везде.
-#
-# ЧЕГО НЕ СМОГЛИ — НАЗЫВАЕТСЯ. Валидатор, которого нет в поставке или который не запустился,
-# даёт `unknown`, а не «нарушений нет». Третье состояние не сворачивается во второе.
-# КАК ЗВАТЬ КАЖДЫЙ — ОБЪЯВЛЕНО, А НЕ УГАДАНО (замер 20.08.2026).
-#
-# Первая редакция звала все валидаторы одинаково — путём к корню. Пять из восьми ответили
-# `IsADirectoryError` или подсказкой по использованию, и обзор отчитался о них как о РАСХОЖДЕНИЯХ.
-# То есть он выдал СВОЮ ошибку вызова за дефект продукта — худшее, что может сделать проверка:
-# человек пошёл бы чинить то, что не сломано, а настоящие находки утонули бы в шуме.
-#
-# Способ вызова замерен по каждому:
-#   root     — принимает корень репозитория;
-#   none     — без аргумента проверяет пакет целиком;
-#   artifact — принимает путь к КОНКРЕТНОМУ артефакту; нет артефакта -> «не проверено», НЕ находка.
-CHECKS = (
-    {"title": "документация", "name": "validate_freshness", "how": "root",
-     "subject": "документы, у которых истёк срок ревизии"},
-    {"title": "ссылки", "name": "validate_references", "how": "root",
-     "subject": "ссылки, ведущие в никуда"},
-    {"title": "артефакты", "name": "validate_cross_artifacts", "how": "root",
-     "subject": "связность артефактов между собой"},
-    {"title": "заявления", "name": "validate_claims", "how": "none",
-     "subject": "публичные числа против кода"},
-    # РОД ДОКУМЕНТА ОБЪЯВЛЕН, И ЭТО НЕ ПЕДАНТИЗМ (замер 20.08.2026). Здесь стояло
-    # `planning/plan.yaml` — и `validate_plan_artifact` честно ответил «kind должен быть
-    # plan-artifact», потому что проверяет RunPlan ФИЧИ, а не delivery-план репозитория.
-    # Обзор выдал этот ответ за РАСХОЖДЕНИЕ и трижды сообщил владельцу о дефекте, которого нет.
-    # Ошибка вызова второго рода: файл существует, валидатор запускается — и проверяет не то.
-    # Поэтому род документа сверяется ДО запуска: не совпал — «не проверено», а не находка.
-    {"title": "план работы", "name": "validate_plan_artifact", "how": "artifact",
-     "artifact": "features/*/plan.yaml", "kind": "plan-artifact",
-     "subject": "RunPlan фичи и его связность"},
-    {"title": "события", "name": "validate_event_catalog", "how": "artifact",
-     "artifact": "analytics/events.yaml", "kind": None,
-     "subject": "каталог событий аналитики"},
-)
-
-
-def _validation_dir(root: Path) -> Path:
-    """Где лежат валидаторы: в дочке — поставка, в самом ките — свой каталог."""
-    shipped = Path(root) / ".ai" / "managed" / "ai_ops_kit" / "validation"
-    return shipped if shipped.is_dir() else Path(root) / "ai_ops_kit" / "validation"
-
-
-def _artifact_kind(path: Path) -> str | None:
-    """Род документа из его же поля `kind`. -> str | None (не прочитали).
-
-    Нужен, чтобы не звать валидатор на документе другого рода: он честно ответит «не то», а обзор
-    выдаст этот ответ за расхождение продукта. Ровно так 20.08 родилась ложная находка про
-    `write_scope`, о которой владельцу сообщили трижды.
-    """
-    try:
-        doc = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except (OSError, yaml.YAMLError):
-        return None
-    return str(doc.get("kind")) if isinstance(doc, dict) and doc.get("kind") else None
-
-
-def run_checks(root: Path, timeout: int = 120) -> list[dict]:
-    """Прогнать шипнутые валидаторы и собрать их ответы. -> список находок.
-
-    `ok`: True — сошлось, False — расхождение, None — НЕ ПРОВЕРЕНО (валидатора нет в поставке,
-    артефакта нет, запуск не состоялся). Третье значение существует намеренно и не сворачивается
-    во второе: «не смотрели» и «нарушений нет» — разные ответы, и второй дороже.
-    """
-    base = _validation_dir(root)
-    out = []
-    for spec in CHECKS:
-        title, name, how = spec["title"], spec["name"], spec["how"]
-        rec = {"check": title, "subject": spec["subject"]}
-        script = base / f"{name}.py"
-        if not script.is_file():
-            out.append({**rec, "ok": None, "detail": "валидатор не поставлен — проверить нечем"})
-            continue
-        if how == "root":
-            argv = [str(root)]
-        elif how == "none":
-            argv = []
-        else:
-            pattern = spec["artifact"]
-            if "*" in pattern:
-                found = sorted(Path(root).glob(pattern))
-                art = found[0] if found else None
-            else:
-                art = Path(root) / pattern
-                art = art if art.is_file() else None
-            if art is None:
-                out.append({**rec, "ok": None,
-                            "detail": f"артефакта {pattern} нет — проверять нечего"})
-                continue
-            want = spec.get("kind")
-            if want:
-                got = _artifact_kind(art)
-                if got != want:
-                    out.append({**rec, "ok": None,
-                                "detail": (f"{art.name}: документ рода '{got or 'неизвестен'}', "
-                                           f"а проверка про '{want}' — проверять нечем")})
-                    continue
-            argv = [str(art)]
-        try:
-            r = subprocess.run([sys.executable, str(script), *argv],
-                               capture_output=True, text=True, timeout=timeout, cwd=str(root))
-        except (OSError, subprocess.SubprocessError) as e:
-            out.append({**rec, "ok": None,
-                        "detail": f"не запустился ({type(e).__name__}: {e})"})
-            continue
-        full = (r.stdout + r.stderr).strip()
-        lines = full.splitlines()
-        # ОШИБКА ВЫЗОВА — НЕ НАХОДКА. Трейсбек или подсказка по использованию означают, что мы
-        # позвали не так, а не что продукт сломан. Выдать одно за другое — послать человека
-        # чинить исправное.
-        #
-        # ИСКАТЬ ОБЯЗАНО ВО ВСЁМ ВЫВОДЕ, А НЕ В ПОСЛЕДНЕЙ СТРОКЕ (замер 20.08.2026 на трёх живых
-        # дочках). Прежде маркер искали в `detail`, а `detail` брал ПОСЛЕДНЮЮ строку. Настоящий
-        # отказ валидатора выглядит так:
-        #     ОШИБКА: ожидался путь к файлу заявлений, получено '<каталог>' — это каталог.
-        #     Использование: validate_claims.py [путь/к/claims.yaml] [--json]
-        #     Без аргумента берётся knowledge/claims.yaml пакета.
-        # Маркер стоит во ВТОРОЙ строке, а последняя — безобидная подсказка. Защита не срабатывала,
-        # и обзор сообщал «расхождение: Без аргумента берётся …» — предложение, из которого человек
-        # не поймёт даже, о чём речь. На трёх дочках из трёх это была ПОЛОВИНА всех находок.
-        wrong_call = "Traceback" in full or re.search(r"(?i)использование:|usage:", full)
-        if wrong_call:
-            # Показываем ПЕРВУЮ строку: в отказе по вызову она и есть суть жалобы, а последняя —
-            # хвост подсказки. Раньше человек получал именно хвост.
-            detail = lines[0][:220] if lines else f"код {r.returncode}, вывод пуст"
-            out.append({**rec, "ok": None, "detail": f"позвали неверно — {detail}"})
-            continue
-        detail = lines[-1][:220] if lines else f"код {r.returncode}, вывод пуст"
-        out.append({**rec, "ok": r.returncode == 0, "detail": detail})
-
-    # ПОСТУПЛЕНИЕ СОБЫТИЙ — ОТДЕЛЬНЫЙ ВОПРОС, И ЕГО НЕ ЗАКРЫВАЕТ КАТАЛОГ. `validate_event_catalog`
-    # отвечает «что мы обещали слать»; доехало ли хоть одно — не знает никто. Цепочка продукта
-    # (Outcome Contract -> Tracking Plan -> реализация -> ПОСТУПЛЕНИЕ -> Product Health) рвётся
-    # ровно здесь и рвётся молча: план выглядит выполненным, дашборд пустой.
-    from ai_ops_kit.intelligence import event_arrival
-    rep = event_arrival.assess(root)
-    out.append({
-        "check": "поступление событий",
-        "subject": "объявленные события доезжают в аналитику",
-        "ok": (None if not rep.get("checked") else not rep.get("missing")),
-        "detail": event_arrival.render(rep).replace("\n", "; ")[:220],
-    })
-    return out
 
 
 def collect_delta(root: Path, since: str | None = None) -> dict:
@@ -802,171 +545,6 @@ def format_autofix_report(res: dict) -> str:
     return "\n".join(L)
 
 
-# ─── РАСПИСАНИЕ И ДОСТАВКА: обзор идёт НОЧЬЮ и БРИФУЕТ ВЛАДЕЛЬЦА ────────────────────────────────
-#
-# Работа `delta_review_runs_nightly_and_briefs_the_owner` требует двух свойств, и оба легко
-# подделать словами:
-#
-#   «идёт ночью»  — кит НЕ крутит демон и не планировщик. Единственное честное «ночью» — это
-#                   РЕАЛЬНЫЙ триггер в репозитории (CI-workflow с `schedule: cron`, который зовёт
-#                   обзор). Обещание в конфиге триггером не является: оно не сработает ни разу.
-#                   Честность та же, что у EnvironmentMap: ОБЪЯВЛЕНО ≠ ВИДНО. Отсюда три состояния —
-#                   detected (триггер есть), declared_not_detected (конфиг просит, триггера нет),
-#                   absent (ни того ни другого). Второе НЕ сворачивается в первое.
-#
-#   «брифует владельца» — бриф, оставшийся в stdout, владельца не достиг. ПРОИЗВЕДЁН ≠ ДОСТАВЛЕН
-#                   (тот же инвариант, что у `--confirm`: отправленный ≠ прочитанный). Доставка —
-#                   запись в durable-инбокс обзоров + указатель `latest.md` + receipt. Прочитал ли
-#                   владелец — отдельный вопрос, и его закрывает `--confirm`, а не факт записи.
-
-SCHEDULE_WORKFLOW_REL = ".github/workflows/nightly-review.yml"
-BRIEFS_DIR_REL = ".ai/project/nightly-review/briefs"
-
-
-def _shipped_script_path(root: Path) -> str:
-    """Как звать обзор из CI дочки. В дочке — из поставки, в самом ките — из пакета."""
-    rel = (".ai/managed/ai_ops_kit/intelligence/nightly_review.py"
-           if (Path(root) / ".ai" / "managed").is_dir()
-           else "ai_ops_kit/intelligence/nightly_review.py")
-    return rel
-
-
-def _nightly_declared(root: Path) -> bool:
-    """Просит ли конфиг ночной обзор (`nightly.enabled` / `nightly.schedule`)?"""
-    cfg = Path(root) / ".ai-ops.yaml"
-    if not cfg.is_file():
-        return False
-    try:
-        doc = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError):
-        return False
-    n = doc.get("nightly") or {}
-    return bool(n.get("enabled")) or bool(n.get("schedule"))
-
-
-def _cron_of_nightly_workflow(root: Path) -> str | None:
-    """Найти РЕАЛЬНЫЙ ночной триггер обзора: workflow с `schedule: cron`, зовущий nightly_review.
-
-    -> строка cron первого такого триггера, либо None (триггера нет). Требуем ОБА признака:
-    расписание И вызов обзора — иначе это чужой запланированный workflow, а не наш «ночью».
-    """
-    wf_dir = Path(root) / ".github" / "workflows"
-    if not wf_dir.is_dir():
-        return None
-    for wf in sorted(list(wf_dir.glob("*.yml")) + list(wf_dir.glob("*.yaml"))):
-        try:
-            raw = wf.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        if "nightly_review" not in raw:
-            continue
-        try:
-            doc = yaml.safe_load(raw)
-        except yaml.YAMLError:
-            continue
-        if not isinstance(doc, dict):
-            continue
-        # PyYAML разбирает `on:` в YAML 1.1 как булев ключ True — учитываем оба написания.
-        on = doc.get("on", doc.get(True))
-        sched = on.get("schedule") if isinstance(on, dict) else None
-        if isinstance(sched, list):
-            for item in sched:
-                if isinstance(item, dict) and item.get("cron"):
-                    return str(item["cron"])
-    return None
-
-
-def schedule_status(root: Path) -> dict:
-    """Идёт ли обзор ночью НА САМОМ ДЕЛЕ. -> {"state", "reason", "cron"?, "workflow"?}.
-
-    state: detected — есть CI-триггер `schedule: cron`, зовущий обзор; declared_not_detected —
-    конфиг просит ночной обзор, но триггера нет (объявлено, но не сработает); absent — ни того ни
-    другого. Кит не планировщик: «ночью» подтверждает триггер в репозитории, а не намерение.
-    """
-    root = Path(root)
-    cron = _cron_of_nightly_workflow(root)
-    if cron:
-        return {"state": "detected", "cron": cron, "workflow": SCHEDULE_WORKFLOW_REL,
-                "reason": f"ночной обзор запускается CI по расписанию `{cron}`"}
-    if _nightly_declared(root):
-        return {"state": "declared_not_detected",
-                "reason": ("ночной обзор объявлен в .ai-ops.yaml, но CI-триггера нет — "
-                           "расписание НЕ сработает; поставить триггер: `--install-schedule`")}
-    return {"state": "absent",
-            "reason": "ночного триггера обзора нет и он не объявлен — поставить: `--install-schedule`"}
-
-
-def _workflow_yaml(cron: str, script_rel: str) -> str:
-    """Текст CI-workflow: ночной запуск обзора с доставкой брифа владельцу.
-
-    PYTHONPATH — каталог, СОДЕРЖАЩИЙ пакет `ai_ops_kit` (в дочке `.ai/managed`, в ките `.`): без
-    него запуск скрипта по пути падает в CI на `import ai_ops_kit` (script-mode не видит пакет).
-    Права `contents: read` — обзор только читает git и пишет бриф в файловую систему раннера.
-    """
-    pkg_suffix = "ai_ops_kit/intelligence/nightly_review.py"
-    pythonpath = script_rel[:-len(pkg_suffix)].rstrip("/") or "."
-    return (
-        "# Сгенерировано AI Ops (nightly_review.install_schedule). Правьте cron через\n"
-        "# `--install-schedule --cron ...` или .ai-ops.yaml (nightly.schedule).\n"
-        "name: nightly-product-review\n"
-        "on:\n"
-        "  schedule:\n"
-        f"    - cron: \"{cron}\"\n"
-        "  workflow_dispatch: {}\n"
-        "permissions:\n"
-        "  contents: read\n"
-        "jobs:\n"
-        "  review:\n"
-        "    runs-on: ubuntu-latest\n"
-        "    steps:\n"
-        "      - uses: actions/checkout@v4\n"
-        "        with:\n"
-        "          fetch-depth: 0\n"
-        "      - uses: actions/setup-python@v5\n"
-        "        with:\n"
-        "          python-version: \"3.12\"\n"
-        "      - run: pip install pyyaml\n"
-        "      - name: Ночной дельта-обзор и бриф владельцу\n"
-        f"        env: {{PYTHONPATH: \"{pythonpath}\"}}\n"
-        f"        run: python {script_rel} . --deliver | tee -a \"$GITHUB_STEP_SUMMARY\"\n"
-    )
-
-
-def install_schedule(root: Path, cron: str = "0 3 * * *") -> dict:
-    """Поставить РЕАЛЬНЫЙ ночной триггер: CI-workflow с `schedule: cron`, зовущий обзор.
-
-    Идемпотентно: тот же файл создаётся/обновляется, второго workflow не плодит. -> {"status":
-    created|updated, "workflow", "cron"}. Кит не мержит и не деплоит — кладёт триггер, дальше CI.
-    """
-    root = Path(root)
-    wf = root / SCHEDULE_WORKFLOW_REL
-    existed = wf.is_file()
-    wf.parent.mkdir(parents=True, exist_ok=True)
-    wf.write_text(_workflow_yaml(cron, _shipped_script_path(root)), encoding="utf-8")
-    return {"status": "updated" if existed else "created",
-            "workflow": SCHEDULE_WORKFLOW_REL, "cron": cron}
-
-
-def deliver_brief(root: Path, brief: str, *, date: str | None = None) -> dict:
-    """Доставить бриф владельцу: durable-инбокс + указатель latest + receipt.
-
-    Произведён ≠ доставлен: бриф в stdout владельца не достиг. Пишем датированный файл и
-    `latest.md` (что открыть, не выбирая), возвращаем receipt как доказательство доставки.
-    """
-    root = Path(root)
-    day = date or datetime.now().strftime("%Y-%m-%d")
-    inbox = root / BRIEFS_DIR_REL
-    inbox.mkdir(parents=True, exist_ok=True)
-    body = brief if brief.endswith("\n") else brief + "\n"
-    dated = inbox / f"{day}.md"
-    latest = inbox / "latest.md"
-    dated.write_text(body, encoding="utf-8")
-    latest.write_text(body, encoding="utf-8")
-    return {"kind": "NightlyBriefReceipt", "schema_version": 1,
-            "delivered_at": datetime.now().isoformat(), "date": day,
-            "path": f"{BRIEFS_DIR_REL}/{day}.md", "latest": f"{BRIEFS_DIR_REL}/latest.md"}
-
-
 def run_nightly(root: Path, *, since: str | None = None, deliver: bool = True,
                 date: str | None = None) -> dict:
     """Точка входа расписания: собрать дельту -> бриф -> доставить владельцу.
@@ -978,16 +556,6 @@ def run_nightly(root: Path, *, since: str | None = None, deliver: bool = True,
     brief = format_brief(delta, root)
     receipt = deliver_brief(root, brief, date=date) if deliver else None
     return {"brief": brief, "receipt": receipt, "baseline": delta.get("baseline")}
-
-
-def format_schedule_status(st: dict) -> str:
-    """Человеческий ответ про расписание — состоянием, а не намёком."""
-    state = st.get("state")
-    if state == "detected":
-        return f"Обзор идёт ночью: CI по расписанию `{st.get('cron')}` ({st.get('workflow')})."
-    if state == "declared_not_detected":
-        return f"Расписание объявлено, но не сработает. {st.get('reason')}"
-    return f"Ночного расписания нет. {st.get('reason')}"
 
 
 def main():
