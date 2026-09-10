@@ -6,6 +6,12 @@
 schema_version: 1
 registry_type: quality-gates
 
+# Инвариант AGENTS.md «blocking-гейтов MVP <= 8» относится ИМЕННО к этому списку — ВСЕГДА-включённому
+# SDLC-хребту: перечисленные ниже гейты блокируют выпуск безусловно. Прочие `blocking: true` в реестре
+# (доменные: ux_review, deploy_readiness, accessibility_review, ai_eval, analytics_* и т.д.) блокируют
+# УСЛОВНО — только когда их фаза/условие применимы (UI-фича -> ux_review, деплой -> deploy_readiness).
+# Поэтому суммарная блокирующая поверхность больше 8, и это BY DESIGN, а не нарушение «<= 8».
+# Потолок хребта и целостность его ссылок держит `tests/unit/test_mvp_blocking_gates_locked.py`.
 mvp_blocking_gates:
   - intake_completeness
   - requirements
