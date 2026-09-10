@@ -78,6 +78,9 @@ ALLOWLIST_MODULES: frozenset[str] = frozenset({
     # Точка входа `ai-ops` (pyproject.toml -> [project.scripts]): console_scripts запускает
     # процессом (pip/pipx), а не импортом — нулевой импортер здесь норма по устройству.
     f"{PKG_NAME}.cli.entry",
+    # git merge-driver для plan.yaml: git запускает его ПРОЦЕССОМ по `merge.ai-ops-plan.driver`
+    # (как console_scripts), а не импортом — нулевой импортер норма по устройству.
+    f"{PKG_NAME}.planning.plan_merge_driver",
 })
 SKIP_DIRS = frozenset({
     ".git", ".ai", ".claude", ".venv", "venv", "env", "node_modules",

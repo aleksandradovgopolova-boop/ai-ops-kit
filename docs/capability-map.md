@@ -28,7 +28,7 @@ README ссылаются на неё, а не дублируют список �
 | — из них enforced (blocking) | 22 |
 | — из них advisory (partial) | 13 |
 | Роли в реестре | 42 |
-| **built≠wired модулей** | **2** |
+| **built≠wired модулей** | **1** |
 | planned / unsupported | 4 |
 
 ## built≠wired — построено, но не проведено в контур
@@ -40,7 +40,6 @@ README ссылаются на неё, а не дублируют список �
 
 | Модуль | Состояние | Проверить |
 |---|---|---|
-| `ai_ops_kit/planning/plan_merge_driver.py` | built≠wired | 0 не-тестовых импортёров; `tests/contracts/test_dormant_inventory.py` |
 | `ai_ops_kit/security/security_review_cascade.py` | built≠wired | 0 не-тестовых импортёров; `tests/contracts/test_dormant_inventory.py` |
 
 ## Команды владельца

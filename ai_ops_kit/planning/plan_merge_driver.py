@@ -243,7 +243,7 @@ def _run_driver(ancestor, current, other):
     subprocess.run(
         ["git", "merge-file", "-L", "ours", "-L", "base", "-L", "theirs",
          current, ancestor, other],
-        check=False,
+        check=False, timeout=60,
     )
     return 1
 
@@ -267,7 +267,7 @@ def install_for_repo(root=".", script_rel="ai_ops_kit/planning/plan_merge_driver
 
     def _git(*args):
         return subprocess.run(["git", "-C", str(root), *args],
-                              check=True, capture_output=True, text=True)
+                              check=True, capture_output=True, text=True, timeout=30)
     try:
         attr_path = _git("rev-parse", "--git-path", "info/attributes").stdout.strip()
         attr_abs = os.path.join(str(root), attr_path) if not os.path.isabs(attr_path) else attr_path
