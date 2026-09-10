@@ -22,7 +22,6 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli.py: 1224
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/execution_pipeline.py: 786
-  ai_ops_kit/lifecycle/active_work.py: 1135
   ai_ops_kit/planning/repo_audit.py: 837
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
@@ -35,6 +34,24 @@ ceilings:
   installer/ai_ops.py: 2601
 
 raises:
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'ai_ops_kit/lifecycle/active_work.py = 1135'
+    to: 'ai_ops_kit/lifecycle/active_work.py = 688 (ниже порога 700 — снят из ceilings)'
+    work: 'refactor(lifecycle): вынос носителя заявок и сверки из active_work в сателлиты'
+    why: >-
+      Монолит реестра активных работ (1135 строк) расщеплён без изменения поведения: транспортный
+      носитель заявок (публикация в `.ai/claims/`, носитель копий `.git/ai-ops/claims/`, `team_view`
+      с дедупом по паре машина/работа) вынесен в `lifecycle/work_claims.py` (278 строк, донор ниже
+      порога), а измерение git — личность держателя (`_machine`/`_now_iso`), доказательство его
+      смерти (`holder_is_gone` по процессу/возрасту) и сверка ветки с базой (`reconcile_with_base`,
+      `_divergence`, `_same_ref`) — в `lifecycle/work_reconcile.py` (216 строк, донор ниже порога).
+      active_work остался держателем ЛОКАЛЬНОГО реестра (load/save/_locked/shared_registry_path),
+      команд CLI (register/list/check/finish/handoff) и классификации пересечений (classify/
+      find_cycle/_forecast_lines) — и сам импортирует оба сателлита, ре-экспортируя их имена, поэтому
+      `active_work.<имя>` и прежние импорты внешних потребителей продолжают работать. Тела и
+      докстринги перенесены байт-в-байт. Файл упал ниже порога 700 → снят из ceilings, ратчет держит
+      вниз.
   - at: '2026-09-10'
     what: lower_ceiling
     from: 'ai_ops_kit/intelligence/nightly_review.py = 1097'
