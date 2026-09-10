@@ -23,7 +23,7 @@ ceilings:
   ai_ops_kit/cli/ai_ops_cli_intents.py: 1950
   ai_ops_kit/ui/presenter.py: 945
   ai_ops_kit/engine/workpackage_executor.py: 1066
-  ai_ops_kit/engine/execution_pipeline.py: 786
+  ai_ops_kit/engine/execution_pipeline.py: 789
   ai_ops_kit/planning/delivery_plan.py: 1135
   ai_ops_kit/lifecycle/active_work.py: 1135
   ai_ops_kit/ui/presenter_formatters.py: 1077
@@ -34,7 +34,7 @@ ceilings:
   ai_ops_kit/intelligence/nightly_review.py: 1097
   ai_ops_kit/validation/validate_own_medicine.py: 772
   ai_ops_kit/gates/gate_executor.py: 905
-  ai_ops_kit/engine/tool_broker.py: 785
+  ai_ops_kit/engine/tool_broker.py: 805
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
   installer/ai_ops.py: 4023
@@ -861,3 +861,28 @@ raises:
       deliver-only-путь resume (доставить готовый READY без переавторинга) был мёртв. +8 строк —
       объявление флага в resume-субпарсере с рационале-докстрингом (проброс в run() — в
       ai_ops_run.py, ниже порога 700). Логика не в модуле, потолок под факт, ратчет держит вниз.
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: ai_ops_kit/engine/tool_broker.py = 785
+    to: ai_ops_kit/engine/tool_broker.py = 805
+    work: 'shell-guard-honest-revert-report: R-43, #786 (решение владельца — вариант «починить отчёт»)'
+    why: 'Сторож заявлял «правка откачена» БЕЗУСЛОВНО, в том числе когда откат провалился и правка
+      ОСТАЛАСЬ на диске (замер: команда создаёт файл в protected-пути и тем же вызовом делает каталог
+      r-x -> unlink даёт EACCES, файл цел, отчёт рапортует успех). Отчёт, называющий дыру закрытой,
+      опаснее самой дыры. +20 строк: поле fs_guard.revert_complete, три исхода причины вместо одного
+      безусловного (не удался / откачено с перечнем / нечего откатывать) и пятый пункт в честный
+      список ограничений — прежде невидимость игнорируемых файлов не была названа вовсе. Проза
+      сжата перед поднятием: первая версия давала +33, разбор вынесен в docs/audit-report R-43 и не
+      дублируется в модуле. Логика осталась в execute() намеренно: это ветка отчёта о уже собранных
+      нарушениях, вынос её в отдельный модуль разорвал бы единственную точку исполнения. Потолок под
+      факт, ратчет держит вниз от 805.'
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: ai_ops_kit/engine/execution_pipeline.py = 786
+    to: ai_ops_kit/engine/execution_pipeline.py = 789
+    work: 'shell-guard-honest-revert-report: выравнивание capability-note (R-43, #786)'
+    why: '+3 строки в одной строковой константе: перечень ограничений в capability-note обязан
+      совпадать с честным списком в шапке tool_broker.py, иначе кит обещает РАЗНОЕ в двух местах —
+      тот же класс, что сама находка R-43 (причина записана мягче факта). Добавлены невидимость
+      игнорируемых файлов внутри protected-путей и то, что неудача отката теперь называется.
+      Кода не добавлено, только текст декларации; потолок под факт.'
