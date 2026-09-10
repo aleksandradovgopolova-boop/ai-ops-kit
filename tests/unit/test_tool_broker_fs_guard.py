@@ -240,3 +240,76 @@ class TestRevertReportIsHonest:
         assert "откачено" in ev["reason"], ev["reason"]
         assert "ОТКАТ НЕ УДАЛСЯ" not in ev["reason"]
         assert (git_repo / "production" / "app.conf").read_text().strip() == "real=1"
+@pytest.fixture
+def git_repo_ign(tmp_path):
+    """Git-дерево с .gitignore (*.env) и УЖЕ существующим игнорируемым файлом в protected-пути."""
+    repo = tmp_path / "child_ign"
+    (repo / "production").mkdir(parents=True)
+    (repo / "src").mkdir()
+    (repo / "production" / "app.conf").write_text("real=1\n", encoding="utf-8")
+    (repo / ".gitignore").write_text("*.env\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    _git(repo, "config", "user.email", "test@example.com")
+    _git(repo, "config", "user.name", "test")
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "начальное состояние + .gitignore")
+    # игнорируемый секрет ВНУТРИ protected существует ДО операции (не под git)
+    (repo / "production" / "secret.env").write_text("s3cr3t-original-value\n", encoding="utf-8")
+    return repo
+
+
+@pytest.mark.critical_path
+@pytest.mark.unit
+class TestShellPathGuardIgnored:
+    """R-43 (покрытие): запись в ИГНОРИРУЕМЫЙ файл внутри protected больше не проходит молча."""
+
+    def test_ignored_precondition(self, git_repo_ign):
+        """Фикстура честна: секрет реально игнорируется и git-статус его НЕ показывает."""
+        assert _git(git_repo_ign, "check-ignore", "production/secret.env").returncode == 0
+        st = _git(git_repo_ign, "status", "--porcelain", "-uall").stdout
+        assert "secret.env" not in st, "игнорируемый файл не должен быть в обычном порцелейне"
+
+    def test_new_ignored_file_in_protected_is_caught_and_removed(self, git_repo_ign):
+        """Новый игнор-файл в protected: раньше проходил молча (allowed=True), теперь откат+запрет."""
+        policy = tool_broker.Policy(level="execution", child_root=str(git_repo_ign))
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo leak > production/dropped.env"}, git_repo_ign, policy)
+        assert ev["allowed"] is False, "запись в игнорируемый файл под protected обязана быть запрещена"
+        assert any(v["path"] == "production/dropped.env" for v in ev["fs_guard"]["violations"])
+        assert not (git_repo_ign / "production" / "dropped.env").exists(), "новый игнор-файл не удалён"
+        assert "production/dropped.env" in ev["fs_guard"]["reverted"]["removed"]
+
+    def test_modified_preexisting_ignored_file_detected_and_reported_not_silent(self, git_repo_ign):
+        """Правка существующего игнор-секрета на месте: обнаружена и честно доложена, НЕ молча пропущена."""
+        policy = tool_broker.Policy(level="execution", child_root=str(git_repo_ign))
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo pwned > production/secret.env"}, git_repo_ign, policy)
+        assert ev["allowed"] is False, "правка игнор-файла под protected больше не разрешена молча"
+        assert any(v["path"] == "production/secret.env" for v in ev["fs_guard"]["violations"])
+        # содержимого нет в git — восстановить нельзя; честный отчёт вместо тихого 'откачено'
+        assert any("secret.env" in f and "восстановить нельзя" in f
+                   for f in ev["fs_guard"]["reverted"]["failed"])
+        assert "production/secret.env" not in ev["fs_guard"]["reverted"]["removed"], \
+            "чужой существующий файл нельзя удалять, выдав удаление за откат"
+
+    def test_sed_bak_vector_both_sides_seen(self, git_repo_ign):
+        """Вектор 2b: sed -i.bak правит игнор-секрет и роняет .bak — теперь видно ОБЕ стороны."""
+        policy = tool_broker.Policy(level="execution", child_root=str(git_repo_ign))
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "sed -i.bak 's/.*/PWNED/' production/secret.env"},
+            git_repo_ign, policy)
+        assert ev["allowed"] is False
+        paths = {v["path"] for v in ev["fs_guard"]["violations"]}
+        assert "production/secret.env" in paths, "правка игнор-секрета обязана быть замечена"
+        assert "production/secret.env.bak" in paths, "побочный .bak в protected обязан быть замечен"
+        # .bak новый и не под git -> удалён; секрет доложен как не-восстановимый
+        assert "production/secret.env.bak" in ev["fs_guard"]["reverted"]["removed"]
+
+    def test_ignored_file_outside_protected_not_flagged(self, git_repo_ign):
+        """Границу не раздуваем: игнор-файл ВНЕ protected — законная суета, сторож молчит."""
+        policy = tool_broker.Policy(level="execution", child_root=str(git_repo_ign))
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo cache > src/build.env"}, git_repo_ign, policy)
+        assert ev["allowed"] is True, "игнорируемое вне protected не должно откатываться"
+        assert ev["fs_guard"]["violations"] == []
+        assert (git_repo_ign / "src" / "build.env").exists(), "законный игнор-артефакт удалять нельзя"

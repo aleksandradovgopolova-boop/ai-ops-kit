@@ -42,18 +42,23 @@ from ai_ops_kit.shared.gitio import git
 # запрещённой. Обход перестал быть необнаружимым и безнаказанным — но это пост-фактум, не запрет.
 # Откат может НЕ УДАТЬСЯ (права, каталог) — тогда `revert_complete` false и причина начинается с
 # «ОТКАТ НЕ УДАЛСЯ» (R-43/#786: раньше заявляла успех безусловно). Успех перечисляет откаченное —
-# сторож видит не всё (пятый пункт ниже), и список даёт заметить, чего в нём нет.
+# сторож видит не всё (см. честный список ниже), и список даёт заметить, чего в нём нет.
 #
+# R-43 закрыт с обеих сторон: (1) сторож не заявляет успех отката, которого не было (#797);
+# (2) игнорируемые файлы ВНУТРИ protected-путей теперь в снимке (`_ignored_under`) — запись в них
+# больше не проходит молча: новый игнор-файл удаляется, правка существующего на месте ОБНАРУЖИВАЕТСЯ
+# и честно доложена как «откатить не смогли» (прежнего содержимого нет — файл не под git).
 # Что этим ЕЩЁ НЕ закрыто, честно:
 #   * не-git рабочее дерево — сверять не с чем, сторож молчит (в evidence нет fs_guard);
 #   * запись ВНЕ корня репозитория (python -c open('/etc/...','w')), чтение чужих файлов, сеть —
 #     сторож смотрит только внутрь git-дерева;
+#   * игнорируемые файлы ВНЕ protected-путей не сверяются намеренно: снимать игнор всего дерева на
+#     каждой shell-операции значило бы откатывать законную суету (__pycache__, node_modules, сборку);
+#   * правку существующего игнорируемого файла под protected сторож ОБНАРУЖИТ, но не восстановит
+#     (содержимого нет в git) — это отказ с честным отчётом, не тихий пропуск;
 #   * write_scope для shell по умолчанию НЕ enforced (см. shell_scope_guard): тот же брокер
 #     исполняет подготовку окружения и проверки движка, а они законно пишут вне scope;
-#   * побочные эффекты без файлов (внешние вызовы, БД, отправка данных) не откатываются в принципе;
-#   * ИГНОРИРУЕМЫЕ файлы внутри protected-пути сторож НЕ ВИДИТ (снимок — `git status -uall`, он их
-#     не перечисляет): R-43, ОТКРЫТ — закрыта только отчётная половина. Наивный `--ignored` не
-#     годится: откатывал бы __pycache__/node_modules на КАЖДОЙ операции.
+#   * побочные эффекты без файлов (внешние вызовы, БД, отправка данных) не откатываются в принципе.
 # Полный jail (writable-only worktree, изолированный HOME, сеть off, лимиты) = контейнер.
 # Не давать --engine pipeline с живой моделью доступ к ценному приватному репо без надзора.
 SHELL_TIMEOUT_DEFAULT = 300   # сек: shell-команда не висит вечно
@@ -582,8 +587,45 @@ def _porcelain(root):
     return {"paths": paths, "renames": renames}
 
 
+def _ignored_under(root, prefixes):
+    """Игнорируемые файлы ПОД защищёнными префиксами -> {relpath: (size, mtime_ns)}.
+
+    R-43: `git status --porcelain -uall` игнорируемые не показывает вовсе (нужен `--ignored`),
+    поэтому запись в игнорируемый файл внутри protected-пути (локальные секреты/оверрайды в
+    `production/`, ключевой материал в `security/`, пути под `.ai/`, закрытые игнором при доставке)
+    сторож не видел. Скан СУЖЕН до защищённых префиксов НАМЕРЕННО: снимать игнор всего дерева
+    (`__pycache__`, `node_modules`, артефакты сборки) на каждой из десятков shell-операций петли —
+    значит откатывать законную игнорируемую суету; цена ложных откатов легла бы на любую работу.
+    (size, mtime_ns) вместо содержимого: детектит и создание, и правку на месте без чтения байт."""
+    if not prefixes:
+        return {}
+    rc, out = _git_q(root, "ls-files", "-z", "--others", "--ignored", "--exclude-standard",
+                     "--", *prefixes)
+    if rc != 0:
+        return {}
+    result = {}
+    for rel in out.split("\x00"):
+        rel = rel.strip()
+        if not rel:
+            continue
+        try:
+            stt = (Path(root) / rel).stat()
+            result[rel] = (stt.st_size, stt.st_mtime_ns)
+        except OSError:
+            continue
+    return result
+
+
+def _protected_scan_prefixes(policy):
+    """Префиксы для скана игнорируемых: только protected (R-43 — про защищённые пути).
+
+    write_scope сюда НЕ входит: игнорируемое ВНУТРИ scope законно, а «вне scope» префиксом не
+    выразить — это отдельная, более широкая забота, не разрыв #786."""
+    return [pre for pre, _appr in getattr(policy, "protected", [])]
+
+
 def _fs_snapshot(root, policy):
-    """Состояние до shell-операции: HEAD + грязные пути. None -> сторож неприменим."""
+    """Состояние до shell-операции: HEAD + грязные пути + игнорируемые под protected. None -> неприм."""
     if not getattr(policy, "shell_path_guard", False):
         return None
     # нечего защищать -> не платим двумя git status за каждую shell-операцию (петля делает их десятки)
@@ -593,7 +635,8 @@ def _fs_snapshot(root, policy):
     if st is None:
         return None      # не git-дерево: пост-фактум сверка невозможна, честно ничего не обещаем
     rc, head = _git_q(root, "rev-parse", "HEAD")
-    return {"dirty": st["paths"], "head": head.strip() if rc == 0 else None}
+    return {"dirty": st["paths"], "head": head.strip() if rc == 0 else None,
+            "ignored": _ignored_under(root, _protected_scan_prefixes(policy))}
 
 
 def _shell_violations(root, policy, pre):
@@ -612,6 +655,16 @@ def _shell_violations(root, policy, pre):
         if rc2 == 0:
             committed = [n for n in names.splitlines() if n.strip()]
             touched |= set(committed)
+    # R-43: игнорируемые файлы под protected git-статус не показывает — берём их отдельным сканом
+    # и судим дельту (появился новый ИЛИ изменился существующий). `pre_ignored` различает новый
+    # (можно удалить) от правки существующего (восстановить нельзя — не под git), это идёт в откат.
+    pre_ignored = pre.get("ignored") or {}
+    post_ignored = _ignored_under(root, _protected_scan_prefixes(policy))
+    ignored_pre = {}
+    for rel, tup in post_ignored.items():
+        if pre_ignored.get(rel) != tup:              # новый или изменённый на месте
+            touched.add(rel)
+            ignored_pre[rel] = rel in pre_ignored
     # вынос содержимого ИЗ запрещённого пути: целевая сторона переноса тоже подлежит откату,
     # иначе `git mv security/x public/x` оставлял бы копию снаружи и обход работал бы.
     carried = {new: old for old, new in renames
@@ -622,7 +675,11 @@ def _shell_violations(root, policy, pre):
         if not why and rel in carried:
             why = f"перенос из запрещённого пути '{carried[rel]}'"
         if why:
-            violations.append({"path": rel, "reason": why, "committed": rel in committed})
+            v = {"path": rel, "reason": why, "committed": rel in committed}
+            if rel in ignored_pre:
+                v["ignored"] = True
+                v["ignored_preexisting"] = ignored_pre[rel]
+            violations.append(v)
     return violations, head_now
 
 
@@ -641,6 +698,12 @@ def _revert_violations(root, pre, head_now, violations):
         if rc == 0:
             rc2, _ = _git_q(root, "checkout", "HEAD", "--", rel)
             (undone["restored"] if rc2 == 0 else undone["failed"]).append(rel)
+        elif v.get("ignored_preexisting"):
+            # R-43: игнорируемый файл СУЩЕСТВОВАЛ до операции и изменён на месте. Его нет в git,
+            # прежнего содержимого у нас нет — восстановить нельзя. Честно: обнаружено, откатить не
+            # смогли (не молчим и НЕ удаляем чужой файл, выдав удаление за откат).
+            undone["failed"].append(
+                f"{rel}: изменён игнорируемый файл под защитой — восстановить нельзя (не под git)")
         else:
             fp = Path(root) / rel
             try:

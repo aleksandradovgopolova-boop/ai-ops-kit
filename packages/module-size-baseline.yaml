@@ -27,12 +27,27 @@ ceilings:
   ai_ops_kit/providers/orchestrator_providers.py: 978
   ai_ops_kit/validation/validate_own_medicine.py: 795
   ai_ops_kit/gates/gate_executor.py: 905
-  ai_ops_kit/engine/tool_broker.py: 805
+  ai_ops_kit/engine/tool_broker.py: 868
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
   installer/ai_ops.py: 2168
 
 raises:
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 805'
+    to: 'ai_ops_kit/engine/tool_broker.py = 868'
+    work: 'fix(broker): закрыть покрытие R-43 — сторож видит игнорируемое внутри protected (#786)'
+    why: >-
+      Вторая половина R-43: сторож защищённых путей сверял дерево через `git status --porcelain
+      -uall`, который игнорируемые файлы не показывает — запись в игнорируемый файл внутри protected
+      (секреты/оверрайды в production/, ключевой материал в security/, пути под .ai/) проходила
+      молча. Добавлены `_ignored_under` (скан игнорируемых, СУЖЕННЫЙ до защищённых префиксов, чтобы
+      не откатывать законную суету __pycache__/node_modules), `_protected_scan_prefixes`, ветка
+      разбора дельты игнорируемых в `_shell_violations` и честный откат в `_revert_violations`
+      (новый игнор-файл удаляется; правка существующего на месте — обнаружена и доложена как «не
+      восстановить», не под git). Плюс обновлён честный список ограничений в шапке. Файл остаётся
+      под порогом монолита-разреза; поднятие потолка записью в ledger, ратчет держит вниз.
   - at: '2026-09-11'
     what: raise_ceiling
     from: 'ai_ops_kit/engine/tool_broker.py = 785; ai_ops_kit/engine/execution_pipeline.py = 786'
