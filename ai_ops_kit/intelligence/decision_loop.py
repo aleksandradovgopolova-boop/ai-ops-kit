@@ -163,7 +163,7 @@ def has_feature_decision_contract(root: Path) -> bool:
 
     #564 (built≠wired): это ТА функция, через которую decision_loop проведён в
     рантайм-маршрут. Присутствие контракта проверяет она; КАЧЕСТВО объявленных
-    контрактов — advisory-гейт feature_decision_quality в пайплайне (тот же
+    контрактов — блокирующий гейт feature_decision_quality в пайплайне (тот же
     check_feature_target, вынесенный вниз в checks.feature_decision).
     """
     ddir = Path(root) / ".ai" / "project" / "decisions"
@@ -189,7 +189,7 @@ def decision_contract_gate(signals, root, task=None, feature=None) -> dict | Non
     обязательным). Под ним работа не стартует без Decision-контракта — валидного фича-решения в
     `.ai/project/decisions`. Для остальных работ сигнал не взведён -> None (не мешаем): governance
     подключается ПО РИСКУ (три кольца). Проверяется ПРИСУТСТВИЕ (fail-closed, до траты); КАЧЕСТВО
-    объявленных контрактов — advisory-гейт feature_decision_quality в пайплайне.
+    объявленных контрактов — блокирующий гейт feature_decision_quality в пайплайне.
 
     Возвращает payload-словарь для блокировки (exit=2) либо None, если продвижение разрешено.
     Маршрут (cli) зовёт это на входе `run --execute`/`do` — это и есть проводка decision_loop в
