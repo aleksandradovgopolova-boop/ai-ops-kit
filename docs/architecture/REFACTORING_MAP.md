@@ -117,9 +117,11 @@
 | Модуль | Ответственность |
 |--------|-----------------|
 | `ai_ops_kit/delivery/pr_open.py` | Открытие draft PR (идемпотентно, SHA-верификация) |
-| `ai_ops_kit/delivery/review_branch.py` | Read-only review ветки |
 
-**Оценка:** Delivery чист. Все импорты из engine — lazy. Граница с engine чёткая.
+**Оценка:** Delivery чист и НЕ зависит от engine (K3, 2026-09-10): `review_branch` — read-only
+review ветки, который ЗАПУСКАЕТ движковые ревью-гейты, — переехал в `ai_ops_kit/engine/review_branch.py`
+(это исполнение, а не доставка). Прежние lazy-импорты engine из delivery сняты вместе с ним;
+обратное направление engine→delivery (`pr_open` — акт доставки) сохранено.
 
 #### Пакет planning (18 модулей, ~2500 строк)
 

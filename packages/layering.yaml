@@ -170,10 +170,10 @@ known_violations: []
 # записано сюда. Обновлять осознанно, как и прочие DERIVED-числа.
 baseline:
   measured_at: "3.34.0"
-  mutual_pairs: 2          # ЧЕСТНОЕ ЧИСЛО. F-03 (аудит 2026-09-09) вскрыл 5 пар, спрятанных за
+  mutual_pairs: 1          # ЧЕСТНОЕ ЧИСЛО. F-03 (аудит 2026-09-09) вскрыл 5 пар, спрятанных за
                            # __import__ (validate_layering видел только ast.Import/ImportFrom и печатал
                            # 0 с ложной подписью «кольцо стало DAG»). Теперь гейт считает и динамику,
-                           # и три пары РАЗВЯЗАНЫ ПО-НАСТОЯЩЕМУ (2026-09-10):
+                           # и ЧЕТЫРЕ пары РАЗВЯЗАНЫ ПО-НАСТОЯЩЕМУ (2026-09-10):
                            #   K1 engine<->gates СНЯТА: CLI-обёртка evidence_collector (строила broker
                            #   через __import__ engine) вынесена в ai_ops_kit/devtools/evidence_collect_cli.py
                            #   — devtools это entrypoints, ему engine импортить можно; библиотечный
@@ -190,8 +190,16 @@ baseline:
                            #   ни динамически. CLI-обёртка, которой нужен построитель, вынесена в
                            #   ai_ops_kit/devtools/context_compile_cli.py (entrypoints). 3 -> 2, и это
                            #   ребро замыкало все длинные циклы -> cycles 5 -> 0.
-                           # Остаются ДВЕ взаимные пары внутри capabilities:
-                           #   delivery<->engine, engine<->lifecycle.
+                           # K3 delivery<->engine СНЯТА (2026-09-10): review_branch (единственный
+                           #   держатель всех трёх рёбер delivery->engine: _resolve_base, worktree,
+                           #   _run_reviews) ЗАПУСКАЕТ движковые ревью-гейты — это исполнение, не
+                           #   доставка. Переехал delivery -> engine (git mv), импорты стали
+                           #   внутрипакетными; delivery больше не зависит от engine. CLI-обёртка (с
+                           #   print) вынесена в devtools/branch_review_cli.py. Акт доставки (draft PR)
+                           #   остался в delivery/pr_open — направление engine->delivery естественно
+                           #   и сохранено. 2 -> 1.
+                           # Остаётся ОДНА взаимная пара внутри capabilities:
+                           #   engine<->lifecycle.
                            #
                            # ЧТО БЫЛО РАЗВЯЗАНО ПО-НАСТОЯЩЕМУ (переезды в foundation, 2026-08-12) — это
                            # сняло ПЕРЕСЕКАВШИЕ СЛОИ пары, а не эти пять внутри capabilities:
@@ -208,18 +216,19 @@ baseline:
                                # K2 (context<->engine, 2026-09-10) убрало ОСТАВШИЕСЯ длинные циклы: они все
                                # проходили через ребро context->engine. Стало 0 — но теперь это ПРАВДА
                                # (гейт считает и динамику), а не прежняя слепота анализатора, печатавшая
-                               # «кольцо стало DAG» при живых __import__. Остаются лишь ДВЕ взаимные пары
-                               # длины два (delivery<->engine, engine<->lifecycle) — они считаются в
+                               # «кольцо стало DAG» при живых __import__. Остаётся лишь ОДНА взаимная пара
+                               # длины два (engine<->lifecycle) — она считается в
                                # mutual_pairs, а не здесь. Настоящие развязки ПЕРЕСЕКАВШИХ слои циклов
                                # остаются в силе: security<->validation (лента №4), engine/providers/
                                # lifecycle->validation (лента №5).
   internal_imports_by_flat_name: 262   # переход на пакетные имена — отдельный срез
   note: >
-    Две взаимные пары лежат ВНУТРИ слоя capabilities (delivery<->engine, engine<->lifecycle),
-    правилами слоёв не запрещены (осознанная граница) и честно сосчитаны. Три из пяти исходных
-    РАЗВЯЗАНЫ ПО-НАСТОЯЩЕМУ (2026-09-10): engine<->gates (K1, CLI evidence_collector в devtools),
+    Одна взаимная пара лежит ВНУТРИ слоя capabilities (engine<->lifecycle), правилами слоёв не
+    запрещена (осознанная граница) и честно сосчитана. Четыре из пяти исходных РАЗВЯЗАНЫ
+    ПО-НАСТОЯЩЕМУ (2026-09-10): engine<->gates (K1, CLI evidence_collector в devtools),
     engops<->gates (K4, environment_map -> checks), context<->engine (K2, RunPlan приходит в
-    compile_bundle извне, а не строится через __import__ engine). Ни одна не спрятана за
+    compile_bundle извне), delivery<->engine (K3, review_branch — запуск движковых ревью-гейтов —
+    переехал в engine, а delivery/pr_open остался актом доставки). Ни одна не спрятана за
     динамическим импортом — проводка перенесена туда, где ей место. До F-03 все пять показывались
     нулём.
     Пары, ПЕРЕСЕКАВШИЕ слои, сняты по-настоящему: security<->validation (лента №4) и

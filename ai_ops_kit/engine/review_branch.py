@@ -10,17 +10,19 @@ ai-review гейтам плана (writer ≠ judge). Диф ветки прот
 База: не задана -> АВТОПОДБОР (`pipeline_git._resolve_base`: текущая ветка -> upstream ->
 remote default), как и обещает справка CLI; не подобралась -> причина названа в `base_note`,
 и ревью продолжается без дифа (это контекст, а не условие вердикта). Хардкода 'main' нет.
-CLI: review_branch.py <child_root> <wid> [--base <ветка>] [--json]  (реальный ревьюер — через ai-ops).
+CLI-обёртка (реальный ревьюер — через ai-ops): ai_ops_kit/devtools/branch_review_cli.py.
+
+Живёт в `engine` (а не в `delivery`): review() ЗАПУСКАЕТ движковые ревью-гейты (_run_reviews,
+_reviewable_gates), подбирает базу (pipeline_git._resolve_base) и worktree — это исполнение, а не
+доставка. Раньше файл лежал в delivery и тянул эти движковые функции ВВЕРХ через __import__, пряча
+взаимную пару delivery<->engine (K3). Переезд в engine делает импорты обычными внутрипакетными, а
+delivery перестаёт зависеть от engine. Сам акт доставки (draft PR) остаётся в delivery/pr_open.
 """
 from __future__ import annotations
 
-import argparse
-import json
-import subprocess
-import sys
 from pathlib import Path
 
-from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401
 
 
 def _git(root, *a):
@@ -57,7 +59,7 @@ def _base_for_review(child_root, base, branch):
             return {"base": base, "source": "explicit", "resolved": True}
         return {"base": base, "source": "explicit", "resolved": False,
                 "reason": f"явная база '{base}' не найдена в репозитории — диф не считан"}
-    _pg = __import__("ai_ops_kit.engine.pipeline_git", fromlist=["_resolve_base"])
+    from ai_ops_kit.engine import pipeline_git as _pg   # внутрипакетно (review_branch теперь в engine)
     r = _pg._resolve_base(child_root, None)
     if r.get("resolved"):
         if r.get("base_ref") == branch:
@@ -122,7 +124,7 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
     branch = f"ai-ops/{wid}"
     wp = child_root / ".ai" / "worktrees" / wid
 
-    _wt = __import__("ai_ops_kit.engine.worktree", fromlist=["_branch_exists", "add"])
+    from ai_ops_kit.engine import worktree as _wt   # внутрипакетно
     if not _wt._branch_exists(child_root, branch):
         return {"kind": "BranchReview", "workitem_id": wid, "reviewable": False,
                 "reviews": [], "verdict": "no-branch", "readiness": _readiness_for("no-branch"),
@@ -153,7 +155,7 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
     plan = _load_plan(child_root, wid)
     gate_ids = plan.get("gates") or ["code_review"]
     signals = {"task_type": plan.get("base_workflow", "QUICK")}
-    _ep = __import__("ai_ops_kit.engine.execution_pipeline", fromlist=["_reviewable_gates", "_run_reviews"])
+    from ai_ops_kit.engine import execution_pipeline as _ep   # внутрипакетно
     reviewable = _ep._reviewable_gates(gate_ids, signals)
 
     reviews = []
@@ -181,28 +183,3 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
     if persist:
         rep["evidence_path"] = _persist_review(child_root, wid, rep)
     return rep
-
-
-def main(argv):
-    ap = argparse.ArgumentParser(prog="review_branch.py")
-    ap.add_argument("child_root"); ap.add_argument("wid")
-    ap.add_argument("--base", default=None,
-                    help="база сравнения; не задана -> auto: текущая ветка/upstream/remote-default")
-    ap.add_argument("--json", action="store_true")
-    a = ap.parse_args(argv)
-    # без живого провайдера здесь ревьюер не подставляется (CLI-обёртка ai-ops даёт провайдер);
-    # печатаем, что ревьюируемо и какова ветка (verdict=needs-reviewer).
-    rep = review(Path(a.child_root), a.wid, reviewer_proposer=None, base=a.base)
-    if a.json:
-        print(json.dumps(rep, ensure_ascii=False, indent=2))
-    else:
-        print(f"BRANCH-REVIEW {a.wid}: verdict={rep['verdict']} · ревьюируемо={rep.get('reviewable')} "
-              f"· ready_for_merge={(rep.get('readiness') or {}).get('ready_for_merge')}")
-        if rep.get("note"):
-            print(f"  · {rep['note']}")
-    # v2.121 (P1.3): needs-reviewer -> НЕ ok. Вердикт не вынесен = готовность не подтверждена.
-    return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
-
-
-if __name__ == "__main__":
-    sys.exit(main(sys.argv[1:]))

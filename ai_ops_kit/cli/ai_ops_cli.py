@@ -533,7 +533,7 @@ def _intent_next(task, child_root, signals, a):
 @_intent("review")
 def _intent_review(task, child_root, signals, a):
     js = a.json
-    from ai_ops_kit.delivery import review_branch
+    from ai_ops_kit.engine import review_branch
     from ai_ops_kit.engine import run_plan
     wid = a.feature or _wid_for(task, signals, a.feature)
     # реальный ревьюер — отдельный провайдер (writer ≠ judge); mock не выносит вердикт (needs-reviewer)

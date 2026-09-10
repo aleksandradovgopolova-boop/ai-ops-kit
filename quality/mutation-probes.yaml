@@ -545,7 +545,7 @@ probes:
     остался бы на месте и модульно «работал».'
 - id: review-auto-base-not-the-reviewed-branch
   kind: guard
-  file: ai_ops_kit/delivery/review_branch.py
+  file: ai_ops_kit/engine/review_branch.py
   find: '        if r.get("base_ref") == branch:'
   replace_with: '        if False:'
   tests:
@@ -556,7 +556,7 @@ probes:
 - id: review-seam-cli-passes-resolved-base
   kind: seam
   covers:
-  - ai_ops_kit/delivery/review_branch.py
+  - ai_ops_kit/engine/review_branch.py
   - ai_ops_kit/cli/ai_ops_cli.py
   file: ai_ops_kit/cli/ai_ops_cli.py
   find: '    rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)'

@@ -32,4 +32,5 @@ ceilings:
   governance: 18
   ui: 16
   integrations: 7
-  delivery: 4
+  delivery: 1      # 4->1 (2026-09-10): CLI review_branch.main (print) уехал в devtools, а сам
+                   # review_branch — в engine (K3-развязка delivery<->engine)

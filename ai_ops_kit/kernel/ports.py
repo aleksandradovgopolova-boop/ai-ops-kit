@@ -24,7 +24,8 @@ merge_lifecycle,refusal_paths,session_thresholds}) — их сняли (2026-09-
   GatePort           — оценка quality gates (fail-closed, writer≠judge).
                        gates/gate_executor.
   DeliveryPort       — верифицированная доставка (draft PR, SHA-проверка).
-                       delivery/pr_open + review_branch.
+                       delivery/pr_open (акт доставки); ревью ветки запускает движковые гейты —
+                       engine/review_branch.
   PolicyPort         — решение о допустимости действия (автономия/HITL).
                        governance/policy_engine, engine/tool_broker.
   ClassifierPort     — классификация задачи (роль/workflow/риск).
@@ -226,7 +227,7 @@ class GatePort(Protocol):
 class DeliveryPort(Protocol):
     """Верифицированная доставка — draft PR с SHA-проверкой.
 
-    Реализация: delivery/pr_open + review_branch.
+    Реализация: delivery/pr_open (акт доставки) + engine/review_branch (ревью ветки).
     Ядро зовёт deliver() ПОСЛЕ durable-фиксации RunHandoff.
     """
 
