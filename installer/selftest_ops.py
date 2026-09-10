@@ -95,10 +95,10 @@ def selftest():
         child.mkdir(parents=True, exist_ok=True)
         subprocess.run(["git", "-C", str(child), "init", "-q"], capture_output=True)
         with contextlib.redirect_stdout(io.StringIO()):
-            rc = _ao().cmd_init(str(child))
+            rc = _ao()._setup_ops().cmd_init(str(child))
         expect("init вернул 0", rc == 0)
         with contextlib.redirect_stdout(io.StringIO()):
-            rc_nogit = _ao().cmd_init(str(Path(td) / "not-a-repo"))
+            rc_nogit = _ao()._setup_ops().cmd_init(str(Path(td) / "not-a-repo"))
         expect("init в несуществующий/не-git каталог -> rc=2 (fail-closed)", rc_nogit == 2)
         cfg = yaml.safe_load((child / ".ai-ops.yaml").read_text(encoding="utf-8"))
         prov = json.loads((child / ".ai" / "managed" / ".provenance.json").read_text(encoding="utf-8"))

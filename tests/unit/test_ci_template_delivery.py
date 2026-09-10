@@ -209,10 +209,10 @@ def test_install_and_update_deliver_the_same_things():
     import ast
     src = (KIT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
-    # cmd_update вынесена в installer/update_ops.py, cmd_init осталась в ai_ops.py — парсим каждую там,
-    # где она живёт; собираем и bare-name, и Attribute-вызовы (в сателлите доставка идёт через `_ao().`).
+    # cmd_update -> installer/update_ops.py, cmd_init -> installer/setup_ops.py (разрез монолита) —
+    # парсим каждую там, где она живёт; собираем и bare-name, и Attribute-вызовы (доставка через `_ao().`).
     src_by_cmd = {"cmd_update": (KIT / "installer" / "update_ops.py").read_text(encoding="utf-8"),
-                  "cmd_init": src}
+                  "cmd_init": (KIT / "installer" / "setup_ops.py").read_text(encoding="utf-8")}
     calls = {}
     for name in ("cmd_update", "cmd_init"):
         cmd_tree = ast.parse(src_by_cmd[name])

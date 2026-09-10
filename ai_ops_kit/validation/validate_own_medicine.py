@@ -109,14 +109,22 @@ def delivery_steps(pkg: Path = PKG):
     return out
 
 
+def _cmd_init_fn(pkg: Path = PKG):
+    """AST `cmd_init` + исходник. Команда вынесена в сателлит installer/setup_ops.py (разрез монолита)."""
+    src = (pkg / "installer" / "setup_ops.py").read_text(encoding="utf-8")
+    return _func(ast.parse(src), "cmd_init"), src
+
+
 def init_only_calls(pkg: Path = PKG):
-    """Функции установщика, которые зовёт `cmd_init` СВЕРХ `deliver_assets`. -> отсортированный список."""
-    tree, names, _ = _installer_ast(pkg)
-    fn = _func(tree, "cmd_init")
+    """Функции установщика, которые зовёт `cmd_init` СВЕРХ `deliver_assets`. -> отсортированный список.
+
+    Ядро `cmd_init` теперь зовёт через `_ao().<имя>` (сателлит), поэтому собираем и bare-, и attr-имена."""
+    names = _installer_ast(pkg)[1]
+    fn = _cmd_init_fn(pkg)[0]
     if fn is None:
         return []
-    return sorted({n.func.id for n in ast.walk(fn)
-                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in names})
+    return sorted({getattr(n.func, "id", "") or getattr(n.func, "attr", "")
+                   for n in ast.walk(fn) if isinstance(n, ast.Call)} & names)
 
 
 def _installer_module(pkg: Path):
@@ -497,7 +505,6 @@ NOT_CULTURE = {
     "_child_scaffolding": "загрузчик сателлита; шаг — back-fill контекста, проверен в DELIVERY_CHECKS",
     "ensure_zone_markers": "шаг `zone_markers` из `deliver_assets`",
     "_assets_report_line": "печатает отчёт о доставке; в репозиторий не пишет",
-    "_onboarding_summary": "печатает приветствие; в репозиторий не пишет",
     "_is_git_worktree": "проверка окружения перед установкой",
     "pkg_version": "чтение версии пакета",
     "parent_source": "чтение git remote для конфига дочки",
@@ -715,9 +722,9 @@ def evaluate(root: Path = PKG):
                       f"установка изменилась, решение устарело")
 
     # 3. Артефакты, которые пишутся строкой на месте (слабый страж — назван в LIMITATIONS).
-    _, _, src = _installer_ast(PKG)
-    init_fn = _func(ast.parse(src), "cmd_init")
-    init_src = ast.get_source_segment(src, init_fn) or "" if init_fn else ""
+    # cmd_init вынесена в сателлит installer/setup_ops.py — парсим её оттуда.
+    init_fn, init_full_src = _cmd_init_fn(PKG)
+    init_src = ast.get_source_segment(init_full_src, init_fn) or "" if init_fn else ""
     for rel, marker in INLINE_ARTIFACTS.items():
         if marker not in init_src:
             errors.append(f"пункт `{rel}` объявлен доставляемым, но упоминания `{marker}` в "

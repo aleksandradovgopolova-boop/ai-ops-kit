@@ -25,12 +25,12 @@ ceilings:
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
   ai_ops_kit/providers/orchestrator_providers.py: 978
-  ai_ops_kit/validation/validate_own_medicine.py: 788
+  ai_ops_kit/validation/validate_own_medicine.py: 795
   ai_ops_kit/gates/gate_executor.py: 905
   ai_ops_kit/engine/tool_broker.py: 785
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  installer/ai_ops.py: 2454
+  installer/ai_ops.py: 2168
 
 raises:
   - at: '2026-09-11'
@@ -1047,3 +1047,27 @@ raises:
       перенос, поведение байт-в-байт то же; временную подмену глобалов установщика (REPO_ROOT/AI_DIR/…)
       selftest теперь пишет через _ao() (живой namespace, view с __setattr__), поэтому cmd_init видит
       подмену. Сателлит ниже порога 700 — в baseline не заводится.
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2454'
+    to: 'installer/ai_ops.py = 2168'
+    work: 'split-installer-monolith: команды установки init/setup вынесены в сателлит'
+    why: >-
+      Команды `init`/`setup` и их хелперы (_onboarding_summary, _setup_summary/_setup_remaining,
+      _run_managed_intent) вынесены в installer/setup_ops.py. Обе запускаются из полного клона кита,
+      не из одинокой копии, поэтому ленивый импорт сателлита безопасен. Чистый перенос, поведение
+      байт-в-байт то же; общие с ядром функции (deliver_assets, managed_set, _assets_report_line, …)
+      читаются через _ao(); временную подмену AI_DIR/MANAGED в cmd_init view пишет в живой namespace.
+      own-medicine научен парсить cmd_init из сателлита; selftest зовёт init через _ao()._setup_ops().
+      Сателлит ниже порога 700 — в baseline не заводится.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/validation/validate_own_medicine.py = 788'
+    to: 'ai_ops_kit/validation/validate_own_medicine.py = 795'
+    work: 'split-installer-monolith: own-medicine научен парсить cmd_init из сателлита'
+    why: >-
+      cmd_init вынесена из installer/ai_ops.py в сателлит installer/setup_ops.py и зовёт общие функции
+      через `_ao().<имя>` (Attribute-вызовы). own-medicine (инвариант «кит ест своё лекарство»)
+      разбирал cmd_init только в ai_ops.py и только bare-name вызовы — после выноса он бы ослеп на
+      шаги установки. Добавлен хелпер `_cmd_init_fn` (парсит cmd_init из setup_ops) и `init_only_calls`
+      теперь собирает и attr-имена. +7 строк — цена сохранения самопроверки, а не роста монолита.
