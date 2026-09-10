@@ -20,11 +20,14 @@ registry_type: standard
 # v5 (#746): сила гейта feature_decision_quality поднята advisory → blocking (ENFORCE). Это изменение
 # check_strength — часть версионируемой поверхности стандарта: дочка вправе знать, что фича-цель без
 # измеримого обязательства теперь блокирует прогон, а не только предупреждает.
-standard_version: 5
+# v6 (#826): SECURITY.md добавлен в required_repo_artifacts — новый обязательный артефакт репозитория
+# (путь раскрытия уязвимостей, статья SEC-001 Архитектурной конституции). Теперь он детерминированно
+# сидируется черновиком, проверяется doctor'ом и own-medicine, а не только judge-проверкой каталога.
+standard_version: 6
 
 # Отпечаток состава требований (sha256[:16] от required_artifacts + required_sections + сила гейтов,
 # считанных из источников ниже). Меняется состав — обязаны измениться отпечаток и standard_version.
-requirements_fingerprint: "e403adeb6dfcbbfa"
+requirements_fingerprint: "3e71e13600d1fbff"
 
 # Откуда читается состав (SR-2: ссылки на реестры, а не дубль):
 sources:
