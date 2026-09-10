@@ -54,7 +54,7 @@ LLM-судьи или решение человека. В отчёте прог�
 | `contour_consistency` | validator | совещательный | validate-product-model |
 | `deploy_readiness` | validator | блокирующий | validate-deploy-readiness |
 | `event_contract_consistency` | validator | совещательный | validate-event-catalog |
-| `feature_decision_quality` | validator | совещательный | validate-feature-decisions |
+| `feature_decision_quality` | validator | блокирующий | validate-feature-decisions |
 | `implementation_verification` | validator | блокирующий | validate-evidence |
 | `intake_completeness` | validator | блокирующий | validate-intake |
 | `knowledge_freshness` | validator | совещательный | validate-freshness |

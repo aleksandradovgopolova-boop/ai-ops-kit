@@ -116,3 +116,62 @@ def test_track_is_skipped_with_a_reason_without_signal():
 def test_track_registry_stays_consistent():
     """Гейт трека резолвится в реестре гейтов, поля трека на месте (страж целостности tracks.yaml)."""
     assert validate_tracks() == []
+
+
+# ─── 4. ENFORCE (#746): гейт проведён в ОБЯЗАТЕЛЬНЫЙ (блокирующий) контур ─────────────────────────
+# Раньше гейт был advisory (blocking: false) — неполная фича-цель давала fail-валидатора, но контур
+# трактовал его как warn-сигнал (res["blocking"] == False). Решение владельца ENFORCE: детерминированный
+# by_construction-гейт краснит прогон. Тесты доказывают именно СИЛУ, а не только наличие механизма.
+
+def test_gate_is_declared_blocking_in_registry():
+    """ENFORCE-инвариант: реестр объявляет гейт блокирующим (был advisory до #746)."""
+    gate = ge.load_gates()[GATE_ID]
+    assert gate.get("blocking") is True, (
+        "feature_decision_quality обязан быть blocking:true — иначе фича-цель без измеримого "
+        "обязательства молча проходит прогон (регрессия к advisory)")
+
+
+def test_incomplete_feature_decision_blocks_the_contour(tmp_path, monkeypatch):
+    """FAIL-CLOSED: фича-решение без target/guardrails ⇒ гейт БЛОКИРУЕТ (status fail + blocking),
+    и называет, чего не хватает. Отличие от advisory: res['blocking'] теперь True, не False."""
+    _write_decisions(tmp_path, {
+        "schema_version": 1, "kind": "feature-decision", "id": "x",
+        "feature_target": {"baseline": {"metric": "m", "value": 1}},  # нет target/guardrails
+    })
+    monkeypatch.chdir(tmp_path)
+    gate = ge.load_gates()[GATE_ID]
+    res = ge.evaluate_gate(GATE_ID, gate, {})
+    assert res["status"] == "fail", res
+    assert res["blocking"] is True, (
+        "гейт краснеет, но контур не трактует его как блокер — это всё ещё advisory-поведение")
+    joined = " ".join(c["id"] for c in res["checks"])
+    assert "target" in joined and "guardrails" in joined, joined
+
+
+def test_valid_feature_target_passes_the_blocking_gate(tmp_path, monkeypatch):
+    """POSITIVE: полное измеримое обязательство ⇒ блокирующий гейт зелёный (не ложный блок)."""
+    propose(tmp_path, "ok", "полная фича", feature_target=_full_target())
+    monkeypatch.chdir(tmp_path)
+    gate = ge.load_gates()[GATE_ID]
+    res = ge.evaluate_gate(GATE_ID, gate, {})
+    assert res["status"] == "pass", res
+    assert res["blocking"] is True and res["blockers"] == [], res
+
+
+def test_non_feature_task_is_explainable_skip_not_blocked(tmp_path, monkeypatch):
+    """SIDE-EFFECT: не-фича-задача не активирует трек — честный explainable skip, а не тихий блок.
+    Доказывает, что ENFORCE не превращает обычную работу в заблокированную."""
+    plan = build_plan({"task_type": "bugfix", "task_text": "починить регрессию"})
+    assert GATE_ID not in plan["gates"], "блокирующий гейт не должен требоваться для не-фича-задачи"
+    skipped = {t["track"]: t["reason"] for t in plan["skipped_tracks"]}
+    assert skipped.get("FEATURE_DECISIONS"), "explainable skip обязан назвать причину, не молчать"
+
+
+def test_advisory_review_records_the_enforce_decision():
+    """Свод: запись прополки #616 переведена в 'enforced'; field_evidence остаётся false, т.к.
+    evidence.field=by_construction (не proven) — синхрон-инвариант test_gate_prevents."""
+    doc = yaml.safe_load(
+        (ge.PKG / "quality" / "gates.yaml").read_text(encoding="utf-8"))
+    rec = doc["advisory_review"]["decisions"][GATE_ID]
+    assert rec["decision"] == "enforced", rec
+    assert not rec["field_evidence"], "field_evidence обязан быть falsy при evidence.field != proven"

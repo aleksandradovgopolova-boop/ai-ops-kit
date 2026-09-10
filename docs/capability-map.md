@@ -25,8 +25,8 @@ README ссылаются на неё, а не дублируют список �
 |---|---|
 | Команды владельца (`./ai-ops …`) | 33 |
 | Quality gates — всего | 35 |
-| — из них enforced (blocking) | 21 |
-| — из них advisory (partial) | 14 |
+| — из них enforced (blocking) | 22 |
+| — из них advisory (partial) | 13 |
 | Роли в реестре | 42 |
 | **built≠wired модулей** | **1** |
 | planned / unsupported | 4 |
@@ -105,7 +105,7 @@ README ссылаются на неё, а не дублируют список �
 | `documentation_updated` | result | partial (advisory) | Документация обновлена вместе с изменением (Definition of Done). ПЕРЕВЕДЁН ИЗ САМОЗАЯВЛЕНИЯ В МАШИННЫЙ (v3.37, C3): оба доказательства — факты о дифе, а не суждение, и спрашивать о них стадию, которая |
 | `event_contract_consistency` | specification | partial (advisory) | Имена событий согласованы во всех слоях: единый каталог, каноничная грамматика, audit/analytics ссылаются на domain через maps_to, domain не подменён AuditEvent. Класс contract<->code<->analytics nami |
 | `evidence` | fact-check | built (enforced) | Каждый существенный вывод имеет источник и статус. |
-| `feature_decision_quality` | decision-review | partial (advisory) | Продуктовое решение, объявленное фичей (kind: feature-decision), несёт ИЗМЕРИМОЕ обязательство: baseline (где мы сейчас), target (куда идём) и guardrails (что не должно сломаться). Проверяет МЕХАНИЗМ, |
+| `feature_decision_quality` | decision-review | built (enforced) | Продуктовое решение, объявленное фичей (kind: feature-decision), несёт ИЗМЕРИМОЕ обязательство: baseline (где мы сейчас), target (куда идём) и guardrails (что не должно сломаться). Проверяет МЕХАНИЗМ, |
 | `implementation_verification` | verify | built (enforced) | Сборка/линт/тесты пройдены на конкретной ревизии. |
 | `intake_completeness` | intake | built (enforced) | Полнота intake и классификации до старта. |
 | `knowledge_freshness` | sync | partial (advisory) | Размеченные знания не протухли (класс устаревания из FreshnessPolicy). |

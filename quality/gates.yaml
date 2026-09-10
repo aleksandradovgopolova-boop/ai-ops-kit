@@ -641,7 +641,7 @@ gates:
       FEATURE_DECISIONS по сигналу feature_decision_declared; для не-фич-задач трек не активирован —
       честный explainable skip, а не тихий pass.
     stage: decision-review
-    blocking: false          # advisory до обкатки на живых прогонах (как соседние consistency-гейты)
+    blocking: true           # ENFORCE (#746): детерминированный by_construction-гейт (closed_by validator + review_mode writer) — вердикт МЕХАНИЗМА, а не эвристика judge с false-positive-риском, поэтому дисциплина «advisory до обкатки» (для judge-гейтов) к нему не относится. Прецедент: десяток блокирующих by_construction-валидаторов без field_evidence (intake_completeness, requirements, specification, plan_readiness, implementation_verification, deploy_readiness, spec_synchronization, archive_readiness). Фичит только kind:feature-decision; для не-фич — explainable skip, поэтому обычную работу не блокирует.
     responsible_role: product-reviewer
     review_mode: writer                       # детерминированный гейт: вердикт механизма, не ревью
     validator: validate-feature-decisions     # runnable: ai_ops_kit/checks/feature_decision.gate_feature_decisions (через gate_executor.deterministic_run)
@@ -707,6 +707,10 @@ gates:
 #   justified_advisory — advisory обоснованно: evidence назван ЛИБО blocking противоречит существу.
 #   owner_decision     — детерминирован и проведён (enforce-ready), но полевого срабатывания-на-дефекте
 #                        нет; перевод в blocking = рост enforcement-поверхности → решение ВЛАДЕЛЬЦА (§26).
+#   enforced           — решение ВЛАДЕЛЬЦА принято: гейт переведён из owner_decision в блокирующий
+#                        контур (blocking: true). Применимо к детерминированным by_construction-гейтам,
+#                        где нет false-positive-риска; field_evidence остаётся false, пока evidence.field
+#                        не proven (синхрон-инвариант test_gate_prevents).
 # Границы: MVP-blocking ≤ 8 не тронут; ловящий дефекты гейт не снят ради числа.
 advisory_review:
   reviewed_at: "2026-09-07"
@@ -725,6 +729,6 @@ advisory_review:
     release_safety:             {decision: justified_advisory,  field_evidence: false}  # трек RELEASE; ждёт места флагов в дочке
     observability_readiness:    {decision: justified_advisory,  field_evidence: false}  # трек RELEASE; ждёт места конфига в дочке
     event_contract_consistency: {decision: owner_decision,      field_evidence: false}  # enforce vs park: детерминирован+трек EVENTS
-    feature_decision_quality:   {decision: owner_decision,      field_evidence: false}  # enforce vs park: детерминирован+трек FEATURE_DECISIONS
+    feature_decision_quality:   {decision: enforced,            field_evidence: false}  # ENFORCE #746: детерминированный by_construction-гейт проведён в блокирующий контур; field_evidence остаётся false, т.к. evidence.field=by_construction (не proven) — синхрон с test_gate_prevents (proven<->field_evidence)
     documentation_updated:      {decision: owner_decision,      field_evidence: false}  # enforce vs park: машинный+трек DOCUMENTATION
     surface_wiring_consistency: {decision: owner_decision,      field_evidence: false}  # снять vs park: child-only, ни разу не сработал
