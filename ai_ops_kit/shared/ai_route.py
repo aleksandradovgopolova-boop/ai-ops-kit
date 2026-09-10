@@ -21,16 +21,18 @@ from pathlib import Path
 
 import yaml
 
+from typing import Any
+
 PKG_ROOT = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
                  Path(__file__).resolve().parents[1])
 REG = PKG_ROOT / "registry"
 
 
-def load(name):
+def load(name: str) -> Any:
     return yaml.safe_load((REG / name).read_text(encoding="utf-8"))
 
 
-def _match(when, ctx):
+def _match(when: Any, ctx: dict[str, Any]) -> bool:
     if not isinstance(when, dict):
         return False
     for k, v in when.items():
@@ -39,7 +41,7 @@ def _match(when, ctx):
     return True
 
 
-def route(inp):
+def route(inp: dict[str, Any]) -> dict[str, Any]:
     policy = load("routing-policy.yaml")
     providers = load("providers.yaml")["providers"]
     runtimes = load("runtimes.yaml")["runtimes"]
@@ -126,7 +128,7 @@ def route(inp):
     model_class = model_class or "balanced"
 
     # выбор провайдера: prefer ∩ available, не forbidden; иначе первый available не forbidden
-    def pick_provider():
+    def pick_provider() -> str | None:
         for p in prefer_provider:
             if p in available_providers and p not in forbid_provider:
                 return p
@@ -156,7 +158,7 @@ def route(inp):
     # 4. execution_mode из возможностей выбранного рантайма
     rt = runtimes.get(selected_runtime, {})
     caps = rt.get("capabilities", {})
-    def cap_true(name):
+    def cap_true(name: str) -> bool:
         c = caps.get(name)
         return isinstance(c, dict) and c.get("value") is True
     if cap_true("native_subagents"):
@@ -180,7 +182,7 @@ def route(inp):
     # 6. required/missing capabilities (из workflow-контракта)
     required = workflows.get(workflow, {}).get("required_capabilities", [])
     prov_caps = providers.get(selected_provider, {}).get("capabilities", {}) if selected_provider else {}
-    def provider_supports(capname):
+    def provider_supports(capname: str) -> bool:
         c = prov_caps.get(capname)
         if c is True:
             return True
