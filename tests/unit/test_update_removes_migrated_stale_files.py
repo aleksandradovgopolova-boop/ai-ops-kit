@@ -39,6 +39,7 @@ pytestmark = pytest.mark.slow
 
 KIT = Path(__file__).resolve().parents[2]
 INSTALLER = KIT / "installer" / "ai_ops.py"
+UPDATE_OPS = KIT / "installer" / "update_ops.py"   # cmd_update вынесена сюда (разрез монолита)
 
 # Валидатор кита, которого НЕТ в белом списке поставки: именно такие и остались у ии-среды.
 STALE = "validate_decisions.py"
@@ -94,7 +95,7 @@ def test_stale_file_moved_by_migration_is_removed_in_the_same_update(child, tmp_
     new_path = root / ".ai" / "managed" / "ai_ops_kit" / "validation" / STALE
 
     inst = _load(root)
-    rc = inst.cmd_update(force=True, in_place=True)
+    rc = inst._update_ops().cmd_update(force=True, in_place=True)
 
     assert rc == 0, "обновление не прошло"
     assert not (old_dir / STALE).exists(), "файл остался по старому пути"
@@ -112,7 +113,7 @@ def test_files_that_belong_to_managed_survive(child, tmp_path):
     assert must_stay.is_file(), "предпосылка: VERSION в managed есть"
 
     inst = _load(root)
-    inst.cmd_update(force=True, in_place=True)
+    inst._update_ops().cmd_update(force=True, in_place=True)
 
     assert must_stay.is_file(), "уборка вынесла файл, который обязан быть в managed"
     assert (root / ".ai" / "managed" / "ai_ops_kit" / "validation" / "_bootstrap.py").is_file(), \
@@ -125,11 +126,14 @@ def test_diff_is_recomputed_after_the_migration_chain():
 
     Дефект не в одной строке, а в ПОСЛЕДОВАТЕЛЬНОСТИ, и именно её надо держать.
     """
-    tree = ast.parse(INSTALLER.read_text(encoding="utf-8"))
+    tree = ast.parse(UPDATE_OPS.read_text(encoding="utf-8"))
     fn = next(n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name == "cmd_update")
+    # build_diff остался в ai_ops.py (гейт check-update), cmd_update зовёт его через `_ao().build_diff()`
+    # — это Attribute-вызов, а не bare-name; ловим обе формы.
     diffs = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
-             and getattr(n.func, "id", "") == "build_diff"]
+             and (getattr(n.func, "id", "") == "build_diff"
+                  or getattr(n.func, "attr", "") == "build_diff")]
     chain = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
              and getattr(getattr(n.func, "attr", None), "__class__", None) is not None
              and getattr(n.func, "attr", "") == "run"]
@@ -153,7 +157,7 @@ def test_report_names_what_was_actually_applied(child, tmp_path):
     (old_dir / STALE).write_text("# лишний\n", encoding="utf-8")
 
     inst = _load(root)
-    inst.cmd_update(force=True, in_place=True)
+    inst._update_ops().cmd_update(force=True, in_place=True)
 
     rep = json.loads((root / ".ai" / "runtime" / "last-update-report.json").read_text("utf-8"))
     removed = [c["path"] for c in (rep.get("managed_changes") or [])
