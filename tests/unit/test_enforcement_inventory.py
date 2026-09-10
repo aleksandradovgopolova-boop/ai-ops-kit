@@ -2,12 +2,13 @@
 """Инвентарь «объявлено → исполняется» имеет ЗУБЫ (validate_enforcement_inventory).
 
 Три обязательных теста на capability (AGENTS.md):
-  * positive     — инвентарь репозитория валиден: каждый dev-инструмент и baseline покрыт,
-                   доказательства резолвятся; mypy честно помечен unenforced;
-  * fail-closed  — необъявленное исполнение (инструмент без записи), протухшее доказательство
-                   (enforced_at не находит паттерн), беспричинный unenforced и мёртвый baseline —
-                   каждый краснеет;
-  * side-effect  — declared_dev_tools реально читает ОБА источника (requirements-dev + pyproject).
+  * positive     — инвентарь репозитория валиден: каждый dev-инструмент, pre-commit-ХУК и baseline
+                   покрыт, доказательства резолвятся; mypy честно enforced, часть хуков — local_only;
+  * fail-closed  — необъявленное исполнение (инструмент/хук без записи), протухшее доказательство
+                   (enforced_at не находит паттерн), беспричинный unenforced/local_only и мёртвый
+                   baseline — каждый краснеет;
+  * side-effect  — declared_dev_tools реально читает ОБА источника (requirements-dev + pyproject),
+                   declared_hooks реально читает id хуков из .pre-commit-config.yaml.
 """
 from __future__ import annotations
 
@@ -96,6 +97,68 @@ def test_unenforced_without_reason_is_caught():
             t.pop("reason", None)
     errors = vei.check(broken)
     assert any("mypy" in e and "без причины" in e for e in errors), errors
+
+
+# ─── pre-commit-хуки: охват + резолюция доказательств ───────────────────────────────────────────
+
+def test_every_declared_hook_is_in_inventory():
+    """Каждый хук из .pre-commit-config.yaml присутствует в инвентаре — иначе охват дыряв."""
+    spec = vei.load_spec()
+    inv = {h["id"] for h in spec.get("pre_commit_hooks") or []}
+    declared = vei.declared_hooks()
+    assert declared, "не удалось прочитать ни одного хука из .pre-commit-config.yaml"
+    assert declared <= inv, f"хуки объявлены, но не в инвентаре: {sorted(declared - inv)}"
+
+
+def test_undeclared_hook_is_caught():
+    """Мутация: хук объявлен в .pre-commit-config, но отсутствует в инвентаре — check() краснеет."""
+    spec = vei.load_spec()
+    victim = next(iter(vei.declared_hooks()))
+    thin = dict(spec, pre_commit_hooks=[
+        h for h in spec["pre_commit_hooks"] if h["id"] != victim])
+    errors = vei.check(thin)
+    assert any(victim in e and "не в инвентаре" in e for e in errors), errors
+
+
+def test_stale_hook_entry_is_caught():
+    """Запись про хук, которого в .pre-commit-config уже нет, — мёртвая, краснеет."""
+    spec = vei.load_spec()
+    fat = dict(spec, pre_commit_hooks=list(spec["pre_commit_hooks"]) + [
+        {"id": "хук-которого-нет", "status": "local_only", "reason": "выдумка"}])
+    errors = vei.check(fat)
+    assert any("хук-которого-нет" in e and "мёртвая запись" in e for e in errors), errors
+
+
+def test_every_enforced_hook_evidence_resolves():
+    """Каждый enforced-хук имеет enforced_at, чей паттерн реально находится в названном файле."""
+    spec = vei.load_spec()
+    enforced = [h for h in spec["pre_commit_hooks"] if h["status"] == "enforced"]
+    assert enforced, "ожидался хотя бы один enforced-хук (ruff/selftest-smoke/commit-contract)"
+    for h in enforced:
+        ea = h["enforced_at"]
+        assert vei._resolves(vei.PKG, ea["file"], ea["pattern"]), (h["id"], ea)
+
+
+def test_rotted_hook_evidence_is_caught():
+    """enforced_at хука, чей паттерн не находится в файле, — протухшее доказательство зеркала."""
+    spec = vei.load_spec()
+    broken = dict(spec, pre_commit_hooks=[
+        (dict(h, enforced_at={"file": ".github/workflows/package-quality.yml",
+                              "pattern": "этого-паттерна-точно-нет- zzz"})
+         if h["id"] == "commit-contract" else h)
+        for h in spec["pre_commit_hooks"]])
+    errors = vei.check(broken)
+    assert any("commit-contract" in e and "протухло" in e for e in errors), errors
+
+
+def test_local_only_hook_without_reason_is_caught():
+    """local_only без причины — необъяснённое «в CI не зеркалён»."""
+    spec = vei.load_spec()
+    broken = dict(spec, pre_commit_hooks=[
+        (dict(h, reason="") if h["id"] == "check-yaml" else h)
+        for h in spec["pre_commit_hooks"]])
+    errors = vei.check(broken)
+    assert any("check-yaml" in e and "без причины" in e for e in errors), errors
 
 
 def test_baseline_not_read_by_its_consumer_is_caught():
