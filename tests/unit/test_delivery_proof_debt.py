@@ -200,6 +200,7 @@ def test_doctor_names_the_debt(repo):
     inst = _installer(repo)
     unproven = inst._released_without_proof(repo)
     assert unproven == ["onboarding"]
-    src = (KIT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
-    assert "_released_without_proof(REPO_ROOT)" in src, "doctor не считает долг"
+    # doctor вынесен в сателлит installer/doctor.py; общие функции читаются через `_ao()`.
+    src = (KIT / "installer" / "doctor.py").read_text(encoding="utf-8")
+    assert "_ao()._released_without_proof(_ao().REPO_ROOT)" in src, "doctor не считает долг"
     assert "поставка без доказательства" in src, "doctor не называет долг словами"

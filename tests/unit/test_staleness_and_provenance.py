@@ -152,7 +152,8 @@ def test_doctor_says_out_loud_when_the_kit_came_from_a_draft_branch():
     Практическое следствие уже случилось: у дочки не оказалось правил игнорирования, и первый
     коммит утащил в историю три десятка служебных файлов.
     """
-    src = (PKG / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+    # cmd_doctor вынесен в сателлит installer/doctor.py (разрез монолита) — грепаем его.
+    src = (PKG / "installer" / "doctor.py").read_text(encoding="utf-8")
 
     assert "ЭТО НЕ ВЫПУСК" in src, "doctor не отличает выпуск от черновой ветки"
     assert "не объявлял готовой" in src, "нет объяснения, чем это грозит владельцу"
