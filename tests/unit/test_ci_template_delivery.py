@@ -73,7 +73,7 @@ def test_broken_workflow_is_repaired_and_the_old_one_kept(child):
     assert "/tmp/ai-ops-kit/validation/" in p.read_text(encoding="utf-8")
     inst = _installer(child)
 
-    acts = inst.sync_ci_workflows(child)
+    acts = inst._ci_setup().sync_ci_workflows(child)
 
     fixed = p.read_text(encoding="utf-8")
     assert "ai_ops_kit/validation/validate_ai_ops_child.py" in fixed, "путь не починен"
@@ -97,7 +97,7 @@ def test_no_stray_backup_when_git_already_keeps_the_old_file(child):
     subprocess.run(["git", "-C", str(child), "commit", "-qm", "init"], check=True)
 
     inst = _installer(child)
-    acts = inst.sync_ci_workflows(child)
+    acts = inst._ci_setup().sync_ci_workflows(child)
 
     act = next(a for a in acts if a["file"] == VALIDATE)
     assert act["action"] == "repaired" and act["backup"] == "git"
@@ -113,7 +113,7 @@ def test_state_names_the_defect_before_anything_is_written(child):
     """`doctor` обязан видеть поломку БЕЗ обновления — иначе о ней узнают из красного CI."""
     _break_path(child)
     inst = _installer(child)
-    row = next(r for r in inst.ci_workflow_state(child) if r["file"] == VALIDATE)
+    row = next(r for r in inst._ci_setup().ci_workflow_state(child) if r["file"] == VALIDATE)
     assert row["broken"], "сломанный workflow не назван сломанным"
     assert any("validation/validate_ai_ops_child.py" in b for b in row["broken"])
 
@@ -123,27 +123,27 @@ def test_state_names_the_defect_before_anything_is_written(child):
 def test_owner_edits_are_not_overwritten_silently(child):
     """Правку владельца кит не трогает — и ГОВОРИТ об этом, а не молчит."""
     inst = _installer(child)
-    inst.sync_ci_workflows(child)                       # отпечатки появились: файл наш
+    inst._ci_setup().sync_ci_workflows(child)                       # отпечатки появились: файл наш
     p = child / ".github" / "workflows" / VALIDATE
     mine = p.read_text(encoding="utf-8") + "\n# правка владельца\n"
     p.write_text(mine, encoding="utf-8")
 
-    acts = inst.sync_ci_workflows(child)
+    acts = inst._ci_setup().sync_ci_workflows(child)
 
     assert p.read_text(encoding="utf-8") == mine, "чужая правка перезаписана молча"
     act = next(a for a in acts if a["file"] == VALIDATE)
     assert act["action"] == "left-alone" and act["was"] == "edited"
-    assert "правил" in inst._ci_report_line(acts)
+    assert "правил" in inst._ci_setup()._ci_report_line(acts)
 
 
 def test_explicit_refresh_overwrites_but_keeps_a_copy(child):
     """`--refresh-ci` — осознанное решение человека, и даже оно ничего не теряет."""
     inst = _installer(child)
-    inst.sync_ci_workflows(child)
+    inst._ci_setup().sync_ci_workflows(child)
     p = child / ".github" / "workflows" / VALIDATE
     p.write_text(p.read_text(encoding="utf-8") + "\n# правка владельца\n", encoding="utf-8")
 
-    acts = inst.sync_ci_workflows(child, refresh=True)
+    acts = inst._ci_setup().sync_ci_workflows(child, refresh=True)
 
     act = next(a for a in acts if a["file"] == VALIDATE)
     assert act["action"] == "overwritten" and act["backup"]
@@ -155,7 +155,7 @@ def test_unknown_origin_is_not_called_an_owner_edit(child):
     inst = _installer(child)
     p = child / ".github" / "workflows" / VALIDATE
     p.write_text(p.read_text(encoding="utf-8") + "\n# что-то\n", encoding="utf-8")
-    row = next(r for r in inst.ci_workflow_state(child) if r["file"] == VALIDATE)
+    row = next(r for r in inst._ci_setup().ci_workflow_state(child) if r["file"] == VALIDATE)
     assert row["state"] == "unknown", row
 
 
@@ -165,11 +165,11 @@ def test_second_run_changes_nothing(child):
     """Идемпотентность: update зовут часто, и каждый раз дёргать чужой git недопустимо."""
     inst = _installer(child)
     _break_path(child)
-    inst.sync_ci_workflows(child)
+    inst._ci_setup().sync_ci_workflows(child)
     before = {p.name: p.read_text(encoding="utf-8")
               for p in (child / ".github" / "workflows").iterdir()}
 
-    acts = inst.sync_ci_workflows(child)
+    acts = inst._ci_setup().sync_ci_workflows(child)
 
     after = {p.name: p.read_text(encoding="utf-8")
              for p in (child / ".github" / "workflows").iterdir()}
@@ -213,10 +213,18 @@ def test_install_and_update_deliver_the_same_things():
         calls[name] = {getattr(c.func, "id", "") for c in ast.walk(fn) if isinstance(c, ast.Call)}
     for name in ("cmd_update", "cmd_init"):
         assert "deliver_assets" in calls[name], f"{name} не зовёт общую доставку"
-    # И сама доставка действительно включает CI-шаблоны и маркеры зон.
+    # И сама доставка действительно включает CI-шаблоны и маркеры зон. Синхронизация CI вынесена в
+    # сателлит `ci_setup`, поэтому зовётся как `_ci_setup().sync_ci_workflows(...)` — это Attribute-вызов,
+    # а не bare-name; собираем и имена функций, и имена атрибутов, чтобы увидеть обе формы.
     fn = next(n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name == "deliver_assets")
-    inside = {getattr(c.func, "id", "") for c in ast.walk(fn) if isinstance(c, ast.Call)}
+    inside = set()
+    for c in ast.walk(fn):
+        if isinstance(c, ast.Call):
+            if isinstance(c.func, ast.Name):
+                inside.add(c.func.id)
+            elif isinstance(c.func, ast.Attribute):
+                inside.add(c.func.attr)
     assert {"sync_ci_workflows", "ensure_zone_markers"} <= inside, inside
 
 
@@ -235,7 +243,7 @@ def test_audit_workflow_scheduled_delivered_and_runs_product_audit(tmp_path):
     served = tmp_path / "served"
     (served / ".github" / "workflows").mkdir(parents=True)
     (served / ".ai" / "runtime").mkdir(parents=True)
-    inst.sync_ci_workflows(served)
+    inst._ci_setup().sync_ci_workflows(served)
     assert (served / ".github" / "workflows" / "ai-ops-audit.yml").is_file()   # доехал до дочки
 
 
@@ -286,7 +294,7 @@ def test_fingerprints_go_to_the_served_repo_not_the_current_one(tmp_path, monkey
         shutil.copy2(KIT / "templates" / "ci" / name, served / ".github" / "workflows" / name)
 
     inst = _installer(here)                      # REPO_ROOT = here
-    inst.sync_ci_workflows(served)               # обслуживаем ДРУГОЙ репозиторий
+    inst._ci_setup().sync_ci_workflows(served)               # обслуживаем ДРУГОЙ репозиторий
 
     assert (served / ".ai" / "runtime" / "ci-templates.json").is_file(), \
         "отпечатки не попали в обслуживаемый репозиторий"
