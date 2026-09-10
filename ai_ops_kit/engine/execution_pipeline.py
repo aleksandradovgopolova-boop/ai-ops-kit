@@ -109,10 +109,13 @@ def _build_containment(sandbox, pol, loop):
             "shell_path_violations": sum(
                 len(((e.get("fs_guard") or {}).get("violations")) or [])
                 for e in (loop.get("evidence") or [])),
+            # R-43/#786: перечень обязан совпадать с честным списком в шапке tool_broker.py.
             "note": "enforceable-подмножество на уровне брокера: пути закрыты на обоих "
-                    "каналах (write — до, shell — пост-фактум с откатом); запись вне "
-                    "корня репозитория, сеть и не-git деревья — по-прежнему нет; полная "
-                    "FS/сеть/ресурс-изоляция — контейнерный runtime"}
+                    "каналах (write — до, shell — пост-фактум с откатом, и неудача отката "
+                    "называется, а не скрывается); запись вне корня репозитория, сеть, "
+                    "не-git деревья и ИГНОРИРУЕМЫЕ файлы внутри protected-путей (R-43, "
+                    "открыт) — по-прежнему нет; полная FS/сеть/ресурс-изоляция — "
+                    "контейнерный runtime"}
 
 
 def _plan_delivery(open_pr, ready, committed_sha, work_branch, base_binding, base_ref, base_sha,

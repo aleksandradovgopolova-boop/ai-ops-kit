@@ -40,6 +40,9 @@ from ai_ops_kit.shared.gitio import git
 # Брокер снимает состояние git-дерева до команды и после; если shell изменил protected-путь
 # (а при shell_scope_guard — и путь вне write_scope), правка ОТКАТЫВАЕТСЯ, а операция помечается
 # запрещённой. Обход перестал быть необнаружимым и безнаказанным — но это пост-фактум, не запрет.
+# Откат может НЕ УДАТЬСЯ (права, каталог) — тогда `revert_complete` false и причина начинается с
+# «ОТКАТ НЕ УДАЛСЯ» (R-43/#786: раньше заявляла успех безусловно). Успех перечисляет откаченное —
+# сторож видит не всё (пятый пункт ниже), и список даёт заметить, чего в нём нет.
 #
 # Что этим ЕЩЁ НЕ закрыто, честно:
 #   * не-git рабочее дерево — сверять не с чем, сторож молчит (в evidence нет fs_guard);
@@ -47,7 +50,10 @@ from ai_ops_kit.shared.gitio import git
 #     сторож смотрит только внутрь git-дерева;
 #   * write_scope для shell по умолчанию НЕ enforced (см. shell_scope_guard): тот же брокер
 #     исполняет подготовку окружения и проверки движка, а они законно пишут вне scope;
-#   * побочные эффекты без файлов (внешние вызовы, БД, отправка данных) не откатываются в принципе.
+#   * побочные эффекты без файлов (внешние вызовы, БД, отправка данных) не откатываются в принципе;
+#   * ИГНОРИРУЕМЫЕ файлы внутри protected-пути сторож НЕ ВИДИТ (снимок — `git status -uall`, он их
+#     не перечисляет): R-43, ОТКРЫТ — закрыта только отчётная половина. Наивный `--ignored` не
+#     годится: откатывал бы __pycache__/node_modules на КАЖДОЙ операции.
 # Полный jail (writable-only worktree, изолированный HOME, сеть off, лимиты) = контейнер.
 # Не давать --engine pipeline с живой моделью доступ к ценному приватному репо без надзора.
 SHELL_TIMEOUT_DEFAULT = 300   # сек: shell-команда не висит вечно
@@ -766,9 +772,23 @@ def execute(action: dict, root, policy: Policy) -> dict:
                     _undone = _revert_violations(root, _pre, _head_now, _viol)
                     ev["allowed"] = False
                     ev["ok"] = False
-                    ev["fs_guard"] = {"violations": _viol, "reverted": _undone}
-                    ev["reason"] = ("shell изменил запрещённые пути — правка откачена: "
-                                    + "; ".join(f"{v['path']}: {v['reason']}" for v in _viol[:5]))
+                    # R-43 (#786): причина заявляла «правка откачена» БЕЗУСЛОВНО — в том числе
+                    # когда откат провалился и правка ОСТАЛАСЬ на диске (замер: каталог r-x ->
+                    # EACCES на unlink, файл цел). Отчёт, называющий дыру закрытой, опаснее самой
+                    # дыры: читающий «откачено» на диск не пойдёт. Разбор — docs/audit-report R-43.
+                    _names = "; ".join(f"{v['path']}: {v['reason']}" for v in _viol[:5])
+                    _done = _undone["restored"] + _undone["removed"]
+                    _complete = not _undone["failed"]
+                    ev["fs_guard"] = {"violations": _viol, "reverted": _undone,
+                                      "revert_complete": _complete}
+                    if not _complete:
+                        _what = ("ОТКАТ НЕ УДАЛСЯ — правка ОСТАЛАСЬ на диске: "
+                                 + "; ".join(str(x) for x in _undone["failed"][:5]))
+                    elif _done:                      # перечень: сторож видит не всё (R-43)
+                        _what = "откачено (" + ", ".join(_done[:5]) + ")"
+                    else:
+                        _what = "откатывать было нечего (пути уже отсутствуют)"
+                    ev["reason"] = f"shell изменил запрещённые пути; {_what} | {_names}"
                 elif _pre["dirty"] is not None:
                     ev["fs_guard"] = {"violations": []}
     except (OSError, KeyError) as e:
