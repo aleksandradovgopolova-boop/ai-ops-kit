@@ -1,0 +1,1 @@
+Статья **CODE-003** (без дублирования, DRY) Архитектурной конституции перестала быть долгом: появился гейт-ратчет структурного дублирования функций (`ai_ops_kit/devtools/code_duplication.py` + `tests/contracts/test_code_duplication.py`). Существующие дубли заморожены в `packages/code-duplication-baseline.yaml`, новый — краснит CI (parent). Волна #827 направления #820.

@@ -176,11 +176,11 @@ rules:
     level: MUST_NOT
     category: anti_pattern
     severity: medium
-    gate: "none"
-    enforced_in: none
+    gate: "test_code_duplication"
+    enforced_in: parent
     validation:
-      automated: false
-      manual: true
+      automated: true
+      manual: false
   - id: CODE-004
     title: "Имена раскрывают намерение"
     part: II

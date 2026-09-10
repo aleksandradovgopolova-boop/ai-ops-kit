@@ -24,7 +24,7 @@
 ## Часть II — Код (микро)
 - **CODE-001** · SHOULD · Функции короткие и односмысловые — gate: `validate_func_size` (parent)
 - **CODE-002** · SHOULD · Плоский поток — ранние возвраты — gate: `none` (none)
-- **CODE-003** · MUST NOT · Без дублирования (DRY) — gate: `none` (none)
+- **CODE-003** · MUST NOT · Без дублирования (DRY) — gate: `test_code_duplication` (parent)
 - **CODE-004** · SHOULD · Имена раскрывают намерение — gate: `none` (none)
 - **CODE-005** · SHOULD · Без магических значений — gate: `none` (none)
 - **CODE-006** · MUST NOT · Ошибки не глотать — gate: `none` (none)
