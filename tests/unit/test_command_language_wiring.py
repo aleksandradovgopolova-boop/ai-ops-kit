@@ -25,11 +25,13 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]
 CLI = PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
 PRESENTER = PKG / "ai_ops_kit" / "ui" / "presenter.py"
-# Переводчики повседневных команд вынесены в модуль-сосед (v3.35): переводчик — это `from_*` в любом
-# из двух файлов слоя, и оба исключаются из «корпуса, где кит говорит», чтобы `def from_X` не
-# засчитывался как вызов сам себя.
+# Переводчики вынесены в модули-соседи: переводчик — это `from_*` в любом из файлов слоя, и все они
+# исключаются из «корпуса, где кит говорит», чтобы `def from_X` не засчитывался как вызов сам себя.
+# Файлов теперь три: базовый `presenter.py`, `presenter_formatters.py` (повседневные команды +
+# чтение состояния проекта) и `presenter_report_formatters.py` (ход и решения работы).
 PRESENTER_FORMATTERS = PKG / "ai_ops_kit" / "ui" / "presenter_formatters.py"
-PRESENTER_FILES = (PRESENTER, PRESENTER_FORMATTERS)
+PRESENTER_REPORT_FORMATTERS = PKG / "ai_ops_kit" / "ui" / "presenter_report_formatters.py"
+PRESENTER_FILES = (PRESENTER, PRESENTER_FORMATTERS, PRESENTER_REPORT_FORMATTERS)
 
 # Внутренние имена, которым нечего делать в ответе владельцу продукта. Список короткий и конкретный:
 # каждый пункт когда-то печатался наружу.
