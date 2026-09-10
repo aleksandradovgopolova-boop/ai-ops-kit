@@ -99,7 +99,7 @@
 
 ## agents/
 
-47 агентов по доменам (core/product/engineering/quality/delivery/meta): ревьюеры полного цикла, команда AI-продукта (llm-architect, ai-feature-engineer, ai-red-teamer, ai-evaluator); каждый зарегистрирован в registry/agents.yaml.
+42 агента по доменам (core/product/engineering/quality/delivery/meta): ревьюеры полного цикла, команда AI-продукта (llm-architect, ai-feature-engineer, ai-red-teamer, ai-evaluator); каждый зарегистрирован в registry/agents.yaml.
 
 - `agents/README.md`
 - `agents/core/context-builder.md`
@@ -107,7 +107,6 @@
 - `agents/core/implementation-integrator.md`
 - `agents/core/intake-classifier.md`
 - `agents/core/plan-reviewer.md`
-- `agents/core/repository-explorer.md`
 - `agents/core/requirements-writer.md`
 - `agents/core/task-planner.md`
 - `agents/delivery/documentation-steward.md`
@@ -120,13 +119,10 @@
 - `agents/engineering/fullstack-developer.md`
 - `agents/engineering/llm-architect.md`
 - `agents/engineering/solution-architect.md`
-- `agents/engineering/system-analyst.md`
 - `agents/meta/agent-creator.md`
-- `agents/meta/prompt-reviewer.md`
 - `agents/meta/repository-memory-curator.md`
 - `agents/meta/workflow-designer.md`
 - `agents/product/adoption-manager.md`
-- `agents/product/business-analyst.md`
 - `agents/product/experiment-designer.md`
 - `agents/product/product-analyst.md`
 - `agents/product/product-manager.md`
@@ -440,7 +436,6 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/agents/ai-red-teamer.md`
 - `evaluations/agents/analytics-reviewer.md`
 - `evaluations/agents/architecture-reviewer.md`
-- `evaluations/agents/business-analyst.md`
 - `evaluations/agents/code-reviewer.md`
 - `evaluations/agents/context-builder.md`
 - `evaluations/agents/data-engineer.md`
@@ -462,16 +457,13 @@ Repository memory: decisions/patterns/incidents/known-issues/lessons-learned; п
 - `evaluations/agents/product-analyst.md`
 - `evaluations/agents/product-manager.md`
 - `evaluations/agents/product-reviewer.md`
-- `evaluations/agents/prompt-reviewer.md`
 - `evaluations/agents/regression-analyst.md`
 - `evaluations/agents/release-manager.md`
-- `evaluations/agents/repository-explorer.md`
 - `evaluations/agents/repository-memory-curator.md`
 - `evaluations/agents/requirements-reviewer.md`
 - `evaluations/agents/requirements-writer.md`
 - `evaluations/agents/security-reviewer.md`
 - `evaluations/agents/solution-architect.md`
-- `evaluations/agents/system-analyst.md`
 - `evaluations/agents/task-planner.md`
 - `evaluations/agents/test-engineer.md`
 - `evaluations/agents/ui-ux-designer.md`
@@ -542,7 +534,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `config/agents.yaml`
 - `config/model-routing.yaml`
 - `config/protected-paths.yaml`
-- `config/quality-gates.yaml`
+- `config/session-economy.yaml`
 - `config/tool-permissions.yaml`
 
 ## openspec/
@@ -579,67 +571,80 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 
 ## ai_ops_kit/
 
-**Код движка.** 95 модулей в 13 пакетах (v3.33.2). Плоское имя (`tools/<module>.py`) осталось
-алиасом через `sys.modules` — ОДИН объект модуля, не копия, поэтому состояние общее и 661
-существующий импорт работает без правки. Аннотации отдельных модулей — ниже, в разделе `tools/`.
+**Код движка.** 19 пакетов (package_ceiling, AGENTS.md). Плоский слой `tools/` снят в 4.0:
+точки входа пакетные (`python3 -m ai_ops_kit.<pkg>.<mod>`, PYTHONPATH=.ai/managed), импорт —
+`from ai_ops_kit.<pkg> import <mod>` (см. MIGRATION_GUIDE_4.0.md). Аннотации отдельных модулей —
+ниже, в разделе «Аннотации модулей ai_ops_kit/».
 
 Импорты внутри пакета — пакетные; `ai_ops_kit` импортируется с одним корнем на `sys.path`, как после `pip install` (`tests/unit/test_package_importable.py`, v3.33.0).
 
 Правила границ проверяет `tests/unit/test_package_surface.py`: каждый модуль ровно в одном пакете,
 модулей вне пакетов нет, dev-only не лежит в продуктовом пакете.
 
-- `ai_ops_kit/shared/` (6) — общий фундамент: `_bootstrap` (кладёт корень в `sys.path`; единственный
+- `ai_ops_kit/shared/` — общий фундамент: `_bootstrap` (кладёт корень в `sys.path`; единственный
   модуль, оставшийся плоским — переезд дал бы цикл), `contracts` (TypedDict), `project_detector`,
-  `generate_artifacts`, `generate_runtime`, `path_hygiene` (остаточный `.pth`-пояс кита в
+  `generate_artifacts`, `generate_runtime`, `gitio`, `budget`, `ai_route` (маршрутизация; канон
+  после K5, шим — `engine/ai_route`), `path_hygiene` (остаточный `.pth`-пояс кита в
   site-packages: `doctor` блокирует и говорит, чем удалять)
-- `ai_ops_kit/context/` (9) — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
+- `ai_ops_kit/context/` — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
   `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `repo_graph`,
   `semantic_lite`
-- `ai_ops_kit/engine/` (19) — исполнение: `ai_ops_run`, `execution_pipeline` (+`pipeline_*`),
-  `tool_broker`, `tool_loop`, `worktree`, `gitio`, `run_plan`, `run_handoff`, `budget`,
-  `acceptance_verify`, `atomic_planner`, `workpackage_executor`, `parallel_{planner,executor,live}`
-- `ai_ops_kit/gates/` (13) — гейты и допуск: `gate_executor`, `gate_policy`, `gate_runtime`,
+- `ai_ops_kit/engine/` — исполнение: `ai_ops_run` (+`ai_ops_run_{exec,lifecycle,print,reporting}`),
+  `execution_pipeline` (+`pipeline_*`), `tool_broker`, `tool_loop`, `worktree`, `run_context`,
+  `run_plan`, `run_handoff`, `acceptance_verify`, `atomic_planner`, `workpackage_executor`,
+  `sequence_{plan,aggregate}`, `parallel_{planner,executor,live}`
+- `ai_ops_kit/gates/` — гейты и допуск: `gate_executor`, `gate_policy`, `gate_runtime`,
   `gate_result_v2`, `preflight`, `economic_preflight`, `concurrency_preflight`, `evidence_collector`,
   `regression_evidence`, `verification_tiers`, `spec_levels`, `invariants`, `approvals`
-- `ai_ops_kit/providers/` (9) — модели и деньги: `orchestrator` (+`_http`/`_providers`/`_usage`),
+- `ai_ops_kit/providers/` — модели и деньги: `orchestrator` (+`_http`/`_providers`/`_usage`),
   `model_router`, `provider_endpoints`, `usage_ledger`, `cost_account`, `cost_method`
-- `ai_ops_kit/lifecycle/` (6) — состояние работы: `lifecycle_store`, `lifecycle_intent`, `workitem`,
-  `active_work`, `run_report`, `merge_memory`
+- `ai_ops_kit/lifecycle/` — состояние работы: `lifecycle_intent`, `workitem`, `work_view`,
+  `active_work` (+`work_claims`/`work_reconcile` — носитель заявок и сверка), `run_report`,
+  `merge_memory`, `role_handoff`, `attention_bus`
 - `ai_ops_kit/planning/staleness.py` — две проверки на ПРОТУХАНИЕ: описание ссылается на то, чего нет, и план отстал от истории (14.08.2026)
-- `ai_ops_kit/planning/` (5) — контур Planning & Execution модели продуктового репозитория (v3.35):
+- `ai_ops_kit/planning/` — контур Planning & Execution модели продуктового репозитория (v3.35):
   `contours` (состояние контуров + связность изменения с источниками истины; `unknown != not_changed`),
-  `delivery_plan` (`planning/plan.yaml`, вывод статуса из графа/гейтов/активной работы),
+  `delivery_plan` (+`plan_model`/`plan_validate`; `planning/plan.yaml`, вывод статуса из графа/гейтов/активной работы),
   `roadmap` (контракт четырёх горизонтов + связь целей с планом),
   `next_work` (четыре вопроса: где мы / что идёт / что блокирует / что взять следующим),
   `repo_audit` (первый сценарий: DISCOVER -> CLASSIFY -> RECONSTRUCT -> AUDIT -> ASK с provenance)
-- `ai_ops_kit/intelligence/` (3) — продуктовая аналитика, кольцо Intelligence: `product_health`,
-  `effect_metrics`, `evolution_triggers`. Слой ВЫШЕ ядра — ядро от них зависеть не вправе (v3.33.2)
-- `ai_ops_kit/delivery/` (2) — доставка наружу: `pr_open`, `review_branch`
-- `ai_ops_kit/engops/` (11) — инженерная операционная модель: `commit_policy`, `branch_policy`,
+- `ai_ops_kit/intelligence/` — продуктовая аналитика, кольцо Intelligence: `product_health`,
+  `effect_metrics`, `evolution_triggers`, `nightly_{collectors,review,schedule}` (ночной прогон),
+  `knowledge_graph`, `outcome_analytics`. Слой ВЫШЕ ядра — ядро от них зависеть не вправе (v3.33.2)
+- `ai_ops_kit/delivery/` — доставка наружу: `pr_open`, `review_branch`
+- `ai_ops_kit/engops/` — инженерная операционная модель: `commit_policy`, `branch_policy`,
   `environment_map`, `deploy_readiness`, `architecture_baseline`, `engineering_advisor`,
   `delegation_advisor`, `session_{boundary,guardrails,telemetry,telemetry_provider}`
-- `ai_ops_kit/security/` (6) — `security_scan`, `security_pack`, `security_enforcement`,
+- `ai_ops_kit/security/` — `security_scan`, `security_pack`, `security_enforcement`,
   `security_review_cascade`, `data_classification`, `seam_scan`
-- `ai_ops_kit/ui/` (5) — `storybook_adapter`, `storybook_query`, `ui_evidence_collect`, `ui_readiness`,
-  `presenter` (Human Communication Layer v3.35: контракт `UserMessage` и три аудитории; наружу
-  выходит смысл, а не внутреннее состояние)
-- `ai_ops_kit/cli/` (1) — `ai_ops_cli`
-- `ai_ops_kit/devtools/` (9) — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
+- `ai_ops_kit/ui/` — `storybook_adapter`, `storybook_query`, `ui_evidence_collect`, `ui_readiness`,
+  `presenter` (+`presenter_formatters`/`presenter_report_formatters`; Human Communication Layer
+  v3.35: контракт `UserMessage` и три аудитории; наружу выходит смысл, а не внутреннее состояние)
+- `ai_ops_kit/cli/` — точка входа UX: `ai_ops_cli` (+слой команд
+  `ai_ops_cli_{commands,intents,lifecycle,product,report}`), `entry`, `human_help`
+- `ai_ops_kit/devtools/` — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
   (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,
   `kit_observability`, `model_comparison`, `mutation_probe`, `promotion_qual`, `qual_run`,
   `retrieval_bench`
+- `ai_ops_kit/checks/` — проверки-контракты артефактов и результатов: `feature_blueprint`,
+  `requirements_artifact`, `plan_artifact`, `spec_artifact`, `acceptance_result`, `reviewer_result`,
+  `cross_artifacts`, `run_handoff`, `context_bundle`, `adr_registry`, `architecture_decision`,
+  `feature_decision`, `capability_policy`, `quality_attributes`, `memory_governance`, `environment_map`
+- `ai_ops_kit/governance/` — governance-контур: `policy_engine`, `decision_boundary`, `decision_log`,
+  `enforcement`, `human_override`, `override_learning`
+- `ai_ops_kit/kernel/` — `ports` (порты ядра: контракты зависимостей между кольцами)
+- `ai_ops_kit/integrations/` — внешние интеграции: `github`
 
 ## validation/
 
 Валидаторы — запускаются из pytest (`tests/unit/test_validator_runtime_contract.py` гоняет каждый
-из копии репозитория) и в CI, все должны быть PASS (см. AGENTS.md). Код плоский, в пакеты не
-переезжал; тела селфтестов вынесены в `tests/`.
+из копии репозитория) и в CI, все должны быть PASS (см. AGENTS.md). Пакет `ai_ops_kit/validation/`;
+тела селфтестов вынесены в `tests/`.
 
 - `ai_ops_kit/validation/validate_layering.py` — направления зависимостей между пакетами `ai_ops_kit/*`: граф импортов по AST против `packages/layering.yaml` (v3.32.0)
-- `ai_ops_kit/validation/_bootstrap.py` — sys.path для запускаемых `validation/*.py`; тёзка `tools/_bootstrap.py` вынужденно: `sys.path[0]` — каталог самого скрипта (v3.31.0)
+- `ai_ops_kit/validation/_bootstrap.py` — sys.path для запускаемых `validation/*.py`; тёзка `ai_ops_kit/shared/_bootstrap.py` вынужденно: `sys.path[0]` — каталог самого скрипта (v3.31.0)
 - `ai_ops_kit/validation/ai_capability_selftest.py`
 - `ai_ops_kit/validation/ai_managed_checksums.py`
-- `ai_ops_kit/validation/ai_route.py`
 - `ai_ops_kit/validation/validate_agent_evals.py`
 - `ai_ops_kit/validation/validate_agents_checklist.py`
 - `ai_ops_kit/validation/validate_ai_first_config.py`
@@ -668,37 +673,36 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/validation/validate_stale_gates.py`
 - `ai_ops_kit/validation/validate_workflow_gates.py`
 
-## tools/
+## Аннотации модулей ai_ops_kit/
 
-**Плоские имена — алиасы, реальный код в `ai_ops_kit/` (см. раздел выше).** Пути сохранены: их знают
-документация, `doctor` и 661 существующий импорт. Аннотации ниже описывают сами модули — по какому бы
-имени их ни импортировали; объект модуля один и тот же.
+**Плоский слой `tools/` снят в 4.0 — код целиком под `ai_ops_kit/` (см. раздел выше).** Аннотации
+ниже описывают сами модули по их пакетным путям.
 
 Генераторы (runtime-команды, артефакты по blueprint), sequential-оркестратор, gate executor (исполнение и блокировка quality gates), Product Health, run_report (оценка прогона + история срезов), effect_metrics (метрики эффекта).
 
-- `tools/effect_metrics.py`
-- `tools/gate_executor.py`
-- `tools/generate_artifacts.py`
-- `tools/generate_runtime.py`
-- `tools/orchestrator.py` — провайдеры (mock/anthropic/openai-compatible) + **first-class `claude-cli`** (`make_claude_cli_provider`: локальный `claude -p` read-only как сильный writer, без ключа, v3.9.0)
-- `tools/product_health.py`
-- `tools/run_plan.py` — построение RunPlan (base_workflow + tracks -> gates), validate (v2.32)
-- `tools/run_report.py`
-- `tools/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34); complexity-routing консумирует writer_tier -> strong-executor=claude-cli (v3.9.0)
-- `tools/model_router.py` — provider-neutral resolver роль->cheapest-qualified + **complexity-aware `writer_tier`** (класс задачи -> сильный/дешёвый writer, v3.9.0)
-- `tools/commit_policy.py` — CommitContract: смешение зон кит/продукт, артефакты прогонов, запрещённые файлы, секрет в сообщении, protected_paths без approval (v3.19.0)
-- `tools/branch_policy.py` — BranchContract: защищённые ветки (доставка только PR), имя ветки прогона, **отставание базы** и рассинхрон базы с upstream; unavailable != 0 (v3.19.0)
-- `tools/environment_map.py` — read-only карта окружений: объявлено vs обнаружено (CI environment, .env.<name>); detected_not_declared/declared_not_detected; секреты ТОЛЬКО именами (v3.20.0)
-- `tools/deploy_readiness.py` — честная зрелость поставки absent/configured/runnable/verified; без объявленного отката verified недостижим; платформенная поставка = путь вне репозитория (v3.20.0)
-- `tools/economic_preflight.py` — граница расхода ДО tool loop: оценка по истории usage_ledger против лимитов RunPlan; решение по худшему прогону; нет истории = unavailable, не ноль (v3.21.0)
-- `tools/provider_endpoints.py` — map провайдер->endpoint+key_env для openai-compatible (v3.7.12)
-- `tools/parallel_live.py` — **concurrent parallel-2**: отдельный клон на пакет + governed fan-in (`run_live_concurrent`; доказан live, v3.8)
-- `tools/parallel_executor.py` — bounded parallel-2 executor поверх decision-слоя (v3.7.1)
-- `tools/parallel_planner.py` — планирование параллельных пакетов (disjoint-scope)
-- `tools/security_review_cascade.py` — асимметричный fail-closed security-судья (detector->verifier->reducer); experimental/qualification-only, НЕ в strict-path (v3.8.4)
-- `tools/budget.py` — execution budget: потолок вызовов модели (v2.38)
-- `tools/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
-- `tools/evidence_collector.py` — stack-aware сбор evidence: гоняет команды профиля через Broker -> gate implementation_verification (v2.44)
+- `ai_ops_kit/intelligence/effect_metrics.py`
+- `ai_ops_kit/gates/gate_executor.py`
+- `ai_ops_kit/shared/generate_artifacts.py`
+- `ai_ops_kit/shared/generate_runtime.py`
+- `ai_ops_kit/providers/orchestrator.py` — провайдеры (mock/anthropic/openai-compatible) + **first-class `claude-cli`** (`make_claude_cli_provider`: локальный `claude -p` read-only как сильный writer, без ключа, v3.9.0)
+- `ai_ops_kit/intelligence/product_health.py`
+- `ai_ops_kit/engine/run_plan.py` — построение RunPlan (base_workflow + tracks -> gates), validate (v2.32)
+- `ai_ops_kit/lifecycle/run_report.py`
+- `ai_ops_kit/engine/ai_ops_run.py` — единый контроллер `ai-ops run` (v2.34); complexity-routing консумирует writer_tier -> strong-executor=claude-cli (v3.9.0)
+- `ai_ops_kit/providers/model_router.py` — provider-neutral resolver роль->cheapest-qualified + **complexity-aware `writer_tier`** (класс задачи -> сильный/дешёвый writer, v3.9.0)
+- `ai_ops_kit/engops/commit_policy.py` — CommitContract: смешение зон кит/продукт, артефакты прогонов, запрещённые файлы, секрет в сообщении, protected_paths без approval (v3.19.0)
+- `ai_ops_kit/engops/branch_policy.py` — BranchContract: защищённые ветки (доставка только PR), имя ветки прогона, **отставание базы** и рассинхрон базы с upstream; unavailable != 0 (v3.19.0)
+- `ai_ops_kit/checks/environment_map.py` — read-only карта окружений: объявлено vs обнаружено (CI environment, .env.<name>); detected_not_declared/declared_not_detected; секреты ТОЛЬКО именами (v3.20.0)
+- `ai_ops_kit/gates/deploy_readiness.py` — честная зрелость поставки absent/configured/runnable/verified; без объявленного отката verified недостижим; платформенная поставка = путь вне репозитория (v3.20.0)
+- `ai_ops_kit/gates/economic_preflight.py` — граница расхода ДО tool loop: оценка по истории usage_ledger против лимитов RunPlan; решение по худшему прогону; нет истории = unavailable, не ноль (v3.21.0)
+- `ai_ops_kit/providers/provider_endpoints.py` — map провайдер->endpoint+key_env для openai-compatible (v3.7.12)
+- `ai_ops_kit/engine/parallel_live.py` — **concurrent parallel-2**: отдельный клон на пакет + governed fan-in (`run_live_concurrent`; доказан live, v3.8)
+- `ai_ops_kit/engine/parallel_executor.py` — bounded parallel-2 executor поверх decision-слоя (v3.7.1)
+- `ai_ops_kit/engine/parallel_planner.py` — планирование параллельных пакетов (disjoint-scope)
+- `ai_ops_kit/security/security_review_cascade.py` — асимметричный fail-closed security-судья (detector->verifier->reducer); experimental/qualification-only, НЕ в strict-path (v3.8.4)
+- `ai_ops_kit/shared/budget.py` — execution budget: потолок вызовов модели (v2.38)
+- `ai_ops_kit/shared/project_detector.py` — детект стека -> RepositoryProfile (build/lint/test команды, v2.41)
+- `ai_ops_kit/gates/evidence_collector.py` — stack-aware сбор evidence: гоняет команды профиля через Broker -> gate implementation_verification (v2.44)
 - `ai_ops_kit/validation/validate_package_boundaries.py` — границы 5 пакетов 3.0: DAG зависимостей + непересечение + резолв include (v2.46, срез 0)
 - `ai_ops_kit/validation/validate_standalone_engine.py` — доказывает самодостаточность движка: строит managed из managed_set и гоняет `ai-ops run` из `.ai/managed/` отдельным процессом без parent-клона (v2.82)
 - `ai_ops_kit/validation/validate_qualification.py` — согласованность пакета живых сценариев (форма, task_type из workflows, известные флаги, матрица ОС/стеков) (v2.84)
@@ -713,24 +717,34 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `docs/qualification-runbook.md` — как прогнать живую квалификацию на реальном child (env, команды, чтение отчёта, матрица) (v2.84)
 - `packages/<name>/package.yaml` — декларации границ 5 пакетов 3.0 (файл→пакет), без переноса файлов (v2.46)
 - `packages/layering.yaml` — слои 12 пакетов `ai_ops_kit/*` и допустимые направления зависимостей; замер циклов и то, что сегодня непроверяемо (v3.32.0)
-- `tools/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
-- `tools/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
-- `tools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
-- `tools/staleness.py` — проверки протухания: мёртвые ссылки описания и отставание плана от истории (14.08.2026)
-- `tools/acceptance_verify.py` — сверка критериев приёмки с результатом: независимый судья + вердикт с ЦИТАТОЙ, проверяемой кодом (B2-14, 2026-08-14)
-- `tools/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
-- `tools/pr_open.py` — открытие draft PR через GitHub REST (токен из env; механизм, v2.62)
-- `tools/active_work.py` — реестр активных работ + conflict forecast (v2.22)
-- `tools/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)
-- `tools/merge_memory.py` — запись знания задачи в память при мердже (v2.25)
-- `tools/worktree.py` — git worktree на WorkItem, изоляция параллельных сессий (v2.24)
-- `tools/workitem.py`
+- `ai_ops_kit/engine/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
+- `ai_ops_kit/engine/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
+- `ai_ops_kit/devtools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
+- `ai_ops_kit/planning/staleness.py` — проверки протухания: мёртвые ссылки описания и отставание плана от истории (14.08.2026)
+- `ai_ops_kit/engine/acceptance_verify.py` — сверка критериев приёмки с результатом: независимый судья + вердикт с ЦИТАТОЙ, проверяемой кодом (B2-14, 2026-08-14)
+- `ai_ops_kit/engine/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
+- `ai_ops_kit/delivery/pr_open.py` — открытие draft PR через GitHub REST (токен из env; механизм, v2.62)
+- `ai_ops_kit/lifecycle/active_work.py` — реестр активных работ + conflict forecast (v2.22)
+- `ai_ops_kit/gates/concurrency_preflight.py` — коллизии параллельной работы до старта (v2.28)
+- `ai_ops_kit/lifecycle/merge_memory.py` — запись знания задачи в память при мердже (v2.25)
+- `ai_ops_kit/engine/worktree.py` — git worktree на WorkItem, изоляция параллельных сессий (v2.24)
+- `ai_ops_kit/lifecycle/workitem.py`
 
 ## installer/
 
-CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-репозиториев.
+CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-репозиториев. Ядро — тонкий
+роутер `ai_ops.py`; тяжёлые команды вынесены в сателлиты (загружаются через `_AO_NS=globals()`).
 
-- `installer/ai_ops.py`
+- `installer/ai_ops.py` — точка входа и роутер команд
+- `installer/setup_ops.py` — init/setup
+- `installer/update_ops.py` — update
+- `installer/doctor.py` — doctor
+- `installer/selftest_ops.py` — selftest
+- `installer/aux_commands.py` — вспомогательные команды
+- `installer/ci_setup.py` — синхронизация CI
+- `installer/child_scaffolding.py` — скаффолдинг дочернего репозитория
+- `installer/plan_merge_setup.py` — установка merge-драйвера плана
+- `installer/delivered_merge_footprint.py` — контроль объёма доставки при мердже
 
 ## migrations/
 

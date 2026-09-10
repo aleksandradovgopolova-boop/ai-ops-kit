@@ -30,14 +30,14 @@ cd $PROJ
 `.ai/managed/` — вот его решение:
 
 ```bash
-python3 $KIT/validation/ai_route.py '{"task_type":"feature","risk":"low","reasoning_complexity":"high","confidentiality":"internal","available_providers":["anthropic"],"available_runtimes":["claude-code"]}'
+PYTHONPATH=$KIT python3 -m ai_ops_kit.devtools.ai_route_cli '{"task_type":"feature","risk":"low","reasoning_complexity":"high","confidentiality":"internal","available_providers":["anthropic"],"available_runtimes":["claude-code"]}'
 # -> workflow: ENGINEERING, human_approval_required: false, с обоснованием в reasons
 ```
 
 **Критический риск переопределяет тип задачи** и требует ручного одобрения:
 
 ```bash
-python3 $KIT/validation/ai_route.py '{"task_type":"feature","risk":"critical","confidentiality":"internal","available_providers":["anthropic"],"available_runtimes":["claude-code"]}'
+PYTHONPATH=$KIT python3 -m ai_ops_kit.devtools.ai_route_cli '{"task_type":"feature","risk":"critical","confidentiality":"internal","available_providers":["anthropic"],"available_runtimes":["claude-code"]}'
 # -> workflow: CRITICAL, human_approval_required: true
 #    reason: "critical risk overrides declared task_type"
 ```
@@ -45,7 +45,7 @@ python3 $KIT/validation/ai_route.py '{"task_type":"feature","risk":"critical","c
 ## Шаг 3. Прогон workflow — гейты реально блокируют
 
 ```bash
-python3 $KIT/tools/orchestrator.py run QUICK "поправить опечатку в README" $PROJ
+PYTHONPATH=$KIT python3 -m ai_ops_kit.providers.orchestrator run QUICK "поправить опечатку в README" $PROJ
 # -> BLOCKED: 4 стадии пройдены, но блокирующие гейты не выполнены:
 #    intake_completeness, implementation_verification
 cat $PROJ/.ai/runtime/orchestrator/quick/GateReport.json   # машиночитаемый отчёт
@@ -60,7 +60,7 @@ cat $PROJ/.ai/runtime/orchestrator/quick/GateReport.json   # машиночит�
 
 ```bash
 export ANTHROPIC_API_KEY=…   # ключ только в env
-python3 $KIT/tools/orchestrator.py run QUICK "…" $PROJ --provider anthropic
+PYTHONPATH=$KIT python3 -m ai_ops_kit.providers.orchestrator run QUICK "…" $PROJ --provider anthropic
 # стадии пишет реальная модель; gates остаются принудительными. Без ключа — честная
 # ошибка, а не тихий mock. Провайдеры: anthropic, openai.
 ```
@@ -76,7 +76,7 @@ cat > /tmp/ev.json <<'JSON'
  "implementation_verification": {"status": "pass",
    "provided": ["build_passed", "lint_passed", "typecheck_passed", "tests_passed", "tested_revision"]}}
 JSON
-python3 $KIT/tools/orchestrator.py run QUICK "поправить опечатку" $PROJ --fresh --evidence /tmp/ev.json
+PYTHONPATH=$KIT python3 -m ai_ops_kit.providers.orchestrator run QUICK "поправить опечатку" $PROJ --fresh --evidence /tmp/ev.json
 # -> OK: workflow QUICK завершён; все блокирующие гейты выполнены
 ```
 
@@ -86,7 +86,7 @@ python3 $KIT/tools/orchestrator.py run QUICK "поправить опечатк�
 ## Шаг 5. CRITICAL — строгий путь с независимым ревью и одобрением
 
 ```bash
-python3 $KIT/tools/gate_executor.py CRITICAL
+PYTHONPATH=$KIT python3 -m ai_ops_kit.gates.gate_executor CRITICAL
 # гейты: intake_completeness, plan_readiness, implementation_verification, security, code_review
 # security   -> human-approval (обязательное ручное одобрение)
 # code_review -> ai-review (независимый judge)
@@ -113,9 +113,9 @@ CRITICAL — отдельный зарегистрированный workflow с
 аналитика → релиз → ретроспектива) с одним CI-вердиктом. Кратко:
 
 ```bash
-python3 $KIT/tools/generate_artifacts.py new features demo "Каталог на API-слое" --profile lean
-python3 $KIT/tools/generate_artifacts.py scaffold features/demo --stage discovery
-python3 $KIT/tools/run_report.py features/demo
+PYTHONPATH=$KIT python3 -m ai_ops_kit.shared.generate_artifacts new features demo "Каталог на API-слое" --profile lean
+PYTHONPATH=$KIT python3 -m ai_ops_kit.shared.generate_artifacts scaffold features/demo --stage discovery
+PYTHONPATH=$KIT python3 -m ai_ops_kit.lifecycle.run_report features/demo
 # -> PROBLEM: незаполненные скелеты (созданный-но-пустой артефакт не считается работой)
 ```
 
@@ -124,9 +124,9 @@ python3 $KIT/tools/run_report.py features/demo
 и добейтесь единого вердикта:
 
 ```bash
-python3 $KIT/validation/validate_cross_artifacts.py features/demo   # событие дашборда без tracking plan -> PROBLEM
-python3 $KIT/validation/validate_feature_blueprint.py features/demo
-python3 $KIT/tools/run_report.py features/demo                      # -> ВЕРДИКТ: OK
+PYTHONPATH=$KIT python3 -m ai_ops_kit.validation.validate_cross_artifacts features/demo   # событие дашборда без tracking plan -> PROBLEM
+PYTHONPATH=$KIT python3 -m ai_ops_kit.validation.validate_feature_blueprint features/demo
+PYTHONPATH=$KIT python3 -m ai_ops_kit.lifecycle.run_report features/demo                  # -> ВЕРДИКТ: OK
 ```
 
 Ключевые инварианты слоя: скелеты детерминированные — содержание ваше (drift-детект
