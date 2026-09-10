@@ -184,12 +184,14 @@ def test_delivery_happens_even_when_the_version_matches(child):
     сломанным CI не чинится никогда, а именно в таком состоянии и находятся все подключённые репо.
     """
     import ast
-    src = (KIT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
+    # cmd_update вынесена в сателлит installer/update_ops.py; deliver_assets там — `_ao().deliver_assets()`.
+    src = (KIT / "installer" / "update_ops.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
     fn = next(n for n in ast.walk(tree)
               if isinstance(n, ast.FunctionDef) and n.name == "cmd_update")
     deliver = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
-                    and getattr(n.func, "id", "") == "deliver_assets"), None)
+                    and (getattr(n.func, "id", "") == "deliver_assets"
+                         or getattr(n.func, "attr", "") == "deliver_assets")), None)
     early = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Return)
                   and isinstance(n.value, ast.Constant) and n.value.value == 0), None)
     assert deliver and early, "не нашлось ни вызова доставки, ни раннего выхода"
@@ -207,10 +209,16 @@ def test_install_and_update_deliver_the_same_things():
     import ast
     src = (KIT / "installer" / "ai_ops.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
+    # cmd_update вынесена в installer/update_ops.py, cmd_init осталась в ai_ops.py — парсим каждую там,
+    # где она живёт; собираем и bare-name, и Attribute-вызовы (в сателлите доставка идёт через `_ao().`).
+    src_by_cmd = {"cmd_update": (KIT / "installer" / "update_ops.py").read_text(encoding="utf-8"),
+                  "cmd_init": src}
     calls = {}
     for name in ("cmd_update", "cmd_init"):
-        fn = next(n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef) and n.name == name)
-        calls[name] = {getattr(c.func, "id", "") for c in ast.walk(fn) if isinstance(c, ast.Call)}
+        cmd_tree = ast.parse(src_by_cmd[name])
+        fn = next(n for n in ast.walk(cmd_tree) if isinstance(n, ast.FunctionDef) and n.name == name)
+        calls[name] = ({getattr(c.func, "id", "") for c in ast.walk(fn) if isinstance(c, ast.Call)}
+                       | {getattr(c.func, "attr", "") for c in ast.walk(fn) if isinstance(c, ast.Call)})
     for name in ("cmd_update", "cmd_init"):
         assert "deliver_assets" in calls[name], f"{name} не зовёт общую доставку"
     # И сама доставка действительно включает CI-шаблоны и маркеры зон. Синхронизация CI вынесена в
