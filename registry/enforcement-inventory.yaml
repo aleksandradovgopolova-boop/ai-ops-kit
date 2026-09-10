@@ -12,9 +12,12 @@
 # запускается» краснеет. Реестр вправе только пополняться синхронно с объявлениями: новый
 # dev-инструмент или baseline без записи здесь — красный.
 #
-# ГРАНИЦА v1. Покрыты две самые острые оси: dev-инструменты (requirements-dev.txt + pyproject [dev])
-# и ратчет-baseline'ы (packages/*baseline*.yaml). Pre-commit-хуки (их зеркала в CI vs local-only) —
-# отдельным срезом; внешний кластер аудита (доступ внешних контрибьюторов) отклонён владельцем.
+# ОХВАТ. Три оси: dev-инструменты (requirements-dev.txt + pyproject [dev]), pre-commit-ХУКИ
+# (.pre-commit-config.yaml) и ратчет-baseline'ы (packages/*baseline*.yaml). У хука два честных
+# исхода: `enforced` — зеркалён в CI, с доказательством `enforced_at`, где именно; либо `local_only`
+# — гоняется только локально pre-commit'ом и в CI не зеркалён, с причиной (это допустимо: хук на
+# машине разработчика всё равно исполняется, но машина CI за него не ручается). Внешний кластер
+# аудита (доступ внешних контрибьюторов) отклонён владельцем.
 schema_version: 1
 kind: enforcement-inventory
 
@@ -46,6 +49,58 @@ dev_tools:
     # реальных проблем на фундаменте, типы окупаются. Включён на kernel+shared ([tool.mypy]), шаг в
     # джобе lint. Полная аннотация (disallow_untyped_defs) — отдельный ратчет-вверх.
     enforced_at: {file: .github/workflows/package-quality.yml, pattern: "mypy==2.3.1"}
+
+# Каждый хук из .pre-commit-config.yaml обязан быть здесь: либо `enforced` с зеркалом в CI и
+# доказательством `enforced_at`, либо честно `local_only` с причиной. Новый хук без записи — красный.
+pre_commit_hooks:
+  # ── repo astral-sh/ruff-pre-commit ──
+  - id: ruff
+    status: enforced
+    # Тот же линтер зеркалён в CI отдельным шагом `ruff check .` (та же версия, что в хуке).
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "ruff check"}
+
+  # ── repo pre-commit/pre-commit-hooks (гигиена файлов) ──
+  # Все семь гоняются локально pre-commit'ом; джобы `pre-commit run --all-files` в CI нет, поэтому
+  # честно local_only. Их предмет (пробелы, перевод строки, валидность YAML/JSON, размер файла,
+  # маркеры конфликта, приватный ключ) дёшев на машине разработчика и не оправдывает отдельной
+  # CI-джобы; secret-скан приватных ключей вдобавок закрыт lane security-scan поверх диффа PR.
+  - id: trailing-whitespace
+    status: local_only
+    reason: "гигиена файлов; гоняется локально pre-commit'ом, отдельной pre-commit-джобы в CI нет"
+  - id: end-of-file-fixer
+    status: local_only
+    reason: "гигиена файлов; гоняется локально pre-commit'ом, отдельной pre-commit-джобы в CI нет"
+  - id: check-yaml
+    status: local_only
+    reason: "валидность YAML; гоняется локально pre-commit'ом, отдельной pre-commit-джобы в CI нет"
+  - id: check-json
+    status: local_only
+    reason: "валидность JSON; гоняется локально pre-commit'ом, отдельной pre-commit-джобы в CI нет"
+  - id: check-added-large-files
+    status: local_only
+    reason: "предел размера файла (500kb); гоняется локально, отдельной pre-commit-джобы в CI нет"
+  - id: check-merge-conflict
+    status: local_only
+    reason: "маркеры конфликта слияния; гоняется локально, отдельной pre-commit-джобы в CI нет"
+  - id: detect-private-key
+    status: local_only
+    reason: "приватные ключи; локально pre-commit'ом, а в CI секреты ловит lane security-scan"
+
+  # ── repo local (свои проверки) ──
+  - id: python-compat
+    status: local_only
+    # validate_python_compat.py есть и покрыт юнит-тестами, но джобы, гоняющей его ПО ДЕРЕВУ, в CI
+    # нет (совместимость с полом требований проверяет compatibility-matrix в pipeline-e2e). Хук
+    # исполняется локально на изменённых файлах; честно local_only, а не выдуманный enforced_at.
+    reason: "validate_python_compat гоняется локально на изменённых файлах; прохода по дереву в CI нет"
+  - id: selftest-smoke
+    status: enforced
+    # Хук на pre-push гоняет `pytest tests/contracts/`; ровно этот набор зеркалён шагом CI.
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "tests/contracts/"}
+  - id: commit-contract
+    status: enforced
+    # Хук на commit-msg зовёт scripts/commit-contract.sh; CI зеркалит его по коммитам PR.
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "scripts/commit-contract.sh"}
 
 # Каждый packages/*baseline*.yaml обязан читаться валидатором (который сам гоняется рантайм-контрактом).
 ratchet_baselines:
