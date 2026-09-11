@@ -270,6 +270,143 @@ def test_cli_records_conform_to_surface_schema(tmp_path):
         assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
 
 
+# ── E2: ещё веб-фреймворки (Django / DRF / aiohttp) ──────────────────────────────────────────────
+
+_DJANGO = '''\
+from django.urls import path, re_path, include
+from . import views
+
+urlpatterns = [
+    path("orders/", views.list_orders),
+    re_path(r"^articles/(?P<year>[0-9]{4})/$", views.year_archive),
+    path("blog/", include("blog.urls")),   # include(...) → НЕ конкретный маршрут
+    path(dynamic_prefix, views.dynamic),   # путь-переменная → не доказано
+]
+'''
+
+_DRF = '''\
+from rest_framework import routers
+from .views import UserViewSet
+
+router = routers.DefaultRouter()
+router.register(r"users", UserViewSet)
+router.register(dyn_prefix, UserViewSet)   # префикс-переменная → не доказано
+'''
+
+_AIOHTTP = '''\
+from aiohttp import web
+
+
+async def handle(request):
+    return web.Response()
+
+
+async def create(request):
+    return web.Response()
+
+
+app = web.Application()
+app.router.add_route("GET", "/status", handle)
+app.router.add_get("/health", handle)
+app.add_routes([
+    web.get("/items", handle),
+    web.post("/items", create),
+])
+app.router.add_get(built_path, handle)   # путь-переменная → не доказано
+'''
+
+# Чужой .register / .add_route БЕЗ импорта фреймворка — не должен дать verified.
+_FOREIGN = '''\
+class Registry:
+    def register(self, prefix, target):
+        ...
+
+
+registry = Registry()
+registry.register("plugins", object)
+
+
+class Bus:
+    def add_route(self, method, path, handler):
+        ...
+
+
+bus = Bus()
+bus.add_route("SEND", "/topic", None)
+'''
+
+
+def _refs(surfaces, extractor):
+    return {s["ref"] for s in surfaces if s["extractor"] == extractor}
+
+
+def test_extracts_django_path_and_re_path_literals_as_verified(tmp_path):
+    _write(tmp_path, "site/urls.py", _DJANGO)
+    surfaces = extract_surfaces(tmp_path)
+    refs = _refs(surfaces, "django-urls")
+
+    # Литеральные path/re_path со вьюхой-именем → verified, symbol = имя вьюхи.
+    assert any(r.endswith("|views.list_orders") for r in refs)
+    assert any(r.endswith("|views.year_archive") for r in refs)
+    # include(...) и путь-переменная НЕ дают маршрута.
+    assert not any(r.endswith("|views.dynamic") for r in refs)
+    assert len(refs) == 2
+
+    for s in surfaces:
+        if s["extractor"] == "django-urls":
+            assert s["kind"] == "route"
+            assert s["confidence"] == "verified"
+
+
+def test_extracts_drf_router_register_literal_as_verified(tmp_path):
+    _write(tmp_path, "api/urls.py", _DRF)
+    surfaces = extract_surfaces(tmp_path)
+    refs = _refs(surfaces, "drf-router")
+
+    assert any(r.endswith("|UserViewSet") for r in refs)   # литеральный префикс r"users"
+    assert len(refs) == 1                                   # переменный префикс пропущен
+    for s in surfaces:
+        if s["extractor"] == "drf-router":
+            assert s["confidence"] == "verified"
+
+
+def test_extracts_aiohttp_literal_paths_as_verified(tmp_path):
+    _write(tmp_path, "srv/app.py", _AIOHTTP)
+    surfaces = extract_surfaces(tmp_path)
+    refs = _refs(surfaces, "aiohttp-routes")
+
+    # add_route (путь 2-й арг), add_get (путь 1-й арг), add_routes([web.get/web.post]).
+    assert any(r.endswith("|handle") for r in refs)
+    assert len(refs) == 4     # /status, /health, /items(get), /items(post); переменный путь пропущен
+    for s in surfaces:
+        if s["extractor"] == "aiohttp-routes":
+            assert s["confidence"] == "verified"
+
+
+def test_import_scoping_foreign_register_and_add_route_not_verified(tmp_path):
+    """Чужой .register()/.add_route() в файле без импорта django/DRF/aiohttp → никаких маршрутов."""
+    _write(tmp_path, "app/plugins.py", _FOREIGN)
+    surfaces = extract_surfaces(tmp_path)
+    assert surfaces == []
+
+
+def test_new_extractor_records_conform_to_surface_schema(tmp_path):
+    """Записи Django/DRF/aiohttp тоже валидны по схеме surface и по паттерну ref."""
+    _write(tmp_path, "site/urls.py", _DJANGO)
+    _write(tmp_path, "api/urls.py", _DRF)
+    _write(tmp_path, "srv/app.py", _AIOHTTP)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+
+    surfaces = extract_surfaces(tmp_path)
+    assert {s["extractor"] for s in surfaces} == {"django-urls", "drf-router", "aiohttp-routes"}
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
 def test_cli_extraction_isolated_from_broken_files(tmp_path):
     """Битый pyproject.toml / setup.cfg не валит прогон — файл просто пропускается."""
     _write(tmp_path, "app/cli.py", _ARGPARSE)

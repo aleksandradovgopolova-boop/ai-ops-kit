@@ -102,6 +102,61 @@ extractors:
       does_not_see: >-
         entry_points, заданные исполняемым setup.py (аргумент entry_points= вызова setup()); точки
         входа из плагинов/иных групп; динамически сформированные списки. Только эти два файла.
+  # E2 добавил ещё три верифицированных экстрактора маршрутов для питон-веба (тот же приём: verified
+  # только когда путь/префикс — строковый литерал в исходнике, точным разбором AST без исполнения;
+  # каждый сужен к файлам с импортом своего фреймворка, чтобы одноимённый чужой вызов не дал ложный
+  # verified). Код — те же ai_ops_kit/checks/surface_extraction.py (функции extract_django_urls,
+  # extract_drf_router, extract_aiohttp_routes).
+  - id: django-urls
+    stack: {language: python, frameworks: [django]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST: вызов path("route/", view) или re_path(r"^...$", view) в файле,
+      импортирующем django.urls, где первый позиционный аргумент — строковый путь-литерал.
+      Код не исполняется. ref = "file:line|<вьюха-или-путь>" (имя вьюхи, если она записана именем).
+    honest_limits:
+      sees: >-
+        объявления path()/re_path() со строковым путём-литералом в файле, импортирующем django.urls;
+        symbol — имя вьюхи (views.orders) либо сам путь-литерал.
+      does_not_see: >-
+        include(...) — вложенный urlconf монтируется, конкретный эндпоинт им НЕ доказывается (пропуск);
+        пути НЕ-литералы (переменная/f-строка/конкатенация); маршруты, собранные динамически или за
+        плагинной регистрацией; class-based view с кастомным роутингом; urlpatterns без импорта
+        django.urls в этом файле. Ничего из этого НЕ становится verified.
+  - id: drf-router
+    stack: {language: python, frameworks: [django-rest-framework]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST: вызов <router>.register("prefix", ViewSet) в файле, импортирующем
+      rest_framework, где первый позиционный аргумент — строковый префикс-литерал. Код не
+      исполняется. ref = "file:line|<ViewSet-или-префикс>".
+    honest_limits:
+      sees: >-
+        router.register() со строковым префиксом-литералом в файле, импортирующем rest_framework;
+        symbol — имя ViewSet либо сам префикс.
+      does_not_see: >-
+        префикс-НЕ-литерал (переменная/f-строка); конкретные суффиксы маршрутов, которые роутер
+        разворачивает в рантайме из ViewSet (list/detail/@action) — виден только зарегистрированный
+        префикс, а не порождённые из него URL; чужой .register() в файле без импорта rest_framework.
+  - id: aiohttp-routes
+    stack: {language: python, frameworks: [aiohttp]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST в файле, импортирующем aiohttp: app.router.add_route("GET","/p",h)
+      (путь — 2-й арг), app.router.add_get("/p",h) и семейство add_<method> (путь — 1-й арг), а также
+      app.add_routes([web.get("/p",h), web.route("GET","/p",h), ...]) — разбор списка-литерала. Путь —
+      строковый литерал, начинающийся с "/". Код не исполняется. ref = "file:line|<обработчик-или-путь>".
+    honest_limits:
+      sees: >-
+        add_route/add_<method>/add_routes([...]) со строковым путём-литералом (начинается с "/") в
+        файле, импортирующем aiohttp; symbol — имя обработчика либо сам путь.
+      does_not_see: >-
+        путь-НЕ-литерал (переменная/f-строка); add_routes с аргументом-переменной вместо списка-литерала
+        (список собран динамически); маршруты, добавленные через RouteTableDef-декораторы (@routes.get)
+        или другой способ; чужой .add_route()/.add_get() в файле без импорта aiohttp.
 
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
@@ -109,16 +164,19 @@ extractors:
 # поддержку (тем более verified) до появления кода — запрещено инвариантом честных деклараций.
 planned:
   - intent: python-web-routes-remaining
-    stack: {language: python, frameworks: [django]}
+    stack: {language: python, frameworks: [flask, fastapi, django, aiohttp]}
     surface_kinds: [route, api]
     status: unsupported
     note: >-
-      planned: осталось за пределами реализованного python-web-routes — Django urlpatterns (маршруты
-      объявляются списком path()/re_path(), не декоратором) и динамически собранные маршруты
-      (add_url_rule/include_router через переменную, плагинная регистрация).
+      planned: осталось за пределами реализованных экстракторов маршрутов (python-web-routes,
+      django-urls, drf-router, aiohttp-routes) — маршруты, собранные ДИНАМИЧЕСКИ: Flask add_url_rule,
+      FastAPI include_router через переменную, Django include(...)-вложенность и class-based view с
+      кастомным роутингом, aiohttp RouteTableDef-декораторы (@routes.get) и add_routes с
+      аргументом-переменной, любая плагинная регистрация в рантайме. Их доказать статическим разбором
+      нельзя — они остаются НЕ verified (пропуск), а не заявляются как возможность.
     honest_limits:
-      sees: "будет видеть: объявления path()/re_path() в urls.py статически"
-      does_not_see: "не увидит: динамически собранные маршруты, маршруты за плагинной регистрацией"
+      sees: "будет видеть (когда/если реализуем): часть перечисленного как inferred, не verified"
+      does_not_see: "не увидит сейчас: динамически собранные маршруты, маршруты за плагинной регистрацией"
   - intent: cli-commands-remaining
     stack: {language: python, frameworks: [typer, setuptools]}
     surface_kinds: [cli]

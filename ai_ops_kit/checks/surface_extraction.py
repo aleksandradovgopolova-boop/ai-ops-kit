@@ -150,9 +150,10 @@ def _is_str_literal(node: ast.expr) -> bool:
 def _imports_module(tree: ast.AST, modname: str) -> bool:
     """Файл импортирует модуль modname (`import modname[.x]` или `from modname[.x] import ...`).
 
-    Экстракторы argparse/click сужены этим условием: `.add_parser(...)`/`@x.command()` доказывают
-    CLI лишь в файле, который действительно тянет соответствующий модуль. Без этого атрибут с тем же
-    именем в чужом коде дал бы ложный verified — прямой запрет инварианта честной силы.
+    Экстракторы argparse/click/веб-фреймворков сужены этим условием: `.add_parser(...)`/`@x.command()`,
+    `path(...)`/`router.register(...)`/`app.add_get(...)` доказывают поверхность лишь в файле, который
+    действительно тянет соответствующий модуль. Без этого атрибут/вызов с тем же именем в чужом коде
+    дал бы ложный verified — прямой запрет инварианта честной силы.
     """
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
@@ -337,6 +338,169 @@ def extract_console_scripts(parsed: ParsedFile) -> list:
     return []
 
 
+# ─── Верифицированные экстракторы: ещё веб-фреймворки (вид route, точный разбор AST) ──────────────
+# Django urlpatterns (path/re_path), DRF-роутеры (router.register), aiohttp (add_route/web.get). У
+# всех троих граница verified та же, что у Flask/FastAPI: путь/префикс должен быть строковым
+# ЛИТЕРАЛОМ в исходнике. Переменная/f-строка/`include(...)`/динамика → пропуск (маршрут не доказан
+# разбором). Каждый экстрактор СУЖЕН к файлам, импортирующим свой фреймворк (django.urls /
+# rest_framework / aiohttp): иначе одноимённый чужой вызов (`obj.register`, `x.add_route`, локальный
+# `path`) дал бы ложный verified. Разбор изолирован ядром обхода: битый файл молча пропускается.
+# Проверка «строковый литерал» и «файл импортирует модуль» переиспользуют общие хелперы CLI-набора
+# (`_is_str_literal`, `_imports_module`) — одна реализация на назначение, без дублей.
+
+
+def _dotted_name(node: ast.expr | None) -> str | None:
+    """Точечное имя для Name/Attribute-цепочки ("views.orders", "UserViewSet"), иначе None.
+
+    Используется для symbol в ref: если вьюха/обработчик/ViewSet записан именем — берём его; иначе
+    (лямбда, вызов, подписка) вызывающий откатывается на сам путь-литерал.
+    """
+    parts: list = []
+    cur: ast.AST | None = node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if isinstance(cur, ast.Name):
+        parts.append(cur.id)
+        return ".".join(reversed(parts))
+    return None
+
+
+def _route(rel_path: str, lineno: int, symbol: str, extractor: str) -> Surface:
+    """Собрать verified-запись route. Пустой symbol → ref без "|symbol" (по паттерну схемы)."""
+    ref = f"{rel_path}:{lineno}|{symbol}" if symbol else f"{rel_path}:{lineno}"
+    return Surface(kind="route", ref=ref, confidence="verified", extractor=extractor)
+
+
+def _call_func_name(func: ast.expr) -> str | None:
+    """Имя вызываемого: id для Name, attr для Attribute (напр. `django.urls.path` → "path")."""
+    if isinstance(func, ast.Name):
+        return func.id
+    if isinstance(func, ast.Attribute):
+        return func.attr
+    return None
+
+
+# ── Django urlpatterns ───────────────────────────────────────────────────────────────────────────
+_DJANGO_URL_FUNCS = frozenset({"path", "re_path"})
+
+
+def extract_django_urls(parsed: ParsedFile) -> list:
+    """Django-маршруты: `path("orders/", view)` / `re_path(r"^...$", view)` со строковым путём-литералом.
+
+    verified ТОЛЬКО когда первый аргумент — строковый путь-литерал (у Django он относительный, без
+    ведущего "/"). Вьюха-`include(...)` (монтирование вложенного urlconf) и путь-переменная/f-строка
+    → пропуск: конкретный эндпоинт разбором не доказан. symbol в ref — имя вьюхи, если она записана
+    именем (Name/Attribute), иначе сам путь-литерал.
+    """
+    if not _imports_module(parsed.tree, "django.urls"):
+        return []
+    out: list = []
+    for node in ast.walk(parsed.tree):
+        if not isinstance(node, ast.Call):
+            continue
+        if _call_func_name(node.func) not in _DJANGO_URL_FUNCS or not node.args:
+            continue
+        if not _is_str_literal(node.args[0]):
+            continue   # путь-переменная/f-строка → не доказано
+        route = node.args[0].value
+        view = node.args[1] if len(node.args) > 1 else None
+        if isinstance(view, ast.Call) and _call_func_name(view.func) == "include":
+            continue   # include(...) — вложенный urlconf, не конкретный маршрут
+        symbol = _dotted_name(view) or route
+        out.append(_route(parsed.rel_path, node.lineno, symbol, "django-urls"))
+    return out
+
+
+# ── DRF-роутеры ──────────────────────────────────────────────────────────────────────────────────
+
+
+def extract_drf_router(parsed: ParsedFile) -> list:
+    """DRF-роутер: `router.register(r"prefix", ViewSet)` со строковым префиксом-литералом → verified.
+
+    Сужен к файлам, импортирующим rest_framework, чтобы чужой `.register` (Flask blueprint, свой
+    реестр) не дал ложный маршрут. Префикс-переменная → пропуск. symbol — имя ViewSet, если оно
+    записано именем, иначе сам префикс.
+    """
+    if not _imports_module(parsed.tree, "rest_framework"):
+        return []
+    out: list = []
+    for node in ast.walk(parsed.tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        if node.func.attr != "register" or not node.args:
+            continue
+        if not _is_str_literal(node.args[0]):
+            continue
+        prefix = node.args[0].value
+        viewset = node.args[1] if len(node.args) > 1 else None
+        symbol = _dotted_name(viewset) or prefix
+        out.append(_route(parsed.rel_path, node.lineno, symbol, "drf-router"))
+    return out
+
+
+# ── aiohttp ──────────────────────────────────────────────────────────────────────────────────────
+# Методы-адаптеры маршрутизатора: `app.router.add_get("/p", h)` / `app.add_post("/p", h)` и т.п.
+_AIOHTTP_METHOD_ADDERS = frozenset({
+    "add_get", "add_post", "add_put", "add_delete", "add_patch",
+    "add_head", "add_options", "add_view",
+})
+# Хелперы описания маршрута внутри `app.add_routes([...])`: `web.get("/p", h)` / `web.post(...)` и т.п.
+_AIOHTTP_WEB_METHODS = frozenset({
+    "get", "post", "put", "delete", "patch", "head", "options", "view",
+})
+
+
+def _aiohttp_web_route(call: ast.Call) -> tuple | None:
+    """web.get("/p", h) / web.route("GET","/p",h) → (path, handler_node, lineno) при литерал-пути."""
+    if not isinstance(call.func, ast.Attribute):
+        return None
+    attr = call.func.attr
+    if attr in _AIOHTTP_WEB_METHODS and call.args and _is_path_literal(call.args[0]):
+        handler = call.args[1] if len(call.args) > 1 else None
+        return call.args[0].value, handler, call.lineno
+    if attr == "route" and len(call.args) > 1 and _is_path_literal(call.args[1]):
+        handler = call.args[2] if len(call.args) > 2 else None
+        return call.args[1].value, handler, call.lineno
+    return None
+
+
+def extract_aiohttp_routes(parsed: ParsedFile) -> list:
+    """aiohttp-маршруты со строковым путём-литералом (начинается с "/") → verified.
+
+    Покрывает три формы: `app.router.add_route("GET", "/p", h)` (путь — 2-й арг),
+    `app.router.add_get("/p", h)` и семейство add_<method> (путь — 1-й арг), и
+    `app.add_routes([web.get("/p", h), web.route("GET","/p",h), ...])` (разбор списка-литерала).
+    Сужен к файлам, импортирующим aiohttp. Путь-переменная / список не-литерал → пропуск. symbol —
+    имя обработчика, если оно записано именем, иначе сам путь.
+    """
+    if not _imports_module(parsed.tree, "aiohttp"):
+        return []
+    out: list = []
+    for node in ast.walk(parsed.tree):
+        if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+            continue
+        attr = node.func.attr
+        if attr == "add_route" and len(node.args) > 1 and _is_path_literal(node.args[1]):
+            handler = node.args[2] if len(node.args) > 2 else None
+            symbol = _dotted_name(handler) or node.args[1].value
+            out.append(_route(parsed.rel_path, node.lineno, symbol, "aiohttp-routes"))
+        elif attr in _AIOHTTP_METHOD_ADDERS and node.args and _is_path_literal(node.args[0]):
+            handler = node.args[1] if len(node.args) > 1 else None
+            symbol = _dotted_name(handler) or node.args[0].value
+            out.append(_route(parsed.rel_path, node.lineno, symbol, "aiohttp-routes"))
+        elif attr == "add_routes" and node.args and isinstance(node.args[0], ast.List):
+            for elt in node.args[0].elts:
+                if not isinstance(elt, ast.Call):
+                    continue
+                res = _aiohttp_web_route(elt)
+                if res is not None:
+                    path, handler, lineno = res
+                    symbol = _dotted_name(handler) or path
+                    out.append(_route(parsed.rel_path, lineno, symbol, "aiohttp-routes"))
+    return out
+
+
 # Реестр реализованных экстракторов. Порядок ключей — порядок применения (детерминизм). Добавление
 # нового стека = ещё одна запись здесь + честная декларация в surface-extractors.yaml.
 PYTHON_WEB_ROUTES = Extractor(
@@ -372,11 +536,38 @@ PYTHON_CONSOLE_SCRIPTS = Extractor(
     needs_ast=False,
 )
 
+DJANGO_URLS = Extractor(
+    id="django-urls",
+    suffixes=frozenset({".py"}),
+    surface_kinds=("route",),
+    confidence="verified",
+    extract=extract_django_urls,
+)
+
+DRF_ROUTER = Extractor(
+    id="drf-router",
+    suffixes=frozenset({".py"}),
+    surface_kinds=("route",),
+    confidence="verified",
+    extract=extract_drf_router,
+)
+
+AIOHTTP_ROUTES = Extractor(
+    id="aiohttp-routes",
+    suffixes=frozenset({".py"}),
+    surface_kinds=("route",),
+    confidence="verified",
+    extract=extract_aiohttp_routes,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
     PYTHON_CLI_CLICK,
     PYTHON_CONSOLE_SCRIPTS,
+    DJANGO_URLS,
+    DRF_ROUTER,
+    AIOHTTP_ROUTES,
 )
 
 
