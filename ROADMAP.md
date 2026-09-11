@@ -11,7 +11,7 @@ owner: product-team
 в [`docs/changelog/roadmap-history.md`](docs/changelog/roadmap-history.md). Достигнутые цели живут
 фактом в `history/plan-history.yaml`, а не здесь: roadmap смотрит вперёд, история — назад.
 
-Совместимость: текущий мажор — **4.x** (текущий канал — **v4.0.0 qualification**; точная версия — в
+Совместимость: текущий мажор — **4.x** (текущий канал — **v4.1.0 qualification**; точная версия — в
 `VERSION`). Переход 3.x → 4.0 был breaking: снят плоский слой `tools/`, точки входа только пакетные
 (`python3 -m ai_ops_kit.<pkg>.<mod>`) — руководство в `MIGRATION_GUIDE_4.0.md`, обновление дочки
 через границу мажора осознанное (`ai-ops update --force`). Внутри 4.x — обратная совместимость.
