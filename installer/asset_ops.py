@@ -168,7 +168,10 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
     """
     root = Path(root or _ao().REPO_ROOT)
     return {
-        "context_backfilled": _ao()._child_scaffolding()._backfill_required_context(),
+        # `root` явно: backfill обязан писать в ПЕРЕДАННЫЙ корень, а не в модульный AI_DIR
+        # (= Path.cwd()). Без этого `deliver_assets(<чужой корень>)` in-process сеял контекст в
+        # корень рабочего репозитория кита — единственный доставляющий шаг, писавший мимо цели.
+        "context_backfilled": _ao()._child_scaffolding()._backfill_required_context(root),
         "ci_workflows": _ao()._ci_setup().sync_ci_workflows(root, refresh=refresh_ci),
         "zone_markers": ensure_zone_markers(root),
         # Здесь, а не в `cmd_init`: иначе существующие дочки — те самые, на которых находка и

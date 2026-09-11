@@ -81,19 +81,26 @@ def _draftify(text, today):
     return f"---\nstatus: draft\nreviewed_at: {today}\n---\n\n{text}"
 
 
-def _backfill_required_context(today=None, dry=False):
+def _backfill_required_context(root=None, today=None, dry=False):
     """Создать ОТСУТСТВУЮЩИЕ обязательные документы контекста репозитория из шаблонов КИТА
     (PKG/context, при отсутствии — из managed-слоя ребёнка; порядок — см. `_delivery_source`).
     Пишет в .ai/project/context/
-    как черновик (status: draft). НЕ трогает уже существующие документы. -> список {doc, action}."""
+    как черновик (status: draft). НЕ трогает уже существующие документы. -> список {doc, action}.
+
+    `root` — целевой корень дочки. Когда он передан, пишем в `root/.ai/...`; иначе — в живой AI_DIR
+    установщика. Раньше корня НЕ было, и функция ВСЕГДА писала в модульный AI_DIR (= REPO_ROOT =
+    Path.cwd()): при in-process `deliver_assets(<чужой корень>)` — например, из теста с tmp — backfill
+    уезжал в корень РАБОЧЕГО репозитория кита, а не в переданный. Остальные seed/migrate-шаги давно
+    берут `root` явно; этот был единственным исключением, писавшим мимо цели."""
     import datetime as _dt
     ao = _ao()
     today = today or _dt.date.today().isoformat()
-    proj_ctx = ao.AI_DIR / "project" / "context"
+    ai_dir = (Path(root) / ".ai") if root is not None else ao.AI_DIR
+    proj_ctx = ai_dir / "project" / "context"
     out = []
     for doc in _required_context_docs():
         dst = proj_ctx / doc
-        if dst.exists() or (ao.AI_DIR / "custom" / "context" / doc).exists():
+        if dst.exists() or (ai_dir / "custom" / "context" / doc).exists():
             continue                                   # уже заполнено репозиторием — не трогаем
         src = _core()._delivery_source("context", doc)     # кит первым: см. _delivery_source (F-032)
         if not src.is_file():
