@@ -27,7 +27,9 @@ probes:
   find: '            argv2.append("--reevaluate-only")'
   replace_with: '            argv2.append("--replan")'
   tests:
-  - tests/unit/test_ai_ops_cli.py
+  # Тест-охрана переехала в test_ai_ops_cli_main.py при разрезе монолита ai_ops_cli (#814); указатель
+  # пробы отстал — из-за этого мутант «выживал» на релизном гейте, хотя охрана есть. Возвращаем цель.
+  - tests/unit/test_ai_ops_cli_main.py
   why: '#403: --deliver-only доставляет уже готовый READY-коммит, форвардя reevaluate-only (пропуск
     писателя, без нового коммита). Подменить форвард — resume снова переавторит и будет плодить
     evidence-коммиты при сбое доставки после READY.'
