@@ -28,10 +28,27 @@ def _intent_onboard(task, child_root, signals, a):
     out = child_root / ".ai" / "repository-profile.yaml"
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(yaml.safe_dump(prof, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # Соответствие Архитектурной конституции: первичный отчёт-РЕКОМЕНДАЦИИ владельцу (#846). Advisory,
+    # не блок. Пишется в protected-зону дочки (.ai/project/**), кит его при update не затирает.
+    conf_rel = None
+    try:
+        from ai_ops_kit.checks import constitution_conformance as _cc
+        _findings = _cc.conform(child_root)
+        conf_out = child_root / ".ai" / "project" / "constitution-conformance.md"
+        conf_out.parent.mkdir(parents=True, exist_ok=True)
+        conf_out.write_text(_cc.render_report(_findings), encoding="utf-8")
+        conf_rel = str(conf_out.relative_to(child_root))
+        _conf_summary = _cc.summary(_findings)
+    except (ImportError, OSError, ValueError):           # отчёт-советчик не должен ронять онбординг
+        _conf_summary = None
     if js:
-        print(json.dumps({"written": str(out), "profile": prof}, ensure_ascii=False, indent=2))
+        print(json.dumps({"written": str(out), "profile": prof,
+                          "conformance_report": conf_rel}, ensure_ascii=False, indent=2))
     else:
         _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
+        if conf_rel:
+            print(f"\n  Соответствие конституции: {_conf_summary}")
+            print(f"  Отчёт с рекомендациями: {conf_rel}")
         # voluntary-child-registration: ОДИН РАЗ предлагаем отметиться. Предложение показывается,
         # только пока решение не принято (has_decided) — так повторный онбординг не переспрашивает
         # (идемпотентность). Ни к чему не обязывает: по умолчанию НЕ отмечаемся, отказ безопасен и
