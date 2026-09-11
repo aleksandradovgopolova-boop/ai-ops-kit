@@ -525,35 +525,12 @@ def main(argv):
             argv2.append("--json")
         return ai_ops_run.main(argv2)
 
-    # v2.110 Real Spec-First: `specify` РЕАЛЬНО создаёт spec-артефакт нужной глубины (не только превью).
+    # v2.110 Real Spec-First: `specify` РЕАЛЬНО создаёт spec-артефакт нужной глубины (не только
+    # превью). Тело — в спутнике _intent_specify (ратчет func-size main); Исход 3 #768 — там же.
     if intent == "specify":
-        from ai_ops_kit.gates import spec_levels
-        from ai_ops_kit.engine import run_plan
-        if not signals.get("task_type"):
-            signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
-        wid = a.feature or run_plan.build_plan(dict(signals, task_text=task or ""))["workitem_id"]
-        # F-029: create_spec ДОПИСЫВАЕТ разделы, если уровень поднялся с прошлого раза. Раньше здесь
-        # приходило «уже существует», а сообщение звало заполнить разделы, которых в файле не было.
-        sp, created, spec_rep = spec_levels.create_spec(Path(child_root), wid, signals,
-                                                        overwrite=a.force)
-        cov = spec_levels.assess_from_artifacts(signals, Path(child_root), wid)
-        if a.json:
-            print(json.dumps({"path": str(sp), "created": created, "added": spec_rep["added"],
-                              "add_error": spec_rep["error"], "coverage": cov},
-                             ensure_ascii=False, indent=2))
-        else:
-            try:
-                shown = sp.relative_to(Path(child_root))
-            except ValueError:
-                shown = sp
-            # obs e09fe515 (поле 20.08.2026): подсказка после specify вела СРАЗУ на `run --execute`,
-            # пропуская `plan`. Заявленный путь кита — specify -> plan -> run; человек, идущий по
-            # подсказкам, планирования не видел вовсе. Следующий шаг — `plan`.
-            _say(Path(child_root), "from_specification", shown, created, cov["level_name"],
-                 cov["sections"], cov["blocking_missing"],
-                 f"./ai-ops plan \"{task or '<задача>'}\" --feature {wid}",
-                 spec_rep["added"], spec_rep["error"])
-        return 0
+        from ai_ops_kit.cli.ai_ops_cli_lifecycle import _intent_specify
+        _intent_specify(task, Path(child_root), signals, a)
+        return 0   # specify всегда завершается 0 (как и прежним inline-блоком) — код виден в main
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
     # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.

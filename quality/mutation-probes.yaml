@@ -334,9 +334,9 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/gates/spec_levels.py
-  file: ai_ops_kit/cli/ai_ops_cli.py
-  find: '        sp, created, spec_rep = spec_levels.create_spec(Path(child_root), wid, signals,'
-  replace_with: '        sp, created, spec_rep = (spec_levels._spec_path(Path(child_root), wid), False, {"added": [], "error": None}); _unused = (lambda *a, **k: None)('
+  file: ai_ops_kit/cli/ai_ops_cli_lifecycle.py
+  find: '    sp, created, spec_rep = spec_levels.create_spec(child_root, wid, signals, overwrite=a.force)'
+  replace_with: '    sp, created, spec_rep = (spec_levels._spec_path(child_root, wid), False, {"added": [], "error": None})'
   tests:
   - tests/unit/test_field_findings_cockpit.py::TestSpecifyPathAddsSections
   why: 'ШОВ пути человека к механизму уровней спеки: модульная проверка `create_spec` остаётся зелёной,

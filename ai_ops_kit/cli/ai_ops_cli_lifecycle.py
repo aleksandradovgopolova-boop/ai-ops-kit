@@ -403,6 +403,48 @@ def _intent_new(task, child_root, signals, a):
     return 0
 
 
+def _intent_specify(task, child_root, signals, a):
+    """v2.110 Real Spec-First: `specify` РЕАЛЬНО создаёт spec-артефакт нужной глубины (не превью).
+
+    Исход 3 (#768, obs 8a891ce7): раскрытие ЭСКАЛАЦИИ формы считаем по СЫРЫМ сигналам — ДО того как
+    ниже проставим task_type (иначе провизорность потерялась бы: доопределённый task_type выглядит
+    как заявленный тип). Симметрично #838 на шаге plan, но об УРОВНЕ и РАЗДЕЛАХ формы."""
+    from ai_ops_kit.gates import spec_levels
+    from ai_ops_kit.engine import run_plan
+    from ai_ops_kit.cli.ai_ops_cli import _say   # единый путь наружу, живёт в ai_ops_cli
+    child_root = Path(child_root)
+    spec_provisional, spec_disclosure = spec_levels.escalation_disclosure(signals)
+    if not signals.get("task_type"):
+        signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
+    wid = a.feature or run_plan.build_plan(dict(signals, task_text=task or ""))["workitem_id"]
+    # F-029: create_spec ДОПИСЫВАЕТ разделы, если уровень поднялся с прошлого раза. Раньше здесь
+    # приходило «уже существует», а сообщение звало заполнить разделы, которых в файле не было.
+    sp, created, spec_rep = spec_levels.create_spec(child_root, wid, signals, overwrite=a.force)
+    cov = spec_levels.assess_from_artifacts(signals, child_root, wid)
+    _disc = spec_disclosure or {}
+    if a.json:
+        print(json.dumps({"path": str(sp), "created": created, "added": spec_rep["added"],
+                          "add_error": spec_rep["error"],
+                          # Исход 3: форма может быть предварительной — называем это ДО заполнения.
+                          "spec_provisional": spec_provisional,
+                          "level_if_escalated": _disc.get("level_if_escalated"),
+                          "sections_if_escalated": _disc.get("sections_if_escalated"),
+                          "coverage": cov}, ensure_ascii=False, indent=2))
+        return 0
+    try:
+        shown = sp.relative_to(child_root)
+    except ValueError:
+        shown = sp
+    # obs e09fe515 (поле 20.08.2026): подсказка после specify вела СРАЗУ на `run --execute`, минуя
+    # plan. Заявленный путь кита — specify -> plan -> run; следующий шаг — `plan`.
+    _say(child_root, "from_specification", shown, created, cov["level_name"],
+         cov["sections"], cov["blocking_missing"],
+         f"./ai-ops plan \"{task or '<задача>'}\" --feature {wid}",
+         spec_rep["added"], spec_rep["error"],
+         spec_provisional, _disc.get("sections_if_escalated"), _disc.get("level_if_escalated"))
+    return 0
+
+
 def _intent_discuss(task, child_root, signals, a):
     js = a.json
     from ai_ops_kit.cli.ai_ops_cli import _say, _wid_for   # инфраструктура, живёт в ai_ops_cli
