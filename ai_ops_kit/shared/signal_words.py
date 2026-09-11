@@ -45,7 +45,7 @@ _SIZE_ORDER = ("small", "medium", "large", "xl")
 _RISK_ORDER = ("low", "medium", "high", "critical")
 
 
-def _first_match(norm_text, words_by_value, order):
+def _first_match(norm_text: str, words_by_value: dict[str, tuple[str, ...]], order: tuple[str, ...]) -> str | None:
     for value in order:
         if any(word in norm_text for word in words_by_value[value]):
             return value

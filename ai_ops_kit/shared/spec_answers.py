@@ -24,6 +24,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Iterable
 
 # section_id -> (короткое слово ответа, вопрос человеческим языком).
 # Короткое слово — это же ключ, который понимает `parse_plain_answers` в `--answers
@@ -84,7 +85,7 @@ def _alias_lookup() -> dict:
     return out
 
 
-def questions_for(section_ids) -> list:
+def questions_for(section_ids: Iterable[str]) -> list[str]:
     """Разделы -> человеческие вопросы (в порядке `section_ids`). Раздел без словаря — честная
     заглушка по id (лучше показать техническое имя, чем промолчать о том, что раздел вообще есть)."""
     out = []
@@ -94,12 +95,12 @@ def questions_for(section_ids) -> list:
     return out
 
 
-def answer_words_for(section_ids) -> list:
+def answer_words_for(section_ids: Iterable[str]) -> list[str]:
     """Разделы -> короткие слова ответа (для примера `--answers "слово1=...; слово2=..."`)."""
     return [SECTION_QUESTIONS.get(sid, (sid, None))[0] for sid in (section_ids or ())]
 
 
-def parse_plain_answers(text: str):
+def parse_plain_answers(text: str) -> tuple[dict[str, str], list[str]]:
     """`"зачем=нужно клиентам X; как-поймём=тест проходит"` -> ({section_id: value}, [unmatched]).
 
     Разделитель пар — `;` или перенос строки; внутри пары — первый `=`. Ключ ищется среди коротких
@@ -130,7 +131,7 @@ def parse_plain_answers(text: str):
 _SECTION_STATUSES_TEXT = "complete | declined | missing | needs_human | not_applicable"
 
 
-def apply_answers(child_root, wid, text):
+def apply_answers(child_root: str | Path, wid: str, text: str) -> dict:
     """Записать разобранные ответы в `features/<wid>/spec.yaml`: раздел получает
     `status: complete` и введённый текст как `content`. Разделы вне ответа не трогаются.
 
