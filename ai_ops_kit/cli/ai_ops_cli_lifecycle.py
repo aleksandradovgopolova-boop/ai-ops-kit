@@ -409,9 +409,16 @@ def _intent_specify(task, child_root, signals, a):
 
     Исход 3 (#768, obs 8a891ce7): раскрытие ЭСКАЛАЦИИ формы считаем по СЫРЫМ сигналам — ДО того как
     ниже проставим task_type (иначе провизорность потерялась бы: доопределённый task_type выглядит
-    как заявленный тип). Симметрично #838 на шаге plan, но об УРОВНЕ и РАЗДЕЛАХ формы."""
+    как заявленный тип). Симметрично #838 на шаге plan, но об УРОВНЕ и РАЗДЕЛАХ формы.
+
+    #863 (живой zero-touch прогон): `--answers "слово=ответ; …"` записывает ответы ОБЫЧНЫМИ
+    СЛОВАМИ в уже созданный spec.yaml — владелец не открывает файл вовсе. Разбор и запись живут в
+    `ai_ops_kit.shared.spec_answers` (общий модуль: те же слова использует и presenter в подсказке
+    `answer_command`, и это разбор). Применяем ответ ДО пересчёта coverage — иначе только что
+    заполненные разделы попали бы в `blocking_missing`, будто их и не назвали."""
     from ai_ops_kit.gates import spec_levels
     from ai_ops_kit.engine import run_plan
+    from ai_ops_kit.shared import spec_answers
     from ai_ops_kit.cli.ai_ops_cli import _say   # единый путь наружу, живёт в ai_ops_cli
     child_root = Path(child_root)
     spec_provisional, spec_disclosure = spec_levels.escalation_disclosure(signals)
@@ -421,11 +428,17 @@ def _intent_specify(task, child_root, signals, a):
     # F-029: create_spec ДОПИСЫВАЕТ разделы, если уровень поднялся с прошлого раза. Раньше здесь
     # приходило «уже существует», а сообщение звало заполнить разделы, которых в файле не было.
     sp, created, spec_rep = spec_levels.create_spec(child_root, wid, signals, overwrite=a.force)
+    ans_rep = {"applied": [], "unmatched": [], "error": None}
+    if getattr(a, "answers", None):
+        ans_rep = spec_answers.apply_answers(child_root, wid, a.answers)
     cov = spec_levels.assess_from_artifacts(signals, child_root, wid)
     _disc = spec_disclosure or {}
     if a.json:
         print(json.dumps({"path": str(sp), "created": created, "added": spec_rep["added"],
                           "add_error": spec_rep["error"],
+                          "answers_applied": ans_rep["applied"],
+                          "answers_unmatched": ans_rep["unmatched"],
+                          "answers_error": ans_rep["error"],
                           # Исход 3: форма может быть предварительной — называем это ДО заполнения.
                           "spec_provisional": spec_provisional,
                           "level_if_escalated": _disc.get("level_if_escalated"),
@@ -436,13 +449,21 @@ def _intent_specify(task, child_root, signals, a):
         shown = sp.relative_to(child_root)
     except ValueError:
         shown = sp
+    # Готовая команда ответить СЛОВАМИ на то, что ещё осталось (не файл, не JSON): пример из первых
+    # нескольких вопросов, чтобы строка не разрасталась на весь L2/L3 список.
+    _answer_words = spec_answers.answer_words_for(cov["blocking_missing"][:3])
+    _answer_command = None
+    if _answer_words:
+        _pairs = "; ".join(f"{w}=..." for w in _answer_words)
+        _answer_command = f'./ai-ops specify "{task or wid}" --feature {wid} --answers "{_pairs}"'
     # obs e09fe515 (поле 20.08.2026): подсказка после specify вела СРАЗУ на `run --execute`, минуя
     # plan. Заявленный путь кита — specify -> plan -> run; следующий шаг — `plan`.
     _say(child_root, "from_specification", shown, created, cov["level_name"],
          cov["sections"], cov["blocking_missing"],
          f"./ai-ops plan \"{task or '<задача>'}\" --feature {wid}",
          spec_rep["added"], spec_rep["error"],
-         spec_provisional, _disc.get("sections_if_escalated"), _disc.get("level_if_escalated"))
+         spec_provisional, _disc.get("sections_if_escalated"), _disc.get("level_if_escalated"),
+         _answer_command, ans_rep["applied"], ans_rep["unmatched"], ans_rep["error"])
     return 0
 
 

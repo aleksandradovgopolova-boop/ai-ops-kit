@@ -211,6 +211,24 @@ def _carry_stored_signals(task, child_root, signals, feature):
     return {**stored, **signals}
 
 
+def _parse_signals_arg(raw):
+    """`--signals` понимает JSON (рабочий, внутренний формат) И обычные слова о размере/риске
+    задачи (#864: «небольшая, неопасная» вместо `'{"size":"small","risk":"low"}'`).
+
+    JSON пробуем ПЕРВЫМ — он остаётся основным путём, ничьё поведение не меняется. Если строка не
+    парсится как JSON, это не ошибка формата: пробуем прочитать её как обычную фразу
+    (`ai_ops_kit.shared.signal_words`). Ни слова, ни JSON не нашли — тот же `json.JSONDecodeError`,
+    что был бы раньше (fail-closed, никто ничего не выдумывает)."""
+    try:
+        return json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        from ai_ops_kit.shared import signal_words
+        parsed = signal_words.parse_plain_signals(raw)
+        if not parsed:
+            raise
+        return parsed
+
+
 def _build_signals(intent, task, child_root, a):
     """Собрать сигналы вызова: --signals + feature + перенос сохранённого со specify.
 
@@ -220,7 +238,7 @@ def _build_signals(intent, task, child_root, a):
     роняет уровень (ENGINEERING-задача не едет молча как QUICK). Перенос — только для интентов
     `_SIGNAL_CARRY_INTENTS`, чтобы не менять поведение команд, к уровню отношения не имеющих.
     """
-    signals = json.loads(a.signals)
+    signals = _parse_signals_arg(a.signals)
     if a.feature:
         signals["feature"] = a.feature
     if intent in _SIGNAL_CARRY_INTENTS:
@@ -323,6 +341,12 @@ def _build_cli_arg_parser():
                     help="model: записать один ответ онбординга (без ручной правки YAML)")
     ap.add_argument("--why", default=None,
                     help="model --answer: основание ответа (источник) — ляжет комментарием")
+    # #863 (живой zero-touch прогон): `specify --answers "зачем=...; как-поймём=..."` записывает
+    # ответы обычными словами в features/<wid>/spec.yaml БЕЗ ручной правки YAML. Разбор — в
+    # ai_ops_kit.shared.spec_answers (те же короткие слова, что называет сообщение presenter'а).
+    ap.add_argument("--answers", default=None,
+                    help='specify: ответить на вопросы описания задачи словами, не открывая файл '
+                         '— например --answers "зачем=нужно клиентам X; как-поймём=тест зелёный"')
     # #647 (первый час): `model --flow` сшивает понимание → вопросы → (если ответы есть) направление
     # и план → следующую работу ОДНИМ нарративом. `--apply` записывает направление/план (иначе сухой
     # предпросмотр). Не новый интент — режим `model`, чтобы не плодить top-level команды (#632).

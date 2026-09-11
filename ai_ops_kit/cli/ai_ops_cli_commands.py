@@ -32,24 +32,50 @@ def _wid_for(task, signals, feature):
                                           workitem_id=feature)["workitem_id"]
 
 
+def _plain_signals_example(missing):
+    """#864: пример ответа ОБЫЧНЫМИ СЛОВАМИ для незаявленных size/risk — вместо JSON.
+
+    `task_type` кит спрашивать не должен (он его выводит сам — `missing_intake_signals` его и не
+    просит), поэтому словами закрываются ровно те два сигнала, которые здесь вообще бывают
+    незаявлены. `ai_ops_kit.shared.signal_words.parse_plain_signals` умеет прочитать эту же фразу
+    обратно — строка не декоративная, она реально работает как ответ.
+    -> строка вида `--signals "небольшая, неопасная"` или None (нечего показывать)."""
+    keys = {m.get("signal") for m in (missing or [])}
+    words = []
+    if "size" in keys:
+        words.append("небольшая")
+    if "risk" in keys:
+        words.append("неопасная")
+    if not words:
+        return None
+    return '--signals "' + ", ".join(words) + '"'
+
+
 def _intake_command_carrying_task_type(missing, task_type):
-    """Готовая строка ответа на неполный intake, СОХРАНЯЮЩАЯ уже известный task_type.
+    """Готовая строка ответа на неполный intake — СЛОВАМИ вперёд, JSON вторым (#864).
 
     Полевой замер (cockpit, 06.09.2026): `run` без size/risk печатал подсказку
     `--signals '{"size":..,"risk":..}'` — без task_type. Оператор, следуя ей буквально, ронял
     ENGINEERING в QUICK (base_workflow QUICK -> судья code_review не запускается). Поэтому task_type,
-    выведенный роутером или перенесённый со specify, встаёт в подсказку первым ключом. Формат — как
-    у pipeline_helpers.intake_signals_command, чтобы строка оставалась единообразной.
-    """
+    выведенный роутером или перенесённый со specify, по-прежнему встаёт в JSON-вариант первым
+    ключом — тот, кто скопирует именно его, не потеряет уровень.
+
+    #864 (живой zero-touch прогон): у JSON теперь есть равноправный сосед — ответ обычными
+    словами (`_plain_signals_example`), который `ai_ops_cli._parse_signals_arg` умеет разобрать
+    сам. JSON остаётся рабочим и внутренним (переносит task_type буквально), но не единственным —
+    словам он показан ПЕРВЫМ, а не единственная строка «ответь JSON'ом»."""
     from ai_ops_kit.engine import pipeline_helpers
     base = pipeline_helpers.intake_signals_command(missing)
-    if not task_type or not base:
-        return base
-    pairs = {"task_type": task_type}
-    for m in missing:
-        pairs[m["signal"]] = (m.get("allowed") or ["<значение>"])[0]
-    inner = ", ".join(f'"{k}":"{v}"' for k, v in pairs.items())
-    return f"--signals '{{{inner}}}'"
+    if task_type and base:
+        pairs = {"task_type": task_type}
+        for m in missing:
+            pairs[m["signal"]] = (m.get("allowed") or ["<значение>"])[0]
+        inner = ", ".join(f'"{k}":"{v}"' for k, v in pairs.items())
+        base = f"--signals '{{{inner}}}'"
+    words = _plain_signals_example(missing)
+    if words and base and words != base:
+        return f"{words}  (или тем же в JSON: {base})"
+    return words or base
 
 
 def _say(child_root, translator, *args, **kwargs):
