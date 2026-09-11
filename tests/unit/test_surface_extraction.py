@@ -566,3 +566,170 @@ def test_screen_records_conform_to_surface_schema(tmp_path):
         _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
         assert errors == [], f"запись не по схеме: {errors}"
         assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E4: серверные JS/TS-маршруты (вид `route`) — Express / Nest / Next, ТЕКСТОВЫЙ/файловый разбор ──
+# JS/TS-бэкенд разбирается текстом/паттерном (Express/Nest) или из раскладки файлов (Next), а не
+# доказательным AST → confidence по умолчанию inferred, НЕ verified (честность силы = честность
+# confidence, как у screen-экстракторов E3).
+
+_EXPRESS = '''\
+const express = require("express");
+const app = express();
+const router = express.Router();
+
+app.get("/health", (req, res) => res.send("ok"));
+router.post("/users", (req, res) => res.json({}));
+app.use("/admin", adminRouter);
+app.get("/users/:id", (req, res) => res.json({}));
+
+const key = req.get("X-Api-Key");          // .get у не-роутера, путь не с "/" → НЕ маршрут
+app.get(dynamicPath, handler);             // путь-переменная → НЕ маршрут
+app.get(`/tmpl/${x}`, handler);            // шаблон-строка → НЕ маршрут
+'''
+
+# Тот же .get/.post, но БЕЗ импорта express — не должен дать ложный маршрут.
+_EXPRESS_FOREIGN = '''\
+const cache = makeCache();
+cache.get("/not-a-route");
+emitter.post("/topic", payload);
+'''
+
+_NEST = '''\
+import { Controller, Get, Post } from "@nestjs/common";
+
+@Controller("cats")
+export class CatsController {
+  @Get()
+  findAll() { return []; }
+
+  @Get(":id")
+  findOne() { return {}; }
+
+  @Post("/adopt")
+  adopt() { return {}; }
+}
+'''
+
+# @Get/@Controller-похожие имена, но БЕЗ импорта @nestjs — не должны дать ложный маршрут.
+_NEST_FOREIGN = '''\
+@Controller("ghost")
+class NotNest {
+  @Get("/x")
+  f() {}
+}
+'''
+
+
+def _route_paths(surfaces, extractor):
+    return {s["ref"].split("|", 1)[1]
+            for s in surfaces if s["kind"] == "route" and s["extractor"] == extractor}
+
+
+def test_express_routes_are_inferred(tmp_path):
+    _write(tmp_path, "server/app.js", _EXPRESS)
+    surfaces = extract_surfaces(tmp_path)
+    paths = _route_paths(surfaces, "express")
+    assert {"/health", "/users", "/admin", "/users/:id"} <= paths
+    # Путь-переменная, шаблон-строка и `.get("header")` без "/" — не маршруты.
+    assert "/tmpl/" not in " ".join(paths)
+    assert not any(p == "X-Api-Key" for p in paths)
+    for s in surfaces:
+        if s["extractor"] == "express":
+            assert s["kind"] == "route"
+            assert s["confidence"] == "inferred"   # текстовый JS-разбор НИКОГДА не verified
+            assert s["ref"].startswith("server/app.js:")
+
+
+def test_express_needs_import_indicator(tmp_path):
+    """`.get(...)`/`.post(...)` в файле без импорта express → никаких маршрутов."""
+    _write(tmp_path, "lib/foreign.js", _EXPRESS_FOREIGN)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "express"] == []
+
+
+def test_nest_routes_join_controller_prefix_and_are_inferred(tmp_path):
+    _write(tmp_path, "src/cats.controller.ts", _NEST)
+    surfaces = extract_surfaces(tmp_path)
+    paths = _route_paths(surfaces, "nest")
+    # @Get() → корень контроллера /cats; @Get(":id") → /cats/:id; @Post("/adopt") → /cats/adopt.
+    assert {"/cats", "/cats/:id", "/cats/adopt"} <= paths
+    for s in surfaces:
+        if s["extractor"] == "nest":
+            assert s["kind"] == "route" and s["confidence"] == "inferred"
+
+
+def test_nest_needs_nestjs_indicator(tmp_path):
+    """@Get/@Controller без импорта @nestjs → никаких маршрутов (чужой декоратор не даёт route)."""
+    _write(tmp_path, "src/foreign.ts", _NEST_FOREIGN)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "nest"] == []
+
+
+def test_next_file_routing_pages_api_and_app_handler(tmp_path):
+    _write(tmp_path, "pages/api/orders.ts", "export default function handler(req, res) {}\n")
+    _write(tmp_path, "pages/api/index.ts", "export default function h(req, res) {}\n")
+    _write(tmp_path, "app/billing/route.ts", "export function GET() {}\n")
+    _write(tmp_path, "src/app/api/users/route.js", "export function POST() {}\n")
+    surfaces = extract_surfaces(tmp_path)
+    paths = _route_paths(surfaces, "next")
+    assert paths == {"/api/orders", "/api", "/billing", "/api/users"}
+    for s in surfaces:
+        if s["extractor"] == "next":
+            assert s["kind"] == "route" and s["confidence"] == "inferred"
+
+
+def test_next_ui_pages_and_catch_all_are_not_server_routes(tmp_path):
+    """UI-страница (app/**/page.tsx) — не серверный route; catch-all `[...slug]` честно пропущен."""
+    _write(tmp_path, "app/dashboard/page.tsx", "export default function P() {}\n")
+    _write(tmp_path, "pages/index.tsx", "export default function Home() {}\n")
+    _write(tmp_path, "app/blog/[...slug]/route.ts", "export function GET() {}\n")
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "next"] == []
+
+
+def test_next_route_groups_and_slots_do_not_change_url(tmp_path):
+    """Route-группа `(group)` и обычный `[id]`: группа опускается, динамический сегмент сохраняется."""
+    _write(tmp_path, "app/(marketing)/pricing/route.ts", "export function GET() {}\n")
+    _write(tmp_path, "app/users/[id]/route.ts", "export function GET() {}\n")
+    paths = _route_paths(extract_surfaces(tmp_path), "next")
+    assert paths == {"/pricing", "/users/[id]"}
+
+
+def test_js_server_isolated_from_broken_files(tmp_path):
+    """Битый JS/TS-файл не валит прогон — грамматику не разбираем, скан строки не падает."""
+    _write(tmp_path, "server/app.js", _EXPRESS)
+    _write(tmp_path, "server/broken.ts", 'const x = "unterminated\n@Get(((\n')
+    surfaces = extract_surfaces(tmp_path)
+    assert "/health" in _route_paths(surfaces, "express")
+
+
+def test_js_server_does_not_disturb_python_and_screens(tmp_path):
+    """Серверные JS-экстракторы не трогают питон-route/cli и screen-поверхности."""
+    _write(tmp_path, "app/routes.py", _FLASK)
+    _write(tmp_path, "app/cli.py", _ARGPARSE)
+    _write(tmp_path, "web/App.jsx", _REACT_JSX)
+    _write(tmp_path, "server/app.js", _EXPRESS)
+    surfaces = extract_surfaces(tmp_path)
+    # Питон-route остаётся verified; screen остаётся inferred; серверный JS-route добавился.
+    assert any(s["confidence"] == "verified" and s["extractor"] == "python-web-routes"
+               for s in surfaces)
+    assert any(s["kind"] == "screen" for s in surfaces)
+    assert "/health" in _route_paths(surfaces, "express")
+
+
+def test_js_server_records_conform_to_surface_schema(tmp_path):
+    """Записи Express/Nest/Next валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "server/app.js", _EXPRESS)
+    _write(tmp_path, "src/cats.controller.ts", _NEST)
+    _write(tmp_path, "pages/api/orders.ts", "export default function handler() {}\n")
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path)
+                if s["extractor"] in {"express", "nest", "next"}]
+    assert {s["extractor"] for s in surfaces} == {"express", "nest", "next"}
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
