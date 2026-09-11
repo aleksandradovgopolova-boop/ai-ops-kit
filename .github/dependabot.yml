@@ -1,0 +1,37 @@
+# dependabot.yml — supply-chain самого кита (F-09 внешнего аудита; шаблон для дочек — templates/ci/).
+#
+# ЧТО ЭТО ДАЁТ. Dependabot сам открывает PR'ы, когда у зависимости выходит новая версия или
+# закрывается уязвимость. Это НЕ блокирующая проверка: PR'ы приходят на ревью, ничего не мержится
+# само — видимо, обратимо, ни один прогон не роняет.
+#
+# ГРАНИЦА С ИНВАРИАНТОМ КИТА. «Никаких новых рантайм-зависимостей у инструментов» относится к КОДУ
+# кита (stdlib + pyyaml). Здесь — фордж-конфигурация: GitHub-нативный механизм над dev-инструментами
+# и действиями workflow'ов, не над рантаймом.
+#
+# github-actions ОСОБО ВАЖЕН: действия в .github/workflows/** закреплены на commit SHA (F-09,
+# OpenSSF Pinned-Dependencies), и именно эти SHA Dependabot двигает, оставляя в PR человекочитаемую
+# версию. Так «закреплено на SHA» перестаёт означать «навсегда устарело».
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "github-actions"]
+    commit-message:
+      prefix: "chore(ci)"
+
+  # dev-инструменты (pytest/ruff/mypy/…). Рантайм кита — stdlib+pyyaml, обновлять там нечего.
+  - package-ecosystem: "pip"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies", "python"]
+    commit-message:
+      prefix: "chore(deps)"
+    # Патч/минор одним PR, чтобы не плодить шум; мажор приходит отдельным PR на ревью.
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]

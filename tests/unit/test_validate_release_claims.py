@@ -15,6 +15,11 @@ from validate_release_claims import (  # noqa: F401
     yaml,
 )
 
+# Тесты гоняют валидатор релиз-claims по всему реестру (полный сбор+сверка) — >10 c на CI, то есть
+# slow по определению маркера (pytest.ini). Самый тяжёлый лумп, снятый с шарда `fast` под
+# `--dist loadfile` в slow-шарды selftests; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture
 def base_claims():
@@ -118,8 +123,10 @@ def test_runtime_capability_drift_raises(base_claims):
 
 @pytest.mark.unit
 def test_forbidden_stale_marker_present_in_readme_raises(base_claims):
+    # Пробник — строка, заведомо присутствующая в README (подтверждает, что детектор
+    # запрещённых маркеров действительно сканирует текст, а не молчит вхолостую).
     assert any("устаревший маркер" in x
-               for x in check({**base_claims, "forbidden_stale_markers": ["Открытая"]}))
+               for x in check({**base_claims, "forbidden_stale_markers": ["AI-операционная"]}))
 
 
 @pytest.mark.unit

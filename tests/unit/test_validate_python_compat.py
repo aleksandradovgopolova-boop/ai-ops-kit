@@ -9,6 +9,11 @@ from validate_python_compat import (  # noqa: F401
     scan,
 )
 
+# Тесты сканируют исходники на py3.9-совместимость (проход по дереву в подпроцессе) — >10 c на CI,
+# то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 
 @pytest.mark.unit
 def test_union_in_argument_without_future_is_flagged():

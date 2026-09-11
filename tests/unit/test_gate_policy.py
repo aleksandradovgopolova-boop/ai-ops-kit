@@ -185,3 +185,87 @@ class TestEffectiveReviewOutcome:
     def test_critical_visual_evidence_pass_advisory(self):
         crit = {"ui_changed": True, "ui_impact": "critical"}
         assert effective_review_outcome("visual_regression", crit, "warn", "pass")[0] == "advisory"
+
+
+from ai_ops_kit.gates.gate_policy import (  # noqa: E402
+    effective_enforcement,
+    risk_calibrated_enforcement_enabled,
+)
+
+
+@pytest.mark.unit
+class TestRiskCalibratedFlag:
+    """Owner-флаг risk_calibrated_enforcement (#543) — shadow->live gate."""
+
+    def test_absent_is_off(self):
+        assert risk_calibrated_enforcement_enabled({}) is False
+        assert risk_calibrated_enforcement_enabled({"ui_impact": "internal"}) is False
+
+    def test_flat_signal(self):
+        assert risk_calibrated_enforcement_enabled({"risk_calibrated_enforcement": True}) is True
+        assert risk_calibrated_enforcement_enabled({"risk_calibrated_enforcement": False}) is False
+
+    def test_nested_signal(self):
+        assert risk_calibrated_enforcement_enabled(
+            {"gates": {"risk_calibrated_enforcement": True}}) is True
+        assert risk_calibrated_enforcement_enabled(
+            {"gates": {"risk_calibrated_enforcement": False}}) is False
+
+    def test_nested_takes_precedence(self):
+        # вложенный gates.* — авторитетный (из .ai-ops.yaml); плоский игнорируется при наличии вложенного
+        assert risk_calibrated_enforcement_enabled(
+            {"gates": {"risk_calibrated_enforcement": False},
+             "risk_calibrated_enforcement": True}) is False
+
+
+@pytest.mark.unit
+class TestEffectiveEnforcement:
+    """effective_enforcement (#543): OFF -> статическая строгость; ON -> candidate для UI-гейтов."""
+
+    def test_off_is_static_unchanged(self):
+        # флаг выключен -> строгость = gate.blocking, даже для internal low-risk UI-гейта
+        assert effective_enforcement("ux_review", True, {"ui_impact": "internal"},
+                                     enabled=False) == (True, None)
+
+    def test_off_non_ui_unchanged(self):
+        assert effective_enforcement("code_review", True, {"ui_impact": "internal"},
+                                     enabled=False) == (True, None)
+
+    def test_on_non_ui_gate_unchanged(self):
+        # калибровка касается ТОЛЬКО UI-гейтов; прочие держат статическую строгость даже при ON
+        assert effective_enforcement("code_review", True, {"ui_impact": "internal"},
+                                     enabled=True) == (True, None)
+
+    def test_on_internal_low_risk_demoted_to_advisory(self):
+        blocking, reason = effective_enforcement("ux_review", True, {"ui_impact": "internal"},
+                                                 enabled=True)
+        assert blocking is False
+        assert reason and "ux_review" in reason
+
+    def test_on_internal_visual_and_design_demoted(self):
+        for g in ("visual_regression", "design_system_usage"):
+            blocking, reason = effective_enforcement(g, True, {"ui_impact": "internal"},
+                                                     enabled=True)
+            assert blocking is False, g
+            assert reason, g
+
+    def test_on_internal_accessibility_stays_blocking(self):
+        # safety-гейт: доступность в internal остаётся blocking (candidate не ослабляет)
+        assert effective_enforcement("accessibility_review", True, {"ui_impact": "internal"},
+                                     enabled=True) == (True, None)
+
+    def test_on_user_facing_stays_blocking(self):
+        # candidate НИКОГДА не мягче current для user_facing -> демотии нет
+        for g in UI_GATES:
+            assert effective_enforcement(g, True, {"ui_impact": "user_facing"},
+                                         enabled=True) == (True, None), g
+
+    def test_on_critical_stays_blocking(self):
+        for g in UI_GATES:
+            assert effective_enforcement(g, True, {"ui_impact": "critical"},
+                                         enabled=True) == (True, None), g
+
+    def test_never_stricter_than_static(self):
+        # уже-advisory гейт под калибровкой advisory остаётся advisory (не поднимаем строгость)
+        assert effective_enforcement("ux_review", False, {"ui_impact": "user_facing"},
+                                     enabled=True) == (False, None)

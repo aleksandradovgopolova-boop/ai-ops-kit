@@ -6,7 +6,5 @@ description: 'Данные и интеграции: БД, контракты, м
 note: 'Декларативный preset: агенты подключаются по id из registry/agents.yaml; файлы
   не перемещаются (меньше breaking-риска, чем физический move).'
 agents:
-- database-engineer
-- integration-engineer
-- migration-engineer
+- data-engineer
 requires_core: true

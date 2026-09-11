@@ -37,6 +37,12 @@
     Модуль, загруженный в одной функции и переданный в другую не через фикстуру, может быть
     не распознан как продуктовый алиас (уклон снова в структурную сторону).
 
+ADVISORY (вторичный функциональный счётчик). Единица энфорсимой метрики — ФАЙЛ, поэтому
+структурные assert, дописанные в уже поведенческий файл, дают 0 к знаменателю: долю можно тихо
+«разбавить». Чтобы это было ВИДНО (не меняя энфорсмент), рядом печатается функциональная доля —
+единицей берётся каждая `def test_*` (см. `measure_functions`). Строка помечена «advisory, не
+энфорсится» и НЕ влияет на exit code; расхождение с файловой долей и есть мера разбавления.
+
 РАТЧЕТ ходит ТОЛЬКО ВНИЗ по СТРУКТУРНОСТИ: доля поведенческих не может упасть ниже baseline.
 Сравнение точное, без плавающей арифметики (перекрёстное умножение целых):
     current_behavioral * baseline_total  >=  baseline_behavioral * current_total
@@ -283,6 +289,55 @@ def measure(tests_dir: Path = TESTS_DIR) -> dict:
     }
 
 
+def _iter_test_defs(tree: ast.AST):
+    """Все определения тест-функций (`def test_*` / `async def test_*`), включая методы тест-классов."""
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith("test_"):
+            yield node
+
+
+def measure_functions(tests_dir: Path = TESTS_DIR) -> dict:
+    """ВТОРИЧНЫЙ (advisory) счётчик по ТЕСТ-ФУНКЦИЯМ, а не по файлам.
+
+    Файловая метрика (см. `measure`) считает единицей ФАЙЛ: структурные assert, дописанные в уже
+    поведенческий файл, дают 0 к знаменателю — «разбавление» доли не видно. Здесь единица — каждая
+    `def test_*`: функция поведенческая, если модуль ИМПОРТИРУЕТ продукт кита И именно тело этой
+    функции ЗОВЁТ его (те же критерии Call, что в файловой метрике, но применённые к поддереву
+    функции). Иначе — структурная. Синтаксически битый файл пропускается (его краснит проверка
+    синтаксиса, не эта метрика). Метрика НЕ энфорсится — только печатается как advisory.
+    """
+    behavioral, structural = 0, 0
+    for f in iter_test_files(tests_dir):
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
+        except (SyntaxError, OSError):
+            continue
+        product_funcs, product_aliases, imports_product = _collect_product_bindings(tree)
+        for fn in _iter_test_defs(tree):
+            if imports_product and _calls_product(fn, product_funcs, product_aliases):
+                behavioral += 1
+            else:
+                structural += 1
+    total = behavioral + structural
+    share = round(100.0 * behavioral / total, 2) if total else 0.0
+    return {
+        "behavioral_fn_count": behavioral,
+        "structural_fn_count": structural,
+        "total_fn_count": total,
+        "behavioral_fn_share_pct": share,
+    }
+
+
+def render_function_advisory(fn_metrics: dict) -> str:
+    """ADVISORY-строка по функциональному счётчику. НЕ влияет на вердикт/exit code."""
+    return (
+        f"TEST-TAXONOMY-ADVISORY: функциональная доля поведенческих "
+        f"{fn_metrics['behavioral_fn_count']}/{fn_metrics['total_fn_count']} = "
+        f"{fn_metrics['behavioral_fn_share_pct']}% (advisory, не энфорсится — "
+        f"делает видимым «разбавление» структурными assert внутри поведенческого файла)"
+    )
+
+
 def load_baseline(path: Path = BASELINE_FILE) -> dict:
     """Загрузить baseline из YAML. -> dict (пустой, если файла нет)."""
     if not path.is_file():
@@ -357,6 +412,8 @@ def main(argv: list[str] | None = None) -> int:
 
     if "--report" in argv:
         print(render_report(current))
+        print("")
+        print(render_function_advisory(measure_functions()))
         return 0
 
     if "--baseline" in argv:
@@ -367,6 +424,8 @@ def main(argv: list[str] | None = None) -> int:
 
     baseline = load_baseline()
     errors = check(current, baseline)
+    # ADVISORY: вторичный функциональный счётчик — печатается всегда, exit code НЕ трогает.
+    print(render_function_advisory(measure_functions()))
     for e in errors:
         print(f"  [FAIL] {e}")
     if errors:

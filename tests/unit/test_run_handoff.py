@@ -240,3 +240,29 @@ class TestResumePreflight:
         (fdir / "run-handoff.yaml").write_text("kind: RunHandoff\n:::not yaml:::\n  - [", encoding="utf-8")
         pf = resume_preflight(root, "rw3", base=cur)
         assert pf["can_resume"] is False
+
+
+# ─── #678: генератор сам проверяет форму собранного RunHandoff (validate-and-warn) ──────────────
+
+class TestBuildHandoffValidatesItsOwnShape:
+    def test_valid_report_emits_no_warning_and_check_is_green(self, ready_report):
+        """Нормальный report -> валидный handoff: ни предупреждения, ни ошибок валидатора."""
+        import warnings as _w
+
+        from ai_ops_kit.validation import validate_run_handoff
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            h = build_handoff(ready_report)
+        assert not [x for x in caught if issubclass(x.category, RuntimeWarning)], \
+            [str(x.message) for x in caught]
+        assert validate_run_handoff.check(h) == []
+
+    def test_malformed_report_warns_but_still_returns_handoff(self, ready_report):
+        """Битый report (decision-объект без id/summary) -> handoff с нарушением формы:
+        генератор ГРОМКО предупреждает (resume читает файл), но handoff всё равно возвращается —
+        warn, не блок."""
+        bad = dict(ready_report, decisions=[{"note": "решили без id/summary"}])
+        with pytest.warns(RuntimeWarning, match="нарушением формы"):
+            h = build_handoff(bad)
+        assert h["kind"] == "RunHandoff"  # доставка не сорвана
+        assert h["decisions"] == [{"note": "решили без id/summary"}]

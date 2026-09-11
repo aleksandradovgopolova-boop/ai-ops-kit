@@ -34,12 +34,12 @@ from __future__ import annotations
 
 import argparse
 import json
-import subprocess
 import sys
 import tempfile
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.shared import gitio  # noqa: E402
 from ai_ops_kit.engine import ai_ops_run  # noqa: E402
 from ai_ops_kit.gates import gate_policy  # noqa: E402
 
@@ -56,17 +56,17 @@ def _read_package_version() -> str:
 
 def _scaffold(root: Path) -> str:
     """Пустой python-профиль без тулчейна -> проверки not_applicable (tool-free). Возвращает ветку."""
+    # Единый вход к git с таймаутом (см. shared/gitio): даже в bench-скаффолде зависший git не висит.
     for a in (("init", "-q"), ("config", "user.email", "t@t"), ("config", "user.name", "t")):
-        subprocess.run(["git", "-C", str(root), *a], capture_output=True)
+        gitio.git(root, *a)
     (root / "src").mkdir(exist_ok=True)
     # пустые poetry-deps + отсутствие tests/ -> ни pytest, ни линтеров не детектится как запускаемое
     (root / "pyproject.toml").write_text(
         "[tool.poetry]\nname='x'\n[tool.poetry.dependencies]\n", encoding="utf-8")
     (root / "seed").write_text("x", encoding="utf-8")
-    subprocess.run(["git", "-C", str(root), "add", "-A"], capture_output=True)
-    subprocess.run(["git", "-C", str(root), "commit", "-q", "-m", "seed"], capture_output=True)
-    return subprocess.run(["git", "-C", str(root), "rev-parse", "--abbrev-ref", "HEAD"],
-                          capture_output=True, text=True).stdout.strip()
+    gitio.git(root, "add", "-A")
+    gitio.git(root, "commit", "-q", "-m", "seed")
+    return gitio.git(root, "rev-parse", "--abbrev-ref", "HEAD")[1]
 
 
 # --- заглушки писателя/ревьюера (детерминированные, read-first как в бою) --------------------------

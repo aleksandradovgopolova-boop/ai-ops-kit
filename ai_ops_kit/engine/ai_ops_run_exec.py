@@ -412,18 +412,21 @@ def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, instal
             rep = _pipe(True, _fx + (("\n\n" + resume_ctx) if resume_ctx else ""))
             _fix_left -= 1
     except (KeyboardInterrupt, SystemExit):
+        from ai_ops_kit.engine.ai_ops_run_lifecycle import _run_start_audience
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid, status="blocked",
-                                   reason="прогон прерван (Ctrl-C/exit) — работа не завершена")
+            active_work.finish_cmd(aw_path, fid, status="blocked", child_root=ctx.child_root,
+                                   reason="прогон прерван (Ctrl-C/exit) — работа не завершена",  # #695
+                                   audience=_run_start_audience(ctx.child_root))
         raise
     except Exception as _e:  # noqa: BLE001
         # v3.0-rc17 (finding живого прогона): исключение провайдера/инфры (напр. HTTP 429 kimi ПОСЛЕ
-        # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16),
-        # одиночный прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (status=error, ready_for_pr=False, exit 2),
-        # а не падать. Типизируем сбой (провайдер/сеть vs дефект движка).
+        # исчерпания ретраев) НЕ должно ронять CLI traceback'ом — как в sequential (rc12/rc16), одиночный
+        # прогон обязан вернуть ЧЕСТНЫЙ error-отчёт (exit 2), а не падать. Типизируем сбой ниже.
+        from ai_ops_kit.engine.ai_ops_run_lifecycle import _run_start_audience
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid, status="blocked",
-                                   reason=f"прогон упал: {type(_e).__name__}")
+            active_work.finish_cmd(aw_path, fid, status="blocked", child_root=ctx.child_root,  # #695
+                                   reason=f"прогон упал: {type(_e).__name__}",
+                                   audience=_run_start_audience(ctx.child_root))
         try:
             from ai_ops_kit.engine.workpackage_executor import _classify_failure
             _fail = _classify_failure(_e)
@@ -552,8 +555,18 @@ def _run_preflight(ctx, fid, plan, bundle, payload, spec_cov, work_pkg,
                           author=ctx.author, reevaluate_only=reevaluate_only)
     (features_dir / fid / "preflight.yaml").write_text(
         yaml.safe_dump(pretruth, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    # #633: blocked-preflight — вызов человека, у которого раньше не было durable-дома (жил только в
+    # run-report). Кладём его в шину внимания, чтобы `inbox` его показал; при прохождении — снимаем.
+    from ai_ops_kit.lifecycle import attention_bus as _ab
+    _att_key = f"preflight:{fid}"
     if not pretruth["blocked"]:
+        with contextlib.suppress(Exception):
+            _ab.resolve(child_root, _att_key)
         return pretruth, None
+    with contextlib.suppress(Exception):
+        _ab.record(child_root, key=_att_key, source="прогон: preflight",
+                   reason="работа остановлена до запуска модели: " + "; ".join(pretruth["reasons"]),
+                   kind=_ab.BLOCKED, work_id=fid)
     rep = {"schema_version": 1, "kind": "execution-pipeline", "workitem_id": fid,
            "status": "blocked", "engine": "pipeline", "runtime": runtime,
            "provider": provider_name, "model": model, "ready_for_pr": False,
@@ -679,6 +692,7 @@ def _build_run_arg_parser():
     rs = sub.add_parser("resume")
     rs.add_argument("child_root"); rs.add_argument("feature")
     rs.add_argument("--base", default=None); rs.add_argument("--json", action="store_true")
+    rs.add_argument("--session", default="cli")  # #695: intent-CLI подаёт измеренную личность, как run
     rs.add_argument("--task", help="задача-продолжение (по умолчанию — next_action из RunHandoff)")
     rs.add_argument("--signals", default="{}")
     rs.add_argument("--execute", action="store_true",
@@ -700,4 +714,12 @@ def _build_run_arg_parser():
     rs.add_argument("--replan", action="store_true",
                     help="осознанно сменить классификацию/policy при продолжении (не resume, а replan "
                          "с ревалидацией) — иначе смена task_type/risk/write_scope блокируется")
+    # #403/deliver-only: intent-CLI прокидывает `--reevaluate-only` в resume, когда владелец зовёт
+    # `ai-ops resume --deliver-only` (доставить готовый READY-коммит без переавторинга). Подкоманда
+    # resume этот флаг НЕ объявляла — argparse падал «unrecognized arguments: --reevaluate-only», и
+    # весь deliver-only-путь resume был мёртв (объявлен CLI, не исполнялся движком). Объявляем здесь.
+    rs.add_argument("--reevaluate-only", action="store_true", dest="reevaluate_only",
+                    help="доставить готовый READY-коммит фичи БЕЗ переавторинга (0 model-вызовов, "
+                         "HEAD как committed_sha): переоценить гейты и открыть/обновить PR. "
+                         "Прокидывается из `ai-ops resume --deliver-only`. Нужен --execute + --feature")
     return ap

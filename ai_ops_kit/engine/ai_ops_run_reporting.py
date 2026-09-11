@@ -44,7 +44,20 @@ def _review_fix_context(rep):
                 if tail:
                     break
             parts.append(f"[проверка {name}] упала:\n{tail}".rstrip())
+    # NO-VERDICT vs КОД (issue #577, поле 07.09.2026): тот же класс, что env-скип выше. Ревью, закрытое
+    # `closed_as="refused"` (независимый ревьюер не вынес разбираемого вердикта / провайдер судьи отказал —
+    # см. pipeline_evidence._run_reviews через evidence_from_no_verdict/evidence_from_judge_refusal), несёт
+    # status fail/warn, но перезапуск ПИСАТЕЛЯ его починить НЕ может: refused — сигнал «ревьюер молчит/
+    # недоступен», а не «код плохой». Прежде такая запись шла писателю как обычный блокер, и fix-loop
+    # (ai_ops_run_exec) перезапускал пайплайн → снова _run_reviews → снова спавн `claude -p` (ревьюера):
+    # (fix_attempts+1)×гейты×reads×медленный subprocess = часы, PR не открывался (живой заезд wow-repo).
+    # Пропускаем refused: если он ОСТАЛСЯ единственным блокером, parts пуст → None → fix-loop делает break
+    # → прогон честно завершается NOT_READY с уже названной причиной, БЕЗ повторного спавна ревьюера.
+    # Содержательный fail/warn с реальными блокерами (closed_as "blocked"/"advisory") писателя ретраит как
+    # раньше — фильтр по closed_as, а не по status, именно чтобы не убить полезный ретрай.
     for rv in (rep.get("reviews") or []):
+        if rv.get("closed_as") == "refused":
+            continue   # ревьюер не вынес вердикт — писатель это не чинит, не зацикливаем
         if rv.get("status") in ("fail", "warn"):
             bl = "; ".join(rv.get("blockers") or []) if rv.get("blockers") else "устрани замечания ревью"
             parts.append(f"[{rv.get('gate')}: {rv.get('status')}] {bl}")
@@ -241,6 +254,10 @@ def _enrich_run_report(rep, *, runtime, provider_name, provider_resolution, chil
     from ai_ops_kit.engine.ai_ops_run import _profile_for_report
     rep["runtime"] = runtime
     rep["engine"] = "pipeline"
+    # #702-work: отчёт несёт свой child_root, чтобы печать для человека выбрала аудиторию по
+    # ЕГО communication-policy, а не по CWD процесса. Без этого поля печать остаётся на technical
+    # (синтетические отчёты тестов и минимальные отчёты честно видят полную стену).
+    rep["child_root"] = str(child_root)
     rep["provider"] = provider_name
     # P0-1 side-effect proof: КАК выбран провайдер — в отчёте (и в run-report.json на диске),
     # а не только в stdout: иначе решение резолва невозможно проверить постфактум.
@@ -269,6 +286,13 @@ def _enrich_run_report(rep, *, runtime, provider_name, provider_resolution, chil
             rep["escalation_error"] = model_resolution["escalation_error"]
     rep["model_resolution"] = model_resolution   # per-role решение роутера (видимость в каждом отчёте)
     rep["preflight"] = pretruth   # v2.115: preflight пройден (для наблюдаемости в отчёте)
+    # #637: пост-фактум «работа стоила $X вместо ожидаемых $Y». Оценка до прогона живёт в preflight
+    # (checks["economic_budget"]), факт — в rep["cost"]; сводим их с дельтой. Честно: нет оценки или
+    # факта -> unavailable, не 0. Дельта не считается за факт поверх неполных данных.
+    _eb = ((pretruth or {}).get("checks") or {}).get("economic_budget") if isinstance(pretruth, dict) else None
+    if _eb is not None:
+        from ai_ops_kit.providers import cost_account as _ca
+        rep["cost_delta"] = _ca.estimate_vs_actual(_eb, rep.get("cost"))
     # v2.119: заметка «живой предложитель (swap провайдера)» уместна только для mock-прогона —
     # на живом провайдере она вводит в заблуждение (предложитель УЖЕ живой). Честный отчёт.
     if provider_name and provider_name != "mock" and isinstance(rep.get("not_yet"), list):

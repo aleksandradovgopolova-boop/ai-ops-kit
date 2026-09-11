@@ -74,14 +74,6 @@ LIMITATIONS = [
 
 # ─── источник истины: разбор кода доставки ────────────────────────────────────────────────────
 
-def _installer_ast(pkg: Path):
-    """AST установщика -> (дерево, множество имён функций верхнего уровня)."""
-    src = (pkg / "installer" / "ai_ops.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    names = {n.name for n in tree.body if isinstance(n, ast.FunctionDef)}
-    return tree, names, src
-
-
 def _func(tree, name):
     for n in tree.body:
         if isinstance(n, ast.FunctionDef) and n.name == name:
@@ -96,8 +88,9 @@ def delivery_steps(pkg: Path = PKG):
     отчёт установки (`_assets_report_line`). Функция может быть переименована без смысловой правки,
     ключ — нет.
     """
-    tree, _, _ = _installer_ast(pkg)
-    fn = _func(tree, "deliver_assets")
+    # deliver_assets вынесена в под-хаб installer/asset_ops.py (финальный разрез монолита).
+    src = (pkg / "installer" / "asset_ops.py").read_text(encoding="utf-8")
+    fn = _func(ast.parse(src), "deliver_assets")
     if fn is None:
         return []
     out = []
@@ -109,14 +102,29 @@ def delivery_steps(pkg: Path = PKG):
     return out
 
 
+def _cmd_init_fn(pkg: Path = PKG):
+    """AST `cmd_init` + исходник. Команда вынесена в сателлит installer/setup_ops.py (разрез монолита)."""
+    src = (pkg / "installer" / "setup_ops.py").read_text(encoding="utf-8")
+    return _func(ast.parse(src), "cmd_init"), src
+
+
+_HUB_FILES = ("ai_ops.py", "version_ops.py", "delivery_ops.py", "managed_state.py", "asset_ops.py")
+
+
 def init_only_calls(pkg: Path = PKG):
-    """Функции установщика, которые зовёт `cmd_init` СВЕРХ `deliver_assets`. -> отсортированный список."""
-    tree, names, _ = _installer_ast(pkg)
-    fn = _func(tree, "cmd_init")
+    """Функции установщика, которые зовёт `cmd_init` СВЕРХ `deliver_assets`. -> отсортированный список.
+
+    Собираем bare- и attr-имена вызовов и пересекаем с полной хаб-поверхностью (cmd_init зовёт хаб
+    через `_ao().<имя>`/`_core().<имя>`). Загрузчики `_ao`/`_core` — доступ, не шаг доставки: отсекаем."""
+    names = set()
+    for f in _HUB_FILES:
+        names |= {n.name for n in ast.parse((pkg / "installer" / f).read_text(encoding="utf-8")).body
+                  if isinstance(n, ast.FunctionDef)}
+    fn = _cmd_init_fn(pkg)[0]
     if fn is None:
         return []
-    return sorted({n.func.id for n in ast.walk(fn)
-                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id in names})
+    return sorted(({getattr(n.func, "id", "") or getattr(n.func, "attr", "")
+                    for n in ast.walk(fn) if isinstance(n, ast.Call)} & names) - {"_ao", "_core"})
 
 
 def _installer_module(pkg: Path):
@@ -194,7 +202,7 @@ def _probe_path(pattern: str) -> str:
 
 
 def check_context_backfilled(root, mod):
-    docs = list(mod._required_context_docs())
+    docs = list(mod._child_scaffolding()._required_context_docs())
     missing = [d for d in docs if not (root / ".ai" / "project" / "context" / d).is_file()]
     if missing:
         return NOT_APPLIED, f"нет обязательных документов контекста: {', '.join(missing)}", ""
@@ -310,6 +318,21 @@ def check_gitattributes(root, mod):
     return APPLIED, f"все {len(paths)} журналов-дописок сводятся merge=union (проверен эффект)", ""
 
 
+def check_plan_merge_driver(root, mod):
+    """Кит помечает свой planning/plan.yaml тем же структурным merge-driver, что доставляет дочке.
+
+    Та же граница, что у `check_gitattributes`: проверяется ЭФФЕКТ АТРИБУТА (`git check-attr merge
+    planning/plan.yaml` == `ai-ops-plan`), а не текст файла. Регистрация драйвера в git config —
+    per-clone (`--install`), здесь не проверяется (атрибут — та же граница, что и у union)."""
+    val = _merge_attr(root, "planning/plan.yaml")
+    if val is None:
+        return UNKNOWN, "git не ответил про merge-атрибут planning/plan.yaml — «применено» не следует", ""
+    if val != "ai-ops-plan":
+        return NOT_APPLIED, ("кит НЕ пометил свой planning/plan.yaml драйвером merge=ai-ops-plan — "
+                             "правило доставляется дочкам и производит эффект здесь же"), ""
+    return APPLIED, "planning/plan.yaml помечен merge-driver ai-ops-plan (проверен эффект)", ""
+
+
 def check_entry_point(root, mod):
     dst = root / mod.ENTRY_NAME
     if not dst.is_file():
@@ -339,7 +362,7 @@ def check_planning_seeded(root, mod):
     if missing:
         return NOT_APPLIED, f"нет артефактов планирования: {', '.join(missing)}", ""
     # Существование != заполненность: F-018/F-027 — заготовка кита считалась заполненной.
-    drafts = [r for r in required if mod._is_unfilled_planning_artifact(root / r)]
+    drafts = [r for r in required if mod._child_scaffolding()._is_unfilled_planning_artifact(root / r)]
     if drafts:
         return NOT_APPLIED, (f"артефакты планирования лежат ЗАГОТОВКАМИ: {', '.join(drafts)} "
                              f"(это F-018 в собственном репозитории: файл есть, направления нет)"), ""
@@ -374,14 +397,51 @@ def check_product_layer_seeded(root, mod):
             f"источник подтверждён: реестр артефактов читается, объявлено артефактов слоя: {n}")
 
 
+def check_roadmap_migrated(root, mod):
+    """Перенос уходящего `.ai-ops/ROADMAP.md` в канонический корень (SR-2, `_migrate_legacy_roadmap`).
+
+    Для САМОГО КИТА — `not_applicable`: кит ведёт направление нативно в корневом `ROADMAP.md` и
+    никогда не имел `.ai-ops/ROADMAP.md` (слой `.ai-ops/` — то, что кит ДАЁТ дочке, а не ведёт у
+    себя). Миграция срабатывает только у дочки, установленной ДО свода путей: там заполненный
+    уходящий роадмап переносится в корень, чтобы резолвер не предпочёл пустой канонический.
+    """
+    legacy = Path(root) / ".ai-ops" / "ROADMAP.md"
+    if legacy.is_file():
+        # необычно для самого кита, но если файл есть — честно сообщаем, что перенос применим
+        return APPLIED, "уходящий `.ai-ops/ROADMAP.md` присутствует — перенос в корень применим", ""
+    return (NOT_APPLICABLE,
+            "кит ведёт направление нативно в корневом `ROADMAP.md` и не имеет `.ai-ops/ROADMAP.md`: "
+            "миграция уходящего пути касается только дочек, установленных до свода (SR-2)", "")
+
+
+def check_architecture_migrated(root, mod):
+    """Перенос уходящих `context/system/*` в канонический `ARCHITECTURE.md` (SR-7).
+
+    Для САМОГО КИТА — `not_applicable`: кит ведёт свою архитектуру нативно и не держит заполненных
+    `context/system/SystemOverview.md`/`RepositoryMap.md` для переноса. Миграция касается дочки,
+    заполнившей прежние файлы до перехода на ARCHITECTURE.md.
+    """
+    legacy = [Path(root) / "context" / "system" / n
+              for n in ("SystemOverview.md", "RepositoryMap.md")]
+    if any(p.is_file() and p.read_text(encoding="utf-8").strip() for p in legacy) \
+            and not (Path(root) / "ARCHITECTURE.md").exists():
+        return APPLIED, "заполненные уходящие context/system/* есть — перенос в ARCHITECTURE.md применим", ""
+    return (NOT_APPLICABLE,
+            "кит ведёт архитектуру нативно и не держит заполненных уходящих context/system/* для "
+            "переноса: миграция в ARCHITECTURE.md касается дочек, заполнивших прежние файлы (SR-7)", "")
+
+
 DELIVERY_CHECKS = {
     "context_backfilled": check_context_backfilled,
     "ci_workflows": check_ci_workflows,
     "zone_markers": check_zone_markers,
     "gitignore": check_gitignore,
     "gitattributes": check_gitattributes,
+    "plan_merge_driver": check_plan_merge_driver,
     "entry_point": check_entry_point,
     "communication_adapter": check_communication_adapter,
+    "roadmap_migrated": check_roadmap_migrated,
+    "architecture_migrated": check_architecture_migrated,
     "planning_seeded": check_planning_seeded,
     "product_layer_seeded": check_product_layer_seeded,
 }
@@ -442,10 +502,9 @@ INIT_CHECKS = {
 # записана: пустая строка здесь означала бы «не применимо» без причины, а это не исход.
 NOT_CULTURE = {
     "deliver_assets": "разобран пошагово выше — это и есть перечень доставки",
-    "_backfill_required_context": "шаг `context_backfilled` из `deliver_assets`",
+    "_child_scaffolding": "загрузчик сателлита; шаг — back-fill контекста, проверен в DELIVERY_CHECKS",
     "ensure_zone_markers": "шаг `zone_markers` из `deliver_assets`",
     "_assets_report_line": "печатает отчёт о доставке; в репозиторий не пишет",
-    "_onboarding_summary": "печатает приветствие; в репозиторий не пишет",
     "_is_git_worktree": "проверка окружения перед установкой",
     "pkg_version": "чтение версии пакета",
     "parent_source": "чтение git remote для конфига дочки",
@@ -454,6 +513,10 @@ NOT_CULTURE = {
     # неприменимо по построению: у кита нет `parent`, он и есть parent — ровно та же причина,
     # по которой в этом списке уже лежит `.ai-ops.yaml`.
     "package_channel": "чтение канала, который заработал пакет (release-claims.yaml)",
+    # SR-4: та же причина, что у package_channel — ЧТЕНИЕ факта о пакете (версия стандарта из
+    # registry/standard.yaml) для подстановки в конфиг дочки, а не доставка культуры. У кита нет
+    # parent — самоприменение неприменимо по построению.
+    "package_standard_version": "чтение версии стандарта пакета (registry/standard.yaml)",
     "compatible_range_for": "вычисление совместимого диапазона версий",
     "write_checksums": "чек-суммы managed-слоя — часть пункта managed_layer",
     "write_provenance": "происхождение managed-слоя — часть пункта managed_layer",
@@ -659,9 +722,9 @@ def evaluate(root: Path = PKG):
                       f"установка изменилась, решение устарело")
 
     # 3. Артефакты, которые пишутся строкой на месте (слабый страж — назван в LIMITATIONS).
-    _, _, src = _installer_ast(PKG)
-    init_fn = _func(ast.parse(src), "cmd_init")
-    init_src = ast.get_source_segment(src, init_fn) or "" if init_fn else ""
+    # cmd_init вынесена в сателлит installer/setup_ops.py — парсим её оттуда.
+    init_fn, init_full_src = _cmd_init_fn(PKG)
+    init_src = ast.get_source_segment(init_full_src, init_fn) or "" if init_fn else ""
     for rel, marker in INLINE_ARTIFACTS.items():
         if marker not in init_src:
             errors.append(f"пункт `{rel}` объявлен доставляемым, но упоминания `{marker}` в "

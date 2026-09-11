@@ -20,10 +20,13 @@ import ast
 from pathlib import Path
 
 INSTALLER = Path(__file__).resolve().parents[2] / "installer" / "ai_ops.py"
+# cmd_subsession вынесена в сателлит installer/aux_commands.py (разрез монолита); тело парсим оттуда,
+# а разводку — из диспетчера ai_ops.py.
+AUX = Path(__file__).resolve().parents[2] / "installer" / "aux_commands.py"
 
 
 def _tree():
-    return ast.parse(INSTALLER.read_text(encoding="utf-8"))
+    return ast.parse(AUX.read_text(encoding="utf-8"))
 
 
 def _func(name):
@@ -39,7 +42,7 @@ def test_command_is_dispatched():
     """Разводка: без ветки в диспетчере команда недоступна человеку — то есть мёртвый код."""
     src = INSTALLER.read_text(encoding="utf-8")
     assert 'cmd == "subsession"' in src, "команда не разведена в диспетчере"
-    assert "return cmd_subsession(argv)" in src
+    assert "return _aux_commands().cmd_subsession(argv)" in src
 
 
 def test_it_is_listed_for_the_human():

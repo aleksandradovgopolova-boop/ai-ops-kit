@@ -60,6 +60,33 @@ def test_code_without_history_is_early_product(tmp_path):
     assert cls["class"] == "EARLY_PRODUCT"
 
 
+def test_documented_brownfield_with_short_history_is_not_downgraded(tmp_path):
+    """#818: зрелый brownfield с документацией/схемами/манифестом, но короткой историей.
+
+    Свежий импорт или squash-история даёт мало коммитов, но продукт УЖЕ существует: описанная
+    архитектура, API-схема и манифест зависимостей собираются в discover(). Прежде класс по ним не
+    поднимался, и репозиторий деградировал в EARLY_PRODUCT — собранные факты не использовались.
+    Теперь их суммарный вес (реестр `classification.maturity_signals`) переводит его в EXISTING.
+    """
+    r = _git_repo(tmp_path, commits=1)          # squash/свежий импорт — истории почти нет
+    (r / "src").mkdir()
+    for i in range(20):
+        (r / "src" / f"m{i}.py").write_text("x = 1\n", encoding="utf-8")
+    # Намеренные артефакты зрелости: архитектура + API-схема + документация + манифест. Ни CI, ни
+    # тестов, ни миграций, ни релизов — только doc/schema/manifest-сигналы.
+    (r / "docs" / "architecture").mkdir(parents=True)
+    (r / "docs" / "architecture" / "overview.md").write_text("# arch\n", encoding="utf-8")
+    (r / "openapi.yaml").write_text("openapi: 3.0.0\n", encoding="utf-8")
+    (r / "README.md").write_text("# product\n", encoding="utf-8")
+    (r / "pyproject.toml").write_text("[project]\nname='p'\n", encoding="utf-8")
+    ev = A.discover(r)
+    # Предпосылка: инфраструктурных признаков живой системы нет — класс держат ТОЛЬКО doc/schema.
+    assert not ev["ci"] and not ev["test_files"] and not ev["migrations"] and not ev["release_history"]
+    cls = A.classify(ev, MODEL)
+    assert cls["class"] == "EXISTING_PRODUCT", (
+        f"brownfield с доками/схемами деградировал в грубый класс: {cls}")
+
+
 def test_reconstruction_carries_status_and_evidence(tmp_path):
     (tmp_path / "requirements.txt").write_text("fastapi\n", encoding="utf-8")
     (tmp_path / "migrations").mkdir()

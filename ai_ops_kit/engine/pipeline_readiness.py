@@ -8,18 +8,9 @@ spec-depth/spec-first/приёмка/context-budget (readiness) и доменн�
 """
 from __future__ import annotations
 
-import sys
-from pathlib import Path
-
-PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
-            Path(__file__).resolve().parents[1])
-for _p in (PKG / "tools", PKG / "validation"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
-
-from ai_ops_kit.engine.pipeline_git import _change_context_range  # noqa: E402
-from ai_ops_kit.engine.pipeline_failure import _diff_checks  # noqa: E402
-from ai_ops_kit.engine.pipeline_evidence import (  # noqa: E402
+from ai_ops_kit.engine.pipeline_git import _change_context_range
+from ai_ops_kit.engine.pipeline_failure import _diff_checks, _baseline_status_flips
+from ai_ops_kit.engine.pipeline_evidence import (
     _review_security, _human_approval_domains_uncovered,
 )
 
@@ -294,6 +285,12 @@ def _assess_readiness(gates, coll, signals, plan, child_root, wid, work_root, *,
     # по-прежнему блокирует, т.к. тогда _diff_checks вернёт непустые regressions).
     _iv_baseline_exempt = bool(baseline_diff) and not _diff_checks(baseline_checks, coll["checks"])[0]
     _unmet_for_spec = (_unmet - {"implementation_verification"}) if _iv_baseline_exempt else _unmet
+    # #405 (недетерминизм вердикта): именно pass<->fail флип отдельной проверки между базой и правкой
+    # переворачивает `_iv_baseline_exempt` (а с ним verification_strategy) от прогона к прогону. Гейт
+    # детерминирован НА ОДНОМ входе, но flaky/date-зависимая проверка даёт РАЗНЫЙ вход. Наказать гейт
+    # за это нельзя (он честно отражает наблюдаемый регресс), поэтому не глотаем флип молча, а НАЗЫВАЕМ
+    # нестабильную проверку — тогда расхождение READY/NOT_READY атрибутируется ей, а не остаётся немым.
+    _unstable_checks = _baseline_status_flips(baseline_checks, coll["checks"]) if baseline_diff else []
     _level = _sl.classify(signals)["level"]
     _req_sections = set(_sl.required_sections(_level))
     spec_depth_missing = sorted({s for s, g in _SECTION_GATE.items()
@@ -389,7 +386,8 @@ def _assess_readiness(gates, coll, signals, plan, child_root, wid, work_root, *,
     return {"spec_depth_missing": spec_depth_missing, "spec_depth_ok": spec_depth_ok,
             "spec_incomplete": spec_incomplete, "spec_bad_status": spec_bad_status,
             "spec_complete_ok": spec_complete_ok, "level": _level,
-            "acceptance_criteria": acceptance_criteria, "context_overflow": context_overflow}
+            "acceptance_criteria": acceptance_criteria, "context_overflow": context_overflow,
+            "iv_baseline_exempt": _iv_baseline_exempt, "unstable_checks": _unstable_checks}
 
 
 def _context_budget_overflow(signals, work_root, plan):

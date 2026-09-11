@@ -31,6 +31,7 @@ import sys
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
+from ai_ops_kit.cli import human_help  # noqa: E402 — человеческая «дверь» (#675 Human API)
 # intent -> (описание, какое действие, нужен ли текст задачи)
 INTENTS = {
     # Третье поле — нужен ли текст задачи. `new` и `resume` его ИСПОЛЬЗУЮТ (заголовок работы,
@@ -58,6 +59,20 @@ INTENTS = {
     "doctor":  ("проверить установку изнутри репозитория (полная проверка — у кита)", "doctor", False),
     # v3.35 Product Operating Model: план продукта и его связность.
     "next":    ("что взять следующим: где мы, что идёт, что блокирует, что можно параллельно", "next", False),
+    # #539: владельческая карточка одной задачи — что с ней прямо сейчас: стадия, что готово, что
+    # мешает и ПОЧЕМУ (последствием, простыми словами), следующий шаг и оценка стоимости. Read-only.
+    "explain": ("что с моей задачей прямо сейчас: стадия, что готово, что мешает и почему, "
+                "следующий шаг, оценка стоимости", "explain", False),
+    # #540: единая владельческая очередь — ОДИН список всего, что ждёт решения человека: решения
+    # (карточка что/варианты/рекомендация), остановленные работы, ждущие подтверждения, свежий ночной
+    # обзор, предупреждения о выпуске. Пусто -> честное «ничего не ждёт». Только чтение.
+    "inbox":   ("что ждёт твоего решения: решения, остановленные работы, подтверждения, обзор, "
+                "предупреждения о выпуске — одной очередью", "inbox", False),
+    # #549: единая машинная ПРОЕКЦИЯ «работы» по id. Подкоманда первым словом (как backlog):
+    # `work show <id>` сводит четыре источника (заявка/реестр идущих работ/граф пакетов/план) в одну
+    # read-only карточку. Ничего не пишет, нового рантайма не заводит — агрегатор поверх существующего.
+    "work":    ("проекция одной работы по id: work show <id> — стадия, кто ведёт, области, "
+                "зависимости, артефакты, решения из четырёх источников", "work", True),
     "model":   ("модель продуктового репозитория: классификация, контуры, пробелы, вопросы", "model", False),
     # Product Contract (единый объект продукта): агрегирует идентичность, стандарт, артефакты слоя,
     # источники истины контуров и здоровье в ОДИН объект с одним вердиктом. Ничего не пишет.
@@ -91,10 +106,23 @@ INTENTS = {
     # Без текста — показать судьбу уже записанных (канал обязан быть двусторонним).
     "feedback": ("рассказать киту, что он сделал не так (без текста — судьба уже сказанного)",
                  "feedback", True),
+    # voluntary-child-registration: ДОБРОВОЛЬНЫЙ охват без телеметрии. Подкоманда первым словом:
+    # register|decline|forget|status|summary (в дочке) · coverage|collect (в ките). Всё opt-in,
+    # рукой владельца, без сети. Без подкоманды — показать состояние отметки.
+    "reach":   ("добровольная отметка о подключении и охват (без телеметрии): "
+                "register|decline|forget|status|summary · coverage|collect", "reach", True),
     # Backlog Intelligence (Фаза 2): GitHub Issues как операционная единица. Подкоманда — первым
     # словом: classify | dedup | prioritize | graph. Без доступа к GitHub отвечает «не проверено»
     # с причиной, а не пустотой. Форма ещё меняется — интент experimental.
     "backlog": ("backlog из GitHub Issues: classify | dedup | prioritize | graph", "backlog", True),
+    # Knowledge Graph как ЗАПРАШИВАЕМАЯ технология (тонкий слой поверх registry/entities.yaml +
+    # validate_knowledge_graph). Подкоманда первым словом (как backlog): собирает один граф из
+    # plan.yaml + FL-*.yaml + feature blueprints и отвечает на вопрос, который иначе требует ручного
+    # чтения трёх файлов. `build` — собрать/показать (--apply — записать knowledge/graph.yaml);
+    # `trace <feature>` — цепочка goal→…→feature→outcome + вердикт + пробелы; `gaps` — что не
+    # покрыто измеримым результатом. Только чтение (кроме `build --apply`).
+    "graph":   ("knowledge graph: build | trace <feature> | gaps — зачем функция существует и "
+                "измерен ли её исход, из плана+обучения+blueprint одним графом", "graph", True),
     # Autonomous Replanning (Фаза 5, капстоун): цикл сам сводит приоритеты плана к реальности. Без
     # флага — отчёт (read-only превью: что переупорядочено и почему + структурные ПРЕДЛОЖЕНИЯ).
     # С `--apply` — записывает переприоритизацию (класс A, обратимо, состав работ не меняет) в
@@ -102,6 +130,12 @@ INTENTS = {
     # предложением, автоматически не применяются.
     "replan":  ("перепланирование: сам переприоритизирует план под реальность (--apply — записать), "
                 "структурные изменения — предложением", "replan", False),
+    # #545 outcome-loop: ЕДИНЫЙ пост-релизный путь одним вызовом — PRR -> проверка прихода событий в
+    # аналитику -> проекция исхода -> один вердикт. Только чтение. Честный дефолт при отсутствии
+    # выгрузки аналитики -> «выпуск рекомендовать не могу», а не «healthy». Реальный флип исхода цели
+    # ждёт реального выпуска дочки.
+    "readout": ("пост-релизная петля: доставили -> дошли ли события в аналитику -> исход -> один "
+                "вердикт (без выгрузки аналитики — честно «ещё нечем проверить»)", "readout", False),
 }
 
 
@@ -109,9 +143,9 @@ INTENTS = {
 # `_run_intent`: расхождение означает «обработчик есть, до него не доходит» — молчаливый no-op с
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
-                  "next", "model", "bootstrap", "feedback", "session", "doctor",
+                  "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect", "replan")
+                  "inspect", "replan", "inbox", "work", "readout", "graph", "reach")
 
 
 def resolve_flags(signals):
@@ -148,35 +182,51 @@ def _is_dir_safe(p):
         return False
 
 
+# Шаги, которые ПОДХВАТЫВАЮТ сохранённые на specify сигналы (полевой замер cockpit, 06.09.2026):
+# `specify` их пишет, эти шаги их читают. Перенос идёт только сюда, чтобы не менять поведение
+# команд, которые к сигналам уровня отношения не имеют (status/next/health/…).
+_SIGNAL_CARRY_INTENTS = ("specify", "plan", "run", "do")
 
-def _wid_for(task, signals, feature):
-    from ai_ops_kit.engine import run_plan
-    return feature or run_plan.build_plan(dict(signals, task_text=task or ""),
-                                          workitem_id=feature)["workitem_id"]
+
+def _carry_stored_signals(task, child_root, signals, feature):
+    """Долить сигналы, сохранённые прошлым `specify` в features/<wid>/spec.yaml.
+
+    Правило слияния: сохранённое — БАЗА, переданное на этом вызове (--signals) — СВЕРХУ. Значит
+    явный --signals по-прежнему переопределяет сохранённое, а его отсутствие больше не откатывает
+    уровень: ENGINEERING-задача не едет молча как QUICK. Нет спеки / нет блока signals -> вернём
+    вход без изменений (обратная совместимость)."""
+    from ai_ops_kit.gates import spec_levels
+    try:
+        wid = _wid_for(task, signals, feature)
+        stored = spec_levels.carried_signals(Path(child_root), wid)
+    except Exception:  # noqa: BLE001 — перенос сигналов не должен ронять команду
+        return signals
+    if not stored:
+        return signals
+    return {**stored, **signals}
 
 
-def _say(child_root, translator, *args, **kwargs):
-    """Внутренний отчёт -> человеческий текст. ЕДИНСТВЕННЫЙ путь наружу для команд намерений.
+def _build_signals(intent, task, child_root, a):
+    """Собрать сигналы вызова: --signals + feature + перенос сохранённого со specify.
 
-    Прежде каждая команда печатала своё: `ONBOARD: стек python`, `SPECIFY: создан`, `REVIEW wid:
-    verdict=…`. Правило «наружу выходит смысл» держалось на памяти автора команды, и из двенадцати
-    команд его соблюдали три. Здесь оно держится на том, что другого способа напечатать нет.
-
-    Имя переводчика — строка: так `cli` не тянет `ui` на импорте (слои). Опечатка в имени падает
-    громко (`AttributeError`), а не печатает пустоту, и её же ловит тест разводки.
+    Вынесено из `main` (ратчет func-size: main упиралась в потолок). Правило переноса — то же,
+    что у plan/run: сохранённое на specify — база, переданное на этом вызове — сверху (см.
+    `_carry_stored_signals`). Явный --signals по-прежнему побеждает; его отсутствие больше не
+    роняет уровень (ENGINEERING-задача не едет молча как QUICK). Перенос — только для интентов
+    `_SIGNAL_CARRY_INTENTS`, чтобы не менять поведение команд, к уровню отношения не имеющих.
     """
-    from ai_ops_kit.ui import presenter
-    fn = getattr(presenter, translator)
-    print(presenter.render(fn(*args, **kwargs),
-                           audience=presenter.audience_from_config(child_root)))
-
-
-def _audience(child_root):
-    """Уровень детализации для этого репозитория. Отдельно — там, где нужен и внутренний вывод."""
-    from ai_ops_kit.ui import presenter
-    return presenter.audience_from_config(child_root)
-
-
+    signals = json.loads(a.signals)
+    if a.feature:
+        signals["feature"] = a.feature
+    if intent in _SIGNAL_CARRY_INTENTS:
+        signals = _carry_stored_signals(task, child_root, signals, a.feature)
+    # #543 shadow->live: owner-флаг risk_calibrated_enforcement из .ai-ops.yaml -> в сигналы (если не
+    # задан явным --signals). По умолчанию ключа нет -> флаг OFF -> строгость гейтов не меняется.
+    from ai_ops_kit.gates import gate_executor as _ge
+    _rc = _ge.risk_calibrated_config(child_root)
+    if _rc is not None and "risk_calibrated_enforcement" not in (signals.get("gates") or {}):
+        signals.setdefault("gates", {})["risk_calibrated_enforcement"] = _rc
+    return signals
 
 
 # --- Реестр обработчиков команд (v3.38). Прежде диспетч был цепочкой `if intent == …` в
@@ -209,6 +259,20 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
+    _intent_explain, _intent_inbox, _intent_work, _intent_readout, _intent_graph,
+    _intent_reach,
+)
+
+# --- Слой реализации команд (ai_ops_cli_commands): проб-несущие обработчики намерений и путь
+# исполнения run/do с сессионными стражами. Общие хелперы вывода/идентификации переехали туда же и
+# ре-экспортируются отсюда — вызывающие и тесты резолвят их прежними именами ai_ops_cli.<name>.
+# Ребро импорта одностороннее: сосед НЕ импортирует ai_ops_cli, поэтому цикла нет.
+from ai_ops_kit.cli.ai_ops_cli_commands import (  # noqa: E402,F401 — ре-экспорт + диспетч/регистрация
+    _wid_for, _intake_command_carrying_task_type, _say, _audience,
+    _intent_backlog, _intent_feedback, _intent_status, _enrich_running_with_work_view,
+    _intent_next, _intent_review, _intent_advise,
+    _session_identity, _announce_start, _session_guard_before_start,
+    _process_gate, _main_run_execute,
 )
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
@@ -221,195 +285,16 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("new", _intent_new), ("governance", _intent_governance),
                    ("bootstrap", _intent_bootstrap), ("discuss", _intent_discuss),
                    ("health", _intent_health), ("team", _intent_team),
-                   ("onboard", _intent_onboard), ("doctor", _intent_doctor)):
+                   ("onboard", _intent_onboard), ("doctor", _intent_doctor),
+                   ("explain", _intent_explain), ("inbox", _intent_inbox),
+                   ("work", _intent_work), ("readout", _intent_readout),
+                   ("graph", _intent_graph), ("reach", _intent_reach),
+                   # проб-несущие обработчики из ai_ops_cli_commands:
+                   ("backlog", _intent_backlog), ("feedback", _intent_feedback),
+                   ("status", _intent_status), ("next", _intent_next),
+                   ("review", _intent_review), ("advise", _intent_advise)):
     _intent(_name)(_fn)
 del _name, _fn
-
-
-@_intent("backlog")
-def _intent_backlog(task, child_root, signals, a):
-    js = a.json
-    return _run_backlog(task, child_root, signals, js, a)
-
-
-@_intent("feedback")
-def _intent_feedback(task, child_root, signals, a):
-    js = a.json
-    # Наблюдение о ките — данные, а не пересказ. Без текста команда показывает судьбу уже
-    # сказанного: канал в одну сторону перестают наполнять, поэтому ответ обязан быть виден.
-    from ai_ops_kit.engops import kit_feedback
-    # ПУТЬ РЕПОЗИТОРИЯ — НЕ НАБЛЮДЕНИЕ (проба канала на живой дочке, 18.08.2026). Обёртка
-    # `./ai-ops` подставляет абсолютный путь сразу после интента, а человек по привычке от всех
-    # остальных команд дописывает `.` — и второй позиционный уезжал в ТЕКСТ. `./ai-ops feedback .`
-    # (ровно та команда, которую кит сам печатает как «посмотреть судьбу сказанного», плюс точка)
-    # записывала наблюдение с содержанием «.», возвращала «записал» и судьбу не показывала.
-    # Здесь путь читается как путь: человек просил показать судьбу, а не сообщать про каталог.
-    _txt = (task or "").strip()
-    if _txt and Path(_txt).is_dir():
-        _txt = ""
-    if not _txt:
-        rep = kit_feedback.status(child_root)
-        if js:
-            print(json.dumps(rep, ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_kit_feedback_status", rep)
-            if _audience(child_root) != "product":
-                print()
-                print(kit_feedback.render_status(rep))
-        return 1 if rep["errors"] else 0
-    ev = kit_feedback.evidence_from_args(getattr(a, "evidence_file", None),
-                                         getattr(a, "evidence_command", None),
-                                         getattr(a, "evidence_note", None))
-    p, created, errors = kit_feedback.record(
-        child_root, _txt, evidence=ev, severity=getattr(a, "severity", None),
-        observation_class=getattr(a, "observation_class", None))
-    if js:
-        print(json.dumps({"path": str(p), "created": created, "errors": errors},
-                         ensure_ascii=False, indent=2))
-    else:
-        try:
-            shown = p.relative_to(child_root)
-        except ValueError:
-            shown = p
-        _say(child_root, "from_kit_feedback_recorded", str(shown), created, errors,
-             bool(ev), getattr(a, "observation_class", None))
-    return 1 if errors else 0
-
-
-@_intent("status")
-def _intent_status(task, child_root, signals, a):
-    js = a.json
-    from ai_ops_kit.lifecycle import active_work
-    from ai_ops_kit.ui import presenter
-    awp = child_root / ".ai" / "runtime" / "active-work.yaml"
-    data = {"active": []}
-    if awp.is_file():
-        try:
-            data = active_work.load(awp)
-        except active_work.ActiveWorkCorrupt as e:
-            # Битый реестр — не «работы нет»: координация сессий недостоверна (инвариант 3.0.12).
-            print(presenter.render(presenter.message(
-                status="blocked",
-                summary="Не могу сказать, что идёт прямо сейчас: запись об идущих работах "
-                        "повреждена.",
-                why_it_matters="Пока это так, я не знаю, не перепишет ли новая работа то, что "
-                               "уже правит другая сессия.",
-                next_steps=["восстановить запись и повторить"],
-                technical={"ошибка": str(e)}),
-                audience=presenter.audience_from_config(child_root)))
-            return 1
-    pub = active_work.publication_enabled(child_root)
-    if js:
-        # Досягаемость видна и в JSON — потребитель ответа не должен угадывать её сам.
-        return (active_work.list_cmd(awp, as_json=True, published=pub, child_root=child_root)
-                if awp.is_file() else 0)
-    aud = presenter.audience_from_config(child_root)
-    # Общая карта: локальные заявки + опубликованные заявки ДРУГИХ машин (если публикация
-    # включена). Так «работа идёт» становится фактом о команде, а не об одной машине.
-    team = active_work.team_view(child_root, data.get("active") or [], pub)
-    # #137: СВЕРКА С БАЗОЙ на чтении. Поле 17.08.2026: три записи из четырёх относились к работе,
-    # давно влитой в main, а `status` отвечал «Работа идёт» и советовал не трогать те же файлы.
-    team = active_work.reconcile_with_base(team, child_root)
-    reconciled = active_work.persist_reconciliation(awp, team) if awp.is_file() else 0
-    # ВТОРОЙ ИСТОЧНИК ПРАВДЫ СПРАШИВАЕТСЯ ЗДЕСЬ, а не заводится третьим (замер 18.08.2026):
-    # реестр говорит, что исполняется на этой машине, план — что объявлено идущим. Сверка живёт в
-    # `planning` осознанно: `lifecycle` не вправе его импортировать (слои), а отвечает человеку
-    # entrypoint — он и складывает два ответа в один.
-    from ai_ops_kit.planning import delivery_plan as _dp
-    try:
-        cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())
-    except _dp.PlanCorrupt as e:
-        # Битый план — не «в плане ничего не объявлено»: это ровно тот случай, где «не знаю»
-        # нельзя выдать за «нет». Ответ про реестр остаётся, а про план говорим прямо.
-        print(presenter.render(presenter.message(
-            status="degraded",
-            summary="Про заявки на работу отвечу, а про план — нет: файл плана не разбирается.",
-            why_it_matters="Пока план не читается, я не могу сказать, не объявлена ли идущей "
-                           "работа, которой никто не занимается.",
-            next_steps=["починить файл плана и повторить"],
-            technical={"ошибка": str(e)}), audience=aud))
-        cross = None
-    print(presenter.render(presenter.from_active_work({"active": team}, published=pub,
-                                                      reconciled=reconciled, crosscheck=cross),
-                           audience=aud))
-    return 0
-
-
-@_intent("next")
-def _intent_next(task, child_root, signals, a):
-    js = a.json
-    # Четыре вопроса: где мы, что идёт сейчас, что блокирует, что взять следующим.
-    from ai_ops_kit.planning import next_work
-    from ai_ops_kit.planning import delivery_plan as _plan
-    from ai_ops_kit.planning import contours as _contours
-    try:
-        # Личность спрашивающего — чтобы «что взять» отвечалось участнику, а не
-        # репозиторию: своя работа отделяется от чужой той же меркой, что и в реестре.
-        rep = next_work.compute(child_root, budget_left=getattr(a, "budget", None),
-                                me=_session_identity(child_root))
-    except (_plan.PlanCorrupt, _contours.ModelCorrupt) as e:
-        print(f"ОШИБКА: {e}")
-        return 1
-    if js:
-        print(json.dumps(rep, ensure_ascii=False, indent=2))
-    else:
-        # v3.35 Human Communication Layer: по умолчанию говорим смыслом, а не внутренним
-        # состоянием. Разбор по четырём вопросам доступен на technical/debug и по --json.
-        from ai_ops_kit.ui import presenter
-        aud = presenter.audience_from_config(child_root)
-        print(presenter.render(presenter.from_next_work(rep), audience=aud))
-        # Ошибки плана и направления печатаются ВСЕГДА: «показать по запросу» относится к
-        # техническим деталям исправного прогона, а не к дефекту, который блокирует ответ.
-        for _e in (rep.get("plan_errors") or []):
-            print(f"  ✗ план: {_e}")
-        for _e in (rep.get("roadmap") or {}).get("errors") or []:
-            print(f"  ✗ направление: {_e}")
-        if aud != "product":
-            print()
-            print(next_work.render(rep))
-    # Код возврата — ГОТОВНОСТЬ ОТВЕТИТЬ, а не наличие работы: без плана и с битым roadmap
-    # ответ «что взять следующим» недостоверен, и молчаливый ноль это скрывал бы.
-    return 0 if (rep.get("plan_present") and not rep.get("plan_errors")
-                 and not rep["roadmap"]["errors"]) else 1
-
-
-
-
-
-
-
-
-@_intent("review")
-def _intent_review(task, child_root, signals, a):
-    js = a.json
-    from ai_ops_kit.delivery import review_branch
-    from ai_ops_kit.engine import run_plan
-    wid = a.feature or _wid_for(task, signals, a.feature)
-    # реальный ревьюер — отдельный провайдер (writer ≠ judge); mock не выносит вердикт (needs-reviewer)
-    rev_prop = None
-    prov = getattr(a, "provider", "mock") or "mock"
-    if prov != "mock":
-        from ai_ops_kit.providers import orchestrator
-        rev_prop = orchestrator.make_provider(prov, getattr(a, "model", None))
-    rep = review_branch.review(child_root, wid, reviewer_proposer=rev_prop, base=a.base)
-    if js:
-        print(json.dumps(rep, ensure_ascii=False, indent=2))
-    else:
-        _say(child_root, "from_review", rep)
-    # v2.121 (P1.3): exit code = готовность к merge (needs-reviewer/needs-changes -> non-zero)
-    return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
-
-
-@_intent("advise")
-def _intent_advise(task, child_root, signals, a):
-    js = a.json
-    from ai_ops_kit.engops import engineering_advisor
-    result = engineering_advisor.advise(str(child_root), task_type=signals.get("task_type"))
-    if js:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-    else:
-        _say(child_root, "from_advice", result)
-    return 0
 
 
 def _run_intent(intent, task, child_root, signals, a):
@@ -419,178 +304,6 @@ def _run_intent(intent, task, child_root, signals, a):
     return handler(task, child_root, signals, a) if handler else None
 
 
-def _session_identity(child_root) -> str:
-    """КТО держит работу — измеренная личность, а не константа.
-
-    ЗАМЕР 18.08.2026: `session` по всему пути прогона имел значение по умолчанию `cli`, то есть ВСЕ
-    параллельные сессии на машине выглядели одним держателем. Из этого следовало сразу два следствия
-    заявки потребителя #150: отказ второй сессии не мог сработать в принципе (держатель «тот же»), и
-    атрибуция инцидента была невозможна — в записях стояло `cli` у всех.
-
-    Личность берётся из ТОГО ЖЕ измерения, которым кит уже считает расход сессии
-    (`engops.session_telemetry`): идентификатор рантайма живёт дольше процесса, поэтому повторный
-    прогон в той же сессии — тот же держатель, а не новый. Не измерилось — честный `pid:<pid>`: это
-    «вот этот процесс», а не «все мы вместе»; мёртвый pid заявку не держит (`active_work`).
-    """
-    try:
-        from ai_ops_kit.engops import session_telemetry
-        sid = (session_telemetry.snapshot(str(child_root)) or {}).get("session_id")
-    except Exception:      # noqa: BLE001 — телеметрия недоступна: личность НЕ теряется, см. ниже
-        sid = None
-    if sid:
-        return f"session:{str(sid)[:8]}"
-    import os as _os
-    return f"pid:{_os.getpid()}"
-
-
-def _session_guard_before_start(child_root, task, signals, feature=None):
-    """v3.22 Culture Runtime Integration: session guard ДО старта задачи.
-    1. snapshot — текущее состояние сессии (контекст и расход — measured по транскрипту сессии)
-    2. relation по факту — session_boundary.classify (не жёсткое значение)
-    3. recommend — расход и исход НАЗЫВАЮТСЯ ВСЕГДА (advise, не block)
-    4. delegation — если большая разведка, рекомендовать сабагент
-    Выводит рекомендации пользователю, не блокирует прогон.
-
-    Почему пункт 3 говорит всегда (2026-08-13): раньше он печатал что-либо только на исходах
-    `new_session`/`compact`. Контекст при этом всегда был `unknown` — транскрипт сессии не читался
-    ни разу, — этих исходов не наступало, и страж молчал в 100% прогонов. Молчание неотличимо от
-    «всё в порядке», а решение «здесь новую сессию не начинаем» нужно ДО траты, не после.
-    """
-    try:
-        from ai_ops_kit.engops import session_telemetry
-        from ai_ops_kit.engops import session_guardrails
-        from ai_ops_kit.engops import session_boundary
-        from ai_ops_kit.engops import delegation_advisor
-        # 1. snapshot
-        snap = session_telemetry.snapshot(str(child_root), workitem_id=feature)
-        # 2. relation по факту
-        current_wid = snap.get("workitem_id")
-        relation_cls, reason = session_boundary.classify(
-            current_workitem=current_wid, new_task=task or "", new_workitem=feature)
-        relation = session_boundary.to_relation(relation_cls)
-        # 3. recommend — наружу через presenter, на любом исходе
-        pol = session_guardrails.load_policy(child_root)
-        rec = session_guardrails.recommend(snap, pol, next_relation=relation, next_task=task,
-                                           task_done=False, repo_path=str(child_root))
-        _say(child_root, "from_session_economy", snap, rec)
-        # 3а. автономия: может ли кит взять эту работу в ОТДЕЛЬНУЮ сессию сам, и разрешено ли ему
-        # тратить. Здесь только РЕШЕНИЕ — трата отсюда невозможна: исполнителя и учёт расхода
-        # подключает вызывающий (см. session_launcher.spawn, шов usage_hooks). Печатаем, только когда
-        # рекомендация уже говорит о смене сессии: иначе строка была бы шумом на каждом прогоне.
-        if rec.get("outcome") in ("new_session", "clear"):
-            # 3б. ПОДГОТОВКА ПЕРЕХОДА, а не только совет о нём. Замер 17.08.2026: совет «уйди в
-            # новую сессию» существовал и был верен, но уходить было НЕ С ЧЕМ — сессионного handoff
-            # кит не писал нигде, при этом текст рекомендации утверждал, что handoff сохранён.
-            # Пишем ровно на тех исходах, где переход советуется: писать на каждом прогоне значило бы
-            # заводить файл там, где никто никуда не уходит.
-            from ai_ops_kit.engops import session_handoff
-            try:
-                _h = session_handoff.write(
-                    child_root, session_handoff.build(child_root, snap, rec, goal=task))
-                print(f"  handoff сессии записан: {_h}")
-            except Exception as _he:  # noqa: BLE001 — не смогли записать: говорим, а не молчим
-                print(f"⚠ handoff сессии НЕ записан: {_he}")
-            from ai_ops_kit.engops import session_launcher
-            dec = session_launcher.decide(str(child_root), snap, next_relation=relation,
-                                          next_task=task, task_done=False)
-            _say(child_root, "from_subsession_decision", dec)
-        # 4. delegation
-        del_signals = {"task_text": task or "", "files_count": 0}
-        del_recs = delegation_advisor.advise(del_signals)
-        if del_recs:
-            print(f"⚠ DELEGATION: {len(del_recs)} рекомендация(ий)")
-            for r in del_recs[:2]:
-                print(f"  · {r.get('trigger')}: {r.get('reason', '')[:80]}")
-    except Exception as e:  # noqa: BLE001
-        # session guard — advise, не block; если что-то сломалось, продолжаем
-        print(f"⚠ session guard: {e}")
-
-
-def _process_gate(intent, task, child_root, signals, a, preview_mode):
-    """Два механизма ПЕРЕД процессным шагом. -> код возврата (шаг делать не надо) или None.
-
-    Решение владельца 2026-08-17 по работе `kit-as-first-step-or-as-trace`. Порядок здесь —
-    содержательный, не случайный:
-
-    1. КОРОТКИЙ ПУТЬ (`planning/short_path`). Если работа уже описана, описывать её заново незачем,
-       и потолок траты на описание к ней применять тоже незачем — повода тратить просто нет.
-    2. ПОТОЛОК ПРОЦЕССНОЙ ФАЗЫ (`engops/process_spend`). Ловит противоположный случай: описания нет,
-       разбор идёт, кода всё ещё нет. Замер поля — две сессии по 200+ тысяч токенов.
-
-    Превью не задето: оно ничего не делает и ничего не тратит, а короткий путь — это ДЕЙСТВИЕ.
-    """
-    from ai_ops_kit.engops import process_spend
-    if preview_mode or intent not in process_spend.PROCESS_INTENTS:
-        return None
-    from ai_ops_kit.planning import short_path
-    child_root = Path(child_root)
-    wid = a.feature or _wid_for(task, signals, a.feature)
-
-    if not getattr(a, "full_process", False):
-        d = short_path.assess(task, signals, child_root, wid)
-        if d["short_path"]:
-            tr = short_path.trace(child_root, wid, signals, d)
-            run_cmd = f'./ai-ops run "{task or "<задача>"}" --feature {wid} --execute'
-            if a.json:
-                print(json.dumps({"kind": "short-path", "decision": d,
-                                  "spec": str(tr.get("spec")), "record": str(tr.get("record")),
-                                  "sections_filled": tr.get("filled"),
-                                  "sections_declined": tr.get("declined"),
-                                  "trace_error": tr.get("error"),
-                                  "next_command": run_cmd}, ensure_ascii=False, indent=2))
-            else:
-                _say(child_root, "from_short_path", d, tr, run_cmd)
-                if _audience(child_root) != "product":
-                    print()
-                    print(short_path.render(d))
-            # След не записался — это не короткий путь, а пропуск проверок без записи о нём.
-            # Отдаём тот же код, что у незакрытого гейта: молча продолжать нельзя.
-            return 1 if tr.get("error") else 0
-        if d["declared"] and not a.json:
-            # Заявлено, но не подтверждено: называем, чего не хватает, и идём ОБЫЧНЫМ путём.
-            _say(child_root, "from_short_path", d, None, None)
-
-    # ПОВТОРНЫЙ `specify` ПОД ПОДНЯВШИЙСЯ УРОВЕНЬ — НЕ РАЗБОР (B2-26, поле 19.08.2026).
-    # Потолок ловит «описание уточняется, кода нет, деньги текут». Дописывание недостающих разделов
-    # ни того, ни другого не делает: шаг детерминированный, конечный и модель не зовёт вовсе. Отказ
-    # экономической причиной здесь не просто лишний — он ВРЁТ: человек читает про деньги, а дело в
-    # разделах, и уровень в файле так и остаётся прежним.
-    top_up = {"missing": []}
-    if intent == "specify":
-        from ai_ops_kit.gates import spec_levels
-        top_up = spec_levels.pending_sections(child_root, wid, signals)
-
-    check = process_spend.assess(child_root, wid, intent)
-    if check["blocks"] and top_up["missing"]:
-        _lvl = f"{top_up.get('level_in_file')} -> {top_up['level_now']} ({top_up['level_name']})"
-        if a.json:
-            print(json.dumps({"kind": "spec-top-up-exempt", "check": check,
-                              "level": _lvl, "sections_to_add": top_up["missing"]},
-                             ensure_ascii=False, indent=2))
-        else:
-            # печатается ОБЕИМ аудиториям намеренно: владелец видел на этом месте отказ про деньги,
-            # и заменить его молчанием значило бы починить только техническую половину
-            print(f"· уровень описания поднялся ({_lvl}): дописываю разделы "
-                  f"{', '.join(top_up['missing'])}. Это конечный шаг без обращения к модели — "
-                  f"потолок траты на разбор к нему не применяю.")
-        return None
-
-    if check["blocks"] and not getattr(a, "spend_ok", False):
-        run_cmd = f'./ai-ops run "{task or "<задача>"}" --feature {wid} --execute'
-        cont_cmd = f'./ai-ops {intent} "{task or "<задача>"}" --feature {wid} --spend-ok'
-        if a.json:
-            print(json.dumps({"kind": "process-spend-ceiling", "exit": 2, "check": check,
-                              "run_command": run_cmd, "continue_command": cont_cmd},
-                             ensure_ascii=False, indent=2))
-        else:
-            _say(child_root, "from_process_spend", check, cont_cmd, run_cmd)
-        return 2
-    if check["state"] == "unknown" and not a.json and _audience(child_root) != "product":
-        # «Не знаю» не выдаём за норму — но и не тревожим владельца тем, что мерить нечем.
-        _say(child_root, "from_process_spend", check, None, None)
-    return None
-
-
 def _build_cli_arg_parser():
     """Собрать argparse интент-CLI — тело main() без разбора аргументов и диспетчеризации."""
     ap = argparse.ArgumentParser(prog="ai_ops_cli.py")
@@ -598,6 +311,18 @@ def _build_cli_arg_parser():
     ap.add_argument("rest", nargs="*")
     ap.add_argument("--signals", default="{}")
     ap.add_argument("--feature")
+    # #612 (первый час): `model --answer <qid> "<value>"` записывает один ответ онбординга без ручной
+    # правки .ai/project/onboarding-answers.yaml. `--why` — основание (источник), станет комментарием.
+    ap.add_argument("--answer", nargs=2, metavar=("QID", "VALUE"), default=None,
+                    help="model: записать один ответ онбординга (без ручной правки YAML)")
+    ap.add_argument("--why", default=None,
+                    help="model --answer: основание ответа (источник) — ляжет комментарием")
+    # #647 (первый час): `model --flow` сшивает понимание → вопросы → (если ответы есть) направление
+    # и план → следующую работу ОДНИМ нарративом. `--apply` записывает направление/план (иначе сухой
+    # предпросмотр). Не новый интент — режим `model`, чтобы не плодить top-level команды (#632).
+    ap.add_argument("--flow", action="store_true",
+                    help="model: первый час одним нарративом (понял → знаю/не знаю → направление и "
+                         "план → следующая работа); с --apply записывает направление и план")
     ap.add_argument("--execute", action="store_true")
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
@@ -617,9 +342,13 @@ def _build_cli_arg_parser():
     ap.add_argument("--model", help="review: модель ревьюера")
     ap.add_argument("--sequential", action="store_true",
                     help="run: неатомарную задачу исполнять по WorkPackages последовательно (v3.1)")
+    ap.add_argument("--parallel", action="store_true",
+                    help="run: ЯВНЫЙ opt-in настоящей конкурентности — мультипакетный план исполнить "
+                         "по disposable-клону на пакет с governed fan-in (#542). По умолчанию ВЫКЛ; "
+                         "атомарная задача откатывается в обычный прогон. Основной checkout не трогается")
     ap.add_argument("--open-pr", action="store_true",
                     help="run: открыть draft PR по результату (нужен GITHUB_TOKEN)")
-    ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop")
+    ap.add_argument("--max-steps", type=int, default=40, help="run: потолок шагов tool-loop — предохранитель от убежавшего писателя, не рабочая точка (типовой расход единицы-десятки шагов; обоснование у поля max_steps в run_context)")
     ap.add_argument("--resume-from", help="run --sequential: продолжить с конкретного WorkPackage (id); "
                                           "пакеты до него берутся из снимков прошлого прогона")
     ap.add_argument("--retry-package", help="run --sequential: ДОВЕРЕННЫЙ retry заблокированного пакета (id) "
@@ -631,6 +360,11 @@ def _build_cli_arg_parser():
                     help="resume: доставить УЖЕ готовый READY-коммит без перезапуска писателя "
                          "(#403: перепроверка существующего HEAD без нового evidence-коммита, затем "
                          "доставка) — при сбое доставки после READY не плодит новые коммиты")
+    ap.add_argument("--reevaluate-only", action="store_true", dest="reevaluate_only",
+                    help="run: ПЕРЕОЦЕНИТЬ гейты существующей фичи БЕЗ переавторинга и без вызова "
+                         "модели (план/SHA стабильны) — например, оркестратор записал вердикт-ревью "
+                         "или человек добавил ApprovalRecord: гейт закрывается по артефакту, работа "
+                         "доходит до ready/доставки. Нужен --execute + --feature. engine=pipeline")
     ap.add_argument("--budget", type=int, default=None,
                     help="next: остаток бюджета в токенах (нет значения -> unknown, НЕ ноль)")
     ap.add_argument("--approved", default=None,
@@ -641,6 +375,13 @@ def _build_cli_arg_parser():
                          "по умолчанию .ai-ops/backlog.yaml")
     ap.add_argument("--milestone", default=None,
                     help="delivery: id milestone, под который строить delivery-план и прогноз")
+    # #545 readout (пост-релизная петля): PRR-файл и опциональные OutcomeContract/OutcomeReadout.
+    ap.add_argument("--prr", default=None,
+                    help="readout: путь к PRR-файлу (PostReleaseReadout); без него — поиск в дочке")
+    ap.add_argument("--outcome-contract", default=None, dest="outcome_contract",
+                    help="readout: путь к OutcomeContract для проекции исхода (опционально)")
+    ap.add_argument("--outcome-readout", default=None, dest="outcome_readout",
+                    help="readout: путь к OutcomeReadout (опционально; без него исход — pending)")
     ap.add_argument("--apply", action="store_true",
                     help="bootstrap: РЕАЛЬНО создать отсутствующие направление и план "
                          "(без флага — сухой прогон: показать, что будет создано)")
@@ -666,41 +407,34 @@ def _build_cli_arg_parser():
                     choices=["defect", "friction", "question", "idea"],
                     help="feedback: дефект / трение / вопрос / идея (по умолчанию выводится из улик)")
     ap.add_argument("--json", action="store_true")
+    # #675: `help --all` — показать весь список команд, а не только человеческую дверь. Разбирается
+    # в human_help.handle ДО argparse; объявлен здесь, чтобы флаг был настоящим (printed-commands-runnable).
+    ap.add_argument("--all", action="store_true", help="help: показать все команды, не только дверь")
     return ap
 
 
-def main(argv):
-    ap = _build_cli_arg_parser()
-    a = ap.parse_args(argv)
+def _parse_task_and_root(intent, rest):
+    """Разобрать позиционные `[задача] child_root` -> (task, child_root). Вынесено из main (ратчет
+    func-size). `rest` мутируется на месте (pop): остаток виден вызывающему.
 
-    intent = a.intent
-    rest = list(a.rest)
-    preview_mode = intent == "preview"
-    if preview_mode:
-        intent = rest.pop(0) if rest else "run"
-    # разбор [задача] child_root
+    КАТАЛОГ РЕПОЗИТОРИЯ — ПОСЛЕДНИЙ АРГУМЕНТ (его подставляет `./ai-ops`), текст задачи — перед ним.
+    Прежде разбор шёл слева и опирался на флаг `needs_task`: у `new` он стоял `False`, и
+    `./ai-ops new "добавить экспорт в CSV"` объявлял каталогом репозитория… текст задачи. Каркас
+    создавался в `./добавить экспорт в CSV/features/wi-unknown/`, код возврата 0 — кит молча работал
+    не в том репозитории и сообщал об успехе. Нашлось тестом разводки команд.
+    КАТАЛОГ РАСПОЗНАЁТСЯ И В НАЧАЛЕ, И В КОНЦЕ — иначе один из двух путей вызова ломается (F-032,
+    третье подтверждение 17.08.2026, чистая установка). Обёртка `./ai-ops` подставляет путь СРАЗУ
+    ПОСЛЕ интента (`<intent> <путь> "текст" --флаг`): хвостовой аргумент после флагов argparse в
+    позиционную группу не берёт вовсе (B2-15, 14.08.2026), а разбор искал каталог ТОЛЬКО в хвосте —
+    и `./ai-ops specify "текст" --feature X` терял текст задачи.
+
+    Порядок правил важен: сначала абсолютный путь в НАЧАЛЕ (так делает только обёртка), потом хвост
+    (так пишет человек), потом относительный путь в начале (`./ai-ops specify . "текст"`).
+    Абсолютность в первом правиле отличает подстановку обёртки от текста задачи, случайно совпавшего
+    с именем каталога.
+    """
     needs_task = INTENTS.get(intent, ("", "", False))[2]
     task, child_root = None, "."
-    # КАТАЛОГ РЕПОЗИТОРИЯ — ПОСЛЕДНИЙ АРГУМЕНТ (его подставляет `./ai-ops`), текст задачи — перед
-    # ним. Прежде разбор шёл слева и опирался на флаг `needs_task`: у `new` он стоял `False`, и
-    # `./ai-ops new "добавить экспорт в CSV"` объявлял каталогом репозитория… текст задачи. Каркас
-    # создавался в `./добавить экспорт в CSV/features/wi-unknown/`, код возврата 0 — кит молча
-    # работал не в том репозитории и сообщал об успехе. Нашлось тестом разводки команд.
-    # КАТАЛОГ РЕПОЗИТОРИЯ РАСПОЗНАЁТСЯ И В НАЧАЛЕ, И В КОНЦЕ — иначе один из двух путей вызова
-    # ломается (F-032, третье подтверждение 17.08.2026, чистая установка).
-    #
-    # Обёртка `./ai-ops` подставляет путь СРАЗУ ПОСЛЕ интента (`<intent> <путь> "текст" --флаг`) — и
-    # так она делает не по прихоти: хвостовой аргумент после флагов argparse в позиционную группу не
-    # берёт вовсе (B2-15, 14.08.2026). Разбор же искал каталог ТОЛЬКО в хвосте. В итоге
-    # `./ai-ops specify "текст" --feature X` терял текст задачи, а задачей становился путь
-    # репозитория: кит печатал владельцу следующую команду с абсолютным путём вместо задачи.
-    # Проверялось руками на установленной копии; тесты кита этого не видели, потому что зовут
-    # `main()` в человеческом порядке.
-    #
-    # Порядок правил важен: сначала абсолютный путь в НАЧАЛЕ (так делает только обёртка), потом
-    # хвост (так пишет человек), потом относительный путь в начале (`./ai-ops specify . "текст"`).
-    # Абсолютность в первом правиле — не украшение: она отличает подстановку обёртки от текста
-    # задачи, который случайно совпал с именем каталога.
     if len(rest) >= 2 and _is_dir_safe(rest[0]) and Path(rest[0]).is_absolute():
         child_root = rest.pop(0)
     elif rest and _is_dir_safe(rest[-1]):
@@ -711,9 +445,39 @@ def main(argv):
         task = rest.pop(0)
     elif needs_task:
         task = ""
-    signals = json.loads(a.signals)
-    if a.feature:
-        signals["feature"] = a.feature
+    return task, child_root
+
+
+def main(argv):
+    # #675 Human API: пустой вызов и `help` показывают человеческую дверь (короткий набор команд
+    # владельца), а не argparse-стену из 36 интентов и 30 флагов. `help --all` — весь список.
+    _door = human_help.handle(argv, INTENTS)
+    if _door is not None:
+        return _door
+    ap = _build_cli_arg_parser()
+    a = ap.parse_args(argv)
+
+    intent = a.intent
+    rest = list(a.rest)
+    preview_mode = intent == "preview"
+    if preview_mode:
+        intent = rest.pop(0) if rest else "run"
+    # разбор [задача] child_root (вынесен из main: ратчет func-size). rest мутируется на месте (pop),
+    # поэтому остаток позиционных виден вызывающему (ветка resume ниже его дочитывает).
+    task, child_root = _parse_task_and_root(intent, rest)
+    # Сигналы вызова + перенос сохранённого со specify (в _build_signals: ратчет func-size). ДО
+    # процессного гейта и диспетча — одни и те же сигналы видят и short_path/потолок, и план, и движок.
+    signals = _build_signals(intent, task, child_root, a)
+
+    # ЗАДАЧА ИЗ СПЕКИ, когда `run`/`do` вызваны без текста (только `--feature`). Движок строит задачу
+    # писателю ТОЛЬКО из позиционного аргумента (`ctx = task + профиль`), а НЕ из spec.yaml — и вызов
+    # без текста давал писателю пустой блок «=== ЗАДАЧА ===» (живой прогон #587). Спека — источник
+    # истины: собираем задачу из её разделов. Fail-closed: нет спеки/разделов -> task пуст, как раньше.
+    if intent in ("run", "do") and not (task or "").strip():
+        from ai_ops_kit.gates import spec_levels as _sl
+        _spec_task = _sl.task_from_spec(child_root, _wid_for(task, signals, a.feature))
+        if _spec_task:
+            task = _spec_task
 
     # ПЕРЕД процессным шагом: уже описанная работа идёт коротким путём, залипший разбор
     # останавливается вопросом владельцу. Место выбрано так, что ни один процессный шаг мимо не
@@ -732,9 +496,9 @@ def main(argv):
             child_root, task = task, rest.pop(0)
         # v2.109 Real Resume: --execute реально продолжает прогон (не рестарт); без флага — preflight.
         argv2 = ["resume", child_root, a.feature or (task or ""), "--base", a.base]
-        # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume — иначе
-        # `ai-ops resume --provider X` молча уходил в mock. F-026: провайдера НЕ подставляем (было
-        # `a.provider or "mock"` — заглушка ЯВНО); не задан — решает та же логика, что у `run --execute`.
+        argv2 += ["--session", _session_identity(child_root)]   # #695: та же личность, что у `run`
+        # v3.0-rc2 (P0.1): intent CLI ПРОВОДИТ provider/model/signals в низкоуровневый resume (иначе
+        # `--provider X` молча уходил в mock). F-026: провайдера НЕ подставляем — решает та же логика run.
         argv2 += ["--signals", a.signals]
         if a.provider:
             argv2 += ["--provider", a.provider]
@@ -761,35 +525,12 @@ def main(argv):
             argv2.append("--json")
         return ai_ops_run.main(argv2)
 
-    # v2.110 Real Spec-First: `specify` РЕАЛЬНО создаёт spec-артефакт нужной глубины (не только превью).
+    # v2.110 Real Spec-First: `specify` РЕАЛЬНО создаёт spec-артефакт нужной глубины (не только
+    # превью). Тело — в спутнике _intent_specify (ратчет func-size main); Исход 3 #768 — там же.
     if intent == "specify":
-        from ai_ops_kit.gates import spec_levels
-        from ai_ops_kit.engine import run_plan
-        if not signals.get("task_type"):
-            signals["task_type"] = run_plan.build_plan(dict(signals, task_text=task or ""))["base_workflow"]
-        wid = a.feature or run_plan.build_plan(dict(signals, task_text=task or ""))["workitem_id"]
-        # F-029: create_spec ДОПИСЫВАЕТ разделы, если уровень поднялся с прошлого раза. Раньше здесь
-        # приходило «уже существует», а сообщение звало заполнить разделы, которых в файле не было.
-        sp, created, spec_rep = spec_levels.create_spec(Path(child_root), wid, signals,
-                                                        overwrite=a.force)
-        cov = spec_levels.assess_from_artifacts(signals, Path(child_root), wid)
-        if a.json:
-            print(json.dumps({"path": str(sp), "created": created, "added": spec_rep["added"],
-                              "add_error": spec_rep["error"], "coverage": cov},
-                             ensure_ascii=False, indent=2))
-        else:
-            try:
-                shown = sp.relative_to(Path(child_root))
-            except ValueError:
-                shown = sp
-            # obs e09fe515 (поле 20.08.2026): подсказка после specify вела СРАЗУ на `run --execute`,
-            # пропуская `plan`. Заявленный путь кита — specify -> plan -> run; человек, идущий по
-            # подсказкам, планирования не видел вовсе. Следующий шаг — `plan`.
-            _say(Path(child_root), "from_specification", shown, created, cov["level_name"],
-                 cov["sections"], cov["blocking_missing"],
-                 f"./ai-ops plan \"{task or '<задача>'}\" --feature {wid}",
-                 spec_rep["added"], spec_rep["error"])
-        return 0
+        from ai_ops_kit.cli.ai_ops_cli_lifecycle import _intent_specify
+        _intent_specify(task, Path(child_root), signals, a)
+        return 0   # specify всегда завершается 0 (как и прежним inline-блоком) — код виден в main
 
     # v2.112 Intent UX: настоящие действия (не только превью). preview_mode -> всегда показать превью.
     # v2.116: `review` тоже настоящий intent — read-only ревью действующей ветки.
@@ -811,9 +552,19 @@ def main(argv):
     _understood_type = (pv.get("understood") or {}).get("task_type")
     if _understood_type and not signals.get("task_type"):
         signals["task_type"] = _understood_type
+    # #702: если do/run --execute сейчас упрётся в недостающие intake-сигналы, НЕ показываем превью
+    # «вот что я сделаю / запускай когда готов» — оно противоречит следующему сообщению «данных не
+    # хватает». Пусть говорит одно: чего не хватает (это скажет intake-gap в _main_run_execute).
+    _blocked_on_intake = False
+    _will_execute_now = (intent == "run" and a.execute) or intent == "do"
+    if _will_execute_now:
+        from ai_ops_kit.engine import pipeline_helpers as _ph
+        _blocked_on_intake = bool(_ph.missing_intake_signals(signals))
+    # #708: немедленный старт (do/run --execute) -> превью говорит «запускаю сейчас», не «когда готов».
+    pv["will_execute_now"] = _will_execute_now
     if a.json:
         print(json.dumps(pv, ensure_ascii=False, indent=2))
-    else:
+    elif not _blocked_on_intake:
         # Смысл — всегда; внутренний разбор превью (стадии, флаги, бюджет) — на technical/debug,
         # как у `next` и `model`. Разбор не выброшен: без него не отладить неверный подбор режима.
         _say(Path(child_root), "from_execution_preview", pv)
@@ -825,135 +576,26 @@ def main(argv):
     return _main_run_execute(intent, task, child_root, signals, a, pv)
 
 
-def _main_run_execute(intent, task, child_root, signals, a, pv):
-    """Единственный путь, реально запускающий движок: `run --execute` и `do` (v3.22: `do` — alias
-    с авторазрешением блокировщиков review_fix_attempts/author/open_pr). Возвращает код возврата."""
-    if (intent == "run" and a.execute) or intent == "do":
-        from ai_ops_kit.engine import ai_ops_run
-        from ai_ops_kit.engine import pipeline_helpers
-        # v3.38 (W3): регистрация подписчиков спутников — ЗДЕСЬ, на входе, а не в ядре (kernel-boundary:
-        # ядро испускает события и НЕ импортирует спутники). Явный импорт виден и test_capability_reachability.
-        from ai_ops_kit.engops import session_events as _session_events  # noqa: F401
-        # v3.28.x (F-015): intake-сигналы проверяем ДО старта — `size` требует блокирующий гейт
-        # intake_completeness, иначе пользователь узнавал о пропаже только из вердикта ПОСЛЕ прогона
-        # (раунд C: 6 из 6 прогонов сгорели). Fail-closed (exit 2), но платится секундами, а не часом.
-        _missing = pipeline_helpers.missing_intake_signals(signals)
-        if _missing:
-            _hint = pipeline_helpers.intake_signals_hint(_missing, task)
-            if a.json:
-                print(json.dumps({"kind": "intake-incomplete", "exit": 2,
-                                  "missing": _missing, "hint": _hint}, ensure_ascii=False, indent=2))
-            else:
-                # Готовая команда с ответом обязана дойти до человека на любом уровне детализации.
-                _say(Path(child_root), "from_intake_gap", _missing,
-                     pipeline_helpers.intake_signals_command(_missing))
-            return 2
-        flags = pv["will_do"]["auto_flags"]
-        # v3.28.x (P0-1): провайдер выбирается ОДИН раз здесь и идёт под своим именем во все ветки
-        # (sequential/обычная) — иначе автовыбор терялся бы по дороге (v2.120/v3.0-rc2).
-        _pres = ai_ops_run.resolve_provider_for_run(a.provider, Path(child_root), execute=True,
-                                                    quiet=a.json)
-        # F-026: прогон без вызова модели не доводится до вердикта — отказ (офлайн только `--provider mock`).
-        _refusal = ai_ops_run.live_provider_refusal(_pres, a.provider)
-        if _refusal:
-            if a.json:
-                print(json.dumps({"kind": "run", "status": "error", "exit": 2,
-                                  "error": _refusal, "provider_resolution": _pres},
-                                 ensure_ascii=False, indent=2))
-            else:
-                print(f"ОТКАЗ: {_refusal}")
-            return 2
-        provider = _pres["provider"]
-        # v3.22: `do` форсирует флаги автономного прогона
-        if intent == "do":
-            flags["author"] = True
-            flags["review"] = True
-            a.open_pr = True
-        # v3.1/v2.120: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом);
-        # sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget (аудит P0.2).
-        if a.sequential:
-            from ai_ops_kit.engine import atomic_planner
-            from ai_ops_kit.engine import workpackage_executor
-            from ai_ops_kit.engine import tool_loop
-            from ai_ops_kit.providers import orchestrator
-            wid = a.feature or _wid_for(task, signals, a.feature)
-            wp = atomic_planner.decompose(signals, wid=wid, child_root=Path(child_root))
-            # v3.0-rc13 (P1): доверенный retry — архив попытки + reset на checkpoint предшественника,
-            # затем продолжаем как resume_from (без ручного git reset у пользователя).
-            resume_from = a.resume_from
-            if a.retry_package:
-                rt = workpackage_executor.retry_package(Path(child_root), wid, a.retry_package)
-                if not rt.get("ok"):
-                    print(f"RETRY ОТКАЗ: {rt.get('error')}")
-                    return 2
-                print(f"RETRY {a.retry_package}: ветка восстановлена на checkpoint "
-                      f"{(rt.get('checkpoint') or '')[:12]} (предшественник {rt.get('predecessor') or 'база'}); "
-                      f"попытка заархивирована -> {rt.get('archived_attempt') or '—'}")
-                resume_from = a.retry_package
-            if wp["should_decompose"] and wp["work_packages"]:
-                base_prop = tool_loop.make_model_proposer(orchestrator.make_provider(provider, a.model))
-                auth = orchestrator.make_provider(provider, a.model) if flags["author"] and provider != "mock" else None
-                rev = orchestrator.make_provider(provider, a.model) if flags["review"] and provider != "mock" else None
-                print(f"— исполняю по WorkPackages: {len(wp['work_packages'])} пакет(ов) —")
-                seq = workpackage_executor.execute_sequence(
-                    task, signals, Path(child_root), wp["work_packages"], lambda pkg: base_prop,
-                    feature=wid, base=a.base, provider_name=provider, model=a.model,
-                    author=flags["author"], author_proposer=auth,
-                    review=flags["review"], reviewer_proposer=rev, baseline_diff=flags["baseline_diff"],
-                    sandbox=flags["sandbox"], install_deps=True, open_pr=a.open_pr, max_steps=a.max_steps,
-                    # v2.123 (P0.3): package write_scope РЕАЛЬНО протянут — брокер ограничит пакет его каталогом
-                    write_scope_for=lambda pkg: pkg.get("write_scope"),
-                    resume_from=resume_from)   # v2.124: resume; v3.0-rc13: retry -> resume_from=retry-package
-                _dlv = seq.get("delivery") or {}
-                print(f"SEQUENCE {wid}: executed_all={seq['executed_all']} · ready_all={seq['ready_all']} · "
-                      f"пакетов {seq['total']} · остановлен_на={seq['stopped_at'] or '—'}"
-                      + (f" · доставка={_dlv.get('status')}" if _dlv.get('requested') else ""))
-                for p in seq["packages"]:
-                    print(f"  [{p['id']}] {p['status']} · sha={(p.get('sha') or '')[:12] or '—'} · ready={p.get('ready')}")
-                # v2.120/2.124 exit-код: 0 — ready_all И (если запрошен PR) он реально открыт;
-                # 1 — исполнено, но не готово / доставка не удалась; 2 — цепочка блокирована/ошибка.
-                if seq["ready_all"]:
-                    if _dlv.get("requested") and _dlv.get("status") not in ("opened", "updated"):
-                        return 1   # готово, но draft PR не открыт -> не полный успех
-                    return 0
-                return 1 if seq["executed_all"] else 2
-            print("— задача атомарна: последовательное исполнение не требуется, обычный прогон —")
-        print("— запускаю —")
-        # v3.22: session guard ДО старта — snapshot + relation по факту + delegation
-        _session_guard_before_start(Path(child_root), task, signals, a.feature)
-        # v2.120: канонический вход ПРОВОДИТ провайдера/модель/base/open-pr/max-steps/require-fix в движок
-        # (аудит P0.1: раньше уходило в mock). v3.22: `do` добавляет review_fix_attempts=2.
-        review_fix = 2 if intent == "do" else getattr(a, "review_fix_attempts", 0)
-        rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
-                             session=_session_identity(child_root),
-                             feature=a.feature, execute=True, sandbox=flags["sandbox"],
-                             baseline_diff=flags["baseline_diff"], review=flags["review"],
-                             author=flags["author"], provider_name=provider, model=a.model,
-                             base=a.base, open_pr=a.open_pr, max_steps=a.max_steps,
-                             takeover=getattr(a, "takeover", False),
-                             takeover_reason=getattr(a, "takeover_reason", None),
-                             require_fix=flags.get("require_fix", False),
-                             review_fix_attempts=review_fix,
-                             provider_resolution={k: _pres.get(k) for k in
-                                                  ("provider", "source", "reason", "warning")})
-        ai_ops_run.print_human(rep)
-        return ai_ops_run.exit_code(rep)
-    return 0
-
-
 def _main_guarded(argv):
-    """Граница CLI: отказ провайдера по лимиту — человеку ФРАЗОЙ и кодом, а не трейсбеком.
+    """Граница CLI: отказ провайдера, который повтор не лечит, — человеку ФРАЗОЙ и кодом, а не трейсбеком.
 
     ЗАМЕР ПОЛЯ 20.08.2026 (obs 99aa67ef): при исчерпании лимита сессии claude-cli наружу выходил
     RuntimeError с полным питоновским трейсбеком. Провайдер теперь поднимает типизированный
     `ProviderLimitError`; здесь он превращается в сообщение и код возврата 3 («модель недоступна»).
-    Ловим ТОЛЬКО этот тип — прочие ошибки по-прежнему всплывают, чтобы дефекты не тонули в тихом
-    отказе.
+
+    ЗАЯВКА #160: та же граница ловит структурную недоступность исполнителя в этой среде (запуск
+    изнутри активной сессии Claude) — `ProviderEnvUnavailableError`. Наружу — последствие и оба
+    выхода фразой, код 3, без трейсбека и без пяти бессмысленных повторов внутри.
+
+    Ловим ТОЛЬКО эти типы — прочие ошибки по-прежнему всплывают, чтобы дефекты не тонули в тихом отказе.
     """
-    from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError
+    from ai_ops_kit.providers.orchestrator_providers import (
+        ProviderEnvUnavailableError,
+        ProviderLimitError,
+    )
     try:
         return main(argv)
-    except ProviderLimitError as e:
+    except (ProviderLimitError, ProviderEnvUnavailableError) as e:
         print(e.human_message(), file=sys.stderr)
         return 3
 

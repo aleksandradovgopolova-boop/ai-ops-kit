@@ -124,6 +124,11 @@ def test_onboarding_path(child):
         "команда создала файл и не сказала где — владелец найдёт его в `git status` как незнакомый")
     asked_before = _questions_asked(first.stdout)
     assert asked_before > 0, f"не названо число вопросов:\n{first.stdout[-400:]}"
+    # #702: форма читается человеком — легенда значков, id вопроса в [скобках] и ЛЁГКИЙ путь ответа
+    # командой (а не только «правьте YAML руками»), иначе новичок застревает на главном шаге.
+    assert "ответить сейчас" in first.stdout and "можно позже" in first.stdout, "нет легенды ⚠/·"
+    assert "--answer" in first.stdout, "не предложен лёгкий путь ответа командой (только правка YAML)"
+    assert re.search(r"\[[a-z_]+\]", first.stdout), "не показан id вопроса для --answer"
 
     # ── шаг 2: владелец отвечает ────────────────────────────────────────────────────────────────
     text = (child / ANSWERS).read_text(encoding="utf-8")
@@ -175,7 +180,6 @@ def test_onboarding_path(child):
     plan_path = child / "planning" / "plan.yaml"
     assert plan_path.is_file(), "план не создан"
 
-    sys.path.insert(0, str(KIT / "tools"))
     from ai_ops_kit.planning import delivery_plan
     plan = delivery_plan.load(child)
     assert not delivery_plan.is_template(plan), (
@@ -191,3 +195,46 @@ def test_onboarding_path(child):
     assert "Потому что" in nxt2.stdout or "потому что" in nxt2.stdout, (
         "работа названа без обоснования — совет без причины проверить нельзя:\n"
         + nxt2.stdout[-500:])
+
+
+def test_model_flow_writes_answer_form_as_superset(tmp_path, monkeypatch, capsys):
+    """`model --flow` — надмножество обычного `model`: форма ответов пишется и в первом часе.
+
+    Прежде `--flow` короткозамыкал ДО записи формы, и `setup` (шаг первого часа) не оставлял места
+    для ответов — остаток «ответь на вопросы» прятался (issue #612). Тест независим от фикстур:
+    repo_audit и first_hour подменены, проверяется сам факт записи формы на пути `--flow`.
+    """
+    import json
+    import types
+
+    from ai_ops_kit.cli import ai_ops_cli_intents as I
+    from ai_ops_kit.planning import first_hour, repo_audit
+
+    rep = {"ask": {"questions": [{"ask": "какова цель продукта?", "blocks_work": True,
+                                  "proposal": None}]},
+           "classification": {"class": "EARLY_PRODUCT"}, "conflicts": []}
+    monkeypatch.setattr(repo_audit, "run", lambda root: rep)
+    wrote = {}
+    monkeypatch.setattr(repo_audit, "write_question_file",
+                        lambda root, ask: (wrote.__setitem__("called", True),
+                                           tmp_path / "onboarding-answers.yaml")[1])
+    monkeypatch.setattr(first_hour, "run",
+                        lambda root, **k: {"kind": "first-hour", "stage": "needs_answers"})
+
+    a = types.SimpleNamespace(json=True, answer=None, why=None, flow=True, apply=False, budget=None)
+    rc = I._intent_model("", str(tmp_path), [], a)
+    assert rc == 0
+    assert wrote.get("called"), "model --flow не записал форму вопросов — надмножество нарушено"
+    # Путь имени файла попадает в JSON-вывод первого часа — видно, куда отвечать.
+    out = json.loads(capsys.readouterr().out)
+    assert out.get("answers_file", "").endswith("onboarding-answers.yaml")
+
+
+def test_do_without_signals_gives_one_clear_message_not_a_contradiction(child):
+    """#702: `do` без масштаба/риска не печатает превью «вот что я сделаю / запускай, когда готов»
+    И СРАЗУ «данных не хватает» — это противоречие, на котором новичок теряется. Одна ясная реплика:
+    чего именно не хватает (intake-gap), без ложного обещания запуска."""
+    out = _ai_ops(child, "do", "добавить подсчёт строк").stdout
+    assert "не хватает" in out, f"intake-gap не прозвучал:\n{out[-400:]}"
+    assert "запускай, когда готов" not in out, "превью обещает запуск, хотя данных не хватает"
+    assert "Вот что я сделаю" not in out, "показано превью поверх «данных не хватает» — противоречие"

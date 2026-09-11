@@ -212,3 +212,98 @@ def test_evidence_cli_exit_code_nonzero_only_on_finding(tmp_path, capsys):
     bad = _child(tmp_path / "bad", seen={"task.completed": 1})
     assert ea.main(["event_arrival", str(bad), "--evidence"]) == 1                     # находка
     capsys.readouterr()
+
+
+# ── проводка producer -> гейт analytics_runtime_verification (#424) ───────────────────────────
+# Мало ПРОИЗВЕСТИ доказательство events_verified_live — оно должно ПИТАТЬ гейт вместо слова судьи.
+# Здесь проверяется, что результат гейта опирается на ВЕРДИКТ producer'а: подтверждает -> зелёный,
+# находит недоехавшее -> красный (и слово судьи это не переписывает), не знает -> честно не закрыт.
+
+# судейское evidence прочих трёх доказательств гейта (не наш факт): их приносит роль-судья
+_JUDGE_REST = ["no_pii_in_events", "cohort_identification_works", "dashboard_receives_data"]
+
+
+@pytest.mark.unit
+def test_gate_is_green_when_producer_confirms_live_arrival(tmp_path):
+    """positive: producer подтвердил приход всех analytics-событий + судья закрыл остальные три
+    -> гейт зелёный, и events_verified_live закрыт МАШИНОЙ."""
+    root = _child(tmp_path, seen={"task.completed": 5, "object.version_created": 2})
+    base = {ea.GATE_ID: {"status": "pass", "provided": list(_JUDGE_REST),
+                         "evidence": ["analytics-reviewer verdict"]}}
+    res = ea.verify_analytics_runtime(root, base)
+    assert res["gate"] == ea.GATE_ID
+    assert res["status"] == "pass", res
+    assert res["blockers"] == []
+    # именно машина подтвердила приход — доказательство в evidence, источник назван
+    assert any("intelligence/event_arrival" in e for e in res["evidence"]), res["evidence"]
+
+
+@pytest.mark.unit
+def test_gate_is_red_when_producer_finds_a_missing_event_even_if_judge_passed(tmp_path):
+    """fail-closed: судья объявил ВСЕ четыре доказательства (фабрикация events_verified_live),
+    но producer нашёл недоехавшее событие -> гейт красный, evidence не подделан."""
+    root = _child(tmp_path, seen={"task.completed": 128})   # object.version_created не доехало
+    # судья «зелёный» и лживо приписал себе events_verified_live — ровно разрыв «not declared»
+    base = {ea.GATE_ID: {"status": "pass",
+                         "provided": ["events_verified_live"] + _JUDGE_REST,
+                         "evidence": ["analytics-reviewer verdict"]}}
+    res = ea.verify_analytics_runtime(root, base)
+    assert res["status"] == "fail", res
+    assert res["blocking"] is True
+    assert any("object.version_created" in b for b in res["blockers"]), res["blockers"]
+
+
+@pytest.mark.unit
+def test_gate_is_not_closed_when_producer_cannot_check(tmp_path):
+    """fail-closed для unknown: нет выгрузки -> producer met is None -> events_verified_live НЕ
+    засчитан словом судьи, блокирующий гейт честно не закрыт (unknown != проверено)."""
+    root = _child(tmp_path)                                  # выгрузки поступления нет
+    base = {ea.GATE_ID: {"status": "pass",
+                         "provided": ["events_verified_live"] + _JUDGE_REST,
+                         "evidence": ["analytics-reviewer verdict"]}}
+    res = ea.verify_analytics_runtime(root, base)
+    assert res["status"] == "fail", res                      # блокирующий: недоказанное не зелёное
+    assert any("events_verified_live" in b for b in res["blockers"]), res["blockers"]
+
+
+@pytest.mark.unit
+def test_gate_takes_the_producer_verdict_not_a_static_file(tmp_path, monkeypatch):
+    """side-effect proof: гейт ЗОВЁТ producer и берёт его вердикт (а не читает статичный файл).
+    Подменяем producer заглушкой — её вердикт обязан долететь в результат гейта."""
+    calls = []
+
+    def _stub_live(child_root):
+        calls.append(str(child_root))
+        return {"name": "events_verified_live", "met": False,
+                "reason": "STUB: событие marker.event не доехало", "detail": None}
+
+    monkeypatch.setattr(ea, "events_verified_live", _stub_live)
+    base = {ea.GATE_ID: {"status": "pass",
+                         "provided": ["events_verified_live"] + _JUDGE_REST,
+                         "evidence": ["analytics-reviewer verdict"]}}
+    res = ea.verify_analytics_runtime(tmp_path, base)
+    assert calls, "гейт не позвал producer events_verified_live"
+    assert res["status"] == "fail", res
+    # именно вердикт заглушки долетел до гейта — значит источник живой, не файл
+    assert any("STUB: событие marker.event" in b for b in res["blockers"]), res["blockers"]
+
+
+@pytest.mark.unit
+def test_gate_evidence_entry_is_authoritative_over_judge_word(tmp_path):
+    """Единица проводки: gate_evidence_entry снимает слово судьи о events_verified_live и ставит
+    машинный факт. На находке -> status fail; слово судьи (pass) не сохраняется."""
+    root = _child(tmp_path, seen={"task.completed": 1})     # object.version_created не доехало
+    entry = ea.gate_evidence_entry(root, {"status": "pass",
+                                          "provided": ["events_verified_live"] + _JUDGE_REST})
+    assert entry["status"] == "fail"
+    assert "events_verified_live" not in entry["provided"]   # не подделано словом судьи
+    assert any("object.version_created" in b for b in entry["blockers"])
+
+
+@pytest.mark.unit
+def test_gate_cli_exit_code_nonzero_only_on_finding(tmp_path, capsys):
+    """CLI --gate: находка -> 1; unknown (нет выгрузки) без судьи -> тоже не зелёный, но код 1
+    только когда статус fail."""
+    bad = _child(tmp_path / "bad", seen={"task.completed": 1})
+    assert ea.main(["event_arrival", str(bad), "--gate"]) == 1                          # находка
+    capsys.readouterr()

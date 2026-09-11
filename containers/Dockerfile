@@ -26,6 +26,17 @@ ENV AI_OPS_KIT=/opt/ai-ops-kit \
     PYTHONDONTWRITEBYTECODE=1 \
     OPENSPEC_TELEMETRY=0
 
+# Credential-less git для PUSH, зашитый в образ (defense-in-depth: держится даже при прямом
+# `docker run <image>` без run-sandboxed.sh). У git нет канала получить креду для push:
+#   credential.helper="" (через GIT_CONFIG_*, т.к. root-fs read-only), GIT_ASKPASS=/bin/false,
+#   GIT_TERMINAL_PROMPT=0. push из модельной петли падёт быстро (не виснет), а не полагается на
+#   regex block_push. Жёсткая гарантия недоставки — здесь (среда), regex в брокере — второй рубеж.
+ENV GIT_ASKPASS=/bin/false \
+    GIT_TERMINAL_PROMPT=0 \
+    GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0=credential.helper \
+    GIT_CONFIG_VALUE_0=""
+
 # Non-root: контейнер работает под непривилегированным пользователем; /work — единственная
 # writable точка (bind-mount worktree), root-fs монтируется read-only флагом запуска.
 RUN useradd -m -u 10001 runner

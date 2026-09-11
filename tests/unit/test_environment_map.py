@@ -8,7 +8,7 @@ import json
 
 import pytest
 
-from ai_ops_kit.engops.environment_map import (
+from ai_ops_kit.checks.environment_map import (
     Path,
     assess,
     kind_of,

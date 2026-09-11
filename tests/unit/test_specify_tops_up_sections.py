@@ -25,7 +25,6 @@ import pytest
 import yaml
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.cli import ai_ops_cli as cli
 from ai_ops_kit.engops import process_spend, session_telemetry

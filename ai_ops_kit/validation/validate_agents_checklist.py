@@ -49,6 +49,24 @@ ALLOWED = (
     # без --strict — обкатка non-blocking). Логика покрыта юнит-тестами (test_pr_size), проводка —
     # отдельным тестом джобы (test_kit_pr_size_job).
     re.compile(r"^python3?\s+ai_ops_kit/validation/validate_pr_size\.py\b"),
+    # Доставляемый footprint итога слияния — тот же класс: детерминированная проверка ИТОГА слияния
+    # PR с origin/main (объём пересечения дерева-итога с managed_set против потолка volume_bytes), а
+    # не pytest-тест. Зовётся напрямую с `--base origin/main` (advisory, без --strict — non-blocking).
+    # Логика покрыта юнит-тестами (test_merge_preview, test_delivery_footprint_warning), проводка —
+    # тестом в test_merge_preview. Оркестратор живёт в installer/ (он один видит и merge-preview, и
+    # managed_set), поэтому путь — installer/, а не ai_ops_kit/.
+    re.compile(r"^python3?\s+installer/delivered_merge_footprint\.py\b"),
+    # Ночной дельта-обзор — операционная джоба, а не проверка: он ПРОИЗВОДИТ бриф владельцу
+    # (читает историю git, пишет бриф в файловую систему и в сводку прогона) по расписанию, и
+    # обернуть его в pytest нельзя — у него нет вердикта pass/fail, есть доставка. Логика обзора
+    # покрыта юнит-тестами (test_nightly_review), проводка расписания — тестом генератора
+    # workflow там же. Путь допускает префикс дочки `.ai/managed/` (в дочке скрипт едет из поставки).
+    re.compile(r"^python3?\s+(?:\.ai/managed/)?ai_ops_kit/intelligence/nightly_review\.py\b"),
+    # Ночная сверка issue-трекера с роадмапом — операционная джоба, а не проверка: она ПРОИЗВОДИТ
+    # побочный эффект (заводит/обновляет/закрывает GitHub Issues по расписанию), у неё нет вердикта
+    # pass/fail, обернуть в pytest нельзя. Логика сверки покрыта юнит-тестами (test_roadmap_issue_sync),
+    # ядро — чистая функция на инъектируемом порте.
+    re.compile(r"^python3?\s+-m\s+ai_ops_kit\.cli\.ai_ops_cli\s+roadmap\s+sync-issues\b"),
 )
 
 

@@ -415,3 +415,147 @@ def test_ceiling_unknown_stays_honest():
     """Контроль: неизмеримый расход остаётся degraded «не вижу», а не выдаётся за норму."""
     msg = PR.from_process_spend(_spend_check(state="unknown"))
     assert msg["status"] == "degraded"
+
+
+# ── страж лексики: заголовок работы не проносит жаргон человеку ──────────────────────────────────
+# Дыра, найденная аудитом 04.09: слой человеческого языка построен верно, но `title` работы приходит
+# из плана дочки и вставляется в `summary`/`next` ДОСЛОВНО. `hide`-список политики объявлял категории
+# терминов, но НИЧТО их не ловило — заголовок, написанный внутренним языком, доносил жаргон до
+# продакта в чистом виде. Эти пробы падают на дословной вставке (жаргон в выводе) и зеленеют после
+# маскировки; и отдельно стерегут, что перевод меняет ЯЗЫК, а не ФАКТЫ (для technical термины видны).
+
+# Чёрный список: `hide`-категории политики (gate id, SHA, ...) + конкретная лексика из находки.
+LEAK_BLACKLIST = ("merge queue", "auto-merge", "automerge", "polling", "coverage", "footprint",
+                  "pull request", "write_scope", "tested_revision", "GateResult", "preflight_block",
+                  "ApprovalRecord")
+
+
+def _jargon_title():
+    """Заголовок, написанный внутренним языком (по духу `example_bad` политики)."""
+    return ("coverage и footprint меряются против merge base — merge queue с auto-merge, "
+            "а не polling")
+
+
+def test_next_work_title_does_not_leak_jargon_to_product():
+    """`from_next_work`: жаргонный `title` не должен просочиться в человеческий вывод product."""
+    rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
+           "roadmap": {"errors": [], "warnings": []},
+           "in_progress": [], "blocked": [], "not_ready": [], "parallel_skipped": [],
+           "ready": [], "parallel_with": [],
+           "next_best": {"id": "ARCH-01", "title": _jargon_title(),
+                         "owner_role": "architect", "score": 42, "unblocks": 3,
+                         "why": ["разблокирует 3 задачи"]}}
+    out = PR.render(PR.from_next_work(rep), audience="product")
+    for term in LEAK_BLACKLIST:
+        assert term.lower() not in out.lower(), f"жаргон просочился в вывод product: {term}"
+
+
+def test_active_work_title_does_not_leak_jargon_to_product():
+    """`from_active_work`: расхождение плана с заявками несёт жаргонный `title` — тоже маскируется."""
+    stale = [{"id": "w9", "title": _jargon_title()}]
+    msg = PR.from_active_work({"active": []}, crosscheck={"only_in_plan": stale,
+                                                          "registry_exists": True})
+    out = PR.render(msg, audience="product")
+    for term in LEAK_BLACKLIST:
+        assert term.lower() not in out.lower(), f"жаргон просочился в вывод product: {term}"
+
+
+def test_masking_changes_language_not_facts():
+    """Перевод меняет ЯЗЫК, а не ФАКТЫ: для `technical` внутренние термины остаются видны, а на
+    `product` заголовок не выброшен молча — он переведён (иначе «фикс» = удалить title)."""
+    rep = {"plan_present": True, "plan_errors": [], "plan_warnings": [],
+           "roadmap": {"errors": [], "warnings": []},
+           "in_progress": [], "blocked": [], "not_ready": [], "parallel_skipped": [],
+           "ready": [], "parallel_with": [],
+           "next_best": {"id": "ARCH-01", "title": _jargon_title(),
+                         "owner_role": "architect", "score": 1, "unblocks": 0,
+                         "why": ["готова"]}}
+    msg = PR.from_next_work(rep)
+    # technical/debug видят исходный язык — факты не потеряны.
+    assert "coverage" in PR.render(msg, audience="technical").lower()
+    # product видит перевод, а не пустоту: плоский эквивалент на месте термина.
+    product = PR.render(msg, audience="product").lower()
+    assert "покрытие тестами" in product and "объём поставки" in product
+
+
+# ── #675: просьба масштаба/риска (do/run) читается по-человечески, не «ответь JSON» ────────────
+
+def test_intake_gap_asks_in_human_words_not_raw_json():
+    """Живой проход человеком: кит просил ответить сырым JSON `--signals '{...}'` — язык
+    разработчика. Теперь та же механика подаётся по-человечески: «скопируй строку; если крупнее —
+    поменяй size/risk». JSON остаётся как готовая строка для копирования, но не как инструкция."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+
+    hint = "--signals '{\"task_type\":\"QUICK\", \"size\":\"small\", \"risk\":\"low\"}'"
+    msg = pf.from_intake_gap([{"signal": "size", "allowed": ["small", "medium", "large"]},
+                              {"signal": "risk", "allowed": ["low", "medium", "high"]}],
+                             hint_command=hint)
+    steps = " ".join(msg["next"])
+    # человеку объясняют, ЧТО делать со строкой (скопировать / поменять), а не «ответь одной строкой:»
+    assert "скопируй" in steps
+    assert "поменяй" in steps and "size" in steps and "risk" in steps
+    assert "ответь одной строкой:" not in steps
+    # без готовой строки — просто человеческая просьба, без обломанного JSON
+    msg2 = pf.from_intake_gap([{"signal": "size"}], hint_command=None)
+    assert "--signals" not in " ".join(msg2["next"])
+
+
+# ── #702-work: путь «есть понимание → есть работа» называет КОМАНДЫ, а не «скажи мне» ──────────
+
+def test_bootstrap_preview_names_the_apply_command():
+    """Второй живой проход (фаза работы): `bootstrap` рекомендовал создать план, но команду
+    `--apply` не называл — человек не знал, как сказать «согласен», и застревал. Теперь превью
+    ведёт действием: создать план — `./ai-ops bootstrap --apply`."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+
+    rep = {"will_write": ["planning/plan.yaml"],
+           "work_items": [{"title": "Описать: Engineering"}], "actions": []}
+    body = PR.render(pf.from_bootstrap(rep, applied=False), audience="product")
+    assert "bootstrap --apply" in body, "сухой прогон не назвал команду создать план"
+
+
+
+# ── #708: превью не зовёт «запускай, когда готов», когда движок стартует сразу ─────────────────
+
+def _preview(**over):
+    pv = {"intent": "do", "understood": {"task": "t", "task_type": "QUICK"},
+          "will_do": {"stages": []}, "data_used": {"agents": []},
+          "expected_result": "выполню намерение"}
+    pv.update(over)
+    return pv
+
+
+def test_preview_says_starting_now_when_execution_is_immediate():
+    """`do`/`run --execute` запускают движок ПРЯМО СЕЙЧАС — превью обещает «запускаю сейчас»,
+    а не «запускай, когда готов» (следом идёт старт — иначе противоречие, карта трения #708)."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+    body = PR.render(pf.from_execution_preview(_preview(will_execute_now=True)), audience="product")
+    assert "запускаю сейчас" in body, body
+    assert "запускай, когда готов" not in body, body
+
+
+def test_preview_says_when_ready_for_a_dry_preview():
+    """Голый `run` (без --execute) — это превью: ожидание «запускай, когда готов» здесь верно."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+    body = PR.render(pf.from_execution_preview(_preview(intent="run", will_execute_now=False)),
+                     audience="product")
+    assert "запускай, когда готов" in body, body
+    assert "запускаю сейчас" not in body, body
+
+
+# ── #708: расход сессии человеку — без внутреннего тега состояния ──────────────────────────────
+
+def test_session_spend_hides_state_tag_on_product():
+    """session_spend несёт тег состояния («… [over_budget]») для деталей; человеку на product текст
+    показывает число без жаргонного тега, а в debug тег остаётся (ничего не потеряно)."""
+    from ai_ops_kit.ui import presenter_formatters as pf
+    snap = {"context_current": 50000, "context_status": "measured",
+            "session_total_tokens": 266000000, "session_id": "s1"}
+    rec = {"outcome": "new_session", "session_spend": "266.0M из 20.0M [over_budget]",
+           "spend_state": "over_budget", "context_state": "ok", "command": "claude",
+           "handoff": "записан"}
+    msg = pf.from_session_economy(snap, rec)
+    body = PR.render(msg, audience="product")
+    assert "266.0M из 20.0M" in body, body
+    assert "[over_budget]" not in body, "внутренний тег состояния утёк в текст человеку: " + body
+    assert "[over_budget]" in PR.render(msg, audience="debug"), "тег потерян в деталях"

@@ -36,89 +36,15 @@ from pathlib import Path
 
 import yaml
 
-# Допустимые направления движения метрики к target.
-DIRECTIONS = {"increase", "decrease", "hold"}
-
-
-def check_feature_target(ft) -> list[str]:
-    """Проверить ФОРМУ контракта feature_target; вернуть список ошибок.
-
-    Пустой список = валиден. Продуктовое решение о фиче обязано нести три
-    измеримых обязательства, иначе «фича с целью» — пустая декларация:
-
-      - baseline: где мы сейчас — непустые metric (что двигаем) и value;
-      - target:   куда идём — непустой value и direction ∈ {increase,decrease,hold};
-      - guardrails: что не должно сломаться — хотя бы один пункт с metric и bound.
-
-    Функция не судит о разумности чисел (это дело человека) — она отказывает
-    лишь тому, что не является измеримым обязательством по форме.
-    """
-    if not isinstance(ft, dict):
-        return ["feature_target: ожидается объект с baseline/target/guardrails"]
-
-    errors: list[str] = []
-
-    baseline = ft.get("baseline")
-    if not isinstance(baseline, dict):
-        errors.append("feature_target.baseline: отсутствует (нужны metric и value)")
-    else:
-        if not baseline.get("metric"):
-            errors.append("feature_target.baseline.metric: пусто (назови измеряемую метрику)")
-        if baseline.get("value") in (None, ""):
-            errors.append("feature_target.baseline.value: пусто (где мы сейчас)")
-
-    target = ft.get("target")
-    if not isinstance(target, dict):
-        errors.append("feature_target.target: отсутствует (нужны value и direction)")
-    else:
-        if target.get("value") in (None, ""):
-            errors.append("feature_target.target.value: пусто (куда хотим прийти)")
-        direction = target.get("direction")
-        if direction not in DIRECTIONS:
-            errors.append(
-                f"feature_target.target.direction: '{direction}' не в {sorted(DIRECTIONS)}")
-
-    guardrails = ft.get("guardrails")
-    if not isinstance(guardrails, list) or not guardrails:
-        errors.append("feature_target.guardrails: нужен хотя бы один пункт (metric + bound)")
-    else:
-        for i, g in enumerate(guardrails):
-            if not isinstance(g, dict) or not g.get("metric") or g.get("bound") in (None, ""):
-                errors.append(f"feature_target.guardrails[{i}]: нужны metric и bound")
-
-    return errors
-
-
-def gate_feature_decisions(decisions_dir: Path) -> list[str]:
-    """Гейт: каждое решение, объявленное фичей, несёт ВАЛИДНЫЙ feature_target.
-
-    Обходит каталог решений (.ai/project/decisions/*.yaml — пофайловые решения из
-    propose). Решение с kind: feature-decision ОБЯЗАНО нести feature_target,
-    проходящий check_feature_target; иначе гейт называет, чего не хватает. Решения
-    иных типов (product-decision и т.д.) не трогаются. Каталог читается только на
-    чтение и НЕ создаётся — его отсутствие не ошибка (фич-решений просто нет).
-
-    Возвращает список ошибок; пустой список = всё валидно. Механизм ПРОВЕРЯЕТ, а не
-    верит на слово: фичу, объявленную целью без измеримого обязательства, он краснит.
-    """
-    errors: list[str] = []
-    if not decisions_dir or not Path(decisions_dir).exists():
-        return errors
-    for f in sorted(Path(decisions_dir).glob("*.yaml")):
-        try:
-            d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
-        except (yaml.YAMLError, OSError) as exc:
-            errors.append(f"{f.name}: не читается ({exc})")
-            continue
-        if not isinstance(d, dict) or d.get("kind") != "feature-decision":
-            continue
-        ft = d.get("feature_target")
-        if ft is None:
-            errors.append(f"{f.name}: kind=feature-decision, но нет feature_target")
-            continue
-        for e in check_feature_target(ft):
-            errors.append(f"{f.name}: {e}")
-    return errors
+# Проверяющая логика формы feature_target и гейт каталога решений вынесены ВНИЗ в пакет `checks`
+# (слой primitives, #541): контур гейтов (`gates.gate_executor`) не вправе импортировать
+# `intelligence` (слой выше + kernel-boundary), поэтому чистая/read-only проверка живёт в `checks`,
+# а оба вызывателя тянут её ВНИЗ. Имена ре-экспортируются для обратной совместимости API и тестов.
+from ai_ops_kit.checks.feature_decision import (  # noqa: F401
+    DIRECTIONS,
+    check_feature_target,
+    gate_feature_decisions,
+)
 
 
 def _decisions_dir(root: Path) -> Path:
@@ -224,6 +150,70 @@ def list_decisions(root: Path, status_filter: str | None = None) -> list[dict]:
             continue
 
     return decisions
+
+
+def has_feature_decision_contract(root: Path) -> bool:
+    """Есть ли в каталоге решений хотя бы один ВАЛИДНЫЙ Decision-контракт фичи.
+
+    Контракт = решение kind=feature-decision, несущее feature_target, который
+    проходит check_feature_target (baseline/target/guardrails). Пустой или
+    отсутствующий каталог -> False. Проверка READ-ONLY: каталог не создаётся
+    (в отличие от list_decisions, которая идёт через propose-путь), чтобы
+    fail-closed преамбула маршрута ничего не писала в дочку до старта.
+
+    #564 (built≠wired): это ТА функция, через которую decision_loop проведён в
+    рантайм-маршрут. Присутствие контракта проверяет она; КАЧЕСТВО объявленных
+    контрактов — блокирующий гейт feature_decision_quality в пайплайне (тот же
+    check_feature_target, вынесенный вниз в checks.feature_decision).
+    """
+    ddir = Path(root) / ".ai" / "project" / "decisions"
+    if not ddir.exists():
+        return False
+    for f in sorted(ddir.glob("*.yaml")):
+        try:
+            d = yaml.safe_load(f.read_text(encoding="utf-8")) or {}
+        except (yaml.YAMLError, OSError):
+            continue
+        if not isinstance(d, dict) or d.get("kind") != "feature-decision":
+            continue
+        ft = d.get("feature_target")
+        if ft is not None and not check_feature_target(ft):
+            return True
+    return False
+
+
+def decision_contract_gate(signals, root, task=None, feature=None) -> dict | None:
+    """#564: fail-closed присутствие Decision-контракта для ТРИГГЕРНОГО профиля работы.
+
+    Триггер — сигнал `feature_decision_declared` (тот же, что делает трек FEATURE_DECISIONS
+    обязательным). Под ним работа не стартует без Decision-контракта — валидного фича-решения в
+    `.ai/project/decisions`. Для остальных работ сигнал не взведён -> None (не мешаем): governance
+    подключается ПО РИСКУ (три кольца). Проверяется ПРИСУТСТВИЕ (fail-closed, до траты); КАЧЕСТВО
+    объявленных контрактов — блокирующий гейт feature_decision_quality в пайплайне.
+
+    Возвращает payload-словарь для блокировки (exit=2) либо None, если продвижение разрешено.
+    Маршрут (cli) зовёт это на входе `run --execute`/`do` — это и есть проводка decision_loop в
+    рантайм: до #564 модуль импортировали только тесты.
+    """
+    if not (signals or {}).get("feature_decision_declared"):
+        return None
+    if has_feature_decision_contract(Path(root)):
+        return None
+    wid = feature or "<wid>"
+    propose_cmd = (
+        f"python3 -m ai_ops_kit.intelligence.decision_loop {root} propose "
+        f"--id {wid} --proposal \"{task or '<что предлагается>'}\" "
+        "--feature-target '{\"baseline\": {\"metric\": \"...\", \"value\": ...}, "
+        "\"target\": {\"value\": ..., \"direction\": \"decrease\"}, "
+        "\"guardrails\": [{\"metric\": \"...\", \"bound\": \"...\"}]}'")
+    return {
+        "kind": "decision-contract-missing", "exit": 2,
+        "message": (
+            "работа заявлена как фича-решение, но для неё нет Decision-контракта — измеримого "
+            "обязательства (где мы сейчас, куда идём, что не должно сломаться). Без него запускать "
+            "нельзя: результат будет нечем признать успехом. Заведите решение и повторите запуск."),
+        "propose_command": propose_cmd,
+    }
 
 
 def format_decisions(decisions: list[dict]) -> str:

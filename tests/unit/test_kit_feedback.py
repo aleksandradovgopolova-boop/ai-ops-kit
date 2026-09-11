@@ -220,7 +220,6 @@ class TestOwnerReachesItThroughTheCommand:
     """
 
     def _cli(self):
-        sys.path.insert(0, str(PKG_ROOT / "tools"))
         from ai_ops_kit.cli import ai_ops_cli
         return ai_ops_cli
 

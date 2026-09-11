@@ -1,6 +1,6 @@
 # Quickstart — первый день с AI Ops Kit
 
-Требования: python3 (3.9+) и pyyaml. Node.js нужен только для OpenSpec-опции
+Требования: python3 (3.12+) и pyyaml. Node.js нужен только для OpenSpec-опции
 (включена по умолчанию, выключается `openspec.enabled: false` в `.ai-ops.yaml`).
 
 ## 1. Установка в ваш репозиторий (child)
@@ -51,7 +51,7 @@ python3 <путь>/ai-ops-kit/installer/ai_ops.py doctor
 **Preflight Truth (v2.115):** перед запуском модели проверяются classification → контекст → достаточность
 спеки → атомарность/декомпозиция → бюджет → human-approvals. Если спека неполна или нужен человек
 (secret-boundary/деструктив/новая зависимость) — **модель не запускается, правок и коммита нет**. Одобрение —
-настоящий `ApprovalRecord` (`tools/approvals.py record …`: автор/scope/причина), не флаг.
+настоящий `ApprovalRecord` (`ai_ops_kit/gates/approvals.py record …`: автор/scope/причина), не флаг.
 
 Крупную неатомарную задачу можно исполнить **по WorkPackages последовательно** (пакет→commit→
 evidence→gates→следующий): добавьте `--sequential`.
@@ -65,8 +65,8 @@ evidence→gates→следующий): добавьте `--sequential`.
 ```bash
 # прототип/MVP — lean-профиль (5 стадий, 10 артефактов);
 # зрелый продукт — без --profile (full: 11 стадий)
-python3 <kit>/tools/generate_artifacts.py new features my-feature "Моя фича" --profile lean
-python3 <kit>/tools/generate_artifacts.py scaffold features/my-feature --stage discovery
+PYTHONPATH=<kit> python3 -m ai_ops_kit.shared.generate_artifacts new features my-feature "Моя фича" --profile lean
+PYTHONPATH=<kit> python3 -m ai_ops_kit.shared.generate_artifacts scaffold features/my-feature --stage discovery
 ```
 
 Заполните `discovery/problem-statement.md` и `discovery/hypotheses.md` по существу
@@ -101,7 +101,7 @@ PYTHONPATH=<kit> python3 -m ai_ops_kit.lifecycle.run_report features/my-feature 
 и закоммитится вместе с PR. По накопленной истории считаются метрики эффекта:
 
 ```bash
-python3 <kit>/tools/effect_metrics.py    # PROBLEM-rate, динамика покрытия, дни до retrospective
+PYTHONPATH=<kit> python3 -m ai_ops_kit.intelligence.effect_metrics    # PROBLEM-rate, динамика покрытия, дни до retrospective
 ```
 
 Инструмент честен: пока нет 3+ фич с 3+ срезами, он явно пишет «baseline не готов».
@@ -123,7 +123,7 @@ python3 .ai/managed/ai_ops_kit/engine/ai_ops_run.py run "почини падаю
 бинарники (curl/wget) не в allowlist, но пакет-менеджеры сеть используют. Настоящий сетевой контроль
 даёт контейнер (`AI_OPS_NETWORK=none`) или egress-allowlist прокси — см. `docs/container-isolation.md`.
 `--json` даёт машиночитаемый отчёт (прогресс идёт в stderr). Проверить,
-что движок установлен целиком: `python3 .ai/managed/validation/validate_standalone_engine.py .`
+что движок установлен целиком: `python3 .ai/managed/ai_ops_kit/validation/validate_standalone_engine.py .`
 или `ai-ops doctor` (строка «движок (standalone)»).
 
 Для ENGINEERING/PRODUCT-задач добавьте `--review` (v2.83) и `--author` (v2.86): `--review` даёт

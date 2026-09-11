@@ -172,7 +172,7 @@ case "$cmd" in
   # установщика звалась `onboard` и в дочку не выводилась вовсе — то же имя носит интент движка
   # «определить стек», и `./ai-ops onboard` вёл именно в движок. После переименования столкновения
   # имён нет, и команду можно честно вести в установщик наравне с прочими kit-командами.
-  init|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|subsession|engops|method|ui-status)
+  init|setup|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|subsession|engops|method|ui-status)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
     fi

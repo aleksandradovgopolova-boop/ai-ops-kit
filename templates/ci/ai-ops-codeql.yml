@@ -1,0 +1,49 @@
+# ai-ops-codeql.yml — supply-chain дочки: SAST через CodeQL (OpenSSF Scorecard: SAST).
+# Ставится `ai-ops init` в .github/workflows/ (или скопируйте вручную). Опт-аут: удалить этот файл.
+#
+# ЧТО ЭТО ДАЁТ. CodeQL статически ищет уязвимости в коде и публикует находки во вкладку Security ->
+# Code scanning. По умолчанию проверка ADVISORY: она НЕ роняет PR. Сделать её блокирующей — решение
+# владельца: включить code scanning как required check в branch protection. Кит не превращает её в
+# девятый блокирующий гейт мимо решения (инвариант «бюджет блокирующих не растёт молча»).
+#
+# ГРАНИЦА С ИНВАРИАНТОМ КИТА. Это ФОРДЖ-конфигурация дочки, а не код кита: GitHub-нативный CodeQL,
+# внешних рантайм-зависимостей у инструментов кита не прибавляет.
+#
+# ЯЗЫКИ. `languages` подставьте под свой стек (python, javascript-typescript, go, java-kotlin, …).
+# Пустой прогон на неподходящем языке — шум, а не сигнал.
+#
+# ПИНЫ ДЕЙСТВИЙ. Здесь действия закреплены по МАЖОРНОМУ тегу. Для OpenSSF Pinned-Dependencies закрепите
+# их на commit SHA (см. SUPPLY-CHAIN.md); Dependabot (github-actions) будет двигать SHA за вас.
+name: ai-ops-codeql
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "17 6 * * 1"      # еженедельно: SAST ловит и то, что появилось в зависимостях между PR'ами
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  analyze:
+    name: CodeQL (${{ matrix.language }})
+    # Раннер — переменной, а не зашит: в организации со своими раннерами `ubuntu-latest` висит в
+    # очереди. Задайте vars.CI_RUNNER_LINUX — и проверка поедет на вашей машине.
+    runs-on: ${{ vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
+    permissions:
+      security-events: write   # публикация SARIF во вкладку Security
+      actions: read
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: ["python"]   # ← ПОДСТАВЬТЕ свои языки
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-and-quality
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3

@@ -46,3 +46,60 @@ def thinning_reserve_warning(actual: int, ceiling: int, fraction: float,
                 "то, что в дочке кодом не читается (крупнейшие каталоги/файлы ниже). Поднять потолок "
                 "можно только записью в quality/delivery-budget.yaml с названными файлами и причиной.")
     return "\n".join([head, guidance, "Что занимает поставку сейчас:"] + list(breakdown_lines))
+
+
+# ─── footprint ДОСТАВЛЯЕМОГО итога слияния (merge-preview ∩ managed_set) ───────────────────────────
+# Follow-up к фордж-нейтральному пивоту: гейт объёма меряет ИТОГ СЛИЯНИЯ, а не ветку PR
+# (ai_ops_kit/gates/merge_preview.py считает ВЕСЬ итог). Пробел: дочку волнует НЕ любой файл итога, а
+# тот, что к ней реально поедет. Здесь — ПЕРЕСЕЧЕНИЕ дерева-итога слияния с доставляемой поверхностью
+# (installer.managed_set): объём именно доставляемой части итога. Функции ЧИСТЫЕ — и файлы итога, и
+# managed_set ПЕРЕДАЮТСЯ аргументами, поэтому `validation` (entrypoints) не тянет ни `installer`, ни
+# `gates` вверх по слоям; оркестрацию над git-примитивами делает installer/-хелпер (см. layering.yaml).
+
+
+def delivered_merge_footprint(merge_entries, managed_rels):
+    """Доставляемая часть ИТОГА слияния: пересечение файлов дерева-итога с managed_set дочки.
+
+    `merge_entries` — итерируемое (относительный путь, размер) из дерева-итога слияния
+    (`ai_ops_kit.gates.merge_preview.merge_preview_entries`); `managed_rels` — множество относительных
+    путей доставляемой поверхности (`installer.managed_set`). Считается объём ПЕРЕСЕЧЕНИЯ, а не всего
+    дерева: дочку волнует только то, что к ней доставляется.
+
+    -> {"delivered_bytes": int, "delivered_files": int, "paths": [отсортированные пути]}."""
+    managed = set(managed_rels)
+    hits = [(path, int(size)) for path, size in merge_entries if path in managed]
+    return {"delivered_bytes": sum(size for _, size in hits),
+            "delivered_files": len(hits),
+            "paths": sorted(path for path, _ in hits)}
+
+
+def delivered_footprint_verdict(delivered_bytes, ceiling, fraction):
+    """Вердикт по доставляемому footprint итога слияния против потолка volume_bytes. -> dict.
+
+    Строгость СОГЛАСОВАНА с поставкой и `reserve_is_thin`: пробой — `delivered_bytes >= ceiling` (его
+    ловил бы блокирующий assert поставки), тонкий запас — мягкое предупреждение ДО пробоя. Механизм
+    настоящий (реально считает и сравнивает), но на пути PR — advisory: промоутит владелец отдельно.
+
+    -> {"breached": bool, "thin": bool, "reserve": int}."""
+    breached = ceiling > 0 and delivered_bytes >= ceiling
+    thin = reserve_is_thin(delivered_bytes, ceiling, fraction)
+    return {"breached": breached, "thin": thin, "reserve": ceiling - delivered_bytes}
+
+
+def delivered_filecount_verdict(delivered_files, files_ceiling, fraction):
+    """Вердикт по ЧИСЛУ доставляемых файлов итога слияния против потолка substantive_files. -> dict.
+
+    ЗАЧЕМ ОТДЕЛЬНАЯ ОСЬ. Дрейф, ради которого заведена работа (разбор 20.08: main тихо ушёл 490->498
+    ФАЙЛОВ между слияниями), — про ЧИСЛО файлов, а не про байты: набор мелких файлов пробивает потолок
+    файлов, не тронув потолок объёма. Байтовая ось (`delivered_footprint_verdict`) его не ловит,
+    поэтому счёт файлов итога слияния судится своим потолком.
+
+    Строгость та же, что у объёмной оси и у блокирующего assert поставки в `test_installer.py`
+    (`substantive < substantive_files`): пробой — `delivered_files >= files_ceiling`, тонкий запас —
+    мягкое предупреждение ДО пробоя. Форма результата совпадает с байтовой осью (breached/thin/reserve),
+    но reserve здесь — в ФАЙЛАХ.
+
+    -> {"breached": bool, "thin": bool, "reserve": int}."""
+    breached = files_ceiling > 0 and delivered_files >= files_ceiling
+    thin = reserve_is_thin(delivered_files, files_ceiling, fraction)
+    return {"breached": breached, "thin": thin, "reserve": files_ceiling - delivered_files}

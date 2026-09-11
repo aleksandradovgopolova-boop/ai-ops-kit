@@ -74,6 +74,12 @@ STATES = ("normal", "attention", "over_ceiling", "code_started", "unknown")
 # и `planning/`. ГРАНИЦА `engops/` (лента B) ПЕРЕСЕЧЕНА ОСОЗНАННО, правка на одну строку; сказано в PR.
 _KIT_PREFIXES = (".ai/", ".ai-ops/", ".claude/", ".github/", "features/", "planning/", "history/")
 _KIT_FILES = (".ai-ops.yaml", "ai-ops", "AI-OPS-ONBOARDING.md", "CLAUDE.md", "ROADMAP.md",
+              # ARCHITECTURE.md добавлен 07.09.2026 (SR-7): установка сеет его черновиком, значит
+              # свежая поставка НЕ должна читаться как правка кода — та же категория, что ROADMAP.md.
+              "ARCHITECTURE.md",
+              # SECURITY.md добавлен 11.09.2026 (#826): установка сеет его черновиком (обязательный
+              # артефакт SEC-001), значит свежая поставка НЕ должна читаться как правка кода.
+              "SECURITY.md",
               # `.gitattributes` добавлен 18.08.2026 вместе с его установкой: `ensure_gitattributes`
               # пишет его в дочку, значит свежая поставка НЕ должна читаться как правка кода — ровно
               # тот же случай, что был с `.gitignore` (проба шва test_fresh_install_is_not_a_code_change).
@@ -138,6 +144,8 @@ def code_changed(child_root):
     Смотрим и индекс, и рабочее дерево, и неотслеживаемые файлы: правка, которую ещё не закоммитили,
     — всё равно правка. Пути самого кита исключены (см. `_is_kit_path`).
     """
+    # RAW, а не gitio.git: `git status --porcelain` — вывод с значимой ведущей колонкой XY,
+    # а gitio.git стянул бы её через .strip(). timeout= задан явно (инвариант против зависаний).
     try:
         r = subprocess.run(["git", "-C", str(child_root), "status", "--porcelain"],
                            capture_output=True, text=True, timeout=20, check=False)

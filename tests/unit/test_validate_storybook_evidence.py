@@ -20,7 +20,6 @@ from validate_storybook_evidence import (  # noqa: F401
 @pytest.fixture
 def good_bundle():
     """Build a valid bundle from the real storybook adapter."""
-    sys.path.insert(0, str(PKG / "tools"))
     from ai_ops_kit.ui import storybook_adapter
 
     def _w(root, rel, obj):

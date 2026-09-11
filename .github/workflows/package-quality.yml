@@ -7,11 +7,6 @@ on:
     # запускался вовсе, а PR показывал зелёный статус по одному pr-smoke. Draft-PR
     # по-прежнему отсекается условием на уровне джоба, так что смысл v3.25.1 сохранён.
     types: [opened, ready_for_review, synchronize]
-  # v3.38 (merge-queue-not-handrolled): merge queue строит временный merge-коммит и требует те же
-  # обязательные контексты НА НЁМ — то есть пороги (coverage, footprint, ратчеты) меряются против
-  # ИТОГА СЛИЯНИЯ, а не ветки PR (gate-measures-merge-result). Без этого триггера очередь висла бы
-  # вечно: обязательный контекст в merge_group некому отдать (капкан статусов из разбора 20.08).
-  merge_group:
   push:
     branches: [main]
   workflow_dispatch: {}  # ручной запуск перед release
@@ -28,9 +23,11 @@ permissions:
 jobs:
   quality:
     # v3.27.3 WP4: не запускаем полный CI для draft PR даже при synchronize.
-    # v3.38: сравнение НЕ `... == false`: в merge_group и push событие pull_request отсутствует,
-    # `null == false` в выражениях Actions ложно — джоба молча скипалась бы и обязательный контекст
-    # в очереди слияния не отдавался НИКОГДА (очередь висит; капкан статусов из разбора 20.08).
+    # Условие НЕ сводится к `... == false`: на событиях `push` и `workflow_dispatch` объекта
+    # pull_request нет, `null == false` в выражениях Actions ложно — джоба молча скипалась бы и
+    # обязательный контекст на push в main не отдавался бы НИКОГДА. Защитная ветка
+    # `github.event_name != 'pull_request'` пропускает не-PR события, а draft-фильтр применяется
+    # только к самим PR.
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     strategy:
@@ -38,9 +35,21 @@ jobs:
       matrix:
         # v3.30: группы — разбиение pytest по маркерам, а не рукописные списки команд.
         # Проверка, добавленная как тест, попадает в свою группу сама.
+        # 2026-09-08 (#465): шард `fast` РАЗБИТ на `fast-1`/`fast-2`. Причина архитектурная: после #625
+        # `fast` держался у самой стены 180 c и не был надёжно под ней (тот же состав давал 169 c и
+        # 209 c — разброс раннера ±40 c), а остаток — объём (тысячи тестов < 10 c / 4 ядра), честно
+        # снять его маркером `slow` уже нельзя. Два шарда гонят по половине набора `not slow` на своих
+        # 4 ядрах и уходят под ~110–140 c с запасом. Партиция по `-k` полная и непересекающаяся
+        # (fast-2 = `not (набор fast-1)`), подробности — в .github/ci-groups/fast-1.sh.
+        # ⚠ ВЛАДЕЛЬЦУ: required-статусы branch protection обязан обновить человек. Старый контекст
+        # `quality (fast, .github/ci-groups/fast.sh)` больше НИКОГДА не отчитается — оставленный в
+        # required, он заблокирует каждый PR. Безопасный порядок: сделать `quality (fast-1, …)` и
+        # `quality (fast-2, …)` required → влить этот PR → снять из required старый `fast`.
         include:
-          - group: fast
-            script: .github/ci-groups/fast.sh
+          - group: fast-1
+            script: .github/ci-groups/fast-1.sh
+          - group: fast-2
+            script: .github/ci-groups/fast-2.sh
           - group: selftests-a
             script: .github/ci-groups/selftests-a.sh
           - group: selftests-m
@@ -50,15 +59,15 @@ jobs:
     env:
       AI_OPS_DIFF_BASE: ${{ github.event.pull_request.base.sha || '' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # история нужна eval-гейту для diff изменённых агентов
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest pytest-xdist hypothesis
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -76,9 +85,9 @@ jobs:
     steps:
       # fetch-depth: 0 — не украшение: `towncrier check --compare-with origin/main` сравнивает
       # ветку с базой, и на shallow-клоне базы просто нет (гейт молча не нашёл бы diff).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       # ВЕРСИЯ ПИНУЕТСЯ, и это замер, а не аккуратность. Здесь стояло `pip install ruff`
       # (то есть последний), а `.pre-commit-config.yaml` пинит v0.8.0 — два РАЗНЫХ линтера.
@@ -108,6 +117,13 @@ jobs:
             exit 1
           fi
           echo "битых директив # noqa нет"
+      # mypy: ОБЪЯВЛЕН И ИСПОЛНЯЕТСЯ (F-05, 2026-09-09). До этого стоял в [dev] и не гонялся нигде —
+      # инвентарь enforcement-inventory это подсветил. Область строгая — фундамент (kernel+shared),
+      # см. [tool.mypy] в pyproject. Версия пинуется по той же причине, что ruff: разные версии дают
+      # разные ответы. enforcement-inventory ссылается на ЭТОТ шаг как доказательство исполнения.
+      - run: pip install 'mypy==2.3.1'
+      - name: "mypy — фундамент (kernel+shared) типобезопасен"
+        run: mypy
       # ВОРОТА ВЫПУСКА (работа `release-has-a-gate`, 18.08.2026). Стоят в ЭТОЙ джобе, а не в новой,
       # осознанно: новая джоба не попадает в обязательные статусы защиты ветки без действия владельца,
       # то есть гейт исполнялся бы «по желанию» — ровно класс «объявлено, но не исполняется». Имя
@@ -161,6 +177,28 @@ jobs:
             echo "::error::формат сообщений коммитов нарушен (код $rc)"
             exit 1
           fi
+      # CommitContract по коммитам PR (F-13). До этого контракт (commit_policy: охват коммита,
+      # заглушки, секреты, ссылка на WorkItem) жил ТОЛЬКО в локальном хуке commit-msg — внешний PR
+      # его не проходил, а в CI зеркалились лишь cz check и towncrier. «Половина проверки хуже
+      # отсутствующей» — вот та половина. Здесь контракт гоняется по каждому коммиту диапазона PR.
+      # Сегодня enforce=advise: rc красит ТОЛЬКО настоящие нарушения (секреты/заглушки); broad_scope
+      # и no_workitem печатаются советом. SKIP_CLAIMS=1 — реестра заявок машины в CI нет.
+      - if: ${{ github.event_name == 'pull_request' }}
+        run: pip install 'pyyaml==6.*'
+      - name: "CommitContract по коммитам PR (охват + осмысленность сообщения; advise)"
+        if: ${{ github.event_name == 'pull_request' }}
+        env:
+          COMMIT_CONTRACT_SKIP_CLAIMS: "1"
+        run: |
+          rc=0
+          for sha in $(git rev-list "${{ github.event.pull_request.base.sha }}..HEAD"); do
+            msg=$(mktemp); git log -1 --format=%B "$sha" > "$msg"
+            files=$(git diff-tree --no-commit-id --name-only -r "$sha" | tr '\n' ' ')
+            [ -z "$files" ] && continue
+            COMMIT_CONTRACT_FILES="$files" scripts/commit-contract.sh "$msg" || rc=$?
+          done
+          if [ "$rc" -ne 0 ]; then echo "::error::CommitContract нашёл нарушение в коммите PR"; exit 1; fi
+          echo "CommitContract: коммиты PR проверены (советы, если были, — выше)"
 
   # Lane A2: кит гоняет собственный security-scan против диффа PR.
   # Только на PR (не push в main): `--base origin/main` требует наличия базы для сравнения.
@@ -170,13 +208,34 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужна история для git diff против origin/main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "Security scan: секреты, зависимости, injection-surface"
         run: python3 ai_ops_kit/security/security_scan.py --base origin/main
+
+  # Advisory (работы p1-merge-preview-delivered-footprint + gate-measures-merge-result): ОБЪЁМ и
+  # ЧИСЛО ФАЙЛОВ ДОСТАВЛЯЕМОЙ части ИТОГА слияния — пересечение дерева-итога `git merge-tree
+  # origin/main HEAD` с managed_set дочки — против потолков volume_bytes и substantive_files. Меряет
+  # то, что реально поедет в дочку из РЕЗУЛЬТАТА слияния, а не ветку PR в одиночку и не всё дерево-итог
+  # (это делает merge_preview). Файловая ось закрывает дрейф 490->498 ФАЙЛОВ, который объёмная ось не
+  # ловит. НЕ блокирующая: запускается без --strict (всегда exit 0); новый job в обязательные статусы
+  # защиты ветки не входит без действия владельца — промоут отдельным решением. Только на PR:
+  # --base origin/main требует базы для превью слияния.
+  delivered-footprint:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with: {fetch-depth: 0}   # нужен origin/main как база превью слияния
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+      - name: "Advisory: объём+число файлов доставляемого итога слияния (merge-preview ∩ managed_set)"
+        run: python3 installer/delivered_merge_footprint.py --base origin/main --head HEAD
+
 
   # 2026-09-03 (замер CI): джоба `coverage` УБРАНА С ПУТИ PR. Замер показал: она занимала ~10.8 мин
   # и держала стену package-quality, при этом за окно прогонов не завалила ничего, а тесты и так
@@ -192,9 +251,14 @@ jobs:
   # в поставку. Джоба заодно проверяет заявку requirements.txt «нужен только pyyaml».
   clean-install:
     runs-on: ubuntu-latest
+    # НЕ матрица осознанно: матрица переименовала бы контекст статуса в `clean-install (3.12)`, а
+    # branch protection держит required-контекст `clean-install` по ИМЕНИ — переименование осиротило
+    # бы его, и все PR зависли бы BLOCKED (ровно инцидент python39-compat, ради которого заведён
+    # required-contexts). Совместимость с 3.13 доказывает `pipeline-e2e (3.13)` — полный прогон
+    # набора на 3.13; механика чистой установки (копирование файлов) версие-независима.
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml          # РОВНО рантайм-зависимость, ничего сверх
       - name: "Установка в чистый репозиторий без кита рядом"
@@ -209,10 +273,13 @@ jobs:
   # окружение и настоящая установка, а не имитация.
   upgrade-path:
     runs-on: ubuntu-latest
+    # НЕ матрица осознанно (та же причина, что у clean-install): переименование джобы в
+    # `upgrade-path (3.12)` осиротило бы required-контекст `upgrade-path` в branch protection.
+    # 3.13 покрывает `pipeline-e2e (3.13)`; механика обновления версие-независима.
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}          # нужны ТЕГИ: обновляемся с предыдущего выпуска
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml         # РОВНО рантайм-зависимость, как у пользователя
       - name: "Обновление предыдущий выпуск -> рабочее дерево"
@@ -223,16 +290,36 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.12"]
+        # compatibility-matrix: пол requires-python = ">=3.12" обещает совместимость с 3.13+,
+        # поэтому e2e гоняется на 3.12 И 3.13, а не только на нижней границе — иначе обещанная
+        # совместимость объявлена, но не проверена. 3.14 сюда НЕ добавляем: не релизнута/нестабильна
+        # на раннерах (у кита на ней локально OOM в xdist), арбитр совместимости — этот CI.
+        python-version: ["3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "${{ matrix.python-version }}"}
       # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install pyyaml pytest pytest-xdist hypothesis
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
+
+  # macOS advisory (F-10): разработка идёт на macOS, а CI её не видел — платформа владельца не
+  # проверялась. Джоба НАБЛЮДАЕТ её на быстром срезе (critical_path), но НЕ блокирует
+  # (continue-on-error): реальные отличия macOS/Linux (NFC/NFD имён, case-sensitivity) станут видны,
+  # а не спрячутся. НЕ в required-контекстах branch protection — красный здесь PR не держит.
+  smoke-macos:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    runs-on: macos-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with: {python-version: "3.12"}
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
+      - name: "macOS advisory: critical_path на платформе владельца (не блокирует)"
+        run: python3 -m pytest -m critical_path -q

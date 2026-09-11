@@ -38,7 +38,8 @@ def test_skip_reason_is_about_the_signal_not_past_tense_code():
 @pytest.mark.unit
 def test_the_specify_next_step_is_plan_not_run():
     """Подсказка после specify ведёт на `plan`, а не сразу на `run --execute` (specify->plan->run)."""
-    src = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py").read_text(encoding="utf-8")
+    # Тело specify вынесено в спутник _intent_specify (ратчет func-size main) — сообщение живёт там.
+    src = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli_lifecycle.py").read_text(encoding="utf-8")
     # блок вызова from_specification
     i = src.index("from_specification")
     block = src[i:i + 600]

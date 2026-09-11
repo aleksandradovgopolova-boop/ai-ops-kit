@@ -15,7 +15,6 @@ from hypothesis import strategies as st
 pytestmark = [pytest.mark.unit, pytest.mark.critical_path]
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.gates.invariants import (  # noqa: E402
     ALL_INVARIANTS,

@@ -116,3 +116,45 @@ def test_ai_decisions_filters_by_actor(tmp_path):
     dl.log_ai_decision(tmp_path, **_fields())
     ids = [e["id"] for e in dl.ai_decisions(tmp_path)]
     assert "ep-existing" not in ids and "ai-2026-08-20-x" in ids
+
+
+# --- issue #548: опциональные поля калибровки эпизода ---
+
+def test_calibration_fields_persisted_when_given(tmp_path):
+    _write(tmp_path, REGISTRY_WITH_OUTCOMES)
+    dl.log_ai_decision(
+        tmp_path,
+        confidence="medium",
+        expected_outcome={"metric": "p95 latency", "baseline": "800ms", "target": "400ms"},
+        review_at="2026-12-01",
+        **_fields())
+    got = dl.ai_decisions(tmp_path)[0]
+    assert got["confidence"] == "medium"
+    assert got["expected_outcome"]["target"] == "400ms"
+    assert got["review_at"] == "2026-12-01"
+    # реестр остаётся валидным для существующего гейта
+    data = yaml.safe_load((tmp_path / dl.REGISTRY_REL).read_text(encoding="utf-8"))
+    assert validate_decisions_check(data)[0] == []
+
+
+def test_episode_without_calibration_fields_stays_valid(tmp_path):
+    # обратная совместимость: эпизод без новых полей строится и не несёт их
+    ep = dl.build_ai_episode(**_fields())
+    assert "confidence" not in ep and "expected_outcome" not in ep and "review_at" not in ep
+
+
+def test_bad_confidence_refused():
+    with pytest.raises(dl.RegistryError):
+        dl.build_ai_episode(confidence="sky-high", **_fields())
+
+
+def test_malformed_expected_outcome_refused():
+    # нет target — не измеримое обязательство
+    with pytest.raises(dl.RegistryError):
+        dl.build_ai_episode(expected_outcome={"metric": "latency", "baseline": "800ms"},
+                            **_fields())
+
+
+def test_bad_review_at_refused():
+    with pytest.raises(dl.RegistryError):
+        dl.build_ai_episode(review_at="soon", **_fields())

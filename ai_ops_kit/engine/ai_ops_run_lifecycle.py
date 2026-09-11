@@ -20,10 +20,21 @@ import contextlib
 import sys
 
 from ai_ops_kit.engine.pipeline_helpers import work_produced, delivery_pending  # noqa: E402
-from ai_ops_kit.engine import work_areas as _work_areas       # noqa: E402
+from ai_ops_kit.shared import work_areas as _work_areas       # noqa: E402
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work        # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402
+
+
+def _run_start_audience(child_root):
+    """Аудитория для служебных строк СТАРТА прогона (active-work/worktree). #708: на product их
+    id-насыщенная форма — внутренний шум; берём из communication-policy дочки (default product).
+    Сбой резолва не роняет прогон — падаем на technical (полная форма)."""
+    try:
+        from ai_ops_kit.ui import presenter
+        return presenter.audience_from_config(child_root)
+    except Exception:  # noqa: BLE001
+        return "technical"
 
 
 def _commit_barrier(rep, child_root, features_dir, fid, lifecycle_errors):
@@ -211,6 +222,22 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
         _cost_rep = {"calls": len(_stats), "input_tokens": _in, "output_tokens": _out,
                      "latency_s": _lat, "cost_usd_est": _cost, "model": model}
         rep["cost"] = _cost_rep
+        # ROID (P1, аудит 10 ролей): стоимость прогона, ПРИВЯЗАННАЯ К ИСХОДУ. cost_account считал
+        # cost_per_successful_change, но модуль был дормантным (0 не-тестовых импортёров) — экономика
+        # мерилась в вакууме, не против реального результата. Здесь переиспользуем ту же чистую функцию
+        # с фактическими данными прогона: успешное ПРОВЕРЕННОЕ изменение = ready_for_pr (приёмка/доставка
+        # пройдены к этому моменту). Не проверено -> cost_per_change=None: стоимость есть, успешных
+        # изменений нет — честные потери, а не деление на ноль (честность держит сам cost_account).
+        from ai_ops_kit.providers import cost_account
+        _roid = cost_account.cost_per_successful_change(
+            {"calls_cost": _cost, "latency_s": _lat, "delivered_verified": bool(rep.get("ready_for_pr"))})
+        rep["roid"] = {"cost_per_successful_change": _roid["cost_per_change"],
+                       "total_cost": _roid["total_cost"], "delivered_verified": _roid["delivered_verified"],
+                       "note": _roid["note"]}
+        # #637: нагруженная стоимость ИСХОДА (AI + внимание человека); сборка — в cost_account,
+        # сюда только проводка в отчёт (монолит lifecycle не растёт содержательно).
+        rep["roid_outcome"] = cost_account.roid_outcome_report(
+            _cost, _lat, rep.get("manual_interventions"), rep.get("ready_for_pr"), child_root)
         _ls.journal_append(jname, {"kind": "run_cost", "run_id": fid, "workitem_id": fid,
                                     "attempt_id": attempt_id, **_cost_rep})
         # v3.10.0 Usage Truth: персист КАЖДОГО вызова (writer/reviewer/fix-loop/fallback/escalation)
@@ -285,20 +312,22 @@ def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
     else:
         _st, _why = "blocked", "код не написан — правок 0 (нужен живой провайдер или внешний исполнитель)"
     # B2-20 (повтор B2-12, живой прогон 14.08.2026): `resume` завершённой-но-НЕДОСТАВЛЕННОЙ работы
-    # заново звал писателя, получал ноль правок — потому что делать уже нечего — и хоронил готовый
-    # READY_FOR_PR в `blocked: код не написан`. Работа с коммитом на ветке пропадала из активного
-    # состояния, и владелец видел «кит не справился» там, где кит справился и ждал доставки.
-    # Продолжение поверх существующей ветки без новых правок — это НЕ «код не написан».
+    # заново звал писателя, получал ноль правок (делать уже нечего) и хоронил готовый READY_FOR_PR в
+    # `blocked: код не написан`. Продолжение поверх ветки без новых правок — это НЕ «код не написан».
     if _st == "blocked" and delivery_pending(rep):
+        # #695: называем ОДНУ автономную команду доставки готового (printed-commands-are-runnable).
         print("  работа прошлого прогона на ветке, дописывать нечего — нужна ДОСТАВКА, а не "
-              "повторный прогон: запусти с open_pr (и GITHUB_TOKEN), либо открой PR из ветки сам")
+              "повторный прогон. Одной командой доведёт до открытого PR (нужен GITHUB_TOKEN):\n"
+              f"    ./ai-ops resume {child_root} {fid} --deliver-only --open-pr --execute")
         with contextlib.redirect_stdout(sys.stderr):
-            active_work.finish_cmd(aw_path, fid, status="blocked",
-                                   reason="ждёт доставки: работа готова на ветке, новых правок нет")
+            active_work.finish_cmd(aw_path, fid, status="blocked", child_root=child_root,  # #695
+                                   reason="ждёт доставки: работа готова на ветке, новых правок нет",
+                                   audience=_run_start_audience(child_root))
         _ls.merge_bookkeeping_losses(rep)
         return rep
     with contextlib.redirect_stdout(sys.stderr):
-        active_work.finish_cmd(aw_path, fid, status=_st, reason=_why)
+        active_work.finish_cmd(aw_path, fid, status=_st, reason=_why, child_root=child_root,  # #695
+                               audience=_run_start_audience(child_root))
     _ls.merge_bookkeeping_losses(rep)   # утраченные записи журнала называются в отчёте, а не пропадают
     return rep
 
@@ -335,6 +364,25 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
         from ai_ops_kit.gates import concurrency_preflight as _cpp
         _branch = plan["work_branch"]
         _csha = plan["committed_sha"]
+        # ДРЕЙФ-БЕЗОПАСНАЯ РЕ-ВЕРИФИКАЦИЯ (перед DeliveryIntent): доказательство прогона привязано к
+        # base_sha — итогу слияния на момент проверок. Сдвинулась цель (remote base) с тех пор ->
+        # evidence относится к СТАРОМУ итогу; выдать его за проверенное против фактического merge
+        # нельзя. Fail-closed: помечаем stale-needs-reverify, Intent НЕ создаём и PR НЕ открываем
+        # (доставки устаревшего не будет) — нужен ре-прогон против новой цели. Цель не двигалась ->
+        # путь ниже без изменений (счастливый путь сохранён).
+        _reverify = execution_pipeline._reverify_against_current_target(
+            plan["work_root"], plan["base_ref"], plan["base_sha"], _csha)
+        if _reverify.get("stale"):
+            rep["delivery"] = {"requested": True, "status": "stale-needs-reverify",
+                               "evidence_base": _reverify.get("evidence_base"),
+                               "current_target": _reverify.get("current_target"),
+                               "merge_preview": _reverify.get("merge_preview"),
+                               "reason": _reverify.get("reason")}
+            rep["overall_status"] = "delivery-stale-needs-reverify"
+            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+            _ls.journal_append(jname, {"kind": "delivery_stale", "run_id": fid, "workitem_id": fid,
+                                       "current_target": _reverify.get("current_target")})
+            return
         # repository identity (owner/name из origin) — часть СТРОГОЙ идентичности доставки
         _ru = execution_pipeline._git(child_root, "remote", "get-url", "origin")
         _orn = _cpp._parse_owner_repo(_ru[1]) if _ru[0] == 0 else None
@@ -593,6 +641,22 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
         # «preflight-конфликтов: 0», то есть заявлял «конфликтов нет» там, где проверки
         # вообще не было. Записываем сбой явно.
         preflight = {"error": f"{type(_pe).__name__}: {_pe}"[:200], "conflicts": None}
+    # #661: сигнал «писатель занят + работа независима → годится параллельный субагентный путь».
+    # Момент выбран потому, что здесь у нас ОБА факта: неблокирующая проба замка писателя говорит,
+    # занят ли он ПРЯМО СЕЙЧАС другим прогоном, а `preflight.conflicts` — независима ли эта работа
+    # от активных сессий. Движок только СИГНАЛИТ (субагентов не спавнит) и остаётся при безопасном
+    # дефолте — если координатор путь не подхватит, прогон дождётся очереди штатно. Best-effort:
+    # сбой сигнала не роняет и не блокирует регистрацию (advisory), но пишется в durable-дом.
+    try:
+        from ai_ops_kit.providers import orchestrator_providers as _op
+        from ai_ops_kit.engine import writer_contention as _wc
+        _busy = _op.writer_lock_busy()
+        _decision = _wc.assess(_busy, preflight.get("conflicts"))
+        if _decision["parallel_viable"]:
+            _wc.record(child_root, fid, _decision, areas=list(areas), work_id=fid)
+    except Exception as _wce:  # noqa: BLE001 — сигнал advisory: его сбой не роняет прогон...
+        # ...но и молча не исчезает: named в lifecycle_errors (как preflight-сбой выше).
+        lifecycle_errors.append(f"writer-contention signal: {type(_wce).__name__}: {_wce}"[:200])
     # регистрация активной работы (координация) — человекочитаемые строки в stderr, чтобы
     # stdout оставался чистым для --json.
     # КОД ВОЗВРАТА РЕГИСТРАЦИИ ЧИТАЕТСЯ (замер 18.08.2026). Прежде он отбрасывался в обеих
@@ -607,7 +671,8 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
                                            workitem=f"features/{fid}/workitem.yaml",
                                            child_root=child_root,
                                            takeover=takeover, takeover_reason=takeover_reason,
-                                           published=active_work.publication_enabled(child_root))
+                                           published=active_work.publication_enabled(child_root),
+                                           audience=_run_start_audience(child_root))
         except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
             lifecycle_errors.append(f"active-work register: {_e}")
             _reg_rc = 0        # сбой записи реестра уже назван выше — не путать его с отказом
@@ -869,6 +934,15 @@ def _resolve_models(ctx):
     # (не строим proposer, не зовём провайдера). Честный blocked-preflight-отчёт, ready_for_pr=false.
     if isinstance(ctx.model_resolution, dict) and ctx.model_resolution.get("preflight_blocked"):
         _kpf = ctx.model_resolution.get("key_preflight", {})
+        # #633: provider/key preflight не пройден до вызова модели — вызов человека, живший только в
+        # run-report. Кладём в шину внимания, чтобы `inbox` его показал (fail-safe, прогон не роняем).
+        with contextlib.suppress(Exception):
+            from ai_ops_kit.lifecycle import attention_bus as _ab
+            _ab.record(ctx.child_root, key=f"provider-preflight:{ctx.feature}",
+                       source="прогон: доступ к модели",
+                       reason="работа остановлена до вызова модели: "
+                              + "; ".join(_kpf.get("blocks", []) or ["ключ/ротация провайдера"]),
+                       kind=_ab.BLOCKED, work_id=ctx.feature)
         return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked-preflight",
                 "ready_for_pr": False, "provider": ctx.provider_name, "model": ctx.writer_model,
                 "model_resolution": ctx.model_resolution, "key_preflight": _kpf,

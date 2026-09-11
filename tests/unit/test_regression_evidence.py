@@ -22,6 +22,11 @@ import pytest
 from ai_ops_kit.engine import ai_ops_run
 from ai_ops_kit.gates import regression_evidence as re_
 
+# Тесты поднимают реальный git-репозиторий с багом и гоняют `ai-ops run` через подпроцессы — >10 c
+# на CI, то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile`
+# в slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
+
 
 def _git(root, *args):
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)

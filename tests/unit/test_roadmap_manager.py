@@ -112,6 +112,38 @@ def test_deviation_flags_authored_horizon_mismatch():
     assert rm.deviations(r, aligned) == []
 
 
+def test_deviations_speak_human_without_raw_horizon_slugs():
+    """P2: человеку не показывают сырой горизонт 'now'/'next'/'later' и голый счётчик «0/2».
+
+    Отклонение — это главный текст, который читает не-разработчик. Раньше в нём стоял технический
+    горизонт («по плану горизонт 'next'») и голая дробь исходов. Проверяем, что подача человеческая:
+    горизонт назван словами, счётчик развёрнут, а логика (какие цели помечены) не изменилась.
+    """
+    r = rm.build(_plan())
+    authored = {
+        "now": {"goals": ["g-done"]},
+        "next_outcome": {"goals": ["g-later"]},
+        "later_major": {"goals": ["g-now"]},
+        "someday": {"goals": []},
+    }
+    joined = "\n".join(rm.deviations(r, authored))
+    # Ни одного сырого слага горизонта в кавычках — только человеческие формулировки.
+    for raw in ("горизонт 'now'", "горизонт 'next'", "горизонт 'later'",
+                "'now'", "'next'", "'later'"):
+        assert raw not in joined, f"сырой термин просочился к человеку: {raw!r}"
+    # Термины поданы словами и счётчик развёрнут.
+    assert "запланировано следующим" in joined or "пока не взято в работу" in joined
+    assert "результатов" in joined
+
+
+def test_humanize_outcomes_reads_as_a_sentence():
+    """Счётчик исходов разворачивается в предложение; пустой набор назван честно, не «0/0»."""
+    assert rm.humanize_outcomes(0, 2) == "достигнуто 0 из 2 результатов"
+    assert rm.humanize_outcomes(1, 3) == "достигнуто 1 из 3 результатов"
+    assert "0/0" not in rm.humanize_outcomes(0, 0)
+    assert rm.humanize_outcomes(0, 0) == "результаты пока не заданы"
+
+
 def test_no_authored_file_is_not_no_deviation():
     """side-effect: отсутствие авторского ROADMAP.md — «сверять нечего», а не «расхождений нет»."""
     r = rm.build(_plan())

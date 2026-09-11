@@ -1,4 +1,4 @@
-# Ратчет размера МОДУЛЯ (файла) в ai_ops_kit/ — заморозить монолиты вниз.
+# Ратчет размера МОДУЛЯ (файла) в ai_ops_kit/ И installer/ (F-06) — заморозить монолиты вниз.
 #
 # ЗАЧЕМ. func-size (packages/func-size-baseline.yaml) стережёт максимум ФУНКЦИИ, но не размер ФАЙЛА:
 # god-функцию можно расщепить на десять мелких, а модуль при этом останется на 1800 строк. Мы дорого
@@ -19,27 +19,566 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/cli/ai_ops_cli.py: 962
-  ai_ops_kit/cli/ai_ops_cli_intents.py: 944
-  ai_ops_kit/engine/workpackage_executor.py: 1066
-  ai_ops_kit/engine/execution_pipeline.py: 771
-  ai_ops_kit/planning/delivery_plan.py: 1050
-  ai_ops_kit/lifecycle/active_work.py: 1040
-  ai_ops_kit/ui/presenter_formatters.py: 977
-  ai_ops_kit/planning/repo_audit.py: 965
-  ai_ops_kit/engine/ai_ops_run_exec.py: 703
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 878
-  ai_ops_kit/providers/orchestrator_providers.py: 831
-  ai_ops_kit/intelligence/nightly_review.py: 954
-  ai_ops_kit/validation/validate_own_medicine.py: 732
-  ai_ops_kit/gates/gate_executor.py: 726
-  ai_ops_kit/engine/tool_broker.py: 725
+  ai_ops_kit/ui/presenter.py: 945
+  ai_ops_kit/engine/execution_pipeline.py: 789
+  ai_ops_kit/planning/repo_audit.py: 854
+  ai_ops_kit/engine/ai_ops_run_exec.py: 725
+  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
+  ai_ops_kit/providers/orchestrator_providers.py: 978
+  ai_ops_kit/validation/validate_own_medicine.py: 795
+  ai_ops_kit/gates/gate_executor.py: 905
+  ai_ops_kit/engine/tool_broker.py: 868
   ai_ops_kit/planning/contours.py: 724
+  ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2168'
+    to: 'installer/ai_ops.py = 349 (ниже порога 700 — снят из ceilings); installer/version_ops.py = 563, installer/delivery_ops.py = 588, installer/managed_state.py = 403, installer/asset_ops.py = 553, installer/core.py = 43 (все ниже порога 700 — в ceilings не вносятся)'
+    work: 'refactor(installer): финальный вынос общего хаба из монолита ai_ops в под-хабы за фасадом'
+    why: >-
+      Последний многотысячник кита (installer/ai_ops.py = 2168 — критичный код в каждой дочке) разрезан
+      так, чтобы ни один файл не остался ≥1000. В ai_ops.py остались тонкий диспетч `main`/`_dispatch`,
+      ленивые загрузчики сателлитов и хаба, self-contained развилка гейта отставания `_lag_guard` (она
+      ОБЯЗАНА работать из одинокой копии `ai_ops.py` без сателлитов рядом — copy-guard `check-update`) и
+      прозрачный `__getattr__`-реэкспорт хаба. Общий код доставки/сверки вынесен в четыре когезивных
+      под-хаба (версии-каналы, состав/бюджет поставки, целостность/лаг managed-слоя, доставка ассетов),
+      каждый под порогом. Тонкий фасад `core.py` маршрутизирует `_core().X` к нужному под-хабу и на
+      каждом обращении переставляет живой экземпляр установщика — монолит НЕ возрождён одним core.py.
+      Тела и докстринги перенесены байт-в-байт; глобалы установщика читаются через `_ao()`, кросс-хаб
+      вызовы — через `_core()`. Все файлы упали ниже порога 700 → сняты/не внесены в ceilings, ратчет
+      держит вниз.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 805'
+    to: 'ai_ops_kit/engine/tool_broker.py = 868'
+    work: 'fix(broker): закрыть покрытие R-43 — сторож видит игнорируемое внутри protected (#786)'
+    why: >-
+      Вторая половина R-43: сторож защищённых путей сверял дерево через `git status --porcelain
+      -uall`, который игнорируемые файлы не показывает — запись в игнорируемый файл внутри protected
+      (секреты/оверрайды в production/, ключевой материал в security/, пути под .ai/) проходила
+      молча. Добавлены `_ignored_under` (скан игнорируемых, СУЖЕННЫЙ до защищённых префиксов, чтобы
+      не откатывать законную суету __pycache__/node_modules), `_protected_scan_prefixes`, ветка
+      разбора дельты игнорируемых в `_shell_violations` и честный откат в `_revert_violations`
+      (новый игнор-файл удаляется; правка существующего на месте — обнаружена и доложена как «не
+      восстановить», не под git). Плюс обновлён честный список ограничений в шапке. Файл остаётся
+      под порогом монолита-разреза; поднятие потолка записью в ledger, ратчет держит вниз.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 785; ai_ops_kit/engine/execution_pipeline.py = 786'
+    to: 'ai_ops_kit/engine/tool_broker.py = 805; ai_ops_kit/engine/execution_pipeline.py = 789'
+    work: 'fix(broker): сторож не заявляет успех отката, которого не было (R-43, #786)'
+    why: >-
+      Закрыт R-43: пост-фактум сторож shell мог заявить успешный откат записи в защищённый путь,
+      которого на деле не было (запись в игнорируемый файл сторож не видит). Честный отчёт требует
+      проверить результат отката по факту, а не по намерению — это добавило ветку разбора в
+      tool_broker.py (785 -> 805) и проброс её итога в execution_pipeline.py (786 -> 789). Оба
+      остаются под порогом монолита; поднятие потолка записью в ledger, ратчет держит вниз для
+      остального.
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'ai_ops_kit/lifecycle/active_work.py = 1135'
+    to: 'ai_ops_kit/lifecycle/active_work.py = 688 (ниже порога 700 — снят из ceilings)'
+    work: 'refactor(lifecycle): вынос носителя заявок и сверки из active_work в сателлиты'
+    why: >-
+      Монолит реестра активных работ (1135 строк) расщеплён без изменения поведения: транспортный
+      носитель заявок (публикация в `.ai/claims/`, носитель копий `.git/ai-ops/claims/`, `team_view`
+      с дедупом по паре машина/работа) вынесен в `lifecycle/work_claims.py` (278 строк, донор ниже
+      порога), а измерение git — личность держателя (`_machine`/`_now_iso`), доказательство его
+      смерти (`holder_is_gone` по процессу/возрасту) и сверка ветки с базой (`reconcile_with_base`,
+      `_divergence`, `_same_ref`) — в `lifecycle/work_reconcile.py` (216 строк, донор ниже порога).
+      active_work остался держателем ЛОКАЛЬНОГО реестра (load/save/_locked/shared_registry_path),
+      команд CLI (register/list/check/finish/handoff) и классификации пересечений (classify/
+      find_cycle/_forecast_lines) — и сам импортирует оба сателлита, ре-экспортируя их имена, поэтому
+      `active_work.<имя>` и прежние импорты внешних потребителей продолжают работать. Тела и
+      докстринги перенесены байт-в-байт. Файл упал ниже порога 700 → снят из ceilings, ратчет держит
+      вниз.
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 1224'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 627 (ниже порога 700 — снят из ceilings); ai_ops_cli_commands.py = 625 (ниже порога 700 — в ceilings не вносится)'
+    work: 'refactor(cli): вынос слоя реализации команд из монолита ai_ops_cli в ai_ops_cli_commands'
+    why: >-
+      Монолит входа CLI (1224 строки) разрезан: тонкий диспетч `main`, парсер argparse и декларации
+      INTENTS/DIRECT_INTENTS остались в ai_ops_cli.py, а РЕАЛИЗАЦИЯ команд переехала в соседний
+      ai_ops_kit/cli/ai_ops_cli_commands.py (625 строк, ниже порога). Туда вынесены проб-несущие
+      обработчики намерений (backlog/feedback/status/next/review/advise + read-only помощник
+      _enrich_running_with_work_view), путь реального запуска движка _main_run_execute и сессионные
+      стражи перед стартом (_session_identity/_announce_start/_session_guard_before_start/_process_gate),
+      а также общие хелперы вывода/идентификации (_say/_audience/_wid_for/_intake_command_carrying_task_type).
+      Поведение байт-в-байт то же — чистый перенос. Ребро импорта одностороннее (сосед НЕ импортирует
+      ai_ops_cli), имена ре-экспортируются из ai_ops_cli, регистрация обработчиков — в реестре
+      ai_ops_cli. Мутационные пробы, чьи find уехали в сосед, перенацелены (file/covers). Потолок cli
+      опущен под факт 1224 -> 627 (ратчет вниз).
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'ai_ops_kit/intelligence/nightly_review.py = 1097'
+    to: 'ai_ops_kit/intelligence/nightly_review.py = 665 (ниже порога 700 — снят из ceilings)'
+    work: 'refactor(intelligence): вынос read-only кластеров из nightly_review в сателлиты'
+    why: >-
+      Монолит ночного обзора (1097 строк) расщеплён: read-only сбор сигналов дельты (git/репозиторий
+      + прогон валидаторов run_checks) вынесен в `intelligence/nightly_collectors.py` (300 строк,
+      донор ниже порога), расписание и доставка брифа — в `intelligence/nightly_schedule.py` (184
+      строки, донор ниже порога). nightly_review остался ОРКЕСТРАТОРОМ (collect_delta/format_brief/
+      run_nightly/confirm_review) и ЕДИНСТВЕННЫМ держателем git-пишущего пути автофикса класса A —
+      его намеренно НЕ трогали, чтобы validate_nightly_no_direct_main_write (R1: сканирует ровно этот
+      файл) продолжал сторожить запрет прямой записи в main. Сателлиты импортируются самим
+      nightly_review (ре-экспорт сохраняет доступ `nightly_review.<имя>` для тестов). Логика байт-в-байт
+      та же. Файл упал ниже порога 700 → снят из ceilings, ратчет держит вниз.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'ai_ops_kit/planning/delivery_plan.py = 1135'
+    to: 'ai_ops_kit/planning/delivery_plan.py = 602 (ниже порога 700 — снят из ceilings)'
+    work: разрез монолита delivery_plan — вынос модели и валидации в модули-соседи
+    why: >-
+      Монолит delivery_plan.py разрежён на два когезивных кластера. Модель плана (словарь схемы,
+      аксессоры work/goals, живость целей и политика заморозки умений) перенесена в
+      ai_ops_kit/planning/plan_model.py (282 строки), валидация (структура, семантика, контракт
+      истории, id-хелперы движка) — в ai_ops_kit/planning/plan_validate.py (304 строки). Оба ниже
+      порога 700, поэтому в ceilings НЕ вносятся. Поведение не менялось — чистый перенос байт-в-байт
+      + ре-экспорт именами delivery_plan (все прежние импортёры и `delivery_plan.<name>` работают).
+      Соседи не импортируют delivery_plan (цикла нет): plan_validate читает plan_model, delivery_plan
+      читает оба. delivery_plan.py 1135 -> 602 ушёл ниже порога и снят из ceilings (ратчет вниз).
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: 'installer/ai_ops.py = 3926'
+    to: 'installer/ai_ops.py = 4023'
+    work: 'release update-strategy menu (#750): названное меню стратегий обновления + резолвер'
+    why: >-
+      Новая возможность инсталлятора: названное меню стратегий обновления (pr/manual/scheduled-batch/
+      auto-stable) и РЕЗОЛВЕР, который читает выбор дочки и НАЗЫВАЕТ доступность, ничего не применяя
+      (update_strategy_menu / child_update_strategy / _child_strategy_opt_in / resolve_update_strategy
+      + вывод в doctor через хелпер _doctor_report_update_strategy). Резолвер читает конфиг дочки и
+      канал пакета — это концерн инсталлятора, живёт в ai_ops.py. cmd_doctor удержан под своим func-size
+      потолком (блок вынесен в хелпер). Ратчет держит вниз.
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1947'
+    to: 'ai_ops_cli_intents.py = 1950'
+    work: 'roadmap sync-issues (#742): подкоманда сверки issue-трекера с роадмапом'
+    why: >-
+      Новая подкоманда `roadmap sync-issues`. Основная масса (gh-адаптер GhIssueClient +
+      оркестрация run_roadmap_sync, ~103 строки) ВЫНЕСЕНА в отдельный модуль
+      ai_ops_kit/cli/roadmap_sync_cli.py; в интентах остался лишь 3-строчный диспетч подкоманды
+      (if + ленивый import + вызов). +3 — неснижаемая цена нового входа, не логика. Ратчет держит вниз.
+  - at: '2026-09-09'
+    what: cover_installer
+    from: 'installer/ вне гейта (SOURCE_ROOT только ai_ops_kit)'
+    to: 'installer/ai_ops.py = 3926 (потолок = текущий размер)'
+    work: 'F-06 внешнего аудита: installer под module-size/func-size ратчеты'
+    why: >-
+      installer/ai_ops.py (3926 строк) — крупнейший файл репозитория и ЕДИНСТВЕННЫЙ код, запускаемый
+      пользователем ДО появления кита, — оставался вне всех архитектурных гейтов: validate_module_size
+      обходил только SOURCE_ROOT="ai_ops_kit". Теперь корней два. Потолок = текущий размер: чинить
+      прямо сейчас не нужно, но рост монолита установщика больше не пройдёт незамеченным. Расщепление
+      на модули по фазам — отдельной работой.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'tool_broker.py = 762'
+    to: 'tool_broker.py = 785'
+    work: 'R-42 fix: симлинк-target-guard в execute() (P0 security)'
+    why: >-
+      Находка novelty-Watch R-42 (P0): симлинк внутри корня (`src/out -> migrations/destructive`)
+      обходил protected_paths И write_scope — decide() судил НАПИСАННЫЙ путь, а write_text
+      разыменовывал симлинк; _within_root стерёг только побег ЗА корень. Добавлен symlink-target-guard
+      в execute(): судит РАЗЫМЕНОВАННУЮ цель записи по deny-стороне (protected + побег), оставив
+      write_scope на написанном пути (симметрия R-37, иначе write_scope=fail-open). Замер пробой по
+      содержимому на диске: 3 вектора симлинка → deny+файл цел, легитимная запись → allow.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 1074'
+    to: 'presenter_formatters.py = 1077'
+    work: 'humanize расход сессии (#708): текст без внутреннего тега состояния [over_budget]'
+    why: >-
+      Карта трения #708 (пункт 3): сообщение о расходе сессии показывало человеку
+      «прочитала всего 266.0M из 20.0M [over_budget]» — тег состояния [over_budget] это жаргон, а
+      не число. Теперь в текст идёт число без тега, а полный session_spend (с тегом) остаётся в
+      деталях (tech) — ничего не потеряно. +3 строки: срез хвоста + комментарий, не логика.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1214; presenter_formatters.py = 1070'
+    to: 'ai_ops_cli.py = 1224; presenter_formatters.py = 1074'
+    work: 'humanize превью do/run (#708): «запускаю сейчас» вместо «запускай, когда готов»'
+    why: >-
+      Карта трения #708 (пункт 2): `do`/`run --execute` печатали превью с «Дальше: запускай, когда
+      готов», а следом «— запускаю —» и запускали движок — противоречие. Теперь превью выбирает шаг
+      по признаку немедленного старта (pv.will_execute_now): «запускаю сейчас — результат ниже» для
+      do/run --execute, «запускай, когда готов» — только для голого run (превью). На product
+      дублирующая техно-ремарка «— запускаю —» заглушена (её роль взяло превью), на technical/debug
+      оставлена как маркер старта. Прибавка — текст веток + проброс признака, не логика прогона.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'active_work.py = 1116; ai_ops_run_lifecycle.py = 938; ai_ops_run_exec.py = 721'
+    to: 'active_work.py = 1135; ai_ops_run_lifecycle.py = 952; ai_ops_run_exec.py = 725'
+    work: 'humanize старт/финиш прогона (#708): без внутренних id на product-аудитории'
+    why: >-
+      Карта трения #708: старт прогона сыпал внутренние идентификаторы координации
+      (ACTIVE-WORK 'wi-…', сессия, машина, ветка; строка WORKTREE), а финиш — «работа 'wi-…'
+      помечена blocked». Человеку на product-аудитории это шум: суть — «работа началась в
+      отдельной копии, main не трогаю» и, если что-то не доведено, ПРИЧИНА. Добавлены
+      product-ветки в active_work.register/finish_cmd (id-строки заменены одной человеческой,
+      честность сохранена: пересечения и публикация — остаются; причина остановки — остаётся) и
+      quiet у worktree.add; аудитория берётся из communication-policy дочки через новый
+      _run_start_audience. Прибавка — текст веток + проводка аудитории в точки вызова, не логика
+      координации. Ратчет держит вниз.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 1067'
+    to: 'presenter_formatters.py = 1070'
+    work: 'humanize bootstrap: сухой прогон называет команду создать план (--apply)'
+    why: >-
+      Второй живой проход человеком (фаза РАБОТЫ, не первые минуты): `bootstrap` РЕКОМЕНДОВАЛ создать
+      план, но команду `--apply` не называл — человек не знал, как сказать «согласен», и застревал в
+      петле (model -> bootstrap-превью -> next «плана нет» -> bootstrap-превью). Теперь «Дальше:»
+      ведёт действием «создать план: ./ai-ops bootstrap --apply» первым шагом. +3 строки — текст
+      next_steps, не логика; механика не менялась. Ратчет держит вниз.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1207; ai_ops_cli_intents.py = 1942'
+    to: 'ai_ops_cli.py = 1214; ai_ops_cli_intents.py = 1947'
+    work: 'humanize model/do (#702): --answer вместо правки YAML; do без двойной реплики'
+    why: >-
+      Живой проход человеком (карта трения #702). (1) `model` печатал вопросы онбординга и звал
+      править YAML-файл руками, значки ⚠/· не объяснял; теперь показывает id вопроса в [скобках],
+      легенду «⚠ ответить сейчас, · позже», и ведёт лёгким путём `model --answer <id> "ответ"`
+      (правка YAML — как альтернатива). ai_ops_cli_intents +5 — текст подсказки. (2) `do`/`run`
+      печатал превью «вот что я сделаю / запускай когда готов» И СРАЗУ «данных не хватает» —
+      противоречие; теперь превью гасится, если прогон упрётся в недостающие intake-сигналы
+      (одна ясная реплика). ai_ops_cli +7 — гард `_blocked_on_intake` перед превью. Оба — подача,
+      не логика; механика не менялась. Ратчет держит вниз.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 1059'
+    to: 'presenter_formatters.py = 1067'
+    work: 'humanize do/run intake-gap — просьба масштаба/риска без сырого JSON'
+    why: >-
+      Живой проход сценария человеком (свежий репозиторий → `do "задача"`) показал: кит просил
+      ответить сырым JSON `--signals '{"task_type":...}'` — язык разработчика, на котором человек
+      застревает. `from_intake_gap` теперь подаёт ту же механику по-человечески: «если задача
+      небольшая и обычная — просто скопируй эту строку; если крупнее/рискованнее — поменяй size и
+      risk». +8 строк — это ТЕКСТ пользовательского сообщения (два человеческих next_steps вместо
+      одного JSON-указания), не рост логики. Механизм (`--signals`) не менялся. Ратчет держит вниз.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1198'
+    to: 'ai_ops_cli.py = 1207'
+    work: 'человеческая «передняя дверь» CLI (#675 Human API)'
+    why: >-
+      `ai-ops` без аргументов и `ai-ops help` теперь показывают короткий человеческий набор команд
+      владельца, а не argparse-стену из 36 интентов и 30 флагов (человек, не знающий внутренней
+      механики кита, тонул). СУТЬ вынесена отдельным модулем `ai_ops_kit/cli/human_help.py`, чтобы
+      вход-CLI не рос монолитом; в самом `ai_ops_cli.py` остался лишь тонкий хук — импорт модуля и
+      вызов `human_help.handle(argv, INTENTS)` в начале `main`, плюс регистрация флага `--all` в
+      парсере (чтобы `help --all` был настоящим флагом — того требует test_printed_commands_are_runnable).
+      +9 строк — это residue входа, а не рост логики; логика двери в новом модуле. Ратчет держит вниз.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'pipeline_evidence.py = 724'
+    to: 'pipeline_evidence.py = 734'
+    work: 'reviewer-grounds-pass + spec-reeval-symmetry (живой прогон #587)'
+    why: >-
+      Живой прогон кита против внешнего репозитория вскрыл два дефекта, оба чинятся здесь. (1) На
+      claude-cli-пути дифф даётся ревьюеру ИНЛАЙНОМ (reads всегда []), а элицитация #614 уводила в
+      прозаический pass без цитаты — который Fix C держал как рубер-штамп: pass на блокирующем гейте
+      структурно нельзя было заземлить, гейт не закрывался НИКОГДА. Правка промпта разводит форму по
+      вердикту (needs_work — простой строкой; pass — минимальной структурой с ОДНОЙ цитатой на
+      изменённый файл), плюс тот же смысл в `_REVIEWER_VERDICT_HINT`; страж не тронут — citation-less
+      pass по-прежнему блокируется. (2) `_reevaluate_artifact_evidence`: на reevaluate `specification`
+      при валидном openspec отдавал только `openspec_valid`, теряя `requirements_covered` — асимметрия
+      с авторингом (тот отдаёт оба), из-за которой чистая правка кода роняла гейт. +10 строк —
+      разъясняющие рационале-докстринги (не логика). Потолок под факт, ратчет держит вниз.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'orchestrator_providers.py = 946; ai_ops_run_lifecycle.py = 922'
+    to: 'orchestrator_providers.py = 978; ai_ops_run_lifecycle.py = 938'
+    work: 'writer-contention-signal (#661): сигнал «писатель занят + работа независима → параллель»'
+    why: >-
+      Кит сам распознаёт контенцию писателя и вместо тихого ожидания в очереди пишет машиночитаемый
+      сигнал + честный выбор в inbox. Механика сигнала (assess/record/signal_path) — в новом доноре
+      `engine/writer_contention.py` (ниже порога). В монолитах — тонкая проводка: providers +32
+      (неблокирующая проба замка `writer_lock_busy` с рационале-докстрингом — знать «занят ли писатель
+      ПРЯМО СЕЙЧАС», не вставая в очередь), run_lifecycle +16 (в точке, где уже посчитаны области и
+      concurrency-conflicts: проба + assess + record, best-effort с named-сбоем в lifecycle_errors).
+      Логика не в монолитах; потолки подняты под факт, ратчет держит вниз. Пересведено при rebase
+      поверх #647.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1937'
+    to: 'ai_ops_cli_intents.py = 1942'
+    work: 'setup-reaches-first-hour (#612): setup доводит до первого часа; `model --flow` — надмножество'
+    why: >-
+      Шов первого часа (#612): `ai-ops setup` теперь доходит до первого часа (шаг `model --flow`
+      + проверка целостности `doctor`), а не обрывается на форме вопросов. Чтобы `--flow` не терял
+      «ответь на вопросы», запись формы поднята НАД веткой `if a.flow` в `_intent_model` — `--flow`
+      стал надмножеством обычного `model` (пишет форму И показывает нарратив первого часа). Логики
+      это не добавляет: та же `repo_audit.write_question_file`, перемещённая выше ветвления, плюс
+      прокидка `answers_file` в JSON-вывод первого часа (+5 строк). Оркестрация по-прежнему в доноре
+      `planning/first_hour.py`, монолит не растёт функционалом. Потолок поднят под факт, ратчет держит.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 988; ai_ops_cli_intents.py = 1923; ai_ops_cli.py = 1192; presenter.py = 944'
+    to: 'presenter_formatters.py = 1059; ai_ops_cli_intents.py = 1937; ai_ops_cli.py = 1198; presenter.py = 945'
+    work: 'first-hour-orchestrator (#647): `model --flow` — первый час одним нарративом'
+    why: >-
+      Первый час (понял репозиторий → знаю/не знаю → направление и план → следующая работа) был
+      четырьмя раздельными командами, а склейку держала только расходящаяся проза скилла. Здесь склейка
+      стала first-class В КИТЕ. Сама логика оркестрации — в новом доноре `planning/first_hour.py` (ниже
+      порога): тонкая склейка `repo_audit.run` → `product_bootstrap.plan/apply` → `next_work.compute` с
+      честными состояниями (blocked_understanding / needs_answers при блокерах или CONFLICTING / ready).
+      В монолитах — проводка и подача: presenter_formatters +71 (переводчик `from_first_hour` — первый
+      час человеческим языком, честные состояния, дисциплина записи), ai_ops_cli_intents +14 (ветка
+      `if a.flow` в `_intent_model`, переиспользует уже посчитанный rep), ai_ops_cli +6 (флаг `--flow`
+      в парсере), presenter +1 (реэкспорт формата). Логика не в монолитах; потолки подняты под факт,
+      ратчет держит вниз.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1897; ai_ops_run_exec.py = 703; ai_ops_run_lifecycle.py = 913'
+    to: 'ai_ops_cli_intents.py = 1923; ai_ops_run_exec.py = 713; ai_ops_run_lifecycle.py = 922'
+    work: 'attention-bus — шина внимания (#633)'
+    why: >-
+      Гарантия охвата inbox: эфемерные вызовы человека из прогона (blocked-preflight, provider/key
+      preflight) кладутся в durable-сток и видны в inbox. Сама МЕХАНИКА стока (record/collect/resolve,
+      идемпотентность, locked write) — в новом доноре `lifecycle/attention_bus.py` (ниже порога). В
+      монолитах тонкая проводка: intents +26 (8-й источник inbox: collector + статус + счёт + рендер),
+      run_exec +10 (запись/снятие повода на blocked-preflight), run_lifecycle +9 (запись повода на
+      provider-preflight). Логика не в монолитах; потолки подняты под факт, ратчет держит вниз.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'orchestrator_providers.py = 909'
+    to: 'orchestrator_providers.py = 946'
+    work: 'visible-writer-queue (#652): видимая очередь писателя при ожидании машинного замка'
+    why: >-
+      `orchestrator_providers.py` +37: ожидание занятого писательского замка стало ВИДИМЫМ. Прежде
+      `_writer_serialization_lock` сообщал об очереди один раз и уходил в блокирующий `flock(LOCK_EX)`
+      — в поле прогон так простоял ~час, и человек не мог отличить ожидание от зависания. Теперь при
+      занятости — цикл неблокирующих попыток `flock(LOCK_NB)` с обязательным сном между ними и
+      периодическим `notify(...)` с растущим счётчиком времени ожидания; `yield` (старт писателя) —
+      только после получения замка. Добавлен помощник `_writer_lock_poll_seconds` (интервал из
+      `AI_OPS_WRITER_LOCK_POLL_SECONDS`, дефолт 15 c) и рационале-докстринги, написанные, а не
+      срезанные. Рост оправдан новым поведением; сериализация, escape-hatch и путь без fcntl
+      сохранены. Ратчет держит рост вниз от 946.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1186; ai_ops_cli_intents.py = 1801'
+    to: 'ai_ops_cli.py = 1192; ai_ops_cli_intents.py = 1897'
+    work: 'voluntary-child-registration: `reach` — добровольная отметка о подключении и охват без телеметрии'
+    why: >-
+      `ai_ops_cli_intents.py` +96: проб-свободный read/write-хендлер `_intent_reach`
+      (register|decline|forget|status|summary|coverage|collect) лёг в спутник по образцу остальных
+      команд — в дочке пишет обычные локальные файлы `.ai/reach/*`, мутационных git-проб не несёт,
+      поэтому НЕ в ai_ops_cli.py. `ai_ops_cli.py` +6: тонкая регистрация интента (INTENTS,
+      DIRECT_INTENTS, импорт+запись в for-цикл) плюс однократное предложение отметиться в
+      `_intent_onboard`. САМА доменная логика (запись-регистрация, решение-идемпотентность, снимок
+      продуктового статуса из Product Passport, счёт охвата из набора файлов реестра) вынесена
+      отдельным модулем `ai_ops_kit/engops/child_registry.py` (ниже порога 700) — сюда легла только
+      проводка; продуктовый статус впрыскивается вниз из passport_generator, как health в contract.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'presenter_formatters.py = 977; repo_audit.py = 805'
+    to: 'presenter_formatters.py = 988; repo_audit.py = 837'
+    work: 'conflicting-knowledge-state (#634)'
+    why: >-
+      Восьмое состояние знания CONFLICTING (источники истины об одном факте противоречат) проведено
+      в понимание репозитория. Сам ДЕТЕКТОР вынесен в новый модуль `planning/source_conflict.py`
+      (ниже порога, донор) — сравнивает README / ARCHITECTURE / зависимости кода об СУБД и
+      поднимает состояние ТОЛЬКО при доказуемом расхождении. В монолитах — тонкая проводка:
+      repo_audit +32 (флип факта `persistence` в reconstruct, `conflicts` в run(), секция
+      «ПРОТИВОРЕЧИЯ ИСТОЧНИКОВ» в render), presenter_formatters +11 (строка доверия в `model`,
+      needs_input при споре). Логика не в монолите; потолки подняты под факт, ратчет держит вниз.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_kit/lifecycle/active_work.py = 1068'
+    to: 'ai_ops_kit/lifecycle/active_work.py = 1116'
+    work: 'work-role-handoff (#639)'
+    why: >-
+      Первый клин темы «Work путешествует между ролями-владельцами»: named-переход owner_role
+      роль→роль. Сама ЛОГИКА перехода (валидация роли по словарю модели, запись перехода с брифом,
+      атрибуция прежнего владельца) вынесена в новый донор `lifecycle/role_handoff.py` (ниже порога).
+      В active_work — тонкая проводка на живом реестре: handoff_cmd (locked read-modify-write +
+      печать), owner_role в register + его валидация, argparse-подкоманда `handoff` и диспетч. +48
+      строк glue; логика не в монолите. active_work — известный кандидат на вынос, ратчет держит вниз.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1171; pipeline_evidence.py < 700 (не в baseline)'
+    to: 'ai_ops_cli.py = 1186; pipeline_evidence.py = 724'
+    work: 'живой прогон #587: run без текста -> задача из спеки; диагностика невалидного author-YAML'
+    why: >-
+      `ai_ops_cli.py` +15: `run`/`do` без текста задачи собирают её из features/<wid>/spec.yaml
+      (движок строил задачу писателю только из позиционного аргумента, а не из спеки — вызов
+      `run --feature` без текста давал писателю пустой блок «ЗАДАЧА»). Разбор позиционных вынесен из
+      main в `_parse_task_and_root` (func-size опущен 154 -> 150), сама сборка задачи — в
+      `spec_levels.task_from_spec`. `pipeline_evidence.py` перешёл порог 700 -> 724: `_raw_author_tail`
+      + проводка сырого ответа модели в запись, когда author-YAML не разобрался (раньше причина
+      невалидной спеки не была видна в run-report — только «author не вернул валидный YAML»).
   # Первая запись — установление baseline. Осознанный подъём потолка (или добавление нового файла
   # сверх порога) записывается сюда: дата, что поднято, откуда/куда и ПОЧЕМУ рост оправдан, а не
   # «так вышло» — по образцу func-size-baseline / test-taxonomy-baseline.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 909'
+    to: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 913'
+    work: 'стоимость успешного исхода — проводка roid_outcome в отчёт прогона (#637)'
+    why: >-
+      `_finalize_run_cost` получил +4 строки: тонкая проводка `rep["roid_outcome"]` рядом с уже
+      инлайновым `rep["roid"]`. САМА сборка секёта (attempt, ставка внимания из конфига, форма dict)
+      вынесена в `providers/cost_account.roid_outcome_report`, а не в монолит — сюда лёг только вызов,
+      симметричный существующему roid. Экономика живёт в cost_account, движок прогона лишь пишет её в отчёт.
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1165; ai_ops_cli_intents.py = 1796; repo_audit.py = 804'
+    to: 'ai_ops_cli.py = 1171; ai_ops_cli_intents.py = 1801; repo_audit.py = 805'
+    work: 'первый час: `model --answer` — запись ответа онбординга без ручной правки YAML (#612)'
+    why: >-
+      `ai_ops_cli.py` +6: флаги `--answer`/`--why` в парсере. `ai_ops_cli_intents.py` +5: 4-строчная
+      ветка в `_intent_model` (перехват в main() дал бы god-функцию — func-size ходит только вниз и
+      не поднимается, поэтому логика легла в интент, переиспользуя уже посчитанный rep). `repo_audit.py`
+      +1: ре-экспорт record_answer. САМА логика записи (валидация qid, слияние overrides, сохранение
+      оснований) — в repo_audit_answers.py (под порогом 700), а не в монолитах. Прямая цель ROADMAP
+      «владелец больше не правит YAML руками».
+  - at: '2026-09-08'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 1790'
+    to: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 1796'
+    work: 'единый классификатор границы решений (#631)'
+    why: >-
+      Команда `governance` получила проводку классификатора границы решений (+6 строк): вызов
+      decision_boundary.evaluate(signals) и вывод через decision_boundary.describe(). САМА логика
+      классификатора (три оси → класс, worst_axis_escalates, fail-closed) живёт в НОВОМ модуле
+      ai_ops_kit/governance/decision_boundary.py, а не в монолите — сюда легла только тонкая
+      проводка; рендер тоже вынесен в describe(), чтобы монолит не рос содержательно.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_kit/validation/validate_own_medicine.py = 732'
+    to: 'ai_ops_kit/validation/validate_own_medicine.py = 772'
+    work: 'SR-7: проверки самоприменения для новых шагов доставки (миграции)'
+    why: >-
+      deliver_assets получил два новых шага (roadmap_migrated, architecture_migrated), и инвариант
+      own-medicine требует «каждый шаг доставки имеет решение о самоприменении» — добавлены
+      check_roadmap_migrated и check_architecture_migrated (по образцу соседних, ~30 строк). Файл —
+      реестр решений о самоприменении: рост пропорционален числу шагов доставки, а не монолитности.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/repo_audit.py = 759'
+    to: 'ai_ops_kit/planning/repo_audit.py = 804'
+    work: 'SR-5/6 + SR-1: секционные находки контура + версия стандарта в аудите'
+    why: >-
+      _contour_state получил вычисление секционных находок (SR-6: три состояния секции —
+      заполнена/нет/пуста, +~18 строк) и audit() — блок версии стандарта (SR-1, +~5 строк). Оба —
+      когерентная область файла-аудита: он и так собирает состояние репозитория против модели, а
+      секции и версия стандарта — часть этого состояния. Доменная логика секций вынесена отдельным
+      модулем planning/artifact_sections.py (ниже порога, не в baseline); версия стандарта — в
+      planning/standard.py. Здесь только проводка в отчёт. Потолок под факт, ратчет держит от роста.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py=1743; ai_ops_cli.py=1157; gate_executor.py=820; execution_pipeline.py=779'
+    to: 'ai_ops_cli_intents.py=1790; ai_ops_cli.py=1165; gate_executor.py=905; execution_pipeline.py=786'
+    work: 'сведение вехи 4.2: #584/#585 (проводка обучения) + #588 (метка evidence)'
+    why: >-
+      Потолки по ФАКТУ объединённого дерева. #584/#585: intent-хендлеры сюрфейсинга кандидата/урока в
+      inbox/next легли в ai_ops_cli_intents.py, регистрация — в ai_ops_cli.py; домен вынесен модулями
+      ниже порога (precedent_ledger, child_findings, post_release_loop). #588: метка deterministic vs
+      ai_judgment + вердикт надстроены в gate_executor.py и проведены в execution_pipeline.py. Ратчет
+      держит рост только вниз.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1135; ai_ops_cli_intents.py = 1728'
+    to: 'ai_ops_cli.py = 1157; ai_ops_cli_intents.py = 1743'
+    work: '#567: outcome → insight → кандидат-работа (замыкание петли вехи 4.1) + ребейз на #580'
+    why: >-
+      Проводка петли Outcome→Insight→кандидат-Work: read-only intent-хендлеры сюрфейсинга кандидата
+      в `inbox`/`next` легли в спутник ai_ops_cli_intents.py (+15), регистрация/вызов из маршрута
+      пост-релиза — в ai_ops_cli.py (+10). Сама доменная логика вынесена отдельным модулем
+      intelligence/outcome_insight.py (244 строки, ниже порога 700, не в baseline) — центр тупой,
+      интеллект на периферии (правило вехи 4.1). Потолки под факт, ратчет держит от тихого роста.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1108; ai_ops_cli_intents.py = 1648; presenter.py = 880'
+    to: 'ai_ops_cli.py = 1135; ai_ops_cli_intents.py = 1728; presenter.py = 944'
+    work: 'сведение вехи 4.1: #565 (Work-хребет) + #566 (живой outcome-флип) поверх #564'
+    why: >-
+      Потолки подняты по ФАКТУ объединённого дерева при сведении вехи (замер после слияния лент, а не
+      сумма раздельных). Три файла правили две ленты сразу: #565 провёл `status`/`explain`/`next`
+      через единую Work-проекцию, а #566 — различитель «технически done ≠ продуктово получилось» в
+      `readout`/`explain`; их read-only intent-хендлеры легли в спутник ai_ops_cli_intents.py,
+      продуктовые переводчики (прячут сессию/области записи/PRR от product-аудитории) — в presenter.py,
+      тонкая регистрация интентов — в ai_ops_cli.py. Сама доменная логика вынесена отдельными модулями
+      ниже порога (lifecycle/work_view.py, cli/post_release_loop.py, validation/validate_product_objects.py),
+      в baseline-файлы легли проводка и переводчики. presenter.py и ai_ops_cli_intents.py остаются
+      известными кандидатами на дальнейший вынос; потолки под факт, ратчет держит от тихого роста.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1096'
+    to: 'ai_ops_cli.py = 1108'
+    work: '#564: подключить Decision Loop в маршрут работы (built≠wired)'
+    why: >-
+      Проводка `intelligence/decision_loop` в рантайм-маршрут ОБЯЗАНА жить в файле маршрута:
+      fail-closed присутствие Decision-контракта проверяется на входе `run --execute`/`do`, до
+      выбора провайдера и любой траты. Сама логика гейта (decision_contract_gate +
+      has_feature_decision_contract) вынесена ВНИЗ в подключаемый модуль
+      intelligence/decision_loop.py, а в ai_ops_cli.py легла только тонкая проводка — импорт модуля
+      и вызов гейта с печатью отказа (+12 строк). Меньше в файле маршрута сделать нельзя: место
+      вызова и есть точка подключения, которой требует #564. Ратчет держит рост только вниз.
+    why: >-
+      Новый владельческий интент `ai-ops graph build|trace <feature>|gaps` — тонкий запрашиваемый
+      слой ПОВЕРХ существующего (registry/entities.yaml + validate_knowledge_graph): собирает один
+      граф из plan.yaml + FL-*.yaml + feature blueprints и отвечает на вопрос «зачем функция
+      существует и измерен ли её исход», который иначе требует ручного чтения трёх файлов.
+      Проб-свободный хендлер `_intent_graph` + помощники (`_graph_positionals`,
+      `_validate_graph_integrity`, `_graph_help`, подкоманда первым словом по образцу backlog) легли
+      в спутник read-only хендлеров ai_ops_cli_intents.py (+130); регистрация интента (INTENTS,
+      DIRECT_INTENTS, импорт+список хендлеров) добавила +9 в ai_ops_cli.py. Три переводчика
+      (`from_graph_build`/`from_graph_trace`/`from_graph_gaps`, продуктовый язык, пробел называется
+      пробелом) добавлены в presenter.py (+82). Сам сборщик и обход вынесены отдельным модулем
+      intelligence/knowledge_graph.py (335 строк, ниже порога 700, не в baseline). presenter.py и
+      ai_ops_cli_intents.py — известные кандидаты на вынос; потолки подняты под факт, ратчет держит
+      рост только вниз.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1475; ai_ops_cli.py = 1074; presenter.py = 724'
+    to: 'ai_ops_cli_intents.py = 1518; ai_ops_cli.py = 1087; presenter.py = 798'
+    work: '#545: замкнуть пост-релизную петлю PRR->verify->verdict одним вызовом'
+    why: >-
+      Новый владельческий интент `ai-ops readout` — единый пост-релизный путь одним вызовом
+      (PRR -> verify_analytics_runtime -> outcome-проекция -> один вердикт). Проб-свободные хендлеры
+      `_intent_readout`/`_readout_docs` легли в спутник read-only хендлеров ai_ops_cli_intents.py
+      (+43); регистрация интента (INTENTS, DIRECT_INTENTS, импорт+список хендлеров, флаги
+      --prr/--outcome-*) добавила +13 в ai_ops_cli.py. Переводчик `from_post_release_loop`
+      (продуктовый язык, ошибка через последствие «выпуск рекомендовать не могу») добавлен в
+      presenter.py (+74). Сам оркестратор вынесен отдельным модулем cli/post_release_loop.py (ниже
+      порога, не в baseline). presenter.py и ai_ops_cli_intents.py — известные кандидаты на вынос;
+      потолки подняты под факт, ратчет держит рост только вниз.
+  - at: '2026-09-07'
+    what: raise_ceiling_and_add_module
+    from: 'ai_ops_cli_intents.py = 1420; ai_ops_cli.py = 1068; presenter.py < порога 700 (не в baseline)'
+    to: 'ai_ops_cli_intents.py = 1475; ai_ops_cli.py = 1074; presenter.py = 724 (внесён в ceilings)'
+    work: '#549: единая машинная проекция «Work» по id'
+    why: >-
+      Новый владельческий интент `ai-ops work show <id>` — одна read-only проекция «работы», сводящая
+      четыре источника (workitem/active-work/work-graph/plan) в один машинный объект. Проб-свободный
+      хендлер `_intent_work` (подкоманда `show` первым словом, по образцу backlog) лёг в спутник
+      read-only хендлеров ai_ops_cli_intents.py (+55); регистрация интента (INTENTS, DIRECT_INTENTS,
+      импорт+список хендлеров) добавила +6 в ai_ops_cli.py. Переводчик `from_work_view` (продуктовый
+      язык, прячет сессию/области записи от product-аудитории) добавлен в presenter.py (+82), из-за
+      чего файл перешёл порог 700 и ОСОЗНАННО внесён в ceilings под факт 724. Сама проекция вынесена
+      отдельным модулем lifecycle/work_view.py (ниже порога, не в baseline). presenter.py и
+      ai_ops_cli_intents.py — известные кандидаты на дальнейший вынос переводчиков/хендлеров; здесь
+      потолки подняты под факт, ратчет держит рост только вниз.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 1227; ai_ops_cli.py = 1040'
+    to: 'ai_ops_cli_intents.py = 1420; ai_ops_cli.py = 1045'
+    work: '#540: ai-ops inbox owner queue'
+    why: >-
+      Новая владельческая команда `ai-ops inbox` — одна read-only очередь «что ждёт моего решения»:
+      решения (карточка что/варианты/рекомендация), остановленные работы, ждущие подтверждения,
+      свежий ночной обзор, предупреждения о выпуске. Проб-свободный обработчик и его read-only
+      ассемблеры (decision_loop-каталог напрямую без mkdir, active-work без persist через сборку
+      explain, nightly-review latest.md, product-health) легли в спутник ai_ops_cli_intents.py (+187)
+      — там же, где остальные read-only intent-хендлеры; регистрация интента (INTENTS, DIRECT_INTENTS,
+      импорт+for-цикл) добавила +5 в ai_ops_cli.py. Очередь агрегирует уже существующие источники,
+      вынос ради неё непропорционален; потолки подняты под факт, ратчет держит рост вниз.
+      ai_ops_cli_intents.py — известный кандидат на вынос read-only intent-хендлеров.
   - at: '2026-09-02'
     what: baseline_established
     from: null
@@ -104,3 +643,486 @@ raises:
       месте. ai_ops_run.py усох 1073 -> 411 и ушёл НИЖЕ порога 700 — снят с ceilings (ниже порога не
       ограничивается). Спутник = 703 строки, выше порога — ОСОЗНАННО вносится в ceilings с фактическим
       размером (иначе тест module-size покраснел бы «новый монолит сверх порога без записи»).
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/lifecycle/active_work.py = 1040'
+    to: 'ai_ops_kit/lifecycle/active_work.py = 1073'
+    work: issue-406 — заявка мёртвой сессии гасится по pid
+    why: >-
+      Добавлена честная liveness-проверка держателя заявки: при register сохраняется owner_pid
+      процесса прогона, и заявка снимается сразу, как процесс на своей машине мёртв (holder_is_gone),
+      а не только по возрасту >12ч. Это несколько связанных мест — persist owner_pid, ветка
+      _pid_is_dead после машинного гейта, докстринги-рационале про «pid значим только на своей
+      машине» — плюс два мутационно-охраняемых инварианта. Рост +33 над потолком оправдан новым
+      поведением, а не разбуханием: рационале-комментарии написаны, а не срезаны. Ратчет держит рост
+      вниз от 1073; вынос в спутник — отдельная работа, если файл продолжит расти.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'orchestrator_providers.py = 831; ai_ops_cli.py = 962'
+    to: 'orchestrator_providers.py = 909; ai_ops_cli.py = 969'
+    work: issue-160 — fail-fast, когда claude-cli структурно нерабочий в среде
+    why: >-
+      Полевой баг p1: `run --execute` изнутри сессии Claude получал синтетический api_error с нулевыми
+      токенами, кит гнал 5 бессмысленных ретраев и падал общим RuntimeError. Добавлены детектор
+      структурного отказа `_env_unavailable_envelope` + типизированный `ProviderEnvUnavailableError`
+      с человеческим сообщением в orchestrator_providers.py, и обработка нового типа на границе
+      CLI `_main_guarded` в ai_ops_cli.py (+7): фраза человеку с двумя выходами (терминал вне сессии /
+      `--provider` с ключом), exit 3, без трейсбека. Три вложенных помощника (`_human_error`/`_transient`/
+      `_backoff`) вынесены на уровень модуля, чтобы `_claude_cli_call` вернулась под потолок func-size
+      (183 -> 154; потолок providers/ опущен 170 -> 169 к факту run_workflow). Рост файла оправдан новым
+      поведением; рационале написаны, не срезаны. Ратчет держит рост вниз от новых потолков.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/execution_pipeline.py = 771'
+    to: 'ai_ops_kit/engine/execution_pipeline.py = 773'
+    work: run-names-status-docs-or-the-exception (#404)
+    why: >-
+      _deliver_pr теперь спрашивает living_status.describe(work_root) и вкладывает в тело draft PR
+      явную строку про статус-доки — обновлены этой доставкой или названа причина-исключение (нет
+      управляемого дока / шаблон / нет разметки свежести), чтобы сгенерированный PR не упирался молча
+      в собственный гейт свежести. Сборка тела вынесена в delivery/pr_open.pr_body (там ей место, и
+      это не растит execution_pipeline), но сам вызов describe + проброс status_docs в отчёт стоят
+      +2 строки. Разбивать 771-строчный оркестратор ради двух строк непропорционально; потолок поднят
+      осознанно на +2 под факт. Ратчет держит дальнейший рост вниз от 773.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 944'
+    to: 'ai_ops_kit/cli/ai_ops_cli_intents.py = 948'
+    work: roadmap-check-speaks-human (P2)
+    why: >-
+      _intent_roadmap теперь прогоняет вывод roadmap check через человеческие помощники
+      (HORIZON_HUMAN/humanize_outcomes в roadmap_manager), чтобы владелец не видел сырые слаги и
+      «горизонт 'next'». Подача текста в CLI-обработчике выросла на +4 строки; логика проверки не
+      менялась. Разбивать 944-строчный intents-спутник ради 4 строк непропорционально — потолок
+      поднят осознанно под факт. Ратчет держит рост вниз от 948.
+  - at: '2026-09-04'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/delivery_plan.py = 1050'
+    to: 'ai_ops_kit/planning/delivery_plan.py = 1087'
+    work: plan-waiting-on-owner-state (P2)
+    why: >-
+      Добавлен честный статус waiting_on_owner (механизм готов, ждём названного действия владельца) с
+      обязательным полем waiting_on: валидация «waiting без названного действия = фантомное состояние»,
+      declared_running берёт только in_progress, resolve короткозамыкает статус. Это +26 строк реального
+      поведения в control-plane плана; логика прежних статусов не менялась. Разбивать 1050-строчный
+      контрол-плейн ради статуса непропорционально. Плюс проверка статуса вынесена из validate в
+      помощник _workitem_status_errors (func-size: validate 196->179 под потолком 188->179 — разрез,
+      не подъём func-потолка), что добавило файлу overhead помощника. Итог 1050->1087 осознанно под
+      факт. Ратчет держит рост вниз от 1087.
+  - at: '2026-09-04'
+    what: lower_ceiling
+    from: 'ai_ops_kit/planning/repo_audit.py = 965'
+    to: 'ai_ops_kit/planning/repo_audit.py = 759'
+    work: split-one-monolith-repo_audit — вынос проб-свободных хелперов файла ответов в спутник (P2)
+    why: >-
+      Группа проб-свободных помощников, работающих с файлом ответов владельца
+      (`.ai/project/onboarding-answers.yaml`) — ANSWERS_REL, answers_path, AnswersCorrupt,
+      read_answers, _ANSWER_KEY_RE, _inline_comment, _owner_comments, write_question_file — вынесена
+      из repo_audit.py в новый ai_ops_kit/planning/repo_audit_answers.py. Когерентная область
+      (единственный код, разбирающий и пересобирающий этот файл; у неё уже свои тесты
+      test_onboarding_answers_*), нулевая связь с остальным модулем. Поведение не менялось — чистый
+      перенос + ре-экспорт прежними именами (внешние импортёры repo_audit.write_question_file и
+      `from ...repo_audit import read_answers, answers_path, AnswersCorrupt` работают по-прежнему);
+      рационале-комментарии (F-020/F-021/F-023) перенесены дословно, не срезаны. repo_audit.py усох
+      965 -> 759 (потолок опущен под факт). Спутник = 241 строка, НИЖЕ порога 700 — в ceilings не
+      вносится (ниже порога не ограничивается). Мутационно-охраняемых строк у файла нет — переносить
+      было нечего. Ратчет держит дальнейший рост вниз от 759.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/delivery_plan.py = 1087'
+    to: 'ai_ops_kit/planning/delivery_plan.py = 1140'
+    work: freeze-lift-needs-proven-outcome (P0)
+    why: >-
+      Снятие заморозки исходом требовало только `bool(outcome[...])` — `true` без единого
+      доказательства снимал заморозку и открывал канал stable (класс F-002/F-005, аудит 04.09.2026).
+      Добавлены помощники _freeze_lift_errors (обе половины снятия — решением и исходом — в одном
+      месте) и _field_evidence_present (fail-closed чтение registry/release-claims.yaml ->
+      field_evidence): исход `true` теперь ОБЯЗАН нести полевое доказательство, иначе validate
+      краснит «самодекларация, а не достигнутый исход». Прежний inline-блок проверки решения (28
+      строк) вынесен в тот же помощник — validate усохла 179 -> 157 (func-потолок опущен, не поднят).
+      Чистый прирост файла +53 строки — новое поведение плюс overhead двух помощников с рационале;
+      разбивать 1087-строчный контрол-плейн ради одного гейта непропорционально. Итог 1087 -> 1140
+      осознанно под факт. Ратчет держит рост вниз от 1140.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 878'
+    to: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 897'
+    work: drift-safe-reverify (merge-queue-not-handrolled)
+    why: >-
+      Дрейф-безопасная доставка: транзакционный контроллер _deliver перед созданием DeliveryIntent
+      ре-верифицирует evidence против ТЕКУЩЕЙ цели (remote base). Сдвинулась цель с момента прогона
+      проверок -> доказательство привязано к СТАРОМУ итогу слияния; fail-closed помечаем
+      stale-needs-reverify, Intent не создаём и PR не открываем (нужен ре-прогон против новой цели).
+      Прибавка +19 строк — сам ранний гейт (вызов _reverify_against_current_target + запись stale в
+      отчёт/журнал + ранний выход) с рационале-комментарием; логика ре-верификации вынесена в
+      pipeline_git._reverify_against_current_target (362 строки, НИЖЕ порога), в контроллере — только
+      проводка. _deliver = 171 строка, ниже func-потолка engine/ (184). Итог 878 -> 897 осознанно
+      под факт; ратчет держит рост вниз от 897.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 725'
+    to: 'ai_ops_kit/engine/tool_broker.py = 756'
+    work: self-host-protects-its-own-engine (P0-2)
+    why: >-
+      Движок/CI/реестры кита (.github/, ai_ops_kit/, registry/) при self-host (кит развивает себя)
+      теперь под owner-approval — но ТОЛЬКО когда цель прогона есть сам кит, не произвольная дочка
+      (откат PR #504 показал: навязывать эти пути всем ломает легитимную запись дочки в свой .github/
+      в рамках write_scope). Добавлены чистый детектор _is_kit_self_host (тройка корневых маркеров:
+      пакет + VERSION + manifest) и константа SELF_HOST_PROTECTED; _protected_prefixes добавляет эти
+      пути в карту ТОЛЬКО на self-host. +31 строка — детектор с рационале и врезка; расщеплять
+      725-строчный tool_broker ради одного условного правила непропорционально. Итог 725 -> 756
+      осознанно под факт. Ратчет держит рост вниз от 756.
+  - at: '2026-09-05'
+    what: lower_ceiling
+    from: 'delivery_plan.py = 1140; active_work.py = 1073'
+    to: 'delivery_plan.py = 1135; active_work.py = 1068'
+    work: gitio-timeout-consolidation (P1, аудит 10 ролей)
+    why: >-
+      Прямые git-субпроцессы сведены на shared.gitio (один вход с таймаутом): вызовы вида
+      `subprocess.run(["git", "-C", str(root), …], capture_output=True, text=True)` заменены на
+      `gitio.git(root, …)`, а импорт `subprocess` там, где он стал не нужен, снят. Это чистое
+      усыхание, а не потеря поведения: delivery_plan.py 1140 -> 1135, active_work.py 1073 -> 1068.
+      Потолки опущены под факт (ратчет ходит вниз; усыхание тест module-size лишь просит пере-снять,
+      чтобы потолок == факту).
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/tool_broker.py = 756'
+    to: 'ai_ops_kit/engine/tool_broker.py = 762'
+    work: block-push-guaranteed-by-environment (P1)
+    why: >-
+      Уточнён комментарий-рационале про рубежи недоставки: credential-less-песочница закрывает
+      АВТОМАТИЧЕСКИЕ каналы креды git (первый рубеж), regex block_push — второй; честно названо
+      ОГРАНИЧЕНИЕ — push-способный GITHUB_TOKEN остаётся в песочнице для чтения GitHub, полная
+      гарантия требует read-only токена. +6 строк — рационале написано, а не срезано ради счётчика.
+      Ратчет держит рост вниз от 762.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 897'
+    to: 'ai_ops_kit/engine/ai_ops_run_lifecycle.py = 909'
+    work: roid-cost-per-successful-change-wired (P1, аудит 10 ролей)
+    why: >-
+      cost_account проведён в контур прогона: в _finalize_run_cost стоимость прогона привязана к
+      ИСХОДУ через cost_per_successful_change (ready_for_pr -> cost_per_change, иначе честные потери
+      без деления на ноль), результат кладётся в rep["roid"]. +12 строк — вызов чистой функции с
+      рационале рядом с уже собранным rep["cost"]; расщеплять 897-строчный lifecycle ради одного
+      аддитивного поля непропорционально (func-size не тронут — функция много ниже потолка engine/
+      184). Итог 897 -> 909 осознанно под факт. Ратчет держит рост вниз от 909.
+  - at: '2026-09-05'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/execution_pipeline.py = 773'
+    to: 'ai_ops_kit/engine/execution_pipeline.py = 778'
+    work: sandbox-posture-visible (P1)
+    why: >-
+      Отчёт прогона делает позу изоляции видимой: в isolation-словарь добавлены sandboxed/network
+      (аудит «непесочный дефолт + сеть ON» закрыт честностью, дефолты НЕ флипались). +5 строк — поле
+      + рационале-комментарий; расщеплять 773-строчный оркестратор ради одного поля непропорционально.
+      Итог 773 -> 778 осознанно под факт. Ратчет держит рост вниз от 778.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/intelligence/nightly_review.py = 954'
+    to: 'ai_ops_kit/intelligence/nightly_review.py = 1088'
+    work: nightly-review-names-false-positive-rate (#423)
+    why: >-
+      Ночной обзор теперь ЧЕСТНО называет свою частоту ложных срабатываний: захват (confirm --dismiss),
+      шардовое хранение фидбэка (append-only, учитывает #148), расчёт rate из подтверждённых обзоров,
+      честное «не измерено» без фабрикации. +134 строки — реальная логика с рационале, не разбухание.
+      ★ОТМЕЧЕНО как кандидат на вынос: feedback/rate-машинерия (record_feedback/false_positive_rate/
+      шарды) — когезивный ~100-строчный блок, его вынос в intelligence/review_feedback.py вернул бы
+      nightly_review под 954; отдельная работа★. Ратчет держит рост вниз от 1088.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/engine/execution_pipeline.py = 778'
+    to: 'ai_ops_kit/engine/execution_pipeline.py = 779'
+    work: stabilize-readiness-verdict (#405)
+    why: >-
+      Отчёт baseline-diff теперь несёт поле `unstable_checks` — проверки, чей pass<->fail флип между
+      базой и правкой способен перевернуть вердикт readiness между прогонами (flaky/date-зависимый
+      тест). Их явное имя атрибутирует расхождение READY/NOT_READY недетерминизму ВХОДА, а не гейта.
+      +1 строка — проброс поля из _pipeline_assess_readiness в тело отчёта; разбивать 778-строчный
+      оркестратор ради одной строки непропорционально. Потолок поднят осознанно на +1 под факт;
+      ратчет держит дальнейший рост вниз от 779.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/intelligence/nightly_review.py = 1088'
+    to: 'ai_ops_kit/intelligence/nightly_review.py = 1097'
+    work: nightly-schedule-live (#421)
+    why: >-
+      #421: генератор ночного workflow чинит script-mode import + deps — в сгенерированный workflow
+      добавлены шаг `pip install pyyaml` и `PYTHONPATH` на шаге обзора (иначе запуск скрипта по пути
+      падал в CI на `import ai_ops_kit`/`import yaml`), права понижены до `contents: read`. +9 строк
+      в чистом строителе `_workflow_yaml` (плюс рационале-докстринг). Модуль уже отмечен кандидатом на
+      вынос feedback/rate-машинерии — сюда объём не добавляем. Ратчет держит рост вниз от 1097.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 969'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 1034'
+    work: level-signals-carry-across-specify-plan-run
+    why: >-
+      Перенос сигналов уровня specify->plan->run (полевой замер cockpit 06.09.2026) добавил в CLI
+      читатель/слияние сохранённых сигналов (_carry_stored_signals, _build_signals) и подсказку intake,
+      сохраняющую task_type (_intake_command_carrying_task_type) — иначе ENGINEERING-задача молча ехала
+      как QUICK без судьи. Блок сборки сигналов вынесен из main в _build_signals (ратчет func-size —
+      main=154). ai_ops_cli.py — известный кандидат на вынос; расщепление монолита ради этой правки
+      непропорционально задаче. Потолок поднят осознанно под факт; ратчет держит рост вниз от 1034.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/gates/gate_executor.py = 726'
+    to: 'ai_ops_kit/gates/gate_executor.py = 760'
+    work: code-review-reviewer-renders-a-parseable-verdict
+    why: >-
+      Надёжное извлечение вердикта code_review (полевой замер cockpit 06.09.2026): фолбэк по прозе
+      понимает needs_work и берёт ИТОГОВУЮ вердикт-строку по позиции (_last_prose_verdict), а не
+      fail-first — процитированный пример больше не побеждает итог. +34 строки в gate_executor.
+      Разбор вердикта — связная ответственность этого модуля, вынос ради 34 строк непропорционален.
+      Потолок поднят осознанно под факт; ратчет держит рост вниз от 760.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_cli_intents.py = 948; ai_ops_cli.py = 1034'
+    to: 'ai_ops_cli_intents.py = 1227; ai_ops_cli.py = 1040'
+    work: '#539: ai-ops explain owner surface'
+    why: >-
+      Новая владельческая команда `ai-ops explain` — одна read-only карточка «что с моей задачей
+      прямо сейчас» (стадия, что готово/идёт, что мешает и ПОЧЕМУ последствием, следующий шаг, оценка
+      стоимости). Проб-свободный обработчик и его read-only ассемблеры (active-work без persist,
+      workitem/run-plan/usage-ledger/living_status.describe) легли в спутник ai_ops_cli_intents.py
+      (+270) — там же, где остальные read-only intent-хендлеры; регистрация интента (INTENTS,
+      DIRECT_INTENTS, импорт+for-цикл) добавила +6 в ai_ops_cli.py. Карточка собирается из уже
+      существующих источников, вынос ради неё непропорционален; потолки подняты под факт, ратчет
+      держит рост вниз. +2 строки (1225→1227) — judge-fix: имя ветки убрано из продуктовой строки
+      карточки (жаргон для product-аудитории, держим в technical). ai_ops_cli_intents.py — кандидат
+      на вынос read-only intent-хендлеров, как отмечено для nightly_review.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/gates/gate_executor.py = 760'
+    to: 'ai_ops_kit/gates/gate_executor.py = 781'
+    work: wire-gate-feature-decisions
+    why: >-
+      #541: wire gate_feature_decisions. Гейт feature_decision_quality проведён в контур —
+      deterministic_run получил ветку validate-feature-decisions и исполнитель _feature_decisions_run
+      (читает .ai/project/decisions вниз через checks.feature_decision, без восходящего ребра
+      gates -> intelligence). +21 строка. Ветка исполнения гейта — связная ответственность
+      deterministic_run; вынос ради 21 строки непропорционален. Потолок поднят под факт; ратчет
+      держит рост вниз от 781.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/gates/gate_executor.py = 781'
+    to: 'ai_ops_kit/gates/gate_executor.py = 820'
+    work: gate-policy-shadow-to-live
+    why: >-
+      #543: gate_policy shadow->live. evaluate_gate теперь считает ДЕЙСТВУЮЩУЮ строгость UI-гейта
+      через gate_policy.effective_enforcement под owner-флагом risk_calibrated_enforcement
+      (по умолчанию OFF -> строгость = статическая gate.blocking, поведение НЕ меняется). Чистая
+      сигнальная логика (флаг-ридер + матрица) лежит в gate_policy (тот же пакет, ниже порога);
+      в gate_executor +26 строк: импорт, расчёт effective blocking + named-warning о демотии в
+      evaluate_gate, и репо-конфиг-ридер risk_calibrated_config (.ai-ops.yaml -> owner-флаг).
+      Потолок поднят под факт; ратчет держит рост вниз от 820.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 1040'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 1046'
+    work: gate-policy-shadow-to-live
+    why: >-
+      #543: _build_signals инжектит owner-флаг risk_calibrated_enforcement из .ai-ops.yaml дочки в
+      сигналы прогона (если не задан явным --signals). +6 строк glue; ключа нет -> флаг OFF ->
+      поведение не меняется. Потолок поднят под факт; ратчет держит рост вниз от 1046.
+  - at: '2026-09-06'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py = 1051'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 1068'
+    work: wire run_live_concurrent opt-in
+    why: >-
+      #542: wire run_live_concurrent opt-in. У `ai-ops run` появился явный флаг `--parallel` (по
+      умолчанию ВЫКЛ, дефолт не меняется) и тонкая ветка диспетча в `_main_run_execute`, которая
+      зовёт `engine/parallel_live_dispatch.run_parallel_live` — так построенный, но дормантный
+      concurrent-путь (`parallel_live.run_live_concurrent`) получил живой вызыватель. Сама логика
+      вынесена в отдельный модуль `parallel_live_dispatch` (ниже порога), в cli — только объявление
+      флага + ~13 строк маршрутизации. Потолок поднят под факт (поверх #543); ратчет держит вниз от 1068.
+  - at: '2026-09-07'
+    what: raise_ceiling
+    from: 'ai_ops_cli.py = 1135'
+    to: 'ai_ops_cli.py = 1147'
+    work: 'handoff-verdict-consumed-by-resume-and-reevaluate: --reevaluate-only в CLI-обёртке'
+    why: >-
+      `--reevaluate-only` поднят в run-субпарсер `./ai-ops run` (прежде жил только у движка, и
+      `./ai-ops run ... --reevaluate-only` падал «unrecognized arguments»): объявление флага +
+      проброс в `ai_ops_run.run(reevaluate_only=...)` с комментарием ПОЧЕМУ (уровень берётся из
+      сохранённых на specify сигналов, ENGINEERING не становится молча QUICK). +12 строк поверх
+      сведённой вехи 4.1 (замер итога слияния: 1135 -> 1147, а не сумма раздельных); ai_ops_cli.py —
+      известный кандидат на вынос, ратчет держит рост вниз.
+  - at: '2026-09-09'
+    what: raise_ceiling
+    from: 'ai_ops_run_exec.py = 713'
+    to: 'ai_ops_run_exec.py = 721'
+    work: 'resume-deliver-only-reaches-engine: живой прогон #668'
+    why: >-
+      Симметричная дыра к записи 07.09: `--reevaluate-only` был объявлен в run-субпарсере, но НЕ в
+      resume-субпарсере, а intent-CLI прокидывает его в resume при `--deliver-only`. Итог —
+      `ai-ops resume --deliver-only` падал «unrecognized arguments: --reevaluate-only»: весь
+      deliver-only-путь resume (доставить готовый READY без переавторинга) был мёртв. +8 строк —
+      объявление флага в resume-субпарсере с рационале-докстрингом (проброс в run() — в
+      ai_ops_run.py, ниже порога 700). Логика не в модуле, потолок под факт, ратчет держит вниз.
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: 'ai_ops_kit/validation/validate_own_medicine.py = 772'
+    to: 'ai_ops_kit/validation/validate_own_medicine.py = 788'
+    work: 'plan-yaml-edits-do-not-conflict-in-parallel (#148): проверка own-medicine на драйвер плана'
+    why: >-
+      Новый шаг доставки `plan_merge_driver` (регистрация merge-driver planning/plan.yaml в дочке)
+      ОБЯЗАН иметь свою own-medicine-проверку: `delivery_steps == DELIVERY_CHECKS` — гейт, иначе шаг
+      доставки остался бы без проверки, что кит применяет культуру и к себе. `check_plan_merge_driver`
+      проверяет ЭФФЕКТ атрибута (git check-attr merge planning/plan.yaml == ai-ops-plan), зеркально
+      `check_gitattributes`. +16 строк — сама проверка; логика драйвера в отдельном модуле, не здесь.
+  - at: '2026-09-10'
+    what: raise_ceiling
+    from: 'installer/ai_ops.py = 4023'
+    to: 'installer/ai_ops.py = 4040'
+    work: 'plan-yaml-edits-do-not-conflict-in-parallel (#148): merge-driver для planning/plan.yaml'
+    why: >-
+      Установщик прописывает merge-driver planning/plan.yaml (атрибут merge=ai-ops-plan +
+      merge.ai-ops-plan.driver в git config дочки) — без записи в конфиге атрибут бездействует. ТЯЖЁЛУЮ
+      логику вынес в сателлит `installer/plan_merge_setup.py` (монолит не растим ради функций); в
+      ai_ops.py остались только неизбежные строки проводки: ЛЕНИВЫЙ sibling-импорт сателлита (модульный
+      импорт вешал бы copy-guard, если сателлит не доставлен), правило в `_GITATTRIBUTES_RULES`, вызов в
+      deliver_assets и строка отчёта. ai_ops.py — известный кандидат на вынос (крупнейший файл), ратчет
+      держит рост вниз; логика самого драйвера в отдельном модуле.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 4040'
+    to: 'installer/ai_ops.py = 3605'
+    work: 'split-installer-monolith: два когезивных кластера вынесены в сателлиты'
+    why: >-
+      Синхронизация CI-workflow (`ci_workflow_state`/`sync_ci_workflows`/`_ci_report_line` + хелперы)
+      уехала в `installer/ci_setup.py` (228 строк), скаффолдинг/сидинг дочки (`_seed_product_layer`,
+      `_seed_planning_contour`, `_migrate_legacy_*`, `_backfill_required_context`, `_planning_gaps`,
+      `_context_gaps` и др.) — в `installer/child_scaffolding.py` (299 строк). Чистый перенос,
+      поведение байт-в-байт то же; в ai_ops.py остались ленивые sibling-загрузчики (`_ci_setup`,
+      `_child_scaffolding`) — тот же приём, что `plan_merge_setup`. Оба сателлита ниже порога 700 —
+      в baseline не заводятся. Ратчет ходит вниз: потолок снят до нового факта.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 3605'
+    to: 'installer/ai_ops.py = 3258'
+    work: 'split-installer-monolith: кластер диагностики (doctor) вынесен в сателлит'
+    why: >-
+      Команда `doctor` (крупнейшая функция файла `cmd_doctor` = 264 строки + doctor-only хелперы
+      `_dprint`/`_blocker`/`_path_hygiene`/`_doctor_report_update_strategy`/`_doctor_state`/
+      `_doctor_verdict` и буферы `_DOCTOR_LINES`/`_DOCTOR_BLOCKERS`) уехала в `installer/doctor.py`
+      (408 строк). Чистый перенос, поведение байт-в-байт то же; в ai_ops.py остался ленивый
+      sibling-загрузчик `_doctor()` и вызов из диспетчера main. Общие с другими командами функции
+      (`detect_drift`, `channel_gap`, `source_identity`, `_released_without_proof`, …) остались в
+      ai_ops и читаются через `_ao()` (живые глобалы кладёт загрузчик). Сателлит ниже порога 700 —
+      в baseline не заводится. func-size без изменений: cmd_doctor (264) остаётся под префиксом
+      `installer/`, максимум каталога не вырос.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 3258'
+    to: 'installer/ai_ops.py = 2937'
+    work: 'split-installer-monolith: вспомогательные подкоманды вынесены в сателлит'
+    why: >-
+      12 тонких обработчиков подкоманд `ai-ops` (subsession, delivery-proof, usage, session, method,
+      engops, audit, drift, ui-status, migrate, verify-capabilities, resolve-ref), делегирующих в
+      подсистемы ai_ops_kit и зовущихся только из диспетчера main, вынесены в installer/aux_commands.py
+      (379 строк). Чистый перенос, поведение байт-в-байт то же; в ai_ops.py остался ленивый загрузчик
+      _aux_commands() и вызовы из диспетчера. Общие с ядром функции читаются через _ao(). Сателлит ниже
+      порога 700 — в baseline не заводится.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'ai_ops_kit/ui/presenter_formatters.py = 1077'
+    to: 'ai_ops_kit/ui/presenter_formatters.py = 541 (ниже порога 700 — снят из ceilings)'
+    work: 'split-presenter-formatters-monolith: когезивный кластер вынесен в модуль-сосед'
+    why: >-
+      Более крупная, «ход и решения работы» часть переводчиков внутренних отчётов (экономика сессии,
+      первый час, bootstrap, недостающие intake-сигналы, короткий путь, трата на разбор, запись
+      обратной связи, doctor) уехала в `ai_ops_kit/ui/presenter_report_formatters.py` (571 строка).
+      Чистый перенос, поведение байт-в-байт то же; presenter_formatters реэкспортирует функции
+      обратно, поэтому `presenter.from_*` и `presenter_formatters.from_*` продолжают работать. Файл
+      опустился до 541 строки — ниже порога 700, поэтому из ceilings убран. Сосед тоже ниже порога —
+      в baseline не заводится. Ратчет ходит вниз.
+  - at: '2026-09-10'
+    what: drop_below_threshold
+    from: 'ai_ops_cli_intents.py = 1950; ai_ops_cli_product.py / ai_ops_cli_lifecycle.py / ai_ops_cli_report.py — не существовали'
+    to: 'ai_ops_cli_intents.py = 257 (НИЖЕ порога 700, снят с ceilings); три новых модуля = 681 / 415 / 653 (все НИЖЕ порога 700, в ceilings не вносятся)'
+    work: 'refactor-cli-intents-monolith: разрез монолита intent-хендлеров на когезивные соседние модули'
+    why: >-
+      Монолит проб-свободных intent-хендлеров ai_ops_cli_intents.py (1950 строк) разрезан по
+      когезивным группам на три соседних модуля пакета ai_ops_kit.cli: ai_ops_cli_product.py
+      (продукт/поставка/бэклог: build_preview, _run_backlog, products/delivery/model/contract/inspect/
+      plan/session), ai_ops_cli_lifecycle.py (онбординг/governance: onboard/reach/team/replan/
+      governance/bootstrap/health/roadmap/doctor/new/discuss) и ai_ops_cli_report.py (read-only
+      отчётность explain/inbox). Поведение не менялось — чистый построчный перенос; ai_ops_cli_intents.py
+      импортирует имена из соседей и ре-экспортирует их (ai_ops_cli и тесты резолвят обработчики по
+      имени ai_ops_cli_intents), в нём остались проекции work/readout/graph. Файл усох 1950 -> 257 и
+      ушёл НИЖЕ порога 700 — снят с ceilings. Три новых модуля тоже ниже порога — в ceilings не
+      вносятся. Ратчет держит рост вниз.
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'ai_ops_kit/engine/workpackage_executor.py = 1066'
+    to: 'ai_ops_kit/engine/workpackage_executor.py = 681 (ниже порога 700 — снят из ceilings)'
+    work: 'refactor(engine): разрез монолита workpackage_executor на соседей'
+    why: >-
+      Два когезивных кластера вынесены из монолита-движка в соседние модули пакета engine (чистый
+      рефакторинг, поведение байт-в-байт): модель SequencePlan (хэши определения пакета/плана +
+      integrity-валидация) -> ai_ops_kit/engine/sequence_plan.py; aggregate-верификация финального
+      SHA, закрытие security/code_review на интеграционном диффе, доставка draft PR и durable-запись
+      sequence-report -> ai_ops_kit/engine/sequence_aggregate.py. Имена ре-экспортированы из шапки
+      workpackage_executor, поэтому внешние импортёры и мутационные пробы не тронуты. Файл 1066 -> 681
+      строк, ушёл ниже порога 700 — снят из ceilings (оба соседа < 700, в baseline не вносятся).
+  - at: '2026-09-10'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2937'
+    to: 'installer/ai_ops.py = 2601'
+    work: 'split-installer-monolith: команды update/status/diff вынесены в сателлит'
+    why: >-
+      Команды `update`/`status`/`diff` и отложенное обновление через worktree (`_deferred_update`)
+      вынесены в installer/update_ops.py (400 строк). Гейт отставания `check-update` (cmd_check_update/
+      lag_report/build_diff) ОСТАВЛЕН в ai_ops.py: он обязан работать из одинокой копии ai_ops.py без
+      сателлитов (само-сравнение установки), а ленивый импорт там повесил бы ModuleNotFoundError.
+      Чистый перенос, поведение байт-в-байт то же; общие с ядром функции читаются через _ao().
+      Сателлит ниже порога 700 — в baseline не заводится.
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2601'
+    to: 'installer/ai_ops.py = 2454'
+    work: 'split-installer-monolith: offline self-test вынесен в сателлит'
+    why: >-
+      Offline self-test установщика (сценарий транзакционного отката установки, крупнейший непокрытый
+      блок) вынесен в installer/selftest_ops.py (199 строк). Зовётся только из диспетчера main. Чистый
+      перенос, поведение байт-в-байт то же; временную подмену глобалов установщика (REPO_ROOT/AI_DIR/…)
+      selftest теперь пишет через _ao() (живой namespace, view с __setattr__), поэтому cmd_init видит
+      подмену. Сателлит ниже порога 700 — в baseline не заводится.
+  - at: '2026-09-11'
+    what: lower_ceiling
+    from: 'installer/ai_ops.py = 2454'
+    to: 'installer/ai_ops.py = 2168'
+    work: 'split-installer-monolith: команды установки init/setup вынесены в сателлит'
+    why: >-
+      Команды `init`/`setup` и их хелперы (_onboarding_summary, _setup_summary/_setup_remaining,
+      _run_managed_intent) вынесены в installer/setup_ops.py. Обе запускаются из полного клона кита,
+      не из одинокой копии, поэтому ленивый импорт сателлита безопасен. Чистый перенос, поведение
+      байт-в-байт то же; общие с ядром функции (deliver_assets, managed_set, _assets_report_line, …)
+      читаются через _ao(); временную подмену AI_DIR/MANAGED в cmd_init view пишет в живой namespace.
+      own-medicine научен парсить cmd_init из сателлита; selftest зовёт init через _ao()._setup_ops().
+      Сателлит ниже порога 700 — в baseline не заводится.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/validation/validate_own_medicine.py = 788'
+    to: 'ai_ops_kit/validation/validate_own_medicine.py = 795'
+    work: 'split-installer-monolith: own-medicine научен парсить cmd_init из сателлита'
+    why: >-
+      cmd_init вынесена из installer/ai_ops.py в сателлит installer/setup_ops.py и зовёт общие функции
+      через `_ao().<имя>` (Attribute-вызовы). own-medicine (инвариант «кит ест своё лекарство»)
+      разбирал cmd_init только в ai_ops.py и только bare-name вызовы — после выноса он бы ослеп на
+      шаги установки. Добавлен хелпер `_cmd_init_fn` (парсит cmd_init из setup_ops) и `init_only_calls`
+      теперь собирает и attr-имена. +7 строк — цена сохранения самопроверки, а не роста монолита.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/planning/repo_audit.py = 837'
+    to: 'ai_ops_kit/planning/repo_audit.py = 854'
+    work: 'onboarding-classifier-uses-doc-schema-signals (#818)'
+    why: >-
+      Классификатор онбординга теперь учитывает собранные doc/schema/manifest-сигналы. Добавлен
+      хелпер `_maturity` (читает состав и веса сигналов зрелости из реестра
+      `classification.maturity_signals`, суммирует вес присутствующих) и переписаны ветки
+      EXISTING_PRODUCT в `classify`, чтобы вес зрелости, а не зашитая в код четвёрка признаков,
+      решал класс. +17 строк — цена того, что зрелый brownfield с документацией и API-схемами, но
+      короткой историей, перестаёт деградировать в EARLY_PRODUCT; правила остаются данными реестра.

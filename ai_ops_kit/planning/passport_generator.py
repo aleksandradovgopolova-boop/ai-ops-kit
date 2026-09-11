@@ -24,6 +24,7 @@ import re
 import sys
 from pathlib import Path
 
+from ai_ops_kit.shared.gitio import git
 from ai_ops_kit.planning import artifact_registry as AR
 from ai_ops_kit.planning import repo_audit
 
@@ -44,14 +45,14 @@ def _latest_tag(root: Path) -> str | None:
     `release_history` из repo_audit — это `git tag --list` в лексикографическом порядке, где `v0.8.0`
     идёт раньше `3.36.12`. Называть первый «последним релизом» — фактическая ошибка; берём по дате.
     """
+    # Единый вход к git с таймаутом (см. shared/gitio). OSError (нет git) по-прежнему -> None.
     import subprocess
     try:
-        r = subprocess.run(["git", "-C", str(root), "for-each-ref", "--sort=-creatordate",
-                            "--format=%(refname:short)", "--count=1", "refs/tags"],
-                           capture_output=True, text=True, timeout=10, check=False)
+        rc, out, _ = git(root, "for-each-ref", "--sort=-creatordate",
+                         "--format=%(refname:short)", "--count=1", "refs/tags", timeout=10)
     except (OSError, subprocess.SubprocessError):
         return None
-    tag = (r.stdout or "").strip().splitlines()
+    tag = out.splitlines() if rc == 0 else []
     return tag[0] if tag else None
 
 
@@ -204,7 +205,12 @@ def _delivery_health(ev: dict) -> str:
 
 def _milestone(root: Path) -> dict:
     """Текущий milestone из ROADMAP.md (раздел Now) или плана. Иначе честный пробел."""
-    roadmap = _read(root, "ROADMAP.md") or _read(root, ".ai-ops/ROADMAP.md")
+    # Единый резолвер направления (SR-2): прежде читали `ROADMAP.md` ИЛИ `.ai-ops/ROADMAP.md` —
+    # два пути в одной строке означали, что канонический источник не определён. Теперь путь решает
+    # одно место (roadmap.resolve_roadmap_path), общее с health/drift/planning.
+    from ai_ops_kit.planning import roadmap as _roadmap
+    rp = _roadmap.resolve_roadmap_path(root)
+    roadmap = rp.read_text(encoding="utf-8") if rp.is_file() else None
     if roadmap:
         headers = {m.group(1).strip().lower(): m.start() for m in _H.finditer(roadmap)}
         if "now" in headers:

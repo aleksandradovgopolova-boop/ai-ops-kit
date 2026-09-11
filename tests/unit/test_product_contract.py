@@ -38,7 +38,7 @@ def installer():
 def _bootstrapped(installer, tmp_path):
     (tmp_path / "README.md").write_text("# Демо\n\nсервис.\n", encoding="utf-8")
     (tmp_path / "VERSION").write_text("1.0.0\n", encoding="utf-8")
-    installer._seed_product_layer(tmp_path)
+    installer._child_scaffolding()._seed_product_layer(tmp_path)
     return tmp_path
 
 

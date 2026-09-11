@@ -10,7 +10,7 @@
   6. MVP: число blocking-gate'ов > 8 ИЛИ gate из mvp_blocking отсутствует;
   7. writer/judge: стадия review_mode=read-only не должна быть writer той же стадии.
 
-Использование:  python3 02_tools/ci/validate_ai_first_workflows.py
+Использование:  python3 -m ai_ops_kit.validation.validate_ai_first_workflows
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
 from __future__ import annotations

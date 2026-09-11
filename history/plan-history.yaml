@@ -19,6 +19,154 @@ kind: delivery-plan-history
 
 
 work:
+  - id: types-enforced-on-foundation-or-mypy-removed
+    title: mypy включён и строгий на всём фундаменте (kernel+shared под disallow_untyped_defs)
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: pyproject.toml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-05 внешнего аудита). Спор «включить vs убрать» решён замером — обычный
+      mypy нашёл 8 РЕАЛЬНЫХ проблем на фундаменте, типы окупаются → включён. Доведено до строгого
+      `disallow_untyped_defs` на ВСЁМ фундаменте: `ai_ops_kit.kernel.*` + `ai_ops_kit.shared.*`
+      (per-module override, mypy в джобе lint, `mypy==2.3.1`). Все 8 файлов shared аннотированы
+      РЕАЛЬНЫМИ типами (99 подписей + каскад ошибок тел — agg=dict[str,Any], TypedDict-cast,
+      Iterator для contextmanager, разноарные tuple — закрыты, НЕ залиты Any). Новая untyped-функция
+      в фундаменте теперь краснит. ВНЕ ЭТОЙ РАБОТЫ (отдельно): disallow по остальному пакету
+      (context/engine/gates/… — там свой каскад) и py.typed (маркер «весь пакет типизирован» при
+      неполном покрытии остального был бы над-заявлением). Граница «где типы обязательны» — вверх.
+
+  - id: formatter-adopted-with-blame-ignore
+    title: ruff format — ОТКЛОНЁН замером (раздувает код, ломает 30 потолков размера)
+    goal: checks-that-run
+    status: dropped
+    closed_at: '2026-09-10'
+    finding: decisions/registry.yaml
+    result: >-
+      ОТКЛОНЁН 2026-09-10 (F-07 внешнего аудита) — решением ep-2026-09-10-ruff-format-breaks-size-ratchets.
+      Замер: `ruff format .` меняет 823 файла и РАЗДУВАЕТ код (trailing-comma/по-аргументу-на-строку):
+      execution_pipeline.run_pipeline 184->319 строк, ai_ops_run.py 700->718 и т.п. Итог — 24 нарушения
+      module-size + 6 func-size (30 потолков). Принять форматтер = поднять все эти потолки, то есть
+      ВЫПОТРОШИТЬ ратчеты module-size/func-size, которые кит строил специально против роста монолитов
+      (god-функции смогли бы расти до 319). Это конкретная измеренная причина, а не «конфликты» и не
+      «blame». Аудит этого взаимодействия не учёл. line-length держит ruff-линт как есть; консистентность
+      стиля для СВОЕЙ команды не окупает потери size-инвариантов. Пересмотр — только если форматтер
+      настроят не раздувать (иной профиль) ИЛИ size-ратчеты измерят не по сырым строкам.
+
+  - id: config-is-config-history-in-decisions
+    title: config→decisions ОТКЛОНЁН — комментарии объясняют «почему» и служат ясности команды
+    goal: checks-that-run
+    status: dropped
+    closed_at: '2026-09-10'
+    finding: decisions/registry.yaml
+    result: >-
+      ОТКЛОНЁН 2026-09-10 (F-14 внешнего аудита) — решением ep-2026-09-10-config-narrative-stays.
+      Нарратив в pyproject/workflows — это «почему правило именно такое» (напр. почему ruff-набор узкий,
+      почему версии пинуются), и он защищает от вредной «оптимизации» задним числом; аудит сам велел
+      его СОХРАНИТЬ. Отделить «чистую хронологию» от «почему» — фиддли-ручная работа на горячих файлах
+      (pyproject/workflows конфликтуют с параллельными сессиями) ради маргинальной пользы, с реальным
+      риском потерять контекст, которым команда пользуется. Приоритет владельца — «команде всё понятно»;
+      миграция ему противоречит. Лекарство хуже болезни: не мигрируем.
+
+  - id: commit-contract-runs-in-ci
+    title: commit-contract.sh гоняется по коммитам PR в CI, а не только в локальном хуке
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: .github/workflows/package-quality.yml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-13 внешнего аудита). CommitContract (commit_policy: охват коммита,
+      заглушки, секреты, ссылка на WorkItem) жил ТОЛЬКО в локальном хуке commit-msg — внешний PR его
+      не проходил, а в CI зеркалились лишь cz check и towncrier. «Половина проверки хуже
+      отсутствующей» — вот та половина. Добавлен шаг в джобу lint: цикл по каждому коммиту диапазона
+      base..HEAD PR, для каждого подставляются его сообщение и файлы (COMMIT_CONTRACT_FILES —
+      объявленный шов), COMMIT_CONTRACT_SKIP_CLAIMS=1 (реестра заявок машины в CI нет). Сегодня
+      enforce=advise: rc красит ТОЛЬКО настоящие нарушения (секреты/заглушки), broad_scope и
+      no_workitem печатаются советом — ужесточение остаётся решением владельца.
+
+  - id: ci-sees-owner-platform
+    title: >-
+      CI видит платформу владельца (macOS advisory); ./ai-ops не выбирает интерпретатор ниже пола;
+      имена файлов findings — ASCII
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: .github/workflows/package-quality.yml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-10 внешнего аудита), три части. (1) macOS: разработка идёт на macOS, а CI
+      её не видел — заведена advisory-джоба smoke-macos (macos-latest, critical_path, continue-on-error,
+      НЕ в required): наблюдает платформу владельца, но красный не держит PR — реальные отличия
+      macOS/Linux станут видны, а не спрячутся. (2) Пол интерпретатора: обёртка ./ai-ops перебирала
+      python3.9 и выбрала бы его (requires-python=">=3.12"), падая позже и невнятно — перебор сведён к
+      3.13/3.12 + bare, и отбор теперь проверяет ВЕРСИЮ (sys.version_info>=(3,12)), а не только import
+      yaml. (3) NFC/NFD: 13 кириллических имён в findings/from-children/ переименованы в ASCII
+      (obs-<дата>-<хэш>.yaml — описание внутри файла), ссылки в plan/history обновлены, git mv сохранил
+      историю.
+
+  - id: ci-supply-chain-pinned
+    title: Тестовые зависимости и actions пинованы (SHA), dependabot включён
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    evidence: .github/dependabot.yml
+    result: >-
+      ЗАКРЫТО 2026-09-10 (F-09 внешнего аудита). (1) Тест-зависимости запинены по мажору во всех 7
+      workflow'ах: 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'pytest-cov==7.*' 'pyyaml==6.*'
+      — мажорный релиз больше не покрасит CI на невиновном коммите (тот же довод, что уже был у
+      ruff/towncrier/commitizen). (2) Действия actions/checkout@v4 и actions/setup-python@v5 закреплены
+      на commit SHA (OpenSSF Pinned-Dependencies) с комментарием # v4/# v5. (3) Заведён
+      .github/dependabot.yml (github-actions + pip): двигает SHA и версии PR'ами на ревью, ничего не
+      мержит само. Инвариант «рантайм кита = stdlib+pyyaml» не затронут — это фордж-конфигурация.
+
+  - id: repo-topology-legible-for-the-team
+    title: Таблица «где что» в README — команда находит нужное в 41-каталожном корне без 50-КБ индекса
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-09'
+    evidence: README.md
+    result: >-
+      ЗАКРЫТО 2026-09-09 (F-11 внешнего аудита). В README добавлена секция «Где что в репозитории» —
+      таблица-ориентир на 10 строк «ищете → смотрите», группирующая 41 каталог корня по смыслу (код /
+      источник истины / проверки / план-решения / стандарты / прозаический слой / доки / плагин /
+      обкатка / newsfragments) со ссылками на AGENTS.md (полная карта для контрибьютора) и FILE_INDEX.md
+      (пофайловый список). Каталоги НЕ переезжали (src-layout ломает installer/managed/checksums) —
+      сгруппированы прозой. Приоритет владельца «команде всё понятно по-русски». Машинный сторож
+      таблицы взвешен и НЕ заведён: цена (снижение пола доли поведенческих тестов) выше ценности —
+      сгруппированная карта мёртвую строку показывает глазом, риск низкочастотный.
+
+  - id: library-layers-return-data-not-print
+    title: >-
+      print разрешён в точках входа; в библиотечных пакетах ai_ops_kit заморожен ратчетом вниз к 0
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_print_discipline.py
+    result: >-
+      ЗАКРЫТО 2026-09-09 (F-08 внешнего аудита) — установлен РАТЧЕТ, не переписаны 1365 print.
+      validate_print_discipline (AST-счёт print на пакет) заморозил 690 библиотечных print в 14
+      пакетах (planning 154, engine 139, intelligence 88, lifecycle 66, gates 54, engops 42, …) на
+      packages/print-discipline-baseline.yaml; ратчет ходит ТОЛЬКО ВНИЗ — новый print в библиотечном
+      слое или пакет без записи краснеет, перевод print -> возврат/logging опускает потолок. Аллоу-лист
+      (cli/devtools/validation) берётся из слоя entrypoints layering.yaml — один источник, не хардкод.
+      Проведён в контур: STANDALONE рантайм-контракта, инвентарь enforcement-inventory (новый baseline
+      он сам и потребовал — сработал). Фактический перевод print->данные идёт ратчетом со временем.
+
+  - id: installer-under-size-and-func-gates
+    title: installer/ включён в module-size и func-size ратчеты; текущие 3926 строк заморожены потолком
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_module_size.py
+    result: >-
+      ЗАКРЫТО 2026-09-09 (F-06 внешнего аудита). installer/ai_ops.py (3926 строк) — крупнейший файл
+      репозитория и ЕДИНСТВЕННЫЙ код, запускаемый пользователем ДО появления кита, — оставался вне всех
+      архитектурных гейтов: validate_module_size обходил только SOURCE_ROOT="ai_ops_kit". Теперь корней
+      ДВА (ai_ops_kit + installer): installer/ai_ops.py заморожен потолком 3926 в module-size-baseline
+      (запись cover_installer в ленте raises), и заведён func-size scope installer/ (max cmd_doctor
+      264 строки). Оба ратчета ходят только вниз: чинить сейчас не нужно, но рост монолита установщика
+      больше не пройдёт незамеченным. Расщепление installer на модули по фазам — возможная отдельная
+      работа, не заведена.
+
   - id: uiux-constitution-is-source
     title: >-
       Конституция UI/UX — источник; оперативный слой и rules.yaml генерируются из неё и сверяются в CI
@@ -3476,6 +3624,70 @@ work:
     #     # рантаймом. Тот же инвариант, что `unavailable != 0`.
     #
     #   # ─── nightly-product-review (решение владельца 14.08.2026, ep-2026-08-14-nightly-review) ──────
+  - id: analytics-runtime-evidence-wired
+    title: >-
+      Producer events_verified_live подключён к гейту analytics_runtime_verification
+    goal: outcome-and-analytics-loop
+    status: done
+    closed_at: '2026-09-04'
+    issue: 424
+    evidence: tests/unit/test_event_arrival.py
+    result: >-
+      ЗАКРЫТО 04.09.2026 (#424). Замкнута проводка producer -> гейт — последнее звено исхода
+      `events_verified_in_runtime_not_declared`. Машинный производитель `events_verified_live`
+      (построен 02.09) отдавал доказательство, но гейт `analytics_runtime_verification` его НЕ звал:
+      evidence приходил из файла/вердикта судьи, и «verified» держалось на СЛОВЕ судьи — ровно разрыв
+      «verified in runtime, NOT declared». Проводка: `intelligence/event_arrival.verify_analytics_runtime`
+      зовёт producer и оценивает гейт через `gates.gate_executor.evaluate_gate`, а
+      `gate_evidence_entry` делает машинный вердикт АВТОРИТЕТНЫМ для факта events_verified_live —
+      снимает слово судьи и ставит факт: met True -> доказательство в provided; met False -> гейт
+      красный с блокером о недоехавшем событии (слово судьи не переписывает находку); met None ->
+      доказательство НЕ фабрикуется (unknown != проверено), блокирующий гейт честно не закрыт.
+      СЛОИ: направление intelligence -> gates легально (вниз), `gates` не тянет `intelligence` вверх —
+      validate_layering зелёный (0 взаимных пар, 0 циклов; новое ребро в границах). ЗАМЕР: +6 юнитов
+      (positive гейт зелёный на живом приходе; fail-closed красный на находке ДАЖЕ при зелёном судье;
+      unknown честно не закрыт; side-effect — гейт ЗОВЁТ producer, а не читает статичный файл),
+      «краснеет на дефекте» доказан мутацией ветки met-False (3 теста краснеют). CLI: `--gate`.
+  - id: nightly-no-direct-main-write-is-checkable
+    title: >-
+      Инвариант «ночной обзор не пишет в main напрямую» стал проверкой
+    goal: nightly-product-review
+    status: done
+    closed_at: '2026-09-04'
+    issue: 422
+    evidence: tests/unit/test_validate_nightly_no_direct_main_write.py
+    result: >-
+      ЗАКРЫТО 04.09.2026 (#422). Запрет «класс A автоматизируем, но НИКОГДА в main» был ПРИНЦИПОМ в
+      комментарии nightly_review.py, а не проверкой: добавь кто-нибудь `_git(root, "push", "origin",
+      "main")` в путь автофикса — ни один тест бы не заметил. Доставлен валидатор
+      validate_nightly_no_direct_main_write: AST-обход РЕАЛЬНОГО исходника ночного пути (оркестратор
+      nightly_review + шов A worktree + шов B pr_open). R1 оркестратор без прямой git-мутации, R2 нет
+      git с литералом main/master, R3a worktree.add сохраняет отказ main, R3b pr_open draft-only.
+      Каждое правило краснеет на своём реальном дефекте (fail-closed тесты внедряют запись в main в
+      копию исходника). ОГОВОРКА: R2 ловит литералы (обход через вычисляемую переменную ограничен
+      R1+R3a), R3a — присутствие сравнения с main (сам отказ покрыт поведенческим test_worktree);
+      границы названы в докстринге. Исход `no_direct_writes_to_main_ever` -> true; цель остаётся
+      active (delta_review и false_positive_rate ещё открыты).
+  - id: uiux-token-and-capability-registries-available
+    title: >-
+      Реестры контракта токенов и capability доступны как проверяемые данные
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-09-04'
+    issue: 418
+    evidence: tests/unit/test_uiux_capabilities_registry.py
+    result: >-
+      ЗАКРЫТО 04.09.2026 (#418, Волна 2). Добавлены как ПРОВЕРЯЕМЫЕ данные: standards/uiux/registries/
+      tokens.yaml (контракт дизайн-токенов: имя -> роль/пространство/опорные id, сверяется с
+      design/tokens/*.json) и capabilities.yaml (сквозные возможности UI-системы: темизация, WCAG 2.2
+      AA, клавиатура, полнота состояний, адаптив, reduced-motion, локализация, защита деструктива —
+      каждая опирается на правила Конституции + пространства токенов + компоненты по id). Схема
+      uiux-registry.schema.json признаёт kind tokens/capabilities. Валидатор
+      standards/uiux/scripts/validate-registries.py читает оба реестра и краснеет на ссылочном разрыве
+      (dangling rule/token/namespace/local, missing_source). ЗАМЕР: 11 тестов (positive; fail-closed по
+      каждому классу разрыва; side-effect — удаление namespace из tokens.yaml роняет capability, значит
+      оба файла реально читаются). Исход `tokens_contract_and_capability_registries_available` -> true;
+      цель остаётся active (волны 3-4 открыты).
   - id: own-medicine-checked
     title: >-
       Самоприменение культуры кита проверяется, а уроки поля записаны как культура
@@ -3745,7 +3957,7 @@ work:
     #     status: todo
     #     owner_role: engineer
     #     value: high
-    #     finding: findings/from-children/obs-2026-08-20-когда-у-провайдера-claud-99aa67ef.yaml
+    #     finding: findings/from-children/obs-2026-08-20-99aa67ef.yaml
     #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/providers/, ai_ops_kit/intelligence/, tests/]
     #     reason: >-
     #       НАХОДКА ПОЛЯ, прогон ⌘K в ai-ops-cockpit 20.08.2026 (obs 99aa67ef, 346c4324). В ДВУХ местах
@@ -3779,7 +3991,7 @@ work:
     #     status: todo
     #     owner_role: engineer
     #     value: medium
-    #     finding: findings/from-children/obs-2026-08-20-кит-останавливает-повтор-2dbfc337.yaml
+    #     finding: findings/from-children/obs-2026-08-20-2dbfc337.yaml
     #     write_scope: [ai_ops_kit/engine/, ai_ops_kit/cli/, tests/]
     #     reason: >-
     #       НАХОДКА ПОЛЯ (obs 2dbfc337). Остановив повторный прогон, кит советует «передай --resume», но
@@ -4285,7 +4497,7 @@ work:
     status: done
     closed_at: '2026-08-27'
     pr: 336
-    finding: findings/from-children/obs-2026-08-20-главное-за-прогон-кит-са-fad8d07f.yaml
+    finding: findings/from-children/obs-2026-08-20-fad8d07f.yaml
     evidence: tests/unit/test_no_verdict_is_an_honest_refusal.py
     result: >-
       ЗАКРЫТО 2026-08-27 (PR #336, волна 6). Находка поля P0 (obs fad8d07f): на 'живом' пути прогона
@@ -4719,7 +4931,7 @@ work:
     closed_at: '2026-08-28'
     pr: 355
     evidence: tests/unit/test_process_spend.py
-    finding: findings/from-children/obs-2026-08-20-потолок-траты-на-разбор--487d952b.yaml
+    finding: findings/from-children/obs-2026-08-20-487d952b.yaml
     result: >-
       ЗАКРЫТО 2026-08-28 (код в PR #355; закрытие плана — отдельный учётный PR). Полевой дефект
       obs 487d952b: на шаге plan свежей работы кит показывал ~559k против 50k ДО описания задачи —
@@ -4925,3 +5137,341 @@ work:
     # РАЗБОР: type: engineering; goal: kit-release-strategy; owner_role: engineer; value: medium;
     #   write_scope: [ai_ops_kit/devtools/, tests/]. Реализация — #392; здесь закрыта acceptance-
     #   проверка «оба валидатора зелены», которой не было в исходном тесте.
+
+  - id: run-execute-names-unavailable-provider-not-traceback
+    title: >-
+      run --execute при структурно недоступном claude-cli (запуск изнутри сессии Claude) даёт внятное
+      сообщение и путь, а не RuntimeError после 5 бессмысленных ретраев
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 483
+    issue: 160
+    result: >-
+      Кит детектит именно этот отказ (api_error + 0 токенов + duration_api_ms:0), не ретраит его и
+      выдаёт понятное сообщение с путём (запусти вне сессии Клода или укажи --provider с ключом),
+      а не общий RuntimeError после пяти бессмысленных попыток. Код влит 0399c5e7 (#483).
+
+  - id: code-review-reviewer-renders-a-parseable-verdict
+    title: >-
+      Гейт code_review получает РАЗБИРАЕМЫЙ вердикт ревьюера (а не молчание/прозу), в т.ч. на
+      claude-cli-пути, где дифф даётся инлайном и reads пусты
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 667
+    result: >-
+      Внутренний ревьюер сам заземляет pass и рендерит разбираемый вердикт: прозаический pass без
+      цитаты больше не держится стражем как рубер-штамп, а grounded-форма (pass = цитата) разводится
+      в промпте tool_loop. Код влит b18026f3 (#667); подтверждено ЖИВЫМ прогоном #668 (durationkit/
+      slugkit доведены до READY_FOR_PR, 0 ложных green).
+
+  - id: code-review-reviewer-works-inside-a-claude-session
+    title: >-
+      Гейт code_review закрывается настоящим вердиктом, когда кит запущен ВНУТРИ сессии Клода —
+      реальная среда команды, где вложенный claude-cli-ревьюер прежде молчал
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 570
+    result: >-
+      code_review закрывается настоящим заземлённым вердиктом при запуске ИЗНУТРИ сессии Клода без
+      внешнего ключа (ревьюер идёт каналом, который в этой среде отвечает). Код влит c21d2b3e (#570);
+      ПОДТВЕРЖДЕНО живым прогоном #668 09.09: durationkit (20/20) и slugkit (16/16) доведены из
+      сессии Клода до verified-PR вердиктом самого кита, 0 ложных green.
+
+  - id: handoff-verdict-consumed-by-resume-and-reevaluate
+    title: >-
+      Handoff-вердикт code_review проводится в реальный поток resume/reevaluate (не только юнит)
+    goal: trustworthy-core
+    status: done
+    closed_at: '2026-09-09'
+    pr: 580
+    result: >-
+      Handoff-вердикт закрывает code_review через штатный resume/reevaluate CLI-поток и покрыт тестом
+      ЧЕРЕЗ реальный CLI-поток, а не только юнит `_run_reviews`. Код влит a16fb92a (#580); reevaluate-
+      путь довершён this session #683 (resume --deliver-only доводит флаг reevaluate-only до движка).
+
+  - id: uiux-reviewers-and-ui-health-deepened
+    title: Волна 3 — роли-ревьюеры и UI-health углублены содержанием Конституции
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-09-09'
+    pr: 530
+    issue: 419
+    evidence: tests/unit/test_constitution_coverage_deepens_health_and_reviewers.py
+    result: >-
+      Ревьюеры судят по правилам стандарта (ID UI-/AI-/UI-FORBIDDEN- цитируются гейтами ux_review/
+      accessibility_review/design_system_usage, волна 1), а UI-health СЧИТАЕТ покрытие Конституции:
+      донор ai_ops_kit/ui/constitution_coverage.py (выводит покрытие из rules.yaml, automated_uncovered
+      называет пробелы поимённо, fail-closed) вшит в ui_readiness.py (поле constitution_coverage) и
+      через него — в pipeline_setup и deploy_readiness. Код влит 634055f7 (#530/#419). Blocking/severity
+      гейтов не менялись — advisory до обкатки на дочках (правило движения по roadmap).
+
+  - id: uiux-tokens-contract-and-capability-registries
+    title: Волна 2 — токены-контракт и реестры компонентов/паттернов/шаблонов доступны агенту
+    goal: uiux-standard-as-product
+    status: done
+    closed_at: '2026-09-09'
+    pr: 451
+    issue: 418
+    evidence: standards/uiux/scripts/validate-registries.py
+    result: >-
+      Контракт-реестры добавлены как ПРОВЕРЯЕМЫЕ данные: standards/uiux/registries/{tokens,capabilities,
+      components,patterns,templates}.yaml + design/tokens/*.json; ссылочную целостность проверяет
+      validate-registries.py (dangling rule/token/namespace, unsubstantiated_guarantee). Код влит #451/#418.
+      Доставка в дочку РЕШЕНА владельцем 09.09 (ep-2026-09-09-direction-wave-owner-calls): дочке едут
+      СХЕМЫ (schemas/*.json — против них валидирует свои токены), эталонные ДАННЫЕ остаются в ките (возить
+      в каждую дочку = раздувание, пакет-скоуп доставки — opt-in, дефолт грузит всё). Исход
+      tokens_contract_and_capability_registries_available = true.
+
+  - id: uiux-mcp-access-to-ui-system
+    title: Волна 4 — MCP-доступ к UI-системе (get_*/validate_*)
+    goal: uiux-standard-as-product
+    status: dropped
+    closed_at: '2026-09-09'
+    issue: 420
+    result: >-
+      ОТЛОЖЕНО решением владельца 09.09 (парковка с триггером, не «сделано»). На main — минимальный
+      MCP-адаптер storybook-query (#529); полный MCP-сервер (get_*/validate_* по токенам/реестрам) НЕ
+      строится сейчас: агент уже дотягивается до стандарта данными (правила/схемы едут, evidence-путь
+      читает и выдаёт заземлённый вердикт — ДОКАЗАНО живьём на ai-ops-cockpit, #697); MCP меняет лишь
+      СПОСОБ доступа (запрос vs чтение файла), не суть, а «центр» без реального потребителя — та ловушка,
+      от которой владелец уходил («минимальный адаптер, а не центр», registry/tools.yaml). ТРИГГЕР
+      пересмотра: реальный дизайн-агент в дочке, которому нужны live-запросы UI-системы (собирать экран/
+      валидировать на лету) и чтения файлов не хватает — по замеру, не по ощущению.
+
+  - id: closeout-repeated-on-second-live-repo
+    title: Closeout повторён на втором живом репозитории вердиктом кита
+    goal: qualification-closeout
+    status: done
+    closed_at: '2026-09-09'
+    issue: 668
+    evidence: qualification/qualification-closeout (ROADMAP.md, ep-2026-09-09-direction-wave-owner-calls)
+    result: >-
+      Реальная продуктовая задача доведена до verified-PR вердиктом самого кита на ДВУХ новых
+      сторонних репозиториях БЕЗ правок кита: durationkit (parse_duration, PR durationkit-live-668#1,
+      20/20 тестов) и slugkit (slugify, PR slugkit-live-668#1, 16/16), оба на неизменённом origin/main,
+      11/11 гейтов, 0 ложных green (сверено настоящим pytest). Issue #668 закрыт. Прежняя формулировка
+      критерия («owner-led СЛИТЫЙ PR + отчёт REAL-PRODUCT-*.md») перекрыта подходом #668: закрытие
+      достигается ВЕРДИКТОМ КИТА на verified-PR (то, что владелец принял, закрыв #668), а не ручным
+      owner-led-слиянием. Семь чисел прогона — в ROADMAP и session-памяти.
+
+  - id: level-signals-carry-across-specify-plan-run
+    title: Сигналы уровня переносятся через specify -> plan -> run
+    goal: qualification-closeout
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_level_signals_carry.py
+    result: >-
+      Сигналы уровня (task_type/size/risk) сохраняются в features/<wid>/spec.yaml (spec_levels.py:372
+      create_spec пишет блок signals) и читаются на plan/run/reevaluate (cli:217 _build_signals сливает
+      сохранённое+явное, явный побеждает). ENGINEERING не превращается молча в QUICK. Тесты
+      test_level_signals_carry.py (plan_after_specify_sees_engineering, run_without_signals_reaches_engine).
+
+  - id: merge-queue-not-handrolled
+    title: Дрейф-безопасная доставка своим механизмом, а не ручной очередью слияния
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-09'
+    evidence: tests/unit/test_delivery_drift_reverify.py
+    result: >-
+      Дрейф-безопасная ре-верификация построена фордж-нейтрально: merge_preview.py git merge-tree
+      --write-tree (GitHub/GitLab/голый git); pipeline_git._reverify_against_current_target вшит в
+      mainline-доставку (execution_pipeline.py, ai_ops_run_lifecycle.py) fail-closed — сдвинулась
+      цель -> stale-needs-reverify, Intent не создаётся, PR не открывается. Тесты
+      test_delivery_drift_reverify.py (moved_target_blocks_pr / unmoved_target_opens_pr).
+
+  - id: resume-flags-loud-and-dead-claim-cleared-by-liveness
+    title: resume-флаги громко отказывают без --execute; заявка мёртвой сессии снимается по живости
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-09'
+    evidence: newsfragments/resume-flags-and-dead-session-claim.fix.md
+    result: >-
+      Обе половины на main. Громкий отказ: ai_ops_run.py:305 (#406) — resume --open-pr/--takeover без
+      --execute даёт явную ошибку, не молчит. Снятие по живости: active_work.py:464 _pid_is_dead / :524
+      holder_is_gone по owner_pid (register пишет os.getpid()). Кромка (документированная граница):
+      copy-claim (.git/ai-ops/claims/) не несёт owner_pid — снимается по существованию worktree, не по
+      pid; сессионная заявка из критерия pid несёт и гасится. Строго по критерию «заявка мёртвой сессии» — done.
+
+  - id: storybook-required-stories-derived-from-contract
+    title: Обязательные stories выводятся из Experience Contract кодом и влияют на гейт
+    goal: storybook-as-visual-contract
+    status: done
+    closed_at: '2026-09-09'
+    pr: 690
+    issue: 415
+    evidence: tests/unit/test_storybook_adapter.py
+    result: >-
+      Обязательные stories выводятся из контракта кодом (experience_contract.py:179 required_story_specs,
+      :216 required_stories_coverage) и ВПЛЕТЕНЫ в гейт: storybook_adapter.py:307 build_bundle кладёт
+      required_stories в UIEvidenceBundle, :379 evidence_for_gate читает их — объявленного контрактом
+      опыта нет в собранном Storybook -> ux_review краснеет детерминированно (#452 + проводка #690).
+      ДОКАЗАНО живьём на реальной UI-дочке ai-ops-cockpit (#697): полный контракт -> ux_review pass,
+      убрать обязательную story -> required_stories.missing -> ux_review fail. Оговорка «синтетика» снята.
+  - id: gate-measures-merge-result
+    title: 'coverage и footprint меряются против ИТОГА СЛИЯНИЯ, а не ветки PR — механизмом самого кита, без опоры на фичу форджа'
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-10'
+    pr: 777
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#777). Гейт объёма/охвата меряет против ИТОГА СЛИЯНИЯ (git merge-tree ветки PR с main), фордж-нейтрально. Добавлена вторая ось — ЧИСЛО файлов — поверх той же merge-preview: дрейф 490->498 файлов (мелкие файлы пробивают потолок файлов, не объёма) виден на PR-виновнике, а не на следующем невиновном. Advisory; промоут — отдельным решением.
+  - id: reviewer-prompt-uses-xml-anchors-measured
+    title: 'Секции промпта ревьюера размечены XML-якорями — и это ЗАМЕРЕНО на корпусе вердиктов, а не принято на веру'
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-09-10'
+    pr: 785
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#785). Промпт судьи размечен XML-якорями, недоверенный дифф изолирован в экранированном context — поддельный вердикт внутри диффа не подделывает границу секций (инъекция при ревью своего кода). Замер восстановимости границ на корпусе: XML 6/6 против 2/6 у плоских маркеров. Живая половина — за владельцем через gate_eval_live.
+  - id: delivery-of-ready-work-is-one-autonomous-command
+    title: 'Готовую-на-ветке работу доставка доводит до ОТКРЫТОГО verified PR + DeliveryReceipt одной автономной командой, без ручного подбора флагов'
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-09-10'
+    pr: 784
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#784). Готовая-на-ветке работа доводится до открытого PR одной командой: resume прокидывает open-pr/takeover, session стабилен run-resume, active-work заявка снимается на выходе (в т.ч. прерванного) прогона. По пути найден и починен баг: finish_cmd не получал child_root — носитель заявки не снимался НИКОГДА. Доказано на фикстурах; живой e2e через gh не гонялся.
+  - id: run-updates-status-docs-or-names-the-exception
+    title: 'Прогон обновляет статус-доки репозитория (или явно пишет причину-исключение) — сгенерированный PR не валит собственный status-freshness гейт'
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-09-10'
+    pr: 487
+    result: >-
+      ЗАКРЫТО (уже в main #426+#487, подтверждено 2026-09-10). Прогон на commit зовёт living_status.refresh, тело PR через living_status.describe либо «статус-док свеж», либо «причина-исключение». Сгенерированный PR не валит status-freshness. 33 теста зелёные, дифф против main пуст.
+  - id: writer-verdict-is-deterministic
+    title: 'Вердикт implementation_verification / verification_strategy стабилен на одном входе — READY не чередуется с NOT_READY между дорогими прогонами'
+    goal: green-means-checked
+    status: done
+    closed_at: '2026-09-10'
+    pr: 779
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#779). Механизм воспроизводимости вердикта уже в main; добавлен прямой замер-сторож: путь вердикта N=25 раз на одном входе даёт один отпечаток (met и fail-closed идентичны), вход не мутируется. Регресс недетерминизма краснит. Живая модель не гонялась.
+  - id: storybook-experience-options-with-tradeoffs
+    title: 'Кит предлагает варианты опыта с trade-offs вместо одного «правильного» макета'
+    goal: storybook-as-visual-contract
+    status: done
+    closed_at: '2026-09-10'
+    pr: 778
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#778). Кит предлагает >=2 варианта опыта с названными trade-offs, владелец выбирает один, выбор записан в Experience Contract (иммутабельно, fail-closed на чужой вариант) и стал входом для каждой story. Обязательный набор stories и гейт ux_review не тронуты.
+  - id: forced-major-update-reconciles-allowed-version-range
+    title: 'После `update --force` через мажор конфиг согласован: installed_version попадает в allowed_version_range, а doctor краснеет, если нет — сегодня версия молча остаётся вне диапазона'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    pr: 537
+    result: >-
+      ЗАКРЫТО (уже в main #537, подтверждено 2026-09-10). update --force через мажор расширяет allowed_version_range под новый мажор и говорит вслух (widen_allowed_range); doctor краснит на installed вне диапазона. Замер до/после 5/5 зелёный.
+  - id: wire-decision-gate-into-mandatory-contour
+    title: 'Гейт продуктового решения (baseline/target/guardrails) проведён в ОБЯЗАТЕЛЬНЫЙ контур — фич-решение проверяется на каждой работе, а не только существует функцией'
+    goal: product-decision-loop
+    status: done
+    closed_at: '2026-09-10'
+    pr: 791
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#791). Гейт feature_decision_quality проведён в ОБЯЗАТЕЛЬНЫЙ (blocking) контур: фича, объявленная целью без измеримого обязательства (baseline/target/guardrails), теперь КРАСНИТ прогон и называет нехватку, а не проходит с предупреждением. Решение ENFORCE обосновано: гейт by_construction/validator (детерминированный, без риска ложных срабатываний), прецедент — десяток блокирующих валидаторов того же типа; фичит только kind:feature-decision, для остальных explainable skip. Число advisory-гейтов сведено везде (14->13).
+  - id: release-strategy-assembled-releases-and-update-menu
+    title: 'Кит собирает релизы осознанно (веха/расписание) + владелец-facing меню стратегий обновления дочки (канал × политика, + scheduled/auto-stable)'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    pr: 792
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#792). Названное меню стратегий обновления (pr/manual/scheduled-batch/auto-stable) + резолвер, который читает выбор дочки и НАЗЫВАЕТ доступность, ничего не применяя; auto-stable доступна только на канале stable и при явном opt-in (по умолчанию выключена). Взяты 2 из 3 исходов цели: продукт выбирает стратегию из меню; режимы сверх pr/manual существуют. ОСТАЁТСЯ (не закрыто, будущая работа): полное ИСПОЛНЕНИЕ scheduled-batch/auto-stable (планировщик/автоприменение) и сборка релиза с бампом версии + авто-проводкой в CI — release_assembly называет состав по триггеру, но версию не бампает. Третий исход releases_are_assembled_not_reactively остаётся false.
+  - id: release-assembly-derives-target-version
+    title: 'Осознанная сборка релиза называет целевую версию: уровень SemVer из состава newsfragments'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    evidence: ai_ops_kit/devtools/release_assembly.py
+    result: >-
+      ЗАКРЫТО 2026-09-10. Третий исход kit-release-strategy взят: release_assembly.assemble по вехе/
+      расписанию теперь выводит уровень бампа из состава (feat→minor, иначе→patch) и называет целевую
+      версию (current→target из VERSION), замыкая осознанную сборку — не реактивно и без ручного
+      угадывания X.Y.Z. МАЖОР сборка НЕ выводит: смена мажора остаётся осознанным решением владельца
+      (breaking = ep-решение). release_assembly — dev-инструмент (devtools/), в дочку не едет.
+  - id: plan-yaml-edits-do-not-conflict-in-parallel
+    title: 'Правки plan.yaml из параллельных работ не порождают ручных конфликтов слияния — разбивка по работам либо явная стратегия (report-history уже закрыт union, остаётся структурный plan.yaml)'
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-10'
+    pr: 798
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#798). Кастомный git merge-driver для planning/plan.yaml (installer прописывает merge=ai-ops-plan + merge.ai-ops-plan.driver): непересекающиеся параллельные правки (разные work/goal id) сводятся АВТОМАТИЧЕСКИ, на любой неоднозначности (один id обеими сторонами, дубли, нераспознанная структура, нет pyyaml) — ОБЫЧНЫЙ конфликт с маркерами. Безопасность: финальный backstop перепарсивает итог (валидный YAML, нет дублей id, множества id совпадают) — битый YAML не рождается никогда. Кит применяет драйвер к себе (own_medicine). Union (merge=union) остаётся ТОЛЬКО на JSONL-журналах — структурному YAML он склеил бы битьё. Исход kit_edits_do_not_create_conflicts взят. Живого слияния двух реальных веток на 82-КБ plan.yaml не гоняли — способность на синтетике + сквозной git-merge.
+  - id: layering-pairs-decoupled-by-substance
+    title: 'Пять взаимных пар capabilities развязаны по существу (перенос проводки в правильный слой, не сокрытие через __import__)'
+    goal: layering-ring-is-a-dag
+    status: done
+    closed_at: '2026-09-10'
+    pr: 795
+    result: >-
+      ЗАКРЫТО 2026-09-10 (K1 #780, K4 #788, K2 #790, K3 #793, K5 #795). Все ПЯТЬ взаимных пар слоя
+      capabilities, вскрытых внешним аудитом F-03, развязаны ПО СУЩЕСТВУ — переносом проводки туда,
+      где ей место, а не сокрытием за динамическим импортом. K1 engine↔gates: CLI evidence_collector
+      → devtools. K4 engops↔gates: environment_map → checks (primitives). K2 context↔engine:
+      compile_bundle получает RunPlan извне (plan= или build_plan=), а CLI → devtools; это ребро
+      замыкало все длинные циклы → cycles 5→0. K3 delivery↔engine: review_branch (запуск движковых
+      ревью-гейтов) → engine, CLI → devtools; delivery/pr_open остался актом доставки. K5
+      engine↔lifecycle (последняя): ai_route / резолвер базы / work_areas — чистые сущности без
+      зависимостей от кита — переехали в shared (foundation), workitem зовёт маршрутизатор ВНИЗ.
+      Замер validate_layering: mutual_pairs 5→0, cycles_longer_than_two 9→0. Кольцо стало DAG, и
+      теперь это ПРАВДА (гейт считает и динамику), а не прежний слепой ноль. K5 потребовал доводки до
+      зелёного CI: аннотации типов перенесённых shared-модулей (disallow_untyped_defs), тонкий
+      ре-экспорт-шим engine/ai_route для кросс-версионного апдейта дочки (пару НЕ восстанавливает,
+      объявлен легит-входом в инвентаре). Цель layering-ring-is-a-dag достигнута.
+
+  - id: declared-tools-and-gates-prove-they-run
+    title: >-
+      Инвентарь «объявлено → исполняется»: каждый dev-инструмент, pre-commit-хук и ратчет доказывает
+      «вызывается вот здесь»
+    goal: checks-that-run
+    status: done
+    closed_at: '2026-09-11'
+    pr: 841
+    evidence: ai_ops_kit/validation/validate_enforcement_inventory.py
+    result: >-
+      ЗАКРЫТО 2026-09-11 (последняя работа внешнего аудит-бэклога checks-that-run → цель achieved).
+      Корень класса «объявлено, но не исполняется» построен ранее (#723): validate_enforcement_inventory
+      + registry/enforcement-inventory.yaml покрыли две оси — dev-инструменты (requirements-dev +
+      pyproject [dev]) и ратчет-baseline'ы (packages/*baseline*.yaml), с энфорсом ПОЛНОТЫ (объявленный,
+      но не внесённый в инвентарь → красный) и РЕЗОЛЮЦИИ доказательств (enforced_at реально находит
+      вызов, consumed_by реально читает baseline). #841 добавил ТРЕТЬЮ ось — pre-commit-хуки: секция
+      pre_commit_hooks в реестре + declared_hooks() из .pre-commit-config.yaml + энфорс полноты
+      симметрично dev-инструментам. Каждый из 11 хуков несёт enforced_at (ruff/selftest-smoke/
+      commit-contract — зеркала в CI, резолвятся) либо честный local_only+причина (гигиена файлов и
+      python-compat — гоняются локально, отдельной pre-commit-джобы в CI нет; не выдуманный enforced_at).
+      Итог валидатора: «7 dev + 11 хуков (8 local_only) + 4 baseline — все объявления покрыты,
+      доказательства резолвятся». 14 поведенческих тестов, вкл. мутацию «хук объявлен, но не в
+      инвентаре → красит». Новый объявленный-но-не-инвентаризованный dev-инструмент/хук/ратчет теперь
+      краснит — ревизия класса держится машиной, не памятью владельца.
+
+  - id: the-plan-tells-the-truth-about-the-run
+    title: >-
+      План прогона называет ровно применяемые гейты; форма и причины треков честны
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-09-11'
+    pr: 851
+    finding: findings/from-children/obs-2026-08-20-64a4840a.yaml
+    result: >-
+      ЗАКРЫТО 2026-09-11 (исходы 1+2 PR #838, исход 3 PR #851). Три расхождения «план ОБЕЩАЕТ одно, а
+      прогон ДЕЛАЕТ другое» (obs поля 64a4840a/d48fd639/8a891ce7/e09fe515) устранены по существу:
+      (1) план прогона называет РОВНО применяемые гейты — корень был не в двух списках (прогон и так
+      применял `plan["gates"]`), а в том, что при незаявленной тяжести ai_route выбирает QUICK и план
+      выдавал предварительные 3 гейта за окончательные; добавлен `escalation_disclosure`
+      (run_plan.py): предварительный план честно называет полный набор гейтов и глубину формы, что
+      даст эскалация, ДО прогона, а валидатор это энфорсит (предварительный обязан нести раскрытие,
+      окончательный — нет). (2) Причины отключения треков честны по времени: `skip_reason` в
+      registry/tracks.yaml условны («X не заявлено в сигналах — трек не активирован»), не факт о
+      ненаписанном коде; охраняется тестом + реестром. (3) Уровень и форма известны ДО заполнения:
+      то же раскрытие перенесено на шаг `specify` (spec_levels.escalation_disclosure +
+      _intent_specify) — при незаявленной тяжести `specify` называет уровень-если-эскалирует (L1) и
+      разделы, которые добавятся, ДО того как человек начал заполнять; при заявленной тяжести форма
+      сразу нужного уровня, раскрытие не выдаётся (симметрия с окончательным планом). Мутационная
+      проба specify-пути перенацелена на новый файл-хендлер (#851). Полная интерактивная перестройка
+      («спросить size/risk ПЕРЕД формой») — уже иной UX сверх done-when «известно ДО заполнения»;
+      раскрытие его удовлетворяет. Направление продолжает работа owner-speaks-proven-by-zero-touch-cockpit-run.

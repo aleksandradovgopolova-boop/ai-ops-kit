@@ -365,7 +365,7 @@ def test_guard_speaks_before_the_run_on_every_outcome():
     этих исходов не наступало и страж молчал в 100% прогонов. Молчание читается как «всё хорошо».
     Проверяется РАЗБОРОМ: в функции нет условия на исход перед выводом, и вывод идёт через `_say`.
     """
-    src = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py").read_text(encoding="utf-8")
+    src = (PKG / "ai_ops_kit" / "cli" / "ai_ops_cli_commands.py").read_text(encoding="utf-8")
     fn = next(n for n in ast.walk(ast.parse(src))
               if isinstance(n, ast.FunctionDef) and n.name == "_session_guard_before_start")
     says = [n for n in ast.walk(fn)

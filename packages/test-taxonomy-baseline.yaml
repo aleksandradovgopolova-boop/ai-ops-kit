@@ -22,16 +22,381 @@
 schema_version: 1
 kind: test-taxonomy-ratchet
 
-# Действующий порог = текущий измеренный замер. Меняется только вместе с записью в `raises`.
-behavioral_count: 358
-structural_count: 61
-total_count: 419
-behavioral_share_pct: 85.44
+# Действующий порог = НИЖНЯЯ ГРАНИЦА доли поведенческих (пол). Обновляется записью в `raises`
+# ТОЛЬКО когда доля законно падает (напр. удалили поведенческие тесты вместе с их предметом), а НЕ
+# на каждое изменение состава: точное равенство baseline==замер снято (issue #680) — оно форсило
+# ре-снап даже когда доля не падала. Устаревший-вниз пол безвреден; устаревший-вверх ловит валидатор.
+behavioral_count: 431
+structural_count: 71
+total_count: 502
+behavioral_share_pct: 85.86
 
 raises:
+  - at: '2026-09-11'
+    what: rebaseline_after_measurement
+    from_behavioral: 426
+    from_total: 496
+    to_behavioral: 431
+    to_total: 502
+    to_share_pct: 85.86
+    work: 'Разрез монолита test_ai_ops_cli по темам (#819)'
+    why: >-
+      Пол пересобран к РЕАЛЬНОМУ замеру. Свежий main УЖЕ стоял ниже записанного пола: 429/500 =
+      85.8% < 85.89% (426/496 из записи #823 ниже) — дрейф накопился ПОСЛЕ той записи, не в этом PR.
+      Сам разрез поведение-сохраняющий и ПОДНИМАЕТ долю: монолит test_ai_ops_cli.py (1 поведенческий
+      файл, упёрся в 837/850 у анти-монолит-гейта) разбит на три ПОВЕДЕНЧЕСКИХ файла
+      (test_ai_ops_cli.py + test_ai_ops_cli_main.py + test_ai_ops_cli_owner_queue.py — каждый
+      импортирует ai_ops_kit.cli.ai_ops_cli И зовёт его), +2 поведенческих / +2 всего: доля выросла
+      85.8% -> 85.86%. Ни одного поведенческого теста в структурный не превращено. Пол зафиксирован
+      записью к измеренному, а не проехал молча.
+  - at: '2026-09-11'
+    what: baseline_lowered
+    from_behavioral: 418
+    from_total: 486
+    to_behavioral: 426
+    to_total: 496
+    to_share_pct: 85.89
+    work: 'Архитектурная конституция — зеркало-тест источника (#823)'
+    why: >-
+      ОСОЗНАННОЕ снижение доли (86.01% -> 85.89%): добавлен структурный тест-файл
+      tests/unit/test_architecture_constitution_source.py — зеркало источника standards/architecture/
+      (пересборка rules.yaml/arch.rules.md совпадает с закоммиченным; honesty gate/enforced_in).
+      Он законно структурный — гоняет автономный генератор через subprocess и утверждает на форме
+      генерата, продуктовый код ai_ops_kit/ НЕ импортирует и НЕ зовёт: тот же класс, что уже
+      принятый test_uiux_constitution_source.py. Поведенческих не убыло; прибавились структурные
+      мирроры. Не деградация поведенческого теста, а новый структурный контракт зеркала; снижение
+      зафиксировано записью, а не проехало молча. Долг «завести продуктового потребителя rules.yaml»
+      (constitution_coverage-стиль) — в #825, тогда часть тестов станет поведенческой.
+  - at: '2026-09-09'
+    what: baseline_lowered
+    from_behavioral: 418
+    from_total: 485
+    to_behavioral: 418
+    to_total: 486
+    to_share_pct: 86.01
+    work: 'docs-index-coverage guard (точка входа docs/index.md вместо вики)'
+    why: >-
+      ОСОЗНАННОЕ снижение доли (86.19% -> 86.01%): вместо отдельной вики находимость решена одной
+      дверью docs/index.md, а её ОХВАТ теперь держит структурный тест-файл
+      tests/unit/test_docs_index_coverage.py. Он законно структурный — обходит ссылки в docs/ и
+      утверждает «каждый документ достижим из индекса», продуктовый код ai_ops_kit/ НЕ импортирует
+      и НЕ зовёт (тот же класс, что test_derived_numbers_coverage / test_no_mega_test_file).
+      Поведенческих не убыло (418 без изменений), прибавился один структурный (67 -> 68). Не
+      деградация поведенческого теста, а новый структурный контракт охвата; снижение зафиксировано
+      записью, а не проехало молча.
+  - at: '2026-09-09'
+    what: rebaseline_after_measurement
+    from_behavioral: 417
+    from_total: 483
+    to_behavioral: 417
+    to_total: 484
+    to_share_pct: 86.16
+    work: 'Тир-2 WIRE #677: safety-валидаторы зелены на живом ките (contracts-тест)'
+    why: >-
+      Добавлен tests/contracts/test_safety_validators_green_on_live_kit.py — проводит вердикт
+      5 safety-валидаторов (model_qualification/model_roles/security_domains/security_posture/
+      sandbox_boundary) в parent-CI. Классификатор считает его структурным (проверяет exit-код
+      runnable, а не содержательное поведение) — честно: это смоук «зелёный ли на живом». Доля
+      просела 86.34%->86.16% на +1 структурный. Ровно тот ратчет-шум, который снимает #680.
+  - at: '2026-09-09'
+    what: rebaseline_after_measurement
+    from_behavioral: 422
+    from_total: 488
+    to_behavioral: 417
+    to_total: 483
+    to_share_pct: 86.34
+    work: 'Тир-2 аудита лишнего: срез 5 спекулятивных валидаторов'
+    why: >-
+      Удалены 5 поведенческих тест-файлов удалённых валидаторов (test_validate_capability_scope/
+      integration_trace/loop_policy/loop_trace/provider_residency) вместе с самими валидаторами,
+      схемами и демо. Все пять — поведенческие, поэтому доля просела 86.48% -> 86.34% при снятии
+      5 из 5 из behavioral. Это НЕ разбавление структурными — это честное уменьшение обеих сторон
+      дроби на удалённой спекулятивной поверхности.
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 421
+    from_total: 487
+    to_behavioral: 422
+    to_total: 488
+    to_share_pct: 86.48
+    work: 'writer-contention-signal (#661)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_writer_contention.py: зовёт writer_contention.assess/
+      record/signal_path, orchestrator_providers.writer_lock_busy, attention_bus.collect и
+      ai_ops_cli_intents._inbox_collect — импортирует продуктовый код И исполняет его. Поверх #647
+      (421/487) доля поведенческих не падает (86.45% -> 86.48%).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 420
+    from_total: 486
+    to_behavioral: 421
+    to_total: 487
+    to_share_pct: 86.45
+    work: 'first-hour-orchestrator `model --flow` (#647)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_first_hour.py: импортирует продуктовый код кита
+      (planning.first_hour) И исполняет его — зовёт first_hour.run на разных пониманиях и проверяет
+      честные состояния (blocked_understanding / needs_answers при блокерах или CONFLICTING / ready,
+      дисциплина записи под --apply). Поверх #639 (420/486) доля поведенческих не падает (86.42% -> 86.45%).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 419
+    from_total: 485
+    to_behavioral: 420
+    to_total: 486
+    to_share_pct: 86.42
+    work: 'work-role-handoff между ролями (#639, поверх #634)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_role_handoff.py: зовёт role_handoff.apply_handoff,
+      active_work.register/handoff_cmd и work_view.project_work — импортирует продуктовый код И
+      исполняет его. Поверх #634 (419/485) доля поведенческих не падает (86.39% -> 86.42%).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 418
+    from_total: 484
+    to_behavioral: 419
+    to_total: 485
+    to_share_pct: 86.39
+    work: 'состояние знания CONFLICTING (#634, поверх #633)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_source_conflict.py: строит синтетические репозитории
+      (README против ARCHITECTURE об СУБД), зовёт planning/source_conflict.detect и repo_audit.run/
+      reconstruct/render + presenter. Поверх #633 (418/484) доля поведенческих не падает
+      (86.36% -> 86.39%), ратчет-вниз соблюдён.
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 417
+    from_total: 483
+    to_behavioral: 418
+    to_total: 484
+    to_share_pct: 86.36
+    work: 'шина внимания — attention bus (#633)'
+    why: >-
+      Новый поведенческий файл tests/unit/test_attention_bus.py: зовёт attention_bus.record/collect/
+      resolve и ai_ops_cli_intents._inbox_collect/_inbox_status/_inbox_render — импортирует продуктовый
+      код И исполняет его. Доля поведенческих не падает (86.34% -> 86.36%), ратчет-вниз соблюдён.
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 416
+    from_total: 482
+    to_behavioral: 417
+    to_total: 483
+    to_share_pct: 86.34
+    work: 'добровольная регистрация дочек (voluntary-child-registration)'
+    why: >-
+      Работа добавила один поведенческий тест-файл (test_child_registry — импортирует
+      engops/child_registry И проверяет согласие/отказ/приватность/идемпотентность/паспорт-unknown/
+      счёт над синтетическими репозиториями), структурных без изменений (66). Доля поведенческих
+      выросла 86.31% -> 86.34% (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 415
+    from_total: 481
+    to_behavioral: 416
+    to_total: 482
+    to_share_pct: 86.31
+    work: 'продюсер устаревания решений (#635)'
+    why: >-
+      #635 добавил один поведенческий тест-файл (test_decision_staleness — импортирует
+      planning/decision_staleness И зовёт assess_decisions над синтетическим git-репо с решениями),
+      структурных без изменений (66). Доля поведенческих выросла 86.28% -> 86.31% (не снижение).
+      Числа руками (--baseline лоссовый).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 414
+    from_total: 480
+    to_behavioral: 415
+    to_total: 481
+    to_share_pct: 86.28
+    work: 'настройки как capability policy — 7 осей намерением (#644)'
+    why: >-
+      #644 добавил один поведенческий тест-файл (test_capability_policy — импортирует
+      checks/capability_policy И зовёт resolve/resolve_all/honesty_errors над реальным реестром),
+      структурных без изменений (66). Доля поведенческих выросла 86.25% -> 86.28% (не снижение).
+      Числа руками (--baseline лоссовый). Пересведено при rebase поверх #587 (#651).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 413
+    from_total: 479
+    to_behavioral: 414
+    to_total: 480
+    to_share_pct: 86.25
+    work: 'живой прогон #587: run без текста -> задача из спеки'
+    why: >-
+      #587 добавил один поведенческий тест-файл (test_run_task_from_spec — импортирует
+      gates/spec_levels И cli/ai_ops_cli, зовёт task_from_spec и гоняет `run` через main с реальной
+      спекой на диске), структурных без изменений (66). Доля поведенческих выросла 86.22% -> 86.25%
+      (не снижение). Числа руками (--baseline лоссовый). Пересведено при rebase поверх #636/#637/#638.
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 412
+    from_total: 478
+    to_behavioral: 413
+    to_total: 479
+    to_share_pct: 86.22
+    work: 'стоимость успешного исхода + estimate-vs-actual дельта (#637)'
+    why: >-
+      #637 добавил один поведенческий тест-файл (test_cost_per_outcome — импортирует
+      providers/cost_account И зовёт cost_per_successful_outcome/estimate_vs_actual/human_attention_cost),
+      структурных без изменений (66). Доля поведенческих выросла 86.19% -> 86.22% (не снижение).
+      Числа руками (--baseline лоссовый). Пересведено при rebase поверх #636/#638 (#648/#649).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 411
+    from_total: 477
+    to_behavioral: 412
+    to_total: 478
+    to_share_pct: 86.19
+    work: 'потолок на число top-level пакетов + роль-слои (ратчет, #638)'
+    why: >-
+      #638 добавил один поведенческий тест-файл (test_package_ceiling — импортирует
+      validation/validate_layering И зовёт package_ceiling_errors/conceptual_layer_errors над
+      реальным деревом), структурных без изменений (66). Доля поведенческих выросла 86.16% -> 86.19%
+      (не снижение). Числа руками (--baseline лоссовый). Пересведено при rebase поверх #636 (#648).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 410
+    from_total: 476
+    to_behavioral: 411
+    to_total: 477
+    to_share_pct: 86.16
+    work: 'гейты — машиночитаемое поле prevents + evidence (ратчет, #636)'
+    why: >-
+      #636 добавил один поведенческий тест-файл (test_gate_prevents — импортирует
+      gates/gate_executor.load_gates И зовёт его, сверяя prevents/evidence реестра и синхронизацию
+      с advisory_review), структурных без изменений (66). Доля поведенческих выросла 86.13% -> 86.16%
+      (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 409
+    from_total: 475
+    to_behavioral: 410
+    to_total: 476
+    to_share_pct: 86.13
+    work: 'доменная ось Product/Work/Run/Decision/Outcome как данные (#630)'
+    why: >-
+      #630 добавил один поведенческий тест-файл (test_domain_model — импортирует
+      validation/validate_product_model И зовёт его check_domain_model над реальным реестром),
+      структурных без изменений (66). Доля поведенческих выросла 86.11% -> 86.13% (не снижение).
+      Числа руками (--baseline лоссовый).
+  - at: '2026-09-08'
+    what: rebaseline_after_measurement
+    from_behavioral: 408
+    from_total: 474
+    to_behavioral: 409
+    to_total: 475
+    to_share_pct: 86.11
+    work: 'SR-14..16 (расхождение архитектуры дочки, drift, advisory, #607)'
+    why: >-
+      #607 добавил один поведенческий тест-файл (test_drift — импортирует planning/drift И зовёт
+      его save_snapshot/report, а также сверяет проводку блока в governance_report), структурных без
+      изменений (66). Доля поведенческих выросла 86.08% -> 86.11% (не снижение). Числа руками
+      (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 407
+    from_total: 473
+    to_behavioral: 408
+    to_total: 474
+    to_share_pct: 86.08
+    work: 'SR-9..13 (архитектурные инварианты дочки, advisory, #606)'
+    why: >-
+      #606 добавил один поведенческий тест-файл (test_architecture_invariants — импортирует
+      planning/architecture_invariants И зовёт его), структурных без изменений (66). Доля
+      поведенческих выросла 86.05% -> 86.08% (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 406
+    from_total: 472
+    to_behavioral: 407
+    to_total: 473
+    to_share_pct: 86.05
+    work: '#615 назвать модель границы решений (тест test_decision_boundary)'
+    why: >-
+      #615 добавил один поведенческий тест-файл (test_decision_boundary — импортирует
+      governance/policy_engine и gates/spec_levels И зовёт их, доказывая, что имя класса действия =
+      поведение gate), структурных без изменений (66). Доля поведенческих выросла 86.02% -> 86.05%
+      (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 405
+    from_total: 471
+    to_behavioral: 406
+    to_total: 472
+    to_share_pct: 86.02
+    work: 'SR-17..23 (governance-отчёт продукта дочки, #605)'
+    why: >-
+      #605 добавил один поведенческий тест-файл (test_governance_report — импортирует
+      planning/governance_report И зовёт его), структурных без изменений (66). Доля поведенческих
+      выросла 85.99% -> 86.02% (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 401
+    from_total: 467
+    to_behavioral: 405
+    to_total: 471
+    to_share_pct: 85.99
+    work: 'SR-1..8 (свод обязательных артефактов) + свед. с main #593/#597'
+    why: >-
+      SR-работа добавила 4 поведенческих тест-файла (roadmap_single_source, required_architecture,
+      artifact_sections, standard_version — импортируют продуктовый код И зовут), структурных без
+      изменений (66). При сведении с main приехали #593/#597 — итог по ФАКТУ объединённого дерева
+      405/471, доля выросла 85.87% -> 85.99% (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 397
+    from_total: 463
+    to_behavioral: 401
+    to_total: 467
+    to_share_pct: 85.87
+    work: 'сведение вехи 4.2 (#584/#585/#586 обучение)'
+    why: >-
+      #584/#585/#586 добавили 3 поведенческих тест-файла (precedent_ledger, child_findings,
+      post_release_learning_cluster — импортируют продуктовый код И зовут), структурных без изменений.
+      Доля поведенческих выросла 85.75% -> 85.84%. #588 дописал кейсы в существующий behavioral-файл
+      (test_gate_closure_map) — счёт файлов не меняет. Числа руками (--baseline лоссовый).
   # Первая запись — установление baseline (issue #439). Последующие осознанные снижения порога
   # (например, крупный ввоз структурных фикстур-контрактов) добавляются сюда: дата, откуда/куда и
   # ПОЧЕМУ снижение оправдано, а не «так вышло».
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 397
+    from_total: 463
+    to_behavioral: 398
+    to_total: 464
+    to_share_pct: 85.78
+    work: '#591: ревьюер code_review — либо родит вердикт, либо падает быстро (оставшаяся половина #577)'
+    why: >-
+      Один новый поведенческий тест-файл (test_reviewer_verdict_or_fast_fail.py — импортирует tool_loop/
+      tool_broker И зовёт make_reviewer_proposer/run_review): 397->398, структурных без изменений (66).
+      Доля поведенческих выросла 85.75% -> 85.78% (не снижение). Числа руками (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 395
+    from_total: 461
+    to_behavioral: 397
+    to_total: 463
+    to_share_pct: 85.75
+    work: '#567: outcome → insight → кандидат-работа (+ ребейз на #580)'
+    why: >-
+      #567 добавил один поведенческий тест (test_outcome_insight.py — импортирует outcome_insight И
+      зовёт from_outcome/кандидат-генерацию); при ребейзе на main приехал ещё один поведенческий тест
+      из #580 — итог 395->397, структурных без изменений (66). Доля поведенческих выросла
+      85.68% -> 85.75% (не снижение). Точный счётчик пересчитан по факту; числа руками (--baseline лоссовый).
+  - at: '2026-09-07'
+    what: rebaseline_after_measurement
+    from_behavioral: 391
+    from_total: 457
+    to_behavioral: 395
+    to_total: 461
+    to_share_pct: 85.68
+    work: 'сведение вехи 4.1 (#564/#565/#566/#569) + ребейз на main (#578/#579)'
+    why: >-
+      Ленты вехи добавили 3 поведенческих тест-файла (decision-loop-wired, work-spine, product-objects),
+      плюс при ребейзе на main приехал ещё один поведенческий тест из #579 — итог 391->395, структурных
+      без изменений (66). Доля поведенческих ВЫРОСЛА 85.56% -> 85.68% (не снижение). Точный баз-счётчик
+      пересчитан по факту ОБЪЕДИНЁННОГО дерева, т.к. тест `test_baseline_matches_the_measurement` требует
+      точного равенства, а не только порога вниз. Числа правлены руками: флаг --baseline лоссовый.
   - at: '2026-09-02'
     what: baseline_established
     from_behavioral: null
@@ -230,3 +595,419 @@ raises:
       tools/_bootstrap.py о будущем сносе; снос состоялся). Это не деградация теста в структурный, а
       удаление теста вместе с удалённым кодом: behavioral 360 -> 358, total 421 -> 419, structural 61
       без изменений. Снижение зафиксировано записью, а не проехало молча.
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 358
+    from_total: 419
+    to_behavioral: 360
+    to_total: 421
+    to_share_pct: 85.51
+    work: split-test-acceptance-verify (issue #438, продолжение)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез четвёртого мега-тест-файла тем же
+      приёмом, что #438/#464. test_acceptance_verify.py (847 строк) разрезан на 3 файла по темам —
+      вердикт verify() (ядро, оно же test_acceptance_verify.py), разбор критериев parse_criteria/
+      criteria_from_spec (test_acceptance_criteria_parsing.py) и заземление цитат _ground_quote/
+      _post_state/_diff_by_file (test_acceptance_verify_grounding.py). Разрез вышел чище прежних:
+      общие хелперы (_provider/_read/_verdict, фикстура tree, CRITERIA/DIFF) нужны ТОЛЬКО ядру и
+      остались в нём инлайном — conftest не трогался, риска F811 нет вовсе. Оба отколотых файла
+      импортируют продуктовый код (acceptance_verify) И зовут его -> оба поведенческие, структурных
+      не прибавилось (61 без изменений), доля выросла 85.44% -> 85.51%. Число собранных тестов
+      ДО == ПОСЛЕ (53). Baseline пере-записан на фактический замер.
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 360
+    from_total: 421
+    to_behavioral: 362
+    to_total: 423
+    to_share_pct: 85.58
+    work: issue-406 — resume-флаги и гашение заявки мёртвой сессии по pid
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: работа #406 добавила два ПОВЕДЕНЧЕСКИХ теста
+      (test_resume_exec_only_flags.py, test_active_work_dead_session.py) — оба импортируют
+      продуктовый код (ai_ops_run / active_work) И зовут его, поэтому классифицируются как
+      behavioral. Структурных не прибавилось (61 без изменений), доля выросла 85.51% -> 85.58%.
+      Baseline пере-записан на фактический замер (360 -> 362 поведенческих из 423).
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 362
+    from_total: 423
+    to_behavioral: 367
+    to_total: 428
+    to_share_pct: 85.75
+    work: split-workpackage-executor-resume (issue #465, ускорение группы fast)
+    why: >-
+      Подъём порога ВВЕРХ, а не снижение: механический разрез двух самых тяжёлых по wall-clock файлов
+      группы `fast` тем же приёмом, что #438/#464. `--dist loadfile` пришпиливает файл к ОДНОМУ
+      воркеру, поэтому самый долгий файл серийно держит стену всей группы. Замер (изолированно, -n1):
+      test_workpackage_resume.py = 97s (в 2.4x тяжелее следующего), test_workpackage_executor.py = 41s.
+      resume разрезан по темам на 5 файлов (resume / resume_drift / retry / retry_errors /
+      retry_safety), executor — на 2 (executor happy-path / executor_plan: immutable+sandbox). Тела
+      тестов не менялись, число собранных ДО == ПОСЛЕ (resume 12, executor 14). Все новые файлы
+      импортируют продуктовый код (workpackage_executor/atomic_planner) И зовут его -> +5 файлов = +5
+      поведенческих, структурных не прибавилось (61 без изменений), доля выросла 85.58% -> 85.75%.
+      Baseline пере-записан на фактический замер (после ребейза на main с #478/#480).
+  - at: '2026-09-04'
+    what: baseline_lowered
+    from_behavioral: 367
+    from_total: 428
+    to_behavioral: 367
+    to_total: 429
+    to_share_pct: 85.55
+    work: issue-418 — реестры контракта токенов и capability как проверяемые данные
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.75% -> 85.55%): работа #418 добавила один СТРУКТУРНЫЙ тест-файл
+      (test_uiux_capabilities_registry.py). Он законно структурный — валидирует КОНТРАКТ ДАННЫХ
+      (реестры standards/uiux/registries/tokens.yaml + capabilities.yaml через standards-локальный
+      валидатор), а не рантайм-поведение `ai_ops_kit/`. Сам предмет исхода — «реестры доступны как
+      ПРОВЕРЯЕМЫЕ ДАННЫЕ», поэтому тест данных здесь уместен, а не выродившийся поведенческий.
+      Поведенческих не убыло (367 без изменений), прибавился один структурный (61 -> 62).
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 367
+    from_total: 429
+    to_behavioral: 368
+    to_total: 430
+    to_share_pct: 85.58
+    work: issue-160 — fail-fast, когда claude-cli структурно нерабочий в среде
+    why: >-
+      Подъём порога ВВЕРХ: работа #160 добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_env_unavailable_fail_fast.py) — импортирует продуктовый код (orchestrator_providers) И
+      зовёт его. Структурных не прибавилось (62 без изменений), доля выросла 85.55% -> 85.58%.
+      Baseline пере-записан на фактический замер (367 -> 368 поведенческих из 430; после ребейза на
+      main с влитым #418).
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 368
+    from_total: 430
+    to_behavioral: 369
+    to_total: 431
+    to_share_pct: 85.61
+    work: issue-422 — проверяемый инвариант «ночной обзор не пишет в main напрямую»
+    why: >-
+      Подъём порога ВВЕРХ: работа #422 добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_validate_nightly_no_direct_main_write.py) — импортирует валидатор И зовёт его на реальном
+      исходнике ночного пути. Структурных не прибавилось (62 без изменений), доля выросла
+      85.58% -> 85.61%. Baseline пере-записан на фактический замер (после ребейза на main с #418+#160).
+  - at: '2026-09-04'
+    what: baseline_raised_up
+    from_behavioral: 369
+    from_total: 431
+    to_behavioral: 372
+    to_total: 434
+    to_share_pct: 85.71
+    work: regression-corpus-seeded (P2)
+    why: >-
+      Заведён корпус regression-тестов полевых дефектов: три ПОВЕДЕНЧЕСКИХ файла в tests/regression/
+      (py3.9/tomllib, свежесть volatile, fresh-install классификация) — каждый импортирует и зовёт
+      продуктовый код кита. Доля поведенческих поднялась 85.61 -> 85.71% (порог ужесточён под факт, не
+      снижен). Точный замер: 372 из 434.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 372
+    from_total: 434
+    to_behavioral: 373
+    to_total: 435
+    to_share_pct: 85.75
+    work: kit-measures-against-merge-result (P0, merge-preview примитив)
+    why: >-
+      Добавлен поведенческий тест-файл tests/unit/test_merge_preview.py (пробы merge-preview: итог
+      слияния vs ветка, конфликт fail-closed). Доля поведенческих поднялась 85.71 -> 85.75% (порог
+      ужесточён под факт). Замер: 373 из 435.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 373
+    from_total: 435
+    to_behavioral: 374
+    to_total: 435
+    to_share_pct: 85.98
+    work: review-grounding-reads-the-file (P0)
+    why: >-
+      Заземление ревью чтением файла + пробы сделали тест-файл ревью поведенческим (импортирует и
+      зовёт продукт). Доля поведенческих поднялась 85.75 -> 85.98% (порог ужесточён под факт; total
+      без изменений, один файл перешёл structural -> behavioral). Замер: 374 из 435.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 374
+    from_total: 435
+    to_behavioral: 375
+    to_total: 436
+    to_share_pct: 86.01
+    work: drift-safe-reverify (merge-queue-not-handrolled)
+    why: >-
+      Добавлен поведенческий тест-файл tests/unit/test_delivery_drift_reverify.py (11 проб дрейф-
+      безопасной доставки: сдвиг цели -> stale-needs-reverify, PR не открывается). Доля поведенческих
+      85.98 -> 86.01% (порог ужесточён под факт). Замер: 375 из 436.
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 375
+    from_total: 436
+    to_behavioral: 375
+    to_total: 437
+    to_share_pct: 85.81
+    work: gitio-timeout-consolidation (P1, аудит 10 ролей)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (86.01% -> 85.81%): работа свела прямые git-субпроцессы на shared.gitio
+      с таймаутом и добавила один СТРУКТУРНЫЙ тест-файл (tests/contracts/test_no_unbounded_git.py). Он
+      законно структурный — AST-обходит исходники ai_ops_kit/ и утверждает инвариант «ни одного git без
+      timeout=», продуктовый код НЕ импортирует и НЕ зовёт (тот же класс, что test_no_monolith_funnel).
+      Поведенческих не убыло (375 без изменений), прибавился один структурный (61 -> 62). Не деградация
+      поведенческого теста, а новый структурный контракт; снижение зафиксировано записью, а не молча.
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 375
+    from_total: 437
+    to_behavioral: 375
+    to_total: 438
+    to_share_pct: 85.62
+    work: dormant-inventory-built-not-wired (P1, аудит 10 ролей)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.81% -> 85.62%): работа завела ратчет «built≠wired» и добавила один
+      СТРУКТУРНЫЙ тест-файл (tests/contracts/test_dormant_inventory.py). Он законно структурный —
+      AST-обходит ai_ops_kit/ и считает не-тестовых импортёров каждого модуля, продуктовый код НЕ
+      импортирует и НЕ зовёт (тот же класс, что test_no_unbounded_git / test_no_monolith_funnel).
+      Поведенческих не убыло (375 без изменений), прибавился один структурный (62 -> 63). Не деградация
+      поведенческого теста, а новый структурный контракт; снижение зафиксировано записью, а не молча.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 375
+    from_total: 438
+    to_behavioral: 376
+    to_total: 439
+    to_share_pct: 85.65
+    work: constitution-id-ships (P1, аудит 10 ролей)
+    why: >-
+      Подъём порога ВВЕРХ (не снижение): работа «карта constitution_id едет в дочку» добавила один
+      ПОВЕДЕНЧЕСКИЙ тест-файл (tests/unit/test_constitution_map_ships_to_child.py) — импортирует
+      installer И зовёт managed_set()/package_ownership()/filter_by_packages(), доказывая резолв цитаты
+      ревьюера через границу поставки. Структурных не прибавилось (63 без изменений), доля выросла
+      85.62% -> 85.65%. Baseline пере-записан на фактический замер (после ребейза на main с A/B/C).
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 376
+    from_total: 439
+    to_behavioral: 376
+    to_total: 440
+    to_share_pct: 85.45
+    work: block-push-guaranteed-by-environment (P1, аудит 10 ролей)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.65% -> 85.45%): работа сделала песочницу credential-less для push и
+      добавила один СТРУКТУРНЫЙ тест-файл (tests/unit/test_credentialless_push_env.py). Он законно
+      структурный — парсит скрипты контейнера и гоняет raw git в tmp (product-код кита не импортирует и
+      не зовёт). Поведенческих не убыло (376 без изменений), прибавился один структурный (63 -> 64).
+      Не деградация поведенческого теста, а новый структурный контракт; снижение зафиксировано записью.
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 376
+    from_total: 440
+    to_behavioral: 376
+    to_total: 441
+    to_share_pct: 85.26
+    work: stable-channel-honest (P1, аудит 10 ролей)
+    why: >-
+      ОСОЗНАННОЕ снижение доли (85.45% -> 85.26%): работа сделала недостижимость stable явной и
+      добавила один СТРУКТУРНЫЙ тест-файл (tests/unit/test_stable_channel_honest.py). Он структурен по
+      той же причине, что сосед test_resolve_update_ref.py — грузит installer через sys.path/importlib,
+      и классификатор (ищет пакетный import ai_ops_kit) продуктовый вызов не видит. Поведенческих не
+      убыло (376), прибавился один структурный (64 -> 65). Снижение зафиксировано записью, не молча.
+  - at: '2026-09-05'
+    what: baseline_raised_up
+    from_behavioral: 376
+    from_total: 441
+    to_behavioral: 377
+    to_total: 442
+    to_share_pct: 85.29
+    work: roid-cost-per-successful-change-wired (P1, аудит 10 ролей)
+    why: >-
+      Подъём порога ВВЕРХ: работа ROID провела cost_account в контур и добавила один ПОВЕДЕНЧЕСКИЙ
+      тест-файл (tests/unit/test_roid_cost_to_outcome.py) — импортирует cost_account/ai_ops_run_lifecycle
+      И зовёт их. Структурных не прибавилось (65), доля выросла 85.26% -> 85.29%. Baseline пере-записан
+      на факт (после ребейза на main с A/B/C/#9/#11).
+  - at: '2026-09-05'
+    what: baseline_lowered
+    from_behavioral: 377
+    from_total: 442
+    to_behavioral: 378
+    to_total: 444
+    to_share_pct: 85.14
+    work: split-tool-broker-test-and-mega-guard (#438)
+    why: >-
+      Разрез test_tool_broker.py (964 стр) на test_tool_broker.py + test_tool_broker_shell.py
+      (оба поведенческие, число собранных тестов 88==88) + новый СТРУКТУРНЫЙ страж
+      tests/contracts/test_no_mega_test_file.py (порог 850). Итог: +1 поведенческий файл (shell),
+      +1 структурный (страж). Доля 85.29 -> 85.14 — снижение от структурного стража, зафиксировано
+      записью, не молча.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 378
+    from_total: 444
+    to_behavioral: 379
+    to_total: 445
+    to_share_pct: 85.17
+    work: mcp-access-to-ui-system (#420)
+    why: >-
+      Подъём порога ВВЕРХ: работа объявила storybook_query MCP-инструментом (registry/tools.yaml +
+      capability-index) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл (test_mcp_access_to_ui_system.py) —
+      импортирует и зовёт storybook_query + валидатор. Структурных не прибавилось (66), доля выросла
+      85.14 -> 85.17%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 379
+    from_total: 445
+    to_behavioral: 380
+    to_total: 446
+    to_share_pct: 85.2
+    work: reviewers-and-ui-health-deepened-from-constitution (#419)
+    why: >-
+      Подъём порога ВВЕРХ: работа углубила UI-health/ревьюеров из Конституции (constitution_coverage
+      читает rules.yaml) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_constitution_coverage_deepens_health_and_reviewers.py) — импортирует и зовёт продукт.
+      Структурных не прибавилось (66), доля 85.17 -> 85.20%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 380
+    from_total: 446
+    to_behavioral: 381
+    to_total: 447
+    to_share_pct: 85.23
+    work: stabilize-readiness-verdict (#405)
+    why: >-
+      Подъём порога ВВЕРХ: работа детерминизировала вердикт readiness (content-aware artifact-credit +
+      unstable_checks называет flaky-проверку) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_readiness_determinism.py) — импортирует и зовёт продукт. Структурных не прибавилось (66),
+      доля 85.20 -> 85.23%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 381
+    from_total: 447
+    to_behavioral: 382
+    to_total: 448
+    to_share_pct: 85.27
+    work: forced-major-update-reconciles-allowed-version-range
+    why: >-
+      Подъём порога ВВЕРХ: работа согласует allowed_version_range при `update --force` через мажор и
+      краснит doctor на installed ∉ allowed, добавив один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_update_force_major_reconciles_range.py) — импортирует installer и зовёт cmd_update/doctor.
+      Структурных не прибавилось (66), доля 85.23 -> 85.27%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 382
+    from_total: 448
+    to_behavioral: 383
+    to_total: 449
+    to_share_pct: 85.30
+    work: level-signals-carry-across-specify-plan-run
+    why: >-
+      Подъём порога ВВЕРХ: перенос сигналов уровня specify->plan->run (полевой замер cockpit
+      06.09.2026) добавил один ПОВЕДЕНЧЕСКИЙ тест-файл (test_level_signals_carry.py) — импортирует и
+      зовёт продукт. Структурных не прибавилось (66), доля 85.27 -> 85.30%. Baseline пере-записан на факт.
+  - at: '2026-09-06'
+    what: baseline_raised_up
+    from_behavioral: 383
+    from_total: 449
+    to_behavioral: 384
+    to_total: 450
+    to_share_pct: 85.33
+    work: code-review-reviewer-renders-a-parseable-verdict
+    why: >-
+      Подъём порога ВВЕРХ: работа сделала извлечение вердикта code_review надёжным (живой путь
+      ревьюера разбирает терминал тем же extract_reviewer_json, что и офлайн; фолбэк по прозе понимает
+      needs_work и берёт последний вердикт) и добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_code_review_verdict_extraction_is_robust.py) — импортирует и зовёт продукт. Структурных не
+      прибавилось (66), доля 85.30 -> 85.33%. Baseline пере-записан на факт.
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 386
+    from_total: 452
+    to_behavioral: 387
+    to_total: 453
+    to_share_pct: 85.43
+    work: work-view-projection (issue #549)
+    why: >-
+      Подъём порога ВВЕРХ: единая машинная проекция «работы» по id (lifecycle/work_view) добавила один
+      ПОВЕДЕНЧЕСКИЙ тест-файл (test_work_view.py) — импортирует project_work/from_work_view и зовёт их
+      над собранной дочкой. Структурных не прибавилось (66), доля 85.40 -> 85.43%. Baseline пере-записан
+      на факт.
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 387
+    from_total: 453
+    to_behavioral: 388
+    to_total: 454
+    to_share_pct: 85.46
+    work: post-release-loop-wired (#545)
+    why: >-
+      Подъём порога ВВЕРХ: проводка пост-релизной петли (PRR -> verify_analytics_runtime ->
+      outcome-проекция -> один вердикт) добавила один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_post_release_loop.py) — импортирует cli.post_release_loop И зовёт run_post_release/render,
+      а также presenter.from_post_release_loop. Структурных не прибавилось (66), доля 85.43 -> 85.46%.
+      Baseline пере-записан на фактический замер (387 -> 388 поведенческих из 454).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 388
+    from_total: 454
+    to_behavioral: 389
+    to_total: 455
+    to_share_pct: 85.49
+    work: knowledge-graph-query (Knowledge Graph как запрашиваемая технология)
+    why: >-
+      Подъём порога ВВЕРХ: сборщик+обход Knowledge Graph (intelligence/knowledge_graph) добавил один
+      ПОВЕДЕНЧЕСКИЙ тест-файл (test_knowledge_graph.py) — импортирует build_graph/trace/gaps И зовёт их
+      над собранной из синтетики дочкой, плюс сверяет граф через validate_knowledge_graph. Структурных
+      не прибавилось (66), доля 85.46 -> 85.49%. Baseline пере-записан на фактический замер (388 -> 389
+      поведенческих из 455).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 389
+    from_total: 455
+    to_behavioral: 390
+    to_total: 456
+    to_share_pct: 85.53
+    work: one-command-setup (`ai-ops setup` — единая установка)
+    why: >-
+      Подъём порога ВВЕРХ: единая команда установки `ai-ops setup` добавила один ПОВЕДЕНЧЕСКИЙ
+      тест-файл (test_installer_setup.py) — грузит installer через spec_from_file_location(ai_ops.py)
+      И зовёт `_setup_remaining` над установленной дочкой, плюс гоняет `setup` реальным подпроцессом
+      (managed-зона, профиль стека, черновики bootstrap, честный остаток «от человека»). Структурных
+      не прибавилось (66), доля 85.49 -> 85.53%. Baseline пере-записан на фактический замер (389 -> 390
+      поведенческих из 456).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 390
+    from_total: 456
+    to_behavioral: 391
+    to_total: 457
+    to_share_pct: 85.56
+    work: code-review-reviewer-works-inside-a-claude-session (#160)
+    why: >-
+      Подъём порога ВВЕРХ: handoff ревью оркестратору (#160) добавил один ПОВЕДЕНЧЕСКИЙ тест-файл
+      (test_reviewer_handoff.py — импортирует engine.reviewer_handoff И зовёт open_request/load_verdict
+      + прогоняет _run_reviews через run_pipeline). Структурных не прибавилось (66), доля 85.53 ->
+      85.56%. Baseline пере-записан на фактический замер (390 -> 391 поведенческих из 457).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 391
+    from_total: 457
+    to_behavioral: 392
+    to_total: 458
+    to_share_pct: 85.59
+    work: fix-loop-stops-on-reviewer-no-verdict (#577)
+    why: >-
+      Подъём порога ВВЕРХ: фикс петли fix-loop на no-verdict (#577) добавил один ПОВЕДЕНЧЕСКИЙ
+      тест-файл (test_fix_loop_stops_on_reviewer_no_verdict.py — зовёт _review_fix_context над
+      refused/blocked-ревью И прогоняет реальный fix-loop ai_ops_run.run со счётчиком перезапусков
+      пайплайна). Структурных не прибавилось (66), доля 85.56 -> 85.59%. Baseline пере-записан на
+      фактический замер (391 -> 392 поведенческих из 458).
+  - at: '2026-09-07'
+    what: baseline_raised_up
+    from_behavioral: 395
+    from_total: 461
+    to_behavioral: 396
+    to_total: 462
+    to_share_pct: 85.71
+    work: handoff-verdict-consumed-by-resume-and-reevaluate
+    why: >-
+      Мега-тест-файл test_ai_ops_cli.py перерос 850 строк — тема «--reevaluate-only в CLI» вынесена
+      в отдельный ПОВЕДЕНЧЕСКИЙ файл test_ai_ops_cli_reevaluate.py (зовёт ai_ops_cli._build_cli_arg_parser
+      и _build_signals). Структурных не прибавилось (66), доля 85.68 -> 85.71%. Baseline пере-записан
+      на фактический замер (395 -> 396 поведенческих из 462).

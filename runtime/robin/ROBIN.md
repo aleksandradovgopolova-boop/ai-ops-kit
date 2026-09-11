@@ -32,7 +32,7 @@ audit-log** · **read-mostly** (нет записи в prod) · опция **in-
 ## Обязанности (duties)
 
 Декларативно в `runtime/robin/duties.example.yaml` (в child — свой файл), проверяется
-`validation/validate_duties.py`. Каждая обязанность: id, триггер (cron/событие),
+`ai_ops_kit/validation/validate_duties.py`. Каждая обязанность: id, триггер (cron/событие),
 входы, выход+назначение, владелец. Минимально обязательная — периодический дайджест.
 
 ## Память — два слоя (человек в контуре)
@@ -44,7 +44,7 @@ audit-log** · **read-mostly** (нет записи в prod) · опция **in-
 
 ## Аудит
 
-Append-only interaction-log (тот же формат, что пишет `tools/orchestrator.py`):
+Append-only interaction-log (тот же формат, что пишет `ai_ops_kit/providers/orchestrator.py`):
 ts · actor · duty/workflow · входы(имена) · инструменты · итог · ошибка · human-feedback.
 Секреты и сырые чувствительные данные не пишутся. «0 ошибок» ≠ «0 сбоев».
 

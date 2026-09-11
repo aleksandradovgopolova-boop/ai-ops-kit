@@ -299,9 +299,10 @@ def test_compile_bundle_does_not_write_profile(tmp_path):
     prof = tmp_path / ".ai" / "repository-profile.yaml"
     assert not prof.exists()
 
+    from ai_ops_kit.engine.run_plan import build_plan
     bundle = context_compiler.compile_bundle(
         {"task_type": "QUICK", "risk": "low", "affected_areas": ["core"], "task_text": "правка"},
-        tmp_path)
+        tmp_path, build_plan=build_plan)
 
     assert not prof.exists(), "compile_bundle создал профиль — preview перестал быть безопасным"
     assert any("python" in c for c in bundle["included"]["repository_context"]), \

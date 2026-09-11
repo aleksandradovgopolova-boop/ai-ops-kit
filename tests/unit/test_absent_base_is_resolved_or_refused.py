@@ -32,7 +32,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_ops_kit.delivery import review_branch
+from ai_ops_kit.engine import review_branch
 from ai_ops_kit.security import security_pack
 
 WID = "probe-wid"

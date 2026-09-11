@@ -43,6 +43,39 @@ def test_repository_graph_respects_declared_layers(spec):
     assert not errors, "нарушения слоёв:\n  " + "\n  ".join(errors)
 
 
+def test_dynamic_import_literal_is_counted_as_an_edge():
+    """F-03 (аудит 2026-09-09): __import__/import_module со строковым литералом — такое же ребро,
+    как статический импорт, где бы ни стояло.
+
+    Регресс-охрана против слепоты, из-за которой пять взаимных пар ядра показывались нулём: движок
+    грузил engine-модули через __import__ внутри функций, и ast.Import их не видел. Тест видели
+    падающим на прежнем `_imported_names` (до фикса он возвращал только статические имена).
+    """
+    src = (
+        "import os\n"
+        "from ai_ops_kit.shared import gitio\n"
+        "def f():\n"
+        "    return __import__('ai_ops_kit.engine.tool_broker')\n"
+        "def g():\n"
+        "    import importlib\n"
+        "    return importlib.import_module('ai_ops_kit.gates.deploy_readiness')\n"
+    )
+    names = vl._imported_names(src, filename="fake.py")
+    assert "ai_ops_kit.engine.tool_broker" in names, names        # __import__ литерал
+    assert "ai_ops_kit.gates.deploy_readiness" in names, names    # importlib.import_module литерал
+    assert "ai_ops_kit.shared" in names, names                    # статический импорт не потерян
+
+
+def test_dynamic_import_by_variable_is_not_counted():
+    """Честная граница инструмента: динамику по переменной статически не разрешить — её не считаем.
+
+    Это НЕ дыра, а признание предела: `__import__(name)` с неизвестным `name` граф показать не
+    может, и делать вид, что может, было бы той же ложью, что и прежний ноль.
+    """
+    src = "def f(name):\n    return __import__(name)\n"
+    assert vl._imported_names(src, filename="fake.py") == []
+
+
 def test_every_package_is_placed_in_a_layer(spec):
     """Пакет без слоя — дыра в правиле: про него ничего нельзя ни запретить, ни разрешить."""
     declared = {p for layer in spec["layers"] for p in layer["packages"]}

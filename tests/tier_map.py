@@ -15,6 +15,11 @@ DIR_TIER = {
     "unit": "unit",
     "contracts": "contract",
     "integration": "integration",
+    # Корпус regression-тестов полевых дефектов (P2): по ЯРУСУ это быстрые поведенческие тесты
+    # уровня unit; «regression» же — ОРТОГОНАЛЬНЫЙ маркер (`pytest -m regression`), а не ярус,
+    # поэтому каталог отображается в ярус `unit`, а не в самого себя (значение обязано быть в
+    # TIER_MARKERS). Так корпус остаётся отдельным discoverable каталогом и не осиротевает от пирамиды.
+    "regression": "unit",
 }
 
 # Маркеры, считающиеся ЯРУСНЫМИ — в отличие от ортогональных slow/live/regression/critical_path.

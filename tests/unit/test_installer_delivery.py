@@ -171,7 +171,7 @@ def test_managed_set_excludes_are_declared_not_implicit(ai_ops):
     assert not (rels & ai_ops.DEV_ONLY_FILES), \
         f"объявленное исключение всё равно едет в дочку: {rels & ai_ops.DEV_ONLY_FILES}"
     assert "ai_ops_kit/engine/ai_ops_run.py" in rels
-    assert "ai_ops_kit/engine/ai_route.py" in rels
+    assert "ai_ops_kit/shared/ai_route.py" in rels
 
 
 def test_delivered_engine_does_not_import_undelivered_validators(installed):

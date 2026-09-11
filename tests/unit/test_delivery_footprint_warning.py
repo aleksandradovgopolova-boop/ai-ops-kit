@@ -86,3 +86,73 @@ class TestTheThresholdHasOneHome:
         assert 'volume_reserve_fraction' in src, "тест поставки не спрашивает реестр про порог запаса"
         assert "reserve_is_thin" in src and "thinning_reserve_warning" in src, (
             "тест поставки не применяет предупреждение — тающий запас не будет назван в его прогоне")
+
+
+# ─── доставляемый footprint итога слияния = дерево-итог ∩ managed_set (чистая логика) ──────────────
+
+class TestDeliveredMergeFootprintIsAnIntersection:
+    def test_only_managed_files_of_the_merge_result_are_counted(self):
+        # дерево-итог несёт три файла; в managed_set — только два, третий (dev-ассет) НЕ считается
+        entries = [("ai_ops_kit/a.py", 100), ("ai_ops_kit/b.py", 250), ("tools/dev.py", 9000)]
+        managed = {"ai_ops_kit/a.py", "ai_ops_kit/b.py"}
+        res = dfw.delivered_merge_footprint(entries, managed)
+        assert res["delivered_bytes"] == 350, res       # 100 + 250, БЕЗ 9000 dev-ассета
+        assert res["delivered_files"] == 2, res
+        assert res["paths"] == ["ai_ops_kit/a.py", "ai_ops_kit/b.py"], res
+
+    def test_file_in_merge_result_but_not_managed_is_ignored(self):
+        # файл присутствует в итоге, но НЕ доставляется -> в счёт доставляемого не входит
+        res = dfw.delivered_merge_footprint([("x/only-in-tree.txt", 5000)], {"ai_ops_kit/a.py"})
+        assert res["delivered_bytes"] == 0 and res["delivered_files"] == 0, res
+
+    def test_managed_file_absent_from_merge_result_adds_nothing(self):
+        # managed-путь, которого в дереве-итоге нет, ничего не прибавляет (пересечение, не объединение)
+        res = dfw.delivered_merge_footprint([("ai_ops_kit/a.py", 100)],
+                                            {"ai_ops_kit/a.py", "ai_ops_kit/missing.py"})
+        assert res["delivered_bytes"] == 100 and res["delivered_files"] == 1, res
+
+
+class TestDeliveredFootprintVerdict:
+    def test_breach_when_delivered_reaches_ceiling(self):
+        # доставляемый объём >= потолок — пробой (та же граница «>=», что у блокирующего assert поставки)
+        assert dfw.delivered_footprint_verdict(1000, ceiling=1000, fraction=0.10)["breached"] is True
+        assert dfw.delivered_footprint_verdict(1200, ceiling=1000, fraction=0.10)["breached"] is True
+
+    def test_thin_reserve_below_ceiling_is_a_warning_not_a_breach(self):
+        v = dfw.delivered_footprint_verdict(950, ceiling=1000, fraction=0.10)
+        assert v["breached"] is False and v["thin"] is True, v
+        assert v["reserve"] == 50, v
+
+    def test_comfortable_reserve_passes_clean(self):
+        v = dfw.delivered_footprint_verdict(100, ceiling=1000, fraction=0.10)
+        assert v["breached"] is False and v["thin"] is False, v
+        assert v["reserve"] == 900, v
+
+
+class TestDeliveredFilecountVerdict:
+    """ЧИСЛО файлов итога слияния судится своим потолком (substantive_files) — ось дрейфа 490->498.
+
+    positive/fail-closed/thin — та же строгость, что у объёмной оси, но reserve в ФАЙЛАХ."""
+
+    def test_breach_when_filecount_reaches_ceiling(self):
+        # число доставляемых файлов >= потолок substantive_files — пробой (граница «>=» как у поставки)
+        assert dfw.delivered_filecount_verdict(584, files_ceiling=584, fraction=0.10)["breached"] is True
+        assert dfw.delivered_filecount_verdict(600, files_ceiling=584, fraction=0.10)["breached"] is True
+
+    def test_thin_reserve_below_ceiling_is_a_warning_not_a_breach(self):
+        # осталось 5 файлов из 100 (5%) при пороге 10% — тонко, но ещё не пробой
+        v = dfw.delivered_filecount_verdict(95, files_ceiling=100, fraction=0.10)
+        assert v["breached"] is False and v["thin"] is True, v
+        assert v["reserve"] == 5, v
+
+    def test_comfortable_reserve_passes_clean(self):
+        v = dfw.delivered_filecount_verdict(490, files_ceiling=584, fraction=0.10)
+        assert v["breached"] is False and v["thin"] is False, v
+        assert v["reserve"] == 94, v
+
+    def test_filecount_axis_is_independent_of_bytes(self):
+        # ключевая причина отдельной оси: много мелких файлов пробивают ПОТОЛОК ФАЙЛОВ,
+        # тогда как байтовый вердикт на тех же данных остался бы «в пределах».
+        v_files = dfw.delivered_filecount_verdict(500, files_ceiling=500, fraction=0.10)
+        v_bytes = dfw.delivered_footprint_verdict(10_000, ceiling=5_000_000, fraction=0.10)
+        assert v_files["breached"] is True and v_bytes["breached"] is False

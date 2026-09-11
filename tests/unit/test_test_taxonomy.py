@@ -26,9 +26,14 @@ from ai_ops_kit.validation.validate_test_taxonomy import (
     load_baseline,
     main,
     measure,
+    measure_functions,
+    render_function_advisory,
 )
 
-pytestmark = pytest.mark.unit
+# Тесты гоняют валидатор таксономии по всему репо (сбор+проход всего дерева тестов) — >10 c на CI,
+# то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 
 # Фикстуры-исходники: «поведенческий» импортирует продукт И зовёт его; «структурный» только читает
@@ -113,16 +118,13 @@ class TestTheBaselineHasOneHome:
         assert isinstance(b.get("behavioral_count"), int), b
         assert isinstance(b.get("total_count"), int) and b["total_count"] > 0, b
 
-    def test_baseline_matches_the_measurement(self):
-        """Числа в реестре обязаны совпасть с фактическим замером кита: иначе baseline устарел молча
-        и защищает не ту границу."""
-        b = load_baseline()
-        cur = measure()
-        assert b["behavioral_count"] == cur["behavioral_count"], (
-            f"baseline behavioral {b['behavioral_count']} != замер {cur['behavioral_count']} — "
-            f"пересчитайте: validate_test_taxonomy.py --baseline")
-        assert b["total_count"] == cur["total_count"], (
-            f"baseline total {b['total_count']} != замер {cur['total_count']}")
+    # ТОЧНОЕ РАВЕНСТВО baseline == замер СНЯТО (issue #680). Оно форсило ре-снап baseline на ЛЮБОЕ
+    # изменение состава тестов — даже когда доля поведенческих не падала (14 ре-базлайнов за 08.09).
+    # Это был налог, а не защита: реальная граница — НИЖНЯЯ (доля не падает ниже baseline), и её
+    # держат `test_current_share_meets_baseline` (замер кита не ниже floor -> baseline не завышен) и
+    # `check()` в валидаторе (перекрёстное умножение). baseline теперь = ПОЛ доли, обновляемый
+    # записью в `raises` только когда доля законно падает, а не снимок, совпадающий по числам.
+    # Устаревший-вниз baseline безвреден (пол консервативен); устаревший-вверх ловит share-floor.
 
 
 # ─── fail-closed: падение доли ниже baseline ОТКЛОНЯЕТСЯ ────────────────────────────────────────
@@ -173,6 +175,77 @@ class TestARaiseInStructuralityIsRefused:
         """Baseline без чисел — не порог: проверка обязана краснеть, а не молча пропускать."""
         assert check({"behavioral_count": 1, "total_count": 1,
                       "behavioral_share_pct": 100.0}, {})
+
+
+# ─── advisory: функциональный счётчик виден, но НЕ энфорсится ────────────────────────────────────
+
+# «Разбавленный» файл: поведенческий на уровне ФАЙЛА (импортирует и зовёт продукт), но одна из его
+# тест-функций только читает файл — структурная. Файловая метрика этого не видит (файл = 1 единица,
+# целиком behavioral); функциональный счётчик — видит (1 из 2 = 50%).
+DILUTED_SRC = textwrap.dedent("""\
+    from pathlib import Path
+
+    from ai_ops_kit.validation import validate_test_taxonomy as vtt
+
+    def test_calls_product():
+        assert vtt.measure()["total_count"] >= 0
+
+    def test_only_reads_a_file():
+        assert Path("registry/agents.yaml").exists()
+""")
+
+
+class TestFunctionLevelAdvisoryIsVisibleButNotEnforced:
+    def test_function_counter_sees_dilution_a_file_counter_misses(self, tmp_path):
+        """Ядро P2: структурная тест-функция внутри поведенческого файла видна ФУНКЦИОНАЛЬНО.
+
+        Файл целиком поведенческий (файловая доля 1/1 = 100%), но функциональный счётчик разбивает
+        его на 1 поведенческую + 1 структурную функцию (50%) — именно «разбавление» и становится
+        видимым."""
+        tests = tmp_path / "tests"
+        tests.mkdir(parents=True, exist_ok=True)
+        (tests / "test_diluted.py").write_text(DILUTED_SRC, encoding="utf-8")
+
+        file_metric = measure(tests)
+        assert file_metric["behavioral_count"] == 1 and file_metric["structural_count"] == 0
+
+        fn_metric = measure_functions(tests)
+        assert fn_metric["behavioral_fn_count"] == 1, fn_metric
+        assert fn_metric["structural_fn_count"] == 1, fn_metric
+        assert fn_metric["total_fn_count"] == 2, fn_metric
+        assert fn_metric["behavioral_fn_share_pct"] == 50.0, fn_metric
+
+    def test_function_counter_does_not_change_the_enforced_verdict(self, capsys):
+        """Advisory-строка печатается, но энфорсимый вердикт и exit code — прежние.
+
+        Гарантия жёсткой границы P2: функциональный счётчик ничего не краснит и не зеленит; он лишь
+        добавляет строку вывода поверх неизменной файловой метрики."""
+        rc = main([])
+        out = capsys.readouterr().out
+        assert rc == 0, out
+        # энфорсимая метрика на месте и без изменений
+        assert "TEST-TAXONOMY-OK" in out, out
+        # advisory присутствует и честно помечена как не-энфорсимая
+        assert "TEST-TAXONOMY-ADVISORY" in out, out
+        assert "advisory, не энфорсится" in out, out
+
+    def test_advisory_render_is_pure_and_marks_itself_advisory(self):
+        """render_function_advisory — чистая печать над замером, помеченная advisory."""
+        line = render_function_advisory(
+            {"behavioral_fn_count": 3, "structural_fn_count": 1,
+             "total_fn_count": 4, "behavioral_fn_share_pct": 75.0})
+        assert "3/4" in line and "75.0%" in line
+        assert "advisory, не энфорсится" in line
+
+    def test_function_counter_never_feeds_check(self, tmp_path):
+        """Ратчет `check` работает только на файловой метрике — функциональные числа его не касаются."""
+        tests = tmp_path / "tests"
+        tests.mkdir(parents=True, exist_ok=True)
+        (tests / "test_diluted.py").write_text(DILUTED_SRC, encoding="utf-8")
+        file_metric = measure(tests)
+        # baseline из файловой метрики: тот же замер проходит (пол, не потолок)
+        assert check(file_metric, {"behavioral_count": file_metric["behavioral_count"],
+                                   "total_count": file_metric["total_count"]}) == []
 
 
 # ─── реестр совпадает с местом, где лежит baseline ──────────────────────────────────────────────

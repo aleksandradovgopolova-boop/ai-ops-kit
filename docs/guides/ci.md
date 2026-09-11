@@ -1,56 +1,95 @@
 # CI Configuration
 
-AI Ops Kit использует двухслойный CI.
+AI Ops Kit держит CI в двух слоях: быстрый путь на каждый PR и полный набор на non-draft PR
+и push в main. Ниже — **канонический, аудируемый список обязательных статус-проверок защиты
+ветки** (то, что GitHub называет *required status checks* в branch protection), плюс что из
+проверок advisory, почему тяжёлое не гоняется на каждом PR и где живёт ночное.
 
-## Слои
+## Обязательные статус-проверки защиты main
 
-### 1. PR Smoke (~2 мин)
+Настройка branch protection живёт в GitHub и в репозитории не видна — поэтому её декларация
+хранится как данные в `quality/required-contexts.yaml`, а валидатор
+`ai_ops_kit/validation/validate_required_contexts.py` сверяет этот список с реальными job в
+`.github/workflows/*` (объявлен контекст, а job нет — красное; job есть, а не объявлен —
+warning, не всякая job обязана блокировать). Таблица ниже — тот же список в читаемом виде;
+источник истины — `required-contexts.yaml`, а не эта страница.
 
-Запускается на каждый PR. Быстрая проверка critical path.
+| Контекст (workflow / job) | Workflow | Что проверяет |
+|---------------------------|----------|---------------|
+| `pr-smoke / smoke` | `pr-smoke.yml` | Быстрый critical path (~2 мин): contract-тесты, ключевые валидаторы, формат заголовка PR |
+| `package-quality / lint` | `package-quality.yml` | ruff класса «поломка» (F821/F811/B023/F841), битые `# noqa`, towncrier, `cz check` |
+| `package-quality / quality (fast-1)` | `package-quality.yml` | Быстрая группа pytest, шард 1/2 (`.github/ci-groups/fast-1.sh`, `-m "not slow" -k "test_r or test_s or test_c or test_b"`) |
+| `package-quality / quality (fast-2)` | `package-quality.yml` | Быстрая группа pytest, шард 2/2 (`.github/ci-groups/fast-2.sh`, дополнение fast-1) |
+| `package-quality / quality (selftests-a)` | `package-quality.yml` | Группа selftests-a (`selftests-a.sh`, `-m "slow and not nightly"`) |
+| `package-quality / quality (selftests-m)` | `package-quality.yml` | Группа selftests-m (`selftests-m.sh`) |
+| `package-quality / quality (contracts)` | `package-quality.yml` | Contract-группа pytest (`contracts.sh`) |
+| `package-quality / clean-install` | `package-quality.yml` | Установка в чистый репозиторий, где кита нет рядом |
+| `package-quality / upgrade-path` | `package-quality.yml` | Обновление предыдущий выпуск → рабочее дерево |
+| `package-quality / pipeline-e2e (3.12)` | `package-quality.yml` | 20 process-contract тестов (инварианты процессов WP2–WP5) на Python 3.12 |
+| `package-quality / security-scan` | `package-quality.yml` | Детерминированный скан диффа PR: секреты, неодобренные зависимости, injection-surface |
+| `docs / build` | `docs.yml` | Сборка документации |
 
-```yaml
-# .github/workflows/pr-smoke.yml
-- Contract tests (critical_path)
-- Selftest wrappers (critical modules)
-- Key validators
-```
+Эти десять контекстов должны стоять в required status checks защиты main. Из них
+`clean-install`, `upgrade-path`, `pipeline-e2e` и `security-scan` — именно те проверки, что
+защищают **дочерний** репозиторий: они гоняют установку/обновление кита в чистое окружение и
+скан диффа, то есть ловят регресс до того, как тег доедет до дочки.
 
-### 2. Package Quality (7 параллельных групп)
+### Оговорки по событиям
 
-Запускается на non-draft PR и push в main.
+- `security-scan` идёт только на событии `pull_request` (ей нужна база `origin/main` для diff) —
+  как и `docs / build`. На push в main предмета сравнения нет, поэтому там она не запускается.
+- Группы `quality (*)` не запускаются на **draft**-PR: условие
+  `github.event_name != 'pull_request' || github.event.pull_request.draft == false`. Форма
+  записана именно так (а не `== false`), потому что на событиях `push` и `workflow_dispatch`
+  объекта `pull_request` нет: `null == false` в выражениях Actions ложно, и без защитной ветки
+  `github.event_name != 'pull_request'` джоба молча скипалась бы — обязательный контекст на push
+  в main не отдавался бы никогда.
 
-```yaml
-# .github/workflows/package-quality.yml
-matrix:
-  group: [core, execution, quality-product, culture-ops, context-security, validation, contracts]
-```
+## Advisory-гейты (не блокируют слияние)
 
-Каждая группа — отдельный job на `ubuntu-latest`.
+Обкатываются non-blocking по политике dp-002 — печатают отчёт, но в required status checks не
+внесены; перевод в блокирующие — осознанное решение владельца после обкатки.
 
-## Группы
+| Job | Workflow | Статус |
+|-----|----------|--------|
+| `parallel-safety` | `pr-smoke.yml` | `--strict` (краснеет на PR, смешавшем код с координационным файлом — `planning/plan.yaml`, `history/plan-history.yaml`, `decisions/registry.yaml`, `registry/release-claims.yaml`), но пока **не** в required — красный виден, слияние не блокирует |
+| `pr-size` | `pr-smoke.yml` | Advisory (без `--strict`): «одна работа = один малый PR», потолки из `quality/pr-budget.yaml`; только печатает отчёт |
 
-| Группа | Содержание |
-|--------|-----------|
-| `core` | Registry, workflow, config, observability, changelog |
-| `execution` | Orchestrator, pipeline, tool-loop, budget, gates |
-| `quality-product` | Storybook, ADR, quality, context, cost |
-| `culture-ops` | Session, delegation, commit, branch, deploy |
-| `context-security` | Regression, loop-trace, security, parallel |
-| `validation` | Python-compat, event-catalog, security-posture |
-| `contracts` | Pytest contracts + validators |
+Оба job идут только на `pull_request` (`if: github.event_name == 'pull_request'`): им нужен
+PR-дифф против `origin/main`, которого на других событиях нет.
 
-## Локальный запуск
+## Draft PR
 
-```bash
-# Все группы последовательно
-for g in .github/ci-groups/*.sh; do bash "$g" || exit 1; done
+На draft-PR гоняется быстрый путь (`pr-smoke`), но не тяжёлые группы `package-quality`
+(см. фильтр draft выше). Полный набор включается, когда PR выходит из draft.
 
-# Одна группа
-bash .github/ci-groups/core.sh
+## Nightly (вне пути PR)
 
-# Только тесты
-python3 -m pytest tests/ -v
-```
+Тяжёлое снято с обратной связи каждого PR (замер #462: два теста держали стену — мутационный
+гейт ~6 мин и агрегатный bench ~2.5 мин). Помечено `-m nightly` и гоняется ночью, на push в
+main и вручную (`workflow_dispatch`), а не блокирует PR — но остаётся исполняемым и обязательным.
+
+| Workflow | Job | Когда | Что |
+|----------|-----|-------|-----|
+| `nightly-quality.yml` | `heavy-gates` | cron ~03:37 UTC, push в main, вручную | Мутационный гейт + агрегатный bench (`-m nightly`) |
+| `nightly-coverage.yml` | `coverage` | cron ~03:17 UTC, push в main, вручную | Покрытие с порогом-ратчетом (пол 70%); снято с обязательных 2026-09-03 — держало ~10.8 мин на каждом PR |
+
+## Слияние
+
+Зелёный PR вливается squash-слиянием (`gh pr merge --squash` / кнопка «Squash and merge»)
+после того, как обязательные контексты на нём зелёные. Кит **не** привязан к GitHub merge queue:
+очередь слияния недоступна для личных репозиториев и привязала бы кит к фиче конкретного форджа
+(фордж-нейтральный пивот 04.09.2026). Ранее объявленный триггер `merge_group:` в обоих workflow
+и его обвязка (draft-фильтр под merge_group, «капкан статусов») сняты — механизм был мёртв, потому
+что очередь так и не включалась.
+
+**Дрейф main против итога слияния держит сам кит, на чистом git.** Проблема, ради которой
+рассматривалась очередь (гейты меряют ветку PR, а параллельный дрейф main всплывает падением на
+СЛЕДУЮЩЕМ PR — footprint main тихо ушёл 490→498 файлов между слияниями), закрыта примитивом
+`gate-measures-merge-result`: `ai_ops_kit/gates/merge_preview.py` строит ДЕРЕВО СЛИЯНИЯ base+head
+через `git merge-tree --write-tree` (git 2.38+) и меряет объём ИТОГА, а не ветки. Он fail-closed
+(не посчитали итог — не зелёный) и не зависит ни от какой фордж-фичи. Пробы — в
+`tests/unit/test_merge_preview.py`.
 
 ## Release
 
@@ -64,26 +103,16 @@ on:
     paths: [VERSION]
 ```
 
-## Слияние: родной merge queue (v3.38)
+## Локальный запуск
 
-Зелёный PR вливается **родным GitHub merge queue** (кнопка «Merge when ready» / auto-merge),
-а не ручным интегратором. Почему (разбор 20.08.2026): ручной polling-цикл падал на таймаутах
-`gh`, отчитывался «влито» по факту запуска команды и сверял SHA с пустой строкой; а гейты,
-меряющие ветку PR, пропускали дрейф main (490→498 файлов тихо).
+```bash
+# Группы package-quality
+bash .github/ci-groups/fast-1.sh
+bash .github/ci-groups/fast-2.sh
+bash .github/ci-groups/selftests-a.sh
+bash .github/ci-groups/selftests-m.sh
+bash .github/ci-groups/contracts.sh
 
-Что даёт очередь:
-
-- **Пороги меряются против итога слияния** (`gate-measures-merge-result`): очередь строит
-  временный merge-коммит и требует все обязательные контексты НА НЁМ. Coverage, footprint и
-  ратчеты не могут уехать «между» зелёными ветками.
-- **DIRTY не возникает**: очередь сама батчит и ребейзит.
-
-Механика в workflow: оба файла (`package-quality.yml`, `pr-smoke.yml`) объявляют триггер
-`merge_group:`, а условие draft-фильтра сформулировано как
-`github.event_name != 'pull_request' || ...` — иначе в merge_group событие `pull_request`
-отсутствует, `null == false` ложно, джоба тихо скипается и обязательный контекст не отдаётся
-никогда — очередь висит (капкан статусов, уже прожитый 20.08 с удалённой джобой).
-Оба условия охраняет контракт-тест `tests/contracts/test_gate_measures_merge_result.py`.
-
-Регресс к ручному опросу или снятие `merge_group` — это возвращение оплаченного дефекта,
-а не упрощение.
+# Только тесты
+python3 -m pytest tests/ -v
+```

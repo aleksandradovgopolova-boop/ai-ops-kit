@@ -377,6 +377,17 @@ def compute(child_root, budget_left=None, me=None):
     in_progress.sort(key=lambda r: r["id"])
     blocked.sort(key=lambda r: r["id"])
 
+    # #565: у ИДУЩИХ работ записанная ветка берётся из ЕДИНОЙ Work-проекции — того же источника, что
+    # у `work show`/`explain`/`status`. СЕЛЕКТИВНОСТЬ (ready/blocked/waiting) остаётся ВЫЧИСЛЯЕМОЙ из
+    # графа зависимостей — это другой вопрос, и проекция его не подменяет; дополняем лишь per-work
+    # факт, которого у `next` своего нет. READ-ONLY (project_work читает по контракту и не бросает на
+    # отсутствующих/битых источниках — каждый его reader глушит свой OSError/YAMLError у себя).
+    from ai_ops_kit.lifecycle import work_view as _wv
+    for _r in in_progress:
+        _v = _wv.project_work(_r["id"], child_root)
+        if _v.get("branch"):
+            _r["branch"] = _v["branch"]
+
     next_best = ready[0] if ready else None
     parallel, par_skipped = ([], [])
     if len(ready) > 1:
@@ -392,7 +403,15 @@ def compute(child_root, budget_left=None, me=None):
         stale = _stale.assess(child_root, plan_rel)
     except Exception:                                   # noqa: BLE001 — обзор не обязан ронять ответ
         stale = {"dead_references": [], "plan_behind": None, "error": "проверка протухания не выполнена"}
+    # #635: устаревшие РЕШЕНИЯ — та же линия «чего не спрашивали». Возраст + изменение связанных
+    # файлов после даты решения; advisory, не роняет ответ (как staleness выше).
+    try:
+        from ai_ops_kit.planning import decision_staleness as _dstale
+        stale_decisions = _dstale.assess_decisions(child_root)
+    except Exception:                                   # noqa: BLE001 — обзор не обязан ронять ответ
+        stale_decisions = []
     return {"schema_version": 1, "plan_present": True, "staleness": stale,
+            "stale_decisions": stale_decisions,
             "plan_errors": val["errors"], "plan_warnings": val["warnings"],
             "roadmap": {"errors": rm["errors"], "warnings": rm["warnings"]},
             "where_are_we": where, "in_progress": in_progress, "blocked": blocked,
@@ -474,11 +493,15 @@ def render(rep) -> str:
     # пустой раздел на каждом ответе обесценил бы его за неделю.
     st = rep.get("staleness") or {}
     dead, behind = st.get("dead_references") or [], st.get("plan_behind")
-    if dead or behind:
+    stale_dec = rep.get("stale_decisions") or []
+    if dead or behind or stale_dec:
         L.append("5. ЧЕГО НИКТО НЕ СПРАШИВАЛ")
         if behind:
             L.append(f"  план отстал от истории: {behind['commits']} изменени(й) влито после "
                      f"последней правки {behind['plan_rel']} — работа идёт мимо объявленного")
+        for dec in stale_dec[:5]:
+            L.append(f"  решение {dec['id']} может быть устаревшим: {dec['reason']} "
+                     "(advisory — пересмотр за вами, не блок)")
         for d in dead[:5]:
             L.append(f"  описание ссылается на то, чего нет: {d['doc']}:{d['line']} — "
                      f"{d['kind']} «{d['ref']}»")

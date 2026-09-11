@@ -297,3 +297,39 @@ class TestArtifactCoverage:
         cov = spec_levels.validate_spec(tmp_path, "never", self.ENG)
         assert cov["spec_artifact"] is False
         assert "note" in cov
+
+
+@pytest.mark.unit
+class TestEscalationDisclosure:
+    """escalation_disclosure(): форма спеки раскрывает эскалацию уровня ДО заполнения (исход 3 #768).
+
+    obs 8a891ce7: без заявленной тяжести (size/risk) классификация даёт L0 QUICK, и `specify` выдаёт
+    форму на 6 разделов, а `run`, получив тяжесть, эскалирует в L1 ENGINEERING (+9 разделов). Раскрытие
+    обязано случиться на `specify`, назвав уровень и разделы эскалации, — зеркало #838 на шаге plan.
+    """
+
+    def test_unweighted_task_is_provisional_and_names_the_escalated_level(self):
+        prov, disc = spec_levels.escalation_disclosure({"task_text": "открыть окошко"})
+        assert prov is True, "тяжесть не заявлена — классификация обязана быть предварительной"
+        assert disc["level_if_escalated"] == "L1 ENGINEERING"
+        assert disc["sections_if_escalated"], "форма L1 обязана добавлять разделы к L0"
+
+    def test_disclosure_names_exactly_the_sections_the_escalated_level_requires(self):
+        """Симметрия с #838: названы РОВНО разделы L1, которых нет в форме L0 (по required_sections)."""
+        _, disc = spec_levels.escalation_disclosure({})
+        l0 = set(spec_levels.required_sections(0))
+        expected = [s for s in spec_levels.required_sections(1) if s not in l0]
+        assert disc["sections_if_escalated"] == expected
+        assert "write_scope" in expected and "verification_strategy" in expected
+
+    def test_declared_weight_is_not_provisional(self):
+        """Заявлена тяжесть (size medium+/risk medium+) -> уровень окончателен, раскрытия нет."""
+        for sig in ({"size": "medium"}, {"risk": "high"}, {"size": "large", "risk": "critical"}):
+            prov, disc = spec_levels.escalation_disclosure(sig)
+            assert prov is False and disc is None, sig
+
+    def test_declared_task_type_is_not_provisional(self):
+        """Тип задачи заявлен явно -> человек выбрал уровень, ложной провизорности быть не должно."""
+        for tt in ("QUICK", "ENGINEERING", "PRODUCT"):
+            prov, disc = spec_levels.escalation_disclosure({"task_type": tt})
+            assert prov is False and disc is None, tt

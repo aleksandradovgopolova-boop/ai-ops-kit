@@ -181,3 +181,166 @@ def test_a_swapped_metric_is_caught():
     swapped = {**READOUT, "measured": {**READOUT["measured"], "metric": "clicks"}}
 
     assert any("подмена метрики" in e for e in vpo.cross_check(CONTRACT, swapped))
+
+
+# ─── outcome как узел графа: проекция + трассировка (#544) ────────────────────────────────────────
+
+from validate_knowledge_graph import load_dictionary, validate_graph  # noqa: E402
+
+
+def _feature_to_outcome_graph(outcome_fragment):
+    """Полный путь goal → initiative → epic → feature + фрагмент проекции outcome."""
+    return {
+        "schema_version": 1, "kind": "knowledge-graph",
+        "nodes": [
+            {"id": "grow-repeat", "type": "goal", "title": "Рост повторных покупок"},
+            {"id": "onboarding-init", "type": "initiative", "title": "Ускорить первый запуск"},
+            {"id": "provider-epic", "type": "epic", "title": "Выбор провайдера"},
+            {"id": "express-checkout", "type": "feature", "title": "Экспресс-чекаут"},
+            *outcome_fragment["nodes"],
+        ],
+        "edges": [
+            {"from": "grow-repeat", "type": "contains", "to": "onboarding-init"},
+            {"from": "onboarding-init", "type": "contains", "to": "provider-epic"},
+            {"from": "provider-epic", "type": "contains", "to": "express-checkout"},
+            *outcome_fragment["edges"],
+        ],
+    }
+
+
+def test_outcome_is_a_declared_entity_type_with_allowed_relations():
+    """`outcome` — тип первого класса в словаре, и ребро feature→outcome разрешено."""
+    types, rels = load_dictionary()
+
+    assert "outcome" in types
+    assert ("feature", "targets", "outcome") in rels
+
+
+def test_projection_yields_an_outcome_node_mirroring_the_contract():
+    """Проекция контракта+отчёта даёт ОДИН узел outcome с baseline/target/measured/verdict."""
+    frag = vpo.project_outcome(CONTRACT, READOUT, feature="express-checkout")
+    (node,) = frag["nodes"]
+
+    assert node["type"] == "outcome"
+    assert node["baseline"] == 0.58 and node["target"] == 0.75
+    assert node["measured"] == 0.71 and node["verdict"] == "no"
+    assert node["guardrails"] == ["время до первого агента"]
+    assert {"from": "express-checkout", "type": "targets", "to": node["id"]} in frag["edges"]
+
+
+def test_projection_without_a_readout_is_pending_not_met():
+    """Без отчёта вердикт — `pending` (состояние), а не выдуманный «met»/«unknown»."""
+    node = vpo.project_outcome(CONTRACT)["nodes"][0]
+
+    assert node["verdict"] == "pending"
+    assert "measured" not in node  # неизмеренное не подставляется нулём
+
+
+def test_projected_outcome_fragment_is_a_valid_graph(tmp_path):
+    """Спроецированный outcome встраивается в knowledge-graph и проходит валидатор связей."""
+    import yaml
+
+    frag = vpo.project_outcome(CONTRACT, READOUT, feature="express-checkout")
+    graph = _feature_to_outcome_graph(frag)
+    p = tmp_path / "graph.yaml"
+    p.write_text(yaml.safe_dump(graph, allow_unicode=True), encoding="utf-8")
+    types, rels = load_dictionary()
+
+    assert validate_graph(p, types, rels) == []
+
+
+def test_trace_returns_the_full_goal_to_outcome_chain():
+    """«Зачем существует функция»: цепочка goal → … → feature и привязанный outcome, без пробелов."""
+    frag = vpo.project_outcome(CONTRACT, READOUT, feature="express-checkout")
+    trace = vpo.trace_feature_rationale(_feature_to_outcome_graph(frag), "express-checkout")
+
+    assert [n["type"] for n in trace["chain"]] == ["goal", "initiative", "epic", "feature"]
+    assert trace["outcome"] is not None and trace["outcome"]["verdict"] == "no"
+    assert trace["gaps"] == []
+
+
+def test_trace_reports_honest_gaps_instead_of_fabricating_links():
+    """Неполный граф (нет цели сверху, нет outcome) отдаёт частичную цепочку с НАЗВАННЫМИ пробелами."""
+    lonely = {
+        "schema_version": 1, "kind": "knowledge-graph",
+        "nodes": [{"id": "express-checkout", "type": "feature", "title": "Экспресс-чекаут"}],
+        "edges": [],
+    }
+    trace = vpo.trace_feature_rationale(lonely, "express-checkout")
+
+    assert [n["id"] for n in trace["chain"]] == ["express-checkout"]
+    assert trace["outcome"] is None
+    assert any("до цели" in g for g in trace["gaps"])
+    assert any("outcome" in g for g in trace["gaps"])
+
+
+# ─── evaluate_outcome: ФЛИП вердикта из unknown в met/failed по РЕАЛЬНОМУ замеру (#566) ───────────
+# В отличие от project_outcome (зеркалит объявленный человеком target_met в граф) — здесь вердикт
+# СЧИТАЕТСЯ ИЗ ЧИСЕЛ: baseline → measured против target + guardrails. Это и есть замыкание петли.
+
+def test_evaluate_without_a_readout_is_unknown_not_a_verdict():
+    """Замера нет -> вердикт unknown (флипать нечем), is_real_measurement=False. unknown ≠ провал."""
+    r = vpo.evaluate_outcome(CONTRACT, None)
+    assert r["verdict"] == "unknown"
+    assert r["is_real_measurement"] is False
+
+
+def test_evaluate_flips_to_failed_when_measured_misses_target():
+    """0.71 против цели 0.75 от baseline 0.58 -> primary не дотянул -> failed (флип unknown→failed)."""
+    r = vpo.evaluate_outcome(CONTRACT, READOUT)
+    assert r["verdict"] == "failed"
+    assert r["is_real_measurement"] is True
+    assert r["primary_met"] is False and r["direction"] == "increase"
+
+
+def test_evaluate_flips_to_met_when_measured_reaches_target_and_guardrails_hold():
+    """Замер дотянул до цели и guardrail в норме -> met (флип unknown→met по реальному замеру)."""
+    readout = {**READOUT, "measured": {"metric": "completion_rate", "value": 0.78,
+                                       "measured_at": "2026-09-16"}, "target_met": "yes"}
+    r = vpo.evaluate_outcome(CONTRACT, readout)
+    assert r["verdict"] == "met"
+    assert r["primary_met"] is True and r["guardrail_breaches"] == []
+
+
+def test_evaluate_guardrail_breach_is_failed_even_if_primary_met():
+    """Guardrail пробит (within=False) -> failed, даже когда основная метрика взяла цель."""
+    readout = {**READOUT, "measured": {"metric": "completion_rate", "value": 0.90,
+                                       "measured_at": "2026-09-16"},
+               "guardrails_observed": [{"name": "время до первого агента", "value": "120 сек",
+                                        "within": False}]}
+    r = vpo.evaluate_outcome(CONTRACT, readout)
+    assert r["verdict"] == "failed"
+    assert r["primary_met"] is True
+    assert "время до первого агента" in r["guardrail_breaches"]
+
+
+def test_evaluate_without_a_date_is_a_number_from_head_not_a_measurement():
+    """Замер без measured_at -> unknown: как baseline без даты, «число из головы» итог не флипает."""
+    readout = {**READOUT, "measured": {"metric": "completion_rate", "value": 0.99}}
+    r = vpo.evaluate_outcome(CONTRACT, readout)
+    assert r["verdict"] == "unknown"
+    assert r["is_real_measurement"] is False
+
+
+def test_evaluate_respects_decrease_direction():
+    """Цель НИЖЕ baseline (меньше — лучше): замер ниже цели -> met; выше -> failed."""
+    contract = {**CONTRACT,
+                "baseline": {"value": 5.0, "measured_at": "2026-08-14", "source": "дашборд"},
+                "target": {"value": 2.0, "by": "2026-09-15"}, "guardrails": []}
+    hit = {**READOUT, "measured": {"metric": "x", "value": 1.5, "measured_at": "2026-09-16"},
+           "guardrails_observed": []}
+    miss = {**READOUT, "measured": {"metric": "x", "value": 3.0, "measured_at": "2026-09-16"},
+            "guardrails_observed": []}
+    assert vpo.evaluate_outcome(contract, hit)["verdict"] == "met"
+    assert vpo.evaluate_outcome(contract, miss)["verdict"] == "failed"
+
+
+def test_evaluate_numeric_guardrail_threshold_from_string_units():
+    """Порог '90 сек' и observed '86 сек' без флага within: численно 86<=90 -> не пробит -> met."""
+    contract = {**CONTRACT,
+                "guardrails": [{"name": "время до первого агента", "must_not_exceed": "90 сек"}]}
+    readout = {**READOUT, "measured": {"metric": "completion_rate", "value": 0.80,
+                                       "measured_at": "2026-09-16"},
+               "guardrails_observed": [{"name": "время до первого агента", "value": "86 сек"}]}
+    r = vpo.evaluate_outcome(contract, readout)
+    assert r["guardrail_breaches"] == [] and r["verdict"] == "met"

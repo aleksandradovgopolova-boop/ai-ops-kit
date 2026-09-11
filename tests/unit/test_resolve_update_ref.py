@@ -28,7 +28,12 @@ import yaml
 PKG_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG_ROOT / "installer"))
 
-import ai_ops as installer  # noqa: E402 — путь ставится выше
+import ai_ops  # noqa: E402 — путь ставится выше
+
+# resolve_update_ref и его зависимости (installed_version/child_allowed_range/channel_gap/…) переехали
+# в хаб installer/core.py; и вход, и monkeypatch внутренних вызовов должны идти по нему — иначе патч на
+# ai_ops не виден: хаб зовёт свои функции по имени внутри своего модуля.
+installer = ai_ops._core()  # noqa: E402
 
 CHANNELS_VOCAB = {
     "edge": {"requires": []},
@@ -167,6 +172,73 @@ def test_a_refusal_names_the_way_out(tmp_path, no_installed):
     assert res["best_earned"] == "qualification", res
     assert "update_channel: qualification" in res["reason"], res["reason"]
     assert "ранним получателем" in res["reason"]
+
+
+@pytest.mark.unit
+def test_in_range_tag_wins_over_a_shadowing_major(tmp_path, no_installed):
+    """P1 (аудит 04.09.2026): дочка на 3.x с диапазоном 3.x и тегами [3.40.0, 4.0.0].
+
+    Оба тега заработали канал, но 4.0.0 вне диапазона дочки. Без учёта диапазона resolve отдал бы
+    новейший (4.0.0), `cmd_update` увидел бы его вне диапазона и упал бы — ежедневная джоба
+    краснела бы каждый день после мажора, а безопасный 3.40.0 был бы заслонён. Здесь проверяем:
+    выбирается новейший ЗАРАБОТАВШИЙ И in-range тег — 3.40.0.
+    """
+    repo = _repo(tmp_path, [
+        ("v3.40.0", _claims("3.40.0", "qualification")),
+        ("v4.0.0", _claims("4.0.0", "qualification")),
+    ])
+    res = installer.resolve_update_ref(
+        "qualification", repo, allowed_range=">=3.0.0 <4.0.0")
+    assert res["ref"] == "v3.40.0", res
+    assert res["kind"] == "tag"
+
+
+@pytest.mark.unit
+def test_only_major_earned_is_a_soft_skip_naming_the_way_out(tmp_path, no_installed):
+    """Когда ВСЕ заработавшие теги вне диапазона (только мажор) — не тупик, а осознанный пропуск.
+
+    resolve не выдаёт мажор молча и называет выход: расширить диапазон или --force. Мажор-гейт цел.
+    """
+    repo = _repo(tmp_path, [("v4.0.0", _claims("4.0.0", "qualification"))])
+    res = installer.resolve_update_ref(
+        "qualification", repo, allowed_range=">=3.0.0 <4.0.0")
+    assert res["ref"] is None, res
+    assert res.get("range_blocked") is True, res
+    assert "v4.0.0" in res["reason"] and "--force" in res["reason"], res["reason"]
+
+
+@pytest.mark.unit
+def test_empty_range_keeps_prior_behaviour(tmp_path, no_installed):
+    """Пустой allowed_version_range — ограничений нет: берётся новейший заработавший тег."""
+    repo = _repo(tmp_path, [
+        ("v3.40.0", _claims("3.40.0", "qualification")),
+        ("v4.0.0", _claims("4.0.0", "qualification")),
+    ])
+    assert installer.resolve_update_ref(
+        "qualification", repo, allowed_range="")["ref"] == "v4.0.0"
+
+
+@pytest.mark.unit
+def test_out_of_range_update_is_a_soft_skip_not_a_failure(monkeypatch):
+    """P1: target вне allowed_version_range -> пропуск с rc=0, а не падение с rc=1.
+
+    Ежедневная джоба автообновления (`update --in-place`) не должна краснеть после мажора: выход за
+    диапазон — не сбой, а осознанное решение владельца (расширить диапазон / --force). Раньше здесь
+    был `return 1`, и каждая живая дочка краснела бы ежедневно после 4.0.0.
+    """
+    monkeypatch.setattr(installer, "installed_version", lambda: "3.39.0")
+    monkeypatch.setattr(installer, "pkg_version", lambda: "4.0.0")
+    monkeypatch.setattr(installer, "child_allowed_range", lambda: ">=3.0.0 <4.0.0")
+    monkeypatch.setattr(installer, "child_update_policy", lambda: "manual")
+    monkeypatch.setattr(installer, "channel_gap",
+                        lambda *a, **k: {"satisfied": True, "message": ""})
+    captured = {}
+    monkeypatch.setattr(installer, "write_report",
+                        lambda rep: captured.update(rep) or "report.json")
+    rc = ai_ops._update_ops().cmd_update(force=False, in_place=True)
+    assert rc == 0, "выход за диапазон обязан быть мягким пропуском, а не rc=1"
+    assert captured.get("status") == "skipped", captured
+    assert "4.0.0" in captured.get("report", ""), captured
 
 
 @pytest.mark.unit

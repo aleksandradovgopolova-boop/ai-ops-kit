@@ -127,3 +127,46 @@ def test_no_refresh_without_commit(tmp_path, monkeypatch):
         shell_changed=False, self_committed=False, head_sha=None,
         commit=False, reevaluate_only=False)
     assert calls == []
+
+
+# ─── describe: явная строка про статус-доки в теле PR (#404, вторая ветка) ────
+
+@pytest.mark.unit
+def test_describe_reports_managed_doc_fresh_after_delivery(tmp_path):
+    """После доставки (refresh бампнул reviewed_at на сегодня) describe видит управляемый док свежим."""
+    _write(tmp_path, "context/product/ProductStatus.md", reviewed="2026-01-01")
+    ls.refresh(tmp_path, "W-1", "задача", today=TODAY)
+    d = ls.describe(tmp_path, today=TODAY)
+    assert d == {"managed": True, "doc": "context/product/ProductStatus.md",
+                 "reviewed_at": TODAY, "fresh_today": True}
+
+
+@pytest.mark.unit
+def test_describe_managed_doc_not_fresh_when_not_bumped(tmp_path):
+    """Управляемый док есть, но его reviewed_at не сегодняшний -> fresh_today=False (честный сигнал)."""
+    _write(tmp_path, "context/product/ProductStatus.md", reviewed="2026-01-01")
+    d = ls.describe(tmp_path, today=TODAY)
+    assert d["managed"] is True and d["fresh_today"] is False and d["reviewed_at"] == "2026-01-01"
+
+
+@pytest.mark.unit
+def test_describe_names_reason_when_no_status_doc(tmp_path):
+    """Дока нет вовсе -> managed=False с причиной-исключением, а не молчание."""
+    d = ls.describe(tmp_path, today=TODAY)
+    assert d["managed"] is False and "нет статус-дока" in d["reason"]
+
+
+@pytest.mark.unit
+def test_describe_names_reason_for_template_doc(tmp_path):
+    """Статус-док помечен шаблоном -> причина называет именно это (кит его не трогает)."""
+    _write(tmp_path, "context/product/ProductStatus.md", template=True)
+    d = ls.describe(tmp_path, today=TODAY)
+    assert d["managed"] is False and "шаблон" in d["reason"]
+
+
+@pytest.mark.unit
+def test_describe_names_reason_for_doc_without_freshness_convention(tmp_path):
+    """Файл-кандидат есть, но без reviewed_at/stability -> причина про неприменимость гейта свежести."""
+    _write(tmp_path, "PROJECT_STATUS.md", frontmatter=False)
+    d = ls.describe(tmp_path, today=TODAY)
+    assert d["managed"] is False and "свежести" in d["reason"]

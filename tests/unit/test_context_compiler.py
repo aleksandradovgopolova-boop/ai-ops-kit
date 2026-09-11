@@ -4,15 +4,23 @@
 """
 from __future__ import annotations
 
+import functools
+
 import pytest
 
 from ai_ops_kit.context.context_compiler import (
     CONTEXT_BUDGET_DEFAULT,
     MODEL_CONTEXT,
     Path,
-    build_payload,
-    compile_bundle,
 )
+from ai_ops_kit.context.context_compiler import build_payload as _build_payload
+from ai_ops_kit.context.context_compiler import compile_bundle as _compile_bundle
+from ai_ops_kit.engine.run_plan import build_plan as _build_plan
+
+# K2: context не строит RunPlan сам — план инъецируется. В тестах строитель настоящий
+# (engine.run_plan.build_plan), поэтому подставляем его по умолчанию, а вызовы остаются как есть.
+compile_bundle = functools.partial(_compile_bundle, build_plan=_build_plan)
+build_payload = functools.partial(_build_payload, build_plan=_build_plan)
 
 
 @pytest.fixture
@@ -121,3 +129,87 @@ class TestBuildPayload:
     def test_payload_model_window(self, repo, eng_task):
         pay_m = build_payload(eng_task, repo, context_budget=500_000, model="deepseek-chat")
         assert pay_m["context_budget"] == MODEL_CONTEXT["deepseek-chat"]
+
+
+@pytest.mark.unit
+class TestStorybookNavigationWiring:
+    """#613: живой потребитель storybook_query — при ui_changed навигация по дизайн-системе
+    дочки попадает в контекст пишущего агента."""
+
+    def _repo_with_storybook(self, tmp_path):
+        import json as _json
+        (tmp_path / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
+        (tmp_path / "storybook-static").mkdir()
+        (tmp_path / "storybook-static" / "index.json").write_text(_json.dumps({"v": 5, "entries": {
+            "ui-button--default": {"type": "story", "id": "ui-button--default", "title": "UI/Button",
+                "name": "Default", "importPath": "./src/ui/Button.stories.tsx"}}}), encoding="utf-8")
+        return tmp_path
+
+    def test_ui_changed_injects_storybook_navigation(self, tmp_path):
+        root = self._repo_with_storybook(tmp_path)
+        p = build_payload({"task_text": "поправить кнопку", "ui_changed": True,
+                           "changed_files": ["src/ui/Button.tsx"]}, root)
+        assert "storybook-navigation" in p["text"]
+        assert "UI/Button" in p["text"]
+        assert any(i["kind"] == "storybook" for i in p["included_items"])
+
+    def test_no_storybook_section_without_ui_signal(self, tmp_path):
+        root = self._repo_with_storybook(tmp_path)
+        p = build_payload({"task_text": "починить бэкенд"}, root)   # ui_changed отсутствует
+        assert "storybook-navigation" not in p["text"]
+
+    def test_no_storybook_section_when_child_has_no_storybook(self, repo):
+        p = build_payload({"task_text": "поправить кнопку", "ui_changed": True}, repo)
+        assert "storybook-navigation" not in p["text"]   # не шумим на не-Storybook дочке
+
+
+# ─── #678: генератор сам проверяет форму собранного ContextBundle (validate-and-warn) ──────────
+
+class TestCompileBundleValidatesItsOwnShape:
+    def test_valid_bundle_emits_no_warning_and_check_is_green(self, repo, eng_task):
+        """Реальный compile_bundle -> валидный ContextBundle: ни предупреждения, ни ошибок check()."""
+        import warnings as _w
+
+        from ai_ops_kit.checks.context_bundle import check
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            b = compile_bundle(eng_task, repo)
+        assert not [x for x in caught if issubclass(x.category, RuntimeWarning)], \
+            [str(x.message) for x in caught]
+        assert check(b) == []
+
+    def test_overflow_bundle_also_green(self, repo, eng_task):
+        """Ветка overflow (крохотный бюджет) тоже даёт валидный bundle — без ложного warn."""
+        import warnings as _w
+
+        from ai_ops_kit.checks.context_bundle import check
+        with _w.catch_warnings(record=True) as caught:
+            _w.simplefilter("always")
+            b = compile_bundle(eng_task, repo, context_budget=10)
+        assert not [x for x in caught if issubclass(x.category, RuntimeWarning)], \
+            [str(x.message) for x in caught]
+        assert check(b) == []
+
+    def test_warn_helper_fires_on_malformed_bundle(self):
+        """Битый ContextBundle -> генератор ГРОМКО предупреждает (bundle становится payload модели)."""
+        from ai_ops_kit.context.context_compiler import _warn_if_bundle_malformed
+        bad = {"kind": "ContextBundle", "workitem_id": "x", "included": "не объект",
+               "excluded": [], "estimated_tokens": 1, "context_budget": 1}
+        with pytest.warns(RuntimeWarning, match="нарушением формы"):
+            _warn_if_bundle_malformed(bad)
+
+
+@pytest.mark.unit
+class TestContextDoesNotImportEngine:
+    """K2-развязка слоёв: context не строит RunPlan сам и не импортирует engine."""
+
+    def test_compile_bundle_requires_plan_or_builder(self, repo, eng_task):
+        """Без plan и без build_plan — явная ошибка, а не тихий импорт engine."""
+        with pytest.raises(ValueError, match="context не импортирует engine"):
+            _compile_bundle(eng_task, repo)
+
+    def test_source_has_no_engine_import(self):
+        """В исходнике context_compiler нет ссылки на engine — ни статической, ни динамической."""
+        src = (Path(__file__).resolve().parents[2] / "ai_ops_kit" / "context"
+               / "context_compiler.py").read_text(encoding="utf-8")
+        assert "ai_ops_kit.engine" not in src, "context_compiler не должен упоминать engine"

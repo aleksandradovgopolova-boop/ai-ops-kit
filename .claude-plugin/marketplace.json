@@ -1,0 +1,23 @@
+{
+  "name": "ai-ops",
+  "owner": {
+    "name": "Aleksandra Dovgopolova",
+    "url": "https://github.com/aleksandradovgopolova-boop"
+  },
+  "metadata": {
+    "description": "AI Ops Kit — AI-операционная система продуктовой команды, доступная как плагин Claude Code."
+  },
+  "plugins": [
+    {
+      "name": "ai-ops",
+      "displayName": "AI Ops Kit",
+      "source": ".",
+      "version": "4.0.0",
+      "description": "Запуск AI Ops Kit из Claude Code: status / inbox / next / explain / do (+ run / model / review). Интерфейс владельца 4+1 над рантайм-агностичным движком.",
+      "author": {
+        "name": "Aleksandra Dovgopolova",
+        "url": "https://github.com/aleksandradovgopolova-boop"
+      }
+    }
+  ]
+}

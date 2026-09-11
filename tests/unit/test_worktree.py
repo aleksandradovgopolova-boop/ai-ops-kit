@@ -44,6 +44,20 @@ class TestAdd:
         assert rc == 0
         assert (git_repo / ".ai/worktrees/wi-1").is_dir()
 
+    def test_add_prints_worktree_line_by_default(self, git_repo, capsys):
+        add(git_repo, "wi-1", "feature/wi-1")
+        err = capsys.readouterr().err
+        assert "WORKTREE:" in err and "wi-1" in err
+
+    def test_add_quiet_suppresses_the_line(self, git_repo, capsys):
+        # #708: на product строку про копию даёт active-work одной человеческой фразой —
+        # id-насыщенный дубль WORKTREE глушим. Каталог всё равно создан.
+        rc = add(git_repo, "wi-1", "feature/wi-1", quiet=True)
+        out, err = capsys.readouterr()
+        assert rc == 0
+        assert (git_repo / ".ai/worktrees/wi-1").is_dir()
+        assert "WORKTREE:" not in err and "WORKTREE:" not in out
+
     def test_add_list_contains_new_worktree(self, git_repo):
         add(git_repo, "wi-1", "feature/wi-1")
         rc, out, _ = _git(git_repo, "worktree", "list", "--porcelain")

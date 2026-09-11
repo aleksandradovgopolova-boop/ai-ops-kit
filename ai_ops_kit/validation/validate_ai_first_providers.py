@@ -10,7 +10,7 @@
   6. секреты: имена env — только UPPER_SNAKE; литеральных значений credentials быть не должно;
   7. запуск движка маршрутизации (ai_route) на примерах — форма решения корректна.
 
-Использование:  python3 02_tools/ci/validate_ai_first_providers.py
+Использование:  python3 -m ai_ops_kit.validation.validate_ai_first_providers
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
 from __future__ import annotations
@@ -124,7 +124,7 @@ def check_routing(policy, prov_ids, classes):
 
 def check_router():
     try:
-        from ai_ops_kit.engine import ai_route
+        from ai_ops_kit.shared import ai_route
     # Причина подавления (2026-08-12): непроходимый импорт движка — это находка валидатора, а
     # не его собственная авария; текст исключения уходит в отчёт. Тип широкий намеренно:
     # сломанный модуль может поднять что угодно на уровне импорта.

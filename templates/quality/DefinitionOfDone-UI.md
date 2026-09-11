@@ -37,7 +37,7 @@ UI-изменение **done**, когда для его тира:
 
 1. `ui_impact` определён и (для нетривиальных решений) зафиксирован в `ArchitectureDecision`;
 2. затронутые компоненты имеют stories; обязательные состояния покрыты (по тиру);
-3. `UIEvidenceBundle` собран на текущем SHA и **валиден** (`validation/validate_storybook_evidence.py`):
+3. `UIEvidenceBundle` собран на текущем SHA и **валиден** (`ai_ops_kit/validation/validate_storybook_evidence.py`):
    interaction `pass`, a11y `blocking_violations=0`, visual `pass`, design-system без необоснованных
    новых компонентов;
 4. блокирующие по тиру гейты закрыты (evidence или ревью); `critical` — с human sign-off;

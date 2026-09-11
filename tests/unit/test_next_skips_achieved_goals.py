@@ -147,7 +147,7 @@ def test_real_plan_is_not_advised_from_a_closed_goal():
     # засчитывается ТОЛЬКО если названо, что именно удержано. «Ничего» и «ничего, потому что вот
     # это» — разные ответы.
     if best is None:
-        withheld = (rep.get("blocked") or []) + (rep.get("held") or [])
+        withheld = (rep.get("blocked") or []) + (rep.get("held") or []) + (rep.get("in_progress") or [])
         assert withheld, f"совета нет и НЕ СКАЗАНО почему: {rep.get('gap')}"
         return
 

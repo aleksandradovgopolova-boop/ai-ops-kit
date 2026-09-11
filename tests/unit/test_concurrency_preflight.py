@@ -119,3 +119,75 @@ class TestPrsOverlap:
         recs = [{"number": 7, "title": "A", "files": ["src/a.ts", "src/b.ts"]},
                 {"number": 8, "title": "B", "files": ["docs/x.md"]}]
         assert _prs_overlap(recs, ["src/c.ts"]) == []
+
+
+@pytest.mark.unit
+class TestParseOwnerRepoInjection:
+    """Находка P2#2: owner/repo из remote идёт в путь/квери GitHub API — символы вне
+    [A-Za-z0-9._-] (инъекция квери/сегмента) должны давать None, а не «валидный» repo."""
+
+    def test_query_injection_name_rejected(self):
+        # '?' в имени подмешал бы квери в /repos/owner/<name>?...  -> fail-closed None
+        assert _parse_owner_repo("https://github.com/acme/ev?il.git") is None
+
+    def test_path_traversal_name_rejected(self):
+        # '..' как сегмент -> обход /repos/acme/../...  -> None
+        assert _parse_owner_repo("https://github.com/acme/..") is None
+        assert _parse_owner_repo("https://github.com/../widget") is None
+
+    def test_valid_still_parsed(self):
+        # защита не ломает счастливый путь (в т.ч. точки/дефисы в имени)
+        assert _parse_owner_repo("https://github.com/a.cme/wid-get.js") == ("a.cme", "wid-get.js")
+
+    def test_rest_bails_on_injection_remote(self, git_repo, monkeypatch):
+        import ai_ops_kit.gates.concurrency_preflight as _cpmod
+        monkeypatch.setattr(_cpmod, "_github_token", lambda: "tok")
+        monkeypatch.setattr(_cpmod, "_git", lambda repo, *a: (0, "https://github.com/acme/x?y.git", ""))
+        # ни одного HTTP-вызова быть не должно: инъекционный remote -> unavailable, а не «checked»
+        monkeypatch.setattr(_cpmod, "_gh_api_get", lambda *a, **k: pytest.fail("HTTP call on injection remote"))
+        rest = open_prs_via_rest(git_repo, ["f.txt"])
+        assert rest["status"] == "unavailable"
+
+
+@pytest.mark.unit
+class TestRestPagination:
+    """Находка P2#1: файлы PR берутся постранично до конца. PR с >100 файлами и
+    пересечением на «следующей странице» без пагинации давал ложно-clean."""
+
+    def _fake_api(self, files_pages):
+        """Строит fake _gh_api_get: один открытый PR #1, файлы отдаются страницами files_pages."""
+        import urllib.parse as _up
+
+        def _api(path, token):
+            q = _up.parse_qs(_up.urlparse(path).query)
+            page = int(q.get("page", ["1"])[0])
+            if "/pulls/1/files" in path:
+                idx = page - 1
+                return files_pages[idx] if 0 <= idx < len(files_pages) else []
+            if "/pulls" in path:  # список PR: одна страница с единственным PR
+                return [{"number": 1, "title": "big pr"}] if page == 1 else []
+            return []
+        return _api
+
+    def _wire(self, monkeypatch, api):
+        import ai_ops_kit.gates.concurrency_preflight as _cpmod
+        monkeypatch.setattr(_cpmod, "_github_token", lambda: "tok")
+        monkeypatch.setattr(_cpmod, "_git",
+                            lambda repo, *a: (0, "https://github.com/acme/widget.git", ""))
+        monkeypatch.setattr(_cpmod, "_gh_api_get", api)
+
+    def test_collision_on_next_page_detected(self, git_repo, monkeypatch):
+        # страница 1 — ровно 100 непересекающихся файлов; страница 2 — пересекающийся путь.
+        page1 = [{"filename": f"noise/{i}.txt"} for i in range(100)]
+        page2 = [{"filename": "target/collide.ts"}]
+        self._wire(monkeypatch, self._fake_api([page1, page2]))
+        rest = open_prs_via_rest(git_repo, ["target/collide.ts"])
+        # без пагинации сюда пришло бы 0 совпадений (ложно-clean) — с пагинацией PR #1 найден
+        assert rest["status"] == "checked"
+        assert [p["number"] for p in rest["prs"]] == [1]
+
+    def test_pages_stop_before_max(self, git_repo, monkeypatch):
+        # короткая первая страница (<100) — конец, не partial
+        self._wire(monkeypatch, self._fake_api([[{"filename": "a.txt"}]]))
+        rest = open_prs_via_rest(git_repo, ["b.txt"])
+        assert rest["status"] == "checked" and rest["prs"] == []

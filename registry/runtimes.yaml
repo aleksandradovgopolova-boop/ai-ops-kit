@@ -123,6 +123,15 @@ runtimes:
   qwen-code:
     display_name: Qwen Code
     kind: cli-agent
+    mvp_adapter: true
+    adapter_depth: generated-commands
+    adapter_note: >
+      Адаптер генерирует .qwen/commands/ (ai_ops_kit/shared/generate_runtime.py, профиль
+      qwen-code) и ставит их при install, если рантайм включён в .ai-ops.yaml. Формат — тот же,
+      что у Qwen Code: markdown + YAML-фронтматтер (description), слэш-вызов /ai-<workflow>.
+      Стадии, handoff и enforcement гейтов исполняет сам Qwen Code, следуя командам; код кита их
+      в этом рантайме не оркестрирует. Полное исполнение контракта с блокировкой гейтов —
+      через generic-orchestrator.
     default_provider: qwen
     execution_modes: [native, sequential]
     preferred_mode: sequential
@@ -131,8 +140,9 @@ runtimes:
       tools: {status: documented, value: true}
       file_read: {status: documented, value: true}
       file_write: {status: documented, value: true}
+    agent_packaging: markdown+frontmatter
     command_loading: ".qwen/commands/"
-    last_documented_at: "2026-07-08"
+    last_documented_at: "2026-09-07"
 
   opencode:
     display_name: OpenCode

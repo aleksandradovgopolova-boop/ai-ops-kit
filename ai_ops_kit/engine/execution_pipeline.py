@@ -47,7 +47,7 @@ from ai_ops_kit.engine.pipeline_helpers import (  # noqa: E402,F401
 from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
     _git, _has_changes, _head_advanced, _tree_clean, _TOOL_CACHE_RE, _tree_clean_after_checks,
     _untracked, _committed_changed_files, _commit_on_branch, _resolve_base,
-    _verify_remote_base, _change_context, _change_context_range,
+    _verify_remote_base, _reverify_against_current_target, _change_context, _change_context_range,
     delivery_preflight as _delivery_preflight,
     managed_drift_preflight as _managed_drift_preflight,
 )
@@ -75,7 +75,7 @@ from ai_ops_kit.engine.pipeline_readiness import (  # noqa: E402,F401
 # тесты через execution_pipeline.X). run_pipeline остаётся здесь.
 from ai_ops_kit.engine.pipeline_setup import (  # noqa: E402,F401
     _setup_isolation, _prepare_environment, _commit_work, _assemble_evidence,
-    _seam_scan_advisory,
+    _seam_scan_advisory, _provision_kit_gate_tools, _coordinator_bin_dir,
 )
 
 
@@ -109,10 +109,13 @@ def _build_containment(sandbox, pol, loop):
             "shell_path_violations": sum(
                 len(((e.get("fs_guard") or {}).get("violations")) or [])
                 for e in (loop.get("evidence") or [])),
+            # R-43/#786: перечень обязан совпадать с честным списком в шапке tool_broker.py.
             "note": "enforceable-подмножество на уровне брокера: пути закрыты на обоих "
-                    "каналах (write — до, shell — пост-фактум с откатом); запись вне "
-                    "корня репозитория, сеть и не-git деревья — по-прежнему нет; полная "
-                    "FS/сеть/ресурс-изоляция — контейнерный runtime"}
+                    "каналах (write — до, shell — пост-фактум с откатом, и неудача отката "
+                    "называется, а не скрывается); запись вне корня репозитория, сеть, "
+                    "не-git деревья и ИГНОРИРУЕМЫЕ файлы внутри protected-путей (R-43, "
+                    "открыт) — по-прежнему нет; полная FS/сеть/ресурс-изоляция — "
+                    "контейнерный runtime"}
 
 
 def _plan_delivery(open_pr, ready, committed_sha, work_branch, base_binding, base_ref, base_sha,
@@ -161,22 +164,24 @@ def _deliver_pr(work_root, work_branch, base_ref, base_sha, base_binding, commit
                         reason=f"base '{base_ref}' не разрешилась в ветку: {base_binding.get('reason')} "
                                "— PR к произвольному HEAD не открываем")
         return delivery
-    _rv = _verify_remote_base(work_root, base_ref, base_sha)
-    if _rv.get("verdict") == "unverifiable":
+    _rev = _reverify_against_current_target(work_root, base_ref, base_sha, committed_sha)
+    if _rev.get("verdict") == "unverifiable":
         delivery.update(status="unavailable",
-                        reason=f"remote-base-unverified: {_rv.get('reason')} — доставка невозможна fail-closed")
+                        reason=f"remote-base-unverified: {_rev.get('reason')} — доставка невозможна fail-closed")
         return delivery
-    if _rv.get("verdict") == "verified-moved":
-        delivery.update(status="not-attempted",
-                        reason=f"remote base сдвинулась (validated {base_sha[:12]} != remote "
-                               f"{(_rv.get('remote_sha') or '?')[:12]}) — нужна ревалидация; PR не открыт")
+    if _rev.get("stale"):
+        delivery.update(status="stale-needs-reverify", reason=_rev.get("reason"),
+                        evidence_base=_rev.get("evidence_base"),
+                        current_target=_rev.get("current_target"), merge_preview=_rev.get("merge_preview"))
         return delivery
     from ai_ops_kit.delivery import pr_open
+    from ai_ops_kit.engine import living_status as _living_status
+    # #404: тело PR называет судьбу статус-доков — обновлены или почему нет; read-only, не бросает.
+    status_docs = _living_status.describe(work_root)
     pr = pr_open.open_draft_pr(work_root, work_branch, title=f"ai-ops: {task[:60]}", base=base_ref,
-                               body=f"Автопрогон AI Ops. WorkItem: {wid}. База {base_ref} "
-                                    f"({base_sha[:12]}) → evidence на {committed_sha}.",
+                               body=pr_open.pr_body(wid, base_ref, base_sha, committed_sha, status_docs),
                                delivery_id=delivery_id)
-    delivery.update(status=(pr or {}).get("status"), pr=pr)
+    delivery.update(status=(pr or {}).get("status"), pr=pr, status_docs=status_docs)
     return delivery
 
 
@@ -191,10 +196,10 @@ def _pipeline_check_spec_drift(task, signals, child_root, feature, write_scope, 
                                max_steps, commit, baseline_diff, require_fix, sandbox,
                                review, author):
     """Фаза K0-проводки: параметры прогона обязаны оставаться подмножеством объявленного
-    контракта ядра (kernel/ports.ExecutionSpec). Это НЕ проверка реализации портов (реализации
-    им ещё не соответствуют — долг Phase B, записан в installer.UNWIRED_MODULES), а страж
-    дрейфа КОНТРАКТА: переименование поля в ports.py или новый параметр без записи в контракт
-    краснеет на каждом прогоне, в том числе в дочке."""
+    контракта ядра (kernel/ports.ExecutionSpec). kernel/ports — контракт ТИПОВ, не шов с
+    внедряемыми реализациями (Phase B DI не преследуется), поэтому это страж дрейфа КОНТРАКТА,
+    а не проверка реализаций: переименование поля в ports.py или новый параметр без записи в
+    контракт краснеет на каждом прогоне, в том числе в дочке."""
     from ai_ops_kit.kernel import ports as _kports
     _spec: _kports.ExecutionSpec = {
         "task": task, "signals": dict(signals or {}), "child_root": str(child_root),
@@ -246,6 +251,10 @@ def _pipeline_run_gates(plan, gate_ev, committed_sha, signals, not_applicable, e
     _opinion = _cl.get("judged_or_human") or []
     print(f"  гейты: проверено машиной {_cnt.get('validator', 0)} из {len(_gate_ids)}"
           + (f"; остальное — мнение: {', '.join(_opinion)}" if _opinion else "; мнением не закрыт ни один"))
+    # веха 4.2 (#588): вердикт честности evidence — «зелёное» без детерминированной опоры advisory.
+    _ev = gates.get("evidence_verdict") or {}
+    if _ev and not _ev.get("verified") and _ev.get("advisory"):
+        print(f"  evidence: {_ev.get('reason')}")
 
     # v3.8.3: персистим ПРОЙДЕННОЕ gate-evidence билда (кроме security) по committed_sha в worktree/.ai —
     # чтобы последующий reevaluate (после человеко-approval) переиспользовал model-вердикт code_review и
@@ -379,7 +388,8 @@ def _pipeline_assess_readiness(gates, coll, signals, plan, child_root, wid, work
         "approval_recheck": approval_recheck, "approvals_cover_ok": approvals_cover_ok,
         "contour_consistency": contour_consistency, "ready": ready, "ready_criterion": ready_criterion,
         "acceptance_block": acceptance_block, "acceptance_block_reason": acceptance_block_reason,
-        "baseline_diff": baseline_diff, "baseline_checks": baseline_checks}
+        "baseline_diff": baseline_diff, "baseline_checks": baseline_checks,
+        "unstable_checks": _rd.get("unstable_checks") or []}  # #405: pass<->fail флип, шум ВХОДА
 
 
 def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, applied,
@@ -429,7 +439,12 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
                     "undetermined": profile.get("undetermined", [])},
         "containment": _build_containment(sandbox, pol, loop),
         "loop": _build_loop_section(loop, applied),
-        "isolation": {"worktree": worktree_rel},   # каталог изоляции (None -> прогон в основном дереве)
+        # P1 (аудит «непесочный дефолт + сеть ON»): поза изоляции ВИДНА, а не молчит. Дефолт
+        # sandbox=False НЕ флипаем (флип сломал бы прогоны без Docker) — закрываем находку ЧЕСТНОСТЬЮ:
+        # sandboxed/network едут в отчёт, а рендер называет пониженную изоляцию человеку.
+        "isolation": {"worktree": worktree_rel,     # каталог изоляции (None -> прогон в основном дереве)
+                      "sandboxed": bool(sandbox),
+                      "network": "on" if pol.allow_network else "restricted"},
         "base_binding": base_binding,              # v3.0.1 (P0): base_ref + base_sha, от которого форкнута ветка
         "resume": resume_info,                     # v2.109: продолжение поверх подтверждённой работы (None если resume не запрошен)
         "prepare": prepare,                        # установка зависимостей стека (npm ci/... ) в worktree; None вне изоляции
@@ -453,6 +468,9 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
                   # «гейты пройдены» одинаково и там, где считала машина, и там, где высказался
                   # судья. 19 гейтов из 35 не имеют валидатора вовсе.
                   "closure": gates.get("closure"),
+                  # веха 4.2 (#588): вердикт честности evidence — verified привилегирует
+                  # детерминированные сигналы; AI-суждение advisory видно, а не выдаётся за доказательство.
+                  "evidence_verdict": gates.get("evidence_verdict"),
                   # evidence/аудит (аудит v2.79): полные per-gate результаты, не только сводка
                   "gate_results": gates.get("gate_results"),
                   "tested_revision": committed_sha},
@@ -486,8 +504,8 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
         "authored": authored,
         # baseline-diff: None вне режима; иначе — статусы проверок на базе + регрессии/починки
         "baseline": ({"checks": {k: (v or {}).get("status") for k, v in (baseline_checks or {}).items()},
-                      "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions}
-                     if baseline_diff else None),
+                      "regressions": regressions, "fixed": fixed, "no_regressions": no_regressions,
+                      "unstable_checks": rd.get("unstable_checks") or []} if baseline_diff else None),
         "ready_criterion": ready_criterion,    # all-green | no-regressions
         # v2.106 enforcement: spec-depth (незакрытые разделы уровня, мапящиеся на unmet-гейты) и
         # context-budget overflow — блокируют ready наравне с гейтами.

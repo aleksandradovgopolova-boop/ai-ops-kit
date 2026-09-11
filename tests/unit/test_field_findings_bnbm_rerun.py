@@ -22,6 +22,8 @@ import pytest
 PKG = Path(__file__).resolve().parents[2]
 WRAPPER = PKG / "templates" / "runtime" / "ai-ops-entry.sh"
 INSTALLER = PKG / "installer" / "ai_ops.py"
+DOCTOR = PKG / "installer" / "doctor.py"        # cmd_doctor вынесен сюда (разрез монолита)
+UPDATE = PKG / "installer" / "update_ops.py"    # cmd_update/status/diff вынесены сюда
 
 
 # ─── B2-15 ─────────────────────────────────────────────────────────────────────────────────────
@@ -62,18 +64,19 @@ def test_an_older_neighbour_copy_does_not_block_the_child():
     Дочка с 3.36.10 получала блокирующее «нужен update» против 3.36.8, и выполнение совета понизило
     бы её. Сравнение стало версионным, а не «!=».
     """
-    src = INSTALLER.read_text(encoding="utf-8")
+    # cmd_doctor вынесен в сателлит installer/doctor.py; общие функции читаются через `_ao()`.
+    src = DOCTOR.read_text(encoding="utf-8")
 
-    assert 'parse_version(inst or "0") < parse_version(avail)' in src, (
+    assert '_core().parse_version(inst or "0") < _core().parse_version(avail)' in src, (
         "сравнение версий в doctor снова строгое неравенство — понижение будет считаться апдейтом")
     assert "понижение версии обновлением не является" in src
 
 
 def test_the_doctor_message_names_where_it_found_the_other_version():
     """«Рядом лежит» без адреса не позволяет понять, о какой копии речь."""
-    src = INSTALLER.read_text(encoding="utf-8")
+    src = DOCTOR.read_text(encoding="utf-8")
 
-    assert "в источнике {PKG} лежит" in src, "путь источника не назван в блокирующем сообщении"
+    assert "в источнике {_ao().PKG} лежит" in src, "путь источника не назван в блокирующем сообщении"
 
 
 # ─── B2-18 ─────────────────────────────────────────────────────────────────────────────────────
@@ -156,7 +159,8 @@ def test_status_compares_content_not_only_version_numbers():
     изменений — версия не менялась, менялось содержимое. Владелец, поверивший первому ответу, не
     получал ничего из влитой работы.
     """
-    src = INSTALLER.read_text(encoding="utf-8")
+    # cmd_status/cmd_diff вынесены в сателлит installer/update_ops.py (разрез монолита).
+    src = UPDATE.read_text(encoding="utf-8")
     head = src[src.index("def cmd_status():"):src.index("def cmd_diff():")]
 
     assert "build_diff()" in head, "status снова не смотрит на содержимое"
@@ -209,7 +213,6 @@ def test_every_installer_command_is_routed_by_the_wrapper():
     # ДВЕ СТОРОНЫ, А НЕ ОДНА. Слева — команда установщика без маршрута (недостижима). Справа —
     # имя, объявленное «за движком», которого движок не знает: тогда команда пропала бы совсем.
     import sys as _sys
-    _sys.path.insert(0, str(PKG / "tools"))
     from ai_ops_kit.cli import ai_ops_cli as _cli
     orphan = sorted(n for n in intent_owned if n not in _cli.INTENTS)
     assert not orphan, (f"объявлено, что команду обслуживает движок, но такого интента нет: "

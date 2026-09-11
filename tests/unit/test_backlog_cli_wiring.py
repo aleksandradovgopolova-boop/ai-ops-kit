@@ -12,7 +12,6 @@ from pathlib import Path
 import pytest
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.cli import ai_ops_cli # noqa: E402
 from ai_ops_kit.integrations import github as gh  # noqa: E402

@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 4.0.0
+  package_version: 4.1.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -32,7 +32,6 @@ registries:
   capability_index: registry/capability-index.yaml
   routing: config/model-routing.yaml          # расширяется на Ф6
   entities: registry/entities.yaml            # Knowledge Graph: типы и связи (v2.0)
-  skills_catalog: registry/skills-catalog.yaml # v2.12: внешние скиллы (declared), ставятся на уровне child
 
 workflows:
   mvp: [QUICK, ENGINEERING, PRODUCT, RESEARCH]
@@ -97,12 +96,18 @@ quality_gates:
   count_pinned_by_claims: [gate-count, mvp-blocking-count]   # knowledge/claims.yaml (тип count)
 
 agents:
-  registered: 51             # 38 (v1.0) + 7 ревьюеров (v1.4) + 3 research-pack (v2.1) + 3 AI Product Pack (v2.4)
-  core_target: 12            # целевой минимальный CORE после merge (Ф2-3)
+  registered: 42             # #679: 47 − 5 исполнителей + 1 data-engineer = 43; − development-orchestrator = 42.
+                             #  Ранее: 51 − 4 растворённых источника (repository-explorer,
+                             #  system-analyst, business-analyst, prompt-reviewer).
+  core_target: 12            # целевой минимальный CORE после остальных merge (Ф2-3)
   core_target_note: >
-    В реестре 16 файлов с target_layer=core: 10 сохраняемых + 3 новых (create) + 3 merge-источника
-    (repository-explorer, system-analyst, business-analyst). После merge источники схлопываются
-    в context-builder и requirements-writer, давая итоговые 12 core-агентов.
+    Растворены 4 merge/adapt-источника (Тир-2 #679): repository-explorer -> context-builder;
+    system-analyst и business-analyst -> requirements-writer; prompt-reviewer -> plan-reviewer.
+    Свёрнуты preset-исполнители: fullstack-developer поглотил backend+frontend; новый data-engineer
+    поглотил database+integration+migration. Растворён development-orchestrator в
+    implementation-integrator (инертен — оркестрацию стадий делает generic-orchestrator движка).
+    user-researcher оставлен как отдельный агент (решение владельца 09.09.2026). Дальнейшее движение
+    к core_target=12 — за счёт загрузки по presets, а не удаления агентов.
 
 providers:
   status: integrated          # Ф6: реестры + декларативный routing + self-test
@@ -112,7 +117,7 @@ providers:
   tools: registry/tools.yaml
   capability_index: registry/capability-index.yaml
   routing_policy: registry/routing-policy.yaml
-  routing_engine: ai_ops_kit/engine/ai_route.py
+  routing_engine: ai_ops_kit/shared/ai_route.py
   capability_selftest: ai_ops_kit/validation/ai_capability_selftest.py
   first_class: [anthropic, openai]
   live_executor_providers: [anthropic, openai, openai-compatible]  # v2.39: openai-compatible (DeepSeek/local) через OPENAI_COMPATIBLE_BASE_URL+ключ
@@ -324,12 +329,16 @@ session_orchestration:
       invariant: >
         продуктовые факты не выдумываются: цели, боли и «следующий результат» из кода не выводятся,
         и на их месте стоит пометка владельцу, а не правдоподобный текст
-    required_repo_artifacts:                          # обязательные артефакты контура планирования
+    required_repo_artifacts:                          # обязательные артефакты продуктового репозитория
       - ROADMAP.md                                    # направление: четыре горизонта
       - planning/plan.yaml                            # delivery plan: kind: delivery-plan
+      - ARCHITECTURE.md                               # единый источник правды об архитектуре (SR-7)
+      - SECURITY.md                                   # путь раскрытия уязвимостей (SEC-001 конституции, #826)
     templates:
       roadmap: templates/planning/ROADMAP.md
       plan: templates/planning/plan.yaml
+      architecture: templates/system/ARCHITECTURE.md
+      security: templates/system/SECURITY.md
     # v3.35.2 (тир 3): РЕПОЗИТОРИЙ ВПРАВЕ ОПИСАТЬ СЕБЯ. Пути артефактов были жёсткими, и монорепо,
     # где продукт живёт в `apps/web/`, не мог описать себя вовсе. Дополнить сигналы кита было можно,
     # снять — нельзя (`**/entities/**` в Feature-Sliced Design: 6 ложных находок из 9).
@@ -425,6 +434,20 @@ update_policy:
     # ссылается на файлы (agents/core/*.md, rules/**, templates/**), которых в child нет.
     - "agents/**/*.md"
     - "rules/**/*"
+    # Карта `constitution_id -> правило` UI/UX-Конституции. Чек-листы дизайн-гейтов
+    # (`rules/design/*.yaml`) несут `constitution_id`, и ревьюеры (`agents/quality/*-reviewer.md`)
+    # ОБЯЗАНЫ цитировать этот ID в находке. Оба набора уже едут в дочку — а карта, по которой ID
+    # раскрывается в текст правила, оставалась в ките: в дочке цитата ссылалась на ID, который
+    # дочке нечем резолвить («висячий» ID через границу поставки). Едет только машинный реестр
+    # (~19 КБ), не 147-КБ `UI_CONSTITUTION.md`: дочке нужна карта резолва, а не исходный текст.
+    # Пакетно принадлежит `ai-ops-quality` (там же `rules/design/**`), поэтому карта едет ровно
+    # туда, куда едут цитирующие её чек-листы, и не грузит дочку без дизайн-гейтов.
+    - "standards/uiux/rules.yaml"
+    # Архитектурная конституция (#825): в дочку едет ТОЛЬКО компактный машинный реестр статей
+    # `rules.yaml` (карта `constitution_id -> статья` с полями gate/enforced_in для гейтов и резолва),
+    # как uiux. Тяжёлый источник ARCHITECTURE_CONSTITUTION.md и оперативный слой arch.rules.md —
+    # родительские (footprint-бюджет доставки узкий). Пакетно принадлежит `ai-ops-quality`.
+    - "standards/architecture/rules.yaml"
     - "templates/**/*"
     - "context/**/*"
     - "workflows/*.md"

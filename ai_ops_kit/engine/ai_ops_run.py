@@ -58,7 +58,7 @@ from ai_ops_kit.engine.ai_ops_run_lifecycle import (   # noqa: F401,E402
     _restore_resume_policy, _resolve_models)
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work
-from ai_ops_kit.engine import work_areas as _work_areas       # noqa: E402
+from ai_ops_kit.shared import work_areas as _work_areas       # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
@@ -292,6 +292,28 @@ def main(argv):
     a = ap.parse_args(argv)
     if a.cmd == "resume":
         from ai_ops_kit.engine import run_handoff
+        # #406: флаги, которые ПРИМЕНЯЮТСЯ только при реальном продолжении (--execute), не должны
+        # молча проглатываться на preflight. Раньше `resume --open-pr` без --execute печатал прогноз
+        # готовности и выходил, НИ РАЗУ не взглянув на флаг — человек уходил в уверенности, что PR
+        # откроется/заявка перенимается, а не происходило ничего. Тихо проигнорированный флаг = ложь
+        # об исходе; здесь он становится явным отказом с понятной причиной.
+        _exec_only = []
+        if getattr(a, "open_pr", False):
+            _exec_only.append("--open-pr")
+        if getattr(a, "takeover", False):
+            _exec_only.append("--takeover")
+        if _exec_only and not a.execute:
+            _msg = ("флаги " + ", ".join(_exec_only) + " действуют только при реальном продолжении "
+                    "работы — добавьте --execute. Без него resume лишь проверяет, можно ли "
+                    "продолжить, и ни открыть PR, ни перенять заявку не может (флаг был бы "
+                    "проигнорирован молча).")
+            if a.json:
+                print(json.dumps({"kind": "resume", "status": "error", "error": _msg,
+                                  "resume": {"requested": True, "resumed": False}},
+                                 ensure_ascii=False, indent=2))
+            else:
+                print(f"ai-ops resume {a.feature}: ОТКАЗ — {_msg}")
+            return 2
         pf = run_handoff.resume_preflight(a.child_root, a.feature, base=a.base)
         if not a.execute:
             if a.json:
@@ -346,8 +368,15 @@ def main(argv):
             return 2
         report = run(task, json.loads(a.signals), Path(a.child_root),
                      provider_name=_pres["provider"], model=a.model, engine="pipeline",
+                     # #695: та же измеренная личность, что и у run (intent-CLI подаёт `--session`) —
+                     # иначе resume регистрируется под "cli" и не узнаёт свою же работу.
+                     session=getattr(a, "session", "cli"),
                      execute=True, feature=a.feature, resume=True, force_resume=a.force, base=a.base,
                      replan=a.replan, open_pr=getattr(a, "open_pr", False),
+                     # #403/deliver-only: без этого проброса флаг, объявленный подкомандой resume и
+                     # прокинутый intent-CLI из `--deliver-only`, доходил до argparse, но НЕ до движка —
+                     # resume всё равно переавторил и плодил коммит вместо доставки готового READY.
+                     reevaluate_only=getattr(a, "reevaluate_only", False),
                      takeover=getattr(a, "takeover", False),
                      takeover_reason=getattr(a, "takeover_reason", None),
                      provider_resolution={k: _pres.get(k) for k in

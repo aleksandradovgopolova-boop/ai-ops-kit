@@ -36,7 +36,10 @@ def test_real_repository_respects_kernel_boundary(spec):
 
 @pytest.mark.parametrize("edge", [
     ("engine", "planning"),
-    ("gates", "engops"),
+    # gates -> engops НЕ берём примером: F-03 вскрыл его в реальном коде (deploy_readiness через
+    # __import__), и оно заморожено в known_violations — то есть НЕ краснеет, что и правильно.
+    # Синтетический fail-closed тест обязан брать запрещённое ребро, которого в реестре НЕТ.
+    ("gates", "planning"),
     ("lifecycle", "intelligence"),
     ("shared", "planning"),
     ("kernel", "engops"),

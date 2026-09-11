@@ -32,6 +32,7 @@ import sys
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401
+from ai_ops_kit.shared.gitio import git  # noqa: E402
 
 # Пути, которые считаем тестами. Намеренно широко: язык не угадываем, ориентируемся на
 # общепринятые соглашения именования. Ложноположительное «это тест» безопаснее обратного —
@@ -77,8 +78,9 @@ def classify_changed(files):
 
 
 def _git(root, *args):
-    r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
-    return r.returncode, r.stdout.strip(), r.stderr.strip()
+    # Единый вход к git с таймаутом (см. shared/gitio): та же сигнатура (rc, out, err),
+    # но зависший субпроцесс не вешает прогон — вместо блокировки rc=124.
+    return git(root, *args)
 
 
 def _test_command(profile):

@@ -30,6 +30,10 @@ DOCKERFILE_REQUIRED = {
     "pyyaml": "зависимость движка",
     "/opt/ai-ops-kit": "кит скопирован в образ",
     "ENTRYPOINT": "энтрипоинт движка",
+    # Credential-less git для PUSH, зашитый в образ (defense-in-depth — держится и без wrapper'а).
+    "GIT_ASKPASS=/bin/false": "нет источника логина/пароля для git push (жёсткая недоставка средой)",
+    "GIT_TERMINAL_PROMPT=0": "push по HTTPS без креды падёт быстро, не виснет в промпте",
+    "GIT_CONFIG_KEY_0=credential.helper": "credential helper отключён внутри образа (нет креды push)",
 }
 WRAPPER_REQUIRED = {
     "docker run": "запуск контейнера",
@@ -46,6 +50,10 @@ WRAPPER_REQUIRED = {
     "src=${CLONE}": "в /work монтируется клон, НЕ основной child-репозиторий",
     # v2.113: доставка вынесена в scoped-deliverer (только ветки прогона) — вызывается из wrapper
     "deliver-run-branches.sh": "доставка ТОЛЬКО веток прогона через scoped host-deliverer",
+    # Credential-less git для PUSH (ПЕРВЫЙ рубеж недоставки — среда, не regex block_push).
+    "GIT_ASKPASS=/bin/false": "нет источника логина/пароля для git push из модельной петли",
+    "GIT_TERMINAL_PROMPT=0": "push по HTTPS без креды падёт быстро, не виснет в промпте",
+    "GIT_CONFIG_KEY_0=credential.helper": "credential helper отключён (нет канала креды для push)",
 }
 # Анти-маркер: основной child НЕ должен монтироваться как writable напрямую (регресс worktree-only).
 WRAPPER_FORBIDDEN = {

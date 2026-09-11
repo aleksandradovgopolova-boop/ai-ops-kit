@@ -24,7 +24,7 @@ export OPENAI_COMPATIBLE_API_KEY="…"        # ваш ключ, из менед
 ```
 
 Проверка, что движок на месте: `ai-ops doctor` (строка «движок (standalone)») или
-`python3 .ai/managed/validation/validate_standalone_engine.py .`.
+`python3 .ai/managed/ai_ops_kit/validation/validate_standalone_engine.py .`.
 
 ## 2. Запуск одного сценария
 

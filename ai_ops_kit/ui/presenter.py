@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -40,6 +41,22 @@ _FALLBACK_STATUS_LABEL = {"ok": "Готово", "needs_input": "Нужно тв�
                           "blocked": "Пока не могу продолжить", "done": "Готово",
                           "degraded": "Готово, но проверено не всё"}
 _CONTRACT = {}          # кэш разобранного контракта: {audiences, labels, default, config_key}
+
+# Глоссарий продуктового языка — аварийная копия РОВНО на случай недоступного реестра (источник
+# истины — `registry/communication-policy.yaml -> product_glossary`). Держать здесь основную копию
+# нельзя по той же причине, что и для статусов: реестр перестал бы быть источником истины для
+# собственной политики. Заголовок работы (`title`) приходит из плана дочки и может быть написан
+# внутренним языком; для аудитории `product` человеческие строки прогоняются через этот словарь.
+_FALLBACK_GLOSSARY = {
+    "merge queue": "очередь на слияние", "merge base": "итог слияния",
+    "merge-base": "итог слияния", "pull request": "запрос на слияние",
+    "auto-merge": "автослияние", "automerge": "автослияние", "write_scope": "область правок",
+    "tested_revision": "проверенная версия", "GateResult": "результат проверки",
+    "preflight_block": "предстартовая проверка", "ApprovalRecord": "запись согласования",
+    "coverage": "покрытие тестами", "footprint": "объём поставки", "polling": "опрос состояния",
+    "gate": "проверка", "SHA": "версия",  # «PR» намеренно НЕ здесь — продуктовый язык поставки.
+}
+_GLOSSARY = {}          # кэш: {"map": {term: plain}, "rx": compiled, "source": ...}
 
 
 def _q(n, one="вопрос", few="вопроса", many="вопросов"):
@@ -126,6 +143,53 @@ def audience_from_config(child_root, policy=None) -> str:
     return aud if aud in con["audiences"] else default
 
 
+def _glossary(policy=None) -> dict:
+    """Глоссарий продуктового языка ИЗ РЕЕСТРА: {term: plain}, скомпилированный в один regex.
+
+    Термины сопоставляются по границе слова, без учёта регистра; длинные фразы раньше коротких
+    («merge queue» до «merge»), иначе короткий термин съедал бы часть длинного. При недоступном
+    реестре работаем на аварийной копии и НЕ молчим об этом (`source`) — как и `_contract`.
+    """
+    if policy is None and _GLOSSARY:
+        return _GLOSSARY
+    src = "registry"
+    try:
+        data = policy if policy is not None else load_policy()
+        gmap = data.get("product_glossary")
+        if not isinstance(gmap, dict) or not gmap:
+            raise PolicyMissing("в политике коммуникации нет product_glossary")
+    except PolicyMissing:
+        gmap, src = dict(_FALLBACK_GLOSSARY), "fallback"
+    # Длинные ключи первыми, чтобы фраза побеждала входящее в неё слово.
+    terms = sorted((str(k) for k in gmap), key=len, reverse=True)
+    rx = re.compile("|".join(r"\b" + re.escape(t) + r"\b" for t in terms),
+                    re.IGNORECASE) if terms else None
+    lower = {str(k).lower(): str(v) for k, v in gmap.items()}
+    out = {"map": lower, "rx": rx, "source": src}
+    if policy is None:
+        _GLOSSARY.clear()
+        _GLOSSARY.update(out)
+    return out
+
+
+def _humanize(text: str, policy=None) -> str:
+    """Заменить внутреннюю лексику плоскими эквивалентами глоссария. Перевод меняет ЯЗЫК, а не факты.
+
+    Применяется к человеческим строкам ТОЛЬКО для аудитории `product`: заголовок работы приходит из
+    плана дочки дословно, и без этого фильтра «coverage/footprint/merge queue/auto-merge/polling»
+    просачивались бы в `summary`/`next`. Для `technical`/`debug` строки не трогаются — имена гейтов и
+    метрик им положены по `show`-списку политики.
+    """
+    if not text:
+        return text
+    g = _glossary(policy)
+    rx = g.get("rx")
+    if not rx:
+        return text
+    gmap = g["map"]
+    return rx.sub(lambda m: gmap.get(m.group(0).lower(), m.group(0)), text)
+
+
 def message(status, summary, why_it_matters=None, decision=None, next_steps=None,
             technical=None, headline=None) -> dict:
     """Собрать UserMessage.
@@ -167,26 +231,33 @@ def render(msg: dict, audience="product", show_technical=False) -> str:
     con = _contract()
     if audience not in con["audiences"]:
         audience = con["default"]
+    # МАСКИРОВКА ЛЕКСИКИ НА ПУТИ К ЧЕЛОВЕКУ. Заголовок работы (`title`) приходит из плана дочки и
+    # вставляется в `summary`/`next`/`why` дословно — если он написан внутренним языком, продакт
+    # получает жаргон. `hide`-список политики объявлял категории, но НИЧТО их не ловило (аудит
+    # 04.09). Фильтр применяется ТОЛЬКО для `product`: `technical`/`debug` имена гейтов и метрик
+    # видят по своему `show`-списку. Технические детали (payload ниже) не трогаются — они и так
+    # открыты по запросу, и там жаргон уместен.
+    h = _humanize if audience == "product" else (lambda s, policy=None: s)
     L = []
     label = msg.get("headline") or con["labels"].get(msg.get("status"), msg.get("status", ""))
-    L.append(f"{label}. {msg.get('summary', '')}".strip())
+    L.append(h(f"{label}. {msg.get('summary', '')}".strip()))
     if msg.get("why_it_matters"):
-        L.append(msg["why_it_matters"])
+        L.append(h(msg["why_it_matters"]))
 
     d = msg.get("decision")
     if d:
         L.append("")
-        L.append(f"Нужно от тебя: {d['question']}")
+        L.append(h(f"Нужно от тебя: {d['question']}"))
         if d.get("recommendation"):
-            L.append(f"Рекомендую: {d['recommendation']}")
+            L.append(h(f"Рекомендую: {d['recommendation']}"))
         if d.get("on_approve"):
-            L.append(f"Если согласен — {d['on_approve']}.")
+            L.append(h(f"Если согласен — {d['on_approve']}."))
         if d.get("on_reject"):
-            L.append(f"Если нет — {d['on_reject']}.")
+            L.append(h(f"Если нет — {d['on_reject']}."))
 
     if msg.get("next"):
         L.append("")
-        L.append("Дальше: " + "; ".join(msg["next"]) + ".")
+        L.append(h("Дальше: " + "; ".join(msg["next"]) + "."))
 
     tech = (msg.get("technical_details") or {})
     if tech.get("available"):
@@ -216,8 +287,8 @@ def from_next_work(rep: dict) -> dict:
             summary="В плане работ пока лежит мой пример, а не твоя работа.",
             why_it_matters="Советовать по нему я не стану: это была бы выдумка про твой продукт, "
                            "а не факт о нём.",
-            next_steps=["впиши свои задачи в план и убери пометку «пример»",
-                        "или скажи — соберу первый план из ответов на несколько вопросов"],
+            next_steps=["собери план из ответов: ./ai-ops model (ответь) → ./ai-ops bootstrap --apply",
+                        "или впиши свои задачи в planning/plan.yaml и убери пометку «пример»"],
             technical={"gap": rep.get("gap")})
 
     if not rep.get("plan_present"):
@@ -226,7 +297,7 @@ def from_next_work(rep: dict) -> dict:
                                "задачу мне нечем.",
                        why_it_matters="Без объявленных целей и работ любой мой выбор был бы "
                                       "просто первой строкой списка.",
-                       next_steps=["создам черновик плана из шаблона, если скажешь"],
+                       next_steps=["собери план: ./ai-ops model (ответь на вопросы) → ./ai-ops bootstrap --apply"],
                        technical={"gap": rep.get("gap")})
 
     # ПЕРЕВОД НЕ ПРЯЧЕТ ДЕФЕКТ. Если сам план недостоверен (цикл зависимостей, поле исполнителя,
@@ -355,6 +426,112 @@ def from_next_work(rep: dict) -> dict:
                    "решение о заморозке": (rep.get("freeze") or {}).get("decision") or "—"})
 
 
+def from_post_release_loop(result: dict) -> dict:
+    """`post_release_loop.run_post_release()` -> UserMessage. Пост-релизная петля продукту.
+
+    Ошибку/неполноту объясняем ПОСЛЕДСТВИЕМ, не местом в коде: «выпуск рекомендовать не могу:
+    аналитика дочки ещё не поступила». Внутренние имена (гейт, events_verified_live, PRR) остаются
+    в технических деталях; наружу — что произошло, почему важно и что дальше.
+    """
+    a = result.get("analytics_runtime") or {}
+    prr = result.get("prr") or {}
+    verdict = result.get("verdict")
+    events = a.get("events_verified_live")
+    with_producer = a.get("evidence_with_producer", 1)
+    required = a.get("evidence_required", 4)
+    not_measured = a.get("evidence_not_measured") or []
+
+    tech = {
+        "verdict": verdict,
+        "readout_decision": result.get("readout_decision"),
+        "gate": a.get("gate"),
+        "gate_status": a.get("status"),
+        "events_verified_live": events,
+        "доказательств с источником": f"{with_producer} из {required}",
+        "not_measured": ", ".join(not_measured) or "—",
+        "PRR": (prr.get("id") or "не найден") if prr.get("found") else "не найден",
+        "outcome_flip_ready": result.get("outcome_flip_ready"),
+    }
+    ps = result.get("product_status") or {}
+    outcome_verdict = result.get("outcome_verdict") or "unknown"
+    if result.get("outcome"):
+        tech["outcome_declared"] = result["outcome"].get("verdict")
+        tech["outcome_measured"] = result["outcome"].get("measured_verdict")
+    if ps.get("label"):
+        tech["продуктовый статус"] = ps["label"]
+
+    # ПРОДУКТОВЫЙ ИТОГ СИЛЬНЕЕ ГОТОВНОСТИ ВЫПУСКА: если итог ИЗМЕРЕН (met/failed), говорим о нём
+    # первым — «технически done, продуктово нет» отличает хорошо сделанное от правильного (#566).
+    me = (result.get("outcome") or {}).get("measured_evaluation") or {}
+    if outcome_verdict == "failed":
+        done_green = ps.get("delivery_verified")
+        head = ("Сделано технически, но продукт цель не взял" if done_green
+                else "Продуктовый результат не достигнут")
+        summ = ("Доставка зелёная — изменение внедрено, тесты и проверки пройдены. Но измеренный "
+                "результат цель не берёт." if done_green
+                else "Измеренный результат по релизу цель не берёт.")
+        return message(
+            status="degraded", headline=head,
+            summary=summ,
+            why_it_matters="Это разные вещи: «мы хорошо сделали изменение» и «мы сделали правильное "
+                           "изменение». " + (me.get("reason") or ""),
+            next_steps=["вернуть вывод в discovery: цель не достигнута — решать, менять подход или "
+                        "откатывать по правилу решения из контракта"],
+            technical=tech)
+    if outcome_verdict == "met":
+        return message(
+            status="ok", headline="Продуктовый результат достигнут",
+            summary="Измеренный результат по релизу берёт цель, защитные метрики удержаны.",
+            why_it_matters=me.get("reason") or "Изменение оказалось правильным по измерению, а не "
+                                               "только доставленным.",
+            next_steps=["зафиксировать исход достигнутым по правилу решения из контракта"],
+            technical=tech)
+
+    # Общая для всех веток оговорка: гейт закрывается одним доказательством из четырёх, потому что у
+    # остальных трёх пока нет источника данных. Это НАЗЫВАЕТСЯ, а не прячется за «проверено».
+    gate_note = (f"Полную проверку аналитики после выпуска пока не закрыть: из четырёх её частей "
+                 f"измеримую основу имеет только одна, у остальных ({_human_evidence(not_measured)}) "
+                 f"ещё нет источника данных.")
+
+    if events == "unknown":
+        return message(
+            status="degraded", headline="Выпуск рекомендовать пока не могу",
+            summary="Продукт доставлен, но проверить, доходят ли события в аналитику, ещё нечем: "
+                    "выгрузка от продукта не поступила.",
+            why_it_matters="Без неё я не знаю, работает ли измерение результата — а значит не могу "
+                           "честно сказать, что выпуск удался. " + gate_note,
+            next_steps=["дождаться выгрузки аналитики после реального выпуска и повторить проверку"],
+            technical=tech)
+
+    if events == "not_verified":
+        return message(
+            status="blocked", headline="Аналитика после выпуска расходится с обещанным",
+            summary="Часть событий, которые продукт обещал слать, в выгрузке не встретилась.",
+            why_it_matters="Пока событие не доходит, измерять результат нечем, и продолжать как ни "
+                           "в чём не бывало нельзя. " + gate_note,
+            next_steps=["разобраться, почему объявленные события не доезжают, и перепроверить"],
+            technical=tech)
+
+    # events == "verified": приход подтверждён, но гейт закрыт одним доказательством из четырёх.
+    return message(
+        status="degraded", headline="События доходят, но проверка выпуска ещё неполная",
+        summary="События в аналитику приходят — это подтверждено выгрузкой.",
+        why_it_matters="Это ещё не полная проверка выпуска. " + gate_note,
+        next_steps=["продолжать наблюдение; полную готовность подтвердит только реальный выпуск "
+                    "с доступом к аналитике"],
+        technical=tech)
+
+
+def _human_evidence(names) -> str:
+    """Внутренние ключи доказательств -> человеческие слова (для product-аудитории)."""
+    ru = {
+        "no_pii_in_events": "нет ли персональных данных в событиях",
+        "cohort_identification_works": "работает ли разбиение на когорты",
+        "dashboard_receives_data": "доходят ли данные до дашборда",
+    }
+    return "; ".join(ru.get(n, n) for n in names) or "остальные проверки"
+
+
 def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                      crosscheck: dict = None) -> dict:
     """Реестр активных работ -> UserMessage. Ответ на «что делаем прямо сейчас».
@@ -461,6 +638,120 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
                    "id": ", ".join(str(a.get("id") or "?") for a in active)})
 
 
+# #549: человеческие ярлыки статуса работы (внутренние коды -> статус UserMessage-контракта). Коды
+# приходят из workitem/active-work/plan, а наружу выходит один из четырёх статусов контракта.
+_WORK_VIEW_STATUS = {
+    "blocked": "blocked", "needs_more_evidence": "blocked",
+    "needs_human_decision": "needs_input",
+    "done": "ok", "in-progress": "ok", "in_progress": "ok", "review": "ok",
+    "draft": "ok", "todo": "ok",
+}
+# Человеческие имена четырёх источников проекции — для честной фразы «сведено из…», без внутренних
+# слов workitem/active-work/work-graph/plan.
+_WORK_VIEW_SOURCE_RU = {
+    "workitem": "заявка на работу", "active_work": "реестр идущих работ",
+    "work_graph": "граф пакетов работы", "plan": "план продукта",
+    # #565: приёмники хребта — попадают в «сведено из…», когда реально прочитаны.
+    "runs": "прогоны", "delivery": "доставка", "outcome": "исход",
+}
+# «Обязательные» источники идентичности работы — их отсутствие называется как пробел («не нашёл…»).
+# runs/delivery/outcome сюда НЕ входят намеренно: у ранней работы их ещё нет, и это не пробел, а
+# стадия жизни. Их присутствие видно из самих полей, а провенанс — из `sources`.
+_WORK_VIEW_ALL_SOURCES = ("workitem", "active_work", "work_graph", "plan")
+
+
+def from_work_view(view: dict) -> dict:
+    """Проекция «работы» (lifecycle.work_view.project_work) -> UserMessage. Ответ на «что известно
+    про эту работу», сведённое из четырёх источников в ОДНУ карточку.
+
+    Продуктовый язык: идентификатор ведущей сессии, области записи и пути-глобы — это жаргон (как
+    SHA/gate-id в explain), поэтому в человеческие строки они не идут сырьём — их место в технических
+    деталях. Наружу выходит смысл: чем занята работа, что про неё сведено и чего пока нет.
+    """
+    view = view or {}
+    title = view.get("title") or view.get("id") or "работа"
+    sources = view.get("sources") or []
+    if not sources:
+        # Работа не нашлась ни в одном источнике — честное «не знаю такой», а не пустая карточка,
+        # выданная за факт.
+        return message(
+            status="degraded", headline="Такой работы я не вижу",
+            summary=f"Ни в одном источнике нет работы с идентификатором «{view.get('id')}».",
+            why_it_matters="Собрать по ней нечего: заявки, записи об идущей работе, графа пакетов и "
+                           "строки в плане с таким идентификатором нет.",
+            next_steps=["проверь идентификатор работы или спроси «что дальше»"],
+            technical={"id": view.get("id"), "источники": "—"})
+
+    st = view.get("status")
+    status = _WORK_VIEW_STATUS.get(st, "ok")
+    # Чего НЕ хватает — называется, а не замалчивается: проекция честна о том, что сведено, а что нет.
+    missing = [s for s in _WORK_VIEW_ALL_SOURCES if s not in sources]
+    have_ru = ", ".join(_WORK_VIEW_SOURCE_RU[s] for s in sources)
+    miss_ru = ", ".join(_WORK_VIEW_SOURCE_RU[s] for s in missing)
+
+    # Кто ведёт — фактом, но без сырого идентификатора сессии: он в технических деталях.
+    agent_line = ("Сейчас работу кто-то ведёт." if view.get("current_agent")
+                  else "Активной сессии за работой сейчас нет.")
+    dcount = len(view.get("decisions") or [])
+    acount = len(view.get("artifacts") or [])
+    # #565: хребет — прогоны, доставка (PR), исход. В продуктовую строку идёт СМЫСЛ (доставлено ли,
+    # каков исход), сырьё (url PR, band здоровья) остаётся в технических деталях.
+    runs = view.get("runs") or []
+    delivery = view.get("delivery") or {}
+    prs = delivery.get("prs") or []
+    outcome = view.get("outcome") or {}
+    pr_nums = ", ".join(("#" + str(p.get("number")) if p.get("number") else (p.get("url") or "?"))
+                        for p in prs)
+    delivered_line = (f" Доставлена в PR {pr_nums}." if prs else "")
+    if outcome.get("goal_outcome_reached") is True:
+        outcome_line = " Исход: цель достигнута."
+    elif outcome.get("goal_outcome") is not None:
+        outcome_line = " Исход: цель ещё не достигнута."
+    elif outcome:
+        outcome_line = " Исход пока измеряется."
+    else:
+        outcome_line = ""
+    why = (f"Свёл всё, что известно, из {len(sources)} "
+           + _q(len(sources), "источника", "источников", "источников") + f": {have_ru}.")
+    if missing:
+        why += (f" Не нашёл: {miss_ru} — по этим сторонам работы данных пока нет.")
+
+    return message(
+        status=status,
+        headline=f"«{title}»",
+        summary=(agent_line
+                 + (f" Прогонов: {len(runs)}." if runs else "")
+                 + delivered_line + outcome_line
+                 + (f" Артефактов собрано: {acount}." if acount else "")
+                 + (f" Связанных решений: {dcount}." if dcount else "")),
+        why_it_matters=why,
+        next_steps=["подробности по любой стороне — по запросу"],
+        technical={"id": view.get("id"), "статус": st or "—",
+                   "workflow": view.get("workflow") or "—",
+                   "стадия": view.get("lifecycle_intent") or "—",
+                   "ветка": view.get("branch") or "—",
+                   "прогонов": len(runs) if runs else "—",
+                   "PR": pr_nums or "—",
+                   "исход": (outcome.get("readout_decision")
+                             or (outcome.get("prr") or {}).get("readout_decision")
+                             or ("достигнут" if outcome.get("goal_outcome_reached")
+                                 else ("не достигнут" if outcome.get("goal_outcome") is not None
+                                       else "—"))),
+                   "ведущая сессия": view.get("current_agent") or "—",
+                   "участники": ", ".join(view.get("participants") or []) or "—",
+                   "области записи": ", ".join(view.get("write_scope") or []) or "—",
+                   "зависит от": ", ".join(view.get("depends_on") or []) or "—",
+                   "общие контракты": ", ".join(view.get("shared_contracts") or []) or "—",
+                   "артефакты": ", ".join(
+                       (a.get("path") or a.get("ref") or "?") for a in view.get("artifacts") or [])
+                       or "—",
+                   "доказательства": ", ".join(
+                       e.get("path") or "?" for e in view.get("evidence") or []) or "—",
+                   "решения": ", ".join(
+                       str(d.get("id") or "?") for d in view.get("decisions") or []) or "—",
+                   "источники": ", ".join(sources)})
+
+
 # ── Реэкспорт переводчиков, вынесенных в `presenter_formatters.py` ─────────────────────────────
 # Большинство переводчиков (и повседневных команд, и внутренних отчётов) вынесены в модуль-сосед
 # `presenter_formatters.py`, чтобы presenter не рос как god-модуль. Здесь остаются только контракт
@@ -475,11 +766,94 @@ def from_active_work(rep: dict, published: bool = False, reconciled: int = 0,
 # требует). При обращении к имени `presenter.from_*` модуль подгружается по требованию.
 _FORWARDED_FORMATTERS = (
     "from_advice", "from_bootstrap", "from_contour_consistency", "from_discovery_draft",
-    "from_doctor", "from_execution_preview", "from_intake_gap", "from_kit_feedback_recorded",
+    "from_doctor", "from_execution_preview", "from_first_hour", "from_intake_gap",
+    "from_kit_feedback_recorded",
     "from_new_feature", "from_onboarding_profile", "from_plan_built", "from_process_spend",
     "from_product_health", "from_repository_understanding", "from_review", "from_session_economy",
     "from_short_path", "from_specification", "from_subsession_decision", "_CMD_RU",
 )
+
+
+def from_graph_build(graph: dict, wrote=None) -> dict:
+    """`knowledge_graph.build_graph()` -> UserMessage. Сборка из трёх источников в один граф."""
+    nodes = graph.get("nodes") or []
+    edges = graph.get("edges") or []
+    by_type: dict = {}
+    for n in nodes:
+        by_type[n.get("type")] = by_type.get(n.get("type"), 0) + 1
+    where = f" Записал в {wrote}." if wrote else " Показал (для записи — --apply)."
+    return message(
+        status="ok",
+        summary=(f"Собрал граф из плана, обучения и паспортов функций: {len(nodes)} узлов, "
+                 f"{len(edges)} связей.{where}"),
+        why_it_matters="Один граф вместо ручной сборки из трёх разных файлов.",
+        technical={"by_type": by_type, "written_to": str(wrote) if wrote else None})
+
+
+def from_graph_trace(result: dict) -> dict:
+    """`knowledge_graph.trace()` -> UserMessage. «Зачем функция существует» человеческими словами."""
+    feature = result.get("feature")
+    if result.get("verdict") == "unknown":
+        return message(
+            status="blocked",
+            summary=f"Функции «{feature}» в графе нет — собрать её историю не из чего.",
+            why_it_matters="Граф строю только из объявленного в плане, обучении и паспортах функций; "
+                           "выдумывать связь не буду.",
+            next_steps=["проверь id функции", "или собери граф: ./ai-ops graph build"])
+    chain = result.get("chain") or []
+    titles = [c.get("title") or c.get("id") for c in chain]
+    verdict = result.get("verdict")
+    phrase = {
+        "confirmed": "ценность подтверждена измеримым результатом",
+        "refuted": "измеримый результат не достигнут",
+        "pending": "результат объявлен, но ещё не измерен",
+        "outcome-unmeasured": "результат объявлен, но измерить его нечем",
+        "no-outcome": "к измеримому результату функция пока не привязана",
+        "unmoored": "функция не привязана ни к одной цели",
+    }.get(verdict, "результат ещё не подтверждён")
+    chain_line = " → ".join(titles) if titles else feature
+    if result.get("goal"):
+        summary = (f"Функция «{titles[-1]}» служит цели «{titles[0]}»: {chain_line}. "
+                   f"{phrase.capitalize()}.")
+    else:
+        summary = f"Функция «{feature}»: {chain_line}. {phrase.capitalize()}."
+    headline = "Результат не достигнут" if verdict == "refuted" else None
+    return message(
+        status=("ok" if verdict == "confirmed" else "degraded"),
+        headline=headline,
+        summary=summary,
+        why_it_matters="Раньше этот ответ собирали вручную из трёх файлов — плана, обучения и "
+                       "паспорта функции; теперь он читается по одному графу.",
+        next_steps=(list(result.get("gaps") or []) or None),
+        technical={"verdict": verdict, "chain": [c.get("id") for c in chain],
+                   "outcome": result.get("outcome")})
+
+
+def from_graph_gaps(result: dict) -> dict:
+    """`knowledge_graph.gaps()` -> UserMessage. Что не покрыто измеримым результатом."""
+    oc = result.get("outcomes_without_metric") or []
+    mt = result.get("metrics_without_release") or []
+    ft = result.get("features_without_outcome") or []
+    total = len(oc) + len(mt) + len(ft)
+    if total == 0:
+        return message(
+            status="ok",
+            summary="Каждый объявленный результат измеряется, каждая функция привязана к результату.",
+            why_it_matters="Непокрытого измеримым результатом в графе не нашлось.")
+    lines = []
+    if ft:
+        lines.append("функции без измеримого результата: " + ", ".join(f["id"] for f in ft))
+    if oc:
+        lines.append("результаты, которые нечем измерить: " + ", ".join(o["id"] for o in oc))
+    if mt:
+        lines.append("метрики, которых не наблюдает ни один релиз: " + ", ".join(m["id"] for m in mt))
+    return message(
+        status="degraded",
+        headline="Есть пробелы в измеримости",
+        summary=f"Нашёл {total} мест, где ценность не подтверждена измеримым результатом.",
+        why_it_matters="Такую дыру иначе видно только при ручной сверке плана, метрик и релизов.",
+        next_steps=lines,
+        technical=result)
 
 
 def __getattr__(name):

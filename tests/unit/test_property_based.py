@@ -16,7 +16,6 @@ from hypothesis import strategies as st
 
 # Add tools/ to path
 PKG_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.shared import budget as budget_mod
 from ai_ops_kit.shared import usage_ledger

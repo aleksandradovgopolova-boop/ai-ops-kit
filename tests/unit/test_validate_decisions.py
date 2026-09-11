@@ -64,3 +64,49 @@ class TestDecisionsValidation:
         if reg.exists():
             e, _ = check(yaml.safe_load(reg.read_text(encoding="utf-8")))
             assert e == []
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+class TestEpisodeCalibrationFields:
+    """Опциональные поля эпизода: confidence / expected_outcome / review_at (issue #548)."""
+
+    def _episode(self, **extra):
+        base = {"id": "ep-cal", "question": "q", "decision": "d", "reason": "r",
+                "reversibility": "two-way", "date": "2026-07-13"}
+        base.update(extra)
+        return {"principles": [], "episodes": [base]}
+
+    def test_episode_with_new_fields_validates(self):
+        e, _ = check(self._episode(
+            confidence="high",
+            expected_outcome={"metric": "p95 latency", "baseline": "800ms", "target": "400ms"},
+            review_at="2026-12-01"))
+        assert e == []
+
+    def test_episode_without_new_fields_still_validates(self):
+        # обратная совместимость: старый эпизод без новых полей остаётся валидным
+        e, _ = check(self._episode())
+        assert e == []
+
+    def test_expected_outcome_missing_metric_rejected(self):
+        e, _ = check(self._episode(
+            expected_outcome={"baseline": "800ms", "target": "400ms"}))
+        assert any("expected_outcome.metric" in x for x in e)
+
+    def test_expected_outcome_missing_target_rejected(self):
+        e, _ = check(self._episode(
+            expected_outcome={"metric": "p95 latency", "baseline": "800ms"}))
+        assert any("expected_outcome.target" in x for x in e)
+
+    def test_expected_outcome_not_object_rejected(self):
+        e, _ = check(self._episode(expected_outcome="soon"))
+        assert any("expected_outcome" in x for x in e)
+
+    def test_bad_confidence_rejected(self):
+        e, _ = check(self._episode(confidence="sky-high"))
+        assert any("confidence" in x for x in e)
+
+    def test_bad_review_at_rejected(self):
+        e, _ = check(self._episode(review_at="soon"))
+        assert any("review_at" in x for x in e)

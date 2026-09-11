@@ -1,0 +1,22 @@
+# code-duplication-baseline.yaml — заморозка существующих структурных дублей функций (#827).
+#
+# Ратчет CODE-003 (DRY): перечисленные группы дублей ЗАМОРОЖЕНЫ (известный долг), НОВАЯ группа
+# краснит tests/contracts/test_code_duplication.py. Убрали дубль — удалите его группу отсюда
+# (ратчет ходит вниз). Генерируется: python3 -m ai_ops_kit.devtools.code_duplication --write-baseline.
+schema_version: 1
+kind: code-duplication-ratchet
+scan_root: ai_ops_kit
+min_stmts: 10
+groups:
+  - key: 4c0bc0e2f11c262c
+    members:
+      - ai_ops_kit/validation/validate_budget_contract.py::check_registry
+      - ai_ops_kit/validation/validate_regression_corpus.py::check_registry
+  - key: 89d90017b17e6b6b
+    members:
+      - ai_ops_kit/engops/branch_policy.py::policy_from_config
+      - ai_ops_kit/engops/commit_policy.py::policy_from_config
+  - key: fa4b40716f25638b
+    members:
+      - ai_ops_kit/validation/validate_model_qualification.py::derive_cascade_status
+      - ai_ops_kit/validation/validate_model_qualification.py::derive_judge_status

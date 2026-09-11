@@ -6,9 +6,6 @@ name: pr-smoke
 on:
   pull_request:
     branches: [main]
-  # v3.38 (merge-queue-not-handrolled): `smoke` — обязательный контекст защиты main; без этого
-  # триггера очередь слияния ждала бы его вечно (в merge_group событие pull_request не приходит).
-  merge_group:
 
 # Lane A1: минимальные привилегии — workflow получает только чтение контента.
 permissions:
@@ -21,13 +18,13 @@ jobs:
   smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       # 2026-08-12: pytest-cov здесь больше не нужен — `--cov` ушёл из addopts pytest.ini в
       # отдельную джобу `coverage` (package-quality.yml), где у покрытия есть порог. Прежде
       # addopts требовал пакет от ЛЮБОГО запуска, и джобы падали с «unrecognized arguments».
-      - run: pip install pyyaml pytest hypothesis
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'hypothesis==6.*'
 
       # ЗАГОЛОВОК PR — ЭТО ТЕМА БУДУЩЕГО КОММИТА. Замер 20.08.2026: PR #211 влит squash'ем, и его
       # человекочитаемый заголовок стал темой коммита на main. `cz check` в ветке смотрел коммиты
@@ -37,11 +34,9 @@ jobs:
       # Проверка идёт ЧЕРЕЗ PYTEST, а не строкой в workflow: инвариант кита — проверка обязана быть
       # запускаемой локально и покрытой пробами. Первая редакция этой правки нарушила его инлайновым
       # python-скриптом, и собственный контур её на этом поймал.
-      # ТОЛЬКО на pull_request: в merge_group заголовка PR нет (событие другое), а PR_TITLE_CHECK=1
-      # захардкожен — проба сделала бы `pytest.fail` («ворота запущены, а PR_TITLE не передан»),
-      # `smoke` (обязательный контекст) упал бы, и очередь слияния повисла бы НАВСЕГДА. Заголовок к
-      # моменту очереди уже проверен на самом PR — второй раз не нужен. Это ровно капкан статусов,
-      # который вся эта работа и закрывает (merge-queue-not-handrolled).
+      # Шаг привязан к событию `pull_request`: заголовок PR берётся из
+      # `github.event.pull_request.title`, а PR_TITLE_CHECK=1 захардкожен — на любом другом событии
+      # заголовка нет, и проба сделала бы `pytest.fail` («ворота запущены, а PR_TITLE не передан»).
       - name: "заголовок PR — тема будущего коммита, формат обязателен"
         if: github.event_name == 'pull_request'
         env:
@@ -75,16 +70,15 @@ jobs:
   # history/plan-history.yaml, decisions/registry.yaml, registry/release-claims.yaml — и зелёная на
   # чистом), но пока НЕ внесена в обязательные контексты защиты main, поэтому красный тут виден, но
   # слияние жёстко не блокирует. Перевод в обязательные — решение владельца после обкатки: добавить
-  # `parallel-safety` в required status checks. Тогда же дать джобе исход в merge_group (сейчас она
-  # там пропускается: в merge_group нет PR-диффа, а обязательный пропущенный статус повесил бы
-  # очередь — тот же капкан, что у `smoke` выше).
+  # `parallel-safety` в required status checks. `if: pull_request` — джобе нужен PR-дифф против
+  # `origin/main`, которого на других событиях нет.
   parallel-safety:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужна история для git diff против origin/main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "PR не смешивает код с координационным файлом"
@@ -95,15 +89,15 @@ jobs:
   # «вся фаза одним PR» (повод замерен: дамп +2589 строк, docs/parallel-execution-retro.md §1.7),
   # но пока лишь ПЕЧАТАЕТ отчёт: потолки из quality/pr-budget.yaml — стартовый ратчет, обкатке нужна
   # статистика здоровых PR до перевода в --strict/required. Перевод в блокирующий и в обязательные
-  # контексты — решение владельца после обкатки. `if: pull_request` — тот же капкан статусов, что у
-  # parallel-safety: в merge_group PR-диффа нет, а обязательный пропущенный статус повесил бы очередь.
+  # контексты — решение владельца после обкатки. `if: pull_request` — как и parallel-safety, джобе
+  # нужен PR-дифф против `origin/main`, которого на других событиях нет.
   pr-size:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужна история для git diff против origin/main
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "размер PR: одна работа = один малый PR (advisory)"

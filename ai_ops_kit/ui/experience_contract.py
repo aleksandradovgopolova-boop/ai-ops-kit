@@ -173,6 +173,17 @@ def generate_stories(contract: dict) -> list[dict]:
                 },
             })
 
+    # ВЫБОР ОПЫТА — ВХОД ДЛЯ STORIES. Если владелец выбрал ОДИН вариант опыта
+    # (`record_experience_choice`), выбор проходит в КАЖДУЮ story: она рисуется под выбранное
+    # решение, а не под «какой-то из предложенных». Пока выбор не сделан — ключа нет, и это видно
+    # (отсутствие ≠ выбран дефолт). Обязательный НАБОР stories при этом не меняется (экран ×
+    # состояние) — детерминированный гейт ux_review остаётся прежним; выбор влияет на СОДЕРЖАНИЕ
+    # story, а не на её наличие.
+    choice = chosen_experience_option(contract)
+    if choice:
+        for st in stories:
+            st.setdefault("parameters", {})["experience"] = choice["option"]
+
     return stories
 
 
@@ -299,6 +310,105 @@ def generate_design_options(contract: dict) -> list[dict]:
     return options
 
 
+def option_tradeoff(option: dict) -> str | None:
+    """Названный компромисс варианта — непустой `tradeoffs.cons`. -> строка или None.
+
+    Осознанный компромисс — это то, чем ПЛАТЯТ за вариант (`cons`). Плюсы есть у любого макета;
+    вариант становится выбором только когда названа его цена. Нет цены -> None, и это ошибка,
+    а не мелочь оформления (см. `check_design_options`).
+    """
+    if not isinstance(option, dict):
+        return None
+    tr = option.get("tradeoffs")
+    if not isinstance(tr, dict):
+        return None
+    cons = [str(c).strip() for c in (tr.get("cons") or []) if str(c).strip()]
+    if not cons:
+        return None
+    return "; ".join(cons)
+
+
+def check_design_options(options: list) -> list[str]:
+    """Инвариант КОДОМ, а не прозой: КАЖДЫЙ вариант несёт названный компромисс. -> список ошибок.
+
+    Вариант без trade-off — это «вариант без осознанного компромисса»: он выглядит выбором, но не
+    даёт человеку, с чем его сравнивать, и молча выдаёт один макет за взвешенное решение. Такой
+    набор предлагать нельзя. Пустой список ошибок = набор можно предлагать человеку.
+    """
+    errors: list[str] = []
+    if not options:
+        errors.append("нет вариантов опыта — предлагать человеку нечего")
+    for i, opt in enumerate(options or []):
+        name = (isinstance(opt, dict) and (opt.get("name") or opt.get("id"))) or f"#{i}"
+        if option_tradeoff(opt) is None:
+            errors.append(f"вариант «{name}» без осознанного компромисса "
+                          f"(пустой tradeoffs.cons) — это не выбор, а один макет")
+    return errors
+
+
+def offer_design_options(contract: dict) -> list[dict]:
+    """Варианты опыта для контракта, каждый с НАЗВАННЫМ компромиссом. Fail-closed.
+
+    Это точка, через которую варианты попадают в рабочий контур (`engineering_advisor`): она
+    предлагает набор ТОЛЬКО если инвариант `check_design_options` выполнен. Вариант без trade-off
+    не проскакивает молча — функция бросает `ValueError`, и вызывающий обязан назвать дефект
+    человеку, а не показать псевдовыбор.
+    """
+    options = generate_design_options(contract)
+    errors = check_design_options(options)
+    if errors:
+        raise ValueError("варианты опыта без осознанного компромисса: " + "; ".join(errors))
+    return options
+
+
+def record_experience_choice(contract: dict, option_id: str,
+                             rationale: str | None = None) -> dict:
+    """Записать ВЫБОР владельца — ОДИН вариант опыта — в Experience Contract. Fail-closed.
+
+    Это ФАЗА ВЫБОРА, вторая половина механизма после `offer_design_options` (фаза предложения).
+    Владелец выбирает из набора, который УЖЕ прошёл инвариант trade-offs: `offer_design_options`
+    зовётся здесь же и на наборе без названной цены закрывает ворота (`ValueError`) — выбирать из
+    псевдовыбора нельзя. Выбор варианта, которого в наборе НЕТ, — тоже ошибка, а не молчаливое
+    принятие: иначе в контракт попал бы опыт, которого киту никто не предлагал, и stories вывелись
+    бы под несуществующее решение.
+
+    Возвращает НОВЫЙ контракт с полем `experience_choice` (исходный НЕ мутируется — запись выбора
+    не переписывает вход задним числом). `experience_choice` = {option, name, tradeoff, rationale}:
+    в контракте остаётся не только id, но и НАЗВАННАЯ цена выбранного варианта — чтобы «почему
+    выбран этот» было видно рядом с «что выбрано», а не терялось.
+    """
+    options = offer_design_options(contract)   # fail-closed на наборе без названной цены
+    by_id = {str(o.get("id")): o for o in options}
+    if str(option_id) not in by_id:
+        raise ValueError(
+            f"вариант «{option_id}» не из предложенных ({sorted(by_id)}): выбрать можно "
+            "только тот опыт, который кит предложил с названной ценой")
+    chosen = by_id[str(option_id)]
+    choice = {
+        "option": str(option_id),
+        "name": chosen.get("name"),
+        "tradeoff": option_tradeoff(chosen),
+        "rationale": (str(rationale).strip() or None) if rationale else None,
+    }
+    enriched = dict(contract)
+    enriched["experience_choice"] = choice
+    return enriched
+
+
+def chosen_experience_option(contract: dict) -> dict | None:
+    """Записанный в контракт выбор опыта, если он есть и валиден. -> dict | None.
+
+    Валиден = dict с непустым `option`. Иначе None: «выбор ещё не сделан» не выдаём за сделанный —
+    тот же принцип, что «unknown не сворачиваем в default».
+    """
+    if not isinstance(contract, dict):
+        return None
+    ch = contract.get("experience_choice")
+    if isinstance(ch, dict) and str(ch.get("option") or "").strip():
+        return ch
+    return None
+
+
 def process_contract(contract_path: Path) -> dict:
     """Process Experience Contract and generate stories + options."""
     contract = yaml.safe_load(contract_path.read_text(encoding="utf-8"))
@@ -321,6 +431,9 @@ def process_contract(contract_path: Path) -> dict:
         "stories": stories,
         "required_stories": [s["id"] for s in required_story_specs(contract)],
         "design_options": options,
+        # Записанный выбор опыта (None, пока владелец не выбрал) — виден в выводе рядом со stories,
+        # которые под этот выбор нарисованы.
+        "experience_choice": chosen_experience_option(contract),
         "open_questions": contract.get("open_questions", []),
         "tradeoffs": contract.get("tradeoffs", []),
         "summary": {
@@ -330,6 +443,7 @@ def process_contract(contract_path: Path) -> dict:
             "states": len(contract.get("states", [])),
             "roles": len(contract.get("roles", [])),
             "design_options": len(options),
+            "experience_chosen": chosen_experience_option(contract) is not None,
         },
     }
 

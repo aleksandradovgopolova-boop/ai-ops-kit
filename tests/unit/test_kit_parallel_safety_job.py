@@ -6,7 +6,7 @@
 
 Проверяет:
 1. Джоба parallel-safety существует в pr-smoke.yml.
-2. Условие `if` ограничивает запуск только PR (в merge_group диффа PR нет).
+2. Условие `if` ограничивает запуск только PR (джобе нужен PR-дифф против origin/main).
 3. Шаг вызывает validate_parallel_safety.py с --base и --strict (уже блокирующий, но джоба пока
    НЕ обязательный контекст — перевод в required решает владелец после обкатки, dp-002).
 4. Прямой вызов скрипта не нарушает pytest-only инвариант (whitelist в validate_agents_checklist).
@@ -33,7 +33,7 @@ def test_parallel_safety_job_exists() -> None:
 
 
 def test_parallel_safety_runs_only_on_pr() -> None:
-    """Только на PR: в merge_group нет PR-диффа, а обязательный пропуск повесил бы очередь."""
+    """Только на PR: джобе нужен PR-дифф против origin/main, которого на других событиях нет."""
     doc = yaml.safe_load(WORKFLOW_PATH.read_text())
     condition = doc["jobs"]["parallel-safety"].get("if", "")
     assert "pull_request" in condition, f"parallel-safety должна идти только на PR, условие: {condition}"

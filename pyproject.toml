@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=70.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -11,11 +11,19 @@ requires-python = ">=3.12"   # пол = версия, на которой РЕА
                              # джоба python39-compat лишь ловила современный синтаксис (решение
                              # ep-2026-08-20-python-floor-3.12). Цель — человек не думает про версию.
 license = {text = "MIT"}
-dependencies = ["pyyaml"]
+dependencies = ["pyyaml>=6.0.3"]
+
+[project.scripts]
+# Консольный вход для pip/pipx: `ai-ops <интент>` (next/status/inbox/explain/do/run/…).
+# Диспетчер — ai_ops_kit/cli/entry.py; интенты живут в ai_ops_kit/cli/ai_ops_cli.py -> INTENTS
+# (уже в поставке). Жизненный цикл кита (init/doctor/update) сюда НЕ входит: установщик
+# в поставку не едет (docs/api/public-surface.md). Новый консольный вход АДДИТИВЕН и не
+# breaking change (AGENTS.md, «Публичная граница»: новый интент/вход — не ломающее изменение).
+ai-ops = "ai_ops_kit.cli.entry:main"
 
 [project.optional-dependencies]
-test = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0"]
-dev = ["pytest>=7.0", "pytest-cov>=4.0", "hypothesis>=6.0", "ruff>=0.16.2", "mypy>=1.0", "pre-commit>=3.0"]
+test = ["pytest>=8.0", "pytest-cov>=5.0", "hypothesis>=6.100"]
+dev = ["pytest>=8.0", "pytest-cov>=5.0", "hypothesis>=6.100", "ruff>=0.16.2", "mypy>=1.8", "pre-commit>=3.5"]
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}
@@ -160,6 +168,30 @@ select = [
 # `CHANGELOG.md` правлен 401 раз — в 4.5 раза больше любого файла кода. Находок поля этот класс не
 # дал ни одной: механизма не было вовсе. Это тот же класс «объявлено и не исполняется», только с
 # другой стороны — здесь не было объявлено и не исполнялось.
+
+# mypy: ОБЪЯВЛЕН И ТЕПЕРЬ ИСПОЛНЯЕТСЯ (F-05 внешнего аудита 2026-09-09). Стоял в [dev] и не
+# запускался нигде — тот же класс «объявлено, но не исполняется», что кит вычистил у ruff; инвентарь
+# `registry/enforcement-inventory.yaml` его подсветил. Замер решил спор «включить vs убрать»:
+# обычный проход нашёл 8 РЕАЛЬНЫХ проблем на фундаменте (implicit-Optional, рассогласование возврата
+# с TypedDict, необъявленные переменные) — типы окупаются, поэтому включён, а не удалён.
+# ОБЛАСТЬ — фундамент (kernel+shared), где контракты объявлены Protocol/TypedDict и цена типизации
+# ниже всего. Полная аннотация всего пакета (`disallow_untyped_defs`, ~107 подписей на фундаменте) —
+# отдельный ратчет-ВВЕРХ, не этот шаг: сейчас держим уровень «реальные типовые ошибки = 0».
+# `follow_imports = silent` — ошибки из НЕ-фундамента (его импортов) не краснят гейт: область строгая.
+# `py.typed` НЕ добавлен намеренно: пакет типизирован лишь на фундаменте, и маркер «весь пакет
+# типизирован» был бы над-заявлением — появится, когда покрытие вырастет.
+[tool.mypy]
+files = ["ai_ops_kit/shared", "ai_ops_kit/kernel"]
+ignore_missing_imports = true
+follow_imports = "silent"
+
+# Ратчет-ВВЕРХ (F-05 доводка 2026-09-10): kernel уже ПОЛНОСТЬЮ типизирован, поэтому на нём включён
+# строгий `disallow_untyped_defs` — новая функция без аннотаций в ядре краснит. shared: ВСЕ файлы под строгим disallow (99 подписей + каскад ошибок тел закрыты,
+# реальными типами, не Any). Дальше по коду — отдельный
+# шаг ратчета, когда охват вырастет. Так граница «где типы обязательны» ходит только вверх.
+[[tool.mypy.overrides]]
+module = ["ai_ops_kit.kernel.*", "ai_ops_kit.shared.*"]
+disallow_untyped_defs = true
 
 # towncrier: ЕДИНСТВЕННЫЙ из шести рассмотренных инструментов, у кого есть гейт «в этой ветке
 # добавлена запись для changelog» (EV-1137). Используем ТОЛЬКО `check`, никогда `build`: старый

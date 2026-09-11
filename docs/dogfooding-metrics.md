@@ -20,7 +20,7 @@ git add -A && git commit -m "chore: AI Ops Kit -> <версия>" && git push
    (`ai_ops_run.py run "<задача>" . --feature <имя-фичи>`), а не на ad-hoc `wi-<hash>` — иначе
    срез истории упадёт на новую фичу с 1 срезом и **не сдвинет baseline** (finding обкатки).
 2. **Довести по стадиям:** `plan → implement → verify → finish`.
-3. **В `finish` записать срез явно:** `tools/run_report.py features/<имя-фичи> --record`.
+3. **В `finish` записать срез явно:** `ai_ops_kit/lifecycle/run_report.py features/<имя-фичи> --record`.
 4. **Закрыть blueprint в том же PR, что и код** — иначе «реальность обогнала blueprint».
 
 > **Честно про автозапись (по runtime):**
@@ -33,7 +33,7 @@ git add -A && git commit -m "chore: AI Ops Kit -> <версия>" && git push
 ## Как проверить прогресс
 
 ```bash
-python3 /tmp/ai-ops-kit/tools/effect_metrics.py .ai/project/report-history
+PYTHONPATH=/tmp/ai-ops-kit python3 -m ai_ops_kit.intelligence.effect_metrics .ai/project/report-history
 ```
 - `baseline_ready: true` появляется при **3 фичах × ≥3 срезах** — порог, после которого
   baseline и North Star считаются сами.

@@ -66,11 +66,11 @@ def _shape_ok(rep):
 class TestPositive:
     def test_audit_on_bootstrapped_repo_has_green_artifacts(self, installer, tmp_path):
         r = _repo(tmp_path, tag=True)
-        installer._seed_product_layer(r)
+        installer._child_scaffolding()._seed_product_layer(r)
         rep = PA.audit(r)
         assert _shape_ok(rep)
         assert rep["dimensions"]["artifacts"]["status"] == PA.GREEN
-        assert rep["dimensions"]["artifacts"]["counts"]["valid"] == 5
+        assert rep["dimensions"]["artifacts"]["counts"]["valid"] == 4  # SR-2: roadmap снят из слоя .ai-ops/
 
 
 # ── fail-closed ─────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ class TestFailClosed:
         r = _repo(tmp_path)
         rep = PA.audit(r)
         assert rep["dimensions"]["artifacts"]["status"] == PA.RED
-        assert rep["dimensions"]["artifacts"]["counts"]["missing"] == 5
+        assert rep["dimensions"]["artifacts"]["counts"]["missing"] == 4  # SR-2: roadmap снят из слоя .ai-ops/
         assert rep["verdict"] == PA.RED
 
     def test_unknown_axes_stay_unknown(self, tmp_path):
@@ -96,7 +96,7 @@ class TestFailClosed:
 class TestSideEffect:
     def test_unknown_not_folded_into_verdict(self, installer, tmp_path):
         r = _repo(tmp_path, tag=True)
-        installer._seed_product_layer(r)
+        installer._child_scaffolding()._seed_product_layer(r)
         rep = PA.audit(r)
         assert {"backlog", "risk"} <= set(rep["unknown"])
         assert "backlog" not in rep["evaluated"] and "risk" not in rep["evaluated"]
@@ -105,7 +105,7 @@ class TestSideEffect:
 
     def test_worst_of_evaluated_drives_verdict(self, installer, tmp_path):
         r = _repo(tmp_path, ci=False, tests=False, tag=True)
-        installer._seed_product_layer(r)
+        installer._child_scaffolding()._seed_product_layer(r)
         rep = PA.audit(r)
         assert rep["dimensions"]["tech"]["status"] == PA.RED
         assert rep["verdict"] == PA.RED

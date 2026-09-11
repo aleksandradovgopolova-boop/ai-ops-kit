@@ -314,3 +314,40 @@ class TestComponentReuse:
                     "new_components_justified": True})
             b = build_bundle(root)
             assert reuse_violations(b) == []
+
+
+@pytest.mark.unit
+class TestContractRequiredStoriesWired:
+    """#671/#452 wired: required_stories_coverage (обязательные stories из контракта × СОБРАННЫЙ
+    Storybook) теперь ВЛИЯЕТ на evidence_for_gate.ux_review, а не живёт только в тестах. Объявленного
+    контрактом опыта нет в Storybook -> ux_review краснеет детерминированно."""
+
+    def _index_metriccard_only(self, root):
+        _write(root, "storybook-static/index.json", {"v": 5, "entries": {
+            "components-metriccard--default": {"type": "story", "id": "components-metriccard--default",
+                "title": "Components/MetricCard", "name": "Default", "importPath": "./src/MetricCard.tsx"}}})
+
+    def test_contract_required_story_missing_fails_ux(self):
+        import yaml
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._index_metriccard_only(root)
+            (root / ".ai" / "project").mkdir(parents=True)
+            (root / ".ai" / "project" / "experience-contract.yaml").write_text(
+                yaml.safe_dump({"screens": [{"id": "active-work", "name": "Active Work"}]}),
+                encoding="utf-8")
+            b = build_bundle(root, commit_sha="sha1", changed_files=["src/MetricCard.tsx"])
+            assert b["required_stories"]["missing"], b["required_stories"]
+            assert b["required_stories"]["complete"] is False
+            eg = evidence_for_gate(b)
+            assert eg["ux_review"]["deterministic_status"] == "fail"
+            assert "required_stories.missing" in eg["ux_review"]["basis"]
+
+    def test_no_contract_does_not_force_ux_fail(self):
+        """Контракта нет -> required_stories complete, ложного fail по этой оси не возникает."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self._index_metriccard_only(root)
+            b = build_bundle(root, commit_sha="sha1", changed_files=["src/MetricCard.tsx"])
+            assert b["required_stories"]["complete"] is True
+            assert b["required_stories"]["missing"] == []

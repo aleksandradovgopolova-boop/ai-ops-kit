@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import subprocess
 import sys
@@ -54,6 +55,36 @@ def test_a_healthy_install_passes_from_inside(installed):
     assert rep["installed"] is True
     bad = [c for c in rep["checks"] if c["ok"] is False]
     assert not bad, [f"{c['check']}: {c['detail']}" for c in bad]
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_policy_form_validator_is_wired_to_the_real_child_policy(installed):
+    """#678: валидатор формы политики проведён к ЖИВОМУ пути — сверяет РЕАЛЬНУЮ политику дочки
+    (access-filter теперь едет в поставку). Битую форму ловит, но замечание advisory: не в BLOCKING,
+    doctor не роняет. Если валидатор не доставлен — тест падает (ok=None), это и есть страж отгрузки."""
+    pol = installed / ".ai" / "policies" / "access-filter.yaml"
+    pol.parent.mkdir(parents=True, exist_ok=True)
+    pol.write_text("kind: NotAnAFP\n", encoding="utf-8")   # заведомо неверная форма
+    try:
+        rep = child_doctor.assess(installed)
+        vc = [c for c in rep["checks"] if c["check"].startswith("validate_access_filter")]
+        assert vc, "валидатор access-filter не проведён к политике дочки — остался built≠wired"
+        assert vc[0]["ok"] is False, f"битую форму не поймали (валидатор не доставлен?): {vc[0]}"
+        assert vc[0]["check"] not in child_doctor.BLOCKING          # advisory
+        assert "работать нельзя" not in rep["verdict"], rep["verdict"]
+    finally:
+        pol.unlink()
+        with contextlib.suppress(OSError):
+            pol.parent.rmdir()
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_absent_policy_is_not_a_remark(installed):
+    """Отсутствие политики легально (deny-by-default) — валидатор формы не запускается вовсе."""
+    rep = child_doctor.assess(installed)
+    assert not any(c["check"].startswith("validate_access_filter") for c in rep["checks"])
 
 
 @pytest.mark.unit

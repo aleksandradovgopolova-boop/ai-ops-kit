@@ -9,8 +9,14 @@
   * dangling_rule_ref — запись реестра ссылается на constitution_ref, которого нет в rules.yaml;
   * dangling_token    — запись реестра/семантики ссылается на токен, которого нет в design/tokens;
   * dangling_local    — запись ссылается на локальный id (компонент/паттерн), которого нет в реестре;
+  * dangling_namespace— capability ссылается на namespace токенов, не объявленный в tokens.yaml;
+  * missing_source    — запись tokens.yaml ссылается на файл-источник, которого нет в design/tokens;
+  * empty_namespace   — namespace контракта токенов не покрывает ни одного реального токена;
   * catalog_gap       — паттерн/шаблон из каталога §16 Конституции не покрыт реестром;
   * broken_tier       — semantic-цвет ссылается не на primitive-токен и не на литеральный hex (§21);
+  * unknown_status    — status capability вне закрытого словаря честной градации;
+  * unsubstantiated_guarantee — capability заявляет guaranteed_by_shipped_code без доказанного
+                        shipped_backing (нет реального едущего в дочку артефакта вне standards/uiux);
   * dup_id / bad_id   — дубли или пустые id токенов/записей.
 
 Запуск:  python standards/uiux/scripts/validate-registries.py [--json]
@@ -26,12 +32,36 @@ from pathlib import Path
 import yaml
 
 STD = Path(__file__).resolve().parents[1]
+REPO_ROOT = STD.parents[1]  # standards/uiux -> корень репозитория (для проверки shipped_backing)
 SRC = STD / "UI_CONSTITUTION.md"
 TOKENS_DIR = STD / "design" / "tokens"
 REG_DIR = STD / "registries"
 RULES_YAML = STD / "rules.yaml"
 
 HEX = re.compile(r"^#[0-9A-Fa-f]{3,8}$")
+
+# Закрытый словарь честной градации статуса capability (см. шапку capabilities.yaml).
+#   guaranteed_by_shipped_code — есть доказанный backing-код, едущий в дочку (shipped_backing);
+#   required_by_standard       — стандарт требует, но реализация/поставка не гарантирована;
+#   planned                    — намечено, backing ещё не существует.
+CAP_STATUS_VOCAB = ("guaranteed_by_shipped_code", "required_by_standard", "planned")
+
+
+def _shipped_backing_is_substantiated(entry):
+    """guaranteed_by_shipped_code правдив, только если shipped_backing НЕ пуст и КАЖДЫЙ путь
+    реально существует и лежит ВНЕ standards/uiux/** (это дерево-стандарт в дочку не едет).
+    Каталожная запись (comp./pat./tpl.) — спека, а не shipped-артефакт, и здесь не засчитывается."""
+    backing = entry.get("shipped_backing", [])
+    if not backing:
+        return False
+    std_dir = STD.resolve()
+    for rel in backing:
+        p = (REPO_ROOT / str(rel)).resolve()
+        if not p.exists():
+            return False
+        if p == std_dir or std_dir in p.parents:
+            return False  # внутри standards/uiux/** — не едет в дочку, гарантией не считается
+    return True
 
 
 def _walk_ids(obj):
@@ -182,6 +212,72 @@ def validate():
 
     for name in reg:
         check_refs(name)
+
+    # --- Контракт токенов (tokens.yaml): namespace/source/sample сверяются с design/tokens ---
+    declared_namespaces = set()
+    tok_path = REG_DIR / "tokens.yaml"
+    if tok_path.exists():
+        tok_reg = load_registry("tokens.yaml")
+        seen_tok = []
+        for e in tok_reg.get("entries", []):
+            eid = e.get("id", "")
+            seen_tok.append(eid)
+            ns = e.get("namespace", "")
+            if ns:
+                declared_namespaces.add(ns)
+                if not any(t == ns or t.startswith(ns + ".") for t in token_set):
+                    problems.append("empty_namespace: tokens.yaml/" + eid
+                                    + " -> namespace '" + ns + "' не покрывает ни одного токена")
+            src = e.get("source", "")
+            if src and not (TOKENS_DIR / src).exists():
+                problems.append("missing_source: tokens.yaml/" + eid
+                                + " -> " + src + " (нет в design/tokens)")
+            for ref in e.get("constitution_refs", []):
+                if ref not in rule_ids:
+                    problems.append("dangling_rule_ref: tokens.yaml/" + eid
+                                    + " -> " + ref + " (нет в rules.yaml)")
+            for tok in e.get("sample", []):
+                if tok not in token_set:
+                    problems.append("dangling_token: tokens.yaml/" + eid
+                                    + " -> " + tok + " (нет в design/tokens)")
+        for x in sorted(set(i for i in seen_tok if seen_tok.count(i) > 1)):
+            problems.append("dup_id: tokens.yaml повторяет id: " + x)
+
+    # --- Реестр capability (capabilities.yaml): сквозные возможности как проверяемые данные ---
+    cap_path = REG_DIR / "capabilities.yaml"
+    if cap_path.exists():
+        cap_reg = load_registry("capabilities.yaml")
+        seen_cap = []
+        for e in cap_reg.get("entries", []):
+            eid = e.get("id", "")
+            seen_cap.append(eid)
+            status = e.get("status", "")
+            if status not in CAP_STATUS_VOCAB:
+                problems.append("unknown_status: capabilities.yaml/" + eid + " -> статус '"
+                                + str(status) + "' вне закрытого словаря "
+                                + str(list(CAP_STATUS_VOCAB)))
+            elif status == "guaranteed_by_shipped_code" and not _shipped_backing_is_substantiated(e):
+                problems.append("unsubstantiated_guarantee: capabilities.yaml/" + eid
+                                + " -> статус guaranteed_by_shipped_code без доказанного shipped_backing"
+                                + " (нет едущего в дочку кода вне standards/uiux/**)")
+            for ref in e.get("constitution_refs", []):
+                if ref not in rule_ids:
+                    problems.append("dangling_rule_ref: capabilities.yaml/" + eid
+                                    + " -> " + ref + " (нет в rules.yaml)")
+            for tok in e.get("tokens", []):
+                if tok not in token_set:
+                    problems.append("dangling_token: capabilities.yaml/" + eid
+                                    + " -> " + tok + " (нет в design/tokens)")
+            for ns in e.get("token_namespaces", []):
+                if ns not in declared_namespaces:
+                    problems.append("dangling_namespace: capabilities.yaml/" + eid
+                                    + " -> " + ns + " (не объявлен в tokens.yaml)")
+            for loc in e.get("backed_by", []):
+                if loc not in local_ids:
+                    problems.append("dangling_local: capabilities.yaml/" + eid
+                                    + " -> " + loc + " (нет в реестрах компонентов/паттернов/шаблонов)")
+        for x in sorted(set(i for i in seen_cap if seen_cap.count(i) > 1)):
+            problems.append("dup_id: capabilities.yaml повторяет id: " + x)
 
     # --- Полнота каталога §16: каждый паттерн/шаблон Конституции покрыт реестром ---
     cat_pat, cat_tpl = parse_section16_catalog()

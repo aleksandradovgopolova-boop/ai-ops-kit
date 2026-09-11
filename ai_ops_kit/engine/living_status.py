@@ -149,3 +149,66 @@ def refresh(work_root, wid: str, task: str, *, today: str | None = None,
         return None
     doc.write_text(updated, encoding="utf-8")
     return {"doc": str(doc.relative_to(root)), "reviewed_at": today, "entry": entry}
+
+
+def _existing_candidate(root: Path, config_rel: str | None) -> tuple[str | None, Path | None]:
+    """Первый СУЩЕСТВУЮЩИЙ файл-кандидат в статус-доки (управляемый или нет). Нужен, чтобы назвать
+    причину-исключение точнее, чем «дока нет»: шаблон / без разметки свежести — разные причины."""
+    rels: list[str] = []
+    cfg = config_rel if config_rel is not None else _config_doc_rel(root)
+    if cfg:
+        rels.append(cfg)
+    rels.extend(_DEFAULT_CANDIDATES)
+    seen: set[str] = set()
+    for rel in rels:
+        if rel in seen:
+            continue
+        seen.add(rel)
+        p = root / rel
+        if p.is_file():
+            return rel, p
+    return None, None
+
+
+def describe(work_root, *, config_rel: str | None = None, today: str | None = None) -> dict:
+    """Read-only: как прогон обошёлся со статус-доком репозитория — для ЯВНОЙ строки в теле PR (#404).
+
+    Прогон обязан на доставке либо обновить статус-доки, либо назвать причину, по которой не обновил;
+    без этого сгенерированный PR молча упирается в собственный гейт свежести. Эта функция НИЧЕГО не
+    пишет — только сообщает исход (обновление `refresh` уже случилось на фазе commit):
+      * управляемый док найден -> {"managed": True, "doc": rel, "reviewed_at": str|None,
+        "fresh_today": bool} (fresh_today — reviewed_at бампнут на сегодня этой доставкой);
+      * управляемого нет -> {"managed": False, "reason": <человекочитаемая причина-исключение>}.
+    Свежесть определяется локально (reviewed_at == today), без импорта слоя validation — ядро не
+    зависит от validation вверх по слоям.
+    """
+    try:
+        return _describe(work_root, config_rel=config_rel, today=today)
+    except Exception:  # noqa: BLE001 — описание судьбы статус-дока не должно рушить доставку PR
+        return {"managed": False, "reason": "статус-док не удалось прочитать"}
+
+
+def _describe(work_root, *, config_rel: str | None, today: str | None) -> dict:
+    """Ядро describe без обёртки-страховки (см. describe)."""
+    root = Path(work_root)
+    today = today or date.today().isoformat()
+    doc = resolve_doc(root, config_rel=config_rel)
+    if doc is not None:
+        reviewed = _frontmatter(doc.read_text(encoding="utf-8")).get("reviewed_at")
+        return {"managed": True, "doc": str(doc.relative_to(root)),
+                "reviewed_at": (str(reviewed) if reviewed else None),
+                "fresh_today": str(reviewed) == today}
+    rel, p = _existing_candidate(root, config_rel)
+    if p is None:
+        reason = "в репозитории нет статус-дока (living-status) — обновлять нечего, гейт свежести неприменим"
+    else:
+        try:
+            md = p.read_text(encoding="utf-8")
+        except OSError:
+            md = ""
+        if _frontmatter(md).get("template") is True:
+            reason = f"статус-док {rel} помечен как шаблон — кит его не трогает"
+        else:
+            reason = (f"статус-док {rel} без разметки свежести (reviewed_at/stability) — "
+                      "гейт свежести к нему неприменим")
+    return {"managed": False, "reason": reason}

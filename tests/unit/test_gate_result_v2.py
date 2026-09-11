@@ -128,7 +128,6 @@ class TestToV1:
 @pytest.mark.unit
 class TestCalibratedView:
     def test_advisory_abstain(self):
-        sys.path.insert(0, str(PKG_ROOT / "tools"))
         from ai_ops_kit.gates import gate_policy
         dec = {d["gate"]: d for d in gate_policy.candidate_policy(
             {"ui_changed": True, "ui_impact": "internal"})}["ux_review"]
@@ -137,7 +136,6 @@ class TestCalibratedView:
         assert view["status"] == "abstain" and check(view) == []
 
     def test_block_fail(self):
-        sys.path.insert(0, str(PKG_ROOT / "tools"))
         from ai_ops_kit.gates import gate_policy
         dec = {d["gate"]: d for d in gate_policy.candidate_policy(
             {"ui_changed": True, "ui_impact": "user_facing"})}["ux_review"]

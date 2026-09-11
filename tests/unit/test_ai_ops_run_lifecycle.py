@@ -9,11 +9,15 @@ from pathlib import Path
 import pytest
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(PKG_ROOT / "tools"))
 
 from ai_ops_kit.engine import ai_ops_run
 
 from _ai_ops_run_helpers import _git_init_commit
+
+# Тесты гоняют полный жизненный цикл `ai-ops run` с реальным git и подпроцессами — >10 c на CI, то
+# есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = pytest.mark.slow
 
 
 @pytest.mark.critical_path

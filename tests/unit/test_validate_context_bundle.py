@@ -67,13 +67,13 @@ class TestContextBundleValidation:
         assert any("estimated_tokens" in e for e in check(bad))
 
     def test_real_compiler_produces_valid_bundle(self, good_bundle):
-        sys.path.insert(0, str(PKG / "tools"))
         from ai_ops_kit.context import context_compiler
+        from ai_ops_kit.engine.run_plan import build_plan
         with tempfile.TemporaryDirectory() as td:
             (Path(td) / "package.json").write_text(
                 '{"dependencies":{"react":"^18"}}', encoding="utf-8")
             bundle = context_compiler.compile_bundle(
                 {"task_type": "ENGINEERING", "risk": "medium",
                  "affected_areas": ["core"], "task_text": "t"},
-                Path(td))
+                Path(td), build_plan=build_plan)
             assert check(bundle) == []

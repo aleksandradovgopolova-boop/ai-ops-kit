@@ -323,6 +323,23 @@ class TestRunReview:
         assert rev["refusal"]["reason"] == "empty_answer"
         assert rev["refusal"]["provider"] == "claude-cli"
 
+    def test_run_review_env_unavailable_is_named_not_crash(self, review_deps):
+        """#160 (сессия Клода): провайдер ревьюера СТРУКТУРНО недоступен в среде (вложенный claude -p)
+        -> run_review НЕ пробрасывает исключение (иначе падает весь прогон), а возвращает named
+        no-verdict `env-unavailable` c refusal-словарём. По нему _run_reviews открывает handoff."""
+        from ai_ops_kit.providers.orchestrator_providers import ProviderEnvUnavailableError
+        policy, root = review_deps
+
+        def env_unavailable(_ctx):
+            raise ProviderEnvUnavailableError("claude-cli", "duration_api_ms:0, 0 токенов")
+
+        rev = tool_loop.run_review(env_unavailable, root, policy, "code_review",
+                                   budget={"max_model_calls": 5})
+        assert rev["result"] is None
+        assert rev["stopped"] == "env-unavailable"
+        assert rev["refusal"]["reason"] == "env_unavailable"
+        assert rev["refusal"]["provider"] == "claude-cli"
+
     def test_run_review_force_verdict_after_reads(self, review_deps):
         """rc10: жадное чтение до лимита, затем на ФОРС-ХОДЕ выносится вердикт (не тихий no-verdict)."""
         policy, root = review_deps
@@ -338,3 +355,77 @@ class TestRunReview:
         assert rev["result"] is not None
         assert rev["stopped"] == "verdict"
         assert len(rev["reads"]) == 3
+
+    # --- issue #614: упрощённая элицитация вердикта -------------------------------------------
+
+    def test_reviewer_prompt_splits_form_by_verdict(self):
+        """(#661-followup, живой прогон 587) Промпт РАЗВОДИТ форму по вердикту: NON-pass — простой
+        строкой-итогом `Recommendation: needs_work` (анти-таймаут #614 сохранён), а pass на
+        блокирующем гейте — ОБЯЗАТЕЛЬНО структурным reviewer-result с цитатой на изменённый файл.
+        Причина: claude-cli читает дифф из промпта и op:read не шлёт (reads всегда []), поэтому
+        прозаический pass НЕЧЕМ заземлить и Fix C держал его как рубер-штамп — гейт не закрывался
+        никогда. Цитата — единственный доступный способ заземлить pass на этом пути."""
+        cap = {}
+
+        def provider(prompt):
+            cap["p"] = prompt
+            return "Recommendation: needs_work"
+
+        tool_loop.make_reviewer_proposer(provider, "code_review")("=== КОНТЕКСТ ===\nдифф")
+        p = cap["p"]
+        low = p.lower()
+        # НЕ-pass остаётся прозаической строкой (анти-таймаут #614)
+        assert "Recommendation: needs_work" in p
+        # pass ОБЯЗАН нести цитату (структурную форму), а не быть прозаической строкой
+        assert "обязательн" in low and "цитат" in low
+        assert "evidence" in low and '"lines"' in p
+        # прежний прозаический `Recommendation: pass` больше НЕ предлагается как достаточный вердикт
+        assert "Recommendation: pass" not in p
+
+    def test_reviewer_one_line_recommendation_becomes_a_verdict(self, review_deps):
+        """(#614-б) Простая строка-итог ловится _last_prose_verdict и приходит вердиктом за 1 виток."""
+        policy, root = review_deps
+        prop = tool_loop.make_reviewer_proposer(
+            lambda _p: "Прочитал дифф, всё ок.\n\nRecommendation: pass", "code_review")
+        rev = tool_loop.run_review(prop, root, policy, "code_review",
+                                   budget={"max_model_calls": 10},
+                                   verdict_hint="строку `Recommendation: pass|needs_work`")
+        assert rev["result"] is not None and rev["result"]["status"] == "pass"
+        assert rev["result"].get("prose_verdict") is True
+        assert rev["stopped"] == "verdict"
+
+    def test_verdict_hint_steers_the_force_turn_message(self, review_deps):
+        """(#614) Форс-ход просит ИМЕННО строку-итог из verdict_hint, а не «один reviewer-result»."""
+        policy, root = review_deps
+        seen = {"forced": None}
+
+        def only_reads_then_watch(ctx):
+            if "ЛИМИТ ЧТЕНИЙ ИСЧЕРПАН" in ctx:
+                seen["forced"] = ctx
+                return {"kind": "reviewer-result", "gate": "code_review", "status": "pass",
+                        "checks": [{"id": "ok", "status": "pass"}]}
+            return {"op": "read", "path": "f.txt"}
+
+        tool_loop.run_review(only_reads_then_watch, root, policy, "code_review",
+                             budget={"max_model_calls": 20}, max_reads=2,
+                             verdict_hint="строку `Recommendation: pass|needs_work`")
+        assert seen["forced"] is not None
+        assert "Recommendation: pass|needs_work" in seen["forced"]
+        assert "один reviewer-result" not in seen["forced"], "структурная просьба не должна вернуться"
+
+    def test_default_force_turn_still_asks_for_reviewer_result(self, review_deps):
+        """(#614-регресс) Без verdict_hint (путь приёмки) форс-ход по-прежнему просит reviewer-result —
+        не меняем существующий шов ни на байт."""
+        policy, root = review_deps
+        seen = {"forced": None}
+
+        def only_reads(ctx):
+            if "ЛИМИТ ЧТЕНИЙ ИСЧЕРПАН" in ctx:
+                seen["forced"] = ctx
+                return {"kind": "reviewer-result", "gate": "code_review", "status": "pass",
+                        "checks": [{"id": "ok", "status": "pass"}]}
+            return {"op": "read", "path": "f.txt"}
+
+        tool_loop.run_review(only_reads, root, policy, "code_review",
+                             budget={"max_model_calls": 20}, max_reads=2)
+        assert seen["forced"] is not None and "один reviewer-result" in seen["forced"]

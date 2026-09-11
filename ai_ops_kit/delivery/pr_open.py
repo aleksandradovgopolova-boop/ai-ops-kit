@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -33,9 +34,67 @@ def _pr_payload(branch, title, body, base):
     return {"title": title, "head": branch, "base": base, "body": body or "", "draft": True}
 
 
+def _status_docs_note(status_docs):
+    """#404: одна строка про статус-доки для тела PR — обновление ИЛИ явная причина-исключение.
+    Так сгенерированный PR не упирается молча в собственный гейт свежести: либо статус-док обновлён
+    этой доставкой, либо в теле названа причина, почему обновлять было нечего. `status_docs` —
+    исход `living_status.describe` (движок считает его; здесь только форматируем). -> str."""
+    outcome = status_docs or {}
+    if outcome.get("managed"):
+        doc, reviewed = outcome.get("doc"), outcome.get("reviewed_at")
+        # Формулируем через НАБЛЮДАЕМЫЙ факт (свеж на дату доставки), а не «эта доставка обновила» —
+        # describe видит только reviewed_at, но не авторство бампа. Переусиливать не честно (#404-review).
+        if outcome.get("fresh_today"):
+            return f"Статус-док свеж на дату доставки: {doc} (reviewed_at {reviewed})."
+        return (f"Статус-док {doc} НЕ свеж на дату доставки (reviewed_at {reviewed}) — "
+                "проверь свежесть перед слиянием.")
+    return f"Статус-доки не обновлялись — причина-исключение: {outcome.get('reason')}."
+
+
+def pr_body(wid, base_ref, base_sha, committed_sha, status_docs):
+    """Тело draft PR автопрогона (чистая функция, тестируется offline). #404: включает явную строку
+    про статус-доки, чтобы у ревьюера был честный след — обновлено или почему нет."""
+    return (f"Автопрогон AI Ops. WorkItem: {wid}. База {base_ref} "
+            f"({(base_sha or '?')[:12]}) → evidence на {committed_sha or '?'}.\n\n"
+            f"{_status_docs_note(status_docs)}")
+
+
 def _git(root, *args):
     from ai_ops_kit.shared import gitio
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
+
+
+# Маскировка секретов в git-stderr перед попаданием в note/тело PR. ЦЕЛЕВОЙ вектор именно этого
+# stderr — credentials, ВСТРОЕННЫЕ В URL (оператор вручную настроил origin вида
+# https://<токен>@github.com/...), плюс распознаваемые формы GitHub-токенов на всякий случай.
+# Паттерны ЛОКАЛЬНЫ намеренно: канонический скраб живёт в security-слое (security_scan.SECRET_PATTERNS,
+# используется engine.tool_broker._scrub_output), но delivery не может импортировать security/engine, не
+# добавив cross-ребро слоёв (ратчет layering морозит текущий набор; delivery↔engine осознанно снята в
+# v3.38 K3). Поэтому здесь — узкий самодостаточный набор под ровно этот канал; при появлении общего
+# примитива в `shared` его стоит переиспользовать. Держать в синхроне с security_scan.SECRET_PATTERNS.
+_SECRET_SUBS = (
+    re.compile(r"(https?://)[^/\s:@]+(?::[^/\s@]+)?@"),          # user:pass@ / токен@ в URL
+    re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),                   # ghp_/gho_/ghs_/ghr_/ghu_ PAT
+    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),                 # fine-grained PAT
+    re.compile(r"(?i)(authorization:\s*(?:bearer|token)\s+)\S+"),# заголовок авторизации
+)
+_URL_CRED_RE = _SECRET_SUBS[0]
+
+
+def _scrub_git_output(text):
+    """P2 (безопасность): git-stderr упавшего push может унести секрет в note/тело PR — если оператор
+    ВРУЧНУЮ настроил origin со встроенным в URL токеном. Маскируем ДО обрезки, чтобы срез не оставил
+    половину. fail-closed: не смогли отредактировать -> содержимое не показываем вовсе (лучше без
+    диагностики, чем с утёкшим секретом)."""
+    if not text:
+        return text
+    try:
+        text = _URL_CRED_RE.sub(r"\1«***REDACTED-SECRET***»@", text)
+        for _pat in _SECRET_SUBS[1:]:
+            text = _pat.sub("«***REDACTED-SECRET***»", text)
+    except Exception as _e:  # noqa: BLE001 — сбой скраба не показывает содержимое (не унести секрет)
+        return f"«***OUTPUT-WITHHELD: скраб секретов не выполнен ({type(_e).__name__})***»"
+    return text
 
 
 def _is_non_fast_forward(err):
@@ -121,7 +180,8 @@ def open_draft_pr(root, branch, title, body="", base=None, push=True, delivery_i
             if prc != 0:
                 _hint = (" (ветка расходится с remote и --force-with-lease не прошёл — возможно, в неё "
                          "дописали извне)" if _is_non_fast_forward(perr) else "")
-                return {"status": "error", "note": f"git push не удался (rc={prc}): {perr[:200]}{_hint}"}
+                return {"status": "error",
+                        "note": f"git push не удался (rc={prc}): {_scrub_git_output(perr)[:200]}{_hint}"}
         # P0 (#399): после УСПЕШНОГО push авторитетный head-sha — это ЛОКАЛЬНО запушенный коммит
         # (push прошёл => origin/<branch> == local <branch>, а PR head — это и есть ветка). Ответ
         # GitHub API про head PR обновляется с задержкой: сразу после push он отдаёт СТАРЫЙ sha,

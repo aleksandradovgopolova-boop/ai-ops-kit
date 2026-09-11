@@ -32,7 +32,10 @@ sys.path.insert(0, str(PKG / "ai_ops_kit" / "validation"))
 
 import validate_release_claims as vrc  # noqa: E402
 
-pytestmark = pytest.mark.unit
+# Тесты собирают производные счётчики по реальному реестру релиз-claims (полный проход) — >10 c на
+# CI, то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile` в
+# slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
+pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 DERIVED_FIELDS = ("validators_count", "validators_externally_tested")
 

@@ -10,7 +10,7 @@
   6. агент из config/agents.yaml, не попавший в реестр;
   7. манифест: нет package_version ИЛИ он расходится с файлом VERSION.
 
-Использование:  python3 02_tools/ci/validate_ai_first_registry.py
+Использование:  python3 -m ai_ops_kit.validation.validate_ai_first_registry
 Возврат 0 — чисто, 1 — есть ошибки. Требует pyyaml.
 """
 from __future__ import annotations

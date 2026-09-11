@@ -7,14 +7,6 @@ security verdict validation, environment symptom detection.
 from __future__ import annotations
 
 import re
-import sys
-from pathlib import Path
-
-PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
-            Path(__file__).resolve().parents[1])
-for _p in (PKG / "tools", PKG / "validation"):
-    if str(_p) not in sys.path:
-        sys.path.insert(0, str(_p))
 
 
 _ENV_SYMPTOMS = ("command not found", "not found", "no such file", "no module named",
@@ -178,6 +170,28 @@ def _diff_checks(baseline, after):
     return regressions, fixed
 
 
+def _baseline_status_flips(baseline, after):
+    """Проверки, чей статус pass<->fail РАЗЛИЧАЕТСЯ между базой и правкой (#405).
+
+    Это ровно те проверки, из-за которых baseline-diff (и производный `_iv_baseline_exempt`)
+    способен ПЕРЕВЕРНУТЬ вердикт readiness между двумя прогонами: date-зависимый/flaky тест,
+    оказавшийся `pass` при захвате базы и `fail` после (или наоборот), молча снимает или выдаёт
+    освобождение implementation_verification. Функция НЕ судит, регресс это или починка — она
+    только НАЗЫВАЕТ нестабильную проверку, чтобы флип вердикта был атрибутирован, а не безмолвен.
+
+    Детерминированна на одном входе: -> отсортированный список имён проверок.
+    """
+    baseline, after = baseline or {}, after or {}
+    real = ("pass", "fail")
+    flips = []
+    for name, a in after.items():
+        b = baseline.get(name) or {}
+        b_status, a_status = b.get("status"), a.get("status")
+        if b_status in real and a_status in real and b_status != a_status:
+            flips.append(name)
+    return sorted(flips)
+
+
 def _evidence_ref_errors(dom, ev_items, reviewer_reads=None):
     """v3.0.10 (finding аудита P1): evidence домена — СТРУКТУРНЫЕ ссылки (EvidenceRef), а не строка."""
     errs = []
@@ -292,8 +306,8 @@ def _security_verdict_errors(res, revision, applicable_domains, vrr, reviewer_re
 #
 # Здесь стояло `sys.exit(selftest())`, а сама функция удалена в v3.30 вместе с переносом
 # селфтестов в pytest: любой запуск падал с `NameError`. Просто убрать блок — тоже неверно:
-# `tools/pipeline_failure.py` остаётся объявленной точкой входа, и молчаливый выход с кодом 0 — тот
-# самый дефект, который ловит `tests/unit/test_alias_entry_points.py` («ноль и есть симптом»).
+# модуль остаётся запускаемой точкой входа (`python3 -m ai_ops_kit.engine.pipeline_failure`), и молчаливый
+# выход с кодом 0 — тот самый дефект «ноль и есть симптом».
 # Поэтому вход делает осмысленную работу — печатает назначение модуля, как `invariants.py`.
 # Проверки модуля — в `tests/unit/`.
 if __name__ == "__main__":

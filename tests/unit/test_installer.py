@@ -367,3 +367,25 @@ def test_delivery_footprint_is_smaller_than_legacy(installed, ai_ops):
                 total, _ceil["volume_bytes"], _warn_fraction,
                 ai_ops.delivery_breakdown_lines(top=8)),
             stacklevel=2)
+
+
+# ── #702: вывод установки читается человеком — ясный следующий шаг, а не стена ─────────────────
+
+def test_install_ends_with_a_clear_human_next_step(child):
+    """Последнее, что видит человек после установки, — понятное действие (набрать `ai-ops`),
+    а не техническая простыня. Иначе новичок не знает, что делать дальше."""
+    out = _run_cli(child, "init", ".").stdout
+    assert "AI Ops Kit подключён" in out
+    tail = out[out.rindex("AI Ops Kit подключён"):]
+    # финал ведёт к человеческой двери и называет первый шаг — без сырых внутренних терминов
+    assert "наберите" in tail and "ai-ops" in tail
+    assert "ai-ops model" in tail
+
+
+def test_install_ci_report_is_a_count_not_a_wall_of_filenames(child):
+    """Первая установка: все workflow просто поставлены — их называют числом, а не перечисляют
+    стеной имён файлов (сжатие стены, #702)."""
+    out = _run_cli(child, "init", ".").stdout
+    assert "Настроен CI и защита репозитория (" in out
+    # старой стены из перечисления .yml-имён в CI-строке быть не должно
+    assert "ai-ops-update.yml (installed)" not in out

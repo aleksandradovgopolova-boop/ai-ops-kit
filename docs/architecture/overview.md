@@ -12,10 +12,10 @@ AI Ops Kit — модульная система с чётким разделе�
 │  Product Layer (agents/, templates/, skills/)    │
 │  AI-агенты, шаблоны, навыки                      │
 ├─────────────────────────────────────────────────┤
-│  Execution Layer (tools/)                        │
+│  Execution Layer (ai_ops_kit/)                   │
 │  Движок: orchestrator → pipeline → delivery      │
 ├─────────────────────────────────────────────────┤
-│  Quality Layer (quality/, validation/)           │
+│  Quality Layer (quality/, ai_ops_kit/validation/)│
 │  Гейты, валидаторы, evidence                     │
 ├─────────────────────────────────────────────────┤
 │  Core Layer (registry/, schemas/, config/)       │
@@ -23,22 +23,28 @@ AI Ops Kit — модульная система с чётким разделе�
 └─────────────────────────────────────────────────┘
 ```
 
+> Плоский слой `tools/` снят в 4.0 — движок целиком под пакетом `ai_ops_kit/`
+> (см. `MIGRATION_GUIDE_4.0.md`). Корневого `validation/` нет с 3.34 — валидаторы
+> под `ai_ops_kit/validation/`.
+
 ## Ключевые модули
 
-| Модуль | Строк | Ответственность |
-|--------|-------|-----------------|
-| `orchestrator.py` | 606 | Провайдеры, HTTP, usage recording |
-| `execution_pipeline.py` | 3210 | Pipeline: detect → tool-loop → evidence → gates |
-| `preflight.py` | 372 | Pre-execution проверки (spec, atomic, budget) |
-| `tool_loop.py` | 682 | Tool-calling loop с writer≠judge |
-| `tool_broker.py` | 689 | Policy Engine + executor |
-| `ai_ops_run.py` | 2180 | Unified task controller |
-| `ai_ops_cli.py` | 887 | Intent-based UX |
+Точные размеры не фиксируем здесь (дрейфуют — их сторожат size-ратчеты в CI), важна ответственность.
 
-## Разбитые модули (v3.28.0)
+| Модуль | Ответственность |
+|--------|-----------------|
+| `ai_ops_kit/providers/orchestrator.py` | Провайдеры, HTTP, usage recording |
+| `ai_ops_kit/engine/execution_pipeline.py` | Pipeline: detect → tool-loop → evidence → gates |
+| `ai_ops_kit/gates/preflight.py` | Pre-execution проверки (spec, atomic, budget) |
+| `ai_ops_kit/engine/tool_loop.py` | Tool-calling loop с writer≠judge |
+| `ai_ops_kit/engine/tool_broker.py` | Policy Engine + executor |
+| `ai_ops_kit/engine/ai_ops_run.py` | Unified task controller |
+| `ai_ops_kit/cli/ai_ops_cli.py` | Intent-based UX |
 
-- `orchestrator.py` → `orchestrator_http.py` + `orchestrator_providers.py` + `orchestrator_usage.py`
-- В процессе: `execution_pipeline.py` → `pipeline_helpers.py` + `pipeline_failure.py` + `pipeline_git.py` + `pipeline_evidence.py`
+## Разбитые модули
+
+- `ai_ops_kit/providers/orchestrator.py` → `orchestrator_http.py` + `orchestrator_providers.py` + `orchestrator_usage.py`
+- `ai_ops_kit/engine/execution_pipeline.py` → `pipeline_helpers.py` + `pipeline_failure.py` + `pipeline_git.py` + `pipeline_evidence.py` + `pipeline_readiness.py` + `pipeline_setup.py`
 
 ## Три кольца (v3.26.0)
 

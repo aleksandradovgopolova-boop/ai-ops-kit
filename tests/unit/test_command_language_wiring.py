@@ -24,12 +24,17 @@ import pytest
 
 PKG = Path(__file__).resolve().parents[2]
 CLI = PKG / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
+# Слой реализации команд вынесен из монолита входа в модуль-сосед — большинство вызовов `_say`
+# живёт теперь там (обработчики намерений и путь run/do), поэтому корпус проверки имён включает оба.
+CLI_COMMANDS = PKG / "ai_ops_kit" / "cli" / "ai_ops_cli_commands.py"
 PRESENTER = PKG / "ai_ops_kit" / "ui" / "presenter.py"
-# Переводчики повседневных команд вынесены в модуль-сосед (v3.35): переводчик — это `from_*` в любом
-# из двух файлов слоя, и оба исключаются из «корпуса, где кит говорит», чтобы `def from_X` не
-# засчитывался как вызов сам себя.
+# Переводчики вынесены в модули-соседи: переводчик — это `from_*` в любом из файлов слоя, и все они
+# исключаются из «корпуса, где кит говорит», чтобы `def from_X` не засчитывался как вызов сам себя.
+# Файлов теперь три: базовый `presenter.py`, `presenter_formatters.py` (повседневные команды +
+# чтение состояния проекта) и `presenter_report_formatters.py` (ход и решения работы).
 PRESENTER_FORMATTERS = PKG / "ai_ops_kit" / "ui" / "presenter_formatters.py"
-PRESENTER_FILES = (PRESENTER, PRESENTER_FORMATTERS)
+PRESENTER_REPORT_FORMATTERS = PKG / "ai_ops_kit" / "ui" / "presenter_report_formatters.py"
+PRESENTER_FILES = (PRESENTER, PRESENTER_FORMATTERS, PRESENTER_REPORT_FORMATTERS)
 
 # Внутренние имена, которым нечего делать в ответе владельцу продукта. Список короткий и конкретный:
 # каждый пункт когда-то печатался наружу.
@@ -87,7 +92,8 @@ def test_no_translator_is_allowed_to_stay_unwired():
 def test_every_name_passed_to_say_exists_in_presenter():
     """`_say` берёт переводчика по имени-строке — значит опечатка возможна, и она обязана краснеть."""
     from ai_ops_kit.ui import presenter
-    tree = ast.parse(CLI.read_text(encoding="utf-8"))
+    src = CLI.read_text(encoding="utf-8") + "\n" + CLI_COMMANDS.read_text(encoding="utf-8")
+    tree = ast.parse(src)
     names = [n.args[1].value for n in ast.walk(tree)
              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "_say"
              and len(n.args) >= 2 and isinstance(n.args[1], ast.Constant)]
@@ -236,16 +242,16 @@ def test_doctor_verdict_names_the_blocking_reason():
     sys.path.insert(0, str(PKG / "installer"))
     import ai_ops as inst
 
-    verdict = inst._doctor_verdict(
+    verdict = inst._doctor()._doctor_verdict(
         ["версии: установлено 3.34.0 / пакет 3.35.0 ⟳ нужен update", "зона managed: ✓"],
         blockers=["установлена версия 3.34.0, а рядом лежит 3.35.0 — нужен update"])
     assert "3.35.0" in verdict and "update" in verdict, verdict
     assert "доказывает" in verdict, "не сказано, почему остальному выводу нельзя верить"
 
-    clean = inst._doctor_verdict(["зона managed: ✓", "движок: ✓"], blockers=[])
+    clean = inst._doctor()._doctor_verdict(["зона managed: ✓", "движок: ✓"], blockers=[])
     assert "порядке" in clean or "работает" in clean, clean
     assert "✗" not in clean
 
-    warned = inst._doctor_verdict(["контекст: ✗ нет обязательного документа"], blockers=[])
+    warned = inst._doctor()._doctor_verdict(["контекст: ✗ нет обязательного документа"], blockers=[])
     assert "замечани" in warned.lower(), warned
     assert "OK" not in warned, "вердикт снова не следует за худшей строкой"

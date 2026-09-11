@@ -7,7 +7,7 @@
 
 Проверяет:
 1. Джоба pr-size существует в pr-smoke.yml.
-2. Условие `if` ограничивает запуск только PR (в merge_group диффа PR нет — капкан статусов).
+2. Условие `if` ограничивает запуск только PR (джобе нужен PR-дифф против origin/main).
 3. Шаг вызывает validate_pr_size.py с --base, но БЕЗ --strict (advisory на время обкатки).
 4. Прямой вызов скрипта не нарушает pytest-only инвариант (whitelist в validate_agents_checklist).
 """
@@ -41,7 +41,7 @@ def test_pr_size_job_exists() -> None:
 
 
 def test_pr_size_runs_only_on_pr() -> None:
-    """Только на PR: в merge_group нет PR-диффа, а обязательный пропуск повесил бы очередь."""
+    """Только на PR: джобе нужен PR-дифф против origin/main, которого на других событиях нет."""
     doc, _ = _steps()
     condition = doc["jobs"]["pr-size"].get("if", "")
     assert "pull_request" in condition, f"pr-size должна идти только на PR, условие: {condition}"

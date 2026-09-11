@@ -317,6 +317,61 @@ class TestReleaseRefusesWithoutChangelogSection:
             "прежнее поведение вернулось: выпуск снова выходит с пустой историей"
 
 
+class TestMutationGateIsAPreconditionOfRelease:
+    """Четвёртые ворота — мутационный гейт СИНХРОННО перед выпуском (работа `mutation-gate-on-release`).
+
+    ЗАМЕР: `test_every_declared_probe_of_the_kit_kills_its_mutant` (~6 мин) доказывает, что тесты кита
+    вообще ловят регрессии. Он жил ТОЛЬКО в nightly-quality.yml (cron + push в main), а release.yml
+    триггерится по `workflow_run` от package-quality и его не дожидался — то есть тег/Release могли
+    выйти на коммите, для которого гейт не прогонялся (ночь на расписании может лечь на другой SHA).
+    Ждать nightly нельзя: расписание не гарантирует прогон ИМЕННО релизного коммита. Значит гейт
+    обязан гнаться в самом release.yml, синхронно, на релизном SHA, и его падение обязано ронять джобу.
+
+    Проверяется СТРУКТУРА workflow (какой шаг с каким `if` и в каком порядке), а не текст файла:
+    достаточно, чтобы снятие условия или самого шага поймал хотя бы один assert."""
+
+    def _release_job(self):
+        wf = yaml.safe_load((KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
+        return wf["jobs"]["release"]
+
+    def _steps(self):
+        return self._release_job()["steps"]
+
+    def _mutation_step(self):
+        for s in self._steps():
+            if "pytest" in str(s.get("run", "")) and "test_mutation_probe" in str(s.get("run", "")):
+                return s
+        raise AssertionError("в release.yml нет шага, вызывающего мутационный гейт")
+
+    def test_release_job_runs_the_mutation_gate(self):
+        """Мутационный гейт вызывается тем же тестом, что и в nightly — не пересказом, а прогоном."""
+        run = str(self._mutation_step()["run"])
+        assert "test_mutation_probe.py" in run, run
+        assert "-m nightly" in run, (
+            f"гейт зовётся не тем маркером, что в nightly-quality — гарантии синхронности нет: {run}")
+
+    def test_the_mutation_gate_is_conditional_on_need_release(self):
+        """6 минут не тратятся, когда выпуск не нужен: шаг под тем же условием, что и создание тега."""
+        assert str(self._mutation_step().get("if")) == "steps.check_release.outputs.needed == 'true'", \
+            self._mutation_step().get("if")
+
+    def test_the_mutation_gate_runs_before_the_tag_is_created(self):
+        """ПОРЯДОК — суть предусловия: гейт обязан стоять ДО создания тега/Release, иначе выпуск уже
+        опубликован к моменту проверки и падение ничего не предотвращает."""
+        steps = self._steps()
+        mut_idx = steps.index(self._mutation_step())
+        tag_idx = next(i for i, s in enumerate(steps)
+                       if "CHANGELOG" in str(s.get("name", "")) and s.get("run")
+                       and "gh release create" in str(s.get("run", "")))
+        assert mut_idx < tag_idx, (
+            "мутационный гейт стоит ПОСЛЕ создания тега — тег вышел бы до проверки")
+
+    def test_the_gate_shares_the_release_commit(self):
+        """Гейт гонится на релизном SHA: та же джоба, тот же `checkout` на `workflow_run.head_sha`."""
+        checkout = next(s for s in self._steps() if "checkout" in str(s.get("uses", "")))
+        assert "workflow_run.head_sha" in str(checkout.get("with", {}).get("ref", "")), checkout
+
+
 @pytest.mark.unit
 def test_the_pr_title_is_gated_by_the_same_pattern_as_commits():
     """Заголовок PR — это тема будущего коммита, и правило обязано действовать ТАМ, где решается.
