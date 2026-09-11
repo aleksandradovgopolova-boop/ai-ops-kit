@@ -5,7 +5,7 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 4.0.0
+version: 4.1.0
 # Поле `phase` УБРАНО (04.09.2026, лента release-metadata). Это была свободная проза релиза, которая
 # дублировала заголовок раздела CHANGELOG. `release_bump` бампает ЧИСЛО версии по всем поверхностям и
 # пишет заголовок CHANGELOG из `--title`, но `phase` не трогал, а `validate_release_claims` проверяет
