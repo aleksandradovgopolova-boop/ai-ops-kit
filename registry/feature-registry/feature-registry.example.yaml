@@ -20,7 +20,7 @@ features:
       who: "Зарегистрированный пользователь продукта."
       verify: "POST /login с валидными кредами → 200 и cookie сессии; неверные креды → 401."
     surfaces:
-      - {kind: route, ref: "src/auth/routes.py:31|login", confidence: verified, extractor: none}
+      - {kind: route, ref: "src/auth/routes.py:31|login", confidence: inferred, extractor: none}
       - {kind: screen, ref: "src/ui/LoginScreen.tsx:12|LoginScreen", confidence: inferred, extractor: none}
     status: active
     owner: "team-identity"
@@ -32,8 +32,8 @@ features:
       who: "Аналитик, которому нужен отчёт вне продукта."
       verify: "`app export report --format csv` создаёт непустой CSV; тот же файл доступен из UI по кнопке «Экспорт»."
     surfaces:
-      - {kind: cli, ref: "src/cli/export.py:8|export_report", confidence: verified, extractor: none}
-      - {kind: api, ref: "src/api/reports.py:54|get_report_export", confidence: verified, extractor: none}
+      - {kind: cli, ref: "src/cli/export.py:8|export_report", confidence: inferred, extractor: none}
+      - {kind: api, ref: "src/api/reports.py:54|get_report_export", confidence: inferred, extractor: none}
     status: active
     owner: "team-analytics"
 

@@ -1,110 +1,44 @@
 # -*- coding: utf-8 -*-
-"""Детерминированная валидация схемы реестра фич дочки (W1 фичи feature-registry-coverage).
+"""Поведенческие тесты валидатора реестра фич дочки (W1 фичи feature-registry-coverage).
 
-Схема (`registry/feature-registry/feature-registry.schema.yaml`) объявляет форму одной фичи и одной
-записи поверхности. Этот тест ДОКАЗЫВАЕТ, что схема пригодна для детерминированной проверки без сети
-и модели: обычный валидатор на stdlib+pyyaml читает схему и проверяет по ней образец.
-
-Три теста на capability (AGENTS.md):
+Логика проверки схемы живёт в ПОСТАВЛЯЕМОМ модуле `ai_ops_kit.validation.validate_feature_registry`,
+а не внутри теста. Здесь мы ИМПОРТИРУЕМ его и ВЫЗЫВАЕМ на образцах, доказывая три capability
+(AGENTS.md):
   * positive     — валидный образец (feature-registry.example.yaml) проходит;
-  * fail-closed  — фича без секции verify / с плохим status / с плохим confidence / с битым ref
-                   ОТКЛОНЯЕТСЯ;
-  * side-effect  — валидатор реально ЧИТАЕТ схему из файла: подмена обязательного набора полей в
+  * fail-closed  — фича без секции verify / с пустым who / с плохим status / с плохим confidence /
+                   с битым ref ОТКЛОНЯЕТСЯ;
+  * side-effect  — валидатор реально ЧИТАЕТ обязательный набор полей ИЗ СХЕМЫ: подмена набора в
                    схеме меняет вердикт (иначе проверка была бы зашита в тесте, а не в реестре).
 """
 from __future__ import annotations
 
 import copy
 import re
-from pathlib import Path
 
 import pytest
 import yaml
 
-REPO = Path(__file__).resolve().parents[2]
-SCHEMA_PATH = REPO / "registry" / "feature-registry" / "feature-registry.schema.yaml"
-EXAMPLE_PATH = REPO / "registry" / "feature-registry" / "feature-registry.example.yaml"
+from ai_ops_kit.validation.validate_feature_registry import (
+    DEFAULT_REGISTRY,
+    DEFAULT_SCHEMA,
+    load_schema,
+    validate_feature,
+    validate_registry,
+)
 
 pytestmark = pytest.mark.unit
 
 
-# ─── Детерминированный валидатор (stdlib+pyyaml, без сети/модели) ────────────────────────────────
-
-def _check_scalar(spec: dict, value, path: str, errors: list) -> None:
-    typ = spec.get("type")
-    if typ == "string":
-        if not isinstance(value, str) or (spec.get("min_length", 0) and len(value) < spec["min_length"]):
-            errors.append(f"{path}: ожидалась непустая строка")
-            return
-        pat = spec.get("pattern")
-        if pat and not re.match(pat, value):
-            errors.append(f"{path}: строка не соответствует шаблону {pat!r}")
-    elif typ == "enum":
-        if value not in spec.get("values", []):
-            errors.append(f"{path}: {value!r} не входит в {spec.get('values')}")
-
-
-def _check_object(fields_spec: dict, required: list, obj, path: str, errors: list) -> None:
-    if not isinstance(obj, dict):
-        errors.append(f"{path}: ожидался объект")
-        return
-    for key in required:
-        # Обязательность = ключ присутствует и не None. Пустоту конкретных полей стерегут их
-        # спецификации (min_length у строк); список surfaces законно пуст у planned-фичи.
-        if key not in obj or obj[key] is None:
-            errors.append(f"{path}.{key}: обязательное поле отсутствует")
-    for key, spec in fields_spec.items():
-        if key not in obj:
-            continue
-        sub = f"{path}.{key}"
-        if spec.get("type") == "object":
-            _check_object(spec.get("fields", {}), spec.get("required", []), obj[key], sub, errors)
-        else:
-            _check_scalar(spec, obj[key], sub, errors)
-
-
-def validate_feature(schema: dict, feature: dict) -> list:
-    """Проверить одну фичу против схемы. -> список ошибок (пусто = валидна)."""
-    errors: list = []
-    fspec = schema["feature"]
-    _check_object(fspec["fields"], fspec["required"], feature, "feature", errors)
-    # surfaces: список записей по схеме surface
-    sspec = schema["surface"]
-    surfaces = feature.get("surfaces")
-    if surfaces is not None:
-        if not isinstance(surfaces, list):
-            errors.append("feature.surfaces: ожидался список")
-        else:
-            for i, surf in enumerate(surfaces):
-                _check_object(sspec["fields"], sspec["required"], surf, f"feature.surfaces[{i}]", errors)
-    return errors
-
-
-def validate_registry(schema: dict, registry: dict) -> list:
-    errors: list = []
-    features = registry.get("features")
-    if not isinstance(features, list):
-        return ["registry.features: ожидался список фич"]
-    seen_ids = set()
-    for i, feat in enumerate(features):
-        errors.extend(validate_feature(schema, feat))
-        fid = feat.get("id")
-        if fid in seen_ids:
-            errors.append(f"registry.features[{i}].id: дубликат {fid!r}")
-        seen_ids.add(fid)
-    return errors
-
-
-# ─── Фикстуры ───────────────────────────────────────────────────────────────────────────────────
+# ─── Фикстуры (читают те же файлы, что и поставляемый валидатор) ─────────────────────────────────
 
 @pytest.fixture
 def schema() -> dict:
-    return yaml.safe_load(SCHEMA_PATH.read_text(encoding="utf-8"))
+    return load_schema(DEFAULT_SCHEMA)
 
 
 @pytest.fixture
 def example() -> dict:
-    return yaml.safe_load(EXAMPLE_PATH.read_text(encoding="utf-8"))
+    return yaml.safe_load(DEFAULT_REGISTRY.read_text(encoding="utf-8"))
 
 
 # ─── positive ────────────────────────────────────────────────────────────────────────────────────
@@ -132,6 +66,14 @@ def test_example_includes_a_planned_feature_with_no_surfaces(schema, example):
     assert planned, "в образце нет ни одной planned-фичи"
     assert planned[0]["surfaces"] == []
     assert validate_feature(schema, planned[0]) == []
+
+
+def test_ref_pattern_in_schema_matches_the_documented_forms(schema):
+    """Схема несёт исполнимый паттерн ref: «file:line» и «file:line|symbol» валидны, «просто файл» — нет."""
+    pat = schema["surface"]["fields"]["ref"]["pattern"]
+    assert re.match(pat, "src/auth/routes.py:31")
+    assert re.match(pat, "src/auth/routes.py:31|login")
+    assert not re.match(pat, "src/auth/routes.py")
 
 
 # ─── fail-closed ─────────────────────────────────────────────────────────────────────────────────
@@ -185,11 +127,18 @@ def test_valid_ref_forms_are_accepted(schema, example):
     assert validate_feature(schema, ok) == []
 
 
-# ─── side-effect: валидатор читает схему из файла, а не хардкод ──────────────────────────────────
+def test_duplicate_feature_id_is_rejected(schema, example):
+    """id фичи уникален в пределах реестра — дубликат ловится валидатором реестра."""
+    dup = copy.deepcopy(example)
+    dup["features"].append(copy.deepcopy(dup["features"][0]))
+    assert any("дубликат" in e for e in validate_registry(schema, dup))
+
+
+# ─── side-effect: валидатор читает обязательный набор из СХЕМЫ, а не хардкод ──────────────────────
 
 def test_validator_reads_required_set_from_the_schema_file(schema, example):
     """Если из схемы убрать `verify` из обязательных секций — фича без verify перестаёт быть ошибкой.
-    Значит вердикт определяется РЕЕСТРОМ-схемой, а не зашит в тесте (иначе схема и проверка
+    Значит вердикт определяется РЕЕСТРОМ-схемой, а не зашит в валидаторе (иначе схема и проверка
     разъехались бы молча)."""
     mutated = copy.deepcopy(schema)
     mutated["feature"]["fields"]["description"]["required"] = ["what", "who"]
