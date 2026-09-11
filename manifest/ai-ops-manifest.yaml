@@ -333,12 +333,14 @@ session_orchestration:
       - ROADMAP.md                                    # направление: четыре горизонта
       - planning/plan.yaml                            # delivery plan: kind: delivery-plan
       - ARCHITECTURE.md                               # единый источник правды об архитектуре (SR-7)
-      - SECURITY.md                                   # путь раскрытия уязвимостей (SEC-001 конституции, #826)
+      - SECURITY.md                                   # архитектура безопасности: как продукт защищён внутри (SEC-008)
+      - security/security-policy.md                   # внешний путь раскрытия уязвимостей (SEC-001 конституции)
     templates:
       roadmap: templates/planning/ROADMAP.md
       plan: templates/planning/plan.yaml
       architecture: templates/system/ARCHITECTURE.md
       security: templates/system/SECURITY.md
+      security_policy: templates/system/security-policy.md
     # v3.35.2 (тир 3): РЕПОЗИТОРИЙ ВПРАВЕ ОПИСАТЬ СЕБЯ. Пути артефактов были жёсткими, и монорепо,
     # где продукт живёт в `apps/web/`, не мог описать себя вовсе. Дополнить сигналы кита было можно,
     # снять — нельзя (`**/entities/**` в Feature-Sliced Design: 6 ложных находок из 9).
