@@ -219,12 +219,26 @@ def test_click_non_literal_explicit_name_is_not_verified(tmp_path):
     assert "runtime-name" not in names  # переменную не резолвим — команда просто не заявлена
 
 
-def test_click_trailing_underscore_func_name_matches_click(tmp_path):
-    """click ≥8.1 срезает хвостовой `_` у имени функции (идиома обхода ключевых слов `list_`→`list`)."""
-    src = "import click\n@click.command()\ndef list_():\n    pass\n"
-    _write(tmp_path, "pkg/keyword_idiom.py", src)
+def test_click_func_name_follows_click_naming_rule(tmp_path):
+    """Имя из функции воспроизводит правило click ТОЧНО (проверено на click 8.5.0):
+    суффиксы command/cmd/group/grp срезаются (build_command→build), а хвостовой `_` НЕ срезается,
+    а становится `-` (list_→"list-"). symbol под verified обязан совпадать с реальной командой click."""
+    src = (
+        "import click\n"
+        "@click.command()\n"
+        "def build_command():\n    pass\n"
+        "@click.group()\n"
+        "def admin_group():\n    pass\n"
+        "@click.command()\n"
+        "def serve_cmd():\n    pass\n"
+        "@click.command()\n"
+        "def list_():\n    pass\n"
+    )
+    _write(tmp_path, "pkg/naming.py", src)
     names = _cli_names(extract_surfaces(tmp_path))
-    assert "list" in names and "list-" not in names
+    assert {"build", "admin", "serve"} <= names       # суффиксы command/group/cmd срезаны
+    assert "list-" in names and "list" not in names   # хвостовой `_` -> `-`, НЕ срезается
+    assert "build-command" not in names and "serve-cmd" not in names
 
 
 def test_console_scripts_pyproject_are_verified_cli(tmp_path):
