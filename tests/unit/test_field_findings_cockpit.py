@@ -316,6 +316,45 @@ class TestPlanTellsTruthAboutTheRun:
         assert disc["spec_sections_if_escalated"] == expected
         assert expected, "форма L1 обязана добавлять разделы к L0"
 
+    def test_specify_discloses_the_escalated_form_before_it_is_filled(self, tmp_path, capsys):
+        """Исход 3 (#768): РАСКРЫТИЕ #838 повторено на самом шаге `specify` — человек видит, что
+        форма предварительная, и узнаёт уровень/разделы эскалации ДО заполнения, а не из `plan`."""
+        from ai_ops_kit.cli import ai_ops_cli
+        from ai_ops_kit.gates import spec_levels
+        rc = ai_ops_cli.main(["specify", "владелец открывает Окошко", str(tmp_path),
+                              "--feature", "wi-okoshko", "--json"])
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["spec_provisional"] is True, (
+            "тяжесть не заявлена — форма выдана по предварительной классификации")
+        assert out["level_if_escalated"] == "L1 ENGINEERING"
+        # Симметрия с #838: ровно разделы L1, которых нет в форме L0 — те самые «ещё 9».
+        l0 = set(spec_levels.required_sections(0))
+        assert out["sections_if_escalated"] == [
+            s for s in spec_levels.required_sections(1) if s not in l0]
+
+    def test_specify_disclosure_reaches_the_human_message_before_filling(self, tmp_path, capsys):
+        """То же раскрытие доходит до человекочитаемого сообщения (не только --json)."""
+        from ai_ops_kit.cli import ai_ops_cli
+        assert ai_ops_cli.main(["specify", "владелец открывает Окошко", str(tmp_path),
+                                "--feature", "wi-h"]) == 0
+        out = capsys.readouterr().out
+        assert "предварительн" in out and "L1 ENGINEERING" in out, (
+            f"человек не увидел, что форма предварительная и до какого уровня дорастёт: {out!r}")
+
+    def test_specify_with_declared_weight_does_not_disclose(self, tmp_path, capsys):
+        """Заявлена тяжесть (size/risk) -> форма сразу нужного уровня, ложного раскрытия нет."""
+        from ai_ops_kit.cli import ai_ops_cli
+        rc = ai_ops_cli.main(["specify", "миграция схемы заказов", str(tmp_path),
+                              "--feature", "wi-mig", "--signals", '{"size":"medium","risk":"medium"}',
+                              "--json"])
+        assert rc == 0
+        out = json.loads(capsys.readouterr().out)
+        assert out["spec_provisional"] is False
+        assert out["level_if_escalated"] is None and out["sections_if_escalated"] is None
+        # И форма сразу инженерная: L1-разделы уже в обязательных, а не «добавятся потом».
+        assert out["coverage"]["level_name"] == "L1 ENGINEERING"
+
     def test_skipped_track_reason_is_about_signals_not_past_tense_code_facts(self):
         """obs 64a4840a/d48fd639: причина отключённого трека не утверждает факт о ненаписанном коде."""
         from ai_ops_kit.engine import run_plan

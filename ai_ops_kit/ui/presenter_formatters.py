@@ -210,20 +210,39 @@ def from_plan_built(workitem_id, workflow, spec_level, packages, context_error=N
 
 
 def from_specification(path, created, level_name, sections, blocking_missing, next_command,
-                       added=None, add_error=None) -> dict:
+                       added=None, add_error=None, spec_provisional=False,
+                       sections_if_escalated=None, level_if_escalated=None) -> dict:
     """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа.
 
     F-029: `added` — разделы, ДОПИСАННЫЕ в уже существующий файл под поднявшийся уровень. Без него
     сообщение звучало «заготовка уже была; заполнить нужно 9 разделов», а в файле лежало 6 разделов
     прошлого уровня — заполнять было нечего. `add_error` — честная причина, если дописать не вышло
-    (битый spec.yaml не переписываем: описанное человеком дороже незакрытого гейта)."""
+    (битый spec.yaml не переписываем: описанное человеком дороже незакрытого гейта).
+
+    Исход 3 (#768, obs 8a891ce7): `spec_provisional` — форма выдана по ПРЕДВАРИТЕЛЬНОЙ классификации
+    (тяжесть size/risk не заявлена). Тогда называем ДО заполнения, до какого уровня
+    (`level_if_escalated`) дорастёт форма и какие разделы (`sections_if_escalated`) добавит эскалация
+    на прогоне, — чтобы человек не заполнил не ту форму и не узнал об этом задним числом."""
     n_missing = len(blocking_missing or [])
     n_added = len(added or [])
+    n_esc = len(sections_if_escalated or [])
     tech = {"spec": str(path), "уровень": level_name, "разделов": len(sections or []),
             "не заполнено": ", ".join(blocking_missing or []) or "—",
             "создана": bool(created), "дописано": ", ".join(added or []) or "—"}
     if add_error:
         tech["дописать не удалось"] = str(add_error)
+    # Исход 3: провизорность и точные разделы эскалации — в технические детали (там уместны id
+    # разделов); в summary уходит плоское предупреждение с уровнем и числом разделов.
+    _disclosure = ""
+    if spec_provisional:
+        tech["форма предварительная"] = (
+            f"тяжесть (size/risk) не заявлена; при эскалации уровень {level_if_escalated}, "
+            f"добавятся разделы: {', '.join(sections_if_escalated or []) or '—'}")
+        _disclosure = (
+            f" Форма предварительная: тяжесть задачи (size/risk) не заявлена — при эскалации на "
+            f"прогоне уровень станет {level_if_escalated} и добавится ещё {n_esc} "
+            f"{_q(n_esc, 'раздел', 'раздела', 'разделов')} (какие — в технических деталях). "
+            f"Заявишь размер/риск сразу — и форма выйдет нужного уровня.")
     if created:
         _origin = "создана"
     elif n_added:
@@ -237,13 +256,14 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             summary=("Заготовка описания задачи " + _origin
                      + f"; заполнить нужно {n_missing} "
                        f"{_q(n_missing, 'раздел', 'раздела', 'разделов')}."
-                     + (f" Дописать разделы не удалось: {add_error}." if add_error else "")),
+                     + (f" Дописать разделы не удалось: {add_error}." if add_error else "")
+                     + _disclosure),
             why_it_matters="Заполнять их за тебя я не буду: это как раз то, что из кода не "
                            "выводится, — зачем задача и как поймём, что получилось.",
             next_steps=[f"заполни разделы в {path}", f"потом запускай: {next_command}"],
             technical=tech)
     return message(status="ok", headline="Описание задачи готово",
-                   summary="Всё, что нужно было описать, описано.",
+                   summary="Всё, что нужно было описать, описано." + _disclosure,
                    next_steps=[f"запускай: {next_command}"], technical=tech)
 
 

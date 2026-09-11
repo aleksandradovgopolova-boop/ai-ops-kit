@@ -106,6 +106,50 @@ def required_sections(level):
     return out
 
 
+# Тяжесть задачи, при которой прогон ДЕТЕРМИНИРОВАННО эскалирует незаявленный тип в ENGINEERING
+# (зеркало ai_route.route: size medium+/risk medium+). Порог держим здесь же, где считаем уровень,
+# чтобы раскрытие формы на `specify` опиралось ровно на тот же критерий, что эскалация на `run`.
+_HEAVY_SIZES = ("medium", "large", "xl")
+_HEAVY_RISKS = ("medium", "high", "critical")
+
+
+def escalation_disclosure(signals):
+    """Честное раскрытие ПРЕДВАРИТЕЛЬНОСТИ уровня/формы спеки — ДО того, как человек начал заполнять.
+
+    Зеркало run_plan._escalation_disclosure, но об УРОВНЕ и РАЗДЕЛАХ формы, а не о гейтах прогона.
+
+    Находка поля (obs 8a891ce7): когда тяжесть задачи (size/risk) НЕ заявлена, классификация даёт
+    базовый L0 QUICK, и `specify` выдаёт форму на 6 разделов. Но `run`, получив явный сигнал тяжести,
+    эскалирует в ENGINEERING и требует форму L1 (ещё 9 разделов). Человек заполнял НЕ ТУ форму и
+    узнавал ПОСЛЕ. Раскрытие обязано быть на шаге `specify` — назвать уровень и разделы, которые
+    добавит эскалация, ДО заполнения, а не задним числом.
+
+    Предварительно = тип задачи НЕ заявлен И тяжесть НЕ заявлена И расчётный уровень базовый L0:
+    при явном сигнале тяжести прогон поднимет уровень до L1 ENGINEERING. Если тяжесть заявлена (или
+    тип задачи заявлен явно, или уровень уже выше L0) — форма выдаётся сразу нужного уровня, и
+    раскрывать нечего (симметрично окончательному плану в #838: он раскрытие не несёт).
+
+    -> (provisional: bool, disclosure: dict|None).
+    """
+    signals = dict(signals or {})
+    size = (signals.get("size") or "").lower()
+    risk = (signals.get("risk") or "").lower()
+    heavy = size in _HEAVY_SIZES or risk in _HEAVY_RISKS
+    declared_type = bool(signals.get("task_type"))
+    if declared_type or heavy or classify(signals)["level"] != 0:
+        return False, None
+    esc_level = TASK_TYPE_LEVEL["ENGINEERING"]
+    cur_sections = set(required_sections(0))
+    disclosure = {
+        "reason": ("тяжесть задачи (size/risk) не заявлена — уровень описания предварительный; "
+                   "при явном сигнале тяжести прогон эскалирует, и форма спецификации вырастет "
+                   "(не факт о коде: форма создаётся до правок)"),
+        "level_if_escalated": LEVEL_NAME[esc_level],
+        "sections_if_escalated": [s for s in required_sections(esc_level) if s not in cur_sections],
+    }
+    return True, disclosure
+
+
 def assess(signals, provided=None):
     """Собрать SpecCoverage. provided: {section_id: {"status": ..., "note": ...}} — что уже описано.
     Отсутствующие обязательные разделы -> missing (блокируют). declined без note -> ошибка формы."""
