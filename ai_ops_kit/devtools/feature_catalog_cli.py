@@ -18,6 +18,16 @@ entry, который зовёт тот же `render_catalog` — обёртка
   python3 -m ai_ops_kit.devtools.feature_catalog_cli --write    — записать docs/feature-catalog.md
   python3 -m ai_ops_kit.devtools.feature_catalog_cli --check    — код 1, если docs/feature-catalog.md устарел
 
+КОНТУР ДОЧКИ (зов ИЗ КЛОНА, без доставки нового файла). В child-CI сам этот модуль не едет
+(devtools/ исключён из поставки), но он ЕСТЬ в клоне кита, который workflow дочки разворачивает в
+`$RUNNER_TEMP`. Оттуда его зовут над реестром ДОЧКИ, направив вывод в её собственный документ и
+подписав шапку командой перегенерации самой дочки — ровно так, как child-CI зовёт validate_* из
+клона:
+  python3 -m ai_ops_kit.devtools.feature_catalog_cli <реестр-дочки> \
+      --write --out docs/feature-catalog.md --regen-cmd "<как дочка перегенерирует>"
+`--out` направляет запись/сверку на файл ДОЧКИ (а не на док самого кита), `--regen-cmd` вписывает в
+маркер шапки команду перегенерации дочки. Без флагов поведение прежнее — генерация дока самого кита.
+
 Только stdlib + pyyaml.
 """
 from __future__ import annotations
@@ -46,9 +56,17 @@ def load_registry(path: Path) -> dict:
     return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
 
-def build_page(registry_path: Path = DEFAULT_REGISTRY) -> str:
-    """Полная markdown-страница каталога из реестра по пути. Детерминирована по содержимому реестра."""
-    return feature_catalog.render_catalog(load_registry(registry_path))
+def build_page(registry_path: Path = DEFAULT_REGISTRY, *, regen_cmd: str | None = None) -> str:
+    """Полная markdown-страница каталога из реестра по пути. Детерминирована по содержимому реестра.
+
+    regen_cmd=None -> команда перегенерации по умолчанию (devtools-обёртка кита), чтобы док самого
+    кита не менялся. Доставляемый в клон контур дочки передаёт СВОЮ команду — она вписывается в
+    маркер шапки, и родной документ дочки не советует несуществующую у неё devtools-обёртку.
+    """
+    reg = load_registry(registry_path)
+    if regen_cmd is None:
+        return feature_catalog.render_catalog(reg)
+    return feature_catalog.render_catalog(reg, regen_cmd=regen_cmd)
 
 
 def main(argv=None) -> int:
@@ -59,6 +77,10 @@ def main(argv=None) -> int:
     ap.add_argument("--write", action="store_true", help=f"записать {PAGE_REL}")
     ap.add_argument("--check", action="store_true",
                     help=f"код 1, если {PAGE_REL} расходится со сгенерированным")
+    ap.add_argument("--out", help=f"куда писать/с чем сверять (по умолчанию {PAGE_REL} самого кита; "
+                                  "контур дочки указывает свой docs/feature-catalog.md)")
+    ap.add_argument("--regen-cmd", dest="regen_cmd",
+                    help="команда перегенерации в маркере шапки (для доставляемого контура дочки)")
     a = ap.parse_args(argv)
 
     registry_path = Path(a.registry)
@@ -69,19 +91,21 @@ def main(argv=None) -> int:
                          ensure_ascii=False, indent=2))
         return 0
 
-    md = build_page(registry_path)
-    page = PKG / PAGE_REL
+    md = build_page(registry_path, regen_cmd=a.regen_cmd)
+    page = Path(a.out) if a.out else PKG / PAGE_REL
+    page_name = a.out if a.out else PAGE_REL
     if a.check:
         current = page.read_text(encoding="utf-8") if page.is_file() else ""
         if current != md:
-            print(f"{PAGE_REL} устарел — перегенерировать: "
+            print(f"{page_name} устарел — перегенерировать: "
                   f"python3 -m ai_ops_kit.devtools.feature_catalog_cli --write", file=sys.stderr)
             return 1
-        print(f"{PAGE_REL} свежий.")
+        print(f"{page_name} свежий.")
         return 0
     if a.write:
+        page.parent.mkdir(parents=True, exist_ok=True)
         page.write_text(md, encoding="utf-8")
-        print(f"записано: {PAGE_REL} ({len(md)} байт, {date.today().isoformat()})")
+        print(f"записано: {page_name} ({len(md)} байт, {date.today().isoformat()})")
         return 0
     print(md)
     return 0
