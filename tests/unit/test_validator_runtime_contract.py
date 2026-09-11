@@ -52,6 +52,7 @@ STANDALONE = [
     "validate_enforcement_inventory",   # инвентарь «объявлено->исполняется»: standalone, читает registry/enforcement-inventory.yaml + дерево
     "validate_engops_policy",
     "validate_event_catalog",
+    "validate_feature_coverage",   # W3: standalone, no-op без входа (в ките нет реестра+поверхностей дочки) -> 0
     "validate_feature_learning",
     "validate_feature_registry",   # W1 (#871): standalone, читает схему registry/feature-registry/*.yaml + образец
     "validate_freshness",
