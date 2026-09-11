@@ -148,8 +148,8 @@ def test_gate_and_enforcement_are_honest():
 
 
 @pytest.mark.unit
-def test_four_parts_present():
-    """ПОКРЫТИЕ: все три части + преамбула населены — конституция не однобока."""
+def test_all_parts_present():
+    """ПОКРЫТИЕ: все части + преамбула населены — конституция не однобока."""
     d = yaml.safe_load(RULES_YAML.read_text(encoding="utf-8"))
     parts = {r["part"] for r in d["rules"]}
-    assert parts == {"preamble", "I", "II", "III"}, f"части конституции неполны: {sorted(parts)}"
+    assert parts == {"preamble", "I", "II", "III", "IV"}, f"части конституции неполны: {sorted(parts)}"

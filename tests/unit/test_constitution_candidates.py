@@ -69,7 +69,9 @@ def test_approve_materializes_into_a_temp_copy_and_generator_sees_it(tmp_path):
     rules = yaml.safe_load((tmp_path / "rules.yaml").read_text(encoding="utf-8"))
     ids = {r["id"] for r in rules["rules"]}
     assert article_id in ids, "материализованная статья не попала в пересобранный реестр"
-    assert rules["rules_total"] == 31, "число статей не выросло на одну"
+    real_total = yaml.safe_load(
+        (REPO_ROOT / "standards" / "architecture" / "rules.yaml").read_text(encoding="utf-8"))["rules_total"]
+    assert rules["rules_total"] == real_total + 1, "число статей не выросло ровно на одну"
     # кандидат помечен approved
     assert cand.list_candidates(q)[0]["status"] == "approved"
     # РЕАЛЬНЫЙ источник не тронут
