@@ -131,7 +131,12 @@ ceilings:
   # 2026-09-11: 603 -> 604 под судью охвата фич (W3): один доставляемый модуль
   # ai_ops_kit/checks/feature_coverage.py — детерминированный судья, зовётся В дочке гейтом
   # feature_coverage. Валидатор validation/validate_feature_coverage.py в поставку НЕ едет. См. `raises`.
-  substantive_files: 604
+  # 2026-09-11: 604 -> 605 под каталог фич для аналитика (W4b): один доставляемый модуль
+  # ai_ops_kit/checks/feature_catalog.py — чистый рендер человекочитаемого каталога фич из реестра,
+  # зовётся devtools-обёрткой кита и (в дочке) доставляемым entry. CLI-обёртка
+  # ai_ops_kit/devtools/feature_catalog_cli.py и сам docs/feature-catalog.md в поставку НЕ едут
+  # (devtools/ + docs/ — не managed_set). Реальная установка 603 -> 604 (строгий `<`, потолок 605). См. `raises`.
+  substantive_files: 605
 
 # Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
 # `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
@@ -2093,3 +2098,23 @@ raises:
       validation/validate_feature_coverage.py и обязан доехать, иначе гейт feature_coverage был бы
       вызовом отсутствующего файла. Его исходник поверх W2 перевёл установленную поставку через потолок
       5340000 (5334096 -> 5344996) — потолок поднят под факт, а не на запас.
+  - at: '2026-09-11'
+    what: substantive_files
+    from_count: 604
+    to_count: 605
+    measured_before: 603
+    measured_after: 604
+    work: feature-catalog-for-the-analyst (W4b)
+    files:
+      - ai_ops_kit/checks/feature_catalog.py
+    why_it_works_in_the_child: >-
+      Модуль РАБОТАЕТ в дочке: это чистый рендер человекочитаемого каталога фич из реестра фич дочки —
+      по каждой фиче что делает / для кого / как проверить, поверхности с уверенностью и статус, чтобы
+      аналитик разобрался во всех фичах из одного места. Живёт в пакете ai_ops_kit/checks (слой
+      primitives, без I/O), едет в .ai/managed как весь пакет; доставляемый entry дочки зовёт его
+      render_catalog над её реестром. Без модуля в поставке этот вызов был бы обращением к
+      отсутствующему файлу (класс F-033). CLI-обёртка ai_ops_kit/devtools/feature_catalog_cli.py (она
+      собирает docs/feature-catalog.md самого кита) в дочку НЕ едет — devtools/ исключён из поставки
+      (DEV_ONLY_PREFIXES); сам docs/feature-catalog.md — документ кита, тоже не managed_set. Поэтому
+      прирост поставки = +1 доставляемый файл, а не +3. Замер установленной поставки 603 -> 604 поверх
+      W3 (строгий `<`, потолок 605). Один доставляемый файл; потолок поднят под него.
