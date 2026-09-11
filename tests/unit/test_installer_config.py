@@ -29,9 +29,28 @@ def _load_installer():
     return mod
 
 
+def _load_satellite(name):
+    """Сателлит установщика (`ci_setup`/`child_scaffolding`) — как plan_merge_setup: грузим по пути,
+    потому что часть функций ai_ops.py вынесена туда, а ленивый импорт из ai_ops здесь неудобен."""
+    spec = importlib.util.spec_from_file_location(name, KIT / "installer" / f"{name}.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
 @pytest.fixture(scope="module")
 def ai_ops():
     return _load_installer()
+
+
+@pytest.fixture(scope="module")
+def ci_setup():
+    return _load_satellite("ci_setup")
+
+
+@pytest.fixture(scope="module")
+def child_scaffolding():
+    return _load_satellite("child_scaffolding")
 
 
 # ---------------------------------------------------------------- внутренние функции
@@ -56,7 +75,7 @@ def test_broken_child_config_raises_named_error(ai_ops, child, monkeypatch):
     assert ".ai-ops.yaml" in str(exc.value)
 
 
-def test_fresh_install_does_not_report_planning_as_ready(installed, ai_ops):
+def test_fresh_install_does_not_report_planning_as_ready(installed, child_scaffolding):
     """F-018 (живой прогон severnaya_traektoriya, 2026-08-12): doctor рапортовал «✓ артефакты на
     месте» СРАЗУ после установки — про черновики, которые сам же и положил.
 
@@ -64,13 +83,13 @@ def test_fresh_install_does_not_report_planning_as_ready(installed, ai_ops):
     но doctor спрашивал только `Path.exists()`. Владелец на свежей установке читал зелёное про
     пустой контур. Комментарий над проверкой обещал обратное: «пробел ВИДЕН, а не молчит».
     """
-    req, gaps, unfilled = ai_ops._planning_gaps(installed)
+    req, gaps, unfilled = child_scaffolding._planning_gaps(installed)
     assert req, "контур планирования не объявлен в манифесте — тест потерял предмет"
     assert unfilled, "свежая установка объявлена заполненной: заготовки посчитаны за план"
     assert not gaps, f"заготовки посчитаны ПРОБЕЛОМ — это испортит первый экран: {gaps}"
 
 
-def test_filled_planning_artifacts_are_not_reported_as_gap(installed, ai_ops):
+def test_filled_planning_artifacts_are_not_reported_as_gap(installed, child_scaffolding):
     """Обратная сторона: заполненные артефакты пробелом не считаются.
 
     Без этой проверки F-018 можно было бы «закрыть», объявив контур пустым всегда.
@@ -91,7 +110,7 @@ def test_filled_planning_artifacts_are_not_reported_as_gap(installed, ai_ops):
     (installed / "ARCHITECTURE.md").write_text(
         "# Architecture\n\n## Context\nнастоящий контекст системы\n", encoding="utf-8")
 
-    _req, gaps, unfilled = ai_ops._planning_gaps(installed)
+    _req, gaps, unfilled = child_scaffolding._planning_gaps(installed)
     assert not gaps and not unfilled, f"заполненные артефакты объявлены незаполненными: {gaps} {unfilled}"
 
 
@@ -144,38 +163,38 @@ def test_gitignore_change_is_named_in_the_report(child, ai_ops):
         "нечего сообщать, а отчёт говорит — это шум, из-за которого перестают читать отчёты")
 
 
-def test_deleted_workflow_is_opted_out_not_absent(installed_copy, ai_ops):
+def test_deleted_workflow_is_opted_out_not_absent(installed_copy, ci_setup):
     """Состояние различает решение владельца и «ещё не ставили»."""
     _record_path(installed_copy).unlink()
-    state = {r["file"]: r["state"] for r in ai_ops.ci_workflow_state(installed_copy)}
+    state = {r["file"]: r["state"] for r in ci_setup.ci_workflow_state(installed_copy)}
     assert state["ai-ops-record.yml"] == "opted-out", state
     # обратная сторона: файл, которого кит НИКОГДА не ставил, остаётся absent
-    prints = ai_ops._ci_prints(installed_copy)
+    prints = ci_setup._ci_prints(installed_copy)
     prints.pop("ai-ops-record.yml", None)
-    ai_ops._ci_prints_path(installed_copy).write_text(
+    ci_setup._ci_prints_path(installed_copy).write_text(
         __import__("json").dumps(prints, ensure_ascii=False), encoding="utf-8")
-    state2 = {r["file"]: r["state"] for r in ai_ops.ci_workflow_state(installed_copy)}
+    state2 = {r["file"]: r["state"] for r in ci_setup.ci_workflow_state(installed_copy)}
     assert state2["ai-ops-record.yml"] == "absent", (
         "без отпечатка отсутствие обязано читаться как «не установлен» — иначе первая установка "
         "перестанет ставить шаблоны вовсе")
 
 
-def test_opt_out_survives_sync_and_is_named(installed_copy, ai_ops):
+def test_opt_out_survives_sync_and_is_named(installed_copy, ci_setup):
     """Доставка не возвращает удалённое и ГОВОРИТ об этом, а не молчит."""
     _record_path(installed_copy).unlink()
-    acts = ai_ops.sync_ci_workflows(installed_copy)
+    acts = ci_setup.sync_ci_workflows(installed_copy)
     assert not _record_path(installed_copy).exists(), "удалённый владельцем workflow вернулся"
     kept = [a for a in acts if a["file"] == "ai-ops-record.yml"]
     assert kept and kept[0]["action"] == "kept-opted-out", acts
 
 
-def test_opt_out_survives_refresh_ci(installed_copy, ai_ops):
+def test_opt_out_survives_refresh_ci(installed_copy, ci_setup):
     """`--refresh-ci` означает «перезапиши мои правки», а НЕ «верни удалённое».
 
     Иначе флаг об обновлении толковал бы согласие шире выданного.
     """
     _record_path(installed_copy).unlink()
-    ai_ops.sync_ci_workflows(installed_copy, refresh=True)
+    ci_setup.sync_ci_workflows(installed_copy, refresh=True)
     assert not _record_path(installed_copy).exists(), "--refresh-ci отменил решение владельца"
 
 

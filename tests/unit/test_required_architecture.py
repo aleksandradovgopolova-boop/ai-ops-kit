@@ -50,7 +50,7 @@ def test_migration_composes_legacy_into_architecture(tmp_path):
     d.mkdir(parents=True)
     (d / "SystemOverview.md").write_text("# System Overview\nграницы\n", encoding="utf-8")
     (d / "RepositoryMap.md").write_text("# Repository Map\nкаталоги\n", encoding="utf-8")
-    out = mod._migrate_legacy_architecture(tmp_path)
+    out = mod._child_scaffolding()._migrate_legacy_architecture(tmp_path)
     assert out and out[0]["action"] == "migrated-from-legacy"
     text = (tmp_path / "ARCHITECTURE.md").read_text(encoding="utf-8")
     assert "границы" in text and "каталоги" in text
@@ -62,7 +62,7 @@ def test_migration_idempotent_when_architecture_exists(tmp_path):
     d = tmp_path / "context" / "system"
     d.mkdir(parents=True)
     (d / "SystemOverview.md").write_text("# System Overview\nграницы\n", encoding="utf-8")
-    assert mod._migrate_legacy_architecture(tmp_path) == []
+    assert mod._child_scaffolding()._migrate_legacy_architecture(tmp_path) == []
     assert "своё" in (tmp_path / "ARCHITECTURE.md").read_text(encoding="utf-8")
 
 

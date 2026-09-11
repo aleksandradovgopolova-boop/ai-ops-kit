@@ -17,4 +17,11 @@
 history/plan-history.yaml merge=union
 quality/mutation-probes.yaml merge=union
 
-# РАЗБИВКА ПЛАНА (19.08.2026, derived-state-out-of-tracked-files): `planning/plan.yaml` разбит на
+# СТРУКТУРНЫЙ MERGE-DRIVER ПЛАНА (#148, 10.09.2026). `planning/plan.yaml` — самый правимый файл кита.
+# union к нему нельзя (склеил бы строки в битый YAML), а разбивку по работам владелец откатил. Поэтому
+# у него отдельный ПОНИМАЮЩИЙ СТРУКТУРУ merge-driver: непересекающиеся правки двух работ (разные
+# элементы goals/work по id) он сводит сам, на ЛЮБОЙ неоднозначности отдаёт обычный конфликт человеку —
+# битый YAML не рождает никогда (ai_ops_kit/planning/plan_merge_driver.py). Атрибут ниже включает драйвер
+# и в самом ките; сам драйвер активируется в git config per-clone: `python3
+# ai_ops_kit/planning/plan_merge_driver.py --install`. Установщик прописывает и атрибут, и config дочке.
+planning/plan.yaml merge=ai-ops-plan

@@ -64,7 +64,7 @@ def _base_workflow(signals):
     """base_workflow из ai_route; при сбое — честный fallback. -> (workflow, reasons, confidence)."""
     try:
         from ai_ops_kit.shared import _bootstrap  # noqa: F401 — импорт ради side-effect: кладёт корень пакета в sys.path
-        from ai_ops_kit.engine import ai_route
+        from ai_ops_kit.shared import ai_route
         d = ai_route.route(signals)
         return d.get("workflow"), d.get("reasons", []), d.get("classification_confidence", "normal")
     # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): это ПРАВИЛЬНЫЙ образец —

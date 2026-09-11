@@ -77,19 +77,25 @@ def test_second_call_is_silent(ai_ops, tmp_path):
 
 
 def test_union_is_not_offered_for_structural_files(ai_ops):
-    """ГРАНИЦА, а не забывчивость: склейка строк на YAML даёт битый или удвоенный документ."""
-    # Сверяем ДЕЙСТВУЮЩИЕ строки, а не пояснения: в комментарии `plan.yaml` упомянут намеренно —
-    # там сказано, почему его здесь быть не может. Проверка по всему тексту краснела бы на прозе.
+    """ГРАНИЦА, а не забывчивость: склейка строк (`union`) на YAML даёт битый/удвоенный документ.
+
+    Инвариант не в том, что структурный файл НЕ упомянут вовсе, — `planning/plan.yaml` теперь есть в
+    блоке, но с ПОНИМАЮЩИМ СТРУКТУРУ драйвером `merge=ai-ops-plan`, а не со строчной склейкой (#148).
+    Инвариант в том, что `union` остаётся ТОЛЬКО для JSONL-журналов, а структурному YAML склейка строк
+    не назначается никогда."""
     rules = ai_ops._GITATTRIBUTES_RULES
     effective = [ln.strip() for ln in rules.splitlines()
                  if ln.strip() and not ln.strip().startswith("#")]
     assert effective, rules
-    for ln in effective:
+    union_rules = [ln for ln in effective if ln.endswith("merge=union")]
+    assert union_rules, "в блоке нет ни одного merge=union — читать границу нечего"
+    for ln in union_rules:
         assert ln.endswith(".jsonl merge=union"), (
-            f"правило не про JSONL-журнал: {ln!r} — на структурном файле склейка ломает документ")
+            f"union назначен не JSONL-журналу: {ln!r} — на структурном файле склейка ломает документ")
+    # Ни один структурный YAML не сводится СКЛЕЙКОЙ СТРОК (union). Структурный merge-driver — можно.
     for forbidden in ("plan.yaml", "registry.yaml", "*.yaml", "*.yml"):
-        assert not any(forbidden in ln for ln in effective), (
-            f"{forbidden} не может сводиться склейкой строк")
+        assert not any(forbidden in ln and ln.endswith("merge=union") for ln in effective), (
+            f"{forbidden} не может сводиться склейкой строк (union)")
 
 
 def test_report_names_the_change(ai_ops, tmp_path):
@@ -107,14 +113,19 @@ def test_deliver_assets_actually_calls_it(ai_ops, tmp_path, monkeypatch):
     Модуль, покрытый тестами выше, останется мёртвым, если `deliver_assets` его не позвал. Здесь
     проверяется именно ВЫЗОВ: остальные шаги доставки заглушены, чтобы тест не зависел от их работы.
     """
-    for name, stub in (("_backfill_required_context", lambda *a, **k: []),
-                       ("sync_ci_workflows", lambda *a, **k: []),
-                       ("ensure_zone_markers", lambda *a, **k: []),
-                       ("ensure_gitignore", lambda *a, **k: "present"),
-                       ("_install_entry_point", lambda *a, **k: {}),
-                       ("_install_communication_adapter", lambda *a, **k: {}),
-                       ("_seed_planning_contour", lambda *a, **k: [])):
-        monkeypatch.setattr(ai_ops, name, stub)
+    # Часть шагов доставки вынесена в сателлиты — глушим их ТАМ, где они живут: `deliver_assets`
+    # зовёт `_child_scaffolding()._backfill_required_context()` и `_ci_setup().sync_ci_workflows()`,
+    # поэтому подмена на модуле-сателлите (тот же объект, что вернёт загрузчик) их и перехватывает.
+    _cs = ai_ops._child_scaffolding()
+    _ci = ai_ops._ci_setup()
+    for mod, name, stub in ((_cs, "_backfill_required_context", lambda *a, **k: []),
+                            (_ci, "sync_ci_workflows", lambda *a, **k: []),
+                            (ai_ops, "ensure_zone_markers", lambda *a, **k: []),
+                            (ai_ops, "ensure_gitignore", lambda *a, **k: "present"),
+                            (ai_ops, "_install_entry_point", lambda *a, **k: {}),
+                            (ai_ops, "_install_communication_adapter", lambda *a, **k: {}),
+                            (_cs, "_seed_planning_contour", lambda *a, **k: [])):
+        monkeypatch.setattr(mod, name, stub)
 
     assets = ai_ops.deliver_assets(tmp_path)
 

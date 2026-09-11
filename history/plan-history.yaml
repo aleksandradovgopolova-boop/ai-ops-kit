@@ -5366,3 +5366,60 @@ work:
     pr: 537
     result: >-
       ЗАКРЫТО (уже в main #537, подтверждено 2026-09-10). update --force через мажор расширяет allowed_version_range под новый мажор и говорит вслух (widen_allowed_range); doctor краснит на installed вне диапазона. Замер до/после 5/5 зелёный.
+  - id: wire-decision-gate-into-mandatory-contour
+    title: 'Гейт продуктового решения (baseline/target/guardrails) проведён в ОБЯЗАТЕЛЬНЫЙ контур — фич-решение проверяется на каждой работе, а не только существует функцией'
+    goal: product-decision-loop
+    status: done
+    closed_at: '2026-09-10'
+    pr: 791
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#791). Гейт feature_decision_quality проведён в ОБЯЗАТЕЛЬНЫЙ (blocking) контур: фича, объявленная целью без измеримого обязательства (baseline/target/guardrails), теперь КРАСНИТ прогон и называет нехватку, а не проходит с предупреждением. Решение ENFORCE обосновано: гейт by_construction/validator (детерминированный, без риска ложных срабатываний), прецедент — десяток блокирующих валидаторов того же типа; фичит только kind:feature-decision, для остальных explainable skip. Число advisory-гейтов сведено везде (14->13).
+  - id: release-strategy-assembled-releases-and-update-menu
+    title: 'Кит собирает релизы осознанно (веха/расписание) + владелец-facing меню стратегий обновления дочки (канал × политика, + scheduled/auto-stable)'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    pr: 792
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#792). Названное меню стратегий обновления (pr/manual/scheduled-batch/auto-stable) + резолвер, который читает выбор дочки и НАЗЫВАЕТ доступность, ничего не применяя; auto-stable доступна только на канале stable и при явном opt-in (по умолчанию выключена). Взяты 2 из 3 исходов цели: продукт выбирает стратегию из меню; режимы сверх pr/manual существуют. ОСТАЁТСЯ (не закрыто, будущая работа): полное ИСПОЛНЕНИЕ scheduled-batch/auto-stable (планировщик/автоприменение) и сборка релиза с бампом версии + авто-проводкой в CI — release_assembly называет состав по триггеру, но версию не бампает. Третий исход releases_are_assembled_not_reactively остаётся false.
+  - id: release-assembly-derives-target-version
+    title: 'Осознанная сборка релиза называет целевую версию: уровень SemVer из состава newsfragments'
+    goal: kit-release-strategy
+    status: done
+    closed_at: '2026-09-10'
+    evidence: ai_ops_kit/devtools/release_assembly.py
+    result: >-
+      ЗАКРЫТО 2026-09-10. Третий исход kit-release-strategy взят: release_assembly.assemble по вехе/
+      расписанию теперь выводит уровень бампа из состава (feat→minor, иначе→patch) и называет целевую
+      версию (current→target из VERSION), замыкая осознанную сборку — не реактивно и без ручного
+      угадывания X.Y.Z. МАЖОР сборка НЕ выводит: смена мажора остаётся осознанным решением владельца
+      (breaking = ep-решение). release_assembly — dev-инструмент (devtools/), в дочку не едет.
+  - id: plan-yaml-edits-do-not-conflict-in-parallel
+    title: 'Правки plan.yaml из параллельных работ не порождают ручных конфликтов слияния — разбивка по работам либо явная стратегия (report-history уже закрыт union, остаётся структурный plan.yaml)'
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-10'
+    pr: 798
+    result: >-
+      ЗАКРЫТО 2026-09-10 (#798). Кастомный git merge-driver для planning/plan.yaml (installer прописывает merge=ai-ops-plan + merge.ai-ops-plan.driver): непересекающиеся параллельные правки (разные work/goal id) сводятся АВТОМАТИЧЕСКИ, на любой неоднозначности (один id обеими сторонами, дубли, нераспознанная структура, нет pyyaml) — ОБЫЧНЫЙ конфликт с маркерами. Безопасность: финальный backstop перепарсивает итог (валидный YAML, нет дублей id, множества id совпадают) — битый YAML не рождается никогда. Кит применяет драйвер к себе (own_medicine). Union (merge=union) остаётся ТОЛЬКО на JSONL-журналах — структурному YAML он склеил бы битьё. Исход kit_edits_do_not_create_conflicts взят. Живого слияния двух реальных веток на 82-КБ plan.yaml не гоняли — способность на синтетике + сквозной git-merge.
+  - id: layering-pairs-decoupled-by-substance
+    title: 'Пять взаимных пар capabilities развязаны по существу (перенос проводки в правильный слой, не сокрытие через __import__)'
+    goal: layering-ring-is-a-dag
+    status: done
+    closed_at: '2026-09-10'
+    pr: 795
+    result: >-
+      ЗАКРЫТО 2026-09-10 (K1 #780, K4 #788, K2 #790, K3 #793, K5 #795). Все ПЯТЬ взаимных пар слоя
+      capabilities, вскрытых внешним аудитом F-03, развязаны ПО СУЩЕСТВУ — переносом проводки туда,
+      где ей место, а не сокрытием за динамическим импортом. K1 engine↔gates: CLI evidence_collector
+      → devtools. K4 engops↔gates: environment_map → checks (primitives). K2 context↔engine:
+      compile_bundle получает RunPlan извне (plan= или build_plan=), а CLI → devtools; это ребро
+      замыкало все длинные циклы → cycles 5→0. K3 delivery↔engine: review_branch (запуск движковых
+      ревью-гейтов) → engine, CLI → devtools; delivery/pr_open остался актом доставки. K5
+      engine↔lifecycle (последняя): ai_route / резолвер базы / work_areas — чистые сущности без
+      зависимостей от кита — переехали в shared (foundation), workitem зовёт маршрутизатор ВНИЗ.
+      Замер validate_layering: mutual_pairs 5→0, cycles_longer_than_two 9→0. Кольцо стало DAG, и
+      теперь это ПРАВДА (гейт считает и динамику), а не прежний слепой ноль. K5 потребовал доводки до
+      зелёного CI: аннотации типов перенесённых shared-модулей (disallow_untyped_defs), тонкий
+      ре-экспорт-шим engine/ai_route для кросс-версионного апдейта дочки (пару НЕ восстанавливает,
+      объявлен легит-входом в инвентаре). Цель layering-ring-is-a-dag достигнута.

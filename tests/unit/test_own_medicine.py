@@ -171,8 +171,8 @@ def test_new_delivery_step_without_a_decision_is_caught(repo_copy, tmp_path):
     shutil.copytree(repo_copy, work, ignore=_IGNORE, symlinks=True)
     inst = work / "installer" / "ai_ops.py"
     text = inst.read_text(encoding="utf-8")
-    text = text.replace('"planning_seeded": _seed_planning_contour(root),',
-                        '"planning_seeded": _seed_planning_contour(root),\n'
+    text = text.replace('"planning_seeded": _child_scaffolding()._seed_planning_contour(root),',
+                        '"planning_seeded": _child_scaffolding()._seed_planning_contour(root),\n'
                         '        "brand_new_step": None,', 1)
     inst.write_text(text, encoding="utf-8")
     r = _run_in(work)
@@ -194,8 +194,8 @@ def test_removed_delivery_step_makes_a_stale_check_red(repo_copy, tmp_path):
     inst = work / "installer" / "ai_ops.py"
     text = inst.read_text(encoding="utf-8")
     assert "planning_seeded" not in om_known_gaps(), "шаг попал в замер — тест выбирает другой"
-    assert '"planning_seeded": _seed_planning_contour(root),' in text
-    inst.write_text(text.replace('"planning_seeded": _seed_planning_contour(root),', "", 1),
+    assert '"planning_seeded": _child_scaffolding()._seed_planning_contour(root),' in text
+    inst.write_text(text.replace('"planning_seeded": _child_scaffolding()._seed_planning_contour(root),', "", 1),
                     encoding="utf-8")
     r = _run_in(work)
     assert r.returncode == 1

@@ -69,7 +69,7 @@ def start(features_dir, fid, task, task_type=None, risk=None):
         inp["task_type"] = task_type
     if risk:
         inp["risk"] = risk
-    _ar = __import__("ai_ops_kit.engine.ai_route", fromlist=["route"])
+    from ai_ops_kit.shared import ai_route as _ar   # foundation (K5): маршрутизатор — чистая классификация
     r = _ar.route(inp)
     wf = r["workflow"]
     fdir = Path(features_dir) / fid

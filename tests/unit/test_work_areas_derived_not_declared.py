@@ -17,7 +17,7 @@ from pathlib import Path
 
 import yaml
 
-from ai_ops_kit.engine import work_areas
+from ai_ops_kit.shared import work_areas
 from ai_ops_kit.lifecycle import active_work
 
 

@@ -228,11 +228,12 @@ class TestNextDoesNotOfferFrozenWork:
         # Настоящий инвариант не «ответ непустой», а «вычитание не молчит»: если предложить нечего,
         # человеку названо, ЧТО именно мешает. Молчаливое «ничего» и «ничего, потому что вот это» —
         # разные ответы, и путать их здесь опаснее всего: план выглядел бы исчерпанным.
-        withheld = (rep.get("blocked") or []) + (rep.get("held") or [])
+        withheld = (rep.get("blocked") or []) + (rep.get("held") or []) + (rep.get("in_progress") or [])
         assert rep["next_best"] is not None or withheld, (
             "предложить нечего и НЕ СКАЗАНО почему — вычитание съело ответ молча")
         for w in withheld:
-            assert w.get("reasons") or w.get("blocked_by"), (
+            # in_progress самообъяснима: её статус И ЕСТЬ причина «уже в работе, не предлагается заново».
+            assert w.get("reasons") or w.get("blocked_by") or w.get("status") == "in_progress", (
                 f"работа {w.get('id')} удержана без названной причины")
 
 

@@ -36,7 +36,7 @@ def _bootstrapped(installer, root):
     root.mkdir(parents=True, exist_ok=True)
     (root / "README.md").write_text("# Демо\n\nсервис.\n", encoding="utf-8")
     (root / "VERSION").write_text("1.0.0\n", encoding="utf-8")
-    installer._seed_product_layer(root)
+    installer._child_scaffolding()._seed_product_layer(root)
     return root
 
 

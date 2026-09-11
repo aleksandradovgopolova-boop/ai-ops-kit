@@ -78,6 +78,13 @@ ALLOWLIST_MODULES: frozenset[str] = frozenset({
     # Точка входа `ai-ops` (pyproject.toml -> [project.scripts]): console_scripts запускает
     # процессом (pip/pipx), а не импортом — нулевой импортер здесь норма по устройству.
     f"{PKG_NAME}.cli.entry",
+    # git merge-driver для plan.yaml: git запускает его ПРОЦЕССОМ по `merge.ai-ops-plan.driver`
+    # (как console_scripts), а не импортом — нулевой импортер норма по устройству.
+    f"{PKG_NAME}.planning.plan_merge_driver",
+    # Ре-экспорт-шим (K5, 2026-09-10): маршрутизатор переехал в shared/ai_route; старый путь оставлен
+    # для кросс-версионного импорта `from ai_ops_kit.engine import ai_route` (smoke-валидатор прежнего
+    # тега при апдейте дочки). 0 импортёров внутри кита — норма: рантайм зовёт shared напрямую.
+    f"{PKG_NAME}.engine.ai_route",
 })
 SKIP_DIRS = frozenset({
     ".git", ".ai", ".claude", ".venv", "venv", "env", "node_modules",

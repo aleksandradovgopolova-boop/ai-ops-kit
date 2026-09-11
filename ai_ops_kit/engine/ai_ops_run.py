@@ -58,7 +58,7 @@ from ai_ops_kit.engine.ai_ops_run_lifecycle import (   # noqa: F401,E402
     _restore_resume_policy, _resolve_models)
 from ai_ops_kit.lifecycle import workitem          # noqa: E402
 from ai_ops_kit.lifecycle import active_work
-from ai_ops_kit.engine import work_areas as _work_areas       # noqa: E402
+from ai_ops_kit.shared import work_areas as _work_areas       # noqa: E402
 from ai_ops_kit.shared import lifecycle_store as _ls   # noqa: E402 — v3.0.12: durable запись/fail-closed чтение resume-артефактов
 
 
