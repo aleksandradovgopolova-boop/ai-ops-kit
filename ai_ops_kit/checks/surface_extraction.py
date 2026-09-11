@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -35,6 +35,11 @@ from pathlib import Path
 from typing import Callable, Iterator, Sequence
 
 from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
+from ai_ops_kit.checks.surface_extractors.js_server import (
+    extract_express_routes,
+    extract_nest_routes,
+    extract_next_routes,
+)
 from ai_ops_kit.checks.surface_extractors.js_ui import (
     extract_react_router_screens,
     extract_vue_router_screens,
@@ -69,6 +74,12 @@ _SKIP_DIRS = frozenset({
 # Extractor'ов, а не в js_ui.py (там разбор идёт по содержимому, не по расширению).
 _SCREEN_JS_SUFFIXES = frozenset({".jsx", ".tsx", ".js", ".ts"})
 _SCREEN_VUE_SUFFIXES = frozenset({".vue", ".js", ".ts"})
+# Серверные JS/TS-бэкенды (route). Express — обычный JS/TS; Nest — TS-декораторы (+ .tsx); Next —
+# файловый роутинг по .js/.ts/.jsx/.tsx. Это МЕТАДАННЫЕ реестра (к каким файлам применим экстрактор),
+# потому живут у сборки Extractor'ов, а разбор идёт по содержимому/раскладке (js_server.py).
+_SERVER_JS_SUFFIXES = frozenset({".js", ".ts", ".mjs", ".cjs"})
+_NEST_JS_SUFFIXES = frozenset({".ts", ".js", ".mjs", ".cjs", ".tsx"})
+_NEXT_JS_SUFFIXES = frozenset({".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -161,6 +172,33 @@ VUE_ROUTER_SCREENS = Extractor(
     needs_ast=False,
 )
 
+EXPRESS_ROUTES = Extractor(
+    id="express",
+    suffixes=_SERVER_JS_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый JS-разбор — эвристика паттерна, не доказательный AST
+    extract=extract_express_routes,
+    needs_ast=False,
+)
+
+NEST_ROUTES = Extractor(
+    id="nest",
+    suffixes=_NEST_JS_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый разбор декораторов — эвристика паттерна, не AST
+    extract=extract_nest_routes,
+    needs_ast=False,
+)
+
+NEXT_ROUTES = Extractor(
+    id="next",
+    suffixes=_NEXT_JS_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # структурный вывод из раскладки файлов — не доказательный AST
+    extract=extract_next_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -171,6 +209,9 @@ DEFAULT_EXTRACTORS: tuple = (
     AIOHTTP_ROUTES,
     REACT_ROUTER_SCREENS,
     VUE_ROUTER_SCREENS,
+    EXPRESS_ROUTES,
+    NEST_ROUTES,
+    NEXT_ROUTES,
 )
 
 

@@ -204,6 +204,75 @@ extractors:
         вложенные роуты, у которых конкретный путь склеивается из родителя в рантайме (виден только
         объявленный литерал сегмента); серверный рендеринг вне known-роутера. Ничего из этого НЕ verified.
 
+  # E4 добавил СЕРВЕРНЫЕ JS/TS-маршруты (вид route) для JS-бэкенда — Express, NestJS, Next. Честность
+  # силы та же, что у screen-экстракторов E3: JS/TS разбирается ТЕКСТОМ/паттерном (Express/Nest) или
+  # выводится из РАСКЛАДКИ ФАЙЛОВ (Next), без исполнения node и без сети — это НЕ доказательный AST →
+  # все три заявляют confidence: inferred (в W4 НЕ блокируют). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/js_server.py (extract_express_routes / extract_nest_routes /
+  # extract_next_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: express
+    stack: {language: [javascript, typescript], frameworks: [express]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .js/.ts/.mjs/.cjs без исполнения: вызовы
+      `<obj>.<method>("/path", ...)`, где <method> ∈ {get, post, put, delete, patch, options, head,
+      all, use}, а путь — строковый литерал в кавычках, начинающийся с "/". Берётся ТОЛЬКО в файле с
+      индикатором express (import express / require('express') / from 'express'), чтобы одноимённый
+      чужой `.get(...)` не дал ложный маршрут. Регэксп по паттерну — эвристика → confidence: inferred.
+      ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        объявления маршрутов Express со СТРОКОВЫМ путём-литералом, начинающимся с "/" (app.get,
+        router.post, app.use("/mount", …) и т.п.), в файле, действительно импортирующем express.
+        Даёт file:line и сам путь как symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        путь из ПЕРЕМЕННОЙ / шаблон-строки (backtick) / выражения (в кавычки не попадает — пропуск);
+        маршруты, собранные динамически из данных/конфига; цепочки middleware и вложенные кастомные
+        роутеры, смонтированные через переменную; `.route("/x").get(...).post(...)`-цепочки (виден
+        лишь литеральный вызов метода с путём); файлы без импорта express. Ничего из этого НЕ verified.
+  - id: nest
+    stack: {language: [typescript, javascript], frameworks: [nestjs]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .ts/.tsx/.js/.mjs/.cjs без исполнения: method-декораторы
+      `@Get("/x")`/`@Post(...)`/@Put/@Delete/@Patch/@Options/@Head/@All на методах + `@Controller("/prefix")`
+      на классе; полный маршрут = префикс контроллера + путь метода (для метода берётся ближайший
+      предшествующий @Controller). Путь/префикс — строковый литерал; `@Get()`/`@Controller()` без
+      литерала дают пустой сегмент (маршрут сводится к префиксу/корню). Берётся ТОЛЬКО в файле с
+      индикатором `@nestjs`. Регэксп по паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        маршруты Nest, объявленные method-декоратором со строковым путём-литералом, склеенные с
+        префиксом @Controller того же файла; file:line и путь как symbol, помечает inferred.
+      does_not_see: >-
+        путь/префикс из переменной/шаблон-строки/константы (не литерал — сегмент пустой или пропуск);
+        глобальные и версионные префиксы, заданные в рантайме (app.setGlobalPrefix, versioning);
+        `@Controller`, импортированный/сгенерированный динамически; RouterModule.register с путями из
+        данных; файлы без индикатора @nestjs. Ничего из этого НЕ verified.
+  - id: next
+    stack: {language: [typescript, javascript], frameworks: [nextjs]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      СТРУКТУРНЫЙ вывод из РАСКЛАДКИ ФАЙЛОВ (содержимое не читается, без исполнения): серверные
+      эндпоинты Next — Pages API `pages/api/**` (`pages/api/orders.ts` → `/api/orders`; index → корень
+      сегмента; допускается ведущий `src/`) и App Router Route Handler `app/**/route.ext`
+      (`app/billing/route.ts` → `/billing`). Route-группы `(group)` и параллельные слоты `@slot` в URL
+      опускаются, catch-all `[...slug]` честно пропускается (маршрут не выводим), обычный `[id]`
+      сохраняется. Вывод из имени файла — эвристика раскладки → confidence: inferred. ref =
+      "file:line|<path>" (line = 1: маршрут выведен из пути файла, а не из места в тексте).
+    honest_limits:
+      sees: >-
+        серверные маршруты Next, выводимые из ПУТИ ФАЙЛА: Pages API под pages/api/** и App Router
+        Route Handler app/**/route.ext (с опциональным ведущим src/). Путь как symbol, inferred.
+      does_not_see: >-
+        UI-страницы (pages/index.tsx, app/**/page.tsx — иной вид, не серверный route); catch-all и
+        optional catch-all `[...slug]`/`[[...slug]]` (пропуск); rewrites/redirects/basePath из
+        next.config; middleware.ts; route.ext, не лежащий под app/; перехватывающие роуты `(.)`/`(..)`
+        и иные конвенции App Router сверх route-групп/слотов. Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
@@ -247,6 +316,6 @@ planned:
     honest_limits:
       sees: "будет видеть (когда/если реализуем): часть перечисленного как inferred, не verified"
       does_not_see: "не увидит сейчас: динамически собранные экраны, серверный рендеринг вне known-роутера"
-  # ПРИМЕЧАНИЕ О ГРАНИЦЕ: серверные JS-маршруты (Express/Nest/Next) — это НЕ вид screen, а отдельная
-  # работа извлечения route для JS-бэкенда (E4). Здесь их нет намеренно: screen-экстракторы E3
-  # покрывают только UI-роуты фронтенда.
+  # ПРИМЕЧАНИЕ О ГРАНИЦЕ: серверные JS-маршруты (Express/Nest/Next) — это вид route, а НЕ screen.
+  # Их извлекают экстракторы express/nest/next выше (работа E4, подмодуль js_server.py); screen-
+  # экстракторы E3 (react-router/vue-router) покрывают только UI-роуты фронтенда.
