@@ -1,0 +1,48 @@
+# registry/feature-registry/feature-registry.example.yaml
+#
+# ВАЛИДНЫЙ ОБРАЗЕЦ реестра фич дочки по схеме feature-registry.schema.yaml. Это ПРИМЕР (форма,
+# которую дочка заполняет своими фичами), а не реестр самого кита. Три фичи, включая одну
+# status=planned (у которой поверхностей ещё нет). Проверяется детерминированно тестом
+# tests/unit/test_feature_registry_schema.py — без сети и модели.
+#
+# extractor у поверхностей здесь = "none": на этапе W1 ни одного реализованного экстрактора нет
+# (см. surface-extractors.yaml). Реальные id экстракторов появятся, когда W2 добавит код; тогда
+# записи surface будут ссылаться на них, а не на sentinel "none".
+
+schema_version: 1
+registry_type: feature-registry
+
+features:
+  - id: user-login
+    name: "Вход пользователя"
+    description:
+      what: "Пользователь входит по email и паролю и получает сессию."
+      who: "Зарегистрированный пользователь продукта."
+      verify: "POST /login с валидными кредами → 200 и cookie сессии; неверные креды → 401."
+    surfaces:
+      - {kind: route, ref: "src/auth/routes.py:31|login", confidence: verified, extractor: none}
+      - {kind: screen, ref: "src/ui/LoginScreen.tsx:12|LoginScreen", confidence: inferred, extractor: none}
+    status: active
+    owner: "team-identity"
+
+  - id: export-report
+    name: "Экспорт отчёта"
+    description:
+      what: "Пользователь выгружает отчёт в CSV командой CLI или кнопкой в интерфейсе."
+      who: "Аналитик, которому нужен отчёт вне продукта."
+      verify: "`app export report --format csv` создаёт непустой CSV; тот же файл доступен из UI по кнопке «Экспорт»."
+    surfaces:
+      - {kind: cli, ref: "src/cli/export.py:8|export_report", confidence: verified, extractor: none}
+      - {kind: api, ref: "src/api/reports.py:54|get_report_export", confidence: verified, extractor: none}
+    status: active
+    owner: "team-analytics"
+
+  - id: shared-workspaces
+    name: "Совместные рабочие пространства"
+    description:
+      what: "Несколько пользователей работают в общем пространстве с ролями доступа."
+      who: "Команды, которым нужна совместная работа над одними данными."
+      verify: "После приглашения второй пользователь видит пространство и объекты согласно своей роли."
+    surfaces: []          # planned: кода ещё нет, поверхностей нет — это законно
+    status: planned
+    owner: "team-collaboration"
