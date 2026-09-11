@@ -155,7 +155,12 @@ ceilings:
   # 2026-09-11: 606 -> 607 под проведение каталога фич в контур дочки (W4c): один доставляемый шаблон
   #   templates/ci/ai-ops-feature-catalog.yml (регенерирует docs/feature-catalog.md дочки из registry/features.yaml,
   #   зовёт поставляемый рендер checks/feature_catalog ИЗ КЛОНА). Реальная установка 605 -> 606 (строгий `<`, потолок 607). См. `raises`.
-  substantive_files: 607
+  # 2026-09-12: 607 -> 612 под раскрой surface_extraction в пакет экстракторов по стекам: доставляемый
+  #   ai_ops_kit/checks/surface_extraction.py расщеплён в пакет ai_ops_kit/checks/surface_extractors/
+  #   (+5 доставляемых .py: __init__/_common/python_web/python_cli/js_ui). Весь пакет checks/ едет в
+  #   .ai/managed; extract_surfaces импортирует подмодули на пути дочки. Реальная установка 606 -> 611
+  #   (строгий `<`, потолок 612). Объём не пробит (см. отсутствие volume-записи). См. запись в `raises`.
+  substantive_files: 612
 
 # Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
 # `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
@@ -2220,3 +2225,26 @@ raises:
       нового кода Django/DRF/aiohttp-репозитории оставались бы с нулём извлечённых маршрутов, и охват
       фич по ним нельзя было бы посчитать. При слитых E1+E2 обе группы экстракторов едут одним файлом;
       замер managed объединённого дерева 5402404, ниже итогового потолка 5420000.
+  - at: '2026-09-12'
+    what: substantive_files
+    from_count: 607
+    to_count: 612
+    measured_before: 606
+    measured_after: 611
+    files:
+      - ai_ops_kit/checks/surface_extractors/__init__.py
+      - ai_ops_kit/checks/surface_extractors/_common.py
+      - ai_ops_kit/checks/surface_extractors/python_web.py
+      - ai_ops_kit/checks/surface_extractors/python_cli.py
+      - ai_ops_kit/checks/surface_extractors/js_ui.py
+    why_it_works_in_the_child: >-
+      Пять новых доставляемых файлов РАБОТАЮТ в дочке: это подпакет ai_ops_kit/checks/surface_extractors/,
+      на который расщеплён извлекатель поверхностей продукта. surface_extraction.py остался публичным
+      входом и на пути дочки импортирует из подпакета функции-экстракторы (python_web — маршруты
+      Flask/FastAPI/Django/DRF/aiohttp, python_cli — команды argparse/click/console_scripts, js_ui —
+      экраны react/vue-router) и общие примитивы разбора _common; extract_surfaces собирает из них
+      DEFAULT_EXTRACTORS и раздаёт им исходники дочки. Весь пакет ai_ops_kit/checks едет в .ai/managed;
+      без этих файлов в поставке импорт extract_surfaces упал бы у дочки ImportError на первом же вызове
+      судьи охвата фич (класс F-033). Прирост поставки = +5 доставляемых .py (тот же объём кода,
+      перераспределённый по когезивным модулям стеков). Реальная установка 606 -> 611 (строгий `<`,
+      потолок 612). Объём поставки не пробит — отдельной volume-записи под этот раскрой нет.
