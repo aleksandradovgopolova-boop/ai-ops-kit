@@ -5475,3 +5475,33 @@ work:
       проба specify-пути перенацелена на новый файл-хендлер (#851). Полная интерактивная перестройка
       («спросить size/risk ПЕРЕД формой») — уже иной UX сверх done-when «известно ДО заполнения»;
       раскрытие его удовлетворяет. Направление продолжает работа owner-speaks-proven-by-zero-touch-cockpit-run.
+
+  - id: parallel-safety-allows-kit-own-update-prs
+    title: >-
+      parallel-safety пропускает собственные install/update-PR кита — координационные файлы в них
+      неизбежны при первом заезде на репозиторий без кита
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-11'
+    issue: 384
+    evidence: ai_ops_kit/validation/validate_parallel_safety.py
+    result: >-
+      ЗАКРЫТО 2026-09-11 ЖИВЫМ ПОЛЕВЫМ ЗАМЕРОМ. Код был готов ранее: #387 (01.09) научил
+      validate_parallel_safety различать install/update-PR кита по файлу-признаку и пропускать их;
+      #836 (11.09) перевёл признак из хардкода в реестр (registry/coordination-files.yaml
+      kit_update_markers, «registry = источник истины») и добавил 4 теста, воспроизводящих поле.
+      Работа держалась открытой до НАСТОЯЩЕГО прогона (тест воспроизводит сценарий — поле
+      подтверждается прогоном). Замер 11.09: в чистый git-репозиторий без кита проведена РЕАЛЬНАЯ
+      установка (установщик, 593 файла), затем прогнан validate_parallel_safety ТОЙ ЖЕ командой, что
+      и CI дочки (root=дочка, --base <коммит до установки>, --defaults <клон кита>/registry/
+      coordination-files.yaml, --strict). Итог с контролями: (A) настоящий заезд — 402 файла кода +
+      planning/plan.yaml + маркер .ai/managed/VERSION — mixed=false, kit_update=true, EXIT=0, БЕЗ
+      ручного git rm; (B) тот же заезд с УБРАННЫМ маркером — mixed=true, EXIT=1 (пропускает именно
+      признак заезда, а не факт правки плана); (C) обычная работа участника — код + planning/plan.yaml,
+      маркер не тронут — mixed=true, EXIT=1 (исключение узкое, обычное смешение по-прежнему краснеет).
+      Исход направления kit_edits_do_not_create_conflicts подтверждён полем. Оговорка честности: прогон
+      на локальном репозитории реальной командой проверки, но не как GitHub-CI на живом PR —
+      сильнее прежнего теста, окончательное поле — зелёная установка в живой проверке дочки. ВНЕ этой
+      работы: последний исход направления owner_does_not_design_the_parallelism — той же природы, что
+      зачётный zero-touch прогон #748; ведётся работой-замером
+      parallel-autonomy-proven-owner-does-not-design-it. Заявка #384.
