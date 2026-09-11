@@ -326,7 +326,7 @@ def compute(child_root, budget_left=None, me=None):
                       "in_roadmap": g["id"] in (set(rm["horizons"].get("now", {}).get("goals", []))
                                                 | set(rm["horizons"].get("next_outcome", {}).get("goals", [])))})
 
-    in_progress, blocked, ready, not_ready = [], [], [], []
+    in_progress, blocked, ready, not_ready, held = [], [], [], [], []
     for wid, w in by_id.items():
         r = res[wid]
         row = {"id": wid, "title": w.get("title"), "type": w.get("type"),
@@ -334,6 +334,17 @@ def compute(child_root, budget_left=None, me=None):
                "reasons": r["reasons"], "unblocks": r["unblocks"], "drift": r["drift"]}
         if r["status"] == "in_progress":
             in_progress.append(row)
+        elif r["status"] == _plan.OWNER_WAIT_STATUS:
+            # УДЕРЖАННАЯ, А НЕ ПОТЕРЯННАЯ. `resolve()` отдаёт `waiting_on_owner` как ОБЪЯВЛЕННЫЙ
+            # факт (см. delivery_plan.resolve) — «механизм готов, ждём названного шага владельца».
+            # До этой правки ни одна ветка ниже её не подбирала: работа не in_progress, не
+            # blocked/waiting, не ready — и молча выпадала из ВСЕХ списков ответа. Пока рядом жила
+            # хоть одна in_progress-работа, пропажа маскировалась общим «есть что взять/чем
+            # объяснить пустоту»; если ждущих владельца работ несколько и это ВСЁ, что осталось
+            # активным, `next_best` становился None и ничто не называло причину — ровно то молчание,
+            # против которого стоит инвариант «пустой совет обязан быть объяснён».
+            row["waiting_on"] = w.get(_plan.OWNER_WAIT_KEY)
+            held.append(row)
         elif r["status"] in ("blocked", "waiting"):
             row["blocked_by"] = r["blocked_by"]
             row["conflicts_with"] = r["conflicts_with"]
@@ -376,6 +387,7 @@ def compute(child_root, budget_left=None, me=None):
     ready.sort(key=lambda r: (-r["score"], r["id"]))
     in_progress.sort(key=lambda r: r["id"])
     blocked.sort(key=lambda r: r["id"])
+    held.sort(key=lambda r: r["id"])
 
     # #565: у ИДУЩИХ работ записанная ветка берётся из ЕДИНОЙ Work-проекции — того же источника, что
     # у `work show`/`explain`/`status`. СЕЛЕКТИВНОСТЬ (ready/blocked/waiting) остаётся ВЫЧИСЛЯЕМОЙ из
@@ -415,6 +427,7 @@ def compute(child_root, budget_left=None, me=None):
             "plan_errors": val["errors"], "plan_warnings": val["warnings"],
             "roadmap": {"errors": rm["errors"], "warnings": rm["warnings"]},
             "where_are_we": where, "in_progress": in_progress, "blocked": blocked,
+            "held": held,
             "ready": ready, "next_best": next_best, "parallel_with": parallel,
             "parallel_skipped": par_skipped, "not_ready": not_ready,
             "held_by_others": held_by_others, "held_by_me": held_by_me,
@@ -461,7 +474,7 @@ def render(rep) -> str:
             L.append(f"      {x}")
 
     L.append("3. ЧТО БЛОКИРУЕТ РАБОТУ")
-    if not rep["blocked"]:
+    if not rep["blocked"] and not rep.get("held"):
         L.append("  ничего не заблокировано")
     for r in rep["blocked"]:
         L.append(f"  · {r['id']} [{r['status']}] — {r['title']}")
@@ -473,10 +486,21 @@ def render(rep) -> str:
         for c in r["admission"]:
             if not c["ok"]:
                 L.append(f"      {c['id']}: {c['detail']}")
+    # УДЕРЖАННОЕ ВЛАДЕЛЬЦЕМ — ОТДЕЛЬНО ОТ «ЗАБЛОКИРОВАНО». `blocked`/`waiting` снимаются графом
+    # зависимостей сами; `waiting_on_owner` не снимется, пока владелец не сделает названный шаг —
+    # молчание о нём читалось бы как «работы больше нет», а не «дело за тобой».
+    for r in rep.get("held") or []:
+        L.append(f"  · {r['id']} ждёт твоего решения (waiting_on: {r.get('waiting_on') or '?'}) "
+                 f"— {r['title']}")
 
     L.append("4. ЧТО ВЗЯТЬ СЛЕДУЮЩИМ")
     nb = rep["next_best"]
-    if not nb:
+    held = rep.get("held") or []
+    if not nb and held:
+        L.append("  взять нечего — эти работы ждут твоего решения:")
+        for r in held:
+            L.append(f"      {r['id']} (waiting_on: {r.get('waiting_on') or '?'})")
+    elif not nb:
         L.append("  готовой работы нет — см. раздел 3 (это НЕ значит «всё сделано»)")
     else:
         L.append(f"  → {nb['owner_role']}: {nb['id']} — {nb['title']}")

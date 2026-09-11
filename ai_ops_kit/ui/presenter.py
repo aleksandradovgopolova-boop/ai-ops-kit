@@ -320,6 +320,7 @@ def from_next_work(rep: dict) -> dict:
     nb = rep.get("next_best")
     frozen = rep.get("frozen") or []
     held_others = rep.get("held_by_others") or []
+    held_owner = rep.get("held") or []
     active = rep.get("in_progress") or []
     blocked = rep.get("blocked") or []
     if not nb:
@@ -354,6 +355,23 @@ def from_next_work(rep: dict) -> dict:
                 technical={"держат другие": ", ".join(h["id"] for h in held_others),
                            "держу я": ", ".join(h["id"] for h in (rep.get("held_by_me") or [])) or "—",
                            "досягаемость": (rep.get("holders_reach") or {})})
+        elif held_owner:
+            # МОЛЧАНИЕ ЗДЕСЬ БЫЛО ДЕФЕКТОМ, А НЕ ОСОБЕННОСТЬЮ. Пока `next_work.compute()` терял
+            # `waiting_on_owner`-работы, эта ветка никогда не срабатывала — и когда ВСЁ оставшееся
+            # было именно таким, разговор падал в generic «работа не объявлена», хотя работа
+            # объявлена и известно, чего именно она ждёт. Владелец обязан услышать СВОЙ шаг, а не
+            # догадку кита.
+            k = len(held_owner)
+            who = "; ".join(f"«{h.get('title') or h['id']}» — {h.get('waiting_on') or '?'}"
+                            for h in held_owner[:3])
+            return message(
+                status="ok", headline="Свободной работы нет: дело за тобой",
+                summary=f"{k} {_q(k, 'работа', 'работы', 'работ')} готовы механикой и ждут "
+                        f"твоего шага: {who}.",
+                why_it_matters="Это не «всё сделано»: код и проверка сделаны, но снять статус "
+                               "может только названное владельцем действие — кит его не выведет.",
+                next_steps=[f"{h['id']}: {h.get('waiting_on') or '?'}" for h in held_owner],
+                technical={"ждут владельца": ", ".join(h["id"] for h in held_owner)})
         elif not_ready:
             causes = sorted({_ADMISSION_RU.get(c, c)
                              for r in not_ready for c in (r.get("blocked_by_admission") or [])})
