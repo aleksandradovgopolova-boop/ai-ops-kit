@@ -30,20 +30,29 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 868
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
-  ai_ops_kit/checks/surface_extraction.py: 733
 
 raises:
   - at: '2026-09-12'
-    what: new_ceiling
-    from: 'ai_ops_kit/checks/surface_extraction.py < 700 (не в baseline)'
-    to: 'ai_ops_kit/checks/surface_extraction.py = 733'
-    work: 'feat(feature-registry): экстракторы поверхностей E1-E3 (CLI + Django/DRF/aiohttp + UI-экраны)'
+    what: lower_ceiling
+    from: 'ai_ops_kit/checks/surface_extraction.py = 733'
+    to: >-
+      ai_ops_kit/checks/surface_extraction.py = 225 (ниже порога 700 — снят из ceilings);
+      surface_extractors/_common.py = 74, surface_extractors/python_web.py = 225,
+      surface_extractors/python_cli.py = 203, surface_extractors/js_ui.py = 83,
+      surface_extractors/__init__.py = 18 (все ниже порога 700 — в ceilings не вносятся)
+    work: 'refactor(feature-registry): раскрой surface_extraction в пакет экстракторов по стекам'
     why: >-
-      Модуль извлечения поверхностей продукта из кода дочки вырос осознанно: каждый экстрактор
-      (argparse/click/console_scripts, django/drf/aiohttp, react/vue-router) — когезивная единица
-      одного назначения, живёт рядом с extract_surfaces и общими хелперами разбора. 733 строки в
-      ряду с соседними когезивными модулями (contours.py 724, pipeline_evidence.py 734). Потолок =
-      факт; дальнейший рост (E4) будет внесён отдельной записью либо файл будет расщеплён в пакет.
+      Модуль извлечения поверхностей продукта из кода дочки дорос до порога монолита (733) и впереди
+      его рост (E4 — серверные JS/TS), поэтому он расщеплён в ПАКЕТ `surface_extractors/` по стекам —
+      это заявленная расширяемость «экстрактор = адаптер, добавляется без роста ядра». Функции-
+      экстракторы перенесены байт-в-байт: python_web (Flask/FastAPI + Django/DRF/aiohttp), python_cli
+      (argparse/click/console_scripts), js_ui (react/vue-router), общие примитивы разбора и записи
+      (Surface/ParsedFile, _is_str_literal, _imports_module) — в `_common`. surface_extraction.py
+      остался ПУБЛИЧНЫМ входом: держит контракт (Surface/ParsedFile реэкспортом, Extractor), сборку
+      DEFAULT_EXTRACTORS и ядро обхода extract_surfaces — 733 -> 225, ушёл ниже порога и снят из
+      ceilings. Каждый подмодуль заметно ниже 700, поэтому в ceilings не вносятся. Внешний контракт
+      цел: `from ai_ops_kit.checks import surface_extraction` и `extract_surfaces(...)` работают как
+      прежде. Ратчет держит вниз.
   - at: '2026-09-11'
     what: lower_ceiling
     from: 'installer/ai_ops.py = 2168'
