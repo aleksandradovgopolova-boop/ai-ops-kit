@@ -27,30 +27,46 @@ surface_kinds: [route, cli, screen, api]
 confidence_levels: [verified, inferred]
 
 # ── Реализованные экстракторы ───────────────────────────────────────────────────────────────────
-# ПУСТО ПО ЧЕСТНОСТИ: в W1 кода извлечения нет. Ни одного verified- и ни одного inferred-экстрактора.
-# Первый реальный экстрактор добавит W2 — записью вида:
-#   - id: python-flask-routes
-#     stack: {language: python, framework: flask}
-#     surface_kinds: [route, api]
-#     confidence: verified            # или inferred, честно по методу
-#     method: "разбор декораторов @app.route / blueprint через ast (без исполнения кода)"
-#     honest_limits:
-#       sees: "маршруты, объявленные декоратором в исходнике"
-#       does_not_see: "маршруты, собранные динамически в рантайме; add_url_rule через переменную"
-extractors: []
+# Здесь ровно то, что кит УМЕЕТ извлекать ПРЯМО СЕЙЧАС — у каждого есть код и он проверяем тестом.
+# Заявлять стек, для которого кода нет, запрещено инвариантом честных capability-деклараций.
+#
+# W2 добавил ПЕРВЫЙ реальный экстрактор: HTTP-маршруты Flask/FastAPI по декораторам, точным разбором
+# AST без исполнения кода → confidence: verified. Код — ai_ops_kit/checks/surface_extraction.py
+# (функция extract_python_web_routes; ядро обхода — extract_surfaces).
+extractors:
+  - id: python-web-routes
+    stack: {language: python, frameworks: [flask, fastapi]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST: декоратор @<router>.<method>("/path", ...) над (async-)функцией, где
+      <method> ∈ {route, api_route, websocket, get, post, put, delete, patch, head, options, trace},
+      а первый позиционный аргумент — строковый путь-литерал, начинающийся с "/". Код не исполняется.
+      ref = "file:line|symbol" (symbol — имя функции-обработчика).
+    honest_limits:
+      sees: >-
+        маршруты, объявленные декоратором в исходнике со строковым путём-литералом
+        (Flask @app.route/@bp.get, FastAPI @app.get/@router.post и т.п.); даёт точные file:line|symbol.
+      does_not_see: >-
+        маршруты, собранные динамически (Flask add_url_rule, FastAPI include_router через переменную);
+        пути НЕ-литералы (f-строки, константы, конкатенация); Django urlpatterns (список, не декоратор);
+        классовые/method-view; любые не-Python стеки. Их появление НЕ доказывает и не блокирует.
 
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
 # поддержку (тем более verified) до появления кода — запрещено инвариантом честных деклараций.
 planned:
-  - intent: python-web-routes
-    stack: {language: python, frameworks: [flask, fastapi, django]}
+  - intent: python-web-routes-remaining
+    stack: {language: python, frameworks: [django]}
     surface_kinds: [route, api]
     status: unsupported
-    note: "planned (W2): статический разбор маршрутов веб-фреймворков Python через ast, без исполнения."
+    note: >-
+      planned: осталось за пределами реализованного python-web-routes — Django urlpatterns (маршруты
+      объявляются списком path()/re_path(), не декоратором) и динамически собранные маршруты
+      (add_url_rule/include_router через переменную, плагинная регистрация).
     honest_limits:
-      sees: "будет видеть: маршруты, объявленные декоратором/роутером в исходнике"
+      sees: "будет видеть: объявления path()/re_path() в urls.py статически"
       does_not_see: "не увидит: динамически собранные маршруты, маршруты за плагинной регистрацией"
   - intent: cli-commands
     stack: {language: python, frameworks: [argparse, click, typer]}
