@@ -209,7 +209,6 @@ experimental:
     - knowledge_integrity
     - knowledge_freshness
     - observability_readiness
-    - feature_coverage
   # Ключи `.ai-ops.yaml`, объявленные, но ещё не устоявшиеся.
   config_keys:
     - product_operating_model

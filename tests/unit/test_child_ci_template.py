@@ -215,6 +215,67 @@ def test_generated_validate_workflow_actually_runs(child):
             f"{r.stdout[-1500:]}\n{r.stderr[-1500:]}")
 
 
+# ─── W4: гейт охвата фич доставлен в дочку как БЛОКИРУЮЩИЙ внешний путь enforcement ─────────────
+
+@pytest.mark.unit
+def test_feature_coverage_workflow_is_wired_honestly():
+    """Гейт feature_coverage объявлен blocking И его enforced_by НАЗЫВАЕТ реально доставленный
+    child-CI (честность: обещание блокировки стоит на существующем контуре, не на бумаге)."""
+    import importlib.util
+    import yaml
+    gates = yaml.safe_load((KIT / "quality" / "gates.yaml").read_text(encoding="utf-8"))["gates"]
+    fcg = gates["feature_coverage"]
+    assert fcg["blocking"] is True, "гейт охвата фич должен быть blocking после W4"
+    guard = fcg.get("enforced_by")
+    assert guard == "ai-ops-feature-coverage", "enforced_by не называет доставленный child-CI"
+    # и этот guard действительно едет всем дочкам (в наборе доставки, НЕ условный)
+    spec = importlib.util.spec_from_file_location("_inst_fc", KIT / "installer" / "ai_ops.py")
+    inst = importlib.util.module_from_spec(spec); spec.loader.exec_module(inst)
+    assert f"{guard}.yml" in inst.CI_TEMPLATES, "workflow не в наборе доставки"
+    assert f"{guard}.yml" not in inst.CONDITIONAL_CI_TEMPLATES, "гейт охвата фич не должен быть условным"
+    # шаблон существует и зовёт валидатор в режиме дочки с персистентным baseline
+    src = (KIT / "templates" / "ci" / f"{guard}.yml").read_text(encoding="utf-8")
+    assert "validate_feature_coverage.py" in src and "--child-root" in src
+    assert "--seed" in src and "--baseline" in src, "нет персистентного baseline в доставленном контуре"
+
+
+@pytest.mark.unit
+@pytest.mark.slow
+def test_delivered_feature_coverage_gate_really_blocks(child, tmp_path):
+    """ГЛАВНОЕ (сценарий блокировки): берём команду из УСТАНОВЛЕННОГО workflow и исполняем её.
+
+    Первый прогон сидирует baseline и НЕ блокирует; после появления НОВОЙ verified-поверхности без
+    фичи тот же доставленный шаг РЕАЛЬНО валит (exit≠0). Это внешний путь enforcement, не декларация.
+    """
+    import os
+    import shutil
+    wf = child / ".github" / "workflows" / "ai-ops-feature-coverage.yml"
+    assert wf.is_file(), "установка не положила ребёнку workflow охвата фич"
+    text = wf.read_text(encoding="utf-8")
+    rels = [r for r in _kit_paths(text) if r.endswith("validate_feature_coverage.py")]
+    assert rels, "workflow не зовёт валидатор охвата фич из клона кита"
+    script = KIT / rels[0]
+    assert script.is_file(), f"{rels[0]}: workflow зовёт то, чего в ките нет"
+
+    work = tmp_path / "fc"
+    shutil.copytree(child, work)
+    env = {**os.environ, "PYTHONPATH": str(KIT)}   # как PYTHONPATH=<клон кита> в самом workflow
+    cmd = [sys.executable, str(script), "--child-root", ".",
+           "--baseline", ".ai/feature-coverage-baseline.yaml", "--seed"]
+
+    r1 = subprocess.run(cmd, cwd=str(work), capture_output=True, text=True, timeout=180, env=env)
+    assert r1.returncode == 0, f"первый прогон обязан сидировать, не блокировать:\n{r1.stdout}\n{r1.stderr}"
+    assert (work / ".ai" / "feature-coverage-baseline.yaml").is_file(), "baseline не засеян в дочке"
+
+    # НОВАЯ verified-поверхность (Flask-маршрут) без фичи в реестре — сверх засеянного baseline
+    (work / "svc.py").write_text(
+        'from flask import Flask\napp = Flask(__name__)\n\n'
+        '@app.route("/pay")\ndef pay():\n    return "ok"\n', encoding="utf-8")
+    r2 = subprocess.run(cmd, cwd=str(work), capture_output=True, text=True, timeout=180, env=env)
+    assert r2.returncode == 1, ("новая verified-поверхность сверх baseline обязана ронять "
+                                f"доставленный гейт:\n{r2.stdout}\n{r2.stderr}")
+
+
 @pytest.mark.unit
 @pytest.mark.slow
 def test_child_validator_is_fail_closed_on_a_broken_install(child, tmp_path):

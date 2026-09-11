@@ -149,3 +149,86 @@ def test_validator_zero_on_inferred_orphan(tmp_path):
         encoding="utf-8",
     )
     assert vfc.main([str(inp)]) == 0
+
+
+# ─── W4: персистентный baseline (ратчет ВНИЗ) — чистая логика reconcile_baseline ────────────────
+
+def test_reconcile_seeds_on_first_run():
+    """Первый прогон (baseline ещё нет): значение СИДИРУЕТСЯ, ничего не блокируем."""
+    rec = fc.reconcile_baseline(3, None)
+    assert rec["seeded"] and not rec["blocked"] and rec["baseline"] == 3 and rec["changed"]
+
+
+def test_reconcile_growth_blocks_and_does_not_raise_baseline():
+    """Verified-сирот стало больше принятого потолка — РОСТ блокирует, baseline вверх не идёт."""
+    rec = fc.reconcile_baseline(4, 2)
+    assert rec["blocked"] and rec["baseline"] == 2 and rec["regressed"] == 2 and not rec["changed"]
+
+
+def test_reconcile_ratchets_down_when_orphans_fall():
+    """Снижение опускает baseline (ратчет вниз); равенство ничего не меняет."""
+    down = fc.reconcile_baseline(1, 3)
+    assert not down["blocked"] and down["baseline"] == 1 and down["changed"]
+    same = fc.reconcile_baseline(3, 3)
+    assert not same["blocked"] and same["baseline"] == 3 and not same["changed"]
+
+
+# ─── W4: режим ДОЧКИ через доставленный контур — вход собирается из КОДА, baseline персистентен ──
+
+def _flask_child(tmp_path):
+    """Дочка с одной verified-поверхностью (Flask-маршрут) и без реестра фич."""
+    (tmp_path / "app.py").write_text(
+        'from flask import Flask\napp = Flask(__name__)\n\n'
+        '@app.route("/login")\ndef login():\n    return "ok"\n', encoding="utf-8")
+    return tmp_path / ".ai" / "feature-coverage-baseline.yaml"
+
+
+def test_child_mode_verified_orphan_blocks_beyond_baseline(tmp_path):
+    """verified-поверхность в коде БЕЗ фичи и СВЕРХ принятого baseline → доставленный шаг валит (1)."""
+    baseline = _flask_child(tmp_path)
+    baseline.parent.mkdir(parents=True, exist_ok=True)
+    baseline.write_text("verified_orphans: 0\n", encoding="utf-8")     # деды = 0, а сирота есть
+    rc = vfc.main(["--child-root", str(tmp_path), "--baseline", str(baseline), "--seed"])
+    assert rc == 1, "новая verified-сирота сверх baseline обязана ронять гейт"
+    # baseline при блокировке НЕ поднят молча — остался 0
+    import yaml as _y
+    assert _y.safe_load(baseline.read_text(encoding="utf-8"))["verified_orphans"] == 0
+
+
+def test_child_mode_first_run_seeds_and_does_not_block(tmp_path):
+    """Первый прогон без baseline: сироты приняты за дедов, файл засеян, возврат 0."""
+    baseline = _flask_child(tmp_path)
+    assert not baseline.exists()
+    rc = vfc.main(["--child-root", str(tmp_path), "--baseline", str(baseline), "--seed"])
+    assert rc == 0, "первая установка не должна тонуть в блокировках"
+    import yaml as _y
+    assert baseline.is_file() and _y.safe_load(baseline.read_text(encoding="utf-8"))["verified_orphans"] == 1
+
+
+def test_child_mode_ratchets_baseline_down_on_disk(tmp_path):
+    """Сирот стало меньше принятого — baseline на диске ОПУСКАЕТСЯ (persist + монотонность вниз)."""
+    baseline = tmp_path / ".ai" / "feature-coverage-baseline.yaml"
+    baseline.parent.mkdir(parents=True, exist_ok=True)
+    baseline.write_text("verified_orphans: 5\n", encoding="utf-8")     # приняли 5, а кода нет вовсе
+    rc = vfc.main(["--child-root", str(tmp_path), "--baseline", str(baseline), "--seed"])
+    assert rc == 0
+    import yaml as _y
+    assert _y.safe_load(baseline.read_text(encoding="utf-8"))["verified_orphans"] == 0, "не опустился"
+
+
+def test_child_mode_documented_surface_is_not_an_orphan(tmp_path):
+    """Поверхность, объявленная фичей в реестре дочки, — покрыта, не сирота: гейт зелёный."""
+    _flask_child(tmp_path)
+    reg = tmp_path / "registry"
+    reg.mkdir(parents=True, exist_ok=True)
+    (reg / "features.yaml").write_text(
+        "features:\n"
+        "  - id: login\n    name: Вход\n"
+        "    description: {what: вход, who: пользователь, verify: тест}\n"
+        "    surfaces:\n      - {kind: route, ref: 'app.py:5|login', confidence: verified, extractor: python-web-routes}\n"
+        "    status: active\n    owner: team\n", encoding="utf-8")
+    baseline = tmp_path / ".ai" / "feature-coverage-baseline.yaml"
+    rc = vfc.main(["--child-root", str(tmp_path), "--baseline", str(baseline), "--seed"])
+    assert rc == 0
+    import yaml as _y
+    assert _y.safe_load(baseline.read_text(encoding="utf-8"))["verified_orphans"] == 0
