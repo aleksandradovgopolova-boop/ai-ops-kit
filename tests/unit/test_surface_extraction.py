@@ -429,3 +429,140 @@ def test_cli_extraction_isolated_from_broken_files(tmp_path):
     surfaces = extract_surfaces(tmp_path)
     # argparse-команды извлеклись; битые манифесты не уронили и не выдали мусорных verified
     assert {"build", "deploy", "mytool"} <= _cli_names(surfaces)
+
+
+# ── E3: экраны UI фронтенд-роутеров (новый вид поверхности `screen`, ТЕКСТОВЫЙ разбор JS) ─────────
+# Фронтенд разбирается текстом/регэкспом (stdlib ast к JS неприменим) → confidence по умолчанию
+# inferred, а НЕ verified: screen-поверхности видны аналитику, но не блокируют (честность силы).
+
+_REACT_JSX = '''\
+import { Routes, Route } from "react-router-dom";
+
+export default function App() {
+  return (
+    <Routes>
+      <Route path="/billing" element={<Billing />} />
+      <Route path='/settings' element={<Settings />} />
+      <Route path="/users/:id" element={<User />} />
+      <Route index element={<Home />} />
+    </Routes>
+  );
+}
+'''
+
+_REACT_OBJECT = '''\
+import { createBrowserRouter } from "react-router-dom";
+
+const router = createBrowserRouter([
+  { path: "/dashboard", element: <Dashboard /> },
+  { path: "/reports", element: <Reports /> },
+]);
+'''
+
+_VUE_ROUTER = '''\
+import { createRouter, createWebHistory } from "vue-router";
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: "/billing", component: Billing },
+    { path: "/account/:id", component: Account },
+  ],
+});
+'''
+
+# path из ПЕРЕМЕННОЙ / шаблон-строки / выражения — не литерал → screen быть НЕ должно.
+_REACT_DYNAMIC = '''\
+import { createBrowserRouter } from "react-router-dom";
+
+const base = "/app";
+const router = createBrowserRouter([
+  { path: base },                 // переменная
+  { path: `${base}/orders` },     // шаблон-строка
+]);
+'''
+
+# Объект с ключом `path:` в файле БЕЗ индикатора роутера — не должен дать ложный экран.
+_NOT_A_ROUTER = '''\
+const config = {
+  path: "/tmp/cache",   // это НЕ роутер: индикатора роутера в файле нет
+  retries: 3,
+};
+'''
+
+
+def _screen_paths(surfaces, extractor):
+    return {s["ref"].split("|", 1)[1]
+            for s in surfaces if s["kind"] == "screen" and s["extractor"] == extractor}
+
+
+def test_react_router_jsx_and_object_screens_are_inferred(tmp_path):
+    _write(tmp_path, "web/App.jsx", _REACT_JSX)
+    _write(tmp_path, "web/router.tsx", _REACT_OBJECT)
+    surfaces = extract_surfaces(tmp_path)
+    paths = _screen_paths(surfaces, "react-router")
+    # JSX <Route path=> (в т.ч. :id как литерал) + объектные роуты createBrowserRouter.
+    assert {"/billing", "/settings", "/users/:id", "/dashboard", "/reports"} <= paths
+    for s in surfaces:
+        if s["extractor"] == "react-router":
+            assert s["kind"] == "screen"
+            assert s["confidence"] == "inferred"   # текстовый JS-разбор НИКОГДА не verified
+
+
+def test_vue_router_screens_are_inferred(tmp_path):
+    _write(tmp_path, "src/router.js", _VUE_ROUTER)
+    surfaces = extract_surfaces(tmp_path)
+    paths = _screen_paths(surfaces, "vue-router")
+    assert {"/billing", "/account/:id"} <= paths
+    for s in surfaces:
+        if s["extractor"] == "vue-router":
+            assert s["kind"] == "screen" and s["confidence"] == "inferred"
+
+
+def test_screen_paths_from_variables_or_templates_are_skipped(tmp_path):
+    """Путь-НЕ-литерал (переменная, шаблон-строка) экраном не становится и уж точно не verified."""
+    _write(tmp_path, "web/dyn.jsx", _REACT_DYNAMIC)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["kind"] == "screen"] == []
+
+
+def test_object_path_key_needs_router_indicator(tmp_path):
+    """`path:` в файле без индикатора роутера (createBrowserRouter/createRouter/…) → не экран."""
+    _write(tmp_path, "web/config.js", _NOT_A_ROUTER)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["kind"] == "screen"] == []
+
+
+def test_screen_extraction_isolated_from_broken_frontend(tmp_path):
+    """Битый/непарсибельный фронтенд-файл не валит прогон — регэксп не разбирает грамматику."""
+    _write(tmp_path, "web/App.jsx", _REACT_JSX)
+    _write(tmp_path, "web/broken.tsx", "<Route path=\n{{{ unbalanced (((\n")  # мусор JSX
+    surfaces = extract_surfaces(tmp_path)
+    assert "/billing" in _screen_paths(surfaces, "react-router")   # валидный файл извлёкся
+
+
+def test_screens_do_not_disturb_python_route_and_cli(tmp_path):
+    """Screen-экстракторы не трогают питон-путь: route/cli остаются как были."""
+    _write(tmp_path, "app/routes.py", _FLASK)
+    _write(tmp_path, "app/cli.py", _ARGPARSE)
+    _write(tmp_path, "web/App.jsx", _REACT_JSX)
+    surfaces = extract_surfaces(tmp_path)
+    kinds = {s["kind"] for s in surfaces}
+    assert {"route", "cli", "screen"} <= kinds
+    assert any(s["confidence"] == "verified" for s in surfaces if s["kind"] == "route")
+
+
+def test_screen_records_conform_to_surface_schema(tmp_path):
+    """Записи screen валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "web/App.jsx", _REACT_JSX)
+    _write(tmp_path, "src/router.js", _VUE_ROUTER)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["kind"] == "screen"]
+    assert surfaces
+    assert {s["extractor"] for s in surfaces} == {"react-router", "vue-router"}
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])

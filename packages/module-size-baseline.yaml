@@ -30,8 +30,20 @@ ceilings:
   ai_ops_kit/engine/tool_broker.py: 868
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
+  ai_ops_kit/checks/surface_extraction.py: 733
 
 raises:
+  - at: '2026-09-12'
+    what: new_ceiling
+    from: 'ai_ops_kit/checks/surface_extraction.py < 700 (не в baseline)'
+    to: 'ai_ops_kit/checks/surface_extraction.py = 733'
+    work: 'feat(feature-registry): экстракторы поверхностей E1-E3 (CLI + Django/DRF/aiohttp + UI-экраны)'
+    why: >-
+      Модуль извлечения поверхностей продукта из кода дочки вырос осознанно: каждый экстрактор
+      (argparse/click/console_scripts, django/drf/aiohttp, react/vue-router) — когезивная единица
+      одного назначения, живёт рядом с extract_surfaces и общими хелперами разбора. 733 строки в
+      ряду с соседними когезивными модулями (contours.py 724, pipeline_evidence.py 734). Потолок =
+      факт; дальнейший рост (E4) будет внесён отдельной записью либо файл будет расщеплён в пакет.
   - at: '2026-09-11'
     what: lower_ceiling
     from: 'installer/ai_ops.py = 2168'

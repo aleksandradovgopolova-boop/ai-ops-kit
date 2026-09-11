@@ -158,6 +158,52 @@ extractors:
         (список собран динамически); маршруты, добавленные через RouteTableDef-декораторы (@routes.get)
         или другой способ; чужой .add_route()/.add_get() в файле без импорта aiohttp.
 
+  # E3 добавил ПЕРВЫЙ не-Python вид поверхности — экраны UI (screen) фронтенд-роутеров. ВАЖНО про
+  # честность силы: фронтенд разбирается ТЕКСТОМ/регэкспом по исходнику (stdlib ast к JS неприменим),
+  # без исполнения node и без сети. Это НЕ доказательный AST того же класса, что питон-экстракторы →
+  # оба заявляют confidence: inferred (эвристика паттерна: видна аналитику, в W4 НЕ блокирует). Код —
+  # те же ai_ops_kit/checks/surface_extraction.py (extract_react_router_screens/extract_vue_router_screens).
+  - id: react-router
+    stack: {language: [javascript, typescript], frameworks: [react-router]}
+    surface_kinds: [screen]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .jsx/.tsx/.js/.ts без исполнения: JSX-объявление
+      `<Route path="/x" ...>`/`<Route path='/x'/>` (путь — строковый литерал в кавычках) и объектные
+      роуты `createBrowserRouter([{path:"/x", ...}])` / `useRoutes([{path:...}])` (ключ `path:` со
+      строковым литералом — берётся только в файле с индикатором объектного роутера). Регэксп по
+      паттерну — эвристика, не доказательство → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        экраны-маршруты React Router, объявленные ЛИТЕРАЛЬНЫМ строковым путём — JSX-атрибутом path=
+        у <Route> или ключом path: в объектных роутах (createBrowserRouter/useRoutes). Даёт file:line
+        и сам путь как symbol, но помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        путь из ПЕРЕМЕННОЙ / шаблон-строки (backtick) / выражения `{...}` (в кавычки не попадает —
+        пропуск); объектный `path:` в файле БЕЗ индикатора роутера (чтобы чужой объект с ключом path
+        не дал ложный экран); <Route> с JSX-значением пропа (`element={<X/>}`), стоящим ПЕРЕД path в
+        том же теге (символ `>` внутри прерывает скан атрибутов — редиома «path первым» видна, обратный
+        порядок может быть пропущен); маршруты, собранные динамически из данных/конфига; серверные
+        JS-маршруты (Express/Nest/Next) — это иной вид, не screen. Ничего из этого НЕ verified.
+  - id: vue-router
+    stack: {language: [javascript, typescript], frameworks: [vue-router]}
+    surface_kinds: [screen]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .vue/.js/.ts без исполнения: ключи `path: '/x'` в
+      `routes: [{ path: '/x', component: ... }]` (createRouter/VueRouter). Ключ берётся только в файле
+      с индикатором vue-router (createRouter/VueRouter/импорт vue-router), путь — строковый литерал.
+      Регэксп по паттерну — эвристика, не доказательство → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        экраны-маршруты Vue Router, объявленные ЛИТЕРАЛЬНЫМ строковым path: в массиве routes файла с
+        индикатором vue-router. Даёт file:line и путь как symbol, помечает inferred (не блокирует).
+      does_not_see: >-
+        путь из переменной/шаблон-строки/выражения (не литерал — пропуск); routes-массив, собранный
+        динамически или импортированный из другого модуля; `path:` в файле без индикатора vue-router;
+        вложенные роуты, у которых конкретный путь склеивается из родителя в рантайме (виден только
+        объявленный литерал сегмента); серверный рендеринг вне known-роутера. Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
@@ -188,11 +234,19 @@ planned:
     honest_limits:
       sees: "будет видеть: объявления команд Typer и entry_points из setup.py статически"
       does_not_see: "не увидит: команды, зарегистрированные в рантайме из данных/плагинов"
-  - intent: ui-screens
-    stack: {language: [typescript, javascript], frameworks: [react, react-router, vue-router]}
+  - intent: ui-screens-remaining
+    stack: {language: [typescript, javascript], frameworks: [react-router, vue-router, angular]}
     surface_kinds: [screen]
     status: unsupported
-    note: "planned (W2+): разбор объявлений маршрутов/экранов SPA из исходника."
+    note: >-
+      planned: осталось за пределами реализованных screen-экстракторов (react-router, vue-router) —
+      экраны, СОБРАННЫЕ ДИНАМИЧЕСКИ (path из переменной/конфига/импортированного модуля), <Route> с
+      JSX-значением пропа перед path (обратный порядок атрибутов), вложенные роуты со склейкой пути в
+      рантайме, а также иные фронтенд-роутеры (Angular Router и пр.). Статически текстом их доказать
+      нельзя — остаются НЕ verified (пропуск), а не заявляются как возможность.
     honest_limits:
-      sees: "будет видеть: экраны/маршруты, объявленные в конфигурации роутинга исходника"
-      does_not_see: "не увидит: экраны, собранные динамически; серверный рендеринг вне known-роутера"
+      sees: "будет видеть (когда/если реализуем): часть перечисленного как inferred, не verified"
+      does_not_see: "не увидит сейчас: динамически собранные экраны, серверный рендеринг вне known-роутера"
+  # ПРИМЕЧАНИЕ О ГРАНИЦЕ: серверные JS-маршруты (Express/Nest/Next) — это НЕ вид screen, а отдельная
+  # работа извлечения route для JS-бэкенда (E4). Здесь их нет намеренно: screen-экстракторы E3
+  # покрывают только UI-роуты фронтенда.
