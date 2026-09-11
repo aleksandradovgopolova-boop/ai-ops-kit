@@ -289,6 +289,12 @@ CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml",
                 "ai-ops-secret-scan.yml",# секрет-скан (бэкстоп к нативному push protection)
                 "ai-ops-sbom.yml",       # SBOM + подписанные релизы (Sigstore attestations)
                 "ai-ops-scorecard.yml",  # агрегатный сигнал OpenSSF Scorecard
+                # Каталог фич для аналитика: на push в main регенерирует docs/feature-catalog.md
+                # дочки из ЕЁ реестра фич (зовёт поставляемый рендер checks/feature_catalog ИЗ КЛОНА),
+                # на PR — сверяет без коммита. Безусловный: реестр фич применим к любому продукту, а
+                # без реестра workflow честно скипает (не падает). Новых доставляемых Python-файлов
+                # не добавляет — генерация зовётся из клона, как child-валидаторы в ai-ops-validate.yml.
+                "ai-ops-feature-catalog.yml",
                 # УСЛОВНЫЙ (см. CONDITIONAL_CI_TEMPLATES): едет ТОЛЬКО UI-продукту. Превью Storybook в
                 # PR как CI-артефакт статической сборки — без внешних сервисов/секретов. Бэкенд-репо
                 # его не получает (нечего собирать), поэтому доставка гейтится по корню дочки.
