@@ -170,6 +170,36 @@ def coverage_verdict(report: dict, baseline_verified_orphans: int = 0) -> dict:
     return {"status": "pass", "evidence": []}
 
 
+def reconcile_baseline(current_verified_orphans: int, stored_baseline=None) -> dict:
+    """Свести текущее число verified-сирот с ПЕРСИСТЕНТНЫМ baseline. Ратчет ходит ТОЛЬКО ВНИЗ.
+
+    Чистая логика без ввода-вывода: файл baseline читает и пишет процессный вход (валидатор/CI),
+    а решение — здесь, чтобы его можно было проверить вызовом. Три случая:
+
+      * `stored_baseline is None` — ПЕРВЫЙ прогон: baseline СИДИРУЕТСЯ текущим числом, ничего не
+        блокируем (иначе первая установка утонула бы в блокировках — тот же bootstrap, что и в
+        `coverage_verdict`, но теперь ПЕРСИСТЕНТНЫЙ: seeded-значение переживёт прогон в файле дочки);
+      * `current > stored` — verified-сирот СТАЛО БОЛЬШЕ принятого потолка: РОСТ, блокируем; baseline
+        НЕ поднимаем молча (ратчет вверх запрещён) — его опустит только устранение сирот;
+      * `current <= stored` — без роста или снижение: baseline опускаем до текущего (ратчет вниз),
+        не блокируем. Закрыли фичей — число убыло и назад не поднимется незаметно.
+
+    -> {"baseline": int, "seeded": bool, "blocked": bool, "regressed": int, "changed": bool}
+       baseline — значение, которое надлежит ЗАПИСАТЬ (down-only); changed — отличается ли оно от
+       stored (нужно ли переписать файл); regressed — на сколько превышен потолок при blocked.
+    """
+    current = max(0, int(current_verified_orphans or 0))
+    if stored_baseline is None:
+        return {"baseline": current, "seeded": True, "blocked": False,
+                "regressed": 0, "changed": True}
+    prev = max(0, int(stored_baseline))
+    if current > prev:
+        return {"baseline": prev, "seeded": False, "blocked": True,
+                "regressed": current - prev, "changed": False}
+    return {"baseline": current, "seeded": False, "blocked": False,
+            "regressed": 0, "changed": current != prev}
+
+
 def evaluate(registry: dict, surfaces: list, baseline_verified_orphans: int = 0) -> dict:
     """Свести отчёт и вердикт в один результат — удобная точка для процессного входа и тестов."""
     report = build_coverage_report(registry, surfaces)
