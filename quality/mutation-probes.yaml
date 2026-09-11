@@ -1730,3 +1730,40 @@ probes:
     пробы остаются зелёными на логике, но ни один prohibited-путь (security/, self-host движок, protected
     дочки) больше не защищён: механизм отключён на входе. Тесты protected-путей в test_tool_broker.py
     обязаны покраснеть.'
+- id: feature-coverage-verified-orphan-stays-blocking
+  kind: guard
+  file: ai_ops_kit/checks/feature_coverage.py
+  find: '    if new_verified > 0:'
+  replace_with: '    if False:'
+  tests:
+  - tests/unit/test_feature_coverage.py::test_verified_orphan_blocks
+  why: 'СИЛА ПО УВЕРЕННОСТИ (W3/S6): verified-orphan — незадокументированная поверхность, доказанная
+    ДЕТЕРМИНИРОВАННО, — обязана БЛОКИРОВАТЬ (fail). Снять порог входа в блок (if False) — тихо
+    ослабить силу до advisory: verified-сирота падает в warn, гейт возвращает 0, незадокументированная
+    фича проезжает в дочкин CI. Проба обязана покраснеть на тесте, где verified-orphan даёт fail и
+    blocking_problems непуст.'
+- id: feature-coverage-inferred-orphan-stays-advisory
+  kind: guard
+  file: ai_ops_kit/checks/feature_coverage.py
+  find: '    v = verified_orphans(report)'
+  replace_with: '    v = verified_orphans(report) + inferred_orphans(report)'
+  tests:
+  - tests/unit/test_feature_coverage.py::test_inferred_orphan_only_warns
+  why: 'Оборотная сторона честности силы: inferred-orphan — ПРЕДПОЛОЖЕНИЕ эвристики — обязан лишь
+    предупреждать (warn), не блокировать. Подмешать inferred-сирот в множество блокирующих verified
+    (v + inferred) — ложная строгость: предположение начинает валить гейт наравне с доказанным.
+    Проба обязана покраснеть на тесте, где inferred-orphan даёт warn и blocking_problems пуст.'
+- id: feature-coverage-seam-gate-consults-verdict
+  kind: seam
+  covers:
+  - ai_ops_kit/checks/feature_coverage.py
+  file: ai_ops_kit/validation/validate_feature_coverage.py
+  find: '    verdict = fc.coverage_verdict(fc.build_coverage_report(registry, surfaces), baseline_verified_orphans)'
+  replace_with: '    verdict = {"status": "pass"}  # SEAM MUTATION'
+  tests:
+  - tests/unit/test_feature_coverage.py::test_verified_orphan_blocks
+  why: 'ШОВ: сила coverage_verdict что-то значит для человека, только если процессный гейт
+    (validate_feature_coverage.blocking_problems) РЕАЛЬНО зовёт судью и читает его fail. Судью можно
+    написать честным и не позвать — тогда он мёртв, а гейт всегда возвращает «блокировать нечего».
+    Мутация обрывает вызов coverage_verdict (константа pass): интеграционный тест, где через
+    vfc.blocking_problems verified-orphan обязан быть непустым, краснеет.'
