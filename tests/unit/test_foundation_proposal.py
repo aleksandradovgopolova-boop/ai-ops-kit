@@ -80,9 +80,41 @@ def test_honest_boundaries_no_report_and_non_ui(tmp_path):
 
     # не UI-продукт (нет .storybook/package.json) -> absent, без маскировки под «ok»
     assert briefing["storybook"]["storybook_maturity"] == "absent"
+    assert briefing["storybook"]["preview_workflow"] is False, "workflow превью не доставлен"
     assert "не настроен" in text
-    # и НИКАКИХ обещаний авто-подъёма/превью — только честное «пока не умею»
-    assert "пока не умею" in text
+    # ЧЕСТНАЯ ГРАНИЦА (превью-workflow НЕ доставлен): превью в PR названо как отдельный workflow,
+    # который включится при наличии Storybook-билда, а авто-подъём/внешний хостинг остаются за
+    # владельцем. НИКАКОГО «доступно/включено» здесь быть не должно — превью ещё не доставлено.
+    assert "отдельным workflow" in text
+    assert "внешний хостинг за тебя не делаю" in text
+    assert "ВКЛЮЧЕНО" not in text
+
+
+@pytest.mark.unit
+def test_preview_workflow_delivered_is_reported_as_available(tmp_path):
+    """Доставлен workflow превью Storybook -> брифинг честно говорит «доступно/включено», а НЕ
+    прежнее «пока не умею». Признак — файл workflow в рабочем дереве дочки (не обещание).
+
+    Мутация: убрать проверку preview_workflow из _storybook_line -> текст не отличит доставленный
+    workflow от недоставленного, тест краснеет (обе ветки дали бы «отдельным workflow»).
+    """
+    child = tmp_path / "child"
+    (child / ".github" / "workflows").mkdir(parents=True)
+    # факт доставки: сам файл workflow (имя = как ставит контур доставки)
+    (child / ".github" / "workflows" / "ai-ops-storybook-preview.yml").write_text(
+        "name: ai-ops-storybook-preview\n", encoding="utf-8")
+
+    briefing = fp.build_briefing(child)
+    assert briefing["storybook"]["preview_workflow"] is True, "факт доставки не считан из дерева"
+
+    from ai_ops_kit.ui import presenter
+    text = presenter.render(fp.to_message(briefing), audience="product")
+    assert "ВКЛЮЧЕНО" in text, "доставленный workflow обязан читаться как доступное превью"
+    assert "storybook-static" in text or "build-скрипт" in text
+    # честная граница сохранена даже при доступном превью: авто-подъём/хостинг — владелец
+    assert "владелец" in text
+    # и НИКАКОГО ложного «пока не умею», раз превью доставлено
+    assert "пока не умею" not in text
 
 
 @pytest.mark.unit
