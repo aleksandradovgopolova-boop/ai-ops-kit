@@ -34,9 +34,10 @@ def _intent_onboard(task, child_root, signals, a):
     try:
         from ai_ops_kit.checks import constitution_conformance as _cc
         _findings = _cc.conform(child_root)
+        _local = _cc.load_local_rules(child_root)         # локальные правила дочки из её уроков (#849)
         conf_out = child_root / ".ai" / "project" / "constitution-conformance.md"
         conf_out.parent.mkdir(parents=True, exist_ok=True)
-        conf_out.write_text(_cc.render_report(_findings), encoding="utf-8")
+        conf_out.write_text(_cc.render_report(_findings, local=_local), encoding="utf-8")
         conf_rel = str(conf_out.relative_to(child_root))
         _conf_summary = _cc.summary(_findings)
     except (ImportError, OSError, ValueError):           # отчёт-советчик не должен ронять онбординг
