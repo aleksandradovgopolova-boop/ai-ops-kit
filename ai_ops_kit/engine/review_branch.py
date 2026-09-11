@@ -173,9 +173,20 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
     else:
         verdict = "needs-changes"
 
+    # Соответствие Архитектурной конституции по ИЗМЕНЁННЫМ файлам (#847): рекомендации владельцу,
+    # НЕ блок (советует, не гейтит — writer≠judge вердикт даёт ревьюер выше). Пофайловые статьи по
+    # diff; кросс-файловые дубли — в онбординг-скане. Сбой советчика ревью не роняет.
+    constitution_findings = []
+    try:
+        from ai_ops_kit.checks import constitution_conformance as _cc   # внутрипакетно
+        constitution_findings = _cc.conform_paths(wp, changed)
+    except (ImportError, OSError, ValueError):
+        constitution_findings = []
+
     rep = {"kind": "BranchReview", "workitem_id": wid, "branch": branch, "revision": revision,
            "reattached_worktree": reattached, "reviewable": reviewable, "reviews": reviews,
            "verdict": verdict, "readiness": _readiness_for(verdict), "changed_files": changed,
+           "constitution_findings": constitution_findings,
            # база рядом с дифом: без неё «изменённых файлов ноль» неотличимо от «база не выбрана»
            "base": based.get("base"), "base_source": based.get("source")}
     if not based["resolved"]:
