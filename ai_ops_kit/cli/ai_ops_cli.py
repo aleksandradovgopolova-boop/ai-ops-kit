@@ -78,6 +78,11 @@ INTENTS = {
     # источники истины контуров и здоровье в ОДИН объект с одним вердиктом. Ничего не пишет.
     "contract": ("единый контракт продукта: идентичность/стандарт/артефакты/контуры/здоровье + вердикт",
                  "contract", False),
+    # Claude-native онбординг для ОБНОВЛЁННОЙ дочки: после `update` кит одним брифингом предлагает
+    # «фундамент» — что нового в ките, ревью фундамента + вердикт, что рекомендую, состояние
+    # Storybook. Оркестрация готовых кирпичей (contract/next/ui_readiness) через presenter. Read-only.
+    "propose": ("предложение по фундаменту одним брифингом: что нового + ревью фундамента + вердикт "
+                "+ что рекомендую + Storybook", "propose", False),
     # Product Registry (флот): сводный вердикт по ВСЕМ продуктам из реестра флота (products.yaml /
     # $AI_OPS_PRODUCTS). «Увидеть состояние всех продуктов разом». Только чтение.
     "products": ("флот продуктов: (без арг.) сводный вердикт по всем | register — добавить текущий репозиторий",
@@ -144,8 +149,8 @@ INTENTS = {
 # кодом 0, самый дорогой вид отказа, потому что выглядит успехом. Сверяется тестом.
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
-                  "roadmap", "delivery", "backlog", "contract", "products", "team", "governance",
-                  "inspect", "replan", "inbox", "work", "readout", "graph", "reach")
+                  "roadmap", "delivery", "backlog", "contract", "propose", "products", "team",
+                  "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach")
 
 
 def resolve_flags(signals):
@@ -254,7 +259,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     build_preview, _print_preview,
     _run_backlog, _BACKLOG_SUBS,
     _product_health_report, _product_risks,
-    _intent_products, _intent_delivery, _intent_model, _intent_contract,
+    _intent_products, _intent_delivery, _intent_model, _intent_contract, _intent_propose,
     _intent_inspect, _intent_plan, _intent_session,
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
@@ -278,6 +283,7 @@ from ai_ops_kit.cli.ai_ops_cli_commands import (  # noqa: E402,F401 — ре-э�
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
 for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery),
                    ("model", _intent_model), ("contract", _intent_contract),
+                   ("propose", _intent_propose),
                    ("inspect", _intent_inspect), ("plan", _intent_plan),
                    ("session", _intent_session),
                    # вторая волна выноса (deepcut, глубже):

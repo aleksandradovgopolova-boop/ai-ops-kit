@@ -1,0 +1,127 @@
+"""«Предложение по фундаменту» — брифинг для ОБНОВЛЁННОЙ дочки собирает четыре части из РЕАЛЬНЫХ
+кирпичей, а не из моков.
+
+ПОВОД (ROADMAP «Дальше», Claude-native онбординг). `update` заканчивался на «N изменений, создайте
+PR» и никуда не переходил: онбординг-поверхности для обновлённой дочки не было. Оркестратор
+`ai_ops_kit/cli/foundation_proposal.py` сшивает готовые вычислители в один брифинг; эти тесты держат
+его честным и проведённым в контур.
+
+Поведенческие (импортируют продуктовый код кита И зовут его): брифинг обязан звать РЕАЛЬНЫЕ
+product_contract / next_work / ui_readiness / presenter — не мок ради мока.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+import pytest
+
+from ai_ops_kit.cli import foundation_proposal as fp
+from ai_ops_kit.planning import product_contract
+from ai_ops_kit.ui import ui_readiness
+
+
+@pytest.mark.unit
+def test_briefing_assembles_all_four_sections_from_real_bricks(tmp_path):
+    """Брифинг несёт все четыре части, и каждая — вывод РЕАЛЬНОГО кирпича, а не заглушка."""
+    child = tmp_path / "child"
+    child.mkdir()
+    briefing = fp.build_briefing(child)
+
+    # четыре части присутствуют
+    for key in ("whats_new", "contract", "verdict", "recommendations", "storybook"):
+        assert key in briefing, f"в брифинге нет секции {key}"
+
+    # РЕАЛЬНЫЙ product_contract: вердикт брифинга == прямой вызов валидатора над тем же репозиторием
+    direct = product_contract.validate(child)
+    assert briefing["verdict"]["verdict"] == direct["verdict"]
+    assert briefing["contract"]["kind"] == "product-contract"
+
+    # РЕАЛЬНЫЙ ui_readiness: зрелость Storybook из объявленной лестницы
+    assert briefing["storybook"]["storybook_maturity"] in ui_readiness.MATURITY
+
+    # РЕАЛЬНЫЙ presenter: to_message отдаёт настоящий UserMessage
+    msg = fp.to_message(briefing)
+    assert msg["kind"] == "user-message"
+    assert msg["summary"]
+
+
+@pytest.mark.unit
+def test_verdict_and_blocking_propagate_from_contract(tmp_path):
+    """Вердикт и блокеры фундамента прокидываются из product_contract в брифинг и в текст.
+
+    Пустой репозиторий -> обязательные артефакты отсутствуют -> not_ready с блокерами. Эти же
+    блокеры обязаны появиться в брифинге и в человеческом «почему важно».
+    """
+    child = tmp_path / "child"
+    child.mkdir()
+    briefing = fp.build_briefing(child)
+    verdict = briefing["verdict"]
+    assert verdict["verdict"] == "not_ready", "пустой репозиторий не может быть valid"
+    assert verdict["blocking"], "у not_ready обязаны быть названы блокеры"
+
+    from ai_ops_kit.ui import presenter
+    text = presenter.render(fp.to_message(briefing), audience="product")
+    assert verdict["blocking"][0] in text, "блокер фундамента не дошёл до человека"
+
+
+@pytest.mark.unit
+def test_honest_boundaries_no_report_and_non_ui(tmp_path):
+    """Честные границы: нет отчёта об обновлении -> «сведений нет»; не UI-продукт -> Storybook absent."""
+    child = tmp_path / "child"
+    child.mkdir()
+    briefing = fp.build_briefing(child)
+
+    # нет last-update-report.json -> прямо сказано «сведений нет», а не выдумка про изменения
+    assert briefing["whats_new"]["update_report_present"] is False
+    from ai_ops_kit.ui import presenter
+    text = presenter.render(fp.to_message(briefing), audience="product")
+    assert "Сведений о последнем обновлении" in text
+
+    # не UI-продукт (нет .storybook/package.json) -> absent, без маскировки под «ok»
+    assert briefing["storybook"]["storybook_maturity"] == "absent"
+    assert "не настроен" in text
+    # и НИКАКИХ обещаний авто-подъёма/превью — только честное «пока не умею»
+    assert "пока не умею" in text
+
+
+@pytest.mark.unit
+def test_whats_new_surfaces_update_report_when_present(tmp_path):
+    """Есть last-update-report.json -> «что нового» называет версию и число изменений."""
+    child = tmp_path / "child"
+    (child / ".ai" / "runtime").mkdir(parents=True)
+    (child / ".ai" / "runtime" / "last-update-report.json").write_text(json.dumps({
+        "schema_version": 1, "command": "update", "from_version": "4.0.0",
+        "to_version": "4.1.0", "status": "ok",
+        "managed_changes": [{"action": "replace", "path": "a.py", "reason": "updated"},
+                            {"action": "replace", "path": "b.py", "reason": "updated"}],
+        "report": "Обновление 4.0.0 -> 4.1.0: 2 изменений.",
+    }, ensure_ascii=False), encoding="utf-8")
+
+    wn = fp.whats_new(child)
+    assert wn["update_report_present"] is True
+    assert wn["from_version"] == "4.0.0" and wn["to_version"] == "4.1.0"
+    assert wn["changed_files"] == 2
+
+    briefing = fp.build_briefing(child)
+    from ai_ops_kit.ui import presenter
+    text = presenter.render(fp.to_message(briefing), audience="product")
+    assert "4.0.0" in text and "4.1.0" in text
+
+
+@pytest.mark.unit
+def test_recommendations_carry_a_reason(tmp_path):
+    """Каждая рекомендация несёт причину «потому что Y» — вопрос без обоснования запрещён политикой."""
+    child = tmp_path / "child"
+    child.mkdir()
+    briefing = fp.build_briefing(child)
+    recs = briefing["recommendations"]
+    assert recs, "фундамент неполон -> рекомендации обязаны быть"
+    assert len(recs) <= 3
+    for r in recs:
+        assert r.get("what") and r.get("why"), "рекомендация без what/why — переложенная работа"
+
+    # главная рекомендация ложится в decision с формулировкой «рекомендую … потому что …»
+    from ai_ops_kit.ui import presenter
+    text = presenter.render(fp.to_message(briefing), audience="product")
+    assert "Рекомендую:" in text and "потому что" in text

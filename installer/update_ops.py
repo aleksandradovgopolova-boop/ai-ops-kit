@@ -28,6 +28,12 @@ import yaml
 
 _HERE = Path(__file__).resolve()
 
+# ПОСЛЕ обновления дочка обязана иметь онбординг-поверхность, а не только «N изменений, создайте PR».
+# Строка ПРИГЛАШАЕТ к брифингу по фундаменту (`./ai-ops propose`), но НЕ запускает его сама: разбор
+# фундамента — отдельный шаг владельца, а не побочный эффект применения обновления.
+_PROPOSE_INVITE = ("Кит обновлён. `./ai-ops propose` — что нового и что я рекомендую по фундаменту "
+                   "(ревью + вердикт + Storybook) одним брифингом.")
+
 # Живые глобалы установщика; проставляет `ai_ops._update_ops()`. None -> прямой вызов (fallback).
 _AO_NS = None
 
@@ -402,4 +408,8 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
                         + " Создайте PR с этим diff — silent update запрещён.")
     out = _core().write_report(report)
     print(report["report"]); print(f"отчёт: {out}")
+    # ПРИГЛАШЕНИЕ К БРИФИНГУ ПО ФУНДАМЕНТУ — ровно после «N изменений, создайте PR». Раньше здесь
+    # путь обрывался: владелец обновлённой дочки не знал ни что нового, ни что делать дальше.
+    if report["status"] == "ok":
+        print(_PROPOSE_INVITE)
     return 0 if report["status"] == "ok" else 1
