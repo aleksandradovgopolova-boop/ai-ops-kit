@@ -56,6 +56,60 @@ def default_rules_path(root: Path) -> Path:
     return Path(root) / "standards" / "architecture" / "rules.yaml"
 
 
+# ── локальные правила ДОЧКИ из её собственных уроков (#849) ──────────────────────
+# Живут в protected-зоне (`.ai/project/**`) — кит их при update НЕ затирает и не навязывает другим
+# дочкам. Это advisory-напоминания: выстраданное правило проекта, которое conformance-отчёт держит
+# на виду рядом с находками. Пополняются из уроков дочки (руками владельца или помощником ниже).
+LOCAL_RULES_REL = ".ai/project/architecture-rules.local.yaml"
+
+
+def local_rules_path(root: Path) -> Path:
+    return Path(root) / LOCAL_RULES_REL
+
+
+def load_local_rules(root: Path) -> list[dict]:
+    """Локальные правила дочки. -> [{id, title, recommendation, lesson?}]. Пусто, если файла нет."""
+    p = local_rules_path(root)
+    if not p.is_file():
+        return []
+    try:
+        doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return []
+    out = []
+    for r in doc.get("rules") or []:
+        if isinstance(r, dict) and r.get("id") and r.get("title"):
+            out.append({"id": r["id"], "title": r["title"],
+                        "recommendation": r.get("recommendation", ""), "lesson": r.get("lesson", "")})
+    return out
+
+
+def add_local_rule(root: Path, title: str, recommendation: str = "", lesson: str = "",
+                   rule_id: str | None = None) -> str:
+    """Добавить локальное правило дочки (из усвоенного урока). -> id правила. Идемпотентен по title.
+
+    Это МЕХАНИЗМ, которым урок дочки становится правилом: добавляет запись в protected-файл, не трогая
+    доставленную конституцию. Существующее правило с тем же title не дублируется.
+    """
+    p = local_rules_path(root)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    doc = {}
+    if p.is_file():
+        try:
+            doc = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            doc = {}
+    rules = doc.get("rules") or []
+    for r in rules:
+        if isinstance(r, dict) and r.get("title") == title:
+            return r.get("id", "")                       # уже есть — не дублируем
+    rid = rule_id or f"LOCAL-{len(rules) + 1:03d}"
+    rules.append({"id": rid, "title": title, "recommendation": recommendation, "lesson": lesson})
+    doc.update({"schema_version": 1, "kind": "architecture-rules-local", "rules": rules})
+    p.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return rid
+
+
 def iter_source_files(root: Path):
     """.py-файлы продукта дочки (без .git/.ai/venv/tests/…)."""
     root = Path(root)
@@ -255,8 +309,13 @@ def summary(findings: list[dict]) -> str:
 _MAX_LOCATIONS = 10
 
 
-def render_report(findings: list[dict], scope: str = "весь код репозитория") -> str:
-    """Owner-facing отчёт соответствия (Markdown, продуктовым языком). Рекомендации, не приговор."""
+def render_report(findings: list[dict], scope: str = "весь код репозитория",
+                  local: list[dict] | None = None) -> str:
+    """Owner-facing отчёт соответствия (Markdown, продуктовым языком). Рекомендации, не приговор.
+
+    `local` — локальные правила дочки (#849): выводятся отдельной секцией как напоминания из её
+    собственных уроков (кит их не проверяет автоматически, но держит на виду).
+    """
     lines = [
         "# Соответствие Архитектурной конституции",
         "",
@@ -268,7 +327,6 @@ def render_report(findings: list[dict], scope: str = "весь код репоз
     ]
     if not findings:
         lines.append("Расхождений по автоматизируемым статьям не найдено. 👍")
-        return "\n".join(lines) + "\n"
     for f in findings:
         lines.append(f"## {f['article_id']} · {f['title']} ({f['count']})")
         lines.append("")
@@ -279,5 +337,17 @@ def render_report(findings: list[dict], scope: str = "весь код репоз
             lines.append(f"- `{loc}`")
         if f["count"] > _MAX_LOCATIONS:
             lines.append(f"- …ещё {f['count'] - _MAX_LOCATIONS}")
+        lines.append("")
+    if local:
+        lines.append("## Локальные правила проекта (из ваших уроков)")
+        lines.append("")
+        lines.append("Эти правила добавил сам проект — кит их не проверяет автоматически, но держит "
+                     "на виду при онбординге и ревью.")
+        lines.append("")
+        for r in local:
+            lines.append(f"- **{r['id']} · {r['title']}**"
+                         + (f" — {r['recommendation']}" if r.get("recommendation") else ""))
+            if r.get("lesson"):
+                lines.append(f"  - _урок:_ {r['lesson']}")
         lines.append("")
     return "\n".join(lines) + "\n"

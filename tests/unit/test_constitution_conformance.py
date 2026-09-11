@@ -95,6 +95,33 @@ def test_conform_paths_ignores_non_python(tmp_path):
     assert cc.conform_paths(tmp_path, ["readme.md"], rules_path=REAL_RULES) == []
 
 
+def test_local_rules_add_load_and_appear_in_report(tmp_path):
+    """Локальные правила дочки (#849): добавляются, читаются, попадают в отчёт как напоминание."""
+    rid = cc.add_local_rule(tmp_path, "Внешний вызов только с таймаутом",
+                            recommendation="Всегда ставь таймаут.",
+                            lesson="инцидент: воркер завис на запросе без таймаута")
+    assert rid.startswith("LOCAL-"), "id локального правила не выдан"
+    loaded = cc.load_local_rules(tmp_path)
+    assert len(loaded) == 1 and loaded[0]["title"] == "Внешний вызов только с таймаутом"
+    # лежит в protected-зоне .ai/project (update кита её не трогает)
+    assert (tmp_path / ".ai" / "project" / "architecture-rules.local.yaml").is_file()
+    report = cc.render_report([], local=loaded)
+    assert "Локальные правила проекта" in report and rid in report and "таймаут" in report.lower()
+
+
+def test_local_rule_add_is_idempotent_by_title(tmp_path):
+    """Тот же title не дублируется — пополнение из уроков не плодит копии."""
+    a = cc.add_local_rule(tmp_path, "Одно правило", recommendation="раз")
+    b = cc.add_local_rule(tmp_path, "Одно правило", recommendation="два")
+    assert a == b, "повторное добавление того же правила выдало новый id"
+    assert len(cc.load_local_rules(tmp_path)) == 1, "правило задвоилось"
+
+
+def test_no_local_rules_file_is_empty(tmp_path):
+    """Нет файла локальных правил — пусто, без ошибок."""
+    assert cc.load_local_rules(tmp_path) == []
+
+
 def test_tests_and_dotdirs_are_skipped(tmp_path):
     """Код в tests/ и .ai/ не считается исходным продуктом дочки."""
     (tmp_path / "tests").mkdir()
