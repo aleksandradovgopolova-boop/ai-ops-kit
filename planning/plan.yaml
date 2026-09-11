@@ -613,6 +613,59 @@ work:
       не толкуя сырые гейты. Готово, когда такой прогон записан на ai-ops-cockpit и «ноль технических
       вмешательств» измерен (артефакт квалификации), а не заявлен. Родственно остатку
       parallel-safety-allows-kit-own-update-prs: механизм готов, ждёт полевого доказательства.
+
+  # ── Три находки zero-touch прогона 11.09 (session-uptime-shelf на ai-ops-cockpit) ────────────
+  # На пути «описание словами → verified PR» движок трижды выложил технику прямо владельцу. Каждая
+  # находка — отдельная задача под owner-speaks: кит должен САМ переводить эти поверхности в
+  # человеческий разговор, а не полагаться на опсика-переводчика. См.
+  # qualification/OWNER-SPEAKS-ZERO-TOUCH-PROTOCOL-2026-09-11.md.
+  - id: specify-collects-spec-by-conversation-not-yaml
+    title: >-
+      Описание задачи кит собирает обычными словами и записывает сам, а не отсылает владельца
+      править features/<slug>/spec.yaml
+    type: engineering
+    goal: owner-speaks-product-not-pipeline
+    status: in_progress
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/ui/presenter_formatters.py, ai_ops_kit/cli/, tests/]
+    reason: >-
+      Замер zero-touch 11.09: шаг specify говорит владельцу «заполни разделы в
+      features/<slug>/spec.yaml» — отсылка к YAML-файлу. Владелец-непрограммист полез бы его править,
+      а это техническое вмешательство, которое цель owner-speaks запрещает. Кит намеренно не выдумывает
+      продуктовое содержание («зачем» и «как поймём») — но выдавать это как «правь YAML» не обязан.
+      Готово, когда путь описания НЕ показывает владельцу файл: кит задаёт продуктовые вопросы обычным
+      языком и сам заносит ответы в spec, YAML остаётся внутренним. Находка zero-touch прогона.
+  - id: run-accepts-size-risk-in-plain-words-not-json
+    title: >-
+      Размер и риск задачи кит принимает обычными словами, а не требует ответа --signals в виде JSON
+    type: engineering
+    goal: owner-speaks-product-not-pipeline
+    status: in_progress
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/ui/presenter_formatters.py, ai_ops_kit/cli/, ai_ops_kit/shared/, tests/]
+    reason: >-
+      Замер zero-touch 11.09: при незаявленной тяжести run требует «ответь одной строкой: --signals
+      '{"size":"small","risk":"low"}'». Сам вопрос человеческий (насколько большая и рискованная), но
+      формат ответа — JSON во флаге командной строки, владелец так не ответит. Готово, когда на вопрос
+      о размере/риске можно ответить обычными словами («небольшая, ничего опасного»), а кит сам поймёт
+      size/risk; JSON-флаг остаётся внутренним/опциональным, не единственным путём. Находка zero-touch.
+  - id: spend-ceiling-spoken-as-meaning-not-tokens
+    title: >-
+      Бюджетный порог разбора кит объясняет смыслом, а не числом токенов и «потолком»
+    type: engineering
+    goal: owner-speaks-product-not-pipeline
+    status: in_progress
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/ui/presenter_report_formatters.py, tests/]
+    reason: >-
+      Замер zero-touch 11.09: сообщение порога звучит «на разбор ушло 373 тысячи токенов, потолок 50
+      тысяч» — владельцу показан сырой счётчик, он не поймёт, что это и что выбрать. Готово, когда
+      сообщение объясняет ПОСЛЕДСТВИЕ простым языком (разбор пошёл по кругу; пора двигаться дальше или
+      уточнить одно) без слов «токены»/«потолок» в тексте для владельца — счётчик уходит в технические
+      детали, а решение предлагается с рекомендацией. Находка zero-touch прогона.
   # spend-ceiling-counts-only-this-work закрыта в историю 2026-08-28 (код в PR #355): потолок разбора
   # привязан к личности живой сессии (CLAUDE_CODE_SESSION_ID) — расход прошлых сессий больше не
   # блокирует свежую работу; при неизвестной сессии — честный unknown, не whole-session; рекомендация
