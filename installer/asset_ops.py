@@ -245,6 +245,15 @@ def _assets_report_line(assets: dict) -> str:
         out += ("\nBack-fill модели продукта (черновики, заполнить вам): " + ", ".join(seeded)
                 + ". Дальше: `./ai-ops model` покажет, что кит понял о проекте, и спросит "
                   "недостающее одним пакетом.")
+    # Реальный документ уже есть в НЕ-каноничном месте — черновик НЕ сеяли. Называем владельцу и
+    # предлагаем перенос по его слову (propose, not impose): переносить и перезаписывать не вправе.
+    existing = [(x["artifact"], x["action"].split("existing-at:", 1)[1])
+                for x in (assets.get("planning_seeded") or [])
+                if str(x.get("action", "")).startswith("existing-at:")]
+    for artifact, where in existing:
+        out += (f"\n{artifact}: черновик НЕ создавал — этот документ у вас уже есть в `{where}`. "
+                f"Канонический стандарт кита держит его в корне (`{artifact}`); перенести в одно "
+                f"место подготовлю по вашему слову — сам не переношу и не перезаписываю.")
     pl = assets.get("product_layer_seeded") or []
     made = [x["artifact"] for x in pl if x.get("action") in ("created", "generated")]
     if made:

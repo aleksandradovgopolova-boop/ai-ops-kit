@@ -62,6 +62,34 @@ def test_seeding_is_idempotent_and_nondestructive(tmp_path):
         "сидинг затёр существующий SECURITY.md"
 
 
+def test_seeding_skips_draft_when_policy_lives_in_docs_security(tmp_path):
+    """Дочка держит реальную политику в docs/security/security-policy.md — сидинг НЕ кладёт корневой
+    черновик SECURITY.md и честно называет найденное (existing-at:), не переносит сам (ии-среда)."""
+    mod = _load_installer()
+    pol = tmp_path / "docs" / "security" / "security-policy.md"
+    pol.parent.mkdir(parents=True)
+    pol.write_text("# Политика безопасности\n\nКанал приёма: security@пример. " + ("текст. " * 30),
+                   encoding="utf-8")
+    out = mod._child_scaffolding()._seed_planning_contour(tmp_path)
+    assert not (tmp_path / "SECURITY.md").exists(), \
+        "сидинг засеял конкурирующий пустой SECURITY.md поверх реальной политики в docs/security/"
+    sec = next(x for x in out if x["artifact"] == "SECURITY.md")
+    assert sec["action"] == "existing-at:docs/security/security-policy.md", sec
+
+
+def test_kit_draft_is_not_treated_as_existing_security(tmp_path):
+    """Прежний кит-черновик SECURITY.md в docs/security/ НЕ считается существующим — иначе фикс
+    замаскировал бы реально невыполненное требование."""
+    mod = _load_installer()
+    stub = tmp_path / "docs" / "security" / "SECURITY.md"
+    stub.parent.mkdir(parents=True)
+    stub.write_text("---\nstatus: draft\n---\n\n> **Это заготовка.**\n", encoding="utf-8")
+    out = mod._child_scaffolding()._seed_planning_contour(tmp_path)
+    sec = next(x for x in out if x["artifact"] == "SECURITY.md")
+    assert sec["action"] == "created-draft", \
+        f"кит-черновик в docs/security/ ошибочно принят за существующий: {sec}"
+
+
 def test_standard_version_reflects_new_required_artifact():
     """Отпечаток стандарта в синхроне после добавления обязательного артефакта (ратчет SR-1)."""
     from ai_ops_kit.planning import standard as S
