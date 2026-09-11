@@ -67,6 +67,20 @@ def _core():
     return _ao()._core()
 
 
+def _changelog_slice(from_version, to_version):
+    """Короткий срез заголовков CHANGELOG кита между версиями — для last-update-report. -> list[str].
+
+    Тонкая обёртка над `devtools.changelog_gen.headlines_between`: смысл «что нового» переносится в
+    ОТЧЁТ (сам CHANGELOG кита в дочку не едет, отчёт — единственный носитель). Любой сбой -> пустой
+    срез: `propose` честно откатится на «версия + число файлов», а не выдумает изменения.
+    """
+    try:
+        from ai_ops_kit.devtools import changelog_gen
+        return changelog_gen.headlines_between(from_version, to_version)
+    except Exception:                                  # noqa: BLE001 — отсутствие смысла «что нового»
+        return []                                      #   не должно ронять применённое обновление
+
+
 def cmd_status():
     inst, avail = _core().installed_version(), _core().pkg_version()
     drift = _core().detect_drift() or []
@@ -399,6 +413,10 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
         out = _core().write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
+    # СМЫСЛ «ЧТО НОВОГО» — В ОТЧЁТ. Число изменённых файлов не говорит владельцу, ЧТО нового; срез
+    # заголовков CHANGELOG между from->to называет фактические изменения. Пусто -> `propose` честно
+    # откатится на «версия + число файлов». CHANGELOG кита в дочку не едет — отчёт единственный носитель.
+    report["changelog_slice"] = _changelog_slice(inst, target)
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
                         f"{n} файлов под контролем."
                         # v3.35.1: back-fill МОДЕЛИ назывался в отчёте, но не в сообщении — человек

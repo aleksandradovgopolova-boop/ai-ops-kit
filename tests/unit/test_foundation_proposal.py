@@ -110,6 +110,52 @@ def test_whats_new_surfaces_update_report_when_present(tmp_path):
 
 
 @pytest.mark.unit
+def test_whats_new_names_changelog_slice_when_present(tmp_path):
+    """Есть `changelog_slice` в отчёте -> «что нового» НАЗЫВАЕТ эти пункты, а не только число файлов."""
+    child = tmp_path / "child"
+    (child / ".ai" / "runtime").mkdir(parents=True)
+    (child / ".ai" / "runtime" / "last-update-report.json").write_text(json.dumps({
+        "schema_version": 1, "command": "update", "from_version": "3.39.4",
+        "to_version": "4.1.0", "status": "ok",
+        "managed_changes": [{"action": "replace", "path": "a.py", "reason": "updated"}],
+        "changelog_slice": ["4.1.0 — Архитектурная конституция",
+                            "4.0.0 — снятие плоского слоя tools/",
+                            "3.40.0 — warn-минор перед 4.0"],
+        "report": "Обновление 3.39.4 -> 4.1.0: 1 изменений.",
+    }, ensure_ascii=False), encoding="utf-8")
+
+    wn = fp.whats_new(child)
+    assert wn["changelog_slice"][0] == "4.1.0 — Архитектурная конституция"
+
+    from ai_ops_kit.ui import presenter
+    text = presenter.render(fp.to_message(fp.build_briefing(child)), audience="product")
+    assert "Что нового:" in text
+    assert "Архитектурная конституция" in text, "смысл изменений не дошёл до человека"
+
+
+@pytest.mark.unit
+def test_whats_new_falls_back_honestly_without_slice(tmp_path):
+    """Нет среза (старый отчёт без поля) -> честный откат на «версия + число файлов», без выдумок."""
+    child = tmp_path / "child"
+    (child / ".ai" / "runtime").mkdir(parents=True)
+    (child / ".ai" / "runtime" / "last-update-report.json").write_text(json.dumps({
+        "schema_version": 1, "command": "update", "from_version": "4.0.0",
+        "to_version": "4.1.0", "status": "ok",
+        "managed_changes": [{"action": "replace", "path": "a.py", "reason": "updated"},
+                            {"action": "replace", "path": "b.py", "reason": "updated"}],
+        "report": "Обновление 4.0.0 -> 4.1.0: 2 изменений.",
+    }, ensure_ascii=False), encoding="utf-8")
+
+    wn = fp.whats_new(child)
+    assert wn["changelog_slice"] == [], "нет поля -> пустой срез, а не выдуманные пункты"
+
+    from ai_ops_kit.ui import presenter
+    text = presenter.render(fp.to_message(fp.build_briefing(child)), audience="product")
+    assert "Что нового:" not in text, "без среза не должно быть раздела смысла"
+    assert "2 изменени" in text and "4.0.0" in text and "4.1.0" in text
+
+
+@pytest.mark.unit
 def test_recommendations_carry_a_reason(tmp_path):
     """Каждая рекомендация несёт причину «потому что Y» — вопрос без обоснования запрещён политикой."""
     child = tmp_path / "child"

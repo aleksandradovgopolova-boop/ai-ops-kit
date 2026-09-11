@@ -77,3 +77,10 @@ def test_update_prints_propose_invite_after_changes(child, tmp_path, capsys):
     # приглашение стоит ПОСЛЕ отчёта об изменениях, а не вместо него
     assert "изменени" in out
     assert out.index("изменени") < out.index("./ai-ops propose")
+
+    # НОСИТЕЛЬ СМЫСЛА: отчёт несёт срез CHANGELOG (`changelog_slice`) для `propose`. На self-install
+    # from==to -> срез честно пустой, но поле ПРИСУТСТВУЕТ (write-path проведён в контур).
+    import json
+    rep = json.loads((root / ".ai" / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
+    assert "changelog_slice" in rep, "отчёт обновления не несёт срез CHANGELOG — `propose` нечего называть"
+    assert isinstance(rep["changelog_slice"], list)

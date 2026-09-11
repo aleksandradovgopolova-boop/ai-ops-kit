@@ -48,6 +48,57 @@ COMMIT_CATEGORIES = {
 # Паттерн для извлечения категории из commit message
 COMMIT_RE = re.compile(r"^(release|fix|feat|refactor|docs|test|ci|perf|chore)\s*(?:\(([^)]+)\))?\s*:\s*(.*)", re.I)
 
+# Заголовок версии: "## [4.1.0] — 2026-09-11 · Заголовок" (тире/дата/·-часть опциональны).
+_VERSION_HEADING_RE = re.compile(r"^##\s*\[(?P<ver>[^\]]+)\]\s*(?:[—–-]\s*(?P<rest>.*\S))?\s*$")
+# Ведущая дата в «остатке» заголовка, когда «·» нет: "2026-09-01 — текст" -> "текст".
+_LEADING_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}\s*[·—–-]?\s*")
+
+
+def _semver(v) -> tuple[int, int, int]:
+    """'4.1.0' -> (4, 1, 0); пре-релизы/суффиксы отброшены, нечисловое -> 0 (MVP-семантика)."""
+    core = str(v).strip().lstrip("v").split("-", 1)[0].split("+", 1)[0]
+    parts = (core.split(".") + ["0", "0", "0"])[:3]
+    return tuple(int(x) if x.isdigit() else 0 for x in parts)  # type: ignore[return-value]
+
+
+def headlines_between(old_version, new_version, text: str = None, limit: int = 6) -> list[str]:
+    """Короткий срез заголовков CHANGELOG между версиями old (исключая) и new (включая).
+
+    Каждый элемент — «X.Y.Z — <человеческий заголовок версии>»: ВЕРХНЕУРОВНЕВЫЙ заголовок секции без
+    её тела. Порядок — как в файле (новейшее сверху). Смысл «что нового» переносится этим срезом в
+    отчёт об обновлении: сам CHANGELOG кита в дочку не едет, отчёт — единственный носитель.
+
+    ЧЕСТНО ПУСТОЙ при любой невозможности сойтись (нет версий-границ, CHANGELOG недоступен, между
+    границами пусто, old >= new). Пустой срез значит «называем как раньше: версия + число файлов» —
+    выдумывать изменения нельзя.
+    """
+    if old_version is None or new_version is None:
+        return []
+    if text is None:
+        try:
+            text = CHANGELOG_PATH.read_text(encoding="utf-8")
+        except OSError:
+            return []
+    lo, hi = _semver(old_version), _semver(new_version)
+    if lo >= hi:
+        return []
+    out: list[str] = []
+    for line in text.splitlines():
+        m = _VERSION_HEADING_RE.match(line)
+        if not m:
+            continue
+        ver = m.group("ver").strip()
+        if ver.lower() == "unreleased":
+            continue
+        if not (lo < _semver(ver) <= hi):
+            continue
+        rest = (m.group("rest") or "").strip()
+        # Человеческий заголовок — часть после «·»; без «·» — строка без ведущей даты.
+        title = (rest.split("·", 1)[1].strip() if "·" in rest
+                 else _LEADING_DATE_RE.sub("", rest).strip())
+        out.append(f"{ver} — {title}" if title else ver)
+    return out[:limit]
+
 
 def _git(*args) -> str:
     """Выполнить git-команду, вернуть stdout."""

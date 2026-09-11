@@ -62,11 +62,13 @@ def _child_standard_version(child_root) -> int | None:
 
 
 def whats_new(child_root) -> dict:
-    """ЧТО НОВОГО: дельта версии кита + дельта стандарта + человекочитаемое «что изменилось».
+    """ЧТО НОВОГО: дельта версии кита + СМЫСЛ изменений + дельта стандарта.
 
-    Версия/список изменений — из last-update-report.json (называем СМЫСЛ через `report`-текст, не
-    только число файлов). Дельта стандарта — из planning.standard.status: `behind=True` значит, что
-    требования к репозиторию стали НОВО обязательными. Нет отчёта -> `update_report_present=False`.
+    Смысл — из `changelog_slice` отчёта (срез заголовков CHANGELOG между старой и новой версией,
+    записанный при обновлении): называем ЧТО нового, а не только число файлов. Среза нет (старый
+    отчёт / CHANGELOG был недоступен) -> честный откат на версию+число, без выдумок. Дельта
+    стандарта — из planning.standard.status: `behind=True` значит, что требования к репозиторию
+    стали НОВО обязательными. Нет отчёта -> `update_report_present=False`.
     """
     from ai_ops_kit.planning import standard
     rep = _read_last_update_report(child_root)
@@ -77,6 +79,8 @@ def whats_new(child_root) -> dict:
         out.update(from_version=rep.get("from_version"), to_version=rep.get("to_version"),
                    changed_files=len(changes),
                    change_paths=[c.get("path") for c in changes[:5]],
+                   changelog_slice=[c for c in (rep.get("changelog_slice") or [])
+                                    if isinstance(c, str) and c.strip()],
                    summary_text=(rep.get("report") or "").strip() or None)
     return out
 
@@ -164,13 +168,20 @@ def _storybook_line(sb: dict) -> str:
 
 
 def _whats_new_line(wn: dict) -> str:
-    """Одна человеческая строка «что нового»: версия + число изменений, честно при отсутствии отчёта."""
+    """Одна человеческая строка «что нового»: НАЗЫВАЕТ смысл изменений (срез CHANGELOG), а не только
+    число файлов. Нет среза (старый отчёт / CHANGELOG недоступен) -> честный откат на версию+число."""
     if not wn.get("update_report_present"):
         line = ("Сведений о последнем обновлении в проекте нет — показываю фундамент как есть, "
                 "без разбора «что нового».")
     else:
-        line = (f"Кит обновлён {wn.get('from_version') or '—'} → {wn.get('to_version') or '—'}: "
-                f"{wn.get('changed_files', 0)} изменени(й) в managed-слое.")
+        frm, to = wn.get("from_version") or "—", wn.get("to_version") or "—"
+        slice_ = wn.get("changelog_slice") or []
+        if slice_:
+            line = (f"Кит обновлён {frm} → {to}. Что нового: "
+                    + "; ".join(slice_[:4]) + ".")
+        else:
+            line = (f"Кит обновлён {frm} → {to}: "
+                    f"{wn.get('changed_files', 0)} изменени(й) в managed-слое.")
     std = wn.get("standard") or {}
     if std.get("behind"):
         line += (f" И требования репозитория обновились: стандарт {std.get('installed')} → "
@@ -215,6 +226,7 @@ def to_message(briefing: dict):
         next_steps=next_steps,
         technical={
             "версия": f"{wn.get('from_version') or '—'} → {wn.get('to_version') or '—'}",
+            "что нового": " | ".join(wn.get("changelog_slice") or []) or "—",
             "изменённых файлов": wn.get("changed_files", "—"),
             "изменения": ", ".join(p for p in (wn.get("change_paths") or []) if p) or "—",
             "отчёт обновления": wn.get("summary_text") or "—",
