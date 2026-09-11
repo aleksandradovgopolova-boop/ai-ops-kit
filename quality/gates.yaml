@@ -197,6 +197,42 @@ gates:
     # ПРИМЕЧАНИЕ: гейт работает на child-ПРОДУКТЕ (у кита нет обёрток/контуров). Live diff-эвристика
     # двух триггеров (новый маршрут ядра / вызов клиента) — сигнал #6 seam_scan (уже подключён advisory).
 
+  feature_coverage:
+    id: feature_coverage
+    prevents: undocumented_feature_surface
+    evidence: {field: by_construction, false_positives: unavailable}
+    closed_by: validator
+    purpose: >
+      Охват фич: каждая наблюдаемая поверхность продукта (маршрут/эндпоинт, CLI-команда, экран, API),
+      извлечённая из кода дочки, сопоставлена ОПИСАННОЙ фиче в реестре фич. Незадокументированная
+      фича — поверхность в коде без сопоставленной фичи — обнаружимая находка. Класс дефекта:
+      «функция построена, но нигде не объявлена как ценность» — продукт растёт молча, и владелец не
+      знает, что у него есть. СИЛА находки ЧЕСТНА ПО УВЕРЕННОСТИ вывода поверхности (confidence):
+      этот гейт blocking, НО фактическая блокировка наступает ЛИШЬ на verified-orphan — поверхность,
+      доказанную детерминированно (её validate-feature-coverage возвращает как fail). inferred-orphan
+      (предположение эвристики) и ghost (фича в реестре без следа в коде, кроме status=planned)
+      остаются ADVISORY — предупреждают, но код возврата валидатора не меняют. САМ ГЕЙТ пока
+      blocking:false (advisory до обкатки) — как соседние consistency-гейты: судья уже падает на
+      verified-orphan (validate-feature-coverage → fail), но гейт не привязан к треку/child-CI, а
+      обещать блокировку без привязки — ложь публичной поверхности; привязку и переход в blocking
+      делает W4 (доставка контура в дочку). Извлечение поверхностей — W2; сам судья их не извлекает,
+      а принимает готовый список, поэтому не зависит от экстрактора.
+    stage: verify
+    blocking: false          # advisory до обкатки/привязки в W4 (как event_contract/surface_wiring):
+                             # судья падает на verified-orphan, но гейт не блокирует, пока не привязан
+                             # к треку/child-CI. MVP-blocking ≤ 8 не тронут (гейт не в хребте).
+    responsible_role: solution-architect
+    review_mode: writer                       # детерминированный гейт: вердикт судьи, не ревью
+    validator: validate-feature-coverage      # runnable: ai_ops_kit/validation/validate_feature_coverage.py (судья: ai_ops_kit/checks/feature_coverage.py)
+    human_approval: false
+    applicability: [ENGINEERING, PRODUCT, AI_FEATURE, CRITICAL]
+    stale_detection: {bind_to: tested_revision}
+    required_evidence: [surfaces_matched, verified_orphans_none_or_baselined]
+    # BOOTSTRAP/РАТЧЕТ: пустой реестр или первый прогон → все поверхности сироты; baseline verified-сирот
+    # заводится advisory и ходит ТОЛЬКО ВНИЗ (fail лишь когда verified-сирот стало БОЛЬШЕ baseline).
+    # Иначе первая установка утонула бы в блокировках. ПРИМЕЧАНИЕ: гейт осмыслен на child-ПРОДУКТЕ (у
+    # кита нет реестра фич дочки + извлечённых поверхностей); в самом ките валидатор — честный no-op.
+
   requirements:
     id: requirements
     prevents: untestable_requirements
