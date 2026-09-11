@@ -219,8 +219,9 @@ def _click_command_name(dec: ast.expr, func_name: str) -> str | None:
     Явное, но НЕ литеральное имя (переменная в аргументе или `name=<переменная>`) → None: click в
     рантайме взял бы это значение, а не имя функции, поэтому доказать имя нельзя — пропускаем, как
     argparse (FEAT-003/004: verified только доказуемое). Имя из функции берётся ТОЛЬКО когда явного
-    имени нет вовсе: click образует его детерминированно — хвостовой `_` срезается (click ≥8.1,
-    идиома `list_`→`list`), затем `lower()` и `_`→`-`.
+    имени нет вовсе: click образует его детерминированно (проверено на click 8.5.0) —
+    `lower()`+`_`→`-`, затем срез хвостового суффикса `command/cmd/group/grp` (build_command→build);
+    хвостовой одиночный `_` НЕ срезается (list_→"list-").
     """
     if isinstance(dec, ast.Call):
         target, args, keywords = dec.func, dec.args, dec.keywords
@@ -238,7 +239,15 @@ def _click_command_name(dec: ast.expr, func_name: str) -> str | None:
         return name_kw.value.value
     if explicit:
         return None  # явное имя задано, но не литерал — доказать нельзя, пропускаем (симметрия с argparse)
-    return func_name.rstrip("_").lower().replace("_", "-")
+    # Без явного имени click образует имя из имени функции ДЕТЕРМИНИРОВАННО (проверено на click 8.5.0):
+    # `name.lower().replace("_","-")`, затем срезает хвостовой суффикс command/cmd/group/grp по `-`.
+    # Хвостовой `_` при этом НЕ срезается (list_ -> "list-"). Воспроизводим точно, чтобы symbol под
+    # verified совпадал с реальной командой click.
+    name = func_name.lower().replace("_", "-")
+    left, sep, suffix = name.rpartition("-")
+    if sep and suffix in {"command", "cmd", "group", "grp"}:
+        name = left
+    return name
 
 
 def extract_python_cli_click(parsed: ParsedFile) -> list:
