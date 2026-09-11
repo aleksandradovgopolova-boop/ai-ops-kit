@@ -19,8 +19,11 @@
 `contract`), а не импортируются здесь, иначе оркестратор потянул бы intelligence.
 
 ЧЕСТНЫЕ ГРАНИЦЫ (не сглаживаем): нет отчёта об обновлении -> «сведений об изменениях нет»; не
-UI-продукт -> Storybook `absent` называется прямо; авто-подъём Storybook и превью в PR — это
-roadmap-будущее (`ROADMAP.md`), и брифинг говорит, что доступно (замер + шаблон), а не обещает их.
+UI-продукт -> Storybook `absent` называется прямо. Превью Storybook в PR (CI-артефакт статической
+сборки, без внешнего хостинга/секретов) кит доставляет отдельным workflow: доставлен -> брифинг
+говорит «доступно/включено», не доставлен -> называет условие (UI-продукт со Storybook-билдом).
+Авто-подъём Storybook (npm i / storybook init) и внешний хостинг остаются за владельцем — кит их
+не делает и не обещает.
 """
 from __future__ import annotations
 
@@ -155,16 +158,28 @@ def build_briefing(child_root, *, health=None, risks=None, budget_left=None, me=
 
 
 def _storybook_line(sb: dict) -> str:
-    """Честная строка про Storybook: называет зрелость и НЕ обещает авто-подъём/превью в PR."""
+    """Честная строка про Storybook: называет зрелость И честную границу превью в PR.
+
+    Превью Storybook в PR = CI-артефакт статической сборки (без внешнего хостинга/секретов). Доставлен
+    workflow -> «доступно/включено»; не доставлен -> называем условие, а не обещание. Авто-подъём
+    Storybook (npm i / storybook init) и внешний хостинг за меня — по-прежнему нет, это владелец."""
     m = sb.get("storybook_maturity")
-    tail = " Поднять Storybook сам и сделать превью в PR я пока не умею — это дальше по roadmap."
+    if sb.get("preview_workflow"):
+        tail = (" Превью Storybook в PR ВКЛЮЧЕНО: workflow доставлен — на PR с UI-изменениями CI "
+                "соберёт Storybook твоим build-скриптом и выложит артефактом (без внешнего хостинга). "
+                "Авто-подъём Storybook и внешний хостинг за меня — по-прежнему нет (это владелец).")
+    else:
+        tail = (" Превью Storybook в PR я доставляю отдельным workflow (CI-артефакт сборки, без "
+                "внешних сервисов) — он включится, когда у репозитория есть Storybook-билд. "
+                "Авто-подъём Storybook и внешний хостинг за тебя не делаю — это владелец.")
     if m == "absent":
         return ("Storybook не настроен — если это не UI-продукт, так и должно быть (не маскирую). "
                 "Могу дать шаблон скрипта; ставить зависимости за тебя не буду." + tail)
     if m in ("configured", "runnable"):
         return (f"Storybook: {m}. {sb.get('recommendation', '')} Шаблон скрипта дам по запросу."
                 + tail)
-    return "Storybook: evidence собирается (verified) — адаптер строит реальный UIEvidenceBundle."
+    return ("Storybook: evidence собирается (verified) — адаптер строит реальный UIEvidenceBundle."
+            + tail)
 
 
 def _whats_new_line(wn: dict) -> str:

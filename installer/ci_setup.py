@@ -85,6 +85,40 @@ def _remember_ci(name: str, text: str, root: Path = None) -> None:
     p.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _is_ui_product(root) -> bool:
+    """UI-продукт ли дочка: есть Storybook-конфиг/зависимость/скрипт (зрелость != absent).
+
+    Гейт доставки условных UI-workflow. Консервативен НАМЕРЕННО: недоступность readiness трактуется
+    как «не UI-продукт» — лучше не доставить условный workflow, чем навязать его бэкенд-репо. Это
+    честный гейт применимости, а не маскировка (см. `ai_ops_kit/ui/ui_readiness.py`)."""
+    try:
+        for _root in (Path(root) / ".ai" / "managed", _ao().PKG):
+            if (_root / "ai_ops_kit" / "ui" / "ui_readiness.py").is_file() and str(_root) not in sys.path:
+                sys.path.insert(0, str(_root))
+        from ai_ops_kit.ui import ui_readiness
+        return ui_readiness.assess(root).get("storybook_maturity") != "absent"
+    except Exception:   # noqa: BLE001 — readiness недоступен -> консервативно «не UI-продукт»
+        return False
+
+
+# Условные workflow: имя -> предикат применимости по корню дочки. Storybook-preview едет лишь
+# UI-продукту (см. installer/asset_ops.py:CONDITIONAL_CI_TEMPLATES).
+_CONDITIONAL_CI = {"ai-ops-storybook-preview.yml": _is_ui_product}
+
+
+def _applicable_ci_templates(root):
+    """Имена CI-workflow, ПРИМЕНИМЫХ к этой дочке: безусловные + условные, чей предикат истинен.
+
+    Не-применимый условный workflow не попадает ни в состояние, ни в доставку — он для этой дочки
+    не существует, а не «absent/opted-out»: гейтит не владелец, а сам кит по природе репозитория."""
+    out = []
+    for name in _core().CI_TEMPLATES:
+        pred = _CONDITIONAL_CI.get(name)
+        if pred is None or pred(root):
+            out.append(name)
+    return out
+
+
 def _ci_broken_refs(text: str):
     """Дефекты кита в его же workflow у ребёнка. -> список описаний (пусто = чисто).
 
@@ -114,7 +148,7 @@ def ci_workflow_state(root: Path = None):
     ao = _ao()
     root = Path(root or ao.REPO_ROOT)
     prints, out = _ci_prints(root), []
-    for name in _core().CI_TEMPLATES:
+    for name in _applicable_ci_templates(root):
         src = ao.PKG / "templates" / "ci" / name
         dst = _ci_dst(root, name)
         if not src.is_file():
