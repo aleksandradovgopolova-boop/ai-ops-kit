@@ -264,6 +264,45 @@ def _holders(child_root, me=None):
     return others, mine, reach
 
 
+def _categorize(by_id, res, caps_known, budget_left, model, plan):
+    """Разложить работы по корзинам ответа: idём / удержано владельцем / заблокировано / готово /
+    не допущено. -> (in_progress, blocked, ready, not_ready, held).
+
+    `waiting_on_owner` — ОТДЕЛЬНАЯ корзина `held`: resolve() отдаёт её как ОБЪЯВЛЕННЫЙ факт
+    («механизм готов, ждём названного шага владельца»), и графом зависимостей она не снимется. Без
+    своей ветки такая работа не совпала бы ни с in_progress, ни с blocked/waiting, ни с ready — и
+    молча выпала бы из ВСЕХ списков ответа; пока рядом жила хоть одна in_progress-работа, пропажа
+    маскировалась. Инвариант: пустой совет обязан быть ОБЪЯСНЁН — поэтому удержанное владельцем
+    называется, а не теряется."""
+    in_progress, blocked, ready, not_ready, held = [], [], [], [], []
+    for wid, w in by_id.items():
+        r = res[wid]
+        row = {"id": wid, "title": w.get("title"), "type": w.get("type"),
+               "owner_role": w.get("owner_role"), "status": r["status"], "source": r["source"],
+               "reasons": r["reasons"], "unblocks": r["unblocks"], "drift": r["drift"]}
+        if r["status"] == "in_progress":
+            in_progress.append(row)
+        elif r["status"] == _plan.OWNER_WAIT_STATUS:
+            row["waiting_on"] = w.get(_plan.OWNER_WAIT_KEY)
+            held.append(row)
+        elif r["status"] in ("blocked", "waiting"):
+            row["blocked_by"] = r["blocked_by"]
+            row["conflicts_with"] = r["conflicts_with"]
+            blocked.append(row)
+        elif r["status"] == "ready":
+            allowed, checks = _admission(w, r, caps_known, budget_left)
+            row["admission"] = checks
+            if allowed:
+                score, why = _rank(w, r, model, plan)
+                row["score"], row["why"] = score, why
+                ready.append(row)
+            else:
+                row["blocked_by_admission"] = [c["id"] for c in checks if not c["ok"]]
+                not_ready.append(row)
+    return in_progress, blocked, ready, not_ready, held
+
+
+
 def compute(child_root, budget_left=None, me=None):
     """Ответ на четыре вопроса. -> dict (машиночитаемо; печать — в `render`).
 
@@ -326,39 +365,8 @@ def compute(child_root, budget_left=None, me=None):
                       "in_roadmap": g["id"] in (set(rm["horizons"].get("now", {}).get("goals", []))
                                                 | set(rm["horizons"].get("next_outcome", {}).get("goals", [])))})
 
-    in_progress, blocked, ready, not_ready, held = [], [], [], [], []
-    for wid, w in by_id.items():
-        r = res[wid]
-        row = {"id": wid, "title": w.get("title"), "type": w.get("type"),
-               "owner_role": w.get("owner_role"), "status": r["status"], "source": r["source"],
-               "reasons": r["reasons"], "unblocks": r["unblocks"], "drift": r["drift"]}
-        if r["status"] == "in_progress":
-            in_progress.append(row)
-        elif r["status"] == _plan.OWNER_WAIT_STATUS:
-            # УДЕРЖАННАЯ, А НЕ ПОТЕРЯННАЯ. `resolve()` отдаёт `waiting_on_owner` как ОБЪЯВЛЕННЫЙ
-            # факт (см. delivery_plan.resolve) — «механизм готов, ждём названного шага владельца».
-            # До этой правки ни одна ветка ниже её не подбирала: работа не in_progress, не
-            # blocked/waiting, не ready — и молча выпадала из ВСЕХ списков ответа. Пока рядом жила
-            # хоть одна in_progress-работа, пропажа маскировалась общим «есть что взять/чем
-            # объяснить пустоту»; если ждущих владельца работ несколько и это ВСЁ, что осталось
-            # активным, `next_best` становился None и ничто не называло причину — ровно то молчание,
-            # против которого стоит инвариант «пустой совет обязан быть объяснён».
-            row["waiting_on"] = w.get(_plan.OWNER_WAIT_KEY)
-            held.append(row)
-        elif r["status"] in ("blocked", "waiting"):
-            row["blocked_by"] = r["blocked_by"]
-            row["conflicts_with"] = r["conflicts_with"]
-            blocked.append(row)
-        elif r["status"] == "ready":
-            allowed, checks = _admission(w, r, caps_known, budget_left)
-            row["admission"] = checks
-            if allowed:
-                score, why = _rank(w, r, model, plan)
-                row["score"], row["why"] = score, why
-                ready.append(row)
-            else:
-                row["blocked_by_admission"] = [c["id"] for c in checks if not c["ok"]]
-                not_ready.append(row)
+    in_progress, blocked, ready, not_ready, held = _categorize(
+        by_id, res, caps_known, budget_left, model, plan)
 
     # ВЫЧИТАНИЕ ТОГО, ЧТО ДЕРЖАТ ДРУГИЕ (работа `next-offers-work-nobody-holds`). Важность и
     # непересечение кит считал и раньше; отсутствовало ровно одно — вопрос УЧАСТНИКА «что взять МНЕ».
