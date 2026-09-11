@@ -1,0 +1,70 @@
+# registry/feature-registry/surface-extractors.yaml
+#
+# ЧЕСТНАЯ ДЕКЛАРАЦИЯ ЭКСТРАКТОРОВ ПОВЕРХНОСТЕЙ (W1 фичи feature-registry-coverage).
+#
+# Инвариант кита (AGENTS.md): capability-декларации честные — нельзя объявлять возможность, которой
+# нет в коде. На этапе W1 код-экстракторов ещё НЕ существует (извлечение поверхностей — работа W2),
+# поэтому список реализованных экстракторов ПУСТ. Это не заглушка «на будущее»: это честное «пока
+# кит не умеет извлекать ни одной поверхности ни из одного стека».
+#
+# Как читать: `extractors` — то, что кит УМЕЕТ прямо сейчас (у каждого есть код и он проверяем).
+# `planned` — намерения; они помечены status: unsupported + note planned и НЕ заявляют confidence,
+# ровно как планы в registry/capability-index.yaml. Пока экстрактор в `planned`, кит не выдаёт по
+# нему verified-поверхностей и не блокирует по ним (см. правило силы в стандарте FEAT).
+#
+# ЗАМЕТКА О ДОСТАВКЕ (honest): как и схема рядом, файл лежит в подкаталоге registry/ и в дочку пока
+# не едет — child-side читателя нет до W2/W3/W5. Поедет плоским registry/-файлом вместе с первым
+# реализованным экстрактором, и тогда подъём поставки будет записан в quality/delivery-budget.yaml.
+
+schema_version: 1
+registry_type: surface-extractors
+
+# Словарь видов поверхностей, которые вообще бывают (совпадает с surface.kind в схеме реестра фич).
+surface_kinds: [route, cli, screen, api]
+
+# Уровни уверенности вывода. verified — доказано детерминированным разбором кода (может блокировать
+# в W4); inferred — предположено эвристикой (только предупреждает).
+confidence_levels: [verified, inferred]
+
+# ── Реализованные экстракторы ───────────────────────────────────────────────────────────────────
+# ПУСТО ПО ЧЕСТНОСТИ: в W1 кода извлечения нет. Ни одного verified- и ни одного inferred-экстрактора.
+# Первый реальный экстрактор добавит W2 — записью вида:
+#   - id: python-flask-routes
+#     stack: {language: python, framework: flask}
+#     surface_kinds: [route, api]
+#     confidence: verified            # или inferred, честно по методу
+#     method: "разбор декораторов @app.route / blueprint через ast (без исполнения кода)"
+#     honest_limits:
+#       sees: "маршруты, объявленные декоратором в исходнике"
+#       does_not_see: "маршруты, собранные динамически в рантайме; add_url_rule через переменную"
+extractors: []
+
+# ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
+# status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
+# Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
+# поддержку (тем более verified) до появления кода — запрещено инвариантом честных деклараций.
+planned:
+  - intent: python-web-routes
+    stack: {language: python, frameworks: [flask, fastapi, django]}
+    surface_kinds: [route, api]
+    status: unsupported
+    note: "planned (W2): статический разбор маршрутов веб-фреймворков Python через ast, без исполнения."
+    honest_limits:
+      sees: "будет видеть: маршруты, объявленные декоратором/роутером в исходнике"
+      does_not_see: "не увидит: динамически собранные маршруты, маршруты за плагинной регистрацией"
+  - intent: cli-commands
+    stack: {language: python, frameworks: [argparse, click, typer]}
+    surface_kinds: [cli]
+    status: unsupported
+    note: "planned (W2): разбор объявлений подкоманд CLI из исходника."
+    honest_limits:
+      sees: "будет видеть: подкоманды, объявленные декоратором/парсером статически"
+      does_not_see: "не увидит: команды, зарегистрированные в рантайме из данных/плагинов"
+  - intent: ui-screens
+    stack: {language: [typescript, javascript], frameworks: [react, react-router, vue-router]}
+    surface_kinds: [screen]
+    status: unsupported
+    note: "planned (W2+): разбор объявлений маршрутов/экранов SPA из исходника."
+    honest_limits:
+      sees: "будет видеть: экраны/маршруты, объявленные в конфигурации роутинга исходника"
+      does_not_see: "не увидит: экраны, собранные динамически; серверный рендеринг вне known-роутера"
