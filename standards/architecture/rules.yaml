@@ -3,7 +3,7 @@
 # level/category/severity/gate/enforced_in — явные поля источника, не эвристика.
 # validation.automated = (gate ∉ {none, meta}); manual = не automated или severity high/critical.
 version: "1.0"
-rules_total: 30
+rules_total: 37
 rules:
   - id: HON-001
     title: "Правило без гейта — пожелание"
@@ -329,6 +329,83 @@ rules:
     part: III
     level: MUST_NOT
     category: anti_pattern
+    severity: medium
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: DATA-001
+    title: "Явная схема данных"
+    part: IV
+    level: MUST
+    category: anti_pattern
+    severity: high
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: DATA-002
+    title: "Схема — источник истины, реализация из неё"
+    part: IV
+    level: MUST
+    category: principle
+    severity: high
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: DATA-003
+    title: "Контракт версионируется; ломающее — только мажор"
+    part: IV
+    level: MUST
+    category: principle
+    severity: high
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: DATA-004
+    title: "Обратная совместимость по умолчанию"
+    part: IV
+    level: SHOULD
+    category: principle
+    severity: medium
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: DATA-005
+    title: "Ошибки контракта — явные и машиночитаемые"
+    part: IV
+    level: SHOULD
+    category: anti_pattern
+    severity: medium
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: DATA-006
+    title: "Миграции данных — через миграцию, обратимо и проверяемо"
+    part: IV
+    level: MUST
+    category: anti_pattern
+    severity: high
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: DATA-007
+    title: "Идемпотентность операций с эффектом"
+    part: IV
+    level: SHOULD
+    category: principle
     severity: medium
     gate: "none"
     enforced_in: none

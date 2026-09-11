@@ -31,12 +31,13 @@ GENERATOR = KIT / "standards" / "architecture" / "scripts" / "build-rules.py"
 LESSONS_DIR = KIT / "product-learning"
 
 # Часть -> (префикс ID, заголовок следующей части в источнике; None = последняя, дописываем в конец).
-_PART_ORDER = ["HON", "ARCH", "CODE", "SEC"]
+_PART_ORDER = ["HON", "ARCH", "CODE", "SEC", "DATA"]
 _PART_HEADER = {
     "HON": "# Преамбула. Честность",
     "ARCH": "# Часть I. Архитектура",
     "CODE": "# Часть II. Код",
     "SEC": "# Часть III. Безопасность",
+    "DATA": "# Часть IV. Данные и API-контракты",
 }
 
 

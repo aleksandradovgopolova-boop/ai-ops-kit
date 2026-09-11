@@ -24,13 +24,14 @@ OUT_DIR = os.path.dirname(os.path.abspath(SRC))
 VERSION = "1.0"
 
 # Префикс ID -> часть конституции. Детерминированно, без разбора заголовков частей.
-PREFIX_PART = {"HON": "preamble", "ARCH": "I", "CODE": "II", "SEC": "III"}
-PART_ORDER = ["preamble", "I", "II", "III"]
+PREFIX_PART = {"HON": "preamble", "ARCH": "I", "CODE": "II", "SEC": "III", "DATA": "IV"}
+PART_ORDER = ["preamble", "I", "II", "III", "IV"]
 PART_TITLE = {
     "preamble": "Преамбула — Честность",
     "I": "Часть I — Архитектура (макро)",
     "II": "Часть II — Код (микро)",
     "III": "Часть III — Безопасность",
+    "IV": "Часть IV — Данные и API-контракты",
 }
 
 LEVELS = {"MUST", "MUST_NOT", "SHOULD", "MAY"}
