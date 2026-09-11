@@ -109,10 +109,13 @@ def test_filled_planning_artifacts_are_not_reported_as_gap(installed, child_scaf
     # числиться пробелом. Реальное содержание (не заготовка: без маркеров template/«Это заготовка»).
     (installed / "ARCHITECTURE.md").write_text(
         "# Architecture\n\n## Context\nнастоящий контекст системы\n", encoding="utf-8")
-    # SEC-001 (#826): SECURITY.md — обязательный артефакт; заполненный (без маркеров заготовки)
-    # не должен числиться пробелом.
+    # SEC-008/SEC-001 (v7): два обязательных security-артефакта; заполненные (без маркеров заготовки)
+    # не должны числиться пробелом. SECURITY.md — архитектура безопасности, security-policy.md — путь раскрытия.
     (installed / "SECURITY.md").write_text(
-        "# Security Policy\n\nСообщайте об уязвимостях приватно на security@example.com.\n",
+        "# Архитектура безопасности\n\n## Модель угроз\nграницы доверия и активы\n", encoding="utf-8")
+    (installed / "security").mkdir(exist_ok=True)
+    (installed / "security" / "security-policy.md").write_text(
+        "# Политика безопасности\n\nСообщайте об уязвимостях приватно на security@example.com.\n",
         encoding="utf-8")
 
     _req, gaps, unfilled = child_scaffolding._planning_gaps(installed)

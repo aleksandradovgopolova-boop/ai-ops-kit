@@ -3,7 +3,7 @@
 # level/category/severity/gate/enforced_in — явные поля источника, не эвристика.
 # validation.automated = (gate ∉ {none, meta}); manual = не automated или severity high/critical.
 version: "1.0"
-rules_total: 37
+rules_total: 38
 rules:
   - id: HON-001
     title: "Правило без гейта — пожелание"
@@ -259,7 +259,7 @@ rules:
       automated: false
       manual: true
   - id: SEC-001
-    title: "SECURITY.md в каждом репозитории"
+    title: "Путь раскрытия уязвимостей в каждом репозитории"
     part: III
     level: MUST
     category: principle
@@ -334,6 +334,17 @@ rules:
     enforced_in: none
     validation:
       automated: false
+      manual: true
+  - id: SEC-008
+    title: "Архитектура безопасности документирована"
+    part: III
+    level: MUST
+    category: principle
+    severity: high
+    gate: "required_repo_artifacts"
+    enforced_in: child
+    validation:
+      automated: true
       manual: true
   - id: DATA-001
     title: "Явная схема данных"

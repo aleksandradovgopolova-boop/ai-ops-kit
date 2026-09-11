@@ -245,6 +245,15 @@ def _assets_report_line(assets: dict) -> str:
         out += ("\nBack-fill модели продукта (черновики, заполнить вам): " + ", ".join(seeded)
                 + ". Дальше: `./ai-ops model` покажет, что кит понял о проекте, и спросит "
                   "недостающее одним пакетом.")
+    # Реальный документ уже есть в НЕ-каноничном месте — черновик НЕ сеяли. Называем владельцу и
+    # предлагаем перенос по его слову (propose, not impose): переносить и перезаписывать не вправе.
+    existing = [(x["artifact"], x["action"].split("existing-at:", 1)[1])
+                for x in (assets.get("planning_seeded") or [])
+                if str(x.get("action", "")).startswith("existing-at:")]
+    for artifact, where in existing:
+        out += (f"\n{artifact}: черновик НЕ создавал — этот документ у вас уже есть в `{where}`. "
+                f"Канонический стандарт кита держит его в корне (`{artifact}`); перенести в одно "
+                f"место подготовлю по вашему слову — сам не переношу и не перезаписываю.")
     pl = assets.get("product_layer_seeded") or []
     made = [x["artifact"] for x in pl if x.get("action") in ("created", "generated")]
     if made:
@@ -274,7 +283,17 @@ CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml",
                 "ai-ops-codeql.yml",     # SAST
                 "ai-ops-secret-scan.yml",# секрет-скан (бэкстоп к нативному push protection)
                 "ai-ops-sbom.yml",       # SBOM + подписанные релизы (Sigstore attestations)
-                "ai-ops-scorecard.yml")  # агрегатный сигнал OpenSSF Scorecard
+                "ai-ops-scorecard.yml",  # агрегатный сигнал OpenSSF Scorecard
+                # УСЛОВНЫЙ (см. CONDITIONAL_CI_TEMPLATES): едет ТОЛЬКО UI-продукту. Превью Storybook в
+                # PR как CI-артефакт статической сборки — без внешних сервисов/секретов. Бэкенд-репо
+                # его не получает (нечего собирать), поэтому доставка гейтится по корню дочки.
+                "ai-ops-storybook-preview.yml")
+
+# УСЛОВНЫЕ CI-workflow: имя -> имя предиката в ci_setup (`_CONDITIONAL_CI`). Безусловные едут всем
+# дочкам; условные — только тем, для кого предикат по корню истинен. storybook-preview едет лишь
+# UI-продукту (есть Storybook-конфиг/зависимость/скрипт): иначе он сорил бы workflow'ом в репозиторий,
+# где Storybook нет. Гейт живёт в сателлите ci_setup (там же итерация доставки), здесь — только объявление.
+CONDITIONAL_CI_TEMPLATES = ("ai-ops-storybook-preview.yml",)
 # Куда ложится шаблон в дочке ОТНОСИТЕЛЬНО `.github/`. По умолчанию — `workflows/<name>`; исключение —
 # Dependabot, который GitHub читает ТОЛЬКО из `.github/dependabot.yml`. Источник всегда `templates/ci/<name>`.
 CI_TEMPLATE_DEST = {"dependabot.yml": ("dependabot.yml",)}

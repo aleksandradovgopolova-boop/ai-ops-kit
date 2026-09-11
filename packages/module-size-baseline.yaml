@@ -19,7 +19,7 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/ui/presenter.py: 945
+  ai_ops_kit/ui/presenter.py: 963
   ai_ops_kit/engine/execution_pipeline.py: 789
   ai_ops_kit/planning/repo_audit.py: 854
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
@@ -1126,3 +1126,13 @@ raises:
       EXISTING_PRODUCT в `classify`, чтобы вес зрелости, а не зашитая в код четвёрка признаков,
       решал класс. +17 строк — цена того, что зрелый brownfield с документацией и API-схемами, но
       короткой историей, перестаёт деградировать в EARLY_PRODUCT; правила остаются данными реестра.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/ui/presenter.py = 945'
+    to: 'ai_ops_kit/ui/presenter.py = 963'
+    work: 'next-surfaces-waiting-on-owner (#873)'
+    why: >-
+      from_next_work получил ветку held_owner: когда взять нечего, а работы ждут владельца, сообщение
+      называет конкретный шаг владельца (waiting_on) вместо немого «работа пока не объявлена». +18
+      строк — цена того, что кит проговаривает удержанное владельцем, а не молчит; ровно инвариант
+      «пустой совет обязан быть объяснён».
