@@ -71,6 +71,30 @@ def test_report_is_advisory_and_readable(tmp_path):
     assert "CODE-003" in report
 
 
+def test_conform_paths_checks_only_given_files(tmp_path):
+    """Ревью по diff (#847): проверяются ТОЛЬКО указанные файлы, пофайловыми статьями."""
+    long_body = "".join(f"    x{i} = {i}\n" for i in range(cc.LONG_FUNCTION_LINES + 5))
+    (tmp_path / "changed.py").write_text(f"def huge():\n{long_body}    return 0\n", encoding="utf-8")
+    (tmp_path / "untouched.py").write_text(f"def other():\n{long_body}    return 0\n", encoding="utf-8")
+    findings = cc.conform_paths(tmp_path, ["changed.py"], rules_path=REAL_RULES)
+    assert any(f["article_id"] == "CODE-001" for f in findings), "изменённый файл не проверен"
+    locs = [loc for f in findings for loc in f["locations"]]
+    assert all("untouched.py" not in loc for loc in locs), "проверен неизменённый файл"
+
+
+def test_conform_paths_excludes_cross_file_duplicates(tmp_path):
+    """Ревью по diff не выдаёт кросс-файловые дубли (CODE-003) — их место в онбординг-скане."""
+    (tmp_path / "a.py").write_text(_dup_pair(), encoding="utf-8")
+    findings = cc.conform_paths(tmp_path, ["a.py"], rules_path=REAL_RULES)
+    assert all(f["article_id"] != "CODE-003" for f in findings), "дубли не должны идти в ревью по diff"
+
+
+def test_conform_paths_ignores_non_python(tmp_path):
+    """Не-.py в diff игнорируются."""
+    (tmp_path / "readme.md").write_text("# doc\n", encoding="utf-8")
+    assert cc.conform_paths(tmp_path, ["readme.md"], rules_path=REAL_RULES) == []
+
+
 def test_tests_and_dotdirs_are_skipped(tmp_path):
     """Код в tests/ и .ai/ не считается исходным продуктом дочки."""
     (tmp_path / "tests").mkdir()

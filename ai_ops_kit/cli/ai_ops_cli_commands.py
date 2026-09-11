@@ -279,6 +279,13 @@ def _intent_review(task, child_root, signals, a):
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
         _say(child_root, "from_review", rep)
+        # Соответствие конституции по изменённым файлам (#847): рекомендации, не блок.
+        _cf = rep.get("constitution_findings") or []
+        if _cf:
+            print(f"\n  Соответствие конституции (по изменённым файлам): {len(_cf)} статей "
+                  "с рекомендациями — это советы, не блок на мерже:")
+            for _f in _cf:
+                print(f"    · {_f['article_id']} {_f['title']} ({_f['count']}) — {_f['recommendation']}")
     # v2.121 (P1.3): exit code = готовность к merge (needs-reviewer/needs-changes -> non-zero)
     return 0 if (rep.get("readiness") or {}).get("ready_for_merge") else 1
 

@@ -93,8 +93,13 @@ def _dup_signature(fn: ast.AST) -> tuple:
     return tuple(type(n).__name__ for n in ast.walk(fn))
 
 
-def _functions(root: Path):
-    for p in iter_source_files(root):
+def _files(root: Path, files=None):
+    """Файлы для проверки: явный список (ревью) или весь исходник дочки (онбординг)."""
+    return list(files) if files is not None else list(iter_source_files(root))
+
+
+def _functions(root: Path, files=None):
+    for p in _files(root, files):
         tree = _parse(p)
         if tree is None:
             continue
@@ -103,11 +108,11 @@ def _functions(root: Path):
                 yield p, node
 
 
-# ── эвристики: article_id -> находки ────────────────────────────────────────────
+# ── эвристики: article_id -> находки. files=None => всё дерево (онбординг); список => ревью по diff ─
 
-def _long_functions(root):
+def _long_functions(root, files=None):
     hits = []
-    for p, fn in _functions(root):
+    for p, fn in _functions(root, files):
         end = getattr(fn, "end_lineno", None)
         if end and (end - fn.lineno + 1) > LONG_FUNCTION_LINES:
             hits.append({"where": f"{_rel(p, root)}:{fn.lineno}:{fn.name}",
@@ -115,9 +120,9 @@ def _long_functions(root):
     return hits
 
 
-def _deep_nesting(root):
+def _deep_nesting(root, files=None):
     hits = []
-    for p, fn in _functions(root):
+    for p, fn in _functions(root, files):
         d = _max_depth(fn)
         if d >= DEEP_NESTING:
             hits.append({"where": f"{_rel(p, root)}:{fn.lineno}:{fn.name}",
@@ -125,9 +130,9 @@ def _deep_nesting(root):
     return hits
 
 
-def _long_modules(root):
+def _long_modules(root, files=None):
     hits = []
-    for p in iter_source_files(root):
+    for p in _files(root, files):
         try:
             n = len(p.read_text(encoding="utf-8").splitlines())
         except OSError:
@@ -137,9 +142,9 @@ def _long_modules(root):
     return hits
 
 
-def _duplicates(root):
+def _duplicates(root, files=None):
     by_sig: dict[tuple, list[str]] = {}
-    for p, fn in _functions(root):
+    for p, fn in _functions(root, files):
         if fn.name in _SKIP_FUNC_NAMES:
             continue
         if sum(1 for n in ast.walk(fn) if isinstance(n, ast.stmt)) < DUP_MIN_STMTS:
@@ -196,6 +201,43 @@ def conform(root: Path, rules_path: Path | None = None) -> list[dict]:
             "recommendation": advice,
         })
     # серьёзные статьи выше
+    order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
+    findings.sort(key=lambda f: (order.get(f["severity"], 9), f["article_id"]))
+    return findings
+
+
+# Пофайловые статьи (атрибутируются одному файлу) — годятся для ревью по diff. Дубли — кросс-файловые
+# (нужно всё дерево), поэтому в ревью по изменённым файлам не входят: их место в онбординг-скане.
+_PER_FILE_ARTICLES = ("CODE-001", "CODE-002", "ARCH-006")
+
+
+def conform_paths(root: Path, rel_paths, rules_path: Path | None = None) -> list[dict]:
+    """Соответствие для КОНКРЕТНЫХ файлов (ревью по diff). Только пофайловые эвристики.
+
+    `rel_paths` — пути относительно `root` (напр. изменённые файлы ветки). Возвращает те же находки,
+    что `conform`, но по подмножеству файлов и без кросс-файловых дублей.
+    """
+    root = Path(root)
+    wanted = {str(p) for p in rel_paths if str(p).endswith(".py")}
+    if not wanted:
+        return []
+    rules = load_rules(rules_path or default_rules_path(root))
+    # ограничиваем обход целевыми файлами
+    targets = [root / rp for rp in wanted if (root / rp).is_file()]
+    findings = []
+    for article_id in _PER_FILE_ARTICLES:
+        meta = rules.get(article_id)
+        if meta is None:
+            continue
+        fn, advice = _HEURISTICS[article_id]
+        hits = fn(root, targets)
+        if not hits:
+            continue
+        findings.append({
+            "article_id": article_id, "title": meta["title"], "level": meta["level"],
+            "severity": meta["severity"], "count": len(hits),
+            "locations": [h["where"] for h in hits], "details": hits, "recommendation": advice,
+        })
     order = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     findings.sort(key=lambda f: (order.get(f["severity"], 9), f["article_id"]))
     return findings
