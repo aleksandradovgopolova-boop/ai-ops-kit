@@ -52,6 +52,57 @@ extractors:
         пути НЕ-литералы (f-строки, константы, конкатенация); Django urlpatterns (список, не декоратор);
         классовые/method-view; любые не-Python стеки. Их появление НЕ доказывает и не блокирует.
 
+  # CLI-команды продукта (вид поверхности cli). Три экстрактора под три стека объявления команд;
+  # у каждого — свой честный предел. Общий принцип: доказано литералом → verified, динамика → пропуск.
+  - id: python-cli-argparse
+    stack: {language: python, frameworks: [argparse]}
+    surface_kinds: [cli]
+    confidence: verified
+    method: >-
+      статический разбор AST в файле, импортирующем argparse: `<subparsers>.add_parser("<name>", ...)`
+      (имя подкоманды из строкового литерала) и `ArgumentParser(prog="<name>")` (имя программы из
+      литерала, по возможности). Код не исполняется. ref = "file:line|<имя-команды>".
+    honest_limits:
+      sees: >-
+        подкоманды argparse с ЛИТЕРАЛЬНЫМ именем (add_parser("name")) и prog-имя верхнего парсера,
+        заданное строковым литералом, — в файле, который действительно импортирует argparse.
+      does_not_see: >-
+        имена, собранные динамически (переменная/f-строка/имя из данных или конфига); prog из
+        переменной; add_parser без литерала; argparse-обёртки, спрятанные за своим API без импорта
+        argparse в этом файле. Недоказанное verified НЕ помечается.
+  - id: python-cli-click
+    stack: {language: python, frameworks: [click]}
+    surface_kinds: [cli]
+    confidence: verified
+    method: >-
+      статический разбор AST в файле, импортирующем click: декоратор @<x>.command()/@<x>.group()
+      (или @command()/@group() из `from click import ...`) над функцией. Имя — из литерала в
+      декораторе (`"name"` или `name="..."`) либо из имени функции по правилу click (lower + `_`→`-`).
+      ref = "file:line|<имя-команды>".
+    honest_limits:
+      sees: >-
+        команды и группы click, объявленные декоратором command/group в файле с импортом click;
+        имя берётся из литерала или детерминированно из имени функции.
+      does_not_see: >-
+        Typer (@app.command() на typer.Typer — иной стек, не импортирует click) и иные click-надстройки;
+        имя из переменной/f-строки; команды, зарегистрированные в рантайме (add_command из данных);
+        нестандартный cls с собственным правилом именования. Недоказанное verified НЕ помечается.
+  - id: python-console-scripts
+    stack: {language: python, frameworks: [setuptools, poetry]}
+    surface_kinds: [cli]
+    confidence: verified
+    method: >-
+      текстовый разбор объявленных точек входа (БЕЗ tomllib — пол 3.9): ключи-имена в pyproject.toml
+      [project.scripts]/[project.gui-scripts]/[tool.poetry.scripts] и вложенные строки
+      console_scripts/gui_scripts в setup.cfg [options.entry_points]. ref = "file:line|<имя-команды>".
+    honest_limits:
+      sees: >-
+        имена команд, ОБЪЯВЛЕННЫЕ как точки входа дистрибутива в pyproject.toml или setup.cfg —
+        доказуемо объявленный интерфейс запуска продукта.
+      does_not_see: >-
+        entry_points, заданные исполняемым setup.py (аргумент entry_points= вызова setup()); точки
+        входа из плагинов/иных групп; динамически сформированные списки. Только эти два файла.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
@@ -68,13 +119,16 @@ planned:
     honest_limits:
       sees: "будет видеть: объявления path()/re_path() в urls.py статически"
       does_not_see: "не увидит: динамически собранные маршруты, маршруты за плагинной регистрацией"
-  - intent: cli-commands
-    stack: {language: python, frameworks: [argparse, click, typer]}
+  - intent: cli-commands-remaining
+    stack: {language: python, frameworks: [typer, setuptools]}
     surface_kinds: [cli]
     status: unsupported
-    note: "planned (W2): разбор объявлений подкоманд CLI из исходника."
+    note: >-
+      planned: осталось за пределами реализованных argparse/click/console_scripts — Typer
+      (@app.command() на typer.Typer, не импортирует click), entry_points в исполняемом setup.py
+      (аргумент вызова setup()), и любые команды, зарегистрированные в рантайме из данных/плагинов.
     honest_limits:
-      sees: "будет видеть: подкоманды, объявленные декоратором/парсером статически"
+      sees: "будет видеть: объявления команд Typer и entry_points из setup.py статически"
       does_not_see: "не увидит: команды, зарегистрированные в рантайме из данных/плагинов"
   - intent: ui-screens
     stack: {language: [typescript, javascript], frameworks: [react, react-router, vue-router]}
