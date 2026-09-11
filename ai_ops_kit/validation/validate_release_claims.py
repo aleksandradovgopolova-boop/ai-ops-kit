@@ -138,13 +138,21 @@ def derived_verification_counts(pkg=PKG):
 def derived_field_values(pkg=PKG):
     """Числа release-claims, выведенные ИЗ ФАКТА (файлов/замера), а не хранимые в реестре.
 
-    Пока это счёт валидаторов и их внешнего покрытия (работа
-    `derived-counts-are-computed-not-declared`): release-claims их больше не держит, поэтому двум
-    лентам нечего двигать и расходиться нечему by construction. Единственное место, где живёт
-    число, — сам факт; все поверхности (проверка release-claims и публичный текст) читают его
-    отсюда, а не из хранимого литерала."""
+    Счёт валидаторов и их внешнего покрытия (работа `derived-counts-are-computed-not-declared`)
+    и счёт гейтов/MVP-блокеров (работа `gate-count-is-computed-not-declared`): release-claims их
+    больше не обязан держать, поэтому двум лентам нечего двигать и расходиться нечему by
+    construction. Единственное место, где живёт число, — сам факт; все поверхности (проверка
+    release-claims и публичный текст) читают его отсюда, а не из хранимого литерала.
+
+    ЗАЧЕМ гейты попали сюда. Добавление гейта в quality/gates.yaml — код, а синхронный подъём
+    gates_count в release-claims.yaml — правка КООРДИНАЦИОННОГО файла; parallel-safety --strict
+    запрещает смешивать их в одном PR, и фичевый PR с новым гейтом упирался в этот запрет. Ровно та
+    же коллизия, что была у validators_count, и снимается тем же приёмом: число выводится из факта,
+    хранить литерал не требуется."""
     vtotal, vtested = derived_verification_counts(pkg)
-    return {"validators_count": vtotal, "validators_externally_tested": vtested}
+    gates_total, mvp = derived_gate_counts(pkg)
+    return {"validators_count": vtotal, "validators_externally_tested": vtested,
+            "gates_count": gates_total, "mvp_blocking_count": mvp}
 
 
 def mvp_gates_are_blocking(pkg=PKG):
@@ -412,12 +420,22 @@ def check(data, pkg=PKG):
         e.append(f"claims.checks_count={data.get('checks_count')} != python3-проверок в чеклисте={checks} (устаревшее число)")
     if data.get("agents_count") != agents:
         e.append(f"claims.agents_count={data.get('agents_count')} != агентов в registry/agents.yaml={agents}")
+    # gates_count / mvp_blocking_count — DERIVED и в release-claims хранить НЕ обязательно
+    # (работа `gate-count-is-computed-not-declared`): число выводится из quality/gates.yaml, поэтому
+    # добавление гейта (код) не требует синхронной правки координационного release-claims.yaml и не
+    # упирается в parallel-safety. Литерал ОСТАЁТСЯ допустимым, но не обязателен: если лента всё же
+    # объявит число и оно разойдётся с фактом — это по-прежнему ошибка (защита от повторного
+    # «прибивания гвоздём»). Затем факт впрыскивается в data (setdefault ниже), чтобы публичный текст
+    # (derived_number_errors) сверялся с фактом, а не с отсутствующим ключом. Проверка
+    # mvp_gates_are_blocking (каждый MVP-гейт обязан быть blocking: true) ниже — НЕ ослаблена.
     gates_total, mvp = derived_gate_counts(pkg)
-    if data.get("gates_count") != gates_total:
+    if data.get("gates_count") is not None and data.get("gates_count") != gates_total:
         e.append(f"claims.gates_count={data.get('gates_count')} != гейтов в quality/gates.yaml={gates_total}")
-    if data.get("mvp_blocking_count") != mvp:
+    if data.get("mvp_blocking_count") is not None and data.get("mvp_blocking_count") != mvp:
         e.append(f"claims.mvp_blocking_count={data.get('mvp_blocking_count')} != "
                  f"mvp_blocking_gates в quality/gates.yaml={mvp}")
+    data.setdefault("gates_count", gates_total)
+    data.setdefault("mvp_blocking_count", mvp)
     # Сверяем то, что ОБЪЯВЛЕНО. Ключ отсутствует -> сверять нечего, и это НЕ молчаливое «всё
     # хорошо»: правило из `derived_numbers_in_docs`, ссылающееся на несуществующий claim, тут же
     # падает («в тексте 7, а claim ...=None»). То есть незаявленное число не проходит мимо, просто
