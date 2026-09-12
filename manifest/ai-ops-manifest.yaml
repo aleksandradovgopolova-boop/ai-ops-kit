@@ -450,6 +450,12 @@ update_policy:
     # как uiux. Тяжёлый источник ARCHITECTURE_CONSTITUTION.md и оперативный слой arch.rules.md —
     # родительские (footprint-бюджет доставки узкий). Пакетно принадлежит `ai-ops-quality`.
     - "standards/architecture/rules.yaml"
+    # Продуктовая конституция (PROD-*): в дочку едет ТОЛЬКО компактный машинный реестр статей
+    # `rules.yaml` (карта `constitution_id -> статья` с полями gate/enforced_in) — тот же путь-паттерн,
+    # что uiux/architecture. Тяжёлый источник PRODUCT_CONSTITUTION.md и оперативный слой
+    # product.rules.md — родительские (не едут). Пакетно принадлежит `ai-ops-quality` (там же живут
+    # проверки конформанса `constitution_conformance`, которые резолвят PROD-* в дочке).
+    - "standards/product/rules.yaml"
     - "templates/**/*"
     - "context/**/*"
     - "workflows/*.md"
