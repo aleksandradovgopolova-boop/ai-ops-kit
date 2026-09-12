@@ -12,6 +12,8 @@ confidence):
     (вид route).
   * ASP.NET Core (E10) — attribute routing (@[HttpGet]/…/[Route] + class-[Route]-префикс с токеном
     [controller]) и Minimal APIs (app.MapGet/…) по .cs (вид route).
+  * gRPC Protocol Buffers (E11) — операции из `rpc` внутри `service {…}` по .proto (вид `api`, как
+    GraphQL E8: второй носитель вида api).
 Позже сюда же добавятся прочие серверные стеки (один файл на «бэкенд-не-JS», чтобы парные тест-файлы
 не раздувались — сторож мега-файла).
 
@@ -45,6 +47,10 @@ from _surface_extraction_helpers import (
     _GRAPHQL_COMMENTS,
     _GRAPHQL_MODELS_ONLY,
     _GRAPHQL_SCHEMA,
+    _GRPC_COMMENTS,
+    _GRPC_MODELS_ONLY,
+    _GRPC_MULTI_SERVICE,
+    _GRPC_SERVICE,
     _RAILS_FOREIGN,
     _RAILS_INTERPOLATION,
     _RAILS_NESTED,
@@ -555,6 +561,100 @@ def test_aspnet_records_conform_to_surface_schema(tmp_path):
     schema = load_schema(DEFAULT_SCHEMA)
     sspec = schema["surface"]
     surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "aspnet-routes"]
+    assert surfaces
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E11: операции gRPC из Protocol Buffers (вид `api`, ТЕКСТОВЫЙ разбор .proto) ────────────────────
+# .proto разбирается текстом/паттерном (не полноценный protobuf-парсер) → confidence по умолчанию
+# inferred, НЕ verified (честность силы = честность confidence, как у graphql-schema E8). Имя операции
+# — `<Svc>/<Rpc>`: префикс сервиса разводит одноимённые rpc разных сервисов.
+
+def test_grpc_service_rpcs_are_api_operations_inferred(tmp_path):
+    _write(tmp_path, "proto/order.proto", _GRPC_SERVICE)
+    surfaces = extract_surfaces(tmp_path)
+    ops = _api_ops(surfaces, "grpc-proto")
+    # Все rpc сервиса OrderService — операции продукта (unary + streaming).
+    assert {"OrderService/CreateOrder", "OrderService/GetOrder",
+            "OrderService/ListOrders", "OrderService/Chat"} <= ops
+    for s in surfaces:
+        if s["extractor"] == "grpc-proto":
+            assert s["kind"] == "api"
+            assert s["confidence"] == "inferred"   # текстовый разбор .proto НИКОГДА не verified
+            assert s["ref"].startswith("proto/order.proto:")
+
+
+def test_grpc_streaming_rpc_is_still_an_operation(tmp_path):
+    """`stream` (client/server/bidi) не меняет факт rpc-операции."""
+    _write(tmp_path, "proto/order.proto", _GRPC_SERVICE)
+    ops = _api_ops(extract_surfaces(tmp_path), "grpc-proto")
+    assert "OrderService/ListOrders" in ops   # returns (stream Order)
+    assert "OrderService/Chat" in ops          # (stream …) returns (stream …)
+
+
+def test_grpc_messages_and_enums_are_not_operations(tmp_path):
+    """Поля message и значения enum (модель данных) НЕ операции; сервиса нет → пусто."""
+    _write(tmp_path, "proto/models.proto", _GRPC_MODELS_ONLY)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "grpc-proto"] == []
+
+
+def test_grpc_data_model_excluded_from_full_schema(tmp_path):
+    """В полной схеме поля message/значения enum не попадают в операции (только rpc сервиса)."""
+    _write(tmp_path, "proto/order.proto", _GRPC_SERVICE)
+    ops = _api_ops(extract_surfaces(tmp_path), "grpc-proto")
+    # id/total/sku/qty (message) и PENDING/SHIPPED (enum) — не операции, и «NotAnOperation» из
+    # комментария внутри message тоже.
+    assert not any(sym.endswith(("/id", "/total", "/sku", "/qty",
+                                 "/PENDING", "/SHIPPED", "/NotAnOperation")) for sym in ops)
+
+
+def test_grpc_service_prefix_disambiguates_same_rpc_name(tmp_path):
+    """Одноимённый rpc (Ping) в двух сервисах разведён префиксом `<Svc>/`."""
+    _write(tmp_path, "proto/svc.proto", _GRPC_MULTI_SERVICE)
+    ops = _api_ops(extract_surfaces(tmp_path), "grpc-proto")
+    assert {"HealthService/Ping", "AdminService/Ping", "AdminService/Shutdown"} <= ops
+
+
+def test_grpc_comments_and_strings_give_no_false_operations(tmp_path):
+    """Текст `rpc …` в `//`/`/* */`-комментарии и в строковом литерале опции не даёт ложных rpc."""
+    _write(tmp_path, "proto/echo.proto", _GRPC_COMMENTS)
+    ops = _api_ops(extract_surfaces(tmp_path), "grpc-proto")
+    assert ops == {"EchoService/Echo"}
+    assert not any("Fake" in s or "CommentedOut" in s or "StringLiteral" in s for s in ops)
+
+
+def test_grpc_isolated_from_broken_files(tmp_path):
+    """Битый .proto (незакрытый service-блок) не валит прогон и не порождает фантомную операцию."""
+    _write(tmp_path, "proto/order.proto", _GRPC_SERVICE)
+    _write(tmp_path, "proto/broken.proto",
+           "service Ghost {\n  rpc Vanish(Req) returns (Resp);\n")  # нет `}`
+    ops = _api_ops(extract_surfaces(tmp_path), "grpc-proto")
+    assert "OrderService/CreateOrder" in ops   # валидная схема разобрана
+    assert not any(s.startswith("Ghost/") for s in ops)   # незакрытый блок пропущен (пары `}` нет)
+
+
+def test_grpc_does_not_break_other_stacks(tmp_path):
+    """.proto рядом с питон-маршрутом: python route остаётся verified, gRPC — отдельный api."""
+    _write(tmp_path, "proto/order.proto", _GRPC_SERVICE)
+    _write(tmp_path, "app.py",
+           "from flask import Flask\napp = Flask(__name__)\n\n\n@app.route('/py')\ndef p():\n    return ''\n")
+    surfaces = extract_surfaces(tmp_path)
+    assert any(s["extractor"] == "python-web-routes" and s["confidence"] == "verified"
+               for s in surfaces)
+    assert "OrderService/CreateOrder" in _api_ops(surfaces, "grpc-proto")
+
+
+def test_grpc_records_conform_to_surface_schema(tmp_path):
+    """Записи grpc-proto валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "proto/order.proto", _GRPC_SERVICE)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "grpc-proto"]
     assert surfaces
     for i, surf in enumerate(surfaces):
         errors: list = []

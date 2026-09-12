@@ -485,6 +485,40 @@ extractors:
         `[HttpGet]` и отдельный `[Route("x")]`, может дать и корень контроллера, и `/x` (атрибуты
         разбираются независимо, не сливаются); файл без индикатора ASP.NET. Ничего из этого НЕ verified.
 
+  # E11 добавил ВТОРОЙ носитель вида `api` — операции gRPC из Protocol Buffers (.proto). Честность
+  # силы та же, что у graphql-schema (E8): .proto — формальная грамматика, но разбирается ТЕКСТОМ/
+  # паттерном по исходнику (не полноценным protobuf-парсером, без вызова protoc, code-gen, reflection
+  # и сети) → это НЕ доказательный AST того же класса, что Python-AST → confidence: inferred (в W4 НЕ
+  # блокирует). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/grpc_proto.py
+  # (extract_grpc_rpcs), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: grpc-proto
+    stack: {language: protobuf, frameworks: [grpc]}
+    surface_kinds: [api]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не protobuf-парсер) разбор файлов .proto без исполнения: объявления
+      `rpc <Name>(<Req>) returns (<Resp>);` внутри блока `service <Svc> { … }` — каждое есть операция
+      API продукта (имя операции = `<Svc>/<Name>`, префикс сервиса разводит одноимённые rpc разных
+      сервисов и совпадает с формой пути gRPC `/package.Service/Method`). `stream` (client/server
+      streaming) на факт операции не влияет. Обычные `message`/`enum` — модель данных, их поля/значения
+      НЕ операции (сканируются только тела service-блоков). Комментарии `//…` и `/* … */` и строковые
+      литералы (`"…"`/`'…'` — значения опций/дефолтов) маскируются пробелами (позиции/номера строк
+      сохраняются) — ложных rpc не дают. Тело блока берётся балансировкой `{…}`; незакрытый блок
+      (обрыв файла) пропускается. Регэксп/скан по паттерну — не грамматический парсер → confidence:
+      inferred. ref = "file:line|<Svc>/<Name>".
+    honest_limits:
+      sees: >-
+        операции gRPC, объявленные `rpc` внутри блока `service` прямо в .proto-файле (в т.ч. unary и
+        client/server/bidi streaming через `stream`); даёт file:line и `<Svc>/<Name>` как symbol,
+        помечает inferred (не блокирует).
+      does_not_see: >-
+        СГЕНЕРИРОВАННЫЕ из .proto stubs (code-gen в .py/.go/.java и т.п. — иной носитель, не .proto);
+        server reflection в рантайме; REST-mapping через аннотации `option (google.api.http)` (это
+        HTTP-биндинг поверх rpc, а не отдельный факт операции); поля `message`/значения `enum` (модель
+        данных, НЕ операции); импортированные (`import "other.proto";`) сервисы из другого файла
+        (виден только per-file service-блок); незакрытый `service {` без пары (обрыв файла — пропуск).
+        Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним

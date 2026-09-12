@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / ruby_rails / dotnet_aspnet, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -38,6 +38,7 @@ from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
 from ai_ops_kit.checks.surface_extractors.dotnet_aspnet import extract_aspnet_routes
 from ai_ops_kit.checks.surface_extractors.go_web import extract_go_web_routes
 from ai_ops_kit.checks.surface_extractors.graphql_api import extract_graphql_operations
+from ai_ops_kit.checks.surface_extractors.grpc_proto import extract_grpc_rpcs
 from ai_ops_kit.checks.surface_extractors.java_spring import extract_spring_routes
 from ai_ops_kit.checks.surface_extractors.js_server import (
     extract_express_routes,
@@ -103,6 +104,10 @@ _SERVER_JAVA_SUFFIXES = frozenset({".java"})
 # поля корневых типов Query/Mutation/Subscription (+ extend). Метаданные реестра (к каким файлам
 # применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому (graphql_api.py).
 _GRAPHQL_SDL_SUFFIXES = frozenset({".graphql", ".gql"})
+# gRPC-контракты (Protocol Buffers, вид api). Разбор ТЕКСТОМ по .proto (не protobuf-парсер, без
+# исполнения) — объявления rpc внутри блоков service. Метаданные реестра (к каким файлам применим
+# экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому (grpc_proto.py).
+_GRPC_PROTO_SUFFIXES = frozenset({".proto"})
 # Серверные Rails-бэкенды (route). Разбор ТЕКСТОМ по .rb (stdlib ast к Ruby неприменим) — DSL
 # config/routes.rb: get/post/… + resources/resource + root + namespace/scope-префиксы. Метаданные
 # реестра (к каким файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по
@@ -268,6 +273,15 @@ GRAPHQL_OPERATIONS = Extractor(
     needs_ast=False,
 )
 
+GRPC_RPCS = Extractor(
+    id="grpc-proto",
+    suffixes=_GRPC_PROTO_SUFFIXES,
+    surface_kinds=("api",),
+    confidence="inferred",   # текстовый разбор .proto — не полноценный protobuf-парсер/AST
+    extract=extract_grpc_rpcs,
+    needs_ast=False,
+)
+
 RAILS_ROUTES = Extractor(
     id="rails-routes",
     suffixes=_RUBY_RB_SUFFIXES,
@@ -303,6 +317,7 @@ DEFAULT_EXTRACTORS: tuple = (
     GO_WEB_ROUTES,
     SPRING_ROUTES,
     GRAPHQL_OPERATIONS,
+    GRPC_RPCS,
     RAILS_ROUTES,
     ASPNET_ROUTES,
 )

@@ -797,3 +797,81 @@ public class NotAspNet
     public object Phantom() => null;
 }
 '''
+
+
+# ─── gRPC Protocol Buffers операции E11 (вид `api`, ТЕКСТОВЫЙ разбор .proto) ──────────────────────
+
+# Полная схема: service с unary и streaming rpc; их имена суть операции API (<Svc>/<Rpc>). Обычные
+# message/enum — модель данных, НЕ операции. Комментарии `//` и `/* */` НЕ должны давать ложных rpc.
+_GRPC_SERVICE = '''\
+syntax = "proto3";
+package shop.v1;
+
+// Order management service.
+service OrderService {
+  // create a new order
+  rpc CreateOrder(CreateOrderRequest) returns (Order);
+  rpc GetOrder(GetOrderRequest) returns (Order);
+  rpc ListOrders(ListOrdersRequest) returns (stream Order);   // server streaming
+  rpc Chat(stream ChatMsg) returns (stream ChatMsg);          // bidi streaming
+}
+
+message CreateOrderRequest {
+  string sku = 1;
+  int32 qty = 2;
+  // rpc NotAnOperation(Foo) returns (Bar);  — это ВНУТРИ message-комментария, не операция
+}
+
+message Order {
+  string id = 1;
+  double total = 2;
+}
+
+enum OrderStatus {
+  PENDING = 0;
+  SHIPPED = 1;
+}
+'''
+
+# Два сервиса в одном файле — префикс сервиса разводит одноимённые rpc (Ping в обоих).
+_GRPC_MULTI_SERVICE = '''\
+syntax = "proto3";
+
+service HealthService {
+  rpc Ping(PingRequest) returns (PongResponse);
+}
+
+service AdminService {
+  rpc Ping(PingRequest) returns (PongResponse);
+  rpc Shutdown(ShutdownRequest) returns (ShutdownResponse);
+}
+'''
+
+# Только модели данных, ни одного service → операций нет.
+_GRPC_MODELS_ONLY = '''\
+syntax = "proto3";
+
+message User {
+  string id = 1;
+  string name = 2;
+}
+
+enum Role {
+  GUEST = 0;
+  ADMIN = 1;
+}
+'''
+
+# Комментарии `//`, блочный `/* */` и строковый литерал опции с текстом "rpc …" не должны дать rpc.
+_GRPC_COMMENTS = '''\
+syntax = "proto3";
+
+/*
+ rpc FakeBlock(Foo) returns (Bar);   // это ВНУТРИ блочного комментария — не операция
+*/
+service EchoService {
+  // rpc CommentedOut(Foo) returns (Bar);   — строчный комментарий, не операция
+  option (some.custom) = "rpc StringLiteral(Foo) returns (Bar);";
+  rpc Echo(EchoRequest) returns (EchoResponse);
+}
+'''
