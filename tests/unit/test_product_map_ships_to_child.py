@@ -131,3 +131,6 @@ def test_all_ten_product_articles_resolve_in_installed_child(child_root):
     assert merged["PROD-001"].get("level") == "MUST"            # машинные поля доехали
     assert "ARCH-001" in merged, "арх-конституция должна резолвиться из той же дочки"
     assert any(k.startswith("UI-") for k in merged), "UI/UX должна резолвиться из той же дочки"
+    # FAIL-CLOSED: выдуманного ID в реестре нет — иначе резолв был бы тавтологически зелёным.
+    assert "PROD-999" not in merged, "несуществующий PROD-999 резолвится — резолв дырявый"
+    assert "PROD-000-НЕТ-ТАКОГО" not in merged, "выдуманный ID резолвится — проверка тавтология"
