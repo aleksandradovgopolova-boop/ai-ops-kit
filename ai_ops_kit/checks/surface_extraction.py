@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Sequence
 
 from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
+from ai_ops_kit.checks.surface_extractors.go_web import extract_go_web_routes
 from ai_ops_kit.checks.surface_extractors.js_server import (
     extract_express_routes,
     extract_nest_routes,
@@ -85,6 +86,10 @@ _SCREEN_ANGULAR_SUFFIXES = frozenset({".ts"})
 _SERVER_JS_SUFFIXES = frozenset({".js", ".ts", ".mjs", ".cjs"})
 _NEST_JS_SUFFIXES = frozenset({".ts", ".js", ".mjs", ".cjs", ".tsx"})
 _NEXT_JS_SUFFIXES = frozenset({".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"})
+# Серверные Go-бэкенды (route). Разбор ТЕКСТОМ по .go (stdlib ast к Go неприменим) — net/http, gin,
+# chi, echo, gorilla/mux. Метаданные реестра (к каким файлам применим экстрактор) держим у сборки
+# Extractor'ов, а разбор идёт по содержимому/импортам (go_web.py).
+_SERVER_GO_SUFFIXES = frozenset({".go"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -213,6 +218,15 @@ NEXT_ROUTES = Extractor(
     needs_ast=False,
 )
 
+GO_WEB_ROUTES = Extractor(
+    id="go-web",
+    suffixes=_SERVER_GO_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый разбор Go — эвристика паттерна, не доказательный AST
+    extract=extract_go_web_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -227,6 +241,7 @@ DEFAULT_EXTRACTORS: tuple = (
     EXPRESS_ROUTES,
     NEST_ROUTES,
     NEXT_ROUTES,
+    GO_WEB_ROUTES,
 )
 
 
