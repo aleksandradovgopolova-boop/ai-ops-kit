@@ -72,3 +72,22 @@ def _imports_module(tree: ast.AST, modname: str) -> bool:
             if mod == modname or mod.startswith(modname + "."):
                 return True
     return False
+
+
+def _matching_brace(text: str, open_idx: int) -> int:
+    """Индекс `}` в паре к `{` на позиции open_idx, либо -1 (пары нет — обрыв файла).
+
+    Разделяемый примитив текстовых экстракторов формальных грамматик с блоками `{…}`
+    (GraphQL SDL, .proto): строки/комментарии к моменту вызова уже замаскированы, так что
+    `{`/`}` внутри них не считаются.
+    """
+    depth = 0
+    for k in range(open_idx, len(text)):
+        c = text[k]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return k
+    return -1
