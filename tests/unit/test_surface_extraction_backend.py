@@ -8,6 +8,8 @@ confidence):
   * Java Spring (E7) — @GetMapping/@PostMapping/…/@RequestMapping + class-префикс (вид route).
   * GraphQL SDL (E8) — операции из полей корневых типов Query/Mutation/Subscription (вид `api`, НЕ
     route: первый экстрактор вида api).
+  * Ruby on Rails (E9) — DSL config/routes.rb: get/post/…, root, resources/resource, namespace/scope
+    (вид route).
 Позже сюда же добавятся прочие серверные стеки (один файл на «бэкенд-не-JS», чтобы парные тест-файлы
 не раздувались — сторож мега-файла).
 
@@ -36,6 +38,10 @@ from _surface_extraction_helpers import (
     _GRAPHQL_COMMENTS,
     _GRAPHQL_MODELS_ONLY,
     _GRAPHQL_SCHEMA,
+    _RAILS_FOREIGN,
+    _RAILS_INTERPOLATION,
+    _RAILS_NESTED,
+    _RAILS_ROUTES,
     _SPRING_DYNAMIC,
     _SPRING_FOREIGN,
     _SPRING_PLAIN_CONTROLLER,
@@ -312,6 +318,141 @@ def test_graphql_records_conform_to_surface_schema(tmp_path):
     schema = load_schema(DEFAULT_SCHEMA)
     sspec = schema["surface"]
     surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "graphql-schema"]
+    assert surfaces
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E9: серверные HTTP-маршруты Ruby on Rails (вид `route`, ТЕКСТОВЫЙ разбор config/routes.rb) ─────
+# Rails-DSL разбирается текстом/паттерном (stdlib ast к Ruby неприменим) → confidence по умолчанию
+# inferred, НЕ verified (честность силы = честность confidence, как у go_web E6 / spring-web E7).
+# Символ ref у Rails — "<МЕТОД> <путь>" (метод есть в DSL явно, и это разводит 7 RESTful-маршрутов
+# одного `resources` в разные записи).
+
+def test_rails_verb_routes_literal_are_inferred(tmp_path):
+    _write(tmp_path, "config/routes.rb", _RAILS_ROUTES)
+    surfaces = extract_surfaces(tmp_path)
+    syms = _route_paths(surfaces, "rails-routes")
+    assert {"GET /health", "POST /login", "DELETE /logout"} <= syms
+    for s in surfaces:
+        if s["extractor"] == "rails-routes":
+            assert s["kind"] == "route"
+            assert s["confidence"] == "inferred"   # текстовый разбор Ruby-DSL НИКОГДА не verified
+            assert s["ref"].startswith("config/routes.rb:")
+
+
+def test_rails_root_maps_to_slash(tmp_path):
+    _write(tmp_path, "config/routes.rb", _RAILS_ROUTES)
+    syms = _route_paths(extract_surfaces(tmp_path), "rails-routes")
+    assert "GET /" in syms
+
+
+def test_rails_resources_expands_to_seven_restful(tmp_path):
+    """`resources :orders` → 7 стандартных RESTful-маршрутов Rails (метод+путь)."""
+    _write(tmp_path, "config/routes.rb",
+           "Rails.application.routes.draw do\n  resources :orders\nend\n")
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "rails-routes"]
+    syms = {s["ref"].split("|", 1)[1] for s in surfaces}
+    assert syms == {
+        "GET /orders", "POST /orders", "GET /orders/new", "GET /orders/:id",
+        "GET /orders/:id/edit", "PATCH /orders/:id", "DELETE /orders/:id",
+    }
+    assert len(surfaces) == 7   # ровно семь записей (index/create/new/show/edit/update/destroy)
+
+
+def test_rails_singular_resource_expands_to_six(tmp_path):
+    """`resource :profile` (ед.ч.) → 6 RESTful без index и без `:id`."""
+    _write(tmp_path, "config/routes.rb",
+           "Rails.application.routes.draw do\n  resource :profile\nend\n")
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "rails-routes"]
+    syms = {s["ref"].split("|", 1)[1] for s in surfaces}
+    assert syms == {
+        "GET /profile/new", "POST /profile", "GET /profile",
+        "GET /profile/edit", "PATCH /profile", "DELETE /profile",
+    }
+    assert not any(":id" in s for s in syms)   # у сингулярного ресурса нет member-параметра
+
+
+def test_rails_namespace_and_scope_prefix(tmp_path):
+    """`namespace :admin` даёт префикс `/admin`, `scope "/api"` — `/api`; склейка с путями внутри."""
+    _write(tmp_path, "config/routes.rb", _RAILS_ROUTES)
+    syms = _route_paths(extract_surfaces(tmp_path), "rails-routes")
+    assert "GET /admin/stats" in syms
+    assert "GET /api/ping" in syms
+    # resources :reports внутри namespace :admin → префикс склеен с RESTful-путями.
+    assert {"GET /admin/reports", "GET /admin/reports/:id"} <= syms
+
+
+def test_rails_dynamic_and_symbol_paths_are_skipped(tmp_path):
+    """Символ `get :dashboard`, склейка `+`, переменная и закомментированный get — не маршруты."""
+    _write(tmp_path, "config/routes.rb", _RAILS_ROUTES)
+    syms = _route_paths(extract_surfaces(tmp_path), "rails-routes")
+    assert not any("dashboard" in s for s in syms)
+    assert not any("commented-out" in s for s in syms)
+    assert not any(s.startswith("GET /dyn") for s in syms)
+
+
+def test_rails_interpolation_is_not_a_literal(tmp_path):
+    """Интерполяция `"/users/#{id}"` — динамика → пропуск; соседний литерал остаётся."""
+    _write(tmp_path, "config/routes.rb", _RAILS_INTERPOLATION)
+    syms = _route_paths(extract_surfaces(tmp_path), "rails-routes")
+    assert "GET /plain" in syms
+    assert not any("users" in s for s in syms)
+
+
+def test_rails_nested_resources_not_deeper_than_one(tmp_path):
+    """Вложенные resources и member/collection внутри resources-блока не разбираются (declared limit)."""
+    _write(tmp_path, "config/routes.rb", _RAILS_NESTED)
+    syms = _route_paths(extract_surfaces(tmp_path), "rails-routes")
+    assert "GET /orders" in syms          # внешний resources развёрнут
+    assert not any("line_items" in s for s in syms)   # вложенный resources — пропуск
+    assert not any("preview" in s for s in syms)      # member-блок — пропуск
+
+
+def test_rails_needs_indicator(tmp_path):
+    """`.get`/`resources` в .rb без индикатора Rails (не routes.rb, нет routes.draw) → пусто."""
+    _write(tmp_path, "app/models/cache.rb", _RAILS_FOREIGN)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "rails-routes"] == []
+
+
+def test_rails_indicator_by_filename(tmp_path):
+    """Файл с именем routes.rb без обёртки draw — всё равно таблица маршрутов Rails (индикатор имени)."""
+    _write(tmp_path, "config/routes.rb", 'get "/bare"\n')
+    syms = _route_paths(extract_surfaces(tmp_path), "rails-routes")
+    assert "GET /bare" in syms
+
+
+def test_rails_isolated_from_broken_files(tmp_path):
+    """Битый .rb (обрыв, незакрытая строка, лишний end) не валит прогон и не даёт фантомов."""
+    _write(tmp_path, "config/routes.rb", _RAILS_ROUTES)
+    _write(tmp_path, "config/broken.rb",
+           'Rails.application.routes.draw do\n  get "/oops\n  resources\n  end\n  end\n')
+    syms = _route_paths(extract_surfaces(tmp_path), "rails-routes")
+    assert "GET /health" in syms   # валидный файл разобран
+    assert not any("oops" in s for s in syms)   # незакрытая строка — не маршрут
+
+
+def test_rails_does_not_break_other_stacks(tmp_path):
+    """routes.rb рядом с питон-маршрутом: python route остаётся verified, Rails — отдельный inferred."""
+    _write(tmp_path, "config/routes.rb", _RAILS_ROUTES)
+    _write(tmp_path, "app.py",
+           "from flask import Flask\napp = Flask(__name__)\n\n\n@app.route('/py')\ndef p():\n    return ''\n")
+    surfaces = extract_surfaces(tmp_path)
+    assert any(s["extractor"] == "python-web-routes" and s["confidence"] == "verified"
+               for s in surfaces)
+    assert "GET /health" in _route_paths(surfaces, "rails-routes")
+
+
+def test_rails_records_conform_to_surface_schema(tmp_path):
+    """Записи rails-routes валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "config/routes.rb", _RAILS_ROUTES)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "rails-routes"]
     assert surfaces
     for i, surf in enumerate(surfaces):
         errors: list = []

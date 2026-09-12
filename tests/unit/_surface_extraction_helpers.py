@@ -630,3 +630,67 @@ mutation CreateOne($input: CreateOrderInput!) {
   }
 }
 '''
+
+
+# ─── Ruby on Rails серверные маршруты E9 (config/routes.rb, вид `route`) ──────────────────────────
+
+# Полный routes.rb: глаголы get/post/…, root, resources (мн.ч.), resource (ед.ч.), namespace/scope
+# префиксы. Плюс ловушки: путь-символ, интерполяция, путь-переменная, комментарий с фейковым get.
+_RAILS_ROUTES = '''\
+Rails.application.routes.draw do
+  root "home#index"
+
+  get "/health", to: "system#health"
+  post "/login", to: "sessions#create"
+  delete "/logout", to: "sessions#destroy"
+
+  resources :orders
+  resource :profile
+
+  namespace :admin do
+    get "/stats", to: "admin#stats"
+    resources :reports
+  end
+
+  scope "/api" do
+    get "/ping", to: "api#ping"
+  end
+
+  # get "/commented-out"  -> это комментарий, не маршрут
+  get :dashboard              # символ, не строковый литерал -> пропуск
+  get "/dyn/" + suffix        # склейка -> пропуск
+  get some_path               # переменная -> пропуск
+end
+'''
+
+# Интерполяция в двойных кавычках (`"/users/#{id}"`) — динамика, маршрутом стать НЕ должна. Держим в
+# отдельной фикстуре, чтобы не воевать с экранированием тройных кавычек Python.
+_RAILS_INTERPOLATION = '''\
+Rails.application.routes.draw do
+  get "/users/#{id}"
+  get "/plain"
+end
+'''
+
+# Вложенный resources внутри resources-блока (member/collection тоже) — глубже 1 не разбираем.
+_RAILS_NESTED = '''\
+Rails.application.routes.draw do
+  resources :orders do
+    member do
+      get "/preview"
+    end
+    resources :line_items
+  end
+end
+'''
+
+# .rb БЕЗ индикатора Rails (нет routes.draw, имя не routes.rb) — чужой resources/get не даёт маршрутов.
+_RAILS_FOREIGN = '''\
+class Cache
+  def get(key)
+    @store[key]
+  end
+end
+
+resources = %i[a b c]
+'''
