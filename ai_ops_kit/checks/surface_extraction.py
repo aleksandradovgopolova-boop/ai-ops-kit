@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router / laravel_routes / ktor_routing, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / trpc_router / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router / laravel_routes / ktor_routing, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -66,6 +66,7 @@ from ai_ops_kit.checks.surface_extractors.python_web import (
     extract_python_web_routes,
 )
 from ai_ops_kit.checks.surface_extractors.ruby_rails import extract_rails_routes
+from ai_ops_kit.checks.surface_extractors.trpc_router import extract_trpc_operations
 
 # `Surface` и `ParsedFile` живут в подпакете (`_common`), но ОСТАЮТСЯ публичными именами этого
 # модуля-входа: внешний контракт `surface_extraction.Surface` / `.ParsedFile` не меняется.
@@ -112,6 +113,11 @@ _GRAPHQL_SDL_SUFFIXES = frozenset({".graphql", ".gql"})
 # исполнения) — объявления rpc внутри блоков service. Метаданные реестра (к каким файлам применим
 # экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому (grpc_proto.py).
 _GRPC_PROTO_SUFFIXES = frozenset({".proto"})
+# tRPC-роутеры (TypeScript, вид api). Разбор ТЕКСТОМ по .ts (не TS-парсер, без исполнения) —
+# процедуры .query/.mutation/.subscription как ключи объекта роутера createTRPCRouter/t.router.
+# .ts УЖЕ в union суффиксов (js-экстракторы), новый суффикс не нужен. Метаданные реестра (к каким
+# файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому (trpc_router.py).
+_TRPC_TS_SUFFIXES = frozenset({".ts"})
 # Серверные Rails-бэкенды (route). Разбор ТЕКСТОМ по .rb (stdlib ast к Ruby неприменим) — DSL
 # config/routes.rb: get/post/… + resources/resource + root + namespace/scope-префиксы. Метаданные
 # реестра (к каким файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по
@@ -307,6 +313,15 @@ GRPC_RPCS = Extractor(
     needs_ast=False,
 )
 
+TRPC_OPERATIONS = Extractor(
+    id="trpc-router",
+    suffixes=_TRPC_TS_SUFFIXES,
+    surface_kinds=("api",),
+    confidence="inferred",   # текстовый разбор TS — не полноценный TS-парсер/AST
+    extract=extract_trpc_operations,
+    needs_ast=False,
+)
+
 RAILS_ROUTES = Extractor(
     id="rails-routes",
     suffixes=_RUBY_RB_SUFFIXES,
@@ -379,6 +394,7 @@ DEFAULT_EXTRACTORS: tuple = (
     SPRING_ROUTES,
     GRAPHQL_OPERATIONS,
     GRPC_RPCS,
+    TRPC_OPERATIONS,
     RAILS_ROUTES,
     ASPNET_ROUTES,
     OPENAPI_ROUTES,
