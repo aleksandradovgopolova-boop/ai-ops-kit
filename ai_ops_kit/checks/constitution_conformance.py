@@ -48,12 +48,34 @@ def load_rules(rules_path: Path) -> dict:
     return out
 
 
+# Каталог конституций кита: у каждой свой реестр `standards/<area>/rules.yaml` (тот же путь едет в
+# дочку под `.ai/managed`). Продуктовая стоит наравне с арх и UI/UX — механизм резолвит статьи любой.
+CONSTITUTIONS = ("architecture", "uiux", "product")
+
+
+def registry_path(root: Path, area: str) -> Path:
+    """Реестр конституции `area`: в дочке `.ai/managed/...`, иначе — корневой `standards/...`."""
+    managed = Path(root) / ".ai" / "managed" / "standards" / area / "rules.yaml"
+    return managed if managed.is_file() else Path(root) / "standards" / area / "rules.yaml"
+
+
 def default_rules_path(root: Path) -> Path:
-    """Где лежит доставленный реестр: в дочке `.ai/managed/...`, иначе — корневой `standards/...`."""
-    managed = Path(root) / ".ai" / "managed" / "standards" / "architecture" / "rules.yaml"
-    if managed.is_file():
-        return managed
-    return Path(root) / "standards" / "architecture" / "rules.yaml"
+    """Реестр Архитектурной конституции (обратная совместимость)."""
+    return registry_path(root, "architecture")
+
+
+def constitution_registries(root: Path) -> dict[str, Path]:
+    """{area: path} по реально присутствующим реестрам — отсутствующий в набор не попадает."""
+    return {area: p for area in CONSTITUTIONS if (p := registry_path(root, area)).is_file()}
+
+
+def load_all_rules(root: Path) -> dict:
+    """Слить статьи всех доступных конституций в один {id: meta}. Префиксы ID не пересекаются
+    (ARCH/CODE/HON/SEC/DATA · UI-* · PROD-*), поэтому конформанс резолвит любую отсюда."""
+    merged: dict = {}
+    for p in constitution_registries(root).values():
+        merged.update(load_rules(p))
+    return merged
 
 
 # ── локальные правила ДОЧКИ из её собственных уроков (#849) ──────────────────────
@@ -235,7 +257,7 @@ def conform(root: Path, rules_path: Path | None = None) -> list[dict]:
     статьям, присутствующим в ДОСТАВЛЕННОМ реестре (версия конституции дочки — источник истины).
     """
     root = Path(root)
-    rules = load_rules(rules_path or default_rules_path(root))
+    rules = load_rules(rules_path) if rules_path else load_all_rules(root)
     findings = []
     for article_id, (fn, advice) in _HEURISTICS.items():
         meta = rules.get(article_id)
@@ -275,7 +297,7 @@ def conform_paths(root: Path, rel_paths, rules_path: Path | None = None) -> list
     wanted = {str(p) for p in rel_paths if str(p).endswith(".py")}
     if not wanted:
         return []
-    rules = load_rules(rules_path or default_rules_path(root))
+    rules = load_rules(rules_path) if rules_path else load_all_rules(root)
     # ограничиваем обход целевыми файлами
     targets = [root / rp for rp in wanted if (root / rp).is_file()]
     findings = []
