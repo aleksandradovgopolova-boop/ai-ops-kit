@@ -1091,3 +1091,63 @@ defmodule MyApp.Cache do
   end
 end
 '''
+
+
+# ─── Laravel серверные маршруты E14 (routes/*.php, вид `route`, ТЕКСТОВЫЙ разбор .php) ────────────
+
+# Полный routes/web.php: глаголы Route::get/post/…, resource (7 RESTful), prefix-группы (fluent и
+# array). Плюс ловушки: путь-переменная, интерполяция двойных кавычек, склейка через `.`, комментарии
+# `//`/`#`/блочный с фейковым Route::get.
+_LARAVEL_WEB = '''\
+<?php
+
+use Illuminate\\Support\\Facades\\Route;
+
+Route::get('/health', [HealthController::class, 'show']);
+Route::post('/login', 'AuthController@login');
+Route::delete('/logout', [AuthController::class, 'logout']);
+
+Route::resource('orders', OrderController::class);
+
+Route::prefix('admin')->group(function () {
+    Route::get('/stats', [AdminController::class, 'stats']);
+    Route::resource('reports', ReportController::class);
+});
+
+Route::group(['prefix' => 'api'], function () {
+    Route::get('/ping', [ApiController::class, 'ping']);
+});
+
+// Route::get('/commented-out', ...);  -> это строчный комментарий, не маршрут
+# Route::get('/hash-comment', ...);    -> тоже комментарий
+/* Route::get('/block-comment', ...); */
+Route::get($somePath, 'C@m');            // переменная -> пропуск
+Route::get("/users/{$id}", 'C@m');       // интерполяция двойных кавычек -> пропуск
+Route::get('/dyn/' . $suffix, 'C@m');    // склейка через . -> пропуск
+'''
+
+# API-ресурс: без форм create/edit (5 маршрутов). Отдельная фикстура для чистой проверки набора.
+_LARAVEL_API_RESOURCE = '''\
+<?php
+
+use Illuminate\\Support\\Facades\\Route;
+
+Route::apiResource('orders', OrderController::class);
+'''
+
+# .php БЕЗ индикатора Laravel (не в routes/, нет фасада Route:: и use-импорта) — чужой ->get не даёт
+# маршрутов.
+_LARAVEL_FOREIGN = '''\
+<?php
+
+class Router
+{
+    public function get($path)
+    {
+        return $this->routes[$path];
+    }
+}
+
+$router = new Router();
+$router->get('/not-a-route');
+'''

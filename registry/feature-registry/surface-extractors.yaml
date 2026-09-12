@@ -598,6 +598,49 @@ extractors:
         динамические пути (переменная/атом-параметр `get :action`/интерполяция `#{…}`/склейка); файл
         без индикатора Phoenix. Ничего из этого НЕ verified.
 
+  # E14 добавил серверные маршруты Laravel (вид route) — первый стек PHP. Честность силы та же, что у
+  # go_web (E6) / java_spring (E7) / rails-routes (E9) / aspnet-routes (E10): PHP разбирается ТЕКСТОМ/
+  # паттерном по исходнику (stdlib ast к PHP неприменим), без вызова интерпретатора PHP и без сети —
+  # это НЕ доказательный AST → confidence: inferred (в W4 НЕ блокирует). Развёртка
+  # resource/apiResource в RESTful — тоже inferred: это КОНВЕНЦИЯ Laravel (роутер разворачивает пути
+  # в рантайме), а не доказанный в исходнике литерал. Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/laravel_routes.py (extract_laravel_routes), зарегистрирован
+  # в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: laravel-routes
+    stack: {language: php, frameworks: [laravel]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор фасада Laravel в routes/*.php без исполнения: `Route::get('/x', …)` и
+      `post`/`put`/`patch`/`delete`/`options` со строковым путём-литералом → route (метод из глагола
+      фасада); `Route::resource('orders', …)` → 7 стандартных RESTful-маршрутов Laravel (index/create/
+      store/show/edit/update/destroy: `/orders`, `/orders/create`, `/orders/{id}`, `/orders/{id}/edit`);
+      `Route::apiResource('orders', …)` → те же 5 без форм create/edit. Группы
+      `Route::prefix('api')->group(function () { … })` и `Route::group(['prefix' => 'admin'], …)` дают
+      префикс пути, склеиваемый с путями внутри блока при ЛИТЕРАЛЬНОМ префиксе. Путь-НЕ-литерал
+      (переменная `Route::get($p, …)`, интерполяция двойных кавычек `"/u/{$id}"`/`"$x"`, склейка через
+      `.`) → пропуск. Берётся ТОЛЬКО в файле с индикатором Laravel (фасад `Route::` в тексте,
+      `use Illuminate\Support\Facades\Route`, ИЛИ файл в каталоге routes/), чтобы чужой `Route::`/`->get`
+      в стороннем PHP не дал ложный маршрут. Регэксп/скан по паттерну — не грамматика PHP → confidence:
+      inferred. ref = "file:line|<МЕТОД> <path>".
+    honest_limits:
+      sees: >-
+        маршруты Laravel, объявленные литеральным глаголом фасада (Route::get/post/…), а также
+        стандартную RESTful-развёртку `Route::resource`/`Route::apiResource` (inferred-конвенция), с
+        учётом литерального префикса одной prefix-группы; file:line и "<МЕТОД> <path>" как symbol,
+        помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        `only(...)`/`except(...)`-сужения ресурса (полный RESTful-набор соответствующего типа выдаётся
+        всегда, конкретные фильтры НЕ применяются); invokable-контроллеры (`Route::get('/x', Controller
+        ::class)` — путь виден, но одиночное действие без глагола-фасада как отдельный маршрут не
+        выводится); `Route::match([...], …)`/`Route::any(…)` (несколько/все методы — не разворачиваем);
+        имена/группировку через `->name(...)`/`->middleware(...)`/`->domain(...)` и биндинг модели
+        (`{order}` вместо `{id}` — конвенциональный плейсхолдер нормализован к `{id}`); ВЛОЖЕННЫЕ группы
+        и замыкания-обработчики с фигурными скобками прямо в routes-файле (могут сбить область
+        prefix-группы — declared limit); nested-ресурсы с точечной нотацией (`photos.comments`);
+        динамические пути (переменная/интерполяция/склейка `.`) и любые маршруты, собранные в рантайме
+        (макросы, `Route::macro`, регистрация из провайдеров). Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним

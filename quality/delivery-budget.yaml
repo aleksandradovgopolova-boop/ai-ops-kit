@@ -92,7 +92,13 @@ ceilings:
   #   есть grpc_proto.py, и перевёл РЕАЛЬНУЮ установку через прежний потолок — на main (с grpc, без
   #   openapi) было 5510505 < 5520000. Реальная установка 5510505 -> 5522677 (+1 файл, +~12 КБ).
   #   См. запись в `raises`.
-  volume_bytes: 5540000
+  # 2026-09-12: 5540000 -> 5560000 под серверные маршруты Laravel (E14) ПОВЕРХ Phoenix (E13): при
+  #   слиянии в поставку доезжают ОБА новых подмодуля — surface_extractors/phoenix_router.py (E13) и
+  #   surface_extractors/laravel_routes.py (E14). Phoenix в одиночку под потолок укладывался (реальная
+  #   установка 5537345 < 5540000, volume-записи по E13 нет), но laravel_routes.py, легший ПОВЕРХ
+  #   дерева с phoenix_router.py, перевёл РЕАЛЬНУЮ установку через прежний потолок: 5537345 -> 5552770
+  #   (+1 файл). Потолок поднят под факт до 5560000. См. запись в `raises`.
+  volume_bytes: 5560000
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -234,9 +240,14 @@ ceilings:
   #   ai_ops_kit/checks/surface_extractors/phoenix_router.py (экстрактор Phoenix-router-DSL router.ex,
   #   первый стек Elixir, вид `route`). Весь пакет checks/ едет в .ai/managed; фасад surface_extraction.py
   #   импортирует phoenix_router на пути дочки. Реальная установка 619 -> 620, что пробило прежний
-  #   потолок 620 (строгий `<`), поднят до 621. Объём НЕ пробит (5540000 держит: реальная установка
-  #   ~5531 КБ < 5540000, volume-записи по E13 нет). См. запись в `raises`.
-  substantive_files: 621
+  #   потолок 620 (строгий `<`), поднят до 621. См. запись в `raises`.
+  # 2026-09-12: 621 -> 622 под серверные маршруты Laravel (E14): один новый доставляемый .py-файл
+  #   ai_ops_kit/checks/surface_extractors/laravel_routes.py (экстрактор фасада Route:: в routes/*.php,
+  #   первый стек PHP, вид `route`). Ложится ПОВЕРХ E13 (phoenix_router.py): оба новых .py доезжают в
+  #   .ai/managed, фасад surface_extraction импортирует и phoenix_router, и laravel_routes на пути
+  #   дочки. Реальная установка 620 -> 621, что пробило прежний потолок 621 (строгий `<`), поднят до
+  #   622. Объём тоже пробит слиянием обеих работ (см. запись volume ниже). См. запись в `raises`.
+  substantive_files: 622
 
 # Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
 # `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
@@ -2620,5 +2631,49 @@ raises:
       Phoenix-маршруты, чтобы сверить их с реестром фич. Без этого файла в поставке импорт фасада упал
       бы у дочки ImportError на первом же вызове судьи (класс F-033). Прирост поставки = +1 доставляемый
       .py. Реальная установка 619 -> 620, что пробило прежний потолок 620 (строгий `<`), поднят до 621.
-      Объём НЕ пробит той же работой: реальная установка ~5531 КБ < потолка 5540000, так что
-      volume-записи по E13 нет.
+  - at: '2026-09-12'
+    what: substantive_files
+    from_count: 621
+    to_count: 622
+    measured_before: 620
+    measured_after: 621
+    work: surface-extractors-laravel-routes (E14)
+    files:
+      - ai_ops_kit/checks/surface_extractors/laravel_routes.py
+    why_it_works_in_the_child: >-
+      Один новый доставляемый .py РАБОТАЕТ в дочке: laravel_routes.py — стек-адаптер извлекателя
+      поверхностей для серверных HTTP-маршрутов Laravel (PHP, вид `route`): глаголы фасада
+      Route::get/post/put/patch/delete/options со строковым путём-литералом, развёртка
+      Route::resource/apiResource в стандартные RESTful-маршруты и prefix-группы. PHP разбирается
+      ТЕКСТОМ/паттерном по фасаду в routes/*.php (stdlib ast к PHP неприменим), без вызова
+      интерпретатора PHP и без сети → confidence: inferred. Экстрактор сужен индикатором Laravel
+      (фасад Route::, use Illuminate\Support\Facades\Route, либо каталог routes/), чтобы чужой
+      Route::/->get в стороннем PHP не дал ложный маршрут. Весь пакет ai_ops_kit/checks едет в
+      .ai/managed; фасад surface_extraction.py регистрирует экстрактор в DEFAULT_EXTRACTORS и
+      импортирует extract_laravel_routes на пути дочки из судьи охвата фич (checks/feature_coverage).
+      Без этого файла в поставке импорт фасада упал бы у дочки ImportError на первом же вызове судьи
+      (класс F-033). Ложится ПОВЕРХ E13 (phoenix_router.py) — прирост поставки = ещё +1 доставляемый
+      .py: реальная установка 620 -> 621, что пробило прежний потолок 621 (строгий `<`), поднят до 622.
+      Объём пробит слиянием обеих работ — см. отдельную volume-запись ниже.
+  - at: '2026-09-12'
+    what: volume
+    from_bytes: 5540000
+    to_bytes: 5560000
+    measured_before: 5537345
+    measured_after: 5552770
+    work: surface-extractors-laravel-routes (E14)
+    files:
+      - ai_ops_kit/checks/surface_extractors/laravel_routes.py
+    why_it_works_in_the_child: >-
+      Слияние E14 (Laravel) на дерево с уже влитым E13 (Phoenix) вырастило ОБЪЁМ managed-поставки
+      через прежний потолок 5540000. Растёт один доставляемый файл — новый подмодуль
+      checks/surface_extractors/laravel_routes.py: стек-адаптер извлекателя серверных HTTP-маршрутов
+      Laravel (PHP, вид `route`) — глаголы фасада Route::get/post/put/patch/delete/options со строковым
+      путём-литералом, развёртка Route::resource/apiResource в стандартные RESTful-маршруты и
+      prefix-группы. Фасад surface_extraction.py регистрирует его в DEFAULT_EXTRACTORS и зовёт
+      extract_laravel_routes на пути дочки из судьи охвата фич (checks/feature_coverage), который читает
+      routes/*.php продукта. Исходник нового файла плюс его контрольная сумма и запись в manifest
+      поставки дали +~15 КБ. Он лёг ПОВЕРХ дерева, где уже есть phoenix_router.py (E13, реальная
+      установка 5537345 < 5540000 — Phoenix в одиночку укладывался): запас по объёму был всего ~2.7 КБ,
+      поэтому +1 файл перевёл поставку за потолок. Реальная установка 5537345 -> 5552770 (+1 файл),
+      потолок поднят под факт до 5560000.

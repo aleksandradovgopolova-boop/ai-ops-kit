@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router / laravel_routes, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -40,6 +40,7 @@ from ai_ops_kit.checks.surface_extractors.go_web import extract_go_web_routes
 from ai_ops_kit.checks.surface_extractors.graphql_api import extract_graphql_operations
 from ai_ops_kit.checks.surface_extractors.grpc_proto import extract_grpc_rpcs
 from ai_ops_kit.checks.surface_extractors.java_spring import extract_spring_routes
+from ai_ops_kit.checks.surface_extractors.laravel_routes import extract_laravel_routes
 from ai_ops_kit.checks.surface_extractors.js_server import (
     extract_express_routes,
     extract_nest_routes,
@@ -131,6 +132,11 @@ _OPENAPI_SPEC_SUFFIXES = frozenset({".yaml", ".yml", ".json"})
 # применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому/индикатору
 # (phoenix_router.py).
 _PHOENIX_EX_SUFFIXES = frozenset({".ex"})
+# Серверные Laravel-бэкенды (route). Разбор ТЕКСТОМ по .php (stdlib ast к PHP неприменим) — фасад
+# `Route::get/post/…`, `Route::resource`/`apiResource` и `prefix`-группы в routes/*.php. Метаданные
+# реестра (к каким файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по
+# содержимому/индикатору (laravel_routes.py).
+_LARAVEL_PHP_SUFFIXES = frozenset({".php"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -331,6 +337,15 @@ PHOENIX_ROUTES = Extractor(
     needs_ast=False,
 )
 
+LARAVEL_ROUTES = Extractor(
+    id="laravel-routes",
+    suffixes=_LARAVEL_PHP_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый разбор фасада PHP — эвристика паттерна, не доказательный AST
+    extract=extract_laravel_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -353,6 +368,7 @@ DEFAULT_EXTRACTORS: tuple = (
     ASPNET_ROUTES,
     OPENAPI_ROUTES,
     PHOENIX_ROUTES,
+    LARAVEL_ROUTES,
 )
 
 
