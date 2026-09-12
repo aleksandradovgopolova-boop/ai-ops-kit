@@ -404,6 +404,43 @@ extractors:
         ОБЪЕДИНЁННУЮ схему federation на уровне рантайма (видны только per-file `extend type`), и поля
         НЕ-корневых типов (модели данных). Ничего из этого НЕ verified.
 
+  # E9 добавил серверные маршруты Ruby on Rails (вид route) — DSL файла config/routes.rb. Честность
+  # силы та же, что у go_web (E6) / spring-web (E7) / js_server (E4): Ruby разбирается ТЕКСТОМ/паттерном
+  # по исходнику (stdlib ast к Ruby неприменим), без вызова интерпретатора Ruby и без сети — это НЕ
+  # доказательный AST → confidence: inferred (в W4 НЕ блокирует). Развёртка resources/resource в
+  # RESTful — тоже inferred: это КОНВЕНЦИЯ Rails (роутер разворачивает пути в рантайме), а не доказанный
+  # в исходнике литерал. Код — новый подмодуль ai_ops_kit/checks/surface_extractors/ruby_rails.py
+  # (extract_rails_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: rails-routes
+    stack: {language: ruby, frameworks: [rails, ruby-on-rails]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор Ruby-DSL config/routes.rb без исполнения: глаголы
+      `get`/`post`/`put`/`patch`/`delete` со строковым путём-литералом → route (метод из глагола DSL);
+      `root "home#index"` → `GET /`; `resources :orders` → 7 стандартных RESTful-маршрутов Rails
+      (index/create/new/show/edit/update/destroy: `/orders`, `/orders/:id`, `/orders/new`,
+      `/orders/:id/edit`); `resource :profile` → 6 RESTful без index и без `:id`. Блоки
+      `namespace :admin do …` дают префикс пути `/admin`, `scope "/api" do …` (и `scope path: "/api"`) —
+      префикс `/api`, склеиваемый с путями внутри блока. Путь-НЕ-литерал (переменная, символ
+      `get :dashboard`, интерполяция `"/u/#{id}"`, склейка через `+`) → пропуск. Берётся ТОЛЬКО в файле
+      с индикатором Rails (`Rails.application.routes.draw` в тексте ИЛИ имя файла routes.rb), чтобы
+      чужой `.get`/`resources` в стороннем Ruby не дал ложный маршрут. Регэксп/скан по паттерну — не
+      грамматика Ruby → confidence: inferred. ref = "file:line|<МЕТОД> <path>".
+    honest_limits:
+      sees: >-
+        маршруты Rails, объявленные литеральным глаголом (get/post/…), `root`, а также стандартную
+        RESTful-развёртку `resources`/`resource` (inferred-конвенция), с учётом префиксов namespace и
+        scope одного уровня; file:line и "<МЕТОД> <path>" как symbol, помечает inferred (не блокирует).
+      does_not_see: >-
+        `only:`/`except:`-фильтры (полный RESTful-набор выдаётся всегда, конкретные фильтры НЕ
+        применяются); constraints (`constraints:`/`constraint`-блоки); member/collection-маршруты и
+        ВЛОЖЕННЫЕ resources глубже 1 (нутро `resources … do` не разбирается); монтирование движков
+        (`mount Engine => "/x"`); concerns (`concerns:`/`concern`); переименование пути через `as:`/`to:`
+        (берётся путь, не имя); redirect/`match … via:`; динамические пути (переменная/символ/
+        интерполяция/склейка `+`); переименование корня/параметров и любые пути, собранные в рантайме.
+        Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
