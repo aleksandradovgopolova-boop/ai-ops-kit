@@ -555,6 +555,49 @@ extractors:
         (SDL/JSON в .js/.ts/.py), и любую спеку без top-level `openapi:`/`swagger:`; переопределение
         путей рантайм-роутером поверх спеки. Ничего из этого НЕ verified.
 
+  # E13 добавил серверные маршруты Phoenix (вид route) — первый стек Elixir/BEAM. Честность силы та
+  # же, что у rails-routes (E9) / go_web (E6) / spring-web (E7) / js_server (E4): Elixir разбирается
+  # ТЕКСТОМ/паттерном по исходнику (stdlib ast к Elixir неприменим), без вызова компилятора Elixir /
+  # BEAM и без сети — это НЕ доказательный AST → confidence: inferred (в W4 НЕ блокирует). Развёртка
+  # resources в RESTful — тоже inferred: это КОНВЕНЦИЯ Phoenix (роутер разворачивает пути в рантайме),
+  # а не доказанный в исходнике литерал. Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/phoenix_router.py (extract_phoenix_routes), зарегистрирован в
+  # DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: phoenix-router
+    stack: {language: elixir, frameworks: [phoenix]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор Elixir Phoenix-router-DSL модуля router.ex без исполнения: глаголы
+      `get`/`post`/`put`/`patch`/`delete` с двойными кавычками пути → route (метод из глагола DSL:
+      `get "/x", Controller, :action` → `GET /x`); `resources "/orders", OrderController` → 7
+      стандартных RESTful-маршрутов Phoenix (index/new/create/show/edit/update/delete: `GET /orders`,
+      `GET /orders/new`, `POST /orders`, `GET /orders/:id`, `GET /orders/:id/edit`, `PATCH
+      /orders/:id`, `DELETE /orders/:id`). Блоки `scope "/api" do …` / `scope "/api", AppWeb do …` /
+      `scope path: "/api" do …` дают префикс пути `/api`, склеиваемый с путями внутри блока; `scope
+      "/", AppWeb` — пустой сегмент. Путь-НЕ-литерал (переменная `get some_path, …`, атом-параметр,
+      интерполяция `"/u/#{id}"`, склейка) в двойные кавычки не попадает или содержит `#{` → пропуск.
+      Берётся ТОЛЬКО в файле с индикатором Phoenix (`Phoenix.Router` в тексте, макрос `use <App>Web,
+      :router` ИЛИ имя файла router.ex), чтобы чужой `get`/`resources` в стороннем Elixir не дал
+      ложный маршрут. Регэксп/скан по паттерну — не грамматика Elixir → confidence: inferred. ref =
+      "file:line|<МЕТОД> <path>".
+    honest_limits:
+      sees: >-
+        маршруты Phoenix, объявленные литеральным глаголом (get/post/put/patch/delete) с путём в
+        двойных кавычках и стандартную RESTful-развёртку `resources` (inferred-конвенция), с учётом
+        префиксов scope одного уровня вложенности; file:line и "<МЕТОД> <path>" как symbol, помечает
+        inferred (не блокирует).
+      does_not_see: >-
+        `pipe_through`/пайплайны и их роль в маршруте; `forward` (монтирование plug/роутера) и
+        `live "/x", LiveView` LiveView-роуты (иной вид объявления, не берутся); PUT для update
+        (Phoenix даёт и PUT, и PATCH — эмитируется только PATCH из перечисленного RESTful-набора);
+        `only:`/`except:`-фильтры и `singleton: true` у `resources` (полный плюральный RESTful-набор
+        выдаётся всегда, фильтры/сингулярность НЕ применяются); член/коллекционные и ВЛОЖЕННЫЕ
+        `resources` глубже 1 (нутро `resources … do` не разбирается); склейку ВЛОЖЕННЫХ scope глубже
+        одного уровня в полный путь в рантайме сверх конкатенации объявленных литеральных сегментов;
+        динамические пути (переменная/атом-параметр `get :action`/интерполяция `#{…}`/склейка); файл
+        без индикатора Phoenix. Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
