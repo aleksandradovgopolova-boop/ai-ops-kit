@@ -720,6 +720,44 @@ extractors:
         `route` в полный путь в рантайме сверх объявленных литералов сегментов; регекс-роуты и
         параметрические сегменты как семантику (литерал `{id}` остаётся в пути как есть); файл без
         индикатора Ktor. Ничего из этого НЕ verified.
+  # E17 добавил ВТОРОЙ источник поверхностей из ЗАЯВЛЕННОГО КОНТРАКТА спеки (после OpenAPI E12) —
+  # операции AsyncAPI из спеки (вид `api`, событийный API). Честность силы та же, что у openapi-spec
+  # (E12): спека может РАСХОДИТЬСЯ с реальным кодом (drift — операция объявлена в спеке, но продюсера/
+  # консьюмера в коде нет или наоборот), плюс разбор структурный по тексту спеки (yaml.safe_load/
+  # json.loads, без исполнения, без брокера, без сети, без резолва remote-$ref), а не доказательство
+  # из исполняемого исходника → это НЕ доказательный AST того же класса, что Python-AST → confidence:
+  # inferred (в W4 НЕ блокирует). Файлы .yaml/.json ОЧЕНЬ распространены (и OpenAPI-спека — тоже
+  # .yaml/.json), потому экстрактор сужен индикатором top-level `asyncapi:` (иначе чужие
+  # package.json/конфиги и OpenAPI-спеки дали бы ложные поверхности). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/asyncapi_spec.py (extract_asyncapi_operations),
+  # зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: asyncapi-spec
+    stack: {language: [yaml, json], frameworks: [asyncapi]}
+    surface_kinds: [api]
+    confidence: inferred
+    method: >-
+      СТРУКТУРНЫЙ (не исполняемый) разбор файлов .yaml/.yml/.json без сети: yaml.safe_load для YAML и
+      json.loads для JSON. Срабатывает ТОЛЬКО когда верхний уровень документа — словарь с ключом
+      `asyncapi:` (AsyncAPI 2.x/3.x); иначе сразу [] (это разводит его и с OpenAPI-спекой, у которой
+      индикатор `openapi:`/`swagger:`). Учтены ОБЕ версии: AsyncAPI 2.x — каждая пара «канал (ключ в
+      `channels`) + operation (publish/subscribe)» = одна операция → api, имя "<канал> <publish|
+      subscribe>"; AsyncAPI 3.x — каждая операция в top-level `operations` = одна операция → api, имя
+      = её ключ. ref = "file:line|<операция>" (line — строка ключа operation/канала в тексте).
+      Битый/не-utf-8 файл не роняет скан (возвращается []). Структурный разбор заявленного контракта ≠
+      доказательный AST → confidence: inferred.
+    honest_limits:
+      sees: >-
+        событийные операции, ОБЪЯВЛЕННЫЕ в спеке AsyncAPI 2.x/3.x (.yaml/.yml/.json): пары
+        канал+publish/subscribe (2.x) и записи top-level `operations` (3.x); даёт file:line и имя
+        операции как symbol, помечает inferred (заявленный контракт, не блокирует).
+      does_not_see: >-
+        РАСХОЖДЕНИЕ спеки с кодом (drift — спека может отставать: объявленная операция в коде может
+        отсутствовать, а реальный продюсер/консьюмер — не попасть в спеку); композицию через
+        `$ref`/remote-refs (операция/канал по ссылке в другой файл НЕ разворачивается);
+        `components`/`messages`/`schemas` (это МОДЕЛИ данных/сообщения, НЕ операции); `bindings`
+        (транспортные детали, не факт операции); спеки, встроенные строкой В КОД (YAML/JSON в
+        .js/.ts/.py), и любую спеку без top-level `asyncapi:` (в т.ч. OpenAPI `openapi:`/`swagger:`).
+        Ничего из этого НЕ verified.
 
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.

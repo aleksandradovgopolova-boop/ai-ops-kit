@@ -1321,3 +1321,80 @@ fun demo() {
     handlers.get("/topic")
 }
 '''
+
+
+# ─── AsyncAPI спеки E17 (вид `api`, СТРУКТУРНЫЙ разбор .yaml/.yml/.json) ───────────────────────────
+
+# AsyncAPI 2.x YAML: индикатор `asyncapi: 2.6.0`, операции — пары канал+publish/subscribe в channels.
+# components/messages — модели данных/сообщения, НЕ операции.
+_ASYNCAPI_2_YAML = '''\
+asyncapi: "2.6.0"
+info:
+  title: Orders Events
+  version: "1.0"
+channels:
+  order/created:
+    publish:
+      summary: inform about a new order
+      operationId: onOrderCreated
+    subscribe:
+      summary: emit when order is created
+  order/cancelled:
+    subscribe:
+      summary: emit when order is cancelled
+components:
+  messages:
+    OrderCreated:
+      payload:
+        type: object
+        properties:
+          id:
+            type: string
+'''
+
+# AsyncAPI 3.x YAML: индикатор `asyncapi: 3.0.0`, операции вынесены в top-level `operations`.
+# channels в 3.x НЕ несут publish/subscribe (адрес + messages) → 2.x-ветка на них молчит.
+_ASYNCAPI_3_YAML = '''\
+asyncapi: "3.0.0"
+info:
+  title: Orders Events
+  version: "1.0"
+operations:
+  sendOrder:
+    action: send
+    channel:
+      $ref: '#/channels/orders'
+  receiveOrder:
+    action: receive
+    channel:
+      $ref: '#/channels/orders'
+channels:
+  orders:
+    address: order.events
+    messages:
+      OrderMessage:
+        $ref: '#/components/messages/OrderCreated'
+'''
+
+# AsyncAPI 3.x JSON: тот же контракт top-level operations, но в JSON — грузится json.loads.
+_ASYNCAPI_3_JSON = '''\
+{
+  "asyncapi": "3.0.0",
+  "info": { "title": "Billing Events", "version": "1.0" },
+  "operations": {
+    "publishInvoice": { "action": "send", "channel": { "$ref": "#/channels/invoices" } },
+    "consumeInvoice": { "action": "receive", "channel": { "$ref": "#/channels/invoices" } }
+  },
+  "channels": {
+    "invoices": { "address": "invoice.events" }
+  }
+}
+'''
+
+# Битый YAML с индикатором asyncapi — разбор падает, но скан не валится (возвращает пусто).
+_ASYNCAPI_BROKEN_YAML = '''\
+asyncapi: "2.0.0"
+channels:
+  order/created:
+    publish: [unbalanced
+'''

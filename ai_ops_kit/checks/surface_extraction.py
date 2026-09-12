@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / trpc_router / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router / laravel_routes / ktor_routing, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / trpc_router / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router / laravel_routes / ktor_routing / asyncapi_spec, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Sequence
 
 from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
+from ai_ops_kit.checks.surface_extractors.asyncapi_spec import extract_asyncapi_operations
 from ai_ops_kit.checks.surface_extractors.dotnet_aspnet import extract_aspnet_routes
 from ai_ops_kit.checks.surface_extractors.go_web import extract_go_web_routes
 from ai_ops_kit.checks.surface_extractors.graphql_api import extract_graphql_operations
@@ -149,6 +150,13 @@ _LARAVEL_PHP_SUFFIXES = frozenset({".php"})
 # (вложенность — балансом скобок). Метаданные реестра (к каким файлам применим экстрактор) держим у
 # сборки Extractor'ов, а разбор идёт по содержимому/индикатору (ktor_routing.py).
 _KTOR_KT_SUFFIXES = frozenset({".kt"})
+# AsyncAPI-спеки (api). Разбор СТРУКТУРНЫЙ по тексту .yaml/.yml/.json (yaml.safe_load / json.loads,
+# БЕЗ исполнения и сети) — событийные операции: пары канал+publish/subscribe (2.x) и top-level
+# `operations` (3.x). Те же расширения, что и у openapi-spec, ОЧЕНЬ распространены — потому экстрактор
+# сужен индикатором top-level `asyncapi:` в самом ПОДМОДУЛЕ (asyncapi_spec.py), а не расширением (это
+# разводит его и с OpenAPI, у которого индикатор `openapi:`/`swagger:`). Метаданные реестра (к каким
+# файлам применим экстрактор) держим у сборки Extractor'ов; сам разбор — по содержимому.
+_ASYNCAPI_SPEC_SUFFIXES = frozenset({".yaml", ".yml", ".json"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -376,6 +384,15 @@ KTOR_ROUTES = Extractor(
     needs_ast=False,
 )
 
+ASYNCAPI_OPERATIONS = Extractor(
+    id="asyncapi-spec",
+    suffixes=_ASYNCAPI_SPEC_SUFFIXES,
+    surface_kinds=("api",),
+    confidence="inferred",   # ЗАЯВЛЕННЫЙ контракт спеки (может расходиться с кодом) + структурный разбор ≠ AST
+    extract=extract_asyncapi_operations,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -401,6 +418,7 @@ DEFAULT_EXTRACTORS: tuple = (
     PHOENIX_ROUTES,
     LARAVEL_ROUTES,
     KTOR_ROUTES,
+    ASYNCAPI_OPERATIONS,
 )
 
 
