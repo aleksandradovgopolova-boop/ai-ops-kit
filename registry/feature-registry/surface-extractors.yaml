@@ -337,6 +337,40 @@ extractors:
         рефлексией-собранные маршруты; HTTP-метод gorilla из .Methods(...) (берётся путь, не метод);
         стеки сверх перечисленных. Ничего из этого НЕ verified.
 
+  # E7 добавил СЕРВЕРНЫЕ Java-маршруты (вид route) Spring — первый JVM-стек. Честность силы та же, что
+  # у go_web (E6) / js_server (E4): Java разбирается ТЕКСТОМ/паттерном по исходнику (stdlib ast к Java
+  # неприменим), без вызова компилятора Java / JVM и без сети — это НЕ доказательный AST → confidence:
+  # inferred (в W4 НЕ блокирует). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/java_spring.py
+  # (extract_spring_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: spring-web
+    stack: {language: java, frameworks: [spring, spring-mvc, spring-boot]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .java без исполнения: method-аннотации `@GetMapping("/x")`,
+      `@PostMapping`, `@PutMapping`, `@DeleteMapping`, `@PatchMapping` и `@RequestMapping(...)`
+      (в т.ч. `@RequestMapping(value="/x", method=RequestMethod.GET)`); путь метода — строковый литерал,
+      позиционный (`"/x"`) или именованный `value=`/`path=`. Class-уровневый `@RequestMapping("/prefix")`
+      над `@RestController`/`@Controller`-классом задаёт ПРЕФИКС, который склеивается с путём метода
+      (оба литералы); сам префикс маршрутом не считается. Метод без литерального пути (`@PostMapping`,
+      `@GetMapping(produces=…)`) сводится к префиксу/корню. Берётся ТОЛЬКО в файле с индикатором Spring
+      (импорт `org.springframework.web.bind.annotation` ИЛИ `@RestController`/`@Controller`), чтобы
+      одноимённая чужая аннотация `@GetMapping` другого фреймворка не дала ложный маршрут. Регэксп по
+      паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        маршруты Spring MVC/Boot, объявленные method-аннотацией @*Mapping со строковым путём-литералом
+        (позиционным или value=/path=), склеенные с литеральным class-префиксом @RequestMapping того же
+        контроллера; file:line и путь как symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        путь/префикс НЕ-литерал — переменная, КОНСТАНТА (`@GetMapping(ORDERS_PATH)`, `value=BASE`),
+        склейка через `+`, шаблон — в кавычки не попадает → пропуск; class-уровневый @RequestMapping с
+        МАССИВОМ путей (`{"/a","/b"}`) и метод-аннотацию с массивом путей (виден 0, не разворачиваем);
+        кастомные мета-аннотации `@*Mapping` (составные @GetMapping-обёртки со своим именем);
+        функциональные роуты WebFlux `RouterFunction`/`route(...)`.route(...); глобальные префиксы из
+        конфигурации (server.servlet.context-path) и путь из `application.properties`/`.yml`
+        (`@GetMapping("${api.base}")`); класс без индикатора Spring. Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
