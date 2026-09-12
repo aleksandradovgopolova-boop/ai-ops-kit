@@ -304,6 +304,39 @@ extractors:
         next.config; middleware.ts; route.ext, не лежащий под app/; перехватывающие роуты `(.)`/`(..)`
         и иные конвенции App Router сверх route-групп/слотов. Ничего из этого НЕ verified.
 
+  # E6 добавил СЕРВЕРНЫЕ Go-маршруты (вид route) — первый не-Python/не-JS серверный стек. Честность
+  # силы та же, что у js_server (E4): Go разбирается ТЕКСТОМ/паттерном по исходнику (stdlib ast к Go
+  # неприменим), без вызова компилятора Go и без сети — это НЕ доказательный AST → confidence: inferred
+  # (в W4 НЕ блокирует). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/go_web.py
+  # (extract_go_web_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: go-web
+    stack: {language: go, frameworks: [net/http, gin, chi, echo, gorilla/mux]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .go без исполнения: вызовы `<ident>.<Verb>("/path", …)`, где
+      <Verb> — HTTP-глагол или монтирование: net/http `HandleFunc`/`Handle`; gin/echo заглавные
+      GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS и `Group("/prefix")`; chi CamelCase Get/Post/… и
+      `Route("/prefix")`/`Mount("/prefix")`; gorilla/mux `HandleFunc("/path").Methods("GET")` (метод из
+      цепочки НЕ читаем — берём путь). Путь — строковый литерал ("…" или raw `…`), начинается с "/", за
+      ним `,` или `)` (конкатенация/fmt.Sprintf/переменная/шаблон в кавычки не попадают → пропуск).
+      Берётся ТОЛЬКО в файле с индикатором Go-веба (импорт net/http / gin-gonic/gin / go-chi/chi /
+      labstack/echo / gorilla/mux), чтобы одноимённый чужой `.Get(...)`/`.HandleFunc(...)` не дал
+      ложный маршрут. Регэксп по паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        объявления маршрутов Go со СТРОКОВЫМ путём-литералом, начинающимся с "/" (http.HandleFunc,
+        r.GET/r.Get, e.GET, gorilla r.HandleFunc(...).Methods(...)), а также литеральный путь групп
+        Group/Route/Mount как отдельный route, в файле, действительно импортирующем один из Go-веб-стеков.
+        Даёт file:line и сам путь как symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        middleware (r.Use и цепочки хендлеров); СКЛЕЙКУ префикса роут-группы (Group/Route/Mount) с
+        дочерними путями в полный URL — виден только объявленный литерал каждого сегмента, не собранный
+        рантаймом полный путь; роут-группы с ДИНАМИЧЕСКИМ (нелитеральным) префиксом; роутеры/пути через
+        переменную, конкатенацию, fmt.Sprintf или константу (не литерал — пропуск); генерируемые/
+        рефлексией-собранные маршруты; HTTP-метод gorilla из .Methods(...) (берётся путь, не метод);
+        стеки сверх перечисленных. Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним

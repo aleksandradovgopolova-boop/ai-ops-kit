@@ -354,3 +354,102 @@ export const config = {
   clean: true,
 };
 '''
+
+
+# ─── Go серверные маршруты E6 (net/http / gin / chi / echo / gorilla, вид route) ──────────────────
+
+# net/http: HandleFunc/Handle с литеральным путём. mux — *http.ServeMux, тот же .HandleFunc.
+_GO_NET_HTTP = '''\
+package main
+
+import (
+	"net/http"
+)
+
+func main() {
+	http.HandleFunc("/health", healthHandler)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/users", usersHandler)
+	http.Handle("/static", fileServer)
+
+	path := computePath()
+	http.HandleFunc(path, dynamicHandler)                 // путь-переменная → НЕ маршрут
+	http.HandleFunc("/v1"+version, versionedHandler)      // конкатенация → НЕ маршрут
+}
+'''
+
+# gin: заглавные глаголы + Group("/prefix").
+_GO_GIN = '''\
+package main
+
+import "github.com/gin-gonic/gin"
+
+func main() {
+	r := gin.Default()
+	r.GET("/ping", pingHandler)
+	r.POST("/users", createUser)
+	r.PUT("/users/:id", updateUser)
+	r.DELETE("/users/:id", deleteUser)
+	r.PATCH("/users/:id", patchUser)
+	admin := r.Group("/admin")
+	admin.GET("/stats", statsHandler)
+
+	r.GET(dynamicRoute, h)                                // переменная → НЕ маршрут
+}
+'''
+
+# chi: CamelCase-глаголы + Route("/prefix", …) / Mount(...).
+_GO_CHI = '''\
+package main
+
+import "github.com/go-chi/chi/v5"
+
+func main() {
+	r := chi.NewRouter()
+	r.Get("/articles", listArticles)
+	r.Post("/articles", createArticle)
+	r.Route("/admin", func(r chi.Router) {
+		r.Get("/dashboard", dashboard)
+	})
+	r.Mount("/api", apiRouter())
+}
+'''
+
+# echo: те же заглавные глаголы, что и gin.
+_GO_ECHO = '''\
+package main
+
+import "github.com/labstack/echo/v4"
+
+func main() {
+	e := echo.New()
+	e.GET("/products", listProducts)
+	e.POST("/orders", createOrder)
+}
+'''
+
+# gorilla/mux: HandleFunc(...).Methods("GET") — метод из цепочки НЕ читаем, берём путь.
+_GO_GORILLA = '''\
+package main
+
+import "github.com/gorilla/mux"
+
+func main() {
+	r := mux.NewRouter()
+	r.HandleFunc("/products/{id}", productHandler).Methods("GET")
+	r.HandleFunc("/checkout", checkoutHandler).Methods("POST")
+}
+'''
+
+# Тот же .Get/.HandleFunc, но БЕЗ импорта Go-веба — не должен дать ложный маршрут.
+_GO_FOREIGN = '''\
+package main
+
+import "example.com/internal/cache"
+
+func main() {
+	c := cache.New()
+	c.Get("/not-a-route")
+	registry.HandleFunc("/topic", nil)
+}
+'''
