@@ -1151,3 +1151,106 @@ class Router
 $router = new Router();
 $router->get('/not-a-route');
 '''
+
+
+# ─── Ktor серверные маршруты E15 (Kotlin DSL `routing { … }`, вид `route`, ТЕКСТОВЫЙ разбор .kt) ──
+
+# Полный routing-блок: method-вызовы get/post с литеральным путём, блок route("/users") с вложенным
+# bare get (= сам префикс) и get("/{id}"), ВЛОЖЕННЫЙ route (склейка префиксов), обёртка authenticate
+# (её семантику не осмысляем — вложенный метод виден как обычный маршрут). Ловушки: путь-переменная,
+# интерполяция `$…`, закомментированный get.
+_KTOR_ROUTING = '''\
+package com.example
+
+import io.ktor.server.application.*
+import io.ktor.server.routing.*
+
+fun Application.module() {
+    routing {
+        get("/health") { call.respondText("ok") }
+        post("/login") { call.respond(HttpStatusCode.OK) }
+
+        route("/users") {
+            get { call.respond(users) }
+            get("/{id}") { call.respond(user) }
+            post("/{id}/activate") { call.respond() }
+
+            route("/{id}/posts") {
+                get { call.respond(posts) }
+            }
+        }
+
+        authenticate("auth-jwt") {
+            get("/me") { call.respond(me) }
+        }
+
+        get(dynamicPath) { call.respond() }          // путь-переменная -> пропуск
+        get("/search/$query") { call.respond() }     // интерполяция -> пропуск
+        // get("/commented-out") { }                 -> комментарий, не маршрут
+    }
+}
+'''
+
+# Extension-функция `fun Route.…()` БЕЗ обёртки routing { } — экстрактор сканирует весь файл (индикатор
+# io.ktor), а не только тело routing. Проверяет вложенные методы блока route и глагол delete.
+_KTOR_ROUTE_EXTENSION = '''\
+package com.example.routes
+
+import io.ktor.server.routing.*
+
+fun Route.orderRoutes() {
+    route("/orders") {
+        get { call.respond(orders) }
+        post { call.respond() }
+        delete("/{id}") { call.respond() }
+    }
+}
+'''
+
+# Индикатор — `install(Routing)` (не routing {}); сырой тройной строковый литерал как путь.
+_KTOR_INSTALL_INDICATOR = '''\
+package com.example
+
+fun Application.module() {
+    install(Routing) {
+        get("""/raw/path""") { call.respond() }
+    }
+}
+'''
+
+# Путь-НЕ-литерал во всех формах: блок route с ПЕРЕМЕННЫМ префиксом (вложенные пути неразрешимы →
+# пропуск), путь-переменная, интерполяция. Файл — валидный Ktor (импорт есть), но литеральным путём
+# обладает только patch("/plain").
+_KTOR_DYNAMIC = '''\
+package com.example
+
+import io.ktor.server.routing.*
+
+fun Application.module() {
+    routing {
+        route(basePrefix) {
+            get("/inside") { call.respond() }
+        }
+        get(pathVar) { call.respond() }
+        put("/v/$version") { call.respond() }
+        patch("/plain") { call.respond() }
+    }
+}
+'''
+
+# .kt БЕЗ индикатора Ktor (нет io.ktor / routing / install(Routing)) — чужой `.get(...)` (член объекта)
+# не должен дать ложный маршрут.
+_KTOR_FOREIGN = '''\
+package com.example.util
+
+class Cache {
+    fun get(key: String) = store[key]
+}
+
+fun demo() {
+    val cache = Cache()
+    cache.get("/not-a-route")
+    val handlers = mutableMapOf<String, Any>()
+    handlers.get("/topic")
+}
+'''

@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router / laravel_routes, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router / laravel_routes / ktor_routing, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -51,6 +51,7 @@ from ai_ops_kit.checks.surface_extractors.js_ui import (
     extract_react_router_screens,
     extract_vue_router_screens,
 )
+from ai_ops_kit.checks.surface_extractors.ktor_routing import extract_ktor_routes
 from ai_ops_kit.checks.surface_extractors.openapi_spec import extract_openapi_routes
 from ai_ops_kit.checks.surface_extractors.phoenix_router import extract_phoenix_routes
 from ai_ops_kit.checks.surface_extractors.python_cli import (
@@ -137,6 +138,11 @@ _PHOENIX_EX_SUFFIXES = frozenset({".ex"})
 # реестра (к каким файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по
 # содержимому/индикатору (laravel_routes.py).
 _LARAVEL_PHP_SUFFIXES = frozenset({".php"})
+# Серверные Ktor-бэкенды (route). Разбор ТЕКСТОМ по .kt (stdlib ast к Kotlin неприменим) — DSL
+# `routing { … }`: method-вызовы get/post/… с литеральным путём + блоки `route("/prefix") { … }`
+# (вложенность — балансом скобок). Метаданные реестра (к каким файлам применим экстрактор) держим у
+# сборки Extractor'ов, а разбор идёт по содержимому/индикатору (ktor_routing.py).
+_KTOR_KT_SUFFIXES = frozenset({".kt"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -346,6 +352,15 @@ LARAVEL_ROUTES = Extractor(
     needs_ast=False,
 )
 
+KTOR_ROUTES = Extractor(
+    id="ktor-routing",
+    suffixes=_KTOR_KT_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый разбор Kotlin-DSL — эвристика паттерна, не доказательный AST
+    extract=extract_ktor_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -369,6 +384,7 @@ DEFAULT_EXTRACTORS: tuple = (
     OPENAPI_ROUTES,
     PHOENIX_ROUTES,
     LARAVEL_ROUTES,
+    KTOR_ROUTES,
 )
 
 
