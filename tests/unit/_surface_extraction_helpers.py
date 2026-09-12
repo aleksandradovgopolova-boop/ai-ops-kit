@@ -876,6 +876,73 @@ service EchoService {
 }
 '''
 
+# ─── tRPC-роутер операции E16 (вид `api`, ТЕКСТОВЫЙ разбор .ts) ───────────────────────────────────
+
+# Полный роутер: query/mutation/subscription-процедуры + обычное поле (meta, НЕ процедура) + вложенный
+# роутер (orders → namespace orders.*). Комментарии `//`/`/* */` и строки НЕ должны давать ложных
+# процедур (строка содержит текст ".query(" — маскируется).
+_TRPC_ROUTER = '''\
+import { initTRPC } from "@trpc/server";
+import { z } from "zod";
+
+const t = initTRPC.create();
+export const publicProcedure = t.procedure;
+
+export const appRouter = t.router({
+  // list all orders
+  getOrders: publicProcedure.query(() => {
+    return [];
+  }),
+  createOrder: publicProcedure
+    .input(z.object({ sku: z.string() }))
+    .mutation(({ input }) => {
+      return { id: 1, note: "call .query( in a string is not a procedure" };
+    }),
+  onOrderUpdate: publicProcedure.subscription(() => {
+    return observable(() => {});
+  }),
+  meta: { description: "not a procedure", router: true },
+  orders: t.router({
+    list: publicProcedure.query(() => []),
+    remove: publicProcedure.mutation(() => ({})),
+  }),
+});
+'''
+
+# createTRPCRouter + строковый литеральный ключ ("with-dash") + вычисляемый ключ (пропуск).
+_TRPC_CREATE_ROUTER = '''\
+import { createTRPCRouter, publicProcedure } from "~/server/api/trpc";
+
+const DYN = "runtime";
+
+export const catRouter = createTRPCRouter({
+  getAll: publicProcedure.query(() => []),
+  "with-dash": publicProcedure.mutation(() => ({})),
+  [DYN]: publicProcedure.query(() => null),
+});
+'''
+
+# Битый .ts: незакрытый объект роутера (нет `}`) — не валит скан и не даёт фантомной операции.
+_TRPC_BROKEN = '''\
+import { createTRPCRouter, publicProcedure } from "@trpc/server";
+
+export const ghostRouter = createTRPCRouter({
+  vanish: publicProcedure.query(() => []),
+'''
+
+# .ts БЕЗ индикатора tRPC, но с полем `router` и вызовом `.query()` — чужой файл, не должен дать операций.
+_TRPC_FOREIGN = '''\
+import { useRouter } from "next/router";
+
+export function useData() {
+  const router = useRouter();
+  const rows = db.select().query();
+  const config = { path: "/home", query: "SELECT 1" };
+  return { router, rows, config };
+}
+'''
+
+
 # ─── OpenAPI/Swagger спеки E12 (вид `route`, СТРУКТУРНЫЙ разбор .yaml/.yml/.json) ─────────────────
 
 def _openapi_ops(surfaces, extractor):
