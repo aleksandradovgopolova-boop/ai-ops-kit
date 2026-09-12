@@ -41,6 +41,7 @@ from ai_ops_kit.checks.surface_extractors.js_server import (
     extract_next_routes,
 )
 from ai_ops_kit.checks.surface_extractors.js_ui import (
+    extract_angular_router_screens,
     extract_react_router_screens,
     extract_vue_router_screens,
 )
@@ -74,6 +75,10 @@ _SKIP_DIRS = frozenset({
 # Extractor'ов, а не в js_ui.py (там разбор идёт по содержимому, не по расширению).
 _SCREEN_JS_SUFFIXES = frozenset({".jsx", ".tsx", ".js", ".ts"})
 _SCREEN_VUE_SUFFIXES = frozenset({".vue", ".js", ".ts"})
+# Angular объявляет маршруты-экраны в TypeScript (const routes: Routes / RouterModule.forRoot) —
+# исходник это .ts (не .tsx/.js: Angular-роутинг живёт в TS-модулях). Метаданные реестра (к каким
+# файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому (js_ui.py).
+_SCREEN_ANGULAR_SUFFIXES = frozenset({".ts"})
 # Серверные JS/TS-бэкенды (route). Express — обычный JS/TS; Nest — TS-декораторы (+ .tsx); Next —
 # файловый роутинг по .js/.ts/.jsx/.tsx. Это МЕТАДАННЫЕ реестра (к каким файлам применим экстрактор),
 # потому живут у сборки Extractor'ов, а разбор идёт по содержимому/раскладке (js_server.py).
@@ -172,6 +177,15 @@ VUE_ROUTER_SCREENS = Extractor(
     needs_ast=False,
 )
 
+ANGULAR_ROUTER_SCREENS = Extractor(
+    id="angular-router",
+    suffixes=_SCREEN_ANGULAR_SUFFIXES,
+    surface_kinds=("screen",),
+    confidence="inferred",   # текстовый TS-разбор — эвристика паттерна, не доказательный AST
+    extract=extract_angular_router_screens,
+    needs_ast=False,
+)
+
 EXPRESS_ROUTES = Extractor(
     id="express",
     suffixes=_SERVER_JS_SUFFIXES,
@@ -209,6 +223,7 @@ DEFAULT_EXTRACTORS: tuple = (
     AIOHTTP_ROUTES,
     REACT_ROUTER_SCREENS,
     VUE_ROUTER_SCREENS,
+    ANGULAR_ROUTER_SCREENS,
     EXPRESS_ROUTES,
     NEST_ROUTES,
     NEXT_ROUTES,

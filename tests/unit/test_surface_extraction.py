@@ -733,3 +733,125 @@ def test_js_server_records_conform_to_surface_schema(tmp_path):
         _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
         assert errors == [], f"запись не по схеме: {errors}"
         assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E5: экраны Angular Router (вид `screen`, ТЕКСТОВЫЙ разбор TypeScript) ─────────────────────────
+# Angular-роутинг живёт в TS (stdlib ast к TS неприменим) → confidence: inferred, как react/vue.
+# Angular объявляет путь обычно БЕЗ ведущего "/" (`path: 'billing'`) — нормализуем к "/billing".
+
+_ANGULAR_MODULE = '''\
+import { NgModule } from "@angular/core";
+import { RouterModule, Routes } from "@angular/router";
+
+const routes: Routes = [
+  { path: "billing", component: BillingComponent },
+  { path: "users/:id", component: UserComponent },
+  { path: "", redirectTo: "billing", pathMatch: "full" },
+  { path: "**", component: NotFoundComponent },
+];
+
+@NgModule({
+  imports: [RouterModule.forRoot(routes)],
+})
+export class AppRoutingModule {}
+'''
+
+# forChild + путь уже с ведущим "/" — нормализация не должна его удвоить.
+_ANGULAR_FEATURE = '''\
+import { RouterModule } from "@angular/router";
+
+@NgModule({
+  imports: [
+    RouterModule.forChild([
+      { path: "/reports", component: ReportsComponent },
+    ]),
+  ],
+})
+export class ReportsModule {}
+'''
+
+# path из ПЕРЕМЕННОЙ / шаблон-строки — не литерал → screen быть НЕ должно (файл — Angular).
+_ANGULAR_DYNAMIC = '''\
+import { Routes } from "@angular/router";
+const base = "settings";
+const routes: Routes = [
+  { path: base },                 // переменная
+  { path: `${base}/profile` },    // шаблон-строка
+];
+'''
+
+# Объект с ключом `path:` в TS-файле БЕЗ индикатора Angular — не должен дать ложный экран.
+_ANGULAR_NOT_A_ROUTER = '''\
+export const config = {
+  path: "dist/output",   // это НЕ Angular-роутер: индикатора в файле нет
+  clean: true,
+};
+'''
+
+
+def test_angular_router_screens_are_inferred(tmp_path):
+    _write(tmp_path, "app/app-routing.module.ts", _ANGULAR_MODULE)
+    _write(tmp_path, "app/reports/reports.module.ts", _ANGULAR_FEATURE)
+    surfaces = extract_surfaces(tmp_path)
+    paths = _screen_paths(surfaces, "angular-router")
+    # Литеральные пути нормализуются к ведущему "/"; динамический сегмент :id как литерал сохранён.
+    assert {"/billing", "/users/:id", "/reports"} <= paths
+    # Пустой путь (дефолт/редирект) и wildcard "**" конкретным экраном не считаются.
+    assert not any(p in ("", "/", "/**", "**") for p in paths)
+    for s in surfaces:
+        if s["extractor"] == "angular-router":
+            assert s["kind"] == "screen"
+            assert s["confidence"] == "inferred"   # текстовый TS-разбор НИКОГДА не verified
+
+
+def test_angular_paths_from_variables_or_templates_are_skipped(tmp_path):
+    """Путь-НЕ-литерал (переменная, шаблон-строка) экраном не становится и уж точно не verified."""
+    _write(tmp_path, "app/dyn-routing.module.ts", _ANGULAR_DYNAMIC)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "angular-router"] == []
+
+
+def test_angular_needs_router_indicator(tmp_path):
+    """`path:` в TS-файле без индикатора Angular (@angular/router / RouterModule / : Routes) → не экран."""
+    _write(tmp_path, "config/webpack.config.ts", _ANGULAR_NOT_A_ROUTER)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "angular-router"] == []
+
+
+def test_angular_isolated_from_broken_frontend(tmp_path):
+    """Битый/непарсибельный TS-файл не валит прогон — регэксп не разбирает грамматику."""
+    _write(tmp_path, "app/app-routing.module.ts", _ANGULAR_MODULE)
+    _write(tmp_path, "app/broken.ts", "const routes: Routes = [ { path: \n{{{ ((( \n")
+    surfaces = extract_surfaces(tmp_path)
+    assert "/billing" in _screen_paths(surfaces, "angular-router")
+
+
+def test_angular_does_not_disturb_other_stacks(tmp_path):
+    """Angular-экстрактор не трогает питон-route/cli и react/vue-экраны."""
+    _write(tmp_path, "app/routes.py", _FLASK)
+    _write(tmp_path, "app/cli.py", _ARGPARSE)
+    _write(tmp_path, "web/App.jsx", _REACT_JSX)
+    _write(tmp_path, "app/app-routing.module.ts", _ANGULAR_MODULE)
+    surfaces = extract_surfaces(tmp_path)
+    # Питон-route остаётся verified; react-screen inferred; angular-screen добавился отдельным extractor.
+    assert any(s["confidence"] == "verified" and s["extractor"] == "python-web-routes"
+               for s in surfaces)
+    assert "/billing" in _screen_paths(surfaces, "react-router")
+    assert "/billing" in _screen_paths(surfaces, "angular-router")
+    # React-объектный экстрактор не должен схватить Angular-файл (нет его индикаторов роутера).
+    assert not any(s["extractor"] == "react-router" and s["ref"].startswith("app/app-routing")
+                   for s in surfaces)
+
+
+def test_angular_records_conform_to_surface_schema(tmp_path):
+    """Записи angular-router валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "app/app-routing.module.ts", _ANGULAR_MODULE)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "angular-router"]
+    assert surfaces
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
