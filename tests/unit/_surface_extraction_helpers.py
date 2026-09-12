@@ -34,6 +34,11 @@ def _route_paths(surfaces, extractor):
             for s in surfaces if s["kind"] == "route" and s["extractor"] == extractor}
 
 
+def _api_ops(surfaces, extractor):
+    return {s["ref"].split("|", 1)[1]
+            for s in surfaces if s["kind"] == "api" and s["extractor"] == extractor}
+
+
 # ─── Python web (route) ──────────────────────────────────────────────────────────────────────────
 
 _FLASK = '''\
@@ -536,5 +541,92 @@ public class NotSpring {
 
     @GetMapping("/ghost")
     public Object phantom() { return null; }
+}
+'''
+
+
+# ─── GraphQL SDL операции E8 (вид `api`) ─────────────────────────────────────────────────────────
+
+# Полная схема: корневые Query/Mutation/Subscription + extend Query — их поля суть операции API.
+# Обычный `type Order`, `input`, `enum` — модель данных, НЕ операции. Комментарии `#` и описания
+# (`"""…"""`, `"…"`, дефолт-строка аргумента) НЕ должны давать ложных полей.
+_GRAPHQL_SCHEMA = '''\
+# Product API schema
+"""Root query operations."""
+type Query {
+  # list all orders
+  orders: [Order!]!
+  order(id: ID!): Order
+  "single-line description"
+  search(q: String = "default"): [Order]
+}
+
+type Mutation {
+  createOrder(input: CreateOrderInput!): Order
+  deleteOrder(id: ID!): Boolean
+}
+
+type Subscription {
+  orderUpdated(id: ID!): Order
+}
+
+extend type Query {
+  health: String
+}
+
+type Order {
+  id: ID!
+  total: Float
+  # this field is NOT an operation
+  status: String
+}
+
+input CreateOrderInput {
+  sku: String!
+  qty: Int
+}
+
+enum OrderStatus {
+  PENDING
+  SHIPPED
+}
+'''
+
+# Комментарий и docstring внутри корневого блока не должны породить ложное поле.
+_GRAPHQL_COMMENTS = '''\
+type Query {
+  """
+  fakeField: String   # это ВНУТРИ docstring — не операция
+  """
+  # commentedOut: Boolean — это комментарий, не операция
+  realField: String
+}
+'''
+
+# Только модели данных, ни одного корневого типа → операций нет.
+_GRAPHQL_MODELS_ONLY = '''\
+type Order {
+  id: ID!
+  items: [Item]
+}
+
+type Item {
+  name: String
+}
+'''
+
+# Клиентский operation-документ (query/mutation ...), а НЕ схема: нет `type Query` → операций нет.
+_GRAPHQL_CLIENT_DOC = '''\
+# client operation document, not a schema
+query GetOrders {
+  orders {
+    id
+  }
+}
+
+mutation CreateOne($input: CreateOrderInput!) {
+  createOrder(input: $input) {
+    id
+  }
 }
 '''

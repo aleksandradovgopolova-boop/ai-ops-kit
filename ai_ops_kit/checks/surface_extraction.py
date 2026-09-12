@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -36,6 +36,7 @@ from typing import Callable, Iterator, Sequence
 
 from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
 from ai_ops_kit.checks.surface_extractors.go_web import extract_go_web_routes
+from ai_ops_kit.checks.surface_extractors.graphql_api import extract_graphql_operations
 from ai_ops_kit.checks.surface_extractors.java_spring import extract_spring_routes
 from ai_ops_kit.checks.surface_extractors.js_server import (
     extract_express_routes,
@@ -96,6 +97,10 @@ _SERVER_GO_SUFFIXES = frozenset({".go"})
 # Метаданные реестра (к каким файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт
 # по содержимому/аннотациям (java_spring.py).
 _SERVER_JAVA_SUFFIXES = frozenset({".java"})
+# GraphQL-схемы (SDL, вид api). Разбор ТЕКСТОМ по .graphql/.gql (не GraphQL-парсер, без исполнения) —
+# поля корневых типов Query/Mutation/Subscription (+ extend). Метаданные реестра (к каким файлам
+# применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому (graphql_api.py).
+_GRAPHQL_SDL_SUFFIXES = frozenset({".graphql", ".gql"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -242,6 +247,15 @@ SPRING_ROUTES = Extractor(
     needs_ast=False,
 )
 
+GRAPHQL_OPERATIONS = Extractor(
+    id="graphql-schema",
+    suffixes=_GRAPHQL_SDL_SUFFIXES,
+    surface_kinds=("api",),
+    confidence="inferred",   # текстовый разбор SDL — не полноценный GraphQL-парсер/AST
+    extract=extract_graphql_operations,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -258,6 +272,7 @@ DEFAULT_EXTRACTORS: tuple = (
     NEXT_ROUTES,
     GO_WEB_ROUTES,
     SPRING_ROUTES,
+    GRAPHQL_OPERATIONS,
 )
 
 
