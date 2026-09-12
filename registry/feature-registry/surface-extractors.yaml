@@ -371,6 +371,39 @@ extractors:
         конфигурации (server.servlet.context-path) и путь из `application.properties`/`.yml`
         (`@GetMapping("${api.base}")`); класс без индикатора Spring. Ничего из этого НЕ verified.
 
+  # E8 добавил ПЕРВЫЙ вид поверхности `api` — операции продукта из GraphQL-схемы (SDL). Честность
+  # силы та же, что у go_web (E6) / spring-web (E7) / js_server (E4): SDL — формальная грамматика, но
+  # разбирается ТЕКСТОМ/паттерном по исходнику (не полноценным GraphQL-парсером, без исполнения,
+  # интроспекции и сети) → это НЕ доказательный AST того же класса, что Python-AST → confidence:
+  # inferred (в W4 НЕ блокирует). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/graphql_api.py (extract_graphql_operations),
+  # зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: graphql-schema
+    stack: {language: graphql, frameworks: [graphql-sdl]}
+    surface_kinds: [api]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не GraphQL-парсер) разбор файлов .graphql/.gql без исполнения: поля КОРНЕВЫХ типов
+      `type Query { … }`, `type Mutation { … }`, `type Subscription { … }` и их расширений
+      `extend type Query { … }` — каждое поле корневого типа есть операция API продукта (имя операции
+      = имя поля). Обычный `type Order { … }` — модель данных, его поля НЕ операции. Комментарии `#…`
+      и описания-строки (`\"\"\"docstring\"\"\"`, `"…"`, дефолтные строковые значения аргументов)
+      маскируются пробелами (позиции/номера строк сохраняются) — ложных полей не дают. Тело блока
+      берётся балансировкой `{…}`; незакрытый блок (обрыв файла) пропускается. Регэксп/скан по
+      паттерну — не грамматический парсер → confidence: inferred. ref = "file:line|<operation>".
+    honest_limits:
+      sees: >-
+        операции GraphQL, объявленные полями корневых типов Query/Mutation/Subscription (и их extend)
+        прямо в SDL-файле .graphql/.gql, включая поля с аргументами (`order(id: ID!): Order`) и
+        директивами; даёт file:line и имя операции как symbol, помечает inferred (не блокирует).
+      does_not_see: >-
+        схемы, заданные SDL-строками В КОДЕ (gql`…`/graphql-tag в .js/.ts) — иной носитель, не .graphql;
+        code-first схемы (Nexus/TypeGraphQL/Strawberry — операции заданы декораторами/классами, не SDL);
+        интроспекцию рантайма; переименование корневых типов через `schema { query: MyQuery }` (берём
+        только конвенциональные имена Query/Mutation/Subscription); директивы схемы как таковые;
+        ОБЪЕДИНЁННУЮ схему federation на уровне рантайма (видны только per-file `extend type`), и поля
+        НЕ-корневых типов (модели данных). Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним

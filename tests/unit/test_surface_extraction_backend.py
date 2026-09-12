@@ -4,10 +4,12 @@
 Здесь живут route-экстракторы серверных стеков, разбираемых ТЕКСТОМ/паттерном (stdlib ast к ним
 неприменим) → confidence по умолчанию `inferred`, а НЕ `verified` (честность силы = честность
 confidence):
-  * Go (E6) — net/http / gin / chi / echo / gorilla/mux.
-  * Java Spring (E7) — @GetMapping/@PostMapping/…/@RequestMapping + class-префикс контроллера.
-Позже сюда же добавятся GraphQL и прочие серверные стеки (один файл на «бэкенд-не-JS», чтобы парные
-тест-файлы не раздувались — сторож мега-файла).
+  * Go (E6) — net/http / gin / chi / echo / gorilla/mux (вид route).
+  * Java Spring (E7) — @GetMapping/@PostMapping/…/@RequestMapping + class-префикс (вид route).
+  * GraphQL SDL (E8) — операции из полей корневых типов Query/Mutation/Subscription (вид `api`, НЕ
+    route: первый экстрактор вида api).
+Позже сюда же добавятся прочие серверные стеки (один файл на «бэкенд-не-JS», чтобы парные тест-файлы
+не раздувались — сторож мега-файла).
 
 JS/TS-бэкенд (Express/Nest/Next) — в `test_surface_extraction_js.py`; кросс-стековые инварианты
 контракта — в ядре `test_surface_extraction.py`. Общие хелперы и исходники-фикстуры — в
@@ -30,10 +32,15 @@ from _surface_extraction_helpers import (
     _GO_GIN,
     _GO_GORILLA,
     _GO_NET_HTTP,
+    _GRAPHQL_CLIENT_DOC,
+    _GRAPHQL_COMMENTS,
+    _GRAPHQL_MODELS_ONLY,
+    _GRAPHQL_SCHEMA,
     _SPRING_DYNAMIC,
     _SPRING_FOREIGN,
     _SPRING_PLAIN_CONTROLLER,
     _SPRING_REST_CONTROLLER,
+    _api_ops,
     _route_paths,
     _write,
 )
@@ -217,6 +224,94 @@ def test_spring_records_conform_to_surface_schema(tmp_path):
     schema = load_schema(DEFAULT_SCHEMA)
     sspec = schema["surface"]
     surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "spring-web"]
+    assert surfaces
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E8: операции GraphQL из SDL (вид `api`, ТЕКСТОВЫЙ разбор .graphql/.gql) ────────────────────────
+# SDL разбирается текстом/паттерном (не полноценный GraphQL-парсер) → confidence по умолчанию
+# inferred, НЕ verified (честность силы = честность confidence, как у go_web E6 / spring-web E7).
+
+def test_graphql_root_type_fields_are_api_operations_inferred(tmp_path):
+    _write(tmp_path, "schema/api.graphql", _GRAPHQL_SCHEMA)
+    surfaces = extract_surfaces(tmp_path)
+    ops = _api_ops(surfaces, "graphql-schema")
+    # Поля Query/Mutation/Subscription + extend Query — все операции продукта.
+    assert {"orders", "order", "search", "createOrder", "deleteOrder",
+            "orderUpdated", "health"} <= ops
+    for s in surfaces:
+        if s["extractor"] == "graphql-schema":
+            assert s["kind"] == "api"
+            assert s["confidence"] == "inferred"   # текстовый разбор SDL НИКОГДА не verified
+            assert s["ref"].startswith("schema/api.graphql:")
+
+
+def test_graphql_extend_root_type_is_included(tmp_path):
+    _write(tmp_path, "schema/api.gql", _GRAPHQL_SCHEMA)
+    ops = _api_ops(extract_surfaces(tmp_path), "graphql-schema")
+    assert "health" in ops   # объявлено через `extend type Query { health: String }`
+
+
+def test_graphql_non_root_types_are_not_operations(tmp_path):
+    """Поля обычных type/input/enum (модель данных) НЕ операции; корневых типов нет → пусто."""
+    _write(tmp_path, "schema/models.graphql", _GRAPHQL_MODELS_ONLY)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "graphql-schema"] == []
+
+
+def test_graphql_data_model_fields_excluded_from_full_schema(tmp_path):
+    """В полной схеме поля `type Order`/input/enum не попадают в операции (только корневые типы)."""
+    _write(tmp_path, "schema/api.graphql", _GRAPHQL_SCHEMA)
+    ops = _api_ops(extract_surfaces(tmp_path), "graphql-schema")
+    # id/total/status (type Order), sku/qty (input), PENDING/SHIPPED (enum) — не операции.
+    assert ops.isdisjoint({"id", "total", "status", "sku", "qty", "PENDING", "SHIPPED"})
+
+
+def test_graphql_comments_and_docstrings_give_no_false_operations(tmp_path):
+    """Текст в `#`-комментарии и `\"\"\"docstring\"\"\"` не должен дать ложное поле."""
+    _write(tmp_path, "schema/api.graphql", _GRAPHQL_COMMENTS)
+    ops = _api_ops(extract_surfaces(tmp_path), "graphql-schema")
+    assert ops == {"realField"}
+    assert "fakeField" not in ops and "commentedOut" not in ops
+
+
+def test_graphql_client_operation_document_is_not_a_schema(tmp_path):
+    """Клиентский query/mutation-документ (нет `type Query`) не даёт операций схемы."""
+    _write(tmp_path, "ops/queries.graphql", _GRAPHQL_CLIENT_DOC)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "graphql-schema"] == []
+
+
+def test_graphql_isolated_from_broken_files(tmp_path):
+    """Битый .graphql (незакрытый блок) не валит прогон и не порождает фантомную операцию."""
+    _write(tmp_path, "schema/api.graphql", _GRAPHQL_SCHEMA)
+    _write(tmp_path, "schema/broken.graphql", "type Query {\n  ghost: String\n")  # нет `}`
+    ops = _api_ops(extract_surfaces(tmp_path), "graphql-schema")
+    assert "orders" in ops        # валидная схема разобрана
+    assert "ghost" not in ops     # незакрытый блок пропущен (пары `}` нет)
+
+
+def test_graphql_does_not_break_other_stacks(tmp_path):
+    """GraphQL-файл рядом с питон-маршрутом: python route остаётся verified, GraphQL — отдельный api."""
+    _write(tmp_path, "schema/api.graphql", _GRAPHQL_SCHEMA)
+    _write(tmp_path, "app.py",
+           "from flask import Flask\napp = Flask(__name__)\n\n\n@app.route('/py')\ndef p():\n    return ''\n")
+    surfaces = extract_surfaces(tmp_path)
+    assert any(s["extractor"] == "python-web-routes" and s["confidence"] == "verified"
+               for s in surfaces)
+    assert "orders" in _api_ops(surfaces, "graphql-schema")
+
+
+def test_graphql_records_conform_to_surface_schema(tmp_path):
+    """Записи graphql-schema валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "schema/api.graphql", _GRAPHQL_SCHEMA)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "graphql-schema"]
     assert surfaces
     for i, surf in enumerate(surfaces):
         errors: list = []
