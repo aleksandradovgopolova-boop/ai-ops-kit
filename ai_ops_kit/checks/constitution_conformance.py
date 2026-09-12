@@ -19,6 +19,7 @@
 from __future__ import annotations
 
 import ast
+import re
 from pathlib import Path
 
 import yaml
@@ -234,6 +235,152 @@ def _duplicates(root, files=None):
     return hits
 
 
+# ── продуктовые эвристики: читают АРТЕФАКТЫ дочки (не .py), советуют по Продуктовой конституции ────
+# Инвариант честности: флагуем только то, что реально ВИДИМ. Артефакта нет — молчим (unknown ≠
+# нарушение). Детерминированно, без сети и модели. Всё — advisory-рекомендации, как CODE-*.
+
+_PLACEHOLDER_MARKERS = ("todo", "tbd", "xxx", "<", "???", "n/a")
+
+
+def _is_blank_or_placeholder(val) -> bool:
+    """Пусто/отсутствует/плейсхолдер — значит секция не заполнена по-настоящему."""
+    if not isinstance(val, str):
+        return True                                      # None или не-строка = не заполнено
+    s = val.strip()
+    if not s:
+        return True
+    low = s.lower()
+    return any(m in low for m in _PLACEHOLDER_MARKERS)
+
+
+def _read_yaml(p: Path) -> dict:
+    """Безопасно прочитать yaml-артефакт. Битый/нечитаемый файл -> {} (молчим, не падаем)."""
+    try:
+        doc = yaml.safe_load(Path(p).read_text(encoding="utf-8"))
+    except (OSError, yaml.YAMLError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _feature_registry(root: Path) -> Path | None:
+    """Реестр фич дочки `registry/features.yaml`. Нет файла -> None (эвристика молчит)."""
+    p = Path(root) / "registry" / "features.yaml"
+    return p if p.is_file() else None
+
+
+def _feature_dirs(root: Path):
+    """Каталоги фич `features/<id>/` в корне дочки (examples/ и служебное не сканируем)."""
+    base = Path(root) / "features"
+    if not base.is_dir():
+        return
+    for d in sorted(base.iterdir()):
+        if d.is_dir() and d.name not in _SKIP_DIRS:
+            yield d
+
+
+def _spec_markdowns(feat_dir: Path) -> list[Path]:
+    """Markdown-спеки фичи: discovery/*.md, prd/*.md, definition/prd/*.md."""
+    out: list[Path] = []
+    for sub in ("discovery", "prd", "definition/prd"):
+        p = feat_dir / sub
+        if p.is_dir():
+            out.extend(sorted(p.glob("*.md")))
+    return out
+
+
+_OUT_OF_SCOPE_RE = re.compile(r"(?mi)^#{1,6}\s+out of scope\s*$")
+_MD_HEADING_RE = re.compile(r"^#{1,6}\s+")
+
+
+def _has_non_empty_out_of_scope(text: str) -> bool:
+    """Есть заголовок `## Out of scope` И под ним непустое тело до следующего заголовка."""
+    m = _OUT_OF_SCOPE_RE.search(text)
+    if not m:
+        return False
+    for line in text[m.end():].splitlines():
+        if _MD_HEADING_RE.match(line):
+            break
+        if line.strip():
+            return True
+    return False
+
+
+def _features_missing_audience(root, files=None):
+    """PROD-002: у фичи в реестре не назван who (для кого) или what (задача, JTBD)."""
+    reg = _feature_registry(root)
+    if reg is None:
+        return []                                        # реестра нет — молчим
+    hits = []
+    for feat in _read_yaml(reg).get("features") or []:
+        if not isinstance(feat, dict):
+            continue
+        where = feat.get("id") or feat.get("name") or "(фича без id)"
+        desc = feat.get("description")
+        desc = desc if isinstance(desc, dict) else {}
+        missing = []
+        if _is_blank_or_placeholder(desc.get("who")):
+            missing.append("не назван who (для кого)")
+        if _is_blank_or_placeholder(desc.get("what")):
+            missing.append("не названа задача (what)")
+        if missing:
+            hits.append({"where": str(where), "detail": "; ".join(missing)})
+    return hits
+
+
+def _specs_missing_non_goals(root, files=None):
+    """PROD-008: у фичи-спеки нет непустой секции `## Out of scope` ни в одном её markdown."""
+    hits = []
+    for d in _feature_dirs(root):
+        mds = _spec_markdowns(d)
+        if not mds:
+            continue                                     # это не спека — молчим по ней
+        try:
+            declared = any(_has_non_empty_out_of_scope(md.read_text(encoding="utf-8"))
+                           for md in mds)
+        except OSError:
+            declared = False
+        if not declared:
+            hits.append({"where": d.name, "detail": "non-goals не объявлены (## Out of scope)"})
+    return hits
+
+
+def _has_measured_readout(feat_dir: Path, blueprint: dict) -> bool:
+    """Рядом с фичей есть измеренный исход: валидный PRR с измеренным health ИЛИ артефакт
+    стадии retrospective/monitoring в blueprint.artifacts."""
+    for prr in sorted(feat_dir.rglob("PRR-*.yaml")):
+        doc = _read_yaml(prr)
+        if doc.get("kind") == "PostReleaseReadout":
+            band = (doc.get("product_health") or {}).get("band")
+            if band and band != "not_measured":
+                return True
+    artifacts = blueprint.get("artifacts")
+    if isinstance(artifacts, dict):
+        for stage in ("retrospective", "monitoring"):
+            items = artifacts.get(stage)
+            if isinstance(items, list) and items:
+                return True
+    return False
+
+
+def _released_features_without_readout(root, files=None):
+    """PROD-010: у выпущенной (status: released) фичи нет измеренного исхода рядом."""
+    hits = []
+    for d in _feature_dirs(root):
+        bp = d / "blueprint.yaml"
+        if not bp.is_file():
+            continue
+        blueprint = _read_yaml(bp)
+        feat = blueprint.get("feature")
+        feat = feat if isinstance(feat, dict) else {}
+        if feat.get("status") != "released":
+            continue                                     # не выпущена — молчим (не «released без readout»)
+        if _has_measured_readout(d, blueprint):
+            continue
+        hits.append({"where": str(feat.get("id") or d.name),
+                     "detail": "выпущена без измеренного исхода"})
+    return hits
+
+
 # article_id -> (эвристика, шаблон рекомендации владельцу)
 _HEURISTICS = {
     "CODE-001": (_long_functions,
@@ -247,6 +394,15 @@ _HEURISTICS = {
     "ARCH-006": (_long_modules,
                  "Крупный модуль обычно владеет слишком многим (нарушен SRP). Рассмотрите разрез по "
                  "ответственности на меньшие связные модули."),
+    "PROD-002": (_features_missing_audience,
+                 "Без «для кого» и какой задачи (JTBD) о ценности фичи судить нельзя. Назовите роль "
+                 "пользователя и задачу, которую фича ему решает."),
+    "PROD-008": (_specs_missing_non_goals,
+                 "Границы честнее, когда явно сказано, чего мы НЕ делаем. Добавьте в спеку фичи "
+                 "секцию «Out of scope» — что осознанно вне охвата."),
+    "PROD-010": (_released_features_without_readout,
+                 "Выпустили — измерьте исход. Добавьте post-release readout (или ретроспективу): "
+                 "без замера не узнать, окупилась ли ставка."),
 }
 
 
