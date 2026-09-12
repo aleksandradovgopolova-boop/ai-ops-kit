@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -36,6 +36,7 @@ from typing import Callable, Iterator, Sequence
 
 from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
 from ai_ops_kit.checks.surface_extractors.go_web import extract_go_web_routes
+from ai_ops_kit.checks.surface_extractors.java_spring import extract_spring_routes
 from ai_ops_kit.checks.surface_extractors.js_server import (
     extract_express_routes,
     extract_nest_routes,
@@ -90,6 +91,11 @@ _NEXT_JS_SUFFIXES = frozenset({".js", ".ts", ".jsx", ".tsx", ".mjs", ".cjs"})
 # chi, echo, gorilla/mux. Метаданные реестра (к каким файлам применим экстрактор) держим у сборки
 # Extractor'ов, а разбор идёт по содержимому/импортам (go_web.py).
 _SERVER_GO_SUFFIXES = frozenset({".go"})
+# Серверные Spring-бэкенды (route). Разбор ТЕКСТОМ по .java (stdlib ast к Java неприменим) —
+# аннотации @GetMapping/@PostMapping/…/@RequestMapping + class-префикс @RestController/@Controller.
+# Метаданные реестра (к каким файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт
+# по содержимому/аннотациям (java_spring.py).
+_SERVER_JAVA_SUFFIXES = frozenset({".java"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -227,6 +233,15 @@ GO_WEB_ROUTES = Extractor(
     needs_ast=False,
 )
 
+SPRING_ROUTES = Extractor(
+    id="spring-web",
+    suffixes=_SERVER_JAVA_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый разбор Java-аннотаций — эвристика паттерна, не доказательный AST
+    extract=extract_spring_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -242,6 +257,7 @@ DEFAULT_EXTRACTORS: tuple = (
     NEST_ROUTES,
     NEXT_ROUTES,
     GO_WEB_ROUTES,
+    SPRING_ROUTES,
 )
 
 

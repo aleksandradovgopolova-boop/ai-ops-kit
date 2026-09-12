@@ -5,8 +5,9 @@
 неприменим) → confidence по умолчанию `inferred`, а НЕ `verified` (честность силы = честность
 confidence):
   * Go (E6) — net/http / gin / chi / echo / gorilla/mux.
-Позже сюда же добавятся Spring / GraphQL и прочие серверные стеки (один файл на «бэкенд-не-JS»,
-чтобы парные тест-файлы не раздувались — сторож мега-файла).
+  * Java Spring (E7) — @GetMapping/@PostMapping/…/@RequestMapping + class-префикс контроллера.
+Позже сюда же добавятся GraphQL и прочие серверные стеки (один файл на «бэкенд-не-JS», чтобы парные
+тест-файлы не раздувались — сторож мега-файла).
 
 JS/TS-бэкенд (Express/Nest/Next) — в `test_surface_extraction_js.py`; кросс-стековые инварианты
 контракта — в ядре `test_surface_extraction.py`. Общие хелперы и исходники-фикстуры — в
@@ -29,6 +30,10 @@ from _surface_extraction_helpers import (
     _GO_GIN,
     _GO_GORILLA,
     _GO_NET_HTTP,
+    _SPRING_DYNAMIC,
+    _SPRING_FOREIGN,
+    _SPRING_PLAIN_CONTROLLER,
+    _SPRING_REST_CONTROLLER,
     _route_paths,
     _write,
 )
@@ -122,6 +127,96 @@ def test_go_records_conform_to_surface_schema(tmp_path):
     schema = load_schema(DEFAULT_SCHEMA)
     sspec = schema["surface"]
     surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "go-web"]
+    assert surfaces
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E7: серверные HTTP-маршруты Java Spring (вид `route`, ТЕКСТОВЫЙ разбор .java) ──────────────────
+# Java разбирается текстом/паттерном (stdlib ast к Java неприменим) → confidence по умолчанию inferred,
+# НЕ verified (честность силы = честность confidence, как у go_web E6 / js_server E4).
+
+def test_spring_getmapping_in_restcontroller_is_inferred(tmp_path):
+    _write(tmp_path, "src/UserController.java", _SPRING_REST_CONTROLLER)
+    surfaces = extract_surfaces(tmp_path)
+    paths = _route_paths(surfaces, "spring-web")
+    # @GetMapping("/{id}") склеен с class-@RequestMapping("/api/users").
+    assert "/api/users/{id}" in paths
+    for s in surfaces:
+        if s["extractor"] == "spring-web":
+            assert s["kind"] == "route"
+            assert s["confidence"] == "inferred"   # текстовый Java-разбор НИКОГДА не verified
+            assert s["ref"].startswith("src/UserController.java:")
+
+
+def test_spring_class_prefix_joins_with_method_path(tmp_path):
+    _write(tmp_path, "src/UserController.java", _SPRING_REST_CONTROLLER)
+    paths = _route_paths(extract_surfaces(tmp_path), "spring-web")
+    # @PostMapping без пути и @GetMapping(produces=) без пути сводятся к префиксу класса;
+    # @RequestMapping(value="/search", method=…) даёт литеральный путь под тем же префиксом.
+    assert {"/api/users/{id}", "/api/users", "/api/users/search"} <= paths
+
+
+def test_spring_requestmapping_value_literal_is_a_route(tmp_path):
+    _write(tmp_path, "src/UserController.java", _SPRING_REST_CONTROLLER)
+    paths = _route_paths(extract_surfaces(tmp_path), "spring-web")
+    assert "/api/users/search" in paths
+
+
+def test_spring_controller_without_class_prefix(tmp_path):
+    """@Controller без class-@RequestMapping: у методов свои пути, префикса нет."""
+    _write(tmp_path, "src/HomeController.java", _SPRING_PLAIN_CONTROLLER)
+    paths = _route_paths(extract_surfaces(tmp_path), "spring-web")
+    assert {"/ping", "/settings"} <= paths
+
+
+def test_spring_non_literal_paths_are_skipped(tmp_path):
+    """Путь-константа/переменная/массив маршрутом не становится и уж точно не verified."""
+    _write(tmp_path, "src/DynController.java", _SPRING_DYNAMIC)
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "spring-web"]
+    # ORDERS_PATH / value=ORDERS / {"/a","/b"} — все нелитеральные пути → ни одного маршрута.
+    assert surfaces == []
+
+
+def test_spring_needs_indicator(tmp_path):
+    """`@GetMapping(...)` в файле без индикатора Spring → никаких маршрутов."""
+    _write(tmp_path, "src/NotSpring.java", _SPRING_FOREIGN)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "spring-web"] == []
+
+
+def test_spring_isolated_from_broken_files(tmp_path):
+    """Битый/непарсибельный .java не валит прогон и не порождает фантомный маршрут из обрыва."""
+    _write(tmp_path, "src/UserController.java", _SPRING_REST_CONTROLLER)
+    _write(tmp_path, "src/Broken.java",
+           'package x;\nimport org.springframework.web.bind.annotation.*;\n'
+           '@RestController class B { @GetMapping("/b"\n')
+    paths = _route_paths(extract_surfaces(tmp_path), "spring-web")
+    assert "/api/users/{id}" in paths
+    assert "/" not in paths   # незакрытая `@GetMapping("/b"` — не маршрут (обрыв файла)
+
+
+def test_spring_does_not_break_other_stacks(tmp_path):
+    """Java-файл рядом с питон-маршрутом: python route остаётся verified, Spring — отдельный inferred."""
+    _write(tmp_path, "src/UserController.java", _SPRING_REST_CONTROLLER)
+    _write(tmp_path, "app.py",
+           "from flask import Flask\napp = Flask(__name__)\n\n\n@app.route('/py')\ndef p():\n    return ''\n")
+    surfaces = extract_surfaces(tmp_path)
+    assert any(s["extractor"] == "python-web-routes" and s["confidence"] == "verified"
+               for s in surfaces)
+    assert "/api/users/{id}" in _route_paths(surfaces, "spring-web")
+
+
+def test_spring_records_conform_to_surface_schema(tmp_path):
+    """Записи spring-web валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "src/UserController.java", _SPRING_REST_CONTROLLER)
+    _write(tmp_path, "src/HomeController.java", _SPRING_PLAIN_CONTROLLER)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "spring-web"]
     assert surfaces
     for i, surf in enumerate(surfaces):
         errors: list = []

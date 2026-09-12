@@ -73,7 +73,12 @@ ceilings:
   #   ai_ops_kit/checks/surface_extractors/go_web.py (экстрактор net/http/gin/chi/echo/gorilla, вид
   #   `route`) перевёл установленную поставку через прежний потолок — на main (после E4+E5) запас был
   #   всего ~3.8 КБ. Реальная установка 5436164 -> 5443744 (+1 файл). См. запись в `raises`.
-  volume_bytes: 5460000
+  # 2026-09-12: 5460000 -> 5480000 под серверные Java Spring-маршруты (E7): новый доставляемый подмодуль
+  #   ai_ops_kit/checks/surface_extractors/java_spring.py (экстрактор @*Mapping, вид `route`) вырастил
+  #   установленную поставку до ~2.8 КБ под прежним потолком 5460000 — запас стал тонким (сработало
+  #   предупреждение о тающем запасе, доля 0.10). Реальная установка 5443744 -> 5457209 (+1 файл).
+  #   См. запись в `raises`.
+  volume_bytes: 5480000
   # Содержательные файлы поставки. v4.0: плоский слой `tools/*.py` СНЯТ, отдельного `alias_bytes`
   # больше нет — все поставляемые файлы содержательные. Число не тронуто: алиасы и так не входили в
   # этот счётчик (substantive = все файлы минус алиасы), поэтому со сносом алиасов оно не изменилось.
@@ -176,7 +181,12 @@ ceilings:
   #   ai_ops_kit/checks/surface_extractors/go_web.py (экстрактор net/http/gin/chi/echo/gorilla, вид
   #   `route`). Весь пакет checks/ едет в .ai/managed; фасад surface_extraction импортирует go_web на
   #   пути дочки. Реальная установка 612 -> 613 (строгий `<`, потолок 614). См. запись в `raises`.
-  substantive_files: 614
+  # 2026-09-12: 614 -> 615 под серверные Java Spring-маршруты (E7): один новый доставляемый .py-файл
+  #   ai_ops_kit/checks/surface_extractors/java_spring.py (экстрактор @*Mapping, вид `route`). Весь
+  #   пакет checks/ едет в .ai/managed; фасад surface_extraction импортирует java_spring на пути дочки.
+  #   Реальная установка 613 -> 614, что пробило прежний потолок 614 (строгий `<`), поднят до 615.
+  #   См. запись в `raises`.
+  substantive_files: 615
 
 # Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
 # `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
@@ -2336,3 +2346,41 @@ raises:
       extract_go_web_routes на пути дочки. Без этого файла в поставке импорт фасада упал бы у дочки
       ImportError на первом же вызове судьи охвата фич (класс F-033). Прирост поставки = +1 доставляемый
       .py. Реальная установка 612 -> 613 (строгий `<`, потолок 614).
+  - at: '2026-09-12'
+    what: volume
+    from_bytes: 5460000
+    to_bytes: 5480000
+    measured_before: 5443744
+    measured_after: 5457209
+    work: surface-extractors-java-spring-routes (E7)
+    files:
+      - ai_ops_kit/checks/surface_extractors/java_spring.py
+    why_it_works_in_the_child: >-
+      Новый доставляемый подмодуль checks/surface_extractors/java_spring.py РАБОТАЕТ в дочке: это
+      стек-адаптер извлекателя поверхностей для серверных HTTP-маршрутов Spring-бэкенда (Java, вид
+      `route`) — аннотации @GetMapping/@PostMapping/@PutMapping/@DeleteMapping/@PatchMapping и
+      @RequestMapping (позиционный путь и value=/path=), плюс class-префикс @RestController/@Controller.
+      Java разбирается ТЕКСТОМ/паттерном по исходнику (stdlib ast к Java неприменим), без вызова
+      компилятора Java / JVM и без сети → confidence: inferred. Фасад surface_extraction.py регистрирует
+      экстрактор в DEFAULT_EXTRACTORS и зовёт его на пути дочки из судьи охвата фич (checks/feature_coverage):
+      он читает исходник продукта и извлекает наблюдаемые Spring-маршруты, чтобы сверить их с реестром
+      фич. Без этого кода Spring-репозитории оставались бы с нулём извлечённых серверных Java-маршрутов.
+      Исходник нового файла (+~5.3 КБ) вырастил managed-объём 5443744 -> 5457209 и оставил под прежним
+      потолком 5460000 лишь ~2.8 КБ — тоньше доли предупреждения о тающем запасе (0.10), поэтому потолок
+      поднят под факт этого роста. Реальная установка 5443744 -> 5457209 (+1 файл).
+  - at: '2026-09-12'
+    what: substantive_files
+    from_count: 614
+    to_count: 615
+    measured_before: 613
+    measured_after: 614
+    work: surface-extractors-java-spring-routes (E7)
+    files:
+      - ai_ops_kit/checks/surface_extractors/java_spring.py
+    why_it_works_in_the_child: >-
+      Тот же один новый доставляемый .py РАБОТАЕТ в дочке: java_spring.py — стек-адаптер серверных
+      Spring-маршрутов (@*Mapping, вид `route`) в подпакете checks/surface_extractors/. Весь пакет
+      ai_ops_kit/checks едет в .ai/managed; фасад surface_extraction.py импортирует из него
+      extract_spring_routes на пути дочки. Без этого файла в поставке импорт фасада упал бы у дочки
+      ImportError на первом же вызове судьи охвата фич (класс F-033). Прирост поставки = +1 доставляемый
+      .py. Реальная установка 613 -> 614, что пробило прежний потолок 614 (строгий `<`), поднят до 615.

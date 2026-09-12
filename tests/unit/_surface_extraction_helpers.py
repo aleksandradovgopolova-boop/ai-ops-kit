@@ -453,3 +453,88 @@ func main() {
 	registry.HandleFunc("/topic", nil)
 }
 '''
+
+
+# ─── Java Spring серверные маршруты E7 (@*Mapping, вид route) ─────────────────────────────────────
+
+# @RestController + class-@RequestMapping-префикс: префикс класса склеивается с путём метода.
+# Покрыты: позиционный @GetMapping("/x"), @PostMapping без пути (→ префикс), @RequestMapping(value=)
+# с method=, @GetMapping(produces=) без пути (→ префикс), @DeleteMapping(CONST) — путь-константа (пропуск).
+_SPRING_REST_CONTROLLER = '''\
+package com.example.api;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/api/users")
+public class UserController {
+
+    @GetMapping("/{id}")
+    public User get(@PathVariable Long id) { return null; }
+
+    @PostMapping
+    public User create(@RequestBody User u) { return null; }
+
+    @RequestMapping(value = "/search", method = RequestMethod.GET)
+    public List<User> search() { return null; }
+
+    @GetMapping(produces = "application/json")
+    public List<User> all() { return null; }
+
+    @DeleteMapping(USERS_PATH)
+    public void remove() {}
+}
+'''
+
+# @Controller без class-@RequestMapping: у методов свои пути, префикса нет.
+_SPRING_PLAIN_CONTROLLER = '''\
+package com.example.web;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+
+@Controller
+public class HomeController {
+
+    @GetMapping("/ping")
+    public String ping() { return "ok"; }
+
+    @PutMapping("/settings")
+    public String settings() { return "settings"; }
+}
+'''
+
+# Путь-НЕ-литерал: позиционная константа, value=константа, массив путей, шаблон-конкатенация.
+# Файл — валидный Spring (индикатор есть), но ни один такой путь маршрутом стать не должен.
+_SPRING_DYNAMIC = '''\
+package com.example.api;
+
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping(BASE_PATH)
+public class DynController {
+
+    @GetMapping(ORDERS_PATH)
+    public Object one() { return null; }
+
+    @PostMapping(value = ORDERS)
+    public Object two() { return null; }
+
+    @GetMapping({"/a", "/b"})
+    public Object arr() { return null; }
+}
+'''
+
+# Те же аннотации, но БЕЗ индикатора Spring (нет импорта аннотаций и нет @RestController/@Controller) —
+# не должны дать ложный маршрут.
+_SPRING_FOREIGN = '''\
+package com.other;
+
+public class NotSpring {
+
+    @GetMapping("/ghost")
+    public Object phantom() { return null; }
+}
+'''
