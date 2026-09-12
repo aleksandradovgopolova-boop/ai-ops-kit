@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / ruby_rails, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / ruby_rails / dotnet_aspnet, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -35,6 +35,7 @@ from pathlib import Path
 from typing import Callable, Iterator, Sequence
 
 from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
+from ai_ops_kit.checks.surface_extractors.dotnet_aspnet import extract_aspnet_routes
 from ai_ops_kit.checks.surface_extractors.go_web import extract_go_web_routes
 from ai_ops_kit.checks.surface_extractors.graphql_api import extract_graphql_operations
 from ai_ops_kit.checks.surface_extractors.java_spring import extract_spring_routes
@@ -107,6 +108,11 @@ _GRAPHQL_SDL_SUFFIXES = frozenset({".graphql", ".gql"})
 # реестра (к каким файлам применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по
 # содержимому/индикатору (ruby_rails.py).
 _RUBY_RB_SUFFIXES = frozenset({".rb"})
+# Серверные ASP.NET Core-бэкенды (route). Разбор ТЕКСТОМ по .cs (stdlib ast к C# неприменим) —
+# attribute routing (@[HttpGet]/…/[Route] + class-[Route]-префикс с токеном [controller]) и Minimal
+# APIs (app.MapGet/…). Метаданные реестра (к каким файлам применим экстрактор) держим у сборки
+# Extractor'ов, а разбор идёт по содержимому/индикатору (dotnet_aspnet.py).
+_DOTNET_CS_SUFFIXES = frozenset({".cs"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -271,6 +277,15 @@ RAILS_ROUTES = Extractor(
     needs_ast=False,
 )
 
+ASPNET_ROUTES = Extractor(
+    id="aspnet-routes",
+    suffixes=_DOTNET_CS_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый разбор C# — эвристика паттерна, не доказательный AST
+    extract=extract_aspnet_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -289,6 +304,7 @@ DEFAULT_EXTRACTORS: tuple = (
     SPRING_ROUTES,
     GRAPHQL_OPERATIONS,
     RAILS_ROUTES,
+    ASPNET_ROUTES,
 )
 
 
