@@ -1,4 +1,4 @@
-"""Экраны UI фронтенд-роутеров (вид поверхности `screen`): React Router / Vue Router по ТЕКСТУ.
+"""Экраны UI фронтенд-роутеров (вид поверхности `screen`): React / Vue / Angular Router по ТЕКСТУ.
 
 ВАЖНО: фронтенд — НЕ Python, stdlib `ast` тут неприменим. Разбор JS/JSX/TS/TSX/.vue —
 ДЕТЕРМИНИРОВАННЫЙ и БЕЗ ИСПОЛНЕНИЯ: паттерный скан `parsed.source` (needs_ast=False, НИКАКОГО
@@ -27,6 +27,12 @@ _OBJ_PATH_RE = re.compile(r"\bpath\s*:\s*(['\"])(.*?)\1")
 # объекте с ключом path. React: фабрики/хук роутера. Vue: createRouter/VueRouter/импорт vue-router.
 _REACT_OBJ_ROUTER_HINTS = ("createBrowserRouter", "createHashRouter", "createMemoryRouter", "useRoutes")
 _VUE_ROUTER_HINTS = ("createRouter", "VueRouter", "vue-router")
+
+# Индикатор Angular-роутинга в файле — чтобы объектный `path:` брался лишь в файле-роутере Angular, а
+# не в любом TS-объекте с ключом path. Ловит импорт `@angular/router`, вызовы `RouterModule.forRoot/
+# forChild` и аннотацию типа `const routes: Routes = [...]`. `\b`/`:` сужают, чтобы слово Routes в
+# другом смысле не считалось индикатором.
+_ANGULAR_ROUTER_INDICATOR_RE = re.compile(r"@angular/router|\bRouterModule\b|:\s*Routes\b")
 
 
 def _lineno(source: str, pos: int) -> int:
@@ -80,4 +86,39 @@ def extract_vue_router_screens(parsed: ParsedFile) -> list:
         path_value = m.group(2)
         if path_value.strip():
             out.append(_screen(parsed.rel_path, _lineno(src, m.start()), path_value, "vue-router"))
+    return out
+
+
+def _angular_screen_path(path_value: str) -> str | None:
+    """Нормализовать литеральный Angular-путь к единому виду ref ('/billing'); None — пропуск.
+
+    Angular-путь обычно объявляют БЕЗ ведущего '/' (`path: 'billing'`) — приводим к '/billing' ради
+    консистентности ref с react/vue. Пропускаем пустой путь ('' — дефолт/редирект-корень, не
+    именованный экран) и wildcard '**' (catch-all, конкретный экран им не задаётся) — их честно не
+    выводим как отдельный screen. Литеральный динамический сегмент (`users/:id`) СОХРАНЯЕТСЯ как есть.
+    """
+    stripped = path_value.strip()
+    if not stripped or "*" in stripped:
+        return None
+    return "/" + stripped.lstrip("/")
+
+
+def extract_angular_router_screens(parsed: ParsedFile) -> list:
+    """Экраны Angular Router из TS: `RouterModule.forRoot([{path:'x'}])`/`const routes: Routes=[...]`.
+
+    Текстовый (не AST) разбор `parsed.source` → confidence: inferred (как react/vue: регэксп по
+    паттерну — эвристика, не доказательный AST). Ключ `path:` со строковым литералом берётся ТОЛЬКО в
+    файле с индикатором Angular (`@angular/router` / `RouterModule` / аннотация `: Routes`), иначе
+    любой TS-объект с ключом path дал бы ложный экран. Путь-НЕ-литерал (переменная, шаблон-строка,
+    выражение) в кавычки не попадает → пропуск; пустой путь и wildcard '**' пропускаются
+    (дефолт/catch-all конкретным экраном не считаем). ref = "file:line|/path".
+    """
+    src = parsed.source
+    if not _ANGULAR_ROUTER_INDICATOR_RE.search(src):
+        return []
+    out: list = []
+    for m in _OBJ_PATH_RE.finditer(src):
+        path_value = _angular_screen_path(m.group(2))
+        if path_value is not None:
+            out.append(_screen(parsed.rel_path, _lineno(src, m.start()), path_value, "angular-router"))
     return out
