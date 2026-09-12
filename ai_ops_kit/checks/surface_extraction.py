@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec / phoenix_router, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -51,6 +51,7 @@ from ai_ops_kit.checks.surface_extractors.js_ui import (
     extract_vue_router_screens,
 )
 from ai_ops_kit.checks.surface_extractors.openapi_spec import extract_openapi_routes
+from ai_ops_kit.checks.surface_extractors.phoenix_router import extract_phoenix_routes
 from ai_ops_kit.checks.surface_extractors.python_cli import (
     extract_console_scripts,
     extract_python_cli_argparse,
@@ -125,6 +126,11 @@ _DOTNET_CS_SUFFIXES = frozenset({".cs"})
 # `openapi:`/`swagger:` в самом ПОДМОДУЛЕ (openapi_spec.py), а не расширением. Метаданные реестра (к
 # каким файлам применим экстрактор) держим у сборки Extractor'ов; сам разбор — по содержимому.
 _OPENAPI_SPEC_SUFFIXES = frozenset({".yaml", ".yml", ".json"})
+# Серверные Phoenix-бэкенды (route). Разбор ТЕКСТОМ по .ex (stdlib ast к Elixir неприменим) — DSL
+# модуля router.ex: get/post/… + resources + scope-префиксы. Метаданные реестра (к каким файлам
+# применим экстрактор) держим у сборки Extractor'ов, а разбор идёт по содержимому/индикатору
+# (phoenix_router.py).
+_PHOENIX_EX_SUFFIXES = frozenset({".ex"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -316,6 +322,15 @@ OPENAPI_ROUTES = Extractor(
     needs_ast=False,
 )
 
+PHOENIX_ROUTES = Extractor(
+    id="phoenix-router",
+    suffixes=_PHOENIX_EX_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # текстовый разбор Elixir Phoenix-DSL — эвристика паттерна, не доказательный AST
+    extract=extract_phoenix_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -337,6 +352,7 @@ DEFAULT_EXTRACTORS: tuple = (
     RAILS_ROUTES,
     ASPNET_ROUTES,
     OPENAPI_ROUTES,
+    PHOENIX_ROUTES,
 )
 
 

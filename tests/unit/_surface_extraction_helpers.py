@@ -1015,3 +1015,79 @@ paths:
     get:
       responses: [unbalanced
 '''
+
+
+# ─── Phoenix серверные маршруты E13 (router.ex, Elixir, вид `route`) ──────────────────────────────
+
+# Полный router.ex: `use MyAppWeb, :router`-индикатор, глаголы get/post/…, resources, scope-префиксы
+# (позиционный и с alias). Плюс ловушки: путь-переменная, атом-параметр, интерполяция, комментарии.
+_PHOENIX_ROUTER = '''\
+defmodule MyAppWeb.Router do
+  use MyAppWeb, :router
+
+  pipeline :browser do
+    plug :accepts, ["html"]
+    plug :fetch_session
+  end
+
+  scope "/", MyAppWeb do
+    pipe_through :browser
+
+    get "/", PageController, :index
+    get "/health", SystemController, :health
+    post "/login", SessionController, :create
+    delete "/logout", SessionController, :delete
+    resources "/orders", OrderController
+  end
+
+  scope "/admin", MyAppWeb.Admin do
+    get "/stats", DashboardController, :stats
+    resources "/reports", ReportController
+  end
+
+  scope path: "/api", alias: MyAppWeb.Api do
+    get "/ping", HealthController, :ping
+  end
+
+  # get "/commented", PageController, :ghost   -> это комментарий, не маршрут
+  get some_path, PageController, :dynamic       # переменная -> пропуск
+  get :dashboard, PageController, :dashboard    # атом-параметр вместо строки -> пропуск
+end
+'''
+
+# Интерполяция в двойных кавычках (`"/users/#{id}"`) — динамика, маршрутом стать НЕ должна. Держим в
+# отдельной фикстуре, чтобы не воевать с экранированием тройных кавычек Python.
+_PHOENIX_INTERPOLATION = '''\
+defmodule MyAppWeb.Router do
+  use Phoenix.Router
+
+  get "/users/#{id}", UserController, :show
+  get "/plain", PageController, :plain
+end
+'''
+
+# Вложенный resources внутри resources-блока (member/collection тоже) — глубже 1 не разбираем.
+_PHOENIX_NESTED = '''\
+defmodule MyAppWeb.Router do
+  use Phoenix.Router
+
+  resources "/orders", OrderController do
+    get "/preview", OrderController, :preview
+    resources "/line_items", LineItemController
+  end
+end
+'''
+
+# .ex БЕЗ индикатора Phoenix (нет Phoenix.Router, нет `, :router`, имя не router.ex) — чужой
+# get/resources не даёт маршрутов.
+_PHOENIX_FOREIGN = '''\
+defmodule MyApp.Cache do
+  def get(key) do
+    Map.get(@store, key)
+  end
+
+  def resources("/orders") do
+    :ok
+  end
+end
+'''
