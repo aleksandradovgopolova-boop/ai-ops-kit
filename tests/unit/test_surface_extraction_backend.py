@@ -14,6 +14,8 @@ confidence):
     [controller]) и Minimal APIs (app.MapGet/…) по .cs (вид route).
   * gRPC Protocol Buffers (E11) — операции из `rpc` внутри `service {…}` по .proto (вид `api`, как
     GraphQL E8: второй носитель вида api).
+  * OpenAPI/Swagger (E12) — пары путь+метод из секции `paths` спеки .yaml/.yml/.json (вид route);
+    структурный разбор ЗАЯВЛЕННОГО контракта (yaml.safe_load/json.loads, без исполнения) → inferred.
 Позже сюда же добавятся прочие серверные стеки (один файл на «бэкенд-не-JS», чтобы парные тест-файлы
 не раздувались — сторож мега-файла).
 
@@ -37,6 +39,13 @@ from _surface_extraction_helpers import (
     _ASPNET_FOREIGN,
     _ASPNET_MINIMAL,
     _ASPNET_PLAIN_CONTROLLER,
+    _OPENAPI_3_JSON,
+    _OPENAPI_3_YAML,
+    _OPENAPI_BROKEN_YAML,
+    _OPENAPI_MODELS_ONLY,
+    _PACKAGE_JSON,
+    _PLAIN_YAML,
+    _SWAGGER_2_YAML,
     _GO_CHI,
     _GO_ECHO,
     _GO_FOREIGN,
@@ -60,6 +69,7 @@ from _surface_extraction_helpers import (
     _SPRING_PLAIN_CONTROLLER,
     _SPRING_REST_CONTROLLER,
     _api_ops,
+    _openapi_ops,
     _route_paths,
     _write,
 )
@@ -655,6 +665,95 @@ def test_grpc_records_conform_to_surface_schema(tmp_path):
     schema = load_schema(DEFAULT_SCHEMA)
     sspec = schema["surface"]
     surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "grpc-proto"]
+    assert surfaces
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E12: HTTP-эндпоинты из OpenAPI/Swagger-спеки (вид `route`, СТРУКТУРНЫЙ разбор .yaml/.yml/.json) ─
+# Спека — ЗАЯВЛЕННЫЙ контракт (может расходиться с кодом) + структурный разбор текста, не исполнение →
+# confidence по умолчанию inferred, НЕ verified (честность силы = честность confidence).
+
+def test_openapi3_yaml_paths_are_inferred_routes(tmp_path):
+    _write(tmp_path, "docs/openapi.yaml", _OPENAPI_3_YAML)
+    surfaces = extract_surfaces(tmp_path)
+    ops = _openapi_ops(surfaces, "openapi-spec")
+    # Каждая пара путь+метод — отдельный route "<METHOD> <path>".
+    assert {"GET /orders", "POST /orders", "GET /orders/{id}", "DELETE /orders/{id}"} <= ops
+    for s in surfaces:
+        if s["extractor"] == "openapi-spec":
+            assert s["kind"] == "route"
+            assert s["confidence"] == "inferred"   # структурный разбор спеки НИКОГДА не verified
+            assert s["ref"].startswith("docs/openapi.yaml:")
+
+
+def test_openapi_components_schemas_are_not_endpoints(tmp_path):
+    """Поля/ключи под components/schemas (в т.ч. ключ `get:` внутри схемы) — модели данных, не route."""
+    _write(tmp_path, "docs/openapi.yaml", _OPENAPI_3_YAML)
+    ops = _openapi_ops(extract_surfaces(tmp_path), "openapi-spec")
+    # Ровно четыре операции из paths — ключ `get:` внутри schemas.Order маршрутом не стал.
+    assert ops == {"GET /orders", "POST /orders", "GET /orders/{id}", "DELETE /orders/{id}"}
+
+
+def test_swagger2_yaml_is_recognized(tmp_path):
+    """Индикатор `swagger: "2.0"` тоже включает экстрактор; basePath к путям НЕ приклеивается."""
+    _write(tmp_path, "api/swagger.yaml", _SWAGGER_2_YAML)
+    ops = _openapi_ops(extract_surfaces(tmp_path), "openapi-spec")
+    assert ops == {"GET /users", "PUT /users/{id}"}
+    assert not any(o.endswith("/v1/users") for o in ops)   # servers/basePath не разворачиваем
+
+
+def test_openapi_json_spec_is_recognized(tmp_path):
+    """JSON-спека (грузится json.loads) даёт те же route, что и YAML."""
+    _write(tmp_path, "openapi.json", _OPENAPI_3_JSON)
+    ops = _openapi_ops(extract_surfaces(tmp_path), "openapi-spec")
+    assert ops == {"GET /products", "POST /products", "PATCH /products/{sku}"}
+
+
+def test_non_openapi_json_yaml_yield_nothing(tmp_path):
+    """package.json и обычный CI-yaml БЕЗ top-level openapi/swagger → ни одной поверхности."""
+    _write(tmp_path, "package.json", _PACKAGE_JSON)
+    _write(tmp_path, ".github/workflows/ci.yaml", _PLAIN_YAML)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "openapi-spec"] == []
+
+
+def test_openapi_without_paths_yields_nothing(tmp_path):
+    """Спека только с components/schemas (без paths) → эндпоинтов нет."""
+    _write(tmp_path, "types.yaml", _OPENAPI_MODELS_ONLY)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "openapi-spec"] == []
+
+
+def test_openapi_broken_file_does_not_crash(tmp_path):
+    """Битый YAML с индикатором openapi не валит прогон и не порождает фантомный маршрут."""
+    _write(tmp_path, "broken.yaml", _OPENAPI_BROKEN_YAML)
+    _write(tmp_path, "docs/openapi.yaml", _OPENAPI_3_YAML)
+    ops = _openapi_ops(extract_surfaces(tmp_path), "openapi-spec")
+    assert "GET /orders" in ops   # валидная спека рядом извлеклась
+
+
+def test_openapi_does_not_break_other_stacks(tmp_path):
+    """Спека .yaml рядом с питон-маршрутом: python route остаётся verified, OpenAPI — отдельный inferred."""
+    _write(tmp_path, "docs/openapi.yaml", _OPENAPI_3_YAML)
+    _write(tmp_path, "app.py",
+           "from flask import Flask\napp = Flask(__name__)\n\n\n@app.route('/py')\ndef p():\n    return ''\n")
+    surfaces = extract_surfaces(tmp_path)
+    assert any(s["extractor"] == "python-web-routes" and s["confidence"] == "verified"
+               for s in surfaces)
+    assert "GET /orders" in _openapi_ops(surfaces, "openapi-spec")
+
+
+def test_openapi_records_conform_to_surface_schema(tmp_path):
+    """Записи openapi-spec валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "docs/openapi.yaml", _OPENAPI_3_YAML)
+    _write(tmp_path, "openapi.json", _OPENAPI_3_JSON)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "openapi-spec"]
     assert surfaces
     for i, surf in enumerate(surfaces):
         errors: list = []
