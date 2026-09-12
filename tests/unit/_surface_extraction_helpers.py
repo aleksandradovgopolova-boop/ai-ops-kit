@@ -694,3 +694,106 @@ end
 
 resources = %i[a b c]
 '''
+
+
+# ─── ASP.NET Core серверные маршруты E10 (attribute routing + Minimal APIs, вид `route`) ──────────
+
+# [ApiController] + class-[Route("api/[controller]")]: префикс склеивается с путём метода, токен
+# [controller] разрешается именем класса без суффикса Controller (UsersController → Users). Покрыты:
+# [HttpGet] без пути (→ префикс), [HttpGet("{id}")] позиционный, [HttpPost], [HttpPut]/[HttpDelete] с
+# путём, [HttpGet("search", Name=…)] (позиц. литерал + именованное свойство), [HttpDelete(CONST)] —
+# путь-константа (пропуск).
+_ASPNET_CONTROLLER = '''\
+using Microsoft.AspNetCore.Mvc;
+
+namespace Shop.Api;
+
+[ApiController]
+[Route("api/[controller]")]
+public class UsersController : ControllerBase
+{
+    [HttpGet]
+    public IActionResult List() => Ok();
+
+    [HttpGet("{id}")]
+    public IActionResult GetOne(int id) => Ok();
+
+    [HttpPost]
+    public IActionResult Create() => Ok();
+
+    [HttpPut("{id}")]
+    public IActionResult Update(int id) => Ok();
+
+    [HttpDelete("{id}")]
+    public IActionResult Remove(int id) => Ok();
+
+    [HttpGet("search", Name = "SearchUsers")]
+    public IActionResult Search() => Ok();
+
+    [HttpDelete(RoutesConst.Purge)]
+    public IActionResult Purge() => Ok();
+}
+'''
+
+# [ApiController] без class-[Route]: у методов абсолютные пути. Плюс method-уровневый [Route("/x")]
+# (без HTTP-глагола) как самостоятельный источник пути.
+_ASPNET_PLAIN_CONTROLLER = '''\
+using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+public class HealthController : ControllerBase
+{
+    [HttpGet("/health")]
+    public IActionResult Check() => Ok();
+
+    [Route("/status")]
+    public IActionResult Status() => Ok();
+}
+'''
+
+# Minimal APIs: app.MapGet/MapPost/MapPut/MapDelete с литеральным путём. Индикатор файла — сам вызов
+# Map*(. Плюс ловушки: путь-переменная и C#-интерполяция $"…" — не маршруты.
+_ASPNET_MINIMAL = '''\
+var builder = WebApplication.CreateBuilder(args);
+var app = builder.Build();
+
+app.MapGet("/ping", () => "pong");
+app.MapPost("/orders", (Order o) => Results.Ok());
+app.MapPut("/orders/{id}", (int id) => Results.Ok());
+app.MapDelete("/orders/{id}", (int id) => Results.Ok());
+
+var routePath = "/dynamic";
+app.MapGet(routePath, () => "no");          // переменная → НЕ маршрут
+app.MapGet($"/tmpl/{x}", () => "no");       // интерполяция → НЕ маршрут
+
+app.Run();
+'''
+
+# Путь-НЕ-литерал во всех формах (class-[Route] константа, [HttpGet(CONST)], интерполяция $"…").
+# Файл — валидный ASP.NET (индикатор [ApiController]), но ни один такой путь маршрутом стать не должен.
+_ASPNET_DYNAMIC = '''\
+using Microsoft.AspNetCore.Mvc;
+
+[ApiController]
+[Route(BasePath)]
+public class DynController : ControllerBase
+{
+    [HttpGet(OrdersRoute)]
+    public IActionResult One() => Ok();
+
+    [HttpPost($"/orders/{Version}")]
+    public IActionResult Two() => Ok();
+}
+'''
+
+# Тот же [Route("…")], но БЕЗ индикатора ASP.NET (нет Microsoft.AspNetCore / [ApiController] / [Http*]
+# / Map*() — сам по себе [Route] индикатором НЕ считается) — не должен дать ложный маршрут.
+_ASPNET_FOREIGN = '''\
+namespace Other;
+
+public class NotAspNet
+{
+    [Route("/ghost")]
+    public object Phantom() => null;
+}
+'''

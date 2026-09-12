@@ -10,6 +10,8 @@ confidence):
     route: первый экстрактор вида api).
   * Ruby on Rails (E9) — DSL config/routes.rb: get/post/…, root, resources/resource, namespace/scope
     (вид route).
+  * ASP.NET Core (E10) — attribute routing (@[HttpGet]/…/[Route] + class-[Route]-префикс с токеном
+    [controller]) и Minimal APIs (app.MapGet/…) по .cs (вид route).
 Позже сюда же добавятся прочие серверные стеки (один файл на «бэкенд-не-JS», чтобы парные тест-файлы
 не раздувались — сторож мега-файла).
 
@@ -28,6 +30,11 @@ from ai_ops_kit.validation.validate_feature_registry import DEFAULT_SCHEMA, load
 from ai_ops_kit.validation.validate_feature_registry import _check_object
 
 from _surface_extraction_helpers import (
+    _ASPNET_CONTROLLER,
+    _ASPNET_DYNAMIC,
+    _ASPNET_FOREIGN,
+    _ASPNET_MINIMAL,
+    _ASPNET_PLAIN_CONTROLLER,
     _GO_CHI,
     _GO_ECHO,
     _GO_FOREIGN,
@@ -453,6 +460,101 @@ def test_rails_records_conform_to_surface_schema(tmp_path):
     schema = load_schema(DEFAULT_SCHEMA)
     sspec = schema["surface"]
     surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "rails-routes"]
+    assert surfaces
+    for i, surf in enumerate(surfaces):
+        errors: list = []
+        _check_object(sspec["fields"], sspec["required"], surf, f"surface[{i}]", errors)
+        assert errors == [], f"запись не по схеме: {errors}"
+        assert re.match(r"^[^:|]+:[0-9]+(\|.+)?$", surf["ref"])
+
+
+# ── E10: серверные HTTP-маршруты ASP.NET Core (вид `route`, ТЕКСТОВЫЙ разбор .cs) ──────────────────
+# C# разбирается текстом/паттерном (stdlib ast к C# неприменим) → confidence по умолчанию inferred,
+# НЕ verified (честность силы = честность confidence, как у go_web E6 / java_spring E7 / rails E9).
+
+def test_aspnet_httpget_in_apicontroller_is_inferred(tmp_path):
+    _write(tmp_path, "src/UsersController.cs", _ASPNET_CONTROLLER)
+    surfaces = extract_surfaces(tmp_path)
+    paths = _route_paths(surfaces, "aspnet-routes")
+    # [HttpGet("{id}")] склеен с class-[Route("api/[controller]")]; [controller] → Users.
+    assert "/api/Users/{id}" in paths
+    for s in surfaces:
+        if s["extractor"] == "aspnet-routes":
+            assert s["kind"] == "route"
+            assert s["confidence"] == "inferred"   # текстовый C#-разбор НИКОГДА не verified
+            assert s["ref"].startswith("src/UsersController.cs:")
+
+
+def test_aspnet_class_route_prefix_and_controller_token(tmp_path):
+    _write(tmp_path, "src/UsersController.cs", _ASPNET_CONTROLLER)
+    paths = _route_paths(extract_surfaces(tmp_path), "aspnet-routes")
+    # [HttpGet]/[HttpPost] без пути сводятся к префиксу класса (с разрешённым [controller]);
+    # [HttpGet("search", Name=…)] даёт литеральный путь под тем же префиксом.
+    assert {"/api/Users", "/api/Users/{id}", "/api/Users/search"} <= paths
+    # Токен [controller] разрешён — сырого токена в путях быть не должно.
+    assert not any("[controller]" in p for p in paths)
+
+
+def test_aspnet_controller_without_class_prefix(tmp_path):
+    """[ApiController] без class-[Route]: абсолютный путь метода; method-[Route] — свой источник пути."""
+    _write(tmp_path, "src/HealthController.cs", _ASPNET_PLAIN_CONTROLLER)
+    paths = _route_paths(extract_surfaces(tmp_path), "aspnet-routes")
+    assert {"/health", "/status"} <= paths
+
+
+def test_aspnet_minimal_api_map_verbs(tmp_path):
+    """Minimal APIs: app.MapGet/MapPost/MapPut/MapDelete с литеральным путём → route."""
+    _write(tmp_path, "Program.cs", _ASPNET_MINIMAL)
+    paths = _route_paths(extract_surfaces(tmp_path), "aspnet-routes")
+    assert {"/ping", "/orders", "/orders/{id}"} <= paths
+    # Путь-переменная и интерполяция $"…" — не маршруты.
+    assert "/dynamic" not in paths
+    assert not any(p.startswith("/tmpl") for p in paths)
+
+
+def test_aspnet_non_literal_paths_are_skipped(tmp_path):
+    """Путь-константа/переменная/интерполяция маршрутом не становится и уж точно не verified."""
+    _write(tmp_path, "src/DynController.cs", _ASPNET_DYNAMIC)
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "aspnet-routes"]
+    # [Route(BasePath)] / [HttpGet(OrdersRoute)] / [HttpPost($"…")] — все нелитеральные → ни маршрута.
+    assert surfaces == []
+
+
+def test_aspnet_needs_indicator(tmp_path):
+    """[Route("…")] в файле без индикатора ASP.NET → никаких маршрутов."""
+    _write(tmp_path, "src/NotAspNet.cs", _ASPNET_FOREIGN)
+    surfaces = extract_surfaces(tmp_path)
+    assert [s for s in surfaces if s["extractor"] == "aspnet-routes"] == []
+
+
+def test_aspnet_isolated_from_broken_files(tmp_path):
+    """Битый/непарсибельный .cs не валит прогон и не порождает фантомный маршрут из обрыва."""
+    _write(tmp_path, "src/UsersController.cs", _ASPNET_CONTROLLER)
+    _write(tmp_path, "src/Broken.cs",
+           'using Microsoft.AspNetCore.Mvc;\n[ApiController] class B { [HttpGet("/b"\n')
+    paths = _route_paths(extract_surfaces(tmp_path), "aspnet-routes")
+    assert "/api/Users/{id}" in paths
+    assert "/b" not in paths   # незакрытый [HttpGet("/b" — не маршрут (обрыв файла)
+
+
+def test_aspnet_does_not_break_other_stacks(tmp_path):
+    """.cs рядом с питон-маршрутом: python route остаётся verified, ASP.NET — отдельный inferred."""
+    _write(tmp_path, "src/UsersController.cs", _ASPNET_CONTROLLER)
+    _write(tmp_path, "app.py",
+           "from flask import Flask\napp = Flask(__name__)\n\n\n@app.route('/py')\ndef p():\n    return ''\n")
+    surfaces = extract_surfaces(tmp_path)
+    assert any(s["extractor"] == "python-web-routes" and s["confidence"] == "verified"
+               for s in surfaces)
+    assert "/api/Users/{id}" in _route_paths(surfaces, "aspnet-routes")
+
+
+def test_aspnet_records_conform_to_surface_schema(tmp_path):
+    """Записи aspnet-routes валидны по той же схеме surface, что судит реестр, и по паттерну ref."""
+    _write(tmp_path, "src/UsersController.cs", _ASPNET_CONTROLLER)
+    _write(tmp_path, "Program.cs", _ASPNET_MINIMAL)
+    schema = load_schema(DEFAULT_SCHEMA)
+    sspec = schema["surface"]
+    surfaces = [s for s in extract_surfaces(tmp_path) if s["extractor"] == "aspnet-routes"]
     assert surfaces
     for i, surf in enumerate(surfaces):
         errors: list = []

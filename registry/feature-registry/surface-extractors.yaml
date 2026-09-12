@@ -441,6 +441,50 @@ extractors:
         интерполяция/склейка `+`); переименование корня/параметров и любые пути, собранные в рантайме.
         Ничего из этого НЕ verified.
 
+  # E10 добавил серверные маршруты ASP.NET Core (вид route) — первый стек .NET/C#. Честность силы та
+  # же, что у go_web (E6) / java_spring (E7) / rails-routes (E9): C# разбирается ТЕКСТОМ/паттерном по
+  # исходнику (stdlib ast к C# неприменим), без вызова компилятора Roslyn / .NET runtime и без сети —
+  # это НЕ доказательный AST → confidence: inferred (в W4 НЕ блокирует). Токен `[controller]`
+  # разрешается ДЕТЕРМИНИРОВАННО именем класса без суффикса Controller (выводимо из исходника, не из
+  # рантайма). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/dotnet_aspnet.py
+  # (extract_aspnet_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: aspnet-routes
+    stack: {language: csharp, frameworks: [asp.net-core, asp.net-mvc, minimal-api]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .cs без исполнения. Attribute routing (контроллеры):
+      method-атрибуты `[HttpGet("/p")]`, `[HttpPost]`, `[HttpPut]`, `[HttpDelete]`, `[HttpPatch]`
+      (а также `[HttpHead]`/`[HttpOptions]`) и `[Route("/p")]` на методе — путь метода строковый
+      литерал (позиционный `"…"` или verbatim `@"…"`); class-уровневый `[Route("api/[controller]")]`
+      задаёт ПРЕФИКС, который склеивается с путём метода (оба литералы), сам префикс маршрутом не
+      считается. Токен `[controller]` РАЗРЕШАЕТСЯ детерминированно — имя класса-контроллера без
+      суффикса `Controller` (`UsersController` → `Users`, регистр как в объявлении). Метод без
+      литерального пути (`[HttpGet]`, `[HttpGet(Name="x")]`) сводится к префиксу/корню. Minimal APIs:
+      `app.MapGet("/p", …)`/`MapPost`/`MapPut`/`MapDelete`/`MapPatch` — литеральный путь первого
+      аргумента → route. Берётся ТОЛЬКО в файле с индикатором ASP.NET (`Microsoft.AspNetCore`,
+      `[ApiController]`/`[HttpGet]`/…, либо вызов `MapGet(`/…), чтобы одноимённый чужой атрибут/метод
+      не дал ложный маршрут. Регэксп по паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        маршруты ASP.NET Core, объявленные method-атрибутом @[Http*]/[Route] со строковым путём-
+        литералом, склеенные с литеральным class-[Route]-префиксом (с разрешением токена [controller]),
+        и Minimal-API `MapGet/MapPost/…` с литеральным путём; file:line и путь как symbol, помечает
+        inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        conventional routing из Program.cs/Startup (`MapControllerRoute`/`MapDefaultControllerRoute`
+        с шаблоном `{controller=Home}/{action=Index}/{id?}` — конкретные эндпоинты собираются
+        рантаймом рефлексией, не выводимы текстом); area-маршруты; подстановку токена `[action]` и
+        прочих рантайм-токенов (кроме [controller] — он разрешается); атрибуты версионирования
+        (`[ApiVersion]`/`[MapToApiVersion]`) и route constraints как отдельную семантику (constraint
+        внутри литерала `{id:int}` остаётся в пути как есть, не осмысляется); путь/префикс НЕ-литерал —
+        переменная, КОНСТАНТА (`[HttpGet(RouteConst)]`), C#-интерполяция `$"…"`/`$@"…"`, склейка через
+        `+` (в кавычки не попадает → пропуск); Minimal API через переменную-группу
+        (`var g = app.MapGroup("/api"); g.MapGet("/x")` — префикс группы рантайм-переменная, не
+        склеивается, виден только литерал самого MapGet); метод, несущий одновременно параметрless
+        `[HttpGet]` и отдельный `[Route("x")]`, может дать и корень контроллера, и `/x` (атрибуты
+        разбираются независимо, не сливаются); файл без индикатора ASP.NET. Ничего из этого НЕ verified.
+
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
 # Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
