@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import re
 
-from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface
+from ai_ops_kit.checks.surface_extractors._common import ParsedFile, Surface, _matching_brace
 
 # ─── имена корневых типов ────────────────────────────────────────────────────────────────────────
 # Конвенциональные корневые типы GraphQL. Переименование через `schema { query: X }` НЕ разрешаем
@@ -103,22 +103,6 @@ def _mask_comments_and_strings(src: str) -> str:
             i += 1
     return "".join(out)
 
-
-def _matching_brace(text: str, open_idx: int) -> int:
-    """Индекс `}` в паре к `{` на позиции open_idx, либо -1 (пары нет — обрыв файла).
-
-    Строки/комментарии к моменту вызова уже замаскированы, так что `{`/`}` внутри них не считаются.
-    """
-    depth = 0
-    for k in range(open_idx, len(text)):
-        c = text[k]
-        if c == "{":
-            depth += 1
-        elif c == "}":
-            depth -= 1
-            if depth == 0:
-                return k
-    return -1
 
 
 def _field_names(body: str) -> list:
