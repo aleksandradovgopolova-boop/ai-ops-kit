@@ -875,3 +875,143 @@ service EchoService {
   rpc Echo(EchoRequest) returns (EchoResponse);
 }
 '''
+
+# ─── OpenAPI/Swagger спеки E12 (вид `route`, СТРУКТУРНЫЙ разбор .yaml/.yml/.json) ─────────────────
+
+def _openapi_ops(surfaces, extractor):
+    """Символы маршрутов OpenAPI ('<METHOD> <path>') конкретного экстрактора."""
+    return {s["ref"].split("|", 1)[1]
+            for s in surfaces if s["kind"] == "route" and s["extractor"] == extractor}
+
+
+# OpenAPI 3.x YAML: индикатор `openapi: 3.0.3`, секция paths с несколькими путями и методами.
+# components/schemas — модели данных, НЕ эндпоинты (их поля/типы маршрутами стать не должны).
+_OPENAPI_3_YAML = '''\
+openapi: 3.0.3
+info:
+  title: Orders API
+  version: "1.0"
+paths:
+  /orders:
+    get:
+      summary: list orders
+      responses:
+        "200":
+          description: ok
+    post:
+      summary: create order
+      responses:
+        "201":
+          description: created
+  /orders/{id}:
+    get:
+      summary: get one order
+      responses:
+        "200":
+          description: ok
+    delete:
+      summary: remove order
+      responses:
+        "204":
+          description: gone
+components:
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        get:
+          type: string
+'''
+
+# Swagger/OpenAPI 2.0 YAML: индикатор `swagger: "2.0"`. Тот же paths, метод put.
+_SWAGGER_2_YAML = '''\
+swagger: "2.0"
+info:
+  title: Legacy API
+  version: "1.0"
+basePath: /v1
+paths:
+  /users:
+    get:
+      responses:
+        "200":
+          description: ok
+  /users/{id}:
+    put:
+      responses:
+        "200":
+          description: ok
+'''
+
+# OpenAPI 3.x JSON: тот же контракт, но в JSON — грузится json.loads, не yaml.
+_OPENAPI_3_JSON = '''\
+{
+  "openapi": "3.0.0",
+  "info": { "title": "Catalog API", "version": "1.0" },
+  "paths": {
+    "/products": {
+      "get": { "summary": "list", "responses": { "200": { "description": "ok" } } },
+      "post": { "summary": "add", "responses": { "201": { "description": "created" } } }
+    },
+    "/products/{sku}": {
+      "patch": { "summary": "update", "responses": { "200": { "description": "ok" } } }
+    }
+  },
+  "components": {
+    "schemas": {
+      "Product": { "type": "object", "properties": { "sku": { "type": "string" } } }
+    }
+  }
+}
+'''
+
+# НЕ-OpenAPI JSON (обычный package.json) — БЕЗ top-level ключа openapi/swagger. Слово "swagger"
+# встречается лишь как имя зависимости (в значении, не в ключе верхнего уровня) → не спека, пусто.
+_PACKAGE_JSON = '''\
+{
+  "name": "my-app",
+  "version": "1.0.0",
+  "scripts": { "start": "node index.js" },
+  "dependencies": { "swagger-ui-express": "^4.6.0", "express": "^4.18.0" },
+  "paths": { "src": "./src" }
+}
+'''
+
+# НЕ-OpenAPI YAML (обычный CI-конфиг) — ни openapi, ни swagger, есть ключ paths с чужим смыслом.
+_PLAIN_YAML = '''\
+name: CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    paths:
+      - src/**
+    steps:
+      - run: make test
+'''
+
+# Спека только с components/definitions, БЕЗ paths → эндпоинтов нет (модели данных не маршруты).
+_OPENAPI_MODELS_ONLY = '''\
+openapi: 3.0.1
+info:
+  title: Types Only
+  version: "1.0"
+components:
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+'''
+
+# Битый YAML с индикатором openapi — разбор падает, но скан не валится (возвращает пусто).
+_OPENAPI_BROKEN_YAML = '''\
+openapi: 3.0.0
+paths:
+  /orders:
+    get:
+      responses: [unbalanced
+'''

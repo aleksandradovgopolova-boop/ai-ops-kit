@@ -22,7 +22,7 @@ confidence, extractor}`. Дальше судья охвата (W3) сверит 
 объявляющий, к каким файлам применим и какую уверенность даёт. Ядро обхода (`extract_surfaces`)
 парсит исходники и раздаёт их применимым экстракторам; добавить новый стек — значит написать функцию
 и зарегистрировать её записью, а не править обход. САМИ функции-экстракторы разложены по стекам в
-подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet, общие примитивы — в `_common`),
+подпакете `surface_extractors/` (python_web / python_cli / js_ui / js_server / go_web / java_spring / graphql_api / grpc_proto / ruby_rails / dotnet_aspnet / openapi_spec, общие примитивы — в `_common`),
 чтобы модуль-вход не рос монолитом; этот файл держит контракт (`Surface`, `ParsedFile`, `Extractor`),
 сборку `DEFAULT_EXTRACTORS` и ядро обхода. Реализованные экстракторы честно продекларированы в
 `registry/feature-registry/surface-extractors.yaml` (инвариант честных capability-деклараций).
@@ -50,6 +50,7 @@ from ai_ops_kit.checks.surface_extractors.js_ui import (
     extract_react_router_screens,
     extract_vue_router_screens,
 )
+from ai_ops_kit.checks.surface_extractors.openapi_spec import extract_openapi_routes
 from ai_ops_kit.checks.surface_extractors.python_cli import (
     extract_console_scripts,
     extract_python_cli_argparse,
@@ -118,6 +119,12 @@ _RUBY_RB_SUFFIXES = frozenset({".rb"})
 # APIs (app.MapGet/…). Метаданные реестра (к каким файлам применим экстрактор) держим у сборки
 # Extractor'ов, а разбор идёт по содержимому/индикатору (dotnet_aspnet.py).
 _DOTNET_CS_SUFFIXES = frozenset({".cs"})
+# OpenAPI/Swagger-спеки (route). Разбор СТРУКТУРНЫЙ по тексту .yaml/.yml/.json (yaml.safe_load /
+# json.loads, БЕЗ исполнения и сети) — пары путь+метод из секции `paths`. Эти расширения ОЧЕНЬ
+# распространены (package.json, конфиги), потому экстрактор сужен индикатором top-level
+# `openapi:`/`swagger:` в самом ПОДМОДУЛЕ (openapi_spec.py), а не расширением. Метаданные реестра (к
+# каким файлам применим экстрактор) держим у сборки Extractor'ов; сам разбор — по содержимому.
+_OPENAPI_SPEC_SUFFIXES = frozenset({".yaml", ".yml", ".json"})
 
 
 # Экстрактор = адаптер под ОДИН стек. Регистрация записью делает добавление стека вопросом
@@ -300,6 +307,15 @@ ASPNET_ROUTES = Extractor(
     needs_ast=False,
 )
 
+OPENAPI_ROUTES = Extractor(
+    id="openapi-spec",
+    suffixes=_OPENAPI_SPEC_SUFFIXES,
+    surface_kinds=("route",),
+    confidence="inferred",   # ЗАЯВЛЕННЫЙ контракт спеки (может расходиться с кодом) + структурный разбор ≠ AST
+    extract=extract_openapi_routes,
+    needs_ast=False,
+)
+
 DEFAULT_EXTRACTORS: tuple = (
     PYTHON_WEB_ROUTES,
     PYTHON_CLI_ARGPARSE,
@@ -320,6 +336,7 @@ DEFAULT_EXTRACTORS: tuple = (
     GRPC_RPCS,
     RAILS_ROUTES,
     ASPNET_ROUTES,
+    OPENAPI_ROUTES,
 )
 
 

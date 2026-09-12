@@ -518,6 +518,42 @@ extractors:
         данных, НЕ операции); импортированные (`import "other.proto";`) сервисы из другого файла
         (виден только per-file service-блок); незакрытый `service {` без пары (обрыв файла — пропуск).
         Ничего из этого НЕ verified.
+  # E12 добавил извлечение HTTP-эндпоинтов из OpenAPI/Swagger-спеки (вид route) — первый источник
+  # поверхностей из ЗАЯВЛЕННОГО КОНТРАКТА API (спека), а не из кода обработчиков. Честность силы: спека
+  # может РАСХОДИТЬСЯ с реальным кодом (drift — эндпоинт объявлен в спеке, но в коде отсутствует или
+  # наоборот), плюс разбор структурный по тексту спеки (yaml.safe_load/json.loads, без исполнения,
+  # без сети, без резолва remote-$ref), а не доказательство из исполняемого исходника → это НЕ
+  # доказательный AST того же класса, что Python-AST → confidence: inferred (в W4 НЕ блокирует). Файлы
+  # .yaml/.json ОЧЕНЬ распространены, потому экстрактор сужен индикатором top-level `openapi:`/`swagger:`
+  # (иначе чужие package.json/конфиги дали бы ложные поверхности). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/openapi_spec.py (extract_openapi_routes), зарегистрирован в
+  # DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: openapi-spec
+    stack: {language: [yaml, json], frameworks: [openapi, swagger]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      СТРУКТУРНЫЙ (не исполняемый) разбор файлов .yaml/.yml/.json без сети: yaml.safe_load для YAML и
+      json.loads для JSON. Срабатывает ТОЛЬКО когда верхний уровень документа — словарь с ключом
+      `openapi:` (OpenAPI 3.x) ИЛИ `swagger:` (Swagger/OpenAPI 2.0); иначе сразу []. Каждая пара «путь
+      (ключ в секции `paths`) + HTTP-метод (get/post/put/delete/patch)» = одна операция → route. Путь —
+      ключ в `paths` (по контракту OpenAPI начинается с "/"), метод — ключ path-item. ref =
+      "file:line|<METHOD> <path>" (метод в верхнем регистре; line — строка ключа метода в тексте).
+      Битый/не-utf-8 файл не роняет скан (возвращается []). Структурный разбор заявленного контракта ≠
+      доказательный AST → confidence: inferred.
+    honest_limits:
+      sees: >-
+        HTTP-эндпоинты, ОБЪЯВЛЕННЫЕ в секции `paths` спеки OpenAPI 3.x / Swagger 2.0 (.yaml/.yml/.json)
+        как пары путь+метод (get/post/put/delete/patch); даёт file:line и "<METHOD> <path>" как symbol,
+        помечает inferred (заявленный контракт, не блокирует).
+      does_not_see: >-
+        РАСХОЖДЕНИЕ спеки с кодом (drift — спека может отставать: объявленный эндпоинт в коде может
+        отсутствовать, а реальный обработчик — не попасть в спеку); композицию через `$ref`/remote-refs
+        (path-item по ссылке в другой файл НЕ разворачивается); `callbacks` и `webhooks` (OpenAPI 3.1 —
+        они не в `paths`); методы head/options/trace; серверные префиксы из `servers:`/`basePath:` (к
+        путям НЕ приклеиваются — виден только литерал ключа `paths`); спеки, встроенные строкой В КОД
+        (SDL/JSON в .js/.ts/.py), и любую спеку без top-level `openapi:`/`swagger:`; переопределение
+        путей рантайм-роутером поверх спеки. Ничего из этого НЕ verified.
 
 # ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
 # status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
