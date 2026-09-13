@@ -19,7 +19,6 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 ceilings:
-  ai_ops_kit/ui/presenter.py: 963
   ai_ops_kit/engine/execution_pipeline.py: 789
   ai_ops_kit/planning/repo_audit.py: 854
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
