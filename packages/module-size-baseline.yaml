@@ -22,7 +22,6 @@ ceilings:
   ai_ops_kit/engine/execution_pipeline.py: 789
   ai_ops_kit/planning/repo_audit.py: 854
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
   ai_ops_kit/validation/validate_own_medicine.py: 795
   ai_ops_kit/gates/gate_executor.py: 905
   ai_ops_kit/engine/tool_broker.py: 868
