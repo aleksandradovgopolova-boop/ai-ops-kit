@@ -469,7 +469,8 @@ probes:
   kind: seam
   covers:
   - ai_ops_kit/cli/ai_ops_cli_commands.py
-  - ai_ops_kit/ui/presenter.py
+  - ai_ops_kit/ui/presenter_work.py
+  - ai_ops_kit/ui/presenter_graph.py
   - ai_ops_kit/lifecycle/active_work.py
   file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '    pub = active_work.publication_enabled(child_root)'
@@ -675,7 +676,7 @@ probes:
     перестаёт верить реестру.'
 - id: registry-superseded-is-not-running
   kind: guard
-  file: ai_ops_kit/ui/presenter.py
+  file: ai_ops_kit/ui/presenter_work.py
   find: '              if (a.get("status") or "") not in ("done", "superseded")]'
   replace_with: '              if (a.get("status") or "") != "done"]'
   tests:
@@ -788,7 +789,7 @@ probes:
     в `.gitignore` владельца НАЗВАНА в отчёте установки: менять чужой документ молча нельзя.'
 - id: broken-record-does-not-silence-the-fate
   kind: guard
-  file: ai_ops_kit/ui/presenter.py
+  file: ai_ops_kit/ui/presenter_graph.py
   find: '            next_steps=fates or None,'
   replace_with: '            next_steps=None,'
   tests:
@@ -802,7 +803,7 @@ probes:
   covers:
   - ai_ops_kit/cli/ai_ops_cli_commands.py
   - ai_ops_kit/planning/delivery_plan.py
-  - ai_ops_kit/ui/presenter.py
+  - ai_ops_kit/ui/presenter_work.py
   file: ai_ops_kit/cli/ai_ops_cli_commands.py
   find: '        cross = _dp.crosscheck_running(child_root, team, registry_exists=awp.is_file())'
   replace_with: '        cross = None'
@@ -815,7 +816,7 @@ probes:
     человека мертва.'
 - id: divergence-is-not-presented-as-normal
   kind: guard
-  file: ai_ops_kit/ui/presenter.py
+  file: ai_ops_kit/ui/presenter_work.py
   find: '        if stale:'
   replace_with: '        if False:'
   tests:
@@ -886,7 +887,7 @@ probes:
     публикацией и чужой машиной — только после этого проба стала убивать.'
 - id: everything-held-is-said-not-hidden
   kind: guard
-  file: ai_ops_kit/ui/presenter.py
+  file: ai_ops_kit/ui/presenter_work.py
   find: '        if held_others:'
   replace_with: '        if False:'
   tests:

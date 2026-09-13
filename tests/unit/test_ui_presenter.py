@@ -157,6 +157,10 @@ def test_contract_comes_from_the_registry_not_from_code(tmp_path, monkeypatch):
     Реестр — источник истины, и для собственной политики коммуникации тоже: иначе переименование
     ярлыка требует правки двух мест, а расхождение обнаруживается глазами.
     """
+    # POLICY и кэш контракта живут в фундаменте `presenter_core` (фасад их ре-экспортирует); патчим
+    # там, где их читает `load_policy`/`_contract` — фасаду импортировать ядро обратно нельзя (цикл).
+    from ai_ops_kit.ui import presenter_core as PR_core
+
     assert PR._contract()["source"] == "registry", "контракт читается не из реестра"
     assert set(PR.statuses()) == {"ok", "needs_input", "blocked", "done", "degraded"}
     assert PR.statuses()["degraded"], "у статуса нет ярлыка — реестр неполон"
@@ -165,7 +169,7 @@ def test_contract_comes_from_the_registry_not_from_code(tmp_path, monkeypatch):
     pol = tmp_path / "policy.yaml"
     pol.write_text("statuses:\n  ok: {label: 'ЯРЛЫК-ИЗ-РЕЕСТРА'}\n"
                    "audiences:\n  product: {default: true}\n", encoding="utf-8")
-    monkeypatch.setattr(PR, "POLICY", pol)
+    monkeypatch.setattr(PR_core, "POLICY", pol)
     PR._CONTRACT.clear()
     try:
         m = PR.message(status="ok", summary="проверка.")
@@ -174,7 +178,7 @@ def test_contract_comes_from_the_registry_not_from_code(tmp_path, monkeypatch):
         PR._CONTRACT.clear()
 
     # Реестр недоступен -> работаем на аварийных значениях и НЕ выдаём их за источник истины.
-    monkeypatch.setattr(PR, "POLICY", tmp_path / "нет.yaml")
+    monkeypatch.setattr(PR_core, "POLICY", tmp_path / "нет.yaml")
     PR._CONTRACT.clear()
     try:
         assert PR._contract()["source"] == "fallback"
