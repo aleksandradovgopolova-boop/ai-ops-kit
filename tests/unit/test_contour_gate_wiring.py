@@ -27,10 +27,16 @@ def test_gate_is_actually_called_in_the_pipeline():
     Проверяем не строкой в файле, а РАЗБОРОМ: есть вызов `contour_consistency_evidence` и есть
     присваивание в `gate_ev["contour_consistency"]`. Замена тела на `pass` краснеет здесь.
     """
-    src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
-    tree = ast.parse(src)
-    called = {n.func.id for n in ast.walk(tree)
-              if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
+    # Разрез монолита: стадии конвейера (в т.ч. сборка gate_ev) вынесены в pipeline_stages —
+    # «конвейер» теперь фасад + сателлит, поэтому разбираем ОБА файла.
+    eng = PKG / "ai_ops_kit" / "engine"
+    src = ((eng / "execution_pipeline.py").read_text(encoding="utf-8")
+           + "\n" + (eng / "pipeline_stages.py").read_text(encoding="utf-8"))
+    called = set()
+    for _f in ("execution_pipeline.py", "pipeline_stages.py"):
+        _tree = ast.parse((eng / _f).read_text(encoding="utf-8"))
+        called |= {n.func.id for n in ast.walk(_tree)
+                   if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
     assert "contour_consistency_evidence" in called, \
         "гейт связности контуров не вызывается в конвейере — его удаление прошло бы молча"
     assert 'gate_ev["contour_consistency"]' in src, \
