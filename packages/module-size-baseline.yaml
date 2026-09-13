@@ -21,7 +21,6 @@ threshold: 700
 ceilings:
   ai_ops_kit/engine/execution_pipeline.py: 789
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
-  ai_ops_kit/validation/validate_own_medicine.py: 795
   ai_ops_kit/planning/contours.py: 724
   ai_ops_kit/engine/pipeline_evidence.py: 734
 
