@@ -56,7 +56,7 @@ cd /path/to/project
 
 ## Честно о границах
 
-- **Канал — `qualification`, не `stable`.** Текущая версия — **v4.1.0 qualification**. `stable`
+- **Канал — `qualification`, не `stable`.** Текущая версия — **v4.2.0 qualification**. `stable`
   требует полевых доказательств на двух живых дочках и проверяется машиной; пока обкатки нет —
   слово не выдаётся авансом.
 - **Часть intelligence-слоя построена, но не проведена в контур** (organizational learning,
