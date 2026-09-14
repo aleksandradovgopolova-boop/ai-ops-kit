@@ -67,6 +67,11 @@ ALLOWED = (
     # pass/fail, обернуть в pytest нельзя. Логика сверки покрыта юнит-тестами (test_roadmap_issue_sync),
     # ядро — чистая функция на инъектируемом порте.
     re.compile(r"^python3?\s+-m\s+ai_ops_kit\.cli\.ai_ops_cli\s+roadmap\s+sync-issues\b"),
+    # Сборка пульта состояния — операционная джоба, а не проверка: она ПРОИЗВОДИТ
+    # dashboard/data.json (свежие показатели для публикуемого пульта) из источников истины и
+    # открытых задач, у неё нет вердикта pass/fail, обернуть в pytest нельзя. Зовётся по
+    # расписанию/на push/вручную из workflow `status-dashboard` перед публикацией на GitHub Pages.
+    re.compile(r"^python3?\s+dashboard/build_data\.py\b"),
 )
 
 

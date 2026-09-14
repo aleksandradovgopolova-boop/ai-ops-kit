@@ -1,0 +1,64 @@
+# Автообновление пульта состояния кита.
+# Пересобирает dashboard/data.json из источников истины и открытых задач и публикует
+# папку dashboard/ на GitHub Pages. Числа освежаются сами: по расписанию, при изменениях
+# в main и по кнопке «Run workflow».
+#
+# Разовая настройка (один раз): Settings → Pages → Source: «GitHub Actions».
+# Положить этот файл в .github/workflows/status-dashboard.yml, а папку dashboard/ —
+# в корень репозитория.
+
+name: Пульт состояния
+
+on:
+  schedule:
+    - cron: "0 6 * * *"        # каждый день в 06:00 UTC; частоту меняйте здесь
+  workflow_dispatch: {}         # ручной запуск из вкладки Actions
+  push:
+    branches: [main]
+    paths:                      # пересобирать сразу, когда меняются источники чисел
+      - "VERSION"
+      - "registry/**"
+      - "quality/gates.yaml"
+      - "dashboard/**"
+      - ".github/workflows/status-dashboard.yml"
+
+# Токен нужен только на чтение задач и на публикацию Pages — не на запись в репозиторий.
+permissions:
+  contents: read
+  issues: read
+  pages: write
+  id-token: write
+
+# Одновременно — одна публикация; новый запуск отменяет предыдущий незавершённый.
+concurrency:
+  group: status-dashboard
+  cancel-in-progress: true
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Собрать свежие показатели
+        env:
+          GH_TOKEN: ${{ github.token }}   # build_data.py читает задачи через gh
+        run: python3 dashboard/build_data.py --repo .
+
+      - uses: actions/configure-pages@v5
+
+      - name: Подготовить страницу к публикации
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dashboard
+
+      - name: Опубликовать на GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4

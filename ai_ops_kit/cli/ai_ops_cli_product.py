@@ -284,16 +284,30 @@ def _intent_model(task, child_root, signals, a):
     except _contours.ModelCorrupt as e:
         print(f"ОШИБКА: {e}")
         return 1
-    # #612: `model --answer <qid> "<value>"` записывает ОДИН ответ онбординга без ручной правки YAML.
+    # #612 + one-screen: `model --answer <qid> "<value>"` записывает ответ(ы) онбординга без ручной
+    # правки YAML. Флаг ПОВТОРЯЕМ (`--answer a "x" --answer b "y"`) — все ответы пишутся по очереди.
+    # `--why` тоже повторяем, по одному на ответ в порядке; лишние ответы просто без основания.
     if getattr(a, "answer", None):
-        ok, msg = repo_audit.record_answer(child_root, a.answer[0], a.answer[1], rep["ask"], why=a.why)
-        print(msg)
-        return 0 if ok else 2
+        whys = list(getattr(a, "why", None) or [])
+        for i, pair in enumerate(a.answer):
+            why = whys[i] if i < len(whys) else None
+            ok, msg = repo_audit.record_answer(child_root, pair[0], pair[1], rep["ask"], why=why)
+            print(msg)
+            # Любой невалидный ответ — стоп и ненулевой код: пакет ответов не должен применяться
+            # наполовину, а `--flow` за ним — тем более (мы бы собрали направление по неполным фактам).
+            if not ok:
+                return 2
+        # Без `--flow` — записал и вышел (прежнее поведение, только пакетом ответов).
+        if not getattr(a, "flow", False):
+            return 0
+        # С `--flow` — НЕ ранний return: продолжаем в первый час тем же вызовом. Понимание
+        # ПЕРЕСЧИТЫВАЕМ — записанные ответы обязаны учитываться, иначе first_hour собрал бы
+        # направление по устаревшим фактам (rep выше посчитан ДО записи).
+        rep = repo_audit.run(child_root)
     # ПОБОЧНЫЙ ЭФФЕКТ НЕ ЗАВИСИТ ОТ ФОРМАТА ВЫВОДА и от `--flow`. Форма ответов создаётся в ЛЮБОМ
     # пути просмотра (обычном И первом часе): первый час не полон без места, куда человек впишет
     # ответы. Прежде `--flow` короткозамыкал ДО записи формы, и `setup` (шаг первого часа) не
-    # оставлял «ответь на вопросы» — остаток прятался (issue #612). `--answer` выше уже вернул
-    # управление, так что здесь форму трогаем только на путях просмотра.
+    # оставлял «ответь на вопросы» — остаток прятался (issue #612).
     answers_file = None
     if rep["ask"]["questions"]:
         answers_file = repo_audit.write_question_file(child_root, rep["ask"])

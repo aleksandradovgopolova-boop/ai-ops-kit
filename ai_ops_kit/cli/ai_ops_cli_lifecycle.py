@@ -42,26 +42,44 @@ def _intent_onboard(task, child_root, signals, a):
         _conf_summary = _cc.summary(_findings)
     except (ImportError, OSError, ValueError):           # отчёт-советчик не должен ронять онбординг
         _conf_summary = None
+    # voluntary-child-registration: решение об отметке — РЕАЛЬНАЯ часть онбординга. По умолчанию
+    # (флага нет) не создаётся ничего — инвариант opt-in; явный флаг записывает решение владельца.
+    # Сети нет ни в одной ветке — кит ничего никуда не отправляет.
+    from ai_ops_kit.engops import child_registry as _reg
+    reach = getattr(a, "reach", None)
+    reach_recorded = None                                 # для JSON: что записано ("registered"/"declined") или None
+    if reach == "register":
+        _reg.register(child_root)
+        reach_recorded = "registered"
+    elif reach == "decline":
+        _reg.decline(child_root)
+        reach_recorded = "declined"
     if js:
         print(json.dumps({"written": str(out), "profile": prof,
-                          "conformance_report": conf_rel}, ensure_ascii=False, indent=2))
+                          "conformance_report": conf_rel, "reach": reach_recorded},
+                         ensure_ascii=False, indent=2))
     else:
         _say(child_root, "from_onboarding_profile", prof, str(out.relative_to(child_root)))
         if conf_rel:
             print(f"\n  Соответствие конституции: {_conf_summary}")
             print(f"  Отчёт с рекомендациями: {conf_rel}")
-        # voluntary-child-registration: ОДИН РАЗ предлагаем отметиться. Предложение показывается,
-        # только пока решение не принято (has_decided) — так повторный онбординг не переспрашивает
-        # (идемпотентность). Ни к чему не обязывает: по умолчанию НЕ отмечаемся, отказ безопасен и
-        # молчалив, гейты от него не краснеют. Согласие — отдельной командой, руками владельца.
-        from ai_ops_kit.engops import child_registry as _reg
-        if not _reg.has_decided(child_root):
-            print("\n  Хочешь помочь честно оценить охват кита? Это ДОБРОВОЛЬНО и БЕЗ телеметрии — "
-                  "кит ничего никуда не отправляет.")
-            print("  Отметиться (имя проекта + версия кита + дата + анонимный id, без путей и почты): "
-                  "./ai-ops reach register .")
-            print("  Не хочешь — просто пропусти или скажи ./ai-ops reach decline . "
-                  "(спрошу об этом только раз).")
+        if reach == "register":
+            # Явное «да»: отметка записана анонимно и локально, без сети.
+            print("\n  Отметились: анонимно и без телеметрии — кит ничего никуда не отправляет.")
+            print("  Охват обновится, когда владелец кита периодически соберёт отметившиеся проекты "
+                  "(reach collect).")
+        elif reach == "decline":
+            # Явное «нет»: ничего не создано, онбординг это не затрагивает.
+            print("\n  Отметку отклонили: ничего не создано, онбординг это не затрагивает.")
+        elif not _reg.has_decided(child_root):
+            # Решения ещё нет -> ОДИН РАЗ задаём явный вопрос да/нет. По умолчанию НЕ отмечаемся и
+            # НИЧЕГО не создаём в этой ветке (иначе отказ перестал бы быть безопасным и молчаливым).
+            print("\n  Отмечаемся? Это добровольно и без телеметрии — кит ничего никуда не отправляет "
+                  "(запишем имя проекта + версию кита + дату + анонимный id, без путей и почты).")
+            print("  Да:  ./ai-ops onboard . --reach register   (или ./ai-ops reach register .)")
+            print("  Нет: ./ai-ops onboard . --reach decline    (или ./ai-ops reach decline .)")
+            print("  Охват потом обновляется, когда владелец кита периодически собирает отметившиеся "
+                  "проекты (reach collect).")
     return 0
 
 

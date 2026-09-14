@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from _installer_helpers import _run_cli
+from _installer_helpers import _git, _run_cli
 
 # Каждый тест поднимает реальную установку кита (подпроцессы + копирование дерева) — 20–40 c на
 # CI, то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile`
@@ -66,8 +66,9 @@ def test_setup_names_what_is_left_to_the_human(child):
     assert ".ai-ops.yaml" in out and (
         "провайдер" in out.lower() or "заготовк" in out.lower()), \
         "остаток конфига не назван — незаполненный .ai-ops.yaml выдан за готовый"
-    # Финальный коммит остаётся за человеком и назван.
-    assert "коммит" in out.lower(), "не сказано, что коммит за человеком"
+    # Коммит служебных файлов теперь делает САМ setup — он не должен оставаться «за человеком».
+    assert "это делает человек" not in out, \
+        "коммит всё ещё свален на человека, хотя setup фиксирует свои файлы сам"
 
 
 def test_setup_reaches_first_hour_via_doctor_and_flow(child):
@@ -123,5 +124,84 @@ def test_remaining_names_config_placeholders_in_process(child):
     remaining = installer._setup_ops()._setup_remaining(child)
     joined = "\n".join(remaining)
     assert ".ai-ops.yaml" in joined, "остаток не называет конфиг с плейсхолдерами"
-    assert any("коммит" in item.lower() for item in remaining), \
-        "остаток не называет финальный коммит как шаг человека"
+    # Коммит служебных файлов setup делает сам — его больше НЕТ в остатке «за человеком».
+    assert not any("коммит" in item.lower() for item in remaining), \
+        "коммит остался в остатке, хотя его теперь делает setup"
+
+
+def test_remaining_depends_on_first_hour_stage_in_process(child):
+    """`_setup_remaining` спрашивает ответы ПО СТАДИИ первого часа, а не по наличию формы.
+
+    ready — вопросов не остаётся; needs_answers — просит ответить и перечисляет блокирующие;
+    blocked_understanding — честно говорит, что репозиторий пока не читается."""
+    r = _run_cli(child, "setup", ".")
+    assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+    setup_ops = _load_installer()._setup_ops()
+
+    ready = {"kind": "first-hour", "stage": "ready",
+             "next": {"next_best": {"id": "W1", "title": "нарезать монолит"}}}
+    r_ready = setup_ops._setup_remaining(child, ready)
+    assert not any("продуктовые вопросы" in x for x in r_ready), \
+        "при stage=ready кит всё ещё просит ответить на вопросы — фактов же хватило"
+
+    needs = {"kind": "first-hour", "stage": "needs_answers",
+             "blocking_questions": [{"id": "primary_user", "ask": "кто главный пользователь?"}]}
+    r_needs = setup_ops._setup_remaining(child, needs)
+    assert any("продуктовые вопросы" in x for x in r_needs), "needs_answers не просит ответить"
+    assert any("primary_user" in x for x in r_needs), "не перечислен блокирующий вопрос по id"
+
+    blocked = {"kind": "first-hour", "stage": "blocked_understanding"}
+    r_blocked = setup_ops._setup_remaining(child, blocked)
+    assert any("не читается" in x for x in r_blocked), \
+        "blocked_understanding не сказал честно, что репозиторий пока не читается"
+
+
+def test_first_hour_done_lines_names_first_work_at_ready():
+    """При stage=ready блок «сделано» называет первую работу человеческим языком."""
+    setup_ops = _load_installer()._setup_ops()
+    ready = {"kind": "first-hour", "stage": "ready",
+             "next": {"next_best": {"id": "W1", "title": "нарезать монолит installer"}}}
+    lines = setup_ops._first_hour_done_lines(ready)
+    joined = "\n".join(lines)
+    assert "направление и план собраны" in joined, "не сказано, что первый час пройден"
+    assert "нарезать монолит installer" in joined, "не названа первая работа"
+    assert any("Дальше имеет смысл взять" in x for x in lines), "первая работа названа не по-человечески"
+    # needs_answers первую работу НЕ называет (её ещё нет).
+    needs = {"kind": "first-hour", "stage": "needs_answers", "blocking_questions": []}
+    assert not any("Дальше имеет смысл взять" in x for x in setup_ops._first_hour_done_lines(needs))
+
+
+def test_setup_names_blocking_questions_at_needs_answers(child):
+    """(needs_answers, подпроцесс) минимальный репозиторий даёт вопросы: экран просит ответить и
+    перечисляет блокирующие с их id — человек видит, чего именно не хватает."""
+    r = _run_cli(child, "setup", ".")
+    assert r.returncode == 0, f"setup упал: {r.stdout}\n{r.stderr}"
+    out = r.stdout
+    assert "продуктовые вопросы" in out, "не попросил ответить на продуктовые вопросы"
+    # Блокирующие вопросы перечислены с id в [скобках] под пунктом остатка.
+    import re as _re
+    assert _re.search(r"—\s*\[[a-z_]+\]", out), \
+        f"блокирующие вопросы не перечислены с id:\n{out[-800:]}"
+
+
+def test_setup_commits_only_kit_files_not_foreign(child):
+    """(C) setup фиксирует ТОЛЬКО пути кита; посторонний файл рабочего дерева остаётся не тронут.
+
+    Кладём посторонний файл ДО установки и проверяем, что после setup он остался незакоммиченным
+    (untracked), а служебные файлы кита (`.ai-ops.yaml`) — закоммичены."""
+    foreign = child / "MY-OWN-NOTES.txt"
+    foreign.write_text("личные заметки пользователя\n", encoding="utf-8")
+    r = _run_cli(child, "setup", ".")
+    assert r.returncode == 0, f"setup упал: {r.stdout}\n{r.stderr}"
+    # Экран называет фиксацию как СДЕЛАННОЕ.
+    assert "закоммичены" in r.stdout, f"не сказано, что setup зафиксировал свои файлы:\n{r.stdout[-600:]}"
+    # Служебные файлы кита — под контролем git (закоммичены).
+    tracked = _git(child, "ls-files").stdout.splitlines()
+    assert ".ai-ops.yaml" in tracked, "setup не зафиксировал .ai-ops.yaml"
+    assert any(t.startswith(".ai/") for t in tracked), "setup не зафиксировал .ai/"
+    # Посторонний файл НЕ закоммичен: git его не отслеживает.
+    assert "MY-OWN-NOTES.txt" not in tracked, \
+        "setup закоммитил посторонний файл пользователя — граница фиксации нарушена"
+    status = _git(child, "status", "--porcelain", "MY-OWN-NOTES.txt").stdout
+    assert status.strip().startswith("??"), \
+        f"посторонний файл должен остаться нетронутым (untracked), а статус: {status!r}"
