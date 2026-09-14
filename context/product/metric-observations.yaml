@@ -1,0 +1,41 @@
+# Наблюдения продуктовых метрик (семейство Time to Verified Outcome).
+# Источник значений — реальные живые прогоны кита на полигонах. Ничего не выдумано:
+# каждое число снято из артефактов прогона, git и PR. Метрики определены в
+# context/product/MetricCatalog.md — ключи здесь совпадают с ним.
+schema_version: 1
+kind: metric-observations
+
+# ЧЕСТНАЯ РАМКА. Это первое наблюдение, а не тренд: n=1 — нижняя граница
+# правдоподобия, а не измеренная норма. Полигон, не продакшн владельца.
+honest_note: >-
+  n=1 — это первое реальное наблюдение, а не тренд. Значения снимались на полигоне
+  (не в продакшне владельца) и показывают нижнюю границу правдоподобия. Два
+  guardrail-метрики ещё в открытых окнах наблюдения.
+
+observations:
+  - date: "2026-09-14"
+    source: ai-ops-cockpit          # полигон
+    feature: catalog-search         # функция «поиск по каталогу»
+    pr: 65                           # PR #65, слит 2026-09-14
+    samples: 1
+    # Оговорка о пути: показывать честно вместе с числами.
+    path_note: >-
+      Писал субагент — в этой среде нет API-ключа для внутреннего писателя кита.
+      Независимый ревьюер и обязательные гейты — зелёные.
+    metrics:
+      intent_to_verified_pr_time:
+        value: 5m37s
+        samples: 1
+      verified_pr_rate:
+        value: 1/1                   # без ручной доводки кода человеком
+        samples: 1
+      human_intervention_rate:
+        value: 0/1
+        samples: 1
+      rework_rate:
+        status: observation_window_open
+        window_days: 7
+        opened_at: "2026-09-14T12:44:07Z"
+      post_merge_defect_rate:
+        status: observation_window_open
+        opened_at: "2026-09-14T12:44:07Z"

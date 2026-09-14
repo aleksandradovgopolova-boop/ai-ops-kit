@@ -12,8 +12,10 @@
 #
 # ГРАНИЦА С ИНВАРИАНТОМ КИТА. Фордж-конфигурация дочки; кода кита и его зависимостей не касается.
 #
-# ПИНЫ. Действия закреплены по мажорному тегу; для Pinned-Dependencies закрепите их на commit SHA
-# (см. SUPPLY-CHAIN.md) — тогда Scorecard засчитает и этот пункт.
+# ПИНЫ. Большинство действий закреплено по мажорному тегу; для Pinned-Dependencies закрепите их на
+# commit SHA (см. SUPPLY-CHAIN.md) — тогда Scorecard засчитает и этот пункт. `ossf/scorecard-action`
+# ПЛАВАЮЩЕГО мажорного тега `v2` НЕ публикует (только полные версии) — поэтому он закреплён на commit
+# SHA с комментарием версии; `@v2` не резолвился и ронял workflow у каждой дочки (finding живого прогона).
 name: ai-ops-scorecard
 on:
   branch_protection_rule: {}
@@ -36,7 +38,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: ossf/scorecard-action@v2
+      - uses: ossf/scorecard-action@55891bbd73f2425e97637d96e306fc9d491d0b21 # v2.4.4
         with:
           results_file: results.sarif
           results_format: sarif

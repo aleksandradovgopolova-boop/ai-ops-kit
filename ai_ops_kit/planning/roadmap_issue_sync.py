@@ -37,6 +37,16 @@ DIRECTION_TITLES = {
     "uiux-standard-as-product": "UI/UX-стандарт как продукт",
 }
 _OPEN_WORK = {"todo", "in_progress"}
+# Работа, ждущая ЖИВОГО прогона владельца: не назначается writer'у (issue-подзадачу под неё не
+# заводим), но и «работ нет» про направление с такой работой — неправда. Показываем её в теле эпика
+# отдельной строкой, чтобы эпик не молчал о том, что под ним есть незакрытая работа-замер.
+_WAITING_WORK = {"waiting_on_owner"}
+
+
+def _one_line(text: str, limit: int = 160) -> str:
+    """Свернуть многострочный `waiting_on` в одну обрезанную строку для тела issue."""
+    t = " ".join(str(text or "").split())
+    return (t[: limit - 1] + "…") if len(t) > limit else t
 
 
 @dataclass(frozen=True)
@@ -121,20 +131,31 @@ def work_title(goal: str, work: dict) -> str:
 
 
 def epic_body(goal: str, horizon: str, reached: int, total: int,
-              missing: list[str], sub_numbers: list[int | None]) -> str:
+              missing: list[str], sub_numbers: list[int | None],
+              waiting: list[dict] | None = None) -> str:
+    waiting = waiting or []
     lines = [f"<!-- roadmap-sync: {_epic_key(goal)} -->",
              f"Направление роадмапа **`{goal}`** (горизонт: {_HZ_HUMAN.get(horizon, horizon)}). "
              f"Готово {reached} из {total} исходов.", "", "### Что ещё не достигнуто"]
     for m in missing:
         lines.append(f"- [ ] `{m}`")
     lines.append("")
+    if waiting:
+        # Работа-замер ждёт живого прогона владельца — не writer'а. Показываем отдельно от подзадач,
+        # чтобы не выдать её за назначаемую работу и не молчать о ней («работ нет» было бы неправдой).
+        lines.append("### Ждёт owner-прогон")
+        for w in waiting:
+            reason = _one_line(w.get("waiting_on") or "")
+            lines.append(f"- `{w['id']}` — ждёт прогона владельца" + (f": {reason}" if reason else ""))
+        lines.append("")
     if sub_numbers:
         lines.append("### Подзадачи (работы плана)")
         for n in sub_numbers:
             lines.append(f"- [ ] #{n}" if n is not None else "- [ ] _(будет заведена)_")
-    else:
+        lines.append("")
+    elif not waiting:
         lines.append("_Заведённых работ под направлением сейчас нет — открыт только исход выше._")
-    lines.append("")
+        lines.append("")
     lines.append("_Эпик направления. Поддерживается командой `roadmap sync-issues`; трекер "
                  "деталей — `planning/plan.yaml` и `ROADMAP.md`._")
     return "\n".join(lines).rstrip() + "\n"
@@ -164,6 +185,15 @@ def _open_works_by_goal(plan_items: list[dict]) -> dict[str, list[dict]]:
     return by
 
 
+def _waiting_works_by_goal(plan_items: list[dict]) -> dict[str, list[dict]]:
+    """Работы-замеры, ждущие живого прогона владельца (`waiting_on_owner`), по цели."""
+    by: dict[str, list[dict]] = {}
+    for w in plan_items:
+        if w.get("status") in _WAITING_WORK and w.get("goal"):
+            by.setdefault(w["goal"], []).append(w)
+    return by
+
+
 def sync(report: dict, plan_items: list[dict], client: Client, apply: bool = False) -> SyncPlan:
     """Свести issue-трекер с роадмапом. Возвращает план; при apply=True выполняет его.
 
@@ -177,6 +207,7 @@ def sync(report: dict, plan_items: list[dict], client: Client, apply: bool = Fal
             missing = [o["name"] for o in g.get("outcomes", []) if not o.get("reached")]
             directions.append((g["goal"], hz, g.get("reached", 0), g.get("total", 0), missing))
     works_by = _open_works_by_goal(plan_items)
+    waiting_by = _waiting_works_by_goal(plan_items)
 
     existing = client.list()
     by_key: dict[str, Issue] = {}
@@ -220,7 +251,7 @@ def sync(report: dict, plan_items: list[dict], client: Client, apply: bool = Fal
         desired_keys.add(key)
         subs = [work_number.get(_work_key(goal, w["id"])) for w in works_by.get(goal, [])]
         title = epic_title(goal)
-        body = epic_body(goal, hz, reached, total, missing, subs)
+        body = epic_body(goal, hz, reached, total, missing, subs, waiting_by.get(goal, []))
         cur = by_key.get(key)
         if cur is None:
             num = client.create(title, body, [LABEL]) if apply else None

@@ -137,11 +137,11 @@ goals:
     outcome:
       ci_lint_job_green: true
       evidence_scope_named_not_implied: true
-      # ОСТАЁТСЯ false 2026-09-10: инфра-исходы достигнуты, но поле вскрыло остаток за ними, и
-      # раньше контракт этого не отражал — кит считал цель достигнутой (2/2), пока прогон ещё
-      # отдавал невоспроизводимый вердикт и немёржабельный PR.
-      verdict_is_reproducible_on_unchanged_input: true   # #405: READY/NOT_READY чередуются на одном входе
-      run_hands_over_only_mergeable_pr: true             # #404: прогон валит собственный status-freshness гейт
+      # ДОСТИГНУТЫ (#404 и #405 закрыты). Поле вскрыло остаток за инфра-исходами: раньше контракт
+      # держал цель достигнутой (2/2), пока прогон ещё отдавал невоспроизводимый вердикт и
+      # немёржабельный PR. Остаток вынесен отдельными исходами, и оба закрыты — цель achieved 4/4.
+      verdict_is_reproducible_on_unchanged_input: true   # #405 закрыт: вердикт воспроизводим на одном входе
+      run_hands_over_only_mergeable_pr: true             # #404 закрыт: прогон отдаёт мёржабельный PR
 
   # ─── этап Product OS (решение владельца 14.08.2026, ep-2026-08-14-product-os) ───────────────
   - id: qualification-closeout
@@ -151,8 +151,9 @@ goals:
     outcome:
       # real_task ДОСТИГНУТ 2026-09-02: реальная задача на ии-среде дошла до слитого verified PR
       # #701 (owner-led). Улика: qualification/REAL-PRODUCT-II-SREDA-OWNER-LED-2026-09-01.md.
-      # repeated_on_two_different_live_repos ОСТАЁТСЯ false: #701 — ПЕРВЫЙ verified PR, критерий
-      # требует повтора на втором живом репозитории. Поэтому цель closeout ещё не achieved.
+      # repeated_on_two_different_live_repos ДОСТИГНУТ 2026-09-09 (#668, свод #705): прогон closeout
+      # довёл ДВА внешних репозитория до verified PR — критерий повтора на втором живом репо выполнен.
+      # #701 был первым; второй закрыл повтор. Поэтому цель closeout achieved.
       real_task_reaches_verified_pr_without_patching_the_kit: true
       repeated_on_two_different_live_repos: true
       # ЗАКРЫТ 14.08: `quality/mutation-probes.yaml` + `devai_ops_kit/devtools/mutation_probe.py` +
@@ -233,12 +234,10 @@ goals:
       # #417: механизм ЕСТЬ и доказан детерминированно — check_feature_target отказывает
       # решению без полной тройки baseline/target/guardrails, propose такой файл не пишет
       # (fail-closed), а gate_feature_decisions краснит каталог решений с неполной фичей
-      # (tests/unit/test_decision_feature_target.py, 6/6). Исход ОСТАЁТСЯ false осознанно:
-      # гейт живёт в decision_loop (модуль пока unwired, в дочку не едет) и не подключён к
-      # обязательному контуру — его никто не гоняет ни в CI, ни в run-гейтах, и ничто не
-      # заставляет фич-решение проходить через propose. Механизм готов, принудительной
-      # проводки нет — true будет, когда гейт станет обязательным. (Честность важнее галочки,
-      # ср. #424.)
+      # (tests/unit/test_decision_feature_target.py, 6/6). ФЛИПНУТ в true 2026-09-03 (свод #794):
+      # прежде исход держали false осознанно, пока гейт не был обязательным. Работа wire-decision-gate
+      # (#791) сделала гейт решений БЛОКИРУЮЩИМ — фич-решение обязано пройти полную тройку, проводка
+      # больше не «готова, но не подключена». Цель product-decision-loop достигнута 2/2.
       feature_has_baseline_target_and_guardrails: true
 
   - id: storybook-as-visual-contract
@@ -264,11 +263,12 @@ goals:
     # Обзор умеет идти ночью РЕАЛЬНЫМ триггером (CI-workflow `schedule: cron`, install_schedule +
     # schedule_status с честным detected/declared/absent) и БРИФУЕТ владельца доставкой (durable-инбокс
     # + latest + receipt: произведён ≠ доставлен), а не печатью в stdout. Два других исхода
-    # `false_positive_rate_is_named` остаётся открыт (#423); `no_direct_writes_to_main_ever` ЗАКРЫТ
-    # 2026-09-04 (#422): проверяемый инвариант доставлен.
-    # ПАУЗА 2026-09-09: механизм доставлен (2/3 исхода верны, ночной прогон отработал живьём), но
-    # активной работы под последним исходом (#423 false_positive_rate) сейчас нет — держать active
-    # значило бы объявлять занятость, которой нет. В ROADMAP стоит под «Дальше»; вернётся с работой.
+    # `no_direct_writes_to_main_ever` ЗАКРЫТ 2026-09-04 (#422): проверяемый инвариант доставлен.
+    # `false_positive_rate_is_named` ЗАКРЫТ 2026-09-05 (#423, свод #801): частота ложных названа
+    # первоклассно в ночном брифе (format_false_positive_rate — «не измерено, нужно >=3 обзоров» = уже
+    # названная частота; измеренное значение — граница автофикса, не этот исход).
+    # ДОСТИГНУТА 2026-09-05: все три исхода верны (3/3), ночной прогон отработал живьём. В ROADMAP
+    # стоит под «Дальше» (ротационные обзоры + portfolio-intelligence — следующая, более широкая работа).
     status: achieved
     outcome:
       # ФЛИПНУТ 2026-09-06 ЖИВЫМ ПРОГОНОМ (#421, PR #533): расписание обзора реально поставлено на
@@ -656,16 +656,17 @@ work:
 
   # backlog-deduplication закрыта в историю 2026-08-28 (тест-доказательство в PR #350): детектор
   # доказан детерминированным тестом на репо с реальными дублями — находит пару, помечает устаревшее,
-  # предлагает слить (никогда молча). Исход цели duplicates_detected_and_merged ОСТАЁТСЯ false:
-  # «слияние» требует живого решения человека, кодом не флипается. См. history.
+  # предлагает слить (никогда молча). Исход цели duplicates_detected_and_merged ФЛИПНУТ 2026-08-31
+  # (#377): половину «слить» построили approval-gated — `ai-ops backlog merge --approved` закрывает
+  # дубль с кросс-ссылкой ТОЛЬКО по одобренным человеком парам (обратимо). См. history.
 
   # backlog-ai-prioritization и backlog-dependency-graph закрыты в историю 2026-08-27 (живой прогон
   # `backlog prioritize` и `backlog graph` на 7 реальных Issues кита). См. history/plan-history.yaml.
 
   # drift-detected-between-artifacts закрыта в историю 2026-08-28 (код в PR #229): drift_artifacts.py
   # + 13 тестов на все три случая (искусственный дрейф→красный, чисто→зелёный, недоступная пара→unknown).
-  # Исход цели drift_detected_between_artifacts остаётся false: требует реального дрейфа на живой дочке
-  # через команду `ai-ops drift` (CLI-проводка вне территории этой работы). См. history.
+  # Исход цели drift_detected_between_artifacts ФЛИПНУТ 2026-08-31 (#369): команда `ai-ops drift`
+  # подключена, детектор поймал реальный рассинхрон на копии дочки — дочка запускает его командой. См. history.
 
   # risks-identified-with-mitigation и team-status-auto-generated закрыты в историю 2026-08-27
   # (живой прогон `ai-ops team`: авто-сводка команды собралась, риск [high] technical назван с
@@ -689,12 +690,11 @@ work:
   # history/plan-history.yaml. Капстоун собирается отдельной работой.
   # ── Phase 3: Roadmap & Delivery (лента 4) — ПОСТРОЕНА ─────────────────────────────────────────
   # Четыре работы построены и влиты (#226 roadmap, #231 milestones, #233 delivery+blockers) и
-  # закрыты в history/plan-history.yaml. ИСХОДЫ цели roadmap-and-delivery ОСТАЮТСЯ false осознанно:
-  # модули собраны, покрыты тестами и мёржены, но объявлены неподключёнными (installer.UNWIRED_MODULES)
-  # — в дочке их пока не зовёт ни одна команда. Исход — это КАПABILITY, достижимая в продукте, а не
-  # «код написан». Флипнуть их в true до подключения команды `ai-ops roadmap`/`delivery` значило бы
-  # выдать построенное за работающее — ровно ложный green, против которого стоит весь контур. Флип —
-  # отдельным шагом (проводка CLI), это уже общая территория командного слоя, не ленты 4.
+  # закрыты в history/plan-history.yaml. ИСХОДЫ цели roadmap-and-delivery ДОСТИГНУТЫ 2026-08-20:
+  # модули подключены командами `ai-ops roadmap`/`delivery` (DIRECT_INTENTS, убраны из UNWIRED_MODULES —
+  # едут в дочку) и проверены ЖИВЫМ прогоном, а не «код написан»: roadmap строит Now/Next/Later из плана
+  # и называет отклонения; delivery даёт порядок задач, прогноз-оценку и ранжированные блокеры. Флип
+  # сделан по факту работающих команд — прежде исходы держали false, пока проводки CLI не было.
 
   # delivery-footprint-warns-before-breach закрыта в историю 2026-08-27 (код в PR #343): порог
   # запаса объявлен данными (quality/delivery-budget.yaml -> warnings.volume_reserve_fraction=0.10),

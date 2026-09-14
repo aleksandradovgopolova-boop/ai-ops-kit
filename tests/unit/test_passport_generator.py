@@ -85,3 +85,57 @@ class TestSideEffects:
     def test_tech_health_unknown_when_unreadable(self):
         h = PG._tech_health({"tree_readable": False})
         assert h["band"] == "unknown"
+
+
+# ── milestone читает горизонт «Сейчас», а не только литерал «Now» ─────────────────
+# Регресс: канонический roadmap кита и русскоязычных дочек называет горизонт «Сейчас».
+# Прежде _milestone искал `if "now" in headers` и на своём же roadmap выдавал «неизвестно».
+
+@pytest.mark.unit
+class TestMilestoneReadsHorizon:
+    def _roadmap(self, tmp_path, heading):
+        (tmp_path / "ROADMAP.md").write_text(
+            f"# ROADMAP\n\n## {heading}\n\n- `cel-1` — команда работает над продуктом.\n"
+            "- `cel-2` — владелец говорит продуктом.\n\n## Later\n\n- потом.\n",
+            encoding="utf-8")
+        return tmp_path
+
+    def test_reads_russian_seichas_header(self, tmp_path):
+        r = self._roadmap(tmp_path, "Сейчас")
+        m = PG.sections(r)["Текущий milestone и прогресс"]
+        assert m["state"] == PG.INFERRED
+        assert "cel-1" in m["value"]
+
+    def test_reads_english_now_header(self, tmp_path):
+        r = self._roadmap(tmp_path, "Now")
+        m = PG.sections(r)["Текущий milestone и прогресс"]
+        assert m["state"] == PG.INFERRED
+        assert "cel-1" in m["value"]
+
+    def test_unknown_when_no_roadmap(self, tmp_path):
+        m = PG.sections(tmp_path)["Текущий milestone и прогресс"]
+        assert m["state"] == PG.UNKNOWN
+
+
+# ── имя репозитория продукт-, а не каталого-центрично (git-worktree) ──────────────
+
+@pytest.mark.unit
+class TestRepoName:
+    def _git(self, cwd, *args):
+        import subprocess
+        subprocess.run(["git", *args], cwd=cwd, check=True,
+                       capture_output=True, text=True)
+
+    def test_name_from_origin_remote_not_dir(self, tmp_path):
+        # Каталог назван служебно (как worktree), а origin указывает на продукт.
+        work = tmp_path / "whale-status-dashboard-02f8c3"
+        work.mkdir()
+        self._git(work, "init", "-q")
+        self._git(work, "remote", "add", "origin",
+                  "https://github.com/example/ai-ops-kit.git")
+        assert PG._repo_name(work) == "ai-ops-kit"
+
+    def test_name_falls_back_to_dir_without_git(self, tmp_path):
+        d = tmp_path / "acme"
+        d.mkdir()
+        assert PG._repo_name(d) == "acme"

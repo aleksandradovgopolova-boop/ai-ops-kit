@@ -46,6 +46,31 @@ class TestFrontend:
 
 
 @pytest.mark.unit
+class TestDataIsolationWorkspaceFalsePositive:
+    """finding живого zero-touch прогона (ai-ops-cockpit): слово `workspace` = UI-концепт, а не
+    мультиарендность. Домен data_isolation (severity critical, судья-человек) не должен подниматься
+    на UI-«рабочих местах», иначе безобидное UI-изменение уходит в обязательное человеческое
+    одобрение. Однозначные маркеры мультиарендности домен поднимать обязан."""
+
+    def test_ui_workspace_file_does_not_trigger(self):
+        r = run_pack(
+            files_content={"src/config/workspaces.ts":
+                           "export function makeWorkspaceId(name){ return name }\n"},
+            signals={})
+        assert "data_isolation" not in r["applicable_domains"]
+
+    def test_real_tenant_marker_still_triggers(self):
+        r = run_pack(
+            files_content={"src/db/orders.py": "rows = db.query(Order).filter(tenant_id=t)\n"},
+            signals={})
+        assert "data_isolation" in r["applicable_domains"]
+
+    def test_multi_tenant_signal_still_triggers(self):
+        r = run_pack(files_content={"src/x.py": "x = 1\n"}, signals={"multi_tenant": True})
+        assert "data_isolation" in r["applicable_domains"]
+
+
+@pytest.mark.unit
 class TestAuthorizationIdol:
     def test_dataclass_does_not_trigger(self):
         r = run_pack(
