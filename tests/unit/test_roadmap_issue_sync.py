@@ -145,6 +145,33 @@ def test_adopts_manual_epic_and_work_without_duplicating():
     assert {i.number for i in c.list()} == {743, 771}
 
 
+def test_waiting_on_owner_work_shown_in_epic_not_as_subtask():
+    # Работа `waiting_on_owner` ждёт ЖИВОГО прогона владельца: не назначается writer'у, поэтому
+    # issue-подзадачу под неё не заводим — но эпик обязан её показать, а не говорить «работ нет».
+    rep = _report(now=[("owner-speaks-product-not-pipeline",
+                        [("owner_never_edits_yaml_or_knows_feature_id", False)])])
+    items = [{"id": "zero-touch-run", "goal": "owner-speaks-product-not-pipeline",
+              "status": "waiting_on_owner",
+              "waiting_on": "владелец проводит на cockpit прогон от описания до verified PR"}]
+    c = FakeClient()
+    s.sync(rep, items, c, apply=True)
+
+    titles = [i.title for i in c.list()]
+    assert any(t.startswith("[roadmap:owner-speaks") for t in titles)                 # эпик заведён
+    assert not any(t.startswith("[owner-speaks-product-not-pipeline]") for t in titles)  # подзадачи НЕТ
+    epic = next(i for i in c.list() if i.title.startswith("[roadmap:"))
+    assert "Ждёт owner-прогон" in epic.body
+    assert "zero-touch-run" in epic.body
+    assert "владелец проводит на cockpit" in epic.body
+    assert "Заведённых работ под направлением сейчас нет" not in epic.body   # молчание снято
+
+    # идемпотентно: второй прогон ничего не делает
+    c.log.clear()
+    plan2 = s.sync(rep, items, c, apply=True)
+    assert plan2.in_sync, [(a.kind, a.key) for a in plan2.actions]
+    assert c.log == []
+
+
 def test_parse_key_reads_marker_and_legacy():
     assert s.parse_key(s.Issue(1, "x", "<!-- roadmap-sync: dir:foo -->\n...", "open")) == "dir:foo"
     assert s.parse_key(s.Issue(2, "[roadmap:foo] t", "тело", "open")) == "dir:foo"
