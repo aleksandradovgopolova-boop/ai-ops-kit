@@ -19,6 +19,27 @@ kind: delivery-plan-history
 
 
 work:
+  - id: owner-speaks-proven-by-zero-touch-cockpit-run
+    title: >-
+      Измеряемый zero-touch прогон на ai-ops-cockpit: от описания задачи до verified PR без
+      технического вмешательства владельца
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-09-14'
+    evidence: qualification/OWNER-SPEAKS-ZERO-TOUCH-RUN-2026-09-14.md
+    result: >-
+      ЗАКРЫТО 2026-09-14 живым прогоном на ai-ops-cockpit (задача «добавь в настройки перетаскивание
+      рабочих мест мышью»): владелец описал задачу ОДНОЙ фразой, счёт технических вмешательств
+      владельца 0 (не правил YAML, не знал feature id, не выбирал агентов/workflow, не запускал
+      внутренних команд, не толковал гейты). Финиш — готовый PR cockpit#66 (гейты 3/3 на 4.3.2, main
+      не тронут). Исход `owner_never_edits_yaml_or_knows_feature_id` флипнут в true РЕШЕНИЕМ ВЛАДЕЛЬЦА
+      (протокол: засчёт за владельцем, кит не судит сам себя). Оговорки записаны в артефакте и НЕ
+      стёрты флипом: продуктовые вопросы заполнил опсик (не человек); прогон не автономен end-to-end
+      (внутренний писатель без API-ключа заглох → операторский субагентный путь); путь вскрыл 2
+      дефекта кита (data_isolation ложно на слове «workspace» #945; scorecard @v2 не резолвился #946),
+      выпущены в 4.3.2 (#947). Побочная полевая ценность: две реальные правки кита + запись
+      квалификации #951 (OWNER-SPEAKS-ZERO-TOUCH-PROTOCOL/RUN).
+
   - id: types-enforced-on-foundation-or-mypy-removed
     title: mypy включён и строгий на всём фундаменте (kernel+shared под disallow_untyped_defs)
     goal: checks-that-run
