@@ -72,6 +72,12 @@ def stage(tmp_path):
     if re.search(r"^\s*allowed_version_range:", text, flags=re.M):
         text = re.sub(r'(^\s*allowed_version_range:\s*).*$', r'\g<1>">=0.0.1 <999.0.0"',
                       text, count=1, flags=re.M)
+    # Тест — про МЕХАНИЗМ фетча кита по адресу, не про выбор канала. `init` пишет в дочку
+    # `update_channel` = канал текущего пакета; закрепляем `qualification`, потому что именно у
+    # него в фикстуре есть резолвимый тег (bare-клон несёт исторические теги, все qualification).
+    # Иначе тест ломается всякий раз, когда сам пакет зарабатывает новый канал (сейчас — stable).
+    text = re.sub(r"(^\s*update_channel:\s*)\S+", r"\g<1>qualification",
+                  text, count=1, flags=re.M)
     cfg.write_text(text, encoding="utf-8")
     _git("add", "-A", cwd=child)
     _git("commit", "-qm", "ai-ops init", cwd=child)

@@ -5,7 +5,7 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 4.3.0
+version: 4.3.1
 # Поле `phase` УБРАНО (04.09.2026, лента release-metadata). Это была свободная проза релиза, которая
 # дублировала заголовок раздела CHANGELOG. `release_bump` бампает ЧИСЛО версии по всем поверхностям и
 # пишет заголовок CHANGELOG из `--title`, но `phase` не трогал, а `validate_release_claims` проверяет
@@ -22,7 +22,7 @@ version: 4.3.0
 # Теперь `stable` требует ПОЛЕВЫХ доказательств на этой самой версии, и это проверяет
 # `validate_release_claims`. Критерии ниже машиночитаемы; менять их — осознанное решение владельца,
 # а не правка строки.
-channel: qualification
+channel: stable
 channels:
   edge:
     what: "то, что влито в main; лучший известный код, но без гарантий"
