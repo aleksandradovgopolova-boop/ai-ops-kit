@@ -8,6 +8,12 @@
 # открывает update-PR, если ключ отсутствует ИЛИ auto_update: true. Чтобы ОТКЛЮЧИТЬ ежедневные PR —
 # поставьте auto_update: false (опт-аут). Ручной запуск (workflow_dispatch) работает всегда.
 #
+# Флаг parent.auto_merge_patch — авто-слияние ТОЛЬКО патч-версий (совпадают major.minor, растёт
+# patch). ПО УМОЛЧАНИЮ ВЫКЛ: слияние в main сильнее, чем открыть PR, поэтому это опт-ин рукой
+# владельца. Минор и мажор всегда остаются на ревью. Мерж не мгновенный — через `gh pr merge --auto`,
+# то есть после обязательных проверок ветки (branch protection). Без настроенной защиты ветки GitHub
+# сольёт сразу — тогда включайте флаг осознанно (и учтите примечание про GITHUB_TOKEN ниже).
+#
 # Примечание: PR, созданный GITHUB_TOKEN, не запускает CI автоматически (ограничение GitHub).
 # Если нужен прогон CI на таком PR — закройте/откройте его или используйте PAT/GitHub App.
 name: ai-ops-update
@@ -126,3 +132,23 @@ jobs:
           } > /tmp/pr-body.md
           gh pr create --title "chore: ai-ops update $FROM -> $TO" \
             --body-file /tmp/pr-body.md --base "${GITHUB_REF_NAME:-main}"
+      - name: Авто-мерж патч-версии (если включено parent.auto_merge_patch)
+        # ОПТ-ИН, ПО УМОЛЧАНИЮ ВЫКЛ. Сливается сам ТОЛЬКО патч (совпадают major.minor, растёт patch);
+        # минор и мажор всегда остаются на ревью. `--auto` = слияние после обязательных проверок
+        # ветки, а не мгновенно; без branch protection GitHub сольёт сразу — это ответственность
+        # владельца, включившего флаг. Любая осечка (auto-merge не разрешён в репозитории, версия не
+        # патч, флаг выкл) — не падение, а оставленный на ревью PR.
+        if: steps.ver.outputs.proceed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TO: ${{ steps.ver.outputs.available }}
+          FROM: ${{ steps.ver.outputs.installed }}
+        run: |
+          AUTOMERGE=$(python3 -c "import yaml; print(str(yaml.safe_load(open('.ai-ops.yaml'))['parent'].get('auto_merge_patch', False)).lower())")
+          if [ "$AUTOMERGE" != true ]; then echo "parent.auto_merge_patch выкл — PR остаётся на ревью"; exit 0; fi
+          KIND=$(python3 -c "f=('$FROM'.lstrip('v').split('-')[0].split('+')[0].split('.')+['0','0','0'])[:3]; t=('$TO'.lstrip('v').split('-')[0].split('+')[0].split('.')+['0','0','0'])[:3]; print('patch' if f[0]==t[0] and f[1]==t[1] and int(t[2])>int(f[2]) else 'other')" 2>/dev/null || echo other)
+          if [ "$KIND" != patch ]; then echo "обновление $FROM -> $TO не патч-версия — авто-мерж не для неё, PR остаётся на ревью"; exit 0; fi
+          BRANCH="ai-ops/update-v$TO"
+          echo "патч-версия $FROM -> $TO при auto_merge_patch=true — включаю авто-мерж (сольётся после обязательных проверок ветки)"
+          gh pr merge "$BRANCH" --squash --auto \
+            || echo "::notice::авто-мерж не включился — нужна защита ветки с обязательными проверками и разрешённый auto-merge в настройках репозитория; PR остаётся на ревью"
