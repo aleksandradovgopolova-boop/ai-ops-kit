@@ -124,6 +124,7 @@ def test_real_repo_observations_reach_build():
     m = obs["observations"][0]["metrics"]
     assert m["intent_to_verified_pr_time"]["value"] == "5m37s"
     assert m["post_merge_defect_rate"]["status"] == "observation_window_open"
-    # Не-слитые прогоны помечены pending_merge.
+    # Все четыре прогона слиты — guardrail-окна открыты (не pending_merge).
     last = obs["observations"][3]["metrics"]
-    assert last["rework_rate"]["status"] == "pending_merge"
+    assert last["rework_rate"]["status"] == "observation_window_open"
+    assert last["rework_rate"]["opened_at"] == "2026-09-14T13:54:00Z"
