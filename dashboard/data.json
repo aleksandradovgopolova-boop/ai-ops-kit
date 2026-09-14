@@ -1,0 +1,113 @@
+{
+  "generated_at": "2026-09-14T10:03:36+00:00",
+  "version": "4.2.0",
+  "channel": "qualification",
+  "standard": {
+    "version": 9,
+    "profile": "ai-product"
+  },
+  "contours": [
+    {
+      "id": "product_strategy",
+      "label": "Стратегия"
+    },
+    {
+      "id": "research_decisions",
+      "label": "Исследования и решения"
+    },
+    {
+      "id": "planning_execution",
+      "label": "Планирование"
+    },
+    {
+      "id": "system_architecture",
+      "label": "Архитектура"
+    },
+    {
+      "id": "data_contracts",
+      "label": "Данные и контракты"
+    },
+    {
+      "id": "engineering_quality_security",
+      "label": "Инженерия · качество · безопасность"
+    },
+    {
+      "id": "delivery_operations",
+      "label": "Доставка и эксплуатация"
+    },
+    {
+      "id": "analytics_learning",
+      "label": "Аналитика и обучение"
+    }
+  ],
+  "product_os_goals": [
+    "product-operating-layer",
+    "backlog-intelligence",
+    "roadmap-and-delivery",
+    "ai-product-operations",
+    "autonomous-product-loop"
+  ],
+  "health": {
+    "gates_total": 36,
+    "gates_advisory": 13,
+    "gates_blocking": 23,
+    "agents": 42,
+    "validators": 87,
+    "tests": 1678,
+    "coverage": 71,
+    "commands": 32,
+    "precommit": 11,
+    "extractors": 25
+  },
+  "children": {
+    "registered": 0,
+    "field_evidence": [
+      {
+        "repo": "ai-ops-cockpit",
+        "versions": [
+          "3.36.12",
+          "3.39.0"
+        ],
+        "outcome": "ok"
+      },
+      {
+        "repo": "wow-repo",
+        "versions": [
+          "3.39.0"
+        ],
+        "outcome": "ok"
+      }
+    ],
+    "field_repos": 2
+  },
+  "issues": [
+    {
+      "id": 748,
+      "title": "Владелец описывает задачу обычным языком, кит ведёт остальное",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-09-11"
+    },
+    {
+      "id": 745,
+      "title": "Над продуктом работает команда одновременно, без конфликтов и дублей",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-09-11"
+    },
+    {
+      "id": 611,
+      "title": "Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code/Codex/Qwen), §25 как протокол",
+      "kind": "enh",
+      "kind_ru": "улучшение",
+      "updated": "2026-09-09"
+    },
+    {
+      "id": 930,
+      "title": "CI на update-PR: поддержать PAT/GitHub App, чтобы проверки шли на автообновлении",
+      "kind": "task",
+      "kind_ru": "задача",
+      "updated": "2026-09-14"
+    }
+  ]
+}

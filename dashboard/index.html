@@ -1,0 +1,364 @@
+<title>Пульт AI Ops Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
+<style>
+  /* Пульт намеренно однотемный: тёмный «пультовый» вид. Все цвета заданы явными
+     токенами, фон body закрашен из токена — страница держится на любом фоне хоста. */
+  :root{
+    --bg:#0b0f1a; --bg-2:#0d1220; --panel:#141b2b; --panel-2:#0f1524; --ink:#eaeef7;
+    --muted:#98a2ba; --faint:#697293; --line:#232f47; --line-2:#1a2337;
+    --accent:#828af2; --accent-soft:#1f2547;
+    --ok:#40c896; --ok-soft:#0f3226;
+    --run:#5f95ee; --run-soft:#112441;
+    --hold:#e3ac4c; --hold-soft:#33280f;
+    --zero:#828bA3; --zero-soft:#182034;
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.42);
+    --r:14px;
+  }
+  *{box-sizing:border-box}
+  html{background:var(--bg)}
+  body{background:
+      radial-gradient(1200px 620px at 84% -8%, rgba(130,138,242,.12), transparent 60%),
+      radial-gradient(900px 520px at 6% 108%, rgba(64,200,150,.07), transparent 55%),
+      var(--bg);
+    color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;font-weight:400;
+    -webkit-font-smoothing:antialiased;line-height:1.45}
+  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
+  h1,h2,h3{margin:0;font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;text-wrap:balance}
+
+  .app{min-height:100dvh;padding:clamp(14px,1.6vw,22px);display:grid;
+    grid-template-rows:auto 1fr auto;gap:clamp(12px,1.3vw,16px);max-width:1560px;margin:0 auto}
+
+  .head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  .brand{display:flex;align-items:center;gap:14px;min-width:0}
+  .mark{width:44px;height:44px;border-radius:12px;flex:none;background:var(--accent);
+    display:grid;place-items:center;color:#0b0f1a;box-shadow:var(--shadow)}
+  .mark svg{width:26px;height:26px}
+  .brand h1{font-size:clamp(20px,2vw,25px);font-weight:700;letter-spacing:-.01em;line-height:1.05}
+  .brand p{margin:2px 0 0;color:var(--muted);font-size:12.5px;max-width:54ch}
+  .head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel);font-size:12px;box-shadow:var(--shadow)}
+  .chip b{font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .chip .dot{width:8px;height:8px;border-radius:50%}
+  .chip.ver{color:var(--muted)}
+  .chip.chan{background:var(--hold-soft);border-color:transparent;color:var(--hold);font-weight:500}
+  .chip.chan .dot{background:var(--hold)}
+  .src{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--faint)}
+  .src .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+  .src.live{color:var(--ok)} .src.live .dot{background:var(--ok)}
+
+  .grid{display:grid;gap:clamp(12px,1.3vw,16px);
+    grid-template-columns:1.22fr 1.04fr 1.08fr;align-items:stretch;min-height:0}
+  .col{display:flex;flex-direction:column;gap:clamp(12px,1.3vw,16px);min-height:0}
+
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);border-radius:var(--r);
+    padding:16px 16px 15px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0}
+  .panel.grow{flex:1}
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--faint);margin-bottom:10px;display:flex;
+    justify-content:space-between;align-items:center;gap:8px}
+  .eyebrow .n{color:var(--muted)}
+
+  .purpose{font-size:14.5px;color:var(--ink);line-height:1.5}
+  .purpose .lede{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:16px}
+  .metarow{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:12px}
+  .tag{font-size:11.5px;padding:4px 9px;border-radius:8px;background:var(--panel-2);
+    border:1px solid var(--line-2);color:var(--muted)}
+  .tag b{color:var(--ink);font-family:"IBM Plex Mono",monospace;font-weight:600}
+
+  .ladder{display:flex;gap:6px;margin:2px 0 12px}
+  .step{flex:1;text-align:center;padding:8px 4px 7px;border-radius:10px;border:1px solid var(--line-2);
+    background:var(--panel-2)}
+  .step .lv{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+  .step .st{font-size:10px;color:var(--faint);margin-top:2px}
+  .step.done{background:var(--ok-soft);border-color:transparent}
+  .step.done .lv{color:var(--ok)}
+  .step.cur{background:var(--hold-soft);border-color:transparent;box-shadow:inset 0 0 0 1.5px var(--hold)}
+  .step.cur .lv{color:var(--hold);font-weight:600}
+  .step.todo{opacity:.7}
+  .reqs{display:flex;flex-direction:column;gap:7px}
+  .req{display:flex;gap:9px;align-items:flex-start;font-size:12.5px}
+  .req .ic{width:16px;height:16px;border-radius:50%;flex:none;margin-top:1px;display:grid;
+    place-items:center;font-size:10px;color:#0b0f1a;font-weight:700}
+  .req.y .ic{background:var(--ok)} .req.n .ic{background:var(--hold)}
+  .req .tx{color:var(--muted)} .req .tx b{color:var(--ink);font-weight:500}
+  .goals{margin-top:8px;padding-left:25px;display:flex;flex-wrap:wrap;gap:4px 6px}
+  .goals span{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint);
+    background:var(--zero-soft);padding:2px 7px;border-radius:6px}
+
+  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+  .tile{border:1px solid var(--line-2);border-radius:11px;padding:11px 12px;background:var(--panel-2)}
+  .tile .v{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:26px;
+    line-height:1;letter-spacing:-.02em}
+  .tile .k{font-size:11.5px;color:var(--muted);margin-top:5px}
+  .tile .s{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint);margin-top:3px}
+  .subline{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
+  .pill{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);
+    background:var(--panel-2);border:1px solid var(--line-2);border-radius:7px;padding:3px 8px}
+  .pill b{color:var(--ink);font-weight:600}
+
+  .kidhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px}
+  .kidhead .big{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:30px;line-height:1}
+  .kidhead .lbl{font-size:12px;color:var(--muted)}
+  .note{font-size:11.5px;color:var(--faint);line-height:1.4;margin:2px 0 11px}
+  .fields{display:flex;flex-direction:column;gap:7px}
+  .field{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 10px;
+    background:var(--panel-2);border:1px solid var(--line-2);border-radius:9px}
+  .field .repo{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--ink)}
+  .field .vv{font-family:"IBM Plex Mono",monospace;color:var(--muted);font-size:11px;margin-left:auto}
+  .field .ok{color:var(--ok);font-weight:600;font-size:11px;display:inline-flex;gap:4px;align-items:center}
+  .field .bad{color:var(--hold)}
+
+  .issues{display:flex;flex-direction:column;gap:8px;overflow:auto;min-height:0}
+  .roadnote{font-size:11.5px;color:var(--muted);background:var(--accent-soft);
+    border-radius:9px;padding:8px 11px;line-height:1.4;margin-bottom:2px}
+  .roadnote b{color:var(--ink)}
+  .roadnote .ok{color:var(--ok);font-weight:600}
+  .issue{border:1px solid var(--line-2);border-radius:11px;padding:10px 12px;background:var(--panel-2);
+    display:flex;flex-direction:column;gap:5px}
+  .issue .top{display:flex;align-items:center;gap:8px}
+  .issue .id{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;color:var(--accent)}
+  .issue .kind{margin-left:auto;font-size:9.5px;font-family:"IBM Plex Mono",monospace;
+    text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:6px}
+  .kind.dir{background:var(--run-soft);color:var(--run)}
+  .kind.enh{background:var(--accent-soft);color:var(--accent)}
+  .kind.task{background:var(--zero-soft);color:var(--zero)}
+  .issue .ti{font-size:13px;line-height:1.35;color:var(--ink);font-weight:450}
+  .issue .dt{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint)}
+
+  .cycle{background:linear-gradient(180deg,var(--panel),var(--panel-2));
+    border:1px solid var(--line);border-radius:var(--r);padding:13px 16px;box-shadow:var(--shadow)}
+  .cyc-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
+  .cyc-head .loop{margin-left:auto;font-size:11px;color:var(--ok);font-family:"IBM Plex Mono",monospace;
+    display:inline-flex;align-items:center;gap:5px}
+  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
+  .node{flex:1 1 0;min-width:120px;display:flex;align-items:center;gap:9px;padding:6px 8px;position:relative}
+  .node:not(:last-child)::after{content:"›";position:absolute;right:-3px;top:50%;transform:translateY(-50%);
+    color:var(--faint);font-size:16px;z-index:1}
+  .node .num{width:22px;height:22px;border-radius:7px;flex:none;background:var(--accent-soft);
+    color:var(--accent);display:grid;place-items:center;font-family:"IBM Plex Mono",monospace;
+    font-size:11px;font-weight:600}
+  .node .lab{font-size:11.5px;line-height:1.2;color:var(--ink)}
+  .node .lab small{display:block;color:var(--faint);font-size:10px}
+
+  .foot{margin-top:11px;text-align:center;color:var(--faint);font-size:11px}
+  .foot b{color:var(--muted);font-weight:500}
+
+  @media (max-width:980px){
+    .app{min-height:0}
+    .grid{grid-template-columns:1fr}
+    .node{min-width:45%}
+  }
+  @media (max-width:560px){
+    .tiles{grid-template-columns:1fr 1fr}
+    .node{min-width:100%}
+    .node:not(:last-child)::after{content:"";}
+  }
+</style>
+
+<div class="app">
+
+  <header class="head">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 13a4 4 0 0 0 4 4h9a4 4 0 0 0 0-8 6 6 0 0 0-11.7-1.6A3.5 3.5 0 0 0 3 13Z"/>
+          <path d="M8 21c1.5-1.2 2.5-1.2 4 0s2.5 1.2 4 0"/>
+        </svg>
+      </div>
+      <div>
+        <h1>AI Ops Kit</h1>
+        <p>AI-операционная система продуктовой команды. Ведёт продукт от намерения до измеренного результата — и не умеет притворяться, что «готово».</p>
+      </div>
+    </div>
+    <div class="head-right">
+      <span class="chip ver">версия <b id="version">4.2.0</b></span>
+      <span class="chip chan"><span class="dot"></span>канал: <span id="channel">qualification</span></span>
+      <span class="src" id="src"><span class="dot"></span><span id="src-text">снимок · 14.09.2026</span></span>
+    </div>
+  </header>
+
+  <div class="grid">
+
+    <!-- COLUMN 1 — PASSPORT -->
+    <section class="col">
+      <div class="panel">
+        <div class="eyebrow"><span>Паспорт продукта</span><span class="n mono" id="std">стандарт v9 · профиль ai-product</span></div>
+        <div class="purpose">
+          <span class="lede">Открытая AI Product Operating System.</span>
+          Не набор агентов, а участник всей команды: от discovery до эксплуатации. Каждая функция получает продуктовые, дизайнерские, технические и аналитические артефакты — и без них не считается завершённой.
+        </div>
+        <div class="metarow">
+          <span class="tag">версия <b id="m-version">4.2.0</b></span>
+          <span class="tag">контуров модели <b id="m-contours">8</b></span>
+          <span class="tag">принцип <b>writer ≠ judge</b></span>
+          <span class="tag">нет доказательства — <b>нет заявления</b></span>
+        </div>
+      </div>
+
+      <div class="panel grow">
+        <div class="eyebrow"><span>Готовность к каналу stable</span><span class="n">2 из 3 условий</span></div>
+        <div class="ladder">
+          <div class="step done"><div class="lv">edge</div><div class="st">пройден</div></div>
+          <div class="step cur"><div class="lv">qualification</div><div class="st">сейчас здесь</div></div>
+          <div class="step todo"><div class="lv">stable</div><div class="st">рубеж</div></div>
+        </div>
+        <div class="reqs">
+          <div class="req y"><span class="ic">✓</span><span class="tx"><b>Собственный контур зелёный.</b> Тег выпущен, все проверки пройдены.</span></div>
+          <div class="req y"><span class="ic">✓</span><span class="tx"><b>Обкатка в поле — <span id="req-field">2 из 2</span> репозиториев.</b> Обновление реально доехало и ничего не сломало.</span></div>
+          <div class="req n"><span class="ic">!</span><span class="tx"><b>Продуктовый слой готов — ещё не закрыт.</b> Пять целей Product OS:</span></div>
+        </div>
+        <div class="goals" id="goals">
+          <span>product-operating-layer</span><span>backlog-intelligence</span><span>roadmap-and-delivery</span><span>ai-product-operations</span><span>autonomous-product-loop</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLUMN 2 — HEALTH + CHILDREN -->
+    <section class="col">
+      <div class="panel">
+        <div class="eyebrow"><span>Здоровье и охват движка</span><span class="n">источник истины — реестр</span></div>
+        <div class="tiles">
+          <div class="tile"><div class="v" id="t-gates">36</div><div class="k">гейтов качества</div><div class="s" id="t-gates-sub">23 блокируют · 13 advisory</div></div>
+          <div class="tile"><div class="v" id="t-tests">1&nbsp;678</div><div class="k">тестов</div><div class="s" id="t-tests-sub">покрытие 71%</div></div>
+          <div class="tile"><div class="v" id="t-agents">42</div><div class="k">роли-агента</div><div class="s">в реестре agents.yaml</div></div>
+          <div class="tile"><div class="v" id="t-validators">87</div><div class="k">валидаторов</div><div class="s">каждый реально исполняется</div></div>
+        </div>
+        <div class="subline">
+          <span class="pill">команд владельца <b id="t-commands">32</b></span>
+          <span class="pill">pre-commit <b id="t-precommit">11</b></span>
+          <span class="pill">извлекателей поверхности <b id="t-extractors">25</b></span>
+        </div>
+      </div>
+
+      <div class="panel grow">
+        <div class="eyebrow"><span>Дочерние проекты</span><span class="n">reach · добровольно, без сети</span></div>
+        <div class="kidhead">
+          <div class="big" id="kid-count">0</div>
+          <div class="lbl">проектов отметилось добровольно (opt-in). Пусто — честное состояние, а не сбой: кит ничего не отправляет сам.</div>
+        </div>
+        <div class="note" id="kid-note">При этом обновление реально обкатано в поле — 3 успешных заезда на 2 репозиториях:</div>
+        <div class="fields" id="fields">
+          <div class="field"><span class="repo">ai-ops-cockpit</span><span class="vv">v3.36.12 · v3.39.0</span><span class="ok">● ок</span></div>
+          <div class="field"><span class="repo">wow-repo</span><span class="vv">v3.39.0</span><span class="ok">● ок</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- COLUMN 3 — NEAREST WORK -->
+    <section class="col">
+      <div class="panel grow">
+        <div class="eyebrow"><span>Ближайшие задачи</span><span class="n"><span id="issue-count">4</span> открытых · GitHub</span></div>
+        <div class="issues" id="issues-wrap">
+          <div class="roadnote">Приоритет «Сейчас»: <b>команда работает параллельно</b> и <b>владелец говорит на языке продукта</b>. Цель «каждая проверка реально исполняется» — <span class="ok">✓ достигнута 11.09</span>.</div>
+          <div id="issues">
+            <div class="issue"><div class="top"><span class="id">#748</span><span class="kind dir">направление</span></div><div class="ti">Владелец описывает задачу обычным языком, кит ведёт остальное</div><div class="dt">обновлено 11.09.2026</div></div>
+            <div class="issue"><div class="top"><span class="id">#745</span><span class="kind dir">направление</span></div><div class="ti">Над продуктом работает команда одновременно, без конфликтов и дублей</div><div class="dt">обновлено 11.09.2026</div></div>
+            <div class="issue"><div class="top"><span class="id">#611</span><span class="kind enh">улучшение</span></div><div class="ti">Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code / Codex / Qwen)</div><div class="dt">обновлено 09.09.2026</div></div>
+            <div class="issue"><div class="top"><span class="id">#930</span><span class="kind task">задача</span></div><div class="ti">CI на update-PR: поддержать PAT/GitHub App, чтобы проверки шли на автообновлении</div><div class="dt">обновлено 14.09.2026</div></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+
+  <section class="cycle">
+    <div class="cyc-head">
+      <div class="eyebrow" style="margin:0">Операционная модель продукта — восемь контуров</div>
+      <span class="loop">↺ цикл замкнут: аналитика возвращается в стратегию</span>
+    </div>
+    <div class="flow" id="flow">
+      <div class="node"><span class="num">1</span><span class="lab">Стратегия<small>product_strategy</small></span></div>
+      <div class="node"><span class="num">2</span><span class="lab">Исследования и решения<small>research_decisions</small></span></div>
+      <div class="node"><span class="num">3</span><span class="lab">Планирование<small>planning_execution</small></span></div>
+      <div class="node"><span class="num">4</span><span class="lab">Архитектура<small>system_architecture</small></span></div>
+      <div class="node"><span class="num">5</span><span class="lab">Данные и контракты<small>data_contracts</small></span></div>
+      <div class="node"><span class="num">6</span><span class="lab">Инженерия · качество · безопасность<small>engineering_quality_security</small></span></div>
+      <div class="node"><span class="num">7</span><span class="lab">Доставка и эксплуатация<small>delivery_operations</small></span></div>
+      <div class="node"><span class="num">8</span><span class="lab">Аналитика и обучение<small>analytics_learning</small></span></div>
+    </div>
+  </section>
+
+  <div class="foot">Пульт состояния продукта · показатели взяты из реестра, гейтов и открытых задач репозитория · <b>всё, что не доказано, помечено как недоказанное</b></div>
+
+</div>
+
+<script>
+  // Живое чтение: страница пробует подтянуть data.json, собранный build_data.py.
+  // Получилось — обновляет числа и ставит зелёную метку «живые данные».
+  // Не получилось (нет файла, или предпросмотр без сети) — тихо остаётся встроенный снимок.
+  (function(){
+    const $ = id => document.getElementById(id);
+    const dash = "—";
+    const nf = n => (n==null ? dash : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " "));
+    const MONTHS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
+    const ruDate = iso => { if(!iso) return dash; const [y,m,d]=iso.split("-"); return `${+d} ${MONTHS[+m-1]} ${y}`; };
+
+    function render(data){
+      try{
+        if(data.version){ $("version").textContent=data.version; $("m-version").textContent=data.version; }
+        if(data.channel) $("channel").textContent=data.channel;
+        if(data.standard){ $("std").textContent=`стандарт v${data.standard.version ?? dash} · профиль ${data.standard.profile ?? dash}`; }
+
+        const h=data.health||{};
+        if(h.gates_total!=null) $("t-gates").textContent=nf(h.gates_total);
+        if(h.gates_blocking!=null||h.gates_advisory!=null)
+          $("t-gates-sub").textContent=`${nf(h.gates_blocking)} блокируют · ${nf(h.gates_advisory)} advisory`;
+        if(h.tests!=null) $("t-tests").innerHTML=nf(h.tests);
+        if(h.coverage!=null) $("t-tests-sub").textContent=`покрытие ${h.coverage}%`;
+        if(h.agents!=null) $("t-agents").textContent=nf(h.agents);
+        if(h.validators!=null) $("t-validators").textContent=nf(h.validators);
+        if(h.commands!=null) $("t-commands").textContent=nf(h.commands);
+        if(h.precommit!=null) $("t-precommit").textContent=nf(h.precommit);
+        if(h.extractors!=null) $("t-extractors").textContent=nf(h.extractors);
+
+        if(Array.isArray(data.contours)) $("m-contours").textContent=data.contours.length;
+        if(Array.isArray(data.product_os_goals) && data.product_os_goals.length)
+          $("goals").innerHTML=data.product_os_goals.map(g=>`<span>${g}</span>`).join("");
+
+        const c=data.children||{};
+        if(c.registered!=null) $("kid-count").textContent=nf(c.registered);
+        if(Array.isArray(c.field_evidence)){
+          const total=c.field_evidence.reduce((s,f)=>s+(f.versions?f.versions.length:0),0);
+          const repos=c.field_repos ?? c.field_evidence.length;
+          $("req-field").textContent=`${repos} из 2`;
+          $("kid-note").textContent=`При этом обновление реально обкатано в поле — ${total} ${total===1?"успешный заезд":"успешных заезда"} на ${repos} ${repos===1?"репозитории":"репозиториях"}:`;
+          $("fields").innerHTML=c.field_evidence.map(f=>{
+            const vers=(f.versions||[]).map(v=>"v"+v).join(" · ");
+            const ok=f.outcome==="ok";
+            return `<div class="field"><span class="repo">${f.repo}</span><span class="vv">${vers}</span><span class="${ok?"ok":"ok bad"}">● ${ok?"ок":f.outcome}</span></div>`;
+          }).join("");
+        }
+
+        if(Array.isArray(data.issues)){
+          $("issue-count").textContent=data.issues.length;
+          $("issues").innerHTML=data.issues.map(it=>
+            `<div class="issue"><div class="top"><span class="id">#${it.id}</span><span class="kind ${it.kind}">${it.kind_ru||it.kind}</span></div>`+
+            `<div class="ti">${it.title}</div><div class="dt">обновлено ${ruDate(it.updated)}</div></div>`
+          ).join("");
+        }
+
+        if(Array.isArray(data.contours) && data.contours.length){
+          $("flow").innerHTML=data.contours.map((c,i)=>
+            `<div class="node"><span class="num">${i+1}</span><span class="lab">${c.label}<small>${c.id}</small></span></div>`
+          ).join("");
+        }
+
+        const when=data.generated_at ? new Date(data.generated_at) : null;
+        const stamp=when ? `${when.getDate()}.${String(when.getMonth()+1).padStart(2,"0")}.${when.getFullYear()} ${String(when.getHours()).padStart(2,"0")}:${String(when.getMinutes()).padStart(2,"0")}` : "";
+        $("src").classList.add("live");
+        $("src-text").textContent=`живые данные${stamp?" · "+stamp:""}`;
+      }catch(e){ /* сломанный data.json — оставляем снимок */ }
+    }
+
+    fetch("data.json", {cache:"no-store"})
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(render)
+      .catch(()=>{ /* нет файла или сеть закрыта — снимок уже отрисован в разметке */ });
+  })();
+</script>
