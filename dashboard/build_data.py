@@ -224,6 +224,27 @@ def product_metrics_status(root: Path):
     return {"outcomes_filled": filled}
 
 
+def metric_observations(root: Path):
+    """Снятые наблюдения продуктовых метрик (TTVO) из живых прогонов.
+
+    Источник — context/product/metric-observations.yaml. Нет файла или нет PyYAML →
+    None (пульт покажет «—», блок наблюдений скрыт), а не выдуманные числа.
+    """
+    if not yaml:
+        return None
+    text = _read(root, "context/product/metric-observations.yaml")
+    if not text.strip():
+        return None
+    try:
+        data = yaml.safe_load(text) or {}
+    except Exception:  # noqa: BLE001 — битый yaml: молчим, блок скрыт
+        return None
+    obs = data.get("observations") or []
+    if not obs:
+        return None
+    return {"honest_note": data.get("honest_note"), "observations": obs}
+
+
 def open_issues(root: Path):
     try:
         out = subprocess.run(["gh", "issue", "list", "--state", "open", "--limit", "40",
@@ -313,6 +334,7 @@ def build(root: Path) -> dict:
         "metrics": {
             "north_star_defined": bool(north_star(root)),
             "outcomes_filled": pm["outcomes_filled"],
+            "observations": metric_observations(root),
             "health": _health_from_passport(psections),
         },
         "goals": goals(plan),

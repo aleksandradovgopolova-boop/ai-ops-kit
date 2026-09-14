@@ -212,6 +212,7 @@
         <div class="eyebrow"><span>Метрики продукта · здоровье</span><span class="n" id="health-src">по паспорту</span></div>
         <div class="health" id="health"></div>
         <div class="callout" id="metrics-callout"></div>
+        <div class="measures" id="observations" hidden></div>
         <div class="measures" id="measures"></div>
         <div class="caplink" id="caplink"></div>
       </div>
@@ -340,7 +341,27 @@
   },
   "metrics": {
     "north_star_defined": true,
-    "outcomes_filled": false,
+    "outcomes_filled": true,
+    "observations": {
+      "honest_note": "n=1 — это первое реальное наблюдение, а не тренд.",
+      "observations": [
+        {
+          "date": "2026-09-14",
+          "source": "ai-ops-cockpit",
+          "feature": "catalog-search",
+          "pr": 65,
+          "samples": 1,
+          "path_note": "Писал субагент — нет API-ключа для внутреннего писателя; независимый ревьюер и гейты зелёные.",
+          "metrics": {
+            "intent_to_verified_pr_time": { "value": "5m37s", "samples": 1 },
+            "verified_pr_rate": { "value": "1/1", "samples": 1 },
+            "human_intervention_rate": { "value": "0/1", "samples": 1 },
+            "rework_rate": { "status": "observation_window_open", "window_days": 7, "opened_at": "2026-09-14T12:44:07Z" },
+            "post_merge_defect_rate": { "status": "observation_window_open", "opened_at": "2026-09-14T12:44:07Z" }
+          }
+        }
+      ]
+    },
     "health": {
       "product": "unknown",
       "tech": "green",
@@ -555,6 +576,31 @@
         $("metrics-callout").innerHTML=`<b>Outcome-метрики продукта не заданы</b> — поэтому здоровье продукта не измеряется. `+
           `Задать: <a href="${link(d,"context/product/ProductMetrics.md")}" target="_blank" rel="noopener">ProductMetrics.md</a> (north star уже есть).`;
       } else $("metrics-callout").hidden=true;
+
+      // first observations (n=1, honest) — снятые числа TTVO с полигона
+      const obs=d.metrics&&d.metrics.observations;
+      const first=obs&&obs.observations&&obs.observations[0];
+      const obsBox=$("observations");
+      if(first){
+        const m=first.metrics||{};
+        const num=(k,lbl)=>{const v=m[k];
+          if(!v) return "";
+          if(v.status==="observation_window_open")
+            return `<div class="m"><span class="mk">${lbl}</span><span class="mv" style="color:var(--faint)">окно наблюдения открыто</span></div>`;
+          return `<div class="m"><span class="mk">${lbl}</span><span class="mv">${esc(v.value)}</span></div>`;};
+        obsBox.innerHTML=
+          `<div class="eyebrow" style="margin:14px 0 8px"><span>Первые наблюдения (n=1)</span>`+
+            `<span class="n">полигон · TTVO ↗</span></div>`+
+          num("intent_to_verified_pr_time","Идея → результат")+
+          num("verified_pr_rate","Без ручной доводки")+
+          num("human_intervention_rate","Вмешательств")+
+          num("rework_rate","Переделки (7д)")+
+          num("post_merge_defect_rate","Дефекты после слияния")+
+          `<div class="callout" style="margin-top:10px">`+
+            `<b>n=1 — первое наблюдение, а не тренд.</b> Полигон${first.source?` (${esc(first.source)})`:""}, не продакшн владельца. `+
+            (first.path_note?esc(first.path_note):"")+`</div>`;
+        obsBox.hidden=false;
+      } else obsBox.hidden=true;
 
       // measures
       const g=d.goals||{}; const pct=g.total?Math.round(100*g.achieved/g.total):0;
