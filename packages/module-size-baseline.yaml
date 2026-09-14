@@ -18,10 +18,27 @@ kind: module-size-ratchet
 threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
-ceilings:
-  ai_ops_kit/planning/contours.py: 724
+# Пусто: последний файл сверх порога (contours.py) разрезан на фасад + сателлит — оба ниже 700.
+ceilings: {}
 
 raises:
+  - at: '2026-09-14'
+    what: lower_ceiling
+    from: 'ai_ops_kit/planning/contours.py = 724'
+    to: >-
+      ai_ops_kit/planning/contours.py = 532 (ниже порога 700 — снят из ceilings);
+      ai_ops_kit/planning/contours_signals.py = 221 (ниже порога 700 — в ceilings не вносится)
+    work: 'chore(planning): разрез contours на фасад + contours_signals'
+    why: >-
+      Последний файл сверх порога (contours.py = 724 — код связности контуров, работает в каждой
+      дочке) разрезан на фасад + ОДИН сателлит. Низкоуровневый фундамент «матчинг путей + детект
+      сигналов в репозитории» (_under_excluded, _NOT_PRODUCT, unquote_git_path, _matches,
+      _product_dirs, _repo_has_signal, signals_present) перенесён байт-в-байт в contours_signals.py;
+      фундамент не зовёт верхние функции фасада, единственная связь наверх — ленивый импорт _resolve
+      внутри функции (оверлей источников истины остаётся в фасаде). Фасад держит модель, config-слой,
+      SoT, reconcile/derive и ЯВНО ре-экспортирует перенесённые имена, поэтому внешний контракт цел:
+      `from ai_ops_kit.planning import contours` и `contours.signals_present(...)` работают как
+      прежде. Оба файла упали ниже порога 700 → сняты/не внесены в ceilings, ратчет держит вниз.
   - at: '2026-09-12'
     what: lower_ceiling
     from: 'ai_ops_kit/checks/surface_extraction.py = 733'
