@@ -1,0 +1,46 @@
+schema_version: 1
+kind: research.evidence
+id: EV-108
+request_id: RR-001
+statement: >
+  Пересчёт стоимости генерации одной книги на ценах 2026-09-10 (допущение прежнее: ~100K
+  токенов выхода + ~200K токенов входа без учёта кэша): deepseek-v4-flash ≈ $0.06;
+  deepseek-v4-pro ≈ $0.17; kimi-k2.6 ≈ $0.59 у официального Moonshot (≈ $0.46, если брать
+  самый дешёвый маршрут OpenRouter — Chutes); kimi-k3 ≈ $2.10. Разброс между дешёвым и
+  качественным вариантом ~37x (было ~35x). Единственное изменение против EV-106 — цена
+  kimi-k2.6: $0.47 -> $0.59 (+25%) из-за официальной цены $0.95/$4.00 вместо $0.66/$3.41
+  (EV-107). Цифры deepseek и kimi-k3 не изменились: EV-101 и EV-103 действительны до
+  2026-10-22. Кэширование промптов снижает входную часть у всех.
+evidence_type: inference
+derived_from: [EV-101, EV-103, EV-107]
+source:
+  title: "Расчёт на основе EV-101/EV-103/EV-107"
+  url: ""
+  type: internal_data
+  published_at: "2026-09-10"
+  is_primary: true
+citation:
+  locator: "формула (та же, что в EV-106): 0.1M*output_price + 0.2M*input_price(cache-miss); слагаемые k2.6 = 0.1*4.00 + 0.2*0.95"
+captured_at: "2026-09-10"
+captured_by: "freshness-Watch (scheduled task, прогон 2026-09-10)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-11"
+reliability:
+  level: medium
+  rationale: >
+    Арифметика пересчитана и сверена; ограничение EV-106 сохраняется полностью — размер книги
+    (~100K выход / ~200K вход) остаётся допущением, фактический профиль токенов пайплайна так
+    и не измерялся, поэтому абсолютные суммы значат меньше, чем отношения между вариантами.
+    Слагаемые deepseek и kimi-k3 взяты из EV-101/EV-103 по их сроку годности, живым re-fetch в
+    этом прогоне НЕ перепроверялись.
+conflicts_with:
+  - evidence_id: EV-106
+    claim: "EV-106: kimi-k2.6 ≈ $0.47/книга, разброс между дешёвым и качественным вариантом ~35x."
+    source: "Расчёт на основе EV-101/EV-103/EV-104 (2026-07-22)"
+    status: resolved
+    note: >
+      EV-106 переведён в status: superseded (superseded_by: EV-108). Расхождение целиком
+      объясняется ценой k2.6 из EV-104, которая заменена на EV-107.
+status: active
+superseded_by: null
