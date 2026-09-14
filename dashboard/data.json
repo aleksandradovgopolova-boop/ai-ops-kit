@@ -1,11 +1,233 @@
 {
-  "generated_at": "2026-09-14T10:03:36+00:00",
-  "version": "4.2.0",
-  "channel": "qualification",
-  "standard": {
-    "version": 9,
-    "profile": "ai-product"
+  "generated_at": "2026-09-14T11:19:08+00:00",
+  "repo": {
+    "owner": "aleksandradovgopolova-boop",
+    "name": "ai-ops-kit",
+    "blob_base": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main"
   },
+  "version": "4.3.1",
+  "channel": "stable",
+  "maturity": {
+    "cls": "EXISTING_PRODUCT",
+    "confidence": "high",
+    "commits": 1516,
+    "code_files": 985
+  },
+  "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
+  "spine": [
+    {
+      "key": "vision",
+      "title": "Видение",
+      "desc": "Куда идёт продукт и зачем",
+      "path": "VISION.md",
+      "state": "filled"
+    },
+    {
+      "key": "strategy",
+      "title": "Стратегия · North Star",
+      "desc": "Центральное обещание и модель продукта",
+      "path": "decisions/registry.yaml",
+      "state": "filled"
+    },
+    {
+      "key": "capability",
+      "title": "Карта возможностей",
+      "desc": "Что продукт умеет: built / wired / planned",
+      "path": "docs/capability-map.md",
+      "state": "generated"
+    },
+    {
+      "key": "discovery",
+      "title": "Исследования",
+      "desc": "Свидетельства, гипотезы, решения",
+      "path": ".research",
+      "state": "filled"
+    },
+    {
+      "key": "roadmap",
+      "title": "Роадмап",
+      "desc": "Четыре горизонта: сейчас → дальше → later",
+      "path": "ROADMAP.md",
+      "state": "filled"
+    },
+    {
+      "key": "backlog",
+      "title": "Бэклог целей",
+      "desc": "Цели и работа, что берётся следующим",
+      "path": "planning/plan.yaml",
+      "state": "filled"
+    },
+    {
+      "key": "metrics",
+      "title": "Метрики продукта",
+      "desc": "North star, outcome-метрики, guardrails",
+      "path": "context/product/ProductMetrics.md",
+      "state": "template"
+    },
+    {
+      "key": "passport",
+      "title": "Паспорт продукта",
+      "desc": "Сводка показателей продукта",
+      "path": "ai_ops_kit/planning/passport_generator.py",
+      "state": "generated"
+    }
+  ],
+  "capability_map": {
+    "commands": 34,
+    "gates": 36,
+    "enforced": 23,
+    "advisory": 13,
+    "roles": 42,
+    "built_not_wired": 1,
+    "planned": 4
+  },
+  "discovery": {
+    "evidence": 233,
+    "decisions": 15,
+    "requests": 17,
+    "experiments": 4
+  },
+  "metrics": {
+    "north_star_defined": true,
+    "outcomes_filled": false,
+    "health": {
+      "product": "unknown",
+      "tech": "green",
+      "delivery": "green"
+    }
+  },
+  "goals": {
+    "total": 23,
+    "achieved": 20,
+    "active": 2,
+    "paused": 1,
+    "active_list": [
+      "team-works-in-parallel",
+      "owner-speaks-product-not-pipeline"
+    ],
+    "paused_list": [
+      "advisory-gates-obkatka"
+    ]
+  },
+  "waiting_on_owner": [
+    {
+      "id": "owner-speaks-proven-by-zero-touch-cockpit-run",
+      "title": "Измеряемый zero-touch прогон на ai-ops-cockpit: путь от описания задачи до verified PR без единого технического вмешательства владельца"
+    },
+    {
+      "id": "parallel-autonomy-proven-owner-does-not-design-it",
+      "title": "Измеряемый прогон: команда ведёт продукт параллельно, а раскрой «что можно одновременно» проектирует КИТ, не владелец — участник не сомневается в нужности задачи и не дублирует чужую"
+    }
+  ],
+  "roadmap_now": [
+    "team-works-in-parallel — над продуктом работает КОМАНДА одновременно, и это не оплачивается конфликтами и дублями. Решение владельца 18.08.2026 (ep-20",
+    "owner-speaks-product-not-pipeline — владелец описывает задачу обычным языком, а кит отделяет факты от предположений, называет варианты с trade-offs, б"
+  ],
+  "issues": [
+    {
+      "id": 748,
+      "title": "Владелец описывает задачу обычным языком, кит ведёт остальное",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-09-11"
+    },
+    {
+      "id": 745,
+      "title": "Над продуктом работает команда одновременно, без конфликтов и дублей",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-09-11"
+    },
+    {
+      "id": 611,
+      "title": "Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code/Codex/Qwen), §25 как протокол",
+      "kind": "enh",
+      "kind_ru": "улучшение",
+      "updated": "2026-09-09"
+    }
+  ],
+  "field_evidence": [
+    {
+      "repo": "ai-ops-cockpit",
+      "versions": [
+        "3.36.12",
+        "3.39.0",
+        "4.3.0"
+      ],
+      "outcome": "ok"
+    },
+    {
+      "repo": "wow-repo",
+      "versions": [
+        "3.39.0"
+      ],
+      "outcome": "ok"
+    },
+    {
+      "repo": "ai-ops-live-587",
+      "versions": [
+        "4.3.0"
+      ],
+      "outcome": "ok"
+    }
+  ],
+  "reach_registered": 0,
+  "passport_sections": [
+    {
+      "name": "Название и описание",
+      "state": "inferred",
+      "source": "README.md",
+      "value": "**AI Ops Kit** — Кит живёт в репозитории продукта и ведёт его по полному циклу — от намерения до измеренного результата: discovery → delivery → release → measurement → следующий цикл. Он организует работу людей и AI-исполнителей, проверяет качество по риску и — главное — не выдаёт утверждение без"
+    },
+    {
+      "name": "Аудитория и проблема",
+      "state": "unknown",
+      "source": null,
+      "value": "_неизвестно — аудитория и Problem/JTBD из кода не выводятся — нужен ответ владельца (контур product_strategy)_"
+    },
+    {
+      "name": "Repository и окружения",
+      "state": "verified",
+      "source": "структура репозитория",
+      "value": "Репозиторий `whale-status-dashboard-02f8c3`, стек: python. CI: .github/workflows. Какое окружение считать production — за владельцем."
+    },
+    {
+      "name": "Owner и команда",
+      "state": "unknown",
+      "source": null,
+      "value": "_неизвестно — владелец и команда из кода достоверно не выводятся — назвать должен человек_"
+    },
+    {
+      "name": "Статус и зрелость",
+      "state": "inferred",
+      "source": "repo_audit.classify",
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1516, файлов кода 985; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+    },
+    {
+      "name": "Здоровье (продукт / технологии / delivery)",
+      "state": "inferred",
+      "source": "CI/тесты (tech); метрики (product); релизы (delivery)",
+      "value": "Продукт: _неизвестно (нет метрик — контур analytics)_. Технологии: **Green** — есть CI и тесты. Delivery: есть история релизов (4 последних тегов) — _отклонение от плана нужно считать отдельно_."
+    },
+    {
+      "name": "Версия и последний релиз",
+      "state": "verified",
+      "source": "VERSION, git tags",
+      "value": "Версия: **4.3.1**. Последний релиз: **v4.3.0**."
+    },
+    {
+      "name": "Текущий milestone и прогресс",
+      "state": "unknown",
+      "source": null,
+      "value": "_неизвестно — текущий milestone нечем определить — ни ROADMAP (Now), ни delivery-плана_"
+    },
+    {
+      "name": "Риски и зависимости",
+      "state": "inferred",
+      "source": "манифесты зависимостей, API-схемы",
+      "value": "Зависимости (по манифестам): requirements.txt, pyproject.toml. Продуктовые риски из кода не выводятся — назвать должен владелец."
+    }
+  ],
   "contours": [
     {
       "id": "product_strategy",
@@ -38,76 +260,6 @@
     {
       "id": "analytics_learning",
       "label": "Аналитика и обучение"
-    }
-  ],
-  "product_os_goals": [
-    "product-operating-layer",
-    "backlog-intelligence",
-    "roadmap-and-delivery",
-    "ai-product-operations",
-    "autonomous-product-loop"
-  ],
-  "health": {
-    "gates_total": 36,
-    "gates_advisory": 13,
-    "gates_blocking": 23,
-    "agents": 42,
-    "validators": 87,
-    "tests": 1678,
-    "coverage": 71,
-    "commands": 32,
-    "precommit": 11,
-    "extractors": 25
-  },
-  "children": {
-    "registered": 0,
-    "field_evidence": [
-      {
-        "repo": "ai-ops-cockpit",
-        "versions": [
-          "3.36.12",
-          "3.39.0"
-        ],
-        "outcome": "ok"
-      },
-      {
-        "repo": "wow-repo",
-        "versions": [
-          "3.39.0"
-        ],
-        "outcome": "ok"
-      }
-    ],
-    "field_repos": 2
-  },
-  "issues": [
-    {
-      "id": 748,
-      "title": "Владелец описывает задачу обычным языком, кит ведёт остальное",
-      "kind": "dir",
-      "kind_ru": "направление",
-      "updated": "2026-09-11"
-    },
-    {
-      "id": 745,
-      "title": "Над продуктом работает команда одновременно, без конфликтов и дублей",
-      "kind": "dir",
-      "kind_ru": "направление",
-      "updated": "2026-09-11"
-    },
-    {
-      "id": 611,
-      "title": "Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code/Codex/Qwen), §25 как протокол",
-      "kind": "enh",
-      "kind_ru": "улучшение",
-      "updated": "2026-09-09"
-    },
-    {
-      "id": 930,
-      "title": "CI на update-PR: поддержать PAT/GitHub App, чтобы проверки шли на автообновлении",
-      "kind": "task",
-      "kind_ru": "задача",
-      "updated": "2026-09-14"
     }
   ]
 }
