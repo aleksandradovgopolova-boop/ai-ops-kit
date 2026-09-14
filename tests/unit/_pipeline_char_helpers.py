@@ -117,6 +117,11 @@ _PATCH_BASE = "ai_ops_kit.engine.execution_pipeline"
 # (evidence_collector, _resolve_base) резолвятся из globals ЭТОГО модуля — подмену ставим здесь, а не
 # на реэкспорте в execution_pipeline (иначе она не дойдёт до _setup_isolation/_assemble_evidence).
 _SETUP_BASE = "ai_ops_kit.engine.pipeline_setup"
+# разрез фасад + сателлит: билдеры отчёта и стадии конвейера вынесены в pipeline_stages. Их
+# коллабораторы (gate_executor, tool_broker, contour_consistency_evidence) резолвятся из globals
+# ЭТОГО модуля — подмену ставим здесь, а не на реэкспорте в execution_pipeline (иначе она не дойдёт
+# до _pipeline_run_gates/_pipeline_resolve_policy/_pipeline_assess_readiness).
+_STAGES_BASE = "ai_ops_kit.engine.pipeline_stages"
 
 
 def _committing_loop(files):

@@ -292,6 +292,40 @@ def test_a_kit_update_pr_is_not_flagged_though_it_touches_the_plan():
 
 
 @pytest.mark.unit
+def test_a_kit_release_pr_is_not_flagged_though_it_bumps_release_claims():
+    """Релиз самого кита (`release_bump` одной командой бампит VERSION+manifest+release-claims+
+    release-notes) — одна МАШИННАЯ рука, НЕ смешение. Прежде parallel-safety краснел на КАЖДОМ выпуске
+    (release-claims — координационный, manifest/release-notes — не-doc yaml=«код») и релиз слить можно
+    было только админ-переопределением. Признак кит-специфичен: корневой VERSION + корневой
+    manifest/ai-ops-manifest.yaml + registry/release-claims.yaml ВМЕСТЕ — в дочке не воспроизводится."""
+    coord = COORD + ["registry/release-claims.yaml"]
+    changed = ["VERSION", "manifest/ai-ops-manifest.yaml", "registry/release-claims.yaml",
+               "registry/release-notes.yaml", "CHANGELOG.md", "README.md", "ROADMAP.md",
+               "newsfragments/release-v9.9.9.chore.md"]
+    rep = ps.diff_mixes_code_with_coordination(changed, coord)
+    assert rep["kit_release"] is True
+    assert rep["mixed"] is False
+    # МУТАЦИОННЫЙ КОНТРОЛЬ: одиночный бамп ПРОДУКТОВОЙ версии дочки (VERSION) + код + план — БЕЗ полной
+    # кит-сигнатуры (нет корневого manifest/ai-ops-manifest.yaml и release-claims) — по-прежнему СМЕШЕНИЕ.
+    # Уберёшь `and not kit_release` в фиксе — верхний assert покраснеет; ослабишь сигнатуру до одного
+    # VERSION — покраснеет этот.
+    child_like = ["VERSION", "ai_ops_kit/intelligence/health_product.py", "planning/plan.yaml"]
+    assert ps.is_kit_release_diff(child_like) is False
+    assert ps.diff_mixes_code_with_coordination(child_like, coord)["mixed"] is True
+
+
+@pytest.mark.unit
+def test_kit_release_signature_requires_all_three_files():
+    """Сигнатура релиза — ВСЕ три файла: частичное совпадение (нет одного) релизом не считается,
+    иначе одиночный корневой VERSION дочки ложно освобождал бы смешанный PR."""
+    full = ["VERSION", "manifest/ai-ops-manifest.yaml", "registry/release-claims.yaml"]
+    assert ps.is_kit_release_diff(full) is True
+    assert ps.is_kit_release_diff(["VERSION", "registry/release-claims.yaml"]) is False
+    assert ps.is_kit_release_diff(["manifest/ai-ops-manifest.yaml", "registry/release-claims.yaml"]) is False
+    assert ps.is_kit_release_diff(["VERSION"]) is False
+
+
+@pytest.mark.unit
 def test_strict_passes_a_kit_update_pr_that_migrates_the_plan(tmp_path):
     """DONE-WHEN #384: --strict пропускает апдейт-PR (managed VERSION + миграция плана) кодом 0;
     тот же смешанный дифф БЕЗ .ai/managed/VERSION остаётся красным (код 1) — маркер и решает."""

@@ -130,7 +130,9 @@ def test_run_report_carries_outcome_kpi_and_delta_wiring():
     import ast
     from pathlib import Path
     kit = Path(__file__).resolve().parents[2]
-    life = (kit / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle.py").read_text(encoding="utf-8")
+    # `_finalize_run_cost` (кладёт roid_outcome) вынесен из фасада в сателлит стадий прогона
+    # (чистый перенос + ре-экспорт через ai_ops_run_lifecycle) — читаем его новый дом.
+    life = (kit / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle_stages.py").read_text(encoding="utf-8")
     rep = (kit / "ai_ops_kit" / "engine" / "ai_ops_run_reporting.py").read_text(encoding="utf-8")
     assert "roid_outcome_report" in life and 'rep["roid_outcome"]' in life
     assert "estimate_vs_actual" in rep and 'rep["cost_delta"]' in rep

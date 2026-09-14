@@ -105,9 +105,12 @@ def test_pinned_numbers_are_not_duplicated_across_registries():
     одного гейта уронило оба валидатора, потому что обновить надо было два места, а знал об этом
     только тот, кто уже наступил.
 
-    Дубль здесь ОСОЗНАННЫЙ: release-claims добавляет проверку `blocking: true` у MVP-блокеров,
-    которой в knowledge/claims нет. Поэтому тест не запрещает дубль, а требует, чтобы значения
-    СОВПАДАЛИ — расхождение поймается здесь, а не через красный CI на следующем релизе.
+    ОБНОВЛЕНО: gates_count/mvp_blocking_count в release-claims теперь DERIVED и БОЛЬШЕ НЕ ХРАНЯТСЯ
+    литералом (см. validate_release_claims.derived_gate_counts). Дубль устранён — «один источник»
+    достигнут, и добавление гейта не обязано править release-claims. Поэтому тест не ТРЕБУЕТ дубля:
+    если литерал ещё присутствует, значения обязаны совпасть; если его нет — это ожидаемо (единый
+    дом), и проверять нечего. Требование `blocking: true` у MVP-блокеров держит
+    validate_release_claims.mvp_gates_are_blocking независимо от счётчика.
     """
     import yaml
 
@@ -126,4 +129,5 @@ def test_pinned_numbers_are_not_duplicated_across_registries():
             f"{claim_id}={expected} в knowledge/claims.yaml, но {release_key}={release[release_key]} "
             f"в release-claims — одно число разъехалось по двум реестрам")
         checked += 1
-    assert checked == len(pairs), f"сверено {checked} из {len(pairs)} дублирующихся чисел"
+    # НЕ требуем checked == len(pairs): отсутствие литерала в release-claims — ожидаемое «единый дом»
+    # состояние (число DERIVED), а не поломка.

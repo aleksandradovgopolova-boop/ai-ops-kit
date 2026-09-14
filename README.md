@@ -34,10 +34,15 @@ AI-агент собирает маленький greenfield за вечер. Н
 состояние built / built≠wired / partial / planned и способ проверки.
 
 Коротко: 32 команды владельца (`status`, `inbox`, `next`, `explain`, `do`, `run`, `review`,
-`contract`, `model` …), 35 <!-- claim:gates-total --> quality-gate (21 блокирующих, 14 advisory),
+`contract`, `model` …), 36 <!-- claim:gates-total --> quality-gate (23 блокирующих, 13 advisory),
 42 <!-- claim:agents-total --> роли в реестре, детерминированный security-scan.
 
 ## Быстрый старт (60 секунд)
+
+**В Claude Code с плагином AI Ops** — просто скажи в репозитории **«установи AI Ops»**. Скилл сам
+подключит кит (init → doctor → onboard) и проведёт первый путь; команды руками вводить не надо.
+
+Без плагина — в CI или офлайн — ручной путь (он же источник истины):
 
 ```bash
 python3 installer/ai_ops.py init /path/to/project
@@ -51,9 +56,7 @@ cd /path/to/project
 
 ## Честно о границах
 
-- **Установка пока ручная.** Сценарий «сказал „Установи AI Ops“ в незнакомом репозитории» ещё
-  не first-class — это следующий шаг ([ROADMAP.md](ROADMAP.md)).
-- **Канал — `qualification`, не `stable`.** Текущая версия — **v4.1.0 qualification**. `stable`
+- **Канал — `qualification`, не `stable`.** Текущая версия — **v4.2.0 qualification**. `stable`
   требует полевых доказательств на двух живых дочках и проверяется машиной; пока обкатки нет —
   слово не выдаётся авансом.
 - **Часть intelligence-слоя построена, но не проведена в контур** (organizational learning,

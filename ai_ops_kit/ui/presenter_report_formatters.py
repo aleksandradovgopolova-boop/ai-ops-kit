@@ -456,9 +456,6 @@ def from_process_spend(check: dict, continue_command: str = None,
     """
     spent, limit = check.get("spent_on_process"), check.get("ceiling")
 
-    def _t(n):
-        return "н/д" if n is None else (f"{n / 1000:.0f} тысяч" if n >= 1000 else str(n))
-
     if check.get("state") == "unknown":
         return message(
             status="degraded", headline="Сколько уходит на разбор — не вижу",
@@ -469,8 +466,8 @@ def from_process_spend(check: dict, continue_command: str = None,
     step = check.get("intent") or "разбор"
     return message(
         status="needs_input", headline="Разбор уже дороже, чем ты разрешила",
-        summary=f"На то, чтобы разобраться и описать, ушло в этой сессии {_t(spent)} токенов, а кода я "
-                f"ещё не тронул. Твой потолок на это — {_t(limit)}.",
+        summary="Разбор и описание этой задачи пошли по кругу: обсуждаем и уточняем заметно дольше, "
+                "чем закладывалось, а к правке кода я ещё не притронулся.",
         why_it_matters="Ровно так уже сгорали сессии: описание уточнялось по кругу, а работа не "
                        "начиналась. Но пропускать объявленный шаг я не советую — путь "
                        "specify→plan→run затем и объявлен, чтобы результат было чем проверить.",

@@ -15,6 +15,7 @@ import pytest
 
 from _pipeline_char_helpers import (
     _PATCH_BASE,
+    _STAGES_BASE,
     _SETUP_BASE,
     _committing_loop,
     _make_base_resolution,
@@ -35,11 +36,11 @@ class TestPipelineReturnStructure:
     Фиксируем, какие ключи ВСЕГДА присутствуют в результате.
     """
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -71,11 +72,11 @@ class TestPipelineReturnStructure:
         for key in required_keys:
             assert key in result, f"Ключ '{key}' отсутствует в результате run_pipeline"
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -108,11 +109,11 @@ class TestPipelinePhaseOrdering:
     Фиксируем, что фазы вызываются в правильном порядке (через порядок mock-вызовов).
     """
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -138,11 +139,11 @@ class TestPipelinePhaseOrdering:
         mock_detect.detect.assert_called_once()
         mock_loop.run_loop.assert_called_once()
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -175,11 +176,11 @@ class TestPipelineContainment:
     Фиксируем, что containment честно отражает, что enforced.
     """
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -203,11 +204,11 @@ class TestPipelineContainment:
 
         assert result["containment"]["sandbox"] is True
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -241,11 +242,11 @@ class TestPipelineDeliveryPlan:
     run_pipeline НЕ открывает PR сама — только возвращает delivery_plan для контроллера.
     """
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -279,11 +280,11 @@ class TestPipelineSignals:
     для классификации и gate evaluation.
     """
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())
@@ -343,11 +344,11 @@ class TestPipelineSecurityCharacterization:
       security).
     """
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     def test_clean_diff_security_passes(self, mock_run_plan, mock_detect, mock_broker,
@@ -375,11 +376,11 @@ class TestPipelineSecurityCharacterization:
         # проекция для отчёта присутствует и честна
         assert result["security_scan"]["overall"] == "clear"
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     def test_new_dependency_forces_security_gate(self, mock_run_plan, mock_detect, mock_broker,
@@ -426,11 +427,11 @@ class TestPipelinePhaseBaselineDiff:
     baseline-раздел и переключается на критерий no-regressions.
     """
 
-    @patch(f"{_PATCH_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
-    @patch(f"{_PATCH_BASE}.gate_executor")
+    @patch(f"{_STAGES_BASE}.contour_consistency_evidence", return_value={"status": "pass", "provided": [], "evidence": {}})
+    @patch(f"{_STAGES_BASE}.gate_executor")
     @patch(f"{_SETUP_BASE}.evidence_collector")
     @patch(f"{_PATCH_BASE}.tool_loop")
-    @patch(f"{_PATCH_BASE}.tool_broker")
+    @patch(f"{_STAGES_BASE}.tool_broker")
     @patch(f"{_PATCH_BASE}.project_detector")
     @patch(f"{_PATCH_BASE}.run_plan")
     @patch(f"{_SETUP_BASE}._resolve_base", return_value=_make_base_resolution())

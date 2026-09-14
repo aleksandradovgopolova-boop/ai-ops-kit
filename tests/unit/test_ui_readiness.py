@@ -64,6 +64,25 @@ class TestAssess:
             a = assess(td)
             assert a["storybook_maturity"] == "runnable"
 
+    def test_preview_workflow_absent_by_default(self):
+        """Честный факт: превью в PR не доставлено, пока файла workflow нет в дереве дочки."""
+        with tempfile.TemporaryDirectory() as td:
+            assert assess(td)["preview_workflow"] is False
+
+    def test_preview_workflow_detected_when_delivered(self):
+        """Доставлен workflow превью -> assess это ВИДИТ (факт из дерева), а `_fmt` называет «ВКЛЮЧЕНО».
+
+        Мутация: убрать поле preview_workflow из assess -> ui-status не отличит доставленное превью
+        от недоставленного, тест краснеет."""
+        from ai_ops_kit.ui.ui_readiness import _fmt
+        with tempfile.TemporaryDirectory() as td:
+            wf = Path(td) / ".github" / "workflows"
+            wf.mkdir(parents=True)
+            (wf / "ai-ops-storybook-preview.yml").write_text("name: x\n", encoding="utf-8")
+            a = assess(td)
+            assert a["preview_workflow"] is True
+            assert "ВКЛЮЧЕНО" in _fmt(a), "ui-status не показал доставленное превью как включённое"
+
 
 @pytest.mark.unit
 class TestCheck:

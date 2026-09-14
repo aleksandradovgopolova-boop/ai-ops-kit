@@ -84,6 +84,10 @@ def test_the_number_in_docs_equals_the_registry_fact():
     import validate_release_claims as vrc
 
     data = _claims()
+    # gates_count теперь ВЫЧИСЛЯЕМОЕ: release-claims может его больше не хранить — наполняем факт,
+    # не затирая объявленное (устаревший литерал по-прежнему разойдётся с фактом и покраснеет).
+    for _k, _v in vrc.derived_field_values(KIT).items():
+        data.setdefault(_k, _v)
     gates = yaml.safe_load((KIT / "quality" / "gates.yaml").read_text(encoding="utf-8"))["gates"]
     assert data["gates_count"] == len(gates), (
         f"claim gates_count={data['gates_count']}, а в quality/gates.yaml {len(gates)}")

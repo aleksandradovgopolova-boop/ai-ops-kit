@@ -105,4 +105,51 @@ class TestGenerate:
         assert result.startswith("## [")
 
 
+@pytest.mark.unit
+class TestHeadlinesBetween:
+    """headlines_between(): срез заголовков CHANGELOG между версиями — носитель «что нового» в отчёт."""
+
+    SAMPLE = (
+        "# CHANGELOG\n\n## [Unreleased]\n\n"
+        "## [4.1.0] — 2026-09-11 · Архитектурная конституция\n\nТело 4.1.0.\n"
+        "## [4.0.0] — 2026-09-04 · снятие плоского слоя tools/ (BREAKING)\n\nТело 4.0.0.\n"
+        "## [3.40.0] — 2026-09-03 · warn-минор перед 4.0\n\nТело 3.40.0.\n"
+        "## [3.39.4] — 2026-09-01 · resume-субпарсер движка\n\nТело 3.39.4.\n"
+    )
+
+    def test_slice_between_two_versions_names_headlines(self):
+        """old (исключая) -> new (включая): называет ровно заголовки промежуточных версий."""
+        out = changelog_gen.headlines_between("3.39.4", "4.1.0", text=self.SAMPLE)
+        assert out == [
+            "4.1.0 — Архитектурная конституция",
+            "4.0.0 — снятие плоского слоя tools/ (BREAKING)",
+            "3.40.0 — warn-минор перед 4.0",
+        ]
+        # граница old ИСКЛЮЧЕНА — версии-источника в срезе нет
+        assert not any(h.startswith("3.39.4") for h in out)
+        # [Unreleased] не попадает
+        assert not any("Unreleased" in h for h in out)
+
+    def test_slice_extracts_title_after_middot(self):
+        """Заголовок — часть после «·», без даты; порядок как в файле (новейшее сверху)."""
+        out = changelog_gen.headlines_between("4.0.0", "4.1.0", text=self.SAMPLE)
+        assert out == ["4.1.0 — Архитектурная конституция"]
+
+    def test_slice_empty_when_bounds_unresolvable(self):
+        """Нет границ / old>=new / нет текста -> ЧЕСТНО пустой срез (не выдумываем)."""
+        assert changelog_gen.headlines_between(None, "4.1.0", text=self.SAMPLE) == []
+        assert changelog_gen.headlines_between("4.1.0", "4.1.0", text=self.SAMPLE) == []
+        assert changelog_gen.headlines_between("4.1.0", "3.39.4", text=self.SAMPLE) == []
+
+    def test_slice_respects_limit(self):
+        """limit ограничивает число пунктов (2-6 в брифинге)."""
+        out = changelog_gen.headlines_between("3.39.4", "4.1.0", text=self.SAMPLE, limit=2)
+        assert len(out) == 2 and out[0].startswith("4.1.0")
+
+    def test_slice_reads_real_changelog_by_default(self):
+        """Без text читает реальный CHANGELOG кита — заголовки между двумя его версиями находятся."""
+        out = changelog_gen.headlines_between("4.0.0", "4.1.0")
+        assert any(h.startswith("4.1.0 —") for h in out)
+
+
 # TestSelftest удалён: тело переехало в tests/unit/test_changelog_gen_selftest.py

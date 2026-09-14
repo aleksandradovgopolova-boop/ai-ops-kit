@@ -34,13 +34,14 @@
 - **CODE-010** · MUST NOT · Без галлюцинаций API — gate: `none` (none)
 
 ## Часть III — Безопасность
-- **SEC-001** · MUST · SECURITY.md в каждом репозитории — gate: `required_repo_artifacts` (child)
+- **SEC-001** · MUST · Путь раскрытия уязвимостей в каждом репозитории — gate: `required_repo_artifacts` (child)
 - **SEC-002** · MUST NOT · Секреты не в коде — gate: `none` (none)
 - **SEC-003** · MUST · Входные данные недоверенны — gate: `none` (none)
 - **SEC-004** · MUST · Наименьшие привилегии — gate: `none` (none)
 - **SEC-005** · MUST · Гигиена цепочки поставок — gate: `none` (none)
 - **SEC-006** · MUST · Защита main — ревью до мержа — gate: `reviewer_handoff` (child)
 - **SEC-007** · MUST NOT · Не течь внутренности в ошибках и логах — gate: `none` (none)
+- **SEC-008** · MUST · Архитектура безопасности документирована — gate: `required_repo_artifacts` (child)
 
 ## Часть IV — Данные и API-контракты
 - **DATA-001** · MUST · Явная схема данных — gate: `none` (none)

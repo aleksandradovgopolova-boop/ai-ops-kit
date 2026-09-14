@@ -10,6 +10,11 @@ import pytest
 
 from ai_ops_kit.gates.gate_executor import evidence_from_judge_refusal, evaluate_gate, load_gates
 from ai_ops_kit.providers import orchestrator_providers as prov
+# Разрез монолита providers на фасад+сателлиты: `_anthropic_call`/`_openai_call` (и seam
+# `_http_post_json`, который они зовут) физически живут в `provider_calls`. Фасад ре-экспортирует
+# их (`prov._anthropic_call` и т.д. работают как прежде), но подмену HTTP-транспорта ставим ТУДА,
+# где вызывающая функция читает имя, — иначе rebind на фасаде вызов внутри сателлита не увидит.
+from ai_ops_kit.providers import provider_calls as _prov_calls
 from ai_ops_kit.providers.response_contract import (
     ENFORCED,
     JSON_ONLY,
@@ -34,7 +39,7 @@ def captured(monkeypatch):
         seen["url"], seen["headers"], seen["body"] = url, headers, body
         return seen.get("reply", {})
 
-    monkeypatch.setattr(prov, "_http_post_json", fake_post)
+    monkeypatch.setattr(_prov_calls, "_http_post_json", fake_post)
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
     monkeypatch.setenv("OPENAI_API_KEY", "test-key")
     monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key")

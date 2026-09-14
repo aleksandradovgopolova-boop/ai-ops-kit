@@ -121,7 +121,8 @@ def test_the_breakdown_reaches_the_run_report():
 
 def test_the_pipeline_puts_the_breakdown_into_run_report_json():
     """ШОВ: разбивка попадает в `gates` отчёта прогона, а не остаётся внутри исполнителя гейтов."""
-    src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    src = ((PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+           + "\n" + (PKG / "ai_ops_kit" / "engine" / "pipeline_stages.py").read_text(encoding="utf-8"))
     assert '"closure": gates.get("closure"),' in src, (
         "отчёт прогона больше не несёт разбивку — дочка снова видит все гейты одинаковыми")
     assert 'проверено машиной' in src, "человеку разбивку не печатают"
@@ -242,7 +243,8 @@ def test_evaluate_output_includes_evidence_verdict():
 
 def test_the_pipeline_puts_the_evidence_verdict_into_run_report_json():
     """ШОВ: вердикт честности evidence попадает в `gates` отчёта прогона и в readout."""
-    src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    src = ((PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+           + "\n" + (PKG / "ai_ops_kit" / "engine" / "pipeline_stages.py").read_text(encoding="utf-8"))
     assert '"evidence_verdict": gates.get("evidence_verdict"),' in src, (
         "вердикт честности evidence не доезжает до run-report — verified-привилегия невидима")
     assert 'evidence:' in src, "advisory-вердикт не печатают человеку"

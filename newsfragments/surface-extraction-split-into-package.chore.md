@@ -1,0 +1,1 @@
+Модуль извлечения поверхностей `surface_extraction.py` (733 строки) раскрыт в пакет `ai_ops_kit/checks/surface_extractors/` по стекам (python_web/python_cli/js_ui/_common); публичный вход и контракт `extract_surfaces` не изменились, поведение идентично.

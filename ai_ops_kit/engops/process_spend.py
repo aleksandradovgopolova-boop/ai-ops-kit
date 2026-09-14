@@ -72,13 +72,17 @@ STATES = ("normal", "attention", "over_ceiling", "code_started", "unknown")
 # тот же случай, что с `.gitignore`/`.gitattributes` (проба `test_fresh_install_is_not_a_code_change`).
 # Правка этих артефактов — описание продукта, а не «начали делать»: та же категория, что `ROADMAP.md`
 # и `planning/`. ГРАНИЦА `engops/` (лента B) ПЕРЕСЕЧЕНА ОСОЗНАННО, правка на одну строку; сказано в PR.
-_KIT_PREFIXES = (".ai/", ".ai-ops/", ".claude/", ".github/", "features/", "planning/", "history/")
+# `security/` добавлен в v7: установка сеет туда `security-policy.md` черновиком (обязательный
+# артефакт SEC-001), значит свежая поставка каталога НЕ должна читаться как правка кода — та же
+# категория, что `planning/` (тоже сидируется). Корневой `SECURITY.md` (архитектура, SEC-008) — ниже.
+_KIT_PREFIXES = (".ai/", ".ai-ops/", ".claude/", ".github/", "features/", "planning/", "history/",
+                 "security/")
 _KIT_FILES = (".ai-ops.yaml", "ai-ops", "AI-OPS-ONBOARDING.md", "CLAUDE.md", "ROADMAP.md",
               # ARCHITECTURE.md добавлен 07.09.2026 (SR-7): установка сеет его черновиком, значит
               # свежая поставка НЕ должна читаться как правка кода — та же категория, что ROADMAP.md.
               "ARCHITECTURE.md",
-              # SECURITY.md добавлен 11.09.2026 (#826): установка сеет его черновиком (обязательный
-              # артефакт SEC-001), значит свежая поставка НЕ должна читаться как правка кода.
+              # SECURITY.md (архитектура безопасности, SEC-008) сидируется черновиком — свежая
+              # поставка НЕ должна читаться как правка кода.
               "SECURITY.md",
               # `.gitattributes` добавлен 18.08.2026 вместе с его установкой: `ensure_gitattributes`
               # пишет его в дочку, значит свежая поставка НЕ должна читаться как правка кода — ровно

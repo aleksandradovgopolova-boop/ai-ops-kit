@@ -18,20 +18,48 @@ kind: module-size-ratchet
 threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
-ceilings:
-  ai_ops_kit/ui/presenter.py: 945
-  ai_ops_kit/engine/execution_pipeline.py: 789
-  ai_ops_kit/planning/repo_audit.py: 854
-  ai_ops_kit/engine/ai_ops_run_exec.py: 725
-  ai_ops_kit/engine/ai_ops_run_lifecycle.py: 952
-  ai_ops_kit/providers/orchestrator_providers.py: 978
-  ai_ops_kit/validation/validate_own_medicine.py: 795
-  ai_ops_kit/gates/gate_executor.py: 905
-  ai_ops_kit/engine/tool_broker.py: 868
-  ai_ops_kit/planning/contours.py: 724
-  ai_ops_kit/engine/pipeline_evidence.py: 734
+# Пусто: последний файл сверх порога (contours.py) разрезан на фасад + сателлит — оба ниже 700.
+ceilings: {}
 
 raises:
+  - at: '2026-09-14'
+    what: lower_ceiling
+    from: 'ai_ops_kit/planning/contours.py = 724'
+    to: >-
+      ai_ops_kit/planning/contours.py = 532 (ниже порога 700 — снят из ceilings);
+      ai_ops_kit/planning/contours_signals.py = 221 (ниже порога 700 — в ceilings не вносится)
+    work: 'chore(planning): разрез contours на фасад + contours_signals'
+    why: >-
+      Последний файл сверх порога (contours.py = 724 — код связности контуров, работает в каждой
+      дочке) разрезан на фасад + ОДИН сателлит. Низкоуровневый фундамент «матчинг путей + детект
+      сигналов в репозитории» (_under_excluded, _NOT_PRODUCT, unquote_git_path, _matches,
+      _product_dirs, _repo_has_signal, signals_present) перенесён байт-в-байт в contours_signals.py;
+      фундамент не зовёт верхние функции фасада, единственная связь наверх — ленивый импорт _resolve
+      внутри функции (оверлей источников истины остаётся в фасаде). Фасад держит модель, config-слой,
+      SoT, reconcile/derive и ЯВНО ре-экспортирует перенесённые имена, поэтому внешний контракт цел:
+      `from ai_ops_kit.planning import contours` и `contours.signals_present(...)` работают как
+      прежде. Оба файла упали ниже порога 700 → сняты/не внесены в ceilings, ратчет держит вниз.
+  - at: '2026-09-12'
+    what: lower_ceiling
+    from: 'ai_ops_kit/checks/surface_extraction.py = 733'
+    to: >-
+      ai_ops_kit/checks/surface_extraction.py = 225 (ниже порога 700 — снят из ceilings);
+      surface_extractors/_common.py = 74, surface_extractors/python_web.py = 225,
+      surface_extractors/python_cli.py = 203, surface_extractors/js_ui.py = 83,
+      surface_extractors/__init__.py = 18 (все ниже порога 700 — в ceilings не вносятся)
+    work: 'refactor(feature-registry): раскрой surface_extraction в пакет экстракторов по стекам'
+    why: >-
+      Модуль извлечения поверхностей продукта из кода дочки дорос до порога монолита (733) и впереди
+      его рост (E4 — серверные JS/TS), поэтому он расщеплён в ПАКЕТ `surface_extractors/` по стекам —
+      это заявленная расширяемость «экстрактор = адаптер, добавляется без роста ядра». Функции-
+      экстракторы перенесены байт-в-байт: python_web (Flask/FastAPI + Django/DRF/aiohttp), python_cli
+      (argparse/click/console_scripts), js_ui (react/vue-router), общие примитивы разбора и записи
+      (Surface/ParsedFile, _is_str_literal, _imports_module) — в `_common`. surface_extraction.py
+      остался ПУБЛИЧНЫМ входом: держит контракт (Surface/ParsedFile реэкспортом, Extractor), сборку
+      DEFAULT_EXTRACTORS и ядро обхода extract_surfaces — 733 -> 225, ушёл ниже порога и снят из
+      ceilings. Каждый подмодуль заметно ниже 700, поэтому в ceilings не вносятся. Внешний контракт
+      цел: `from ai_ops_kit.checks import surface_extraction` и `extract_surfaces(...)` работают как
+      прежде. Ратчет держит вниз.
   - at: '2026-09-11'
     what: lower_ceiling
     from: 'installer/ai_ops.py = 2168'
@@ -1126,3 +1154,13 @@ raises:
       EXISTING_PRODUCT в `classify`, чтобы вес зрелости, а не зашитая в код четвёрка признаков,
       решал класс. +17 строк — цена того, что зрелый brownfield с документацией и API-схемами, но
       короткой историей, перестаёт деградировать в EARLY_PRODUCT; правила остаются данными реестра.
+  - at: '2026-09-11'
+    what: raise_ceiling
+    from: 'ai_ops_kit/ui/presenter.py = 945'
+    to: 'ai_ops_kit/ui/presenter.py = 963'
+    work: 'next-surfaces-waiting-on-owner (#873)'
+    why: >-
+      from_next_work получил ветку held_owner: когда взять нечего, а работы ждут владельца, сообщение
+      называет конкретный шаг владельца (waiting_on) вместо немого «работа пока не объявлена». +18
+      строк — цена того, что кит проговаривает удержанное владельцем, а не молчит; ровно инвариант
+      «пустой совет обязан быть объяснён».

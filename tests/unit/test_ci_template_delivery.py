@@ -256,6 +256,103 @@ def test_audit_workflow_scheduled_delivered_and_runs_product_audit(tmp_path):
     assert (served / ".github" / "workflows" / "ai-ops-audit.yml").is_file()   # доехал до дочки
 
 
+# ── превью Storybook в PR: workflow-шаблон, гейтимый UI-продуктом ──────────────────────────────
+#
+# ROADMAP «Storybook preview в PR». Кит доставляет дочке CI-workflow, который на PR с UI-изменениями
+# собирает Storybook СОБСТВЕННЫМ build-скриптом дочки и выкладывает статическую сборку артефактом CI
+# + комментарий в PR. Границы, которые кит держит осознанно: он НЕ ставит зависимости и НЕ запускает
+# `storybook init` (это владелец), превью = локальный CI-артефакт без внешних сервисов/секретов, а на
+# репозиторий БЕЗ Storybook-билда workflow не навязывается (job скипается честно, а доставка гейтится).
+
+def _yaml():
+    import yaml
+    return yaml
+
+
+def test_storybook_preview_template_gates_on_ui_paths_and_build_script():
+    """(а) Шаблон валиден (YAML), гейтится на UI-пути + наличие build-скрипта, без внешних сервисов.
+
+    Мутация: снять `if steps.detect.outputs.has` со сборки/upload -> workflow собирал бы и на репо
+    без Storybook (падение вместо честного скипа) — но это уже поведение раннера; здесь держим
+    структуру: путь-фильтр, честный детект билд-скрипта, upload-artifact, комментарий, НИКАКИХ секретов.
+    """
+    src = (KIT / "templates" / "ci" / "ai-ops-storybook-preview.yml").read_text(encoding="utf-8")
+    doc = _yaml().safe_load(src)
+    assert doc["name"] == "ai-ops-storybook-preview"
+    on = doc.get(True) or doc.get("on")          # YAML 1.1: голый ключ `on` парсится как булево True
+    assert "paths" in on["pull_request"], "триггер не сужен путями — workflow бежал бы на любом PR"
+    paths = on["pull_request"]["paths"]
+    assert any(".storybook" in p for p in paths) and any(p.endswith("tsx") for p in paths)
+    # ЧЕСТНЫЙ ГЕЙТ наличия build-скрипта Storybook (буквальная проверка, как в ui_readiness)
+    assert "build-storybook" in src and "storybook build" in src
+    assert "steps.detect.outputs.has == 'true'" in src, "сборка не гейтится наличием билд-скрипта"
+    # превью = CI-артефакт статической сборки, БЕЗ внешнего хостинга/секретов
+    assert "actions/upload-artifact@" in src and "storybook-static" in src
+    assert "secrets." not in src, "секретов быть не должно — превью локальное (артефакт CI)"
+    # НИКАКИХ внешних сервисов: все экшены — первопартийные GitHub (actions/* или github/*), никаких
+    # Chromatic/Netlify/anchore-подобных сторонних загрузчиков. Заодно закреплены версионным тегом
+    # (как во всех workflow кита), а не плавающим `@main`.
+    import re
+    refs = [r.rstrip() for r in re.findall(r"uses:\s*([^\s]+)", src)]
+    assert refs, "в workflow нет ни одного экшена — нечего проверять"
+    for ref in refs:
+        name = ref.split("@")[0]
+        assert name.startswith(("actions/", "github/")), f"сторонний экшен запрещён границей: {ref}"
+        assert "@" in ref and not ref.endswith("@main"), f"экшен не закреплён версией: {ref}"
+    # комментарий в PR со ссылкой на артефакт (наименьшие права: pull-requests: write)
+    assert doc["permissions"].get("pull-requests") == "write"
+    assert "createComment" in src or "comment" in src.lower()
+
+
+def test_storybook_preview_is_declared_conditional_not_unconditional():
+    """Шаблон зарегистрирован в наборе доставки, но объявлен УСЛОВНЫМ — едет не всем дочкам.
+
+    Мутация: убрать имя из CI_TEMPLATES -> файл не доставляется вообще; убрать из
+    CONDITIONAL_CI_TEMPLATES -> поехал бы всем дочкам, включая бэкенд-репо. Тест держит обе стороны.
+    """
+    inst = _installer(Path.cwd())
+    assert "ai-ops-storybook-preview.yml" in inst.CI_TEMPLATES          # в наборе доставки
+    assert "ai-ops-storybook-preview.yml" in inst.CONDITIONAL_CI_TEMPLATES  # но условный
+    # и предикат условности реально подключён в сателлите доставки
+    assert "ai-ops-storybook-preview.yml" in inst._ci_setup()._CONDITIONAL_CI
+
+
+def _served_child(tmp_path, *, ui: bool):
+    served = tmp_path / ("ui" if ui else "backend")
+    (served / ".github" / "workflows").mkdir(parents=True)
+    (served / ".ai" / "runtime").mkdir(parents=True)
+    if ui:
+        (served / ".storybook").mkdir()
+        (served / "package.json").write_text(
+            '{"devDependencies":{"@storybook/react":"^8"},'
+            '"scripts":{"build-storybook":"storybook build"}}', encoding="utf-8")
+    return served
+
+
+def test_storybook_preview_delivered_to_ui_child(tmp_path):
+    """(б) Доставка проводит workflow в дочку — но ТОЛЬКО когда это UI-продукт (Storybook налицо)."""
+    inst = _installer(tmp_path)
+    served = _served_child(tmp_path, ui=True)
+    inst._ci_setup().sync_ci_workflows(served)
+    assert (served / ".github" / "workflows" / "ai-ops-storybook-preview.yml").is_file(), \
+        "UI-продукт не получил workflow превью"
+
+
+def test_storybook_preview_withheld_from_non_ui_child(tmp_path):
+    """Консервативный гейт: репозиторий без Storybook workflow превью НЕ получает (не сорим им).
+
+    Это не «absent/opted-out», а неприменимость по природе репозитория — кит гейтит доставку сам,
+    не перекладывая решение на владельца бэкенд-репо. Остальные (безусловные) workflow при этом едут.
+    """
+    inst = _installer(tmp_path)
+    served = _served_child(tmp_path, ui=False)
+    inst._ci_setup().sync_ci_workflows(served)
+    assert not (served / ".github" / "workflows" / "ai-ops-storybook-preview.yml").exists(), \
+        "бэкенд-репо не должен получать workflow превью Storybook"
+    # безусловные workflow всё равно доставлены — гейт узкий, только для условного шаблона
+    assert (served / ".github" / "workflows" / "ai-ops-validate.yml").is_file()
+
+
 # ── зоны переживают клон ──────────────────────────────────────────────────────────────────────
 
 def test_empty_zone_survives_a_clone(tmp_path):

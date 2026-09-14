@@ -129,6 +129,9 @@ def assess(child_root):
             "evidence_status": per_status, "recommendation": rec,
             # health углублён ИЗ Конституции: покрытие правил проверками кита, каждое — по constitution_id
             "constitution_coverage": _constitution_coverage(),
+            # Доставлено ли превью Storybook в PR (CI-артефакт статической сборки) — честный факт из
+            # рабочего дерева дочки, не обещание. Ставит его контур доставки только UI-продукту.
+            "preview_workflow": (root / ".github" / "workflows" / "ai-ops-storybook-preview.yml").is_file(),
             "installs_dependencies": False}   # кит НИКОГДА не ставит deps сам
 
 
@@ -187,6 +190,16 @@ def _fmt(a):
     L.append("  evidence (честно): story_index=%s interaction=%s a11y=%s visual=%s" %
              (es["story_index"], es["interaction"], es["a11y"], es["visual"]))
     L.append("  → " + a["recommendation"])
+    # Превью Storybook в PR (CI-артефакт статической сборки, без внешнего хостинга/секретов): честно
+    # называем, доставлен ли workflow. Не доставлен -> называем условие (UI-продукт со сборкой), а не
+    # обещание. Авто-подъём Storybook и внешний хостинг за владельцем остаются — их кит не делает.
+    if a.get("preview_workflow"):
+        L.append("  превью в PR: ВКЛЮЧЕНО (workflow ai-ops-storybook-preview доставлен) — на PR с "
+                 "UI-изменениями CI соберёт Storybook и выложит артефакт `storybook-static`.")
+    else:
+        L.append("  превью в PR: доступно отдельным workflow (CI-артефакт сборки, без внешнего "
+                 "хостинга) — доставляется UI-продукту со Storybook-билдом; авто-подъём Storybook "
+                 "и внешний хостинг остаются за владельцем.")
     cc = a.get("constitution_coverage") or {}
     if cc.get("available"):
         L.append("  Конституция (из %s): автоматизируемых правил %d, покрыто ревьюером %d" %

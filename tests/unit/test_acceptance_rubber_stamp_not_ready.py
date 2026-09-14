@@ -149,7 +149,10 @@ def test_without_a_judge_the_run_still_reaches_ready(repo):
 
 def test_the_predicate_stands_in_the_ready_decision():
     """ШОВ: результат `acceptance_blocks_ready` реально стоит в формуле ready, а не лежит рядом."""
-    src = (PKG_ROOT / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    # Разрез монолита: стадия готовности вынесена в pipeline_stages — «конвейер» это фасад+сателлит.
+    _eng = PKG_ROOT / "ai_ops_kit" / "engine"
+    src = ((_eng / "execution_pipeline.py").read_text(encoding="utf-8")
+           + "\n" + (_eng / "pipeline_stages.py").read_text(encoding="utf-8"))
 
     assert "acceptance_block, acceptance_block_reason = acceptance_blocks_ready(" in src, (
         "предикат приёмки не подключён к решению о ready")

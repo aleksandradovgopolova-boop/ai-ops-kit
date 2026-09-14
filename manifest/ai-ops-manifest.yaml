@@ -6,7 +6,7 @@ schema_version: 1
 kind: ai-ops-manifest
 
 ai_ops:
-  package_version: 4.1.0
+  package_version: 4.2.0
   schema_version: 1
   minimum_runtime_contract: 1
 
@@ -333,12 +333,14 @@ session_orchestration:
       - ROADMAP.md                                    # направление: четыре горизонта
       - planning/plan.yaml                            # delivery plan: kind: delivery-plan
       - ARCHITECTURE.md                               # единый источник правды об архитектуре (SR-7)
-      - SECURITY.md                                   # путь раскрытия уязвимостей (SEC-001 конституции, #826)
+      - SECURITY.md                                   # архитектура безопасности: как продукт защищён внутри (SEC-008)
+      - security/security-policy.md                   # внешний путь раскрытия уязвимостей (SEC-001 конституции)
     templates:
       roadmap: templates/planning/ROADMAP.md
       plan: templates/planning/plan.yaml
       architecture: templates/system/ARCHITECTURE.md
       security: templates/system/SECURITY.md
+      security_policy: templates/system/security-policy.md
     # v3.35.2 (тир 3): РЕПОЗИТОРИЙ ВПРАВЕ ОПИСАТЬ СЕБЯ. Пути артефактов были жёсткими, и монорепо,
     # где продукт живёт в `apps/web/`, не мог описать себя вовсе. Дополнить сигналы кита было можно,
     # снять — нельзя (`**/entities/**` в Feature-Sliced Design: 6 ложных находок из 9).
@@ -448,6 +450,12 @@ update_policy:
     # как uiux. Тяжёлый источник ARCHITECTURE_CONSTITUTION.md и оперативный слой arch.rules.md —
     # родительские (footprint-бюджет доставки узкий). Пакетно принадлежит `ai-ops-quality`.
     - "standards/architecture/rules.yaml"
+    # Продуктовая конституция (PROD-*): в дочку едет ТОЛЬКО компактный машинный реестр статей
+    # `rules.yaml` (карта `constitution_id -> статья` с полями gate/enforced_in) — тот же путь-паттерн,
+    # что uiux/architecture. Тяжёлый источник PRODUCT_CONSTITUTION.md и оперативный слой
+    # product.rules.md — родительские (не едут). Пакетно принадлежит `ai-ops-quality` (там же живут
+    # проверки конформанса `constitution_conformance`, которые резолвят PROD-* в дочке).
+    - "standards/product/rules.yaml"
     - "templates/**/*"
     - "context/**/*"
     - "workflows/*.md"

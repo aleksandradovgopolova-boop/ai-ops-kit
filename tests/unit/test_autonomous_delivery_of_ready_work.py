@@ -233,6 +233,8 @@ class TestNamedAutonomousDeliveryCommand:
     def test_delivery_pending_names_one_runnable_command(self):
         """POSITIVE: когда работа готова на ветке и дописывать нечего, движок НАЗЫВАЕТ одну команду
         доставки (правило printed-commands-are-runnable), а не абстрактное «запусти с open_pr»."""
-        src = (KIT / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle.py").read_text(encoding="utf-8")
+        # `_finalize_run` (где названа эта команда) вынесен из god-модуля в сателлит стадий прогона
+        # (чистый перенос + ре-экспорт из фасада ai_ops_run_lifecycle) — читаем его новый дом.
+        src = (KIT / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle_stages.py").read_text(encoding="utf-8")
         assert "--deliver-only --open-pr --execute" in src, \
             "автономная команда доставки готовой работы не названа — у неё нет одной точки входа"

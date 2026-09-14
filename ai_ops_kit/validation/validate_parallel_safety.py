@@ -152,8 +152,25 @@ def is_kit_update_diff(changed: list, markers=None) -> bool:
     return any(_norm(f) in marks for f in changed)  # _norm срезает ведущую точку с обеих сторон
 
 
+# Релиз самого кита — тоже ОДНА МАШИННАЯ рука (`devtools/release_bump.py` бампит версию во всех
+# поверхностях сразу), а не параллельная лента. Его сигнатура кит-специфична и в дочке структурно не
+# воспроизводится: корневой `VERSION` + корневой `manifest/ai-ops-manifest.yaml` + координационный
+# `registry/release-claims.yaml` меняются В ОДНОМ диффе. У дочки манифест кита лежит в
+# `.ai/managed/manifest/...` (не в корне), а корневой `VERSION` — её ПРОДУКТОВАЯ версия; поэтому эта
+# тройка вместе бывает только в релизе кита. Признак — ВСЕ три файла (не по одному), чтобы одиночный
+# бамп продуктовой версии дочки НЕ получил освобождение. Без исключения релиз-PR (release-claims —
+# координационный, manifest/release-notes — не-doc yaml=«код») по построению краснел на КАЖДОМ выпуске.
+_KIT_RELEASE_SIGNATURE = ("VERSION", "manifest/ai-ops-manifest.yaml", "registry/release-claims.yaml")
+
+
+def is_kit_release_diff(changed: list) -> bool:
+    """PR — релиз самого кита (`release_bump` бампит все поверхности)? -> вся сигнатура в диффе."""
+    changed_n = {_norm(f) for f in changed}
+    return all(_norm(s) in changed_n for s in _KIT_RELEASE_SIGNATURE)
+
+
 def diff_mixes_code_with_coordination(changed: list, coord: list, markers=None) -> dict:
-    """PR смешивает код с координационным файлом? -> {"mixed","coordination","code","docs","kit_update"}."""
+    """PR смешивает код с координационным файлом? -> {"mixed","coordination","code","docs","kit_update","kit_release"}."""
     coord_n = {_norm(c) for c in coord}
     coord_hits, code_hits, doc_hits = [], [], []
     for f in changed:
@@ -176,9 +193,11 @@ def diff_mixes_code_with_coordination(changed: list, coord: list, markers=None) 
     # заезд на новую дочку. Признак апдейта структурный — файл из `kit_update_markers` реестра в
     # диффе (по умолчанию `.ai/managed/VERSION`); `markers=None` -> тот же безопасный дефолт.
     kit_update = is_kit_update_diff(changed, markers=markers)
-    return {"mixed": bool(coord_hits) and bool(code_hits) and not kit_update,
+    # Релиз кита (release_bump бампит все поверхности) — одна машинная рука, не параллельная лента.
+    kit_release = is_kit_release_diff(changed)
+    return {"mixed": bool(coord_hits) and bool(code_hits) and not kit_update and not kit_release,
             "coordination": sorted(coord_hits), "code": sorted(code_hits),
-            "docs": sorted(doc_hits), "kit_update": kit_update}
+            "docs": sorted(doc_hits), "kit_update": kit_update, "kit_release": kit_release}
 
 
 def assess(root, base=None, defaults=None) -> dict:
@@ -214,6 +233,13 @@ def assess(root, base=None, defaults=None) -> dict:
                     "install/update-PR кита (правит файл-признак из kit_update_markers): правки "
                     f"{', '.join(mix['coordination'])} — миграция апдейта, а не параллельная работа; "
                     "смешение DIRTY не взводит (#384)."]
+            elif mix["kit_release"] and mix["coordination"] and mix["code"]:
+                # Не нарушение — релиз самого кита: release_bump одной командой бампит VERSION, manifest,
+                # release-claims и release-notes. Одна машинная рука, DIRTY-дорожки N² не создаёт.
+                rep["notes"] = rep.get("notes", []) + [
+                    "релиз-PR кита (release_bump бампит все поверхности VERSION/manifest/release-claims/"
+                    f"release-notes): правки {', '.join(mix['coordination'])} — машинный выпуск, а не "
+                    "параллельная работа; смешение DIRTY не взводит."]
     return rep
 
 

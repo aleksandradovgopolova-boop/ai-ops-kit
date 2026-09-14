@@ -38,6 +38,11 @@ import validate_release_claims as vrc  # noqa: E402
 pytestmark = [pytest.mark.unit, pytest.mark.slow]
 
 DERIVED_FIELDS = ("validators_count", "validators_externally_tested")
+# gates_count/mvp_blocking_count тоже DERIVED (работа `gate-count-is-computed-not-declared`), но их
+# литерал ПОКА хранится в release-claims.yaml — его уберёт отдельный bookkeeping-PR. Поэтому эти
+# поля НЕ проверяются на отсутствие в реестре (см. секцию «gates» ниже), а вот из derived_field_values
+# они обязаны выводиться уже сейчас, чтобы удаление литерала не уронило сверку.
+GATE_FIELDS = ("gates_count", "mvp_blocking_count")
 
 
 @pytest.fixture(scope="module")
@@ -58,9 +63,11 @@ def test_registry_no_longer_stores_the_number(claims):
 def test_the_fact_is_the_single_home(claims):
     """Единственное место, где живёт число, — сам факт; проверка читает его оттуда."""
     vals = vrc.derived_field_values(PKG)
-    assert set(vals) == set(DERIVED_FIELDS)
+    assert set(vals) == set(DERIVED_FIELDS) | set(GATE_FIELDS)
     vtotal, vtested = vrc.derived_verification_counts(PKG)
-    assert vals == {"validators_count": vtotal, "validators_externally_tested": vtested}
+    gates_total, mvp = vrc.derived_gate_counts(PKG)
+    assert vals == {"validators_count": vtotal, "validators_externally_tested": vtested,
+                    "gates_count": gates_total, "mvp_blocking_count": mvp}
     assert vtotal > 0, "факт пуст — считать нечего, проверка ослепла бы"
 
 
@@ -125,3 +132,54 @@ def test_a_re_nailed_literal_that_disagrees_still_errors(claims):
     errors = vrc.check(dict(claims, validators_count=vtotal + 999), PKG)
     assert any("validators_count" in e for e in errors), (
         "заново вписанный устаревший литерал прошёл молча")
+
+
+# ── gates_count / mvp_blocking_count: тот же приём для числа ГЕЙТОВ ──────────────────────────────
+# Работа `gate-count-is-computed-not-declared`. Добавление гейта в quality/gates.yaml — код;
+# синхронный подъём gates_count в release-claims.yaml — правка КООРДИНАЦИОННОГО файла, которую
+# parallel-safety --strict запрещает смешивать с кодом. Фичевый PR с новым гейтом упирался в этот
+# запрет. Снимаем ту же коллизию тем же приёмом, что у validators_count: число выводится из факта
+# (quality/gates.yaml), хранить литерал не обязательно.
+
+
+def test_gate_counts_live_in_derived_field_values():
+    """Оба числа гейтов выводятся из quality/gates.yaml и лежат в derived_field_values рядом с
+    валидаторными — единый механизм «факт, а не литерал»."""
+    vals = vrc.derived_field_values(PKG)
+    gates_total, mvp = vrc.derived_gate_counts(PKG)
+    assert vals["gates_count"] == gates_total > 0, "факт по гейтам пуст — проверка ослепла бы"
+    assert vals["mvp_blocking_count"] == mvp
+
+
+def test_check_derives_gate_counts_when_literal_absent(claims):
+    """(а) Без литерала gates_count/mvp_blocking_count сверка ВЫВОДИТ число из quality/gates.yaml и
+    проходит — это состояние ПОСЛЕ bookkeeping-PR, который уберёт литерал из release-claims.yaml.
+    Код обязан переживать его уже сейчас, иначе удаление литерала уронит CI."""
+    without = {k: v for k, v in dict(claims).items() if k not in GATE_FIELDS}
+    assert vrc.check(without, PKG) == [], (
+        "удаление литерала gates_count/mvp_blocking_count из реестра уронило сверку — "
+        "число не деривируется из факта")
+
+
+def test_adding_a_gate_needs_no_registry_edit(claims, monkeypatch):
+    """(б) Гейт добавлен (факт вырос), release-claims без литерала НЕ тронут — реестрового дрейфа
+    нет, и деривированное число растёт вместе с фактом. Раньше это давало красное
+    «gates_count != гейтов в quality/gates.yaml», пока PR не подвинет число в координационном
+    файле, — а именно эту правку запрещает смешивать с кодом parallel-safety."""
+    gates_total, mvp = vrc.derived_gate_counts(PKG)
+    monkeypatch.setattr(vrc, "derived_gate_counts", lambda pkg=vrc.PKG: (gates_total + 1, mvp + 1))
+    assert vrc.derived_field_values(PKG)["gates_count"] == gates_total + 1, (
+        "деривированное число не следует за фактом")
+    without = {k: v for k, v in dict(claims).items() if k not in GATE_FIELDS}
+    gate_drift = [e for e in vrc.check(without, PKG) if "гейтов в quality/gates.yaml" in e
+                  or "mvp_blocking_gates в quality/gates.yaml" in e]
+    assert gate_drift == [], (
+        f"рост числа гейтов потребовал правки release-claims — общая точка вернулась: {gate_drift}")
+
+
+def test_a_re_nailed_gate_literal_that_disagrees_still_errors(claims):
+    """Fail-closed: если лента снова впишет gates_count и оно разойдётся с фактом — ошибка
+    (защита от повторного «прибивания гвоздём»; проверка mvp_gates_are_blocking не ослаблена)."""
+    gates_total, _ = vrc.derived_gate_counts(PKG)
+    errors = vrc.check(dict(claims, gates_count=gates_total + 999), PKG)
+    assert any("gates_count" in e for e in errors), "заново вписанный устаревший литерал прошёл молча"

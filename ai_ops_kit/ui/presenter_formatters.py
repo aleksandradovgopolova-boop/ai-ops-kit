@@ -211,7 +211,9 @@ def from_plan_built(workitem_id, workflow, spec_level, packages, context_error=N
 
 def from_specification(path, created, level_name, sections, blocking_missing, next_command,
                        added=None, add_error=None, spec_provisional=False,
-                       sections_if_escalated=None, level_if_escalated=None) -> dict:
+                       sections_if_escalated=None, level_if_escalated=None,
+                       answer_command=None, applied=None, unmatched=None,
+                       answer_error=None) -> dict:
     """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа.
 
     F-029: `added` — разделы, ДОПИСАННЫЕ в уже существующий файл под поднявшийся уровень. Без него
@@ -222,15 +224,32 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
     Исход 3 (#768, obs 8a891ce7): `spec_provisional` — форма выдана по ПРЕДВАРИТЕЛЬНОЙ классификации
     (тяжесть size/risk не заявлена). Тогда называем ДО заполнения, до какого уровня
     (`level_if_escalated`) дорастёт форма и какие разделы (`sections_if_escalated`) добавит эскалация
-    на прогоне, — чтобы человек не заполнил не ту форму и не узнал об этом задним числом."""
+    на прогоне, — чтобы человек не заполнил не ту форму и не узнал об этом задним числом.
+
+    #863 (живой zero-touch прогон): путь описания задачи не показывает владельцу ФАЙЛ. Раньше
+    единственным next_step было «заполни разделы в <path>» — правка YAML руками. Теперь
+    незаполненные разделы называются ВОПРОСАМИ обычным языком (`ai_ops_kit.shared.spec_answers`),
+    а `answer_command` — готовая команда ответить словами, не открывая файл (`--answers
+    "слово=ответ; …"`), которую тот же модуль умеет разобрать обратно. `applied`/`unmatched`/
+    `answer_error` — честный итог ЭТОГО вызова, если ответ уже пришёл вместе с ним: что
+    записалось, какие слова кит не узнал, и не сломалась ли запись (битый spec.yaml не трогаем —
+    тот же принцип fail-closed, что у `add_error`)."""
+    from ai_ops_kit.shared import spec_answers
     n_missing = len(blocking_missing or [])
     n_added = len(added or [])
     n_esc = len(sections_if_escalated or [])
+    n_applied = len(applied or [])
     tech = {"spec": str(path), "уровень": level_name, "разделов": len(sections or []),
             "не заполнено": ", ".join(blocking_missing or []) or "—",
             "создана": bool(created), "дописано": ", ".join(added or []) or "—"}
     if add_error:
         tech["дописать не удалось"] = str(add_error)
+    if applied:
+        tech["записано в этом ответе"] = ", ".join(sorted(applied))
+    if unmatched:
+        tech["не узнала слова"] = ", ".join(unmatched)
+    if answer_error:
+        tech["запись ответа не удалась"] = str(answer_error)
     # Исход 3: провизорность и точные разделы эскалации — в технические детали (там уместны id
     # разделов); в summary уходит плоское предупреждение с уровнем и числом разделов.
     _disclosure = ""
@@ -244,23 +263,39 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             f"{_q(n_esc, 'раздел', 'раздела', 'разделов')} (какие — в технических деталях). "
             f"Заявишь размер/риск сразу — и форма выйдет нужного уровня.")
     if created:
-        _origin = "создана"
+        _origin = "начата"
     elif n_added:
-        _origin = (f"уже была, дописано {n_added} "
-                   f"{_q(n_added, 'раздел', 'раздела', 'разделов')} под {level_name}")
+        _origin = (f"уже была, стало на {n_added} "
+                   f"{_q(n_added, 'вопрос', 'вопроса', 'вопросов')} больше под {level_name}")
     else:
         _origin = "уже была"
     if n_missing:
+        questions = spec_answers.questions_for(blocking_missing)
+        shown_q = questions[:4]
+        ask = "; ".join(shown_q)
+        if len(questions) > 4:
+            ask += f" — и ещё {len(questions) - 4} (полный список в технических деталях)"
+        steps = []
+        if unmatched:
+            steps.append("несколько слов из ответа я не узнала: " + ", ".join(unmatched)
+                        + " — назови их словами из вопросов ниже")
+        steps.append("ответь словами, не открывая файл: " + ask)
+        if answer_command:
+            steps.append(f"так, например: {answer_command}")
+        steps.append(f"потом запускай: {next_command}")
         return message(
             status="needs_input",
-            summary=("Заготовка описания задачи " + _origin
-                     + f"; заполнить нужно {n_missing} "
-                       f"{_q(n_missing, 'раздел', 'раздела', 'разделов')}."
+            summary=("Описание задачи " + _origin
+                     + f"; осталось ответить на {n_missing} "
+                       f"{_q(n_missing, 'вопрос', 'вопроса', 'вопросов')}."
+                     + (f" Записано в этом ответе: {n_applied}." if n_applied else "")
                      + (f" Дописать разделы не удалось: {add_error}." if add_error else "")
+                     + (f" Запись ответа не удалась: {answer_error}." if answer_error else "")
                      + _disclosure),
-            why_it_matters="Заполнять их за тебя я не буду: это как раз то, что из кода не "
-                           "выводится, — зачем задача и как поймём, что получилось.",
-            next_steps=[f"заполни разделы в {path}", f"потом запускай: {next_command}"],
+            why_it_matters="Отвечать за тебя я не буду: это как раз то, что из кода не "
+                           "выводится, — зачем задача и как поймём, что получилось. Но открывать "
+                           "файл не обязательно — можно просто сказать словами.",
+            next_steps=steps,
             technical=tech)
     return message(status="ok", headline="Описание задачи готово",
                    summary="Всё, что нужно было описать, описано." + _disclosure,

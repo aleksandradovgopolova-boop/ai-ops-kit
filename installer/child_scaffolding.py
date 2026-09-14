@@ -173,6 +173,24 @@ def _migrate_legacy_architecture(root: Path, dry=False):
     return [{"artifact": "ARCHITECTURE.md", "action": "migrated-from-legacy"}]
 
 
+def _existing_canonical_doc(root: Path, rel: str):
+    """Есть ли у дочки реальный документ того же смысла, что канонический `rel`. -> путь | None.
+
+    Единый список частых мест — из пакета (`planning/canonical_docs`), тот же, что у детектора
+    CONFLICTING: третий список путей заводить нельзя (source-of-paths один). Пакет обязан быть на
+    пути — установщик запускают файлом; если импорт не удался, fail-open (None): деградация до
+    прежнего поведения (сеем черновик), не хуже, чем было до фикса.
+    """
+    pkg = _ao().PKG
+    if str(pkg) not in sys.path:
+        sys.path.insert(0, str(pkg))
+    try:
+        from ai_ops_kit.planning import canonical_docs as _cd
+    except Exception:                                  # noqa: BLE001 — пакет недоступен: сеем как раньше
+        return None
+    return _cd.existing_for_artifact(root, rel)
+
+
 def _seed_planning_contour(root: Path, dry=False):
     """v3.35: контур Planning & Execution доезжает до репозитория ЧЕРНОВИКАМИ.
 
@@ -196,6 +214,15 @@ def _seed_planning_contour(root: Path, dry=False):
         dst = root / rel
         if dst.exists():
             out.append({"artifact": rel, "action": "exists"}); continue
+        # Перед посевом пустого черновика ARCHITECTURE.md/SECURITY.md: у дочки уже может быть
+        # РЕАЛЬНЫЙ документ того же смысла в частом НЕ-каноничном месте (`docs/architecture/…`,
+        # `docs/security/…`, `docs/quality/SECURITY*`). Сеять рядом конкурирующий пустой черновик и
+        # просить «заполнить» уже написанное — нарушить собственный принцип кита «один источник
+        # правды». Тогда НЕ сеем и НЕ переносим (перенос в канонический корень — решение владельца),
+        # а честно называем найденное. Список мест — общий с детектором конфликтов (canonical_docs).
+        existing = _existing_canonical_doc(root, rel)
+        if existing is not None:
+            out.append({"artifact": rel, "action": f"existing-at:{existing}"}); continue
         # ROADMAP.md <- templates/planning/ROADMAP.md; planning/plan.yaml <- .../plan.yaml
         src_rel = by_name.get(Path(rel).name)
         src = (ao.PKG / src_rel) if src_rel else None

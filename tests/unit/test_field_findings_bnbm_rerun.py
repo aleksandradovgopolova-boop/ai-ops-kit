@@ -141,10 +141,11 @@ def test_delivery_pending_distinguishes_waiting_from_unwritten_code(rep, expecte
 def test_the_run_uses_the_predicate_and_names_the_waiting_state():
     """ШОВ: предикат действительно стоит в решении о статусе работы, а не лежит рядом.
 
-    Решение о статусе (`_finalize_run`) вынесено из god-модуля `ai_ops_run` в модуль-спутник
-    `ai_ops_run_lifecycle` (чистый перенос + ре-экспорт); шов сохранился, сместился лишь файл.
+    Решение о статусе (`_finalize_run`) вынесено из god-модуля `ai_ops_run` в сателлит стадий
+    прогона `ai_ops_run_lifecycle_stages` (чистый перенос + ре-экспорт через фасад
+    ai_ops_run_lifecycle); шов сохранился, сместился лишь файл.
     """
-    src = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle.py").read_text(encoding="utf-8")
+    src = (PKG / "ai_ops_kit" / "engine" / "ai_ops_run_lifecycle_stages.py").read_text(encoding="utf-8")
 
     assert 'if _st == "blocked" and delivery_pending(rep):' in src, "предикат не подключён к решению"
     assert "ждёт доставки: работа готова на ветке, новых правок нет" in src
@@ -268,7 +269,10 @@ def test_delivery_preflight_warns_before_spending(tmp_path, open_pr, expect):
 
 def test_delivery_preflight_is_wired_before_the_model_call():
     """ШОВ: предупреждение стоит в конвейере ДО петли, иначе оно приходит после траты."""
-    src = (PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    # Разрез монолита: секция отчёта с preflight вынесена в pipeline_stages — читаем фасад+сателлит.
+    # Порядок _setup_isolation < tool_loop.run_loop остаётся в фасадной части (индексы сохранны).
+    src = ((PKG / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+           + "\n" + (PKG / "ai_ops_kit" / "engine" / "pipeline_stages.py").read_text(encoding="utf-8"))
     # deep-cut: preflight выполняется внутри _setup_isolation (pipeline_setup); в конвейере изоляция
     # вызвана ДО tool_loop.run_loop, значит предупреждение звучит до первой траты модели.
     setup_src = (PKG / "ai_ops_kit" / "engine" / "pipeline_setup.py").read_text(encoding="utf-8")

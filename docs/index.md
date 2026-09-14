@@ -50,6 +50,10 @@ AI сопровождает продукт на всём жизненном ци
 - [capability-map.md](capability-map.md) — одна достоверная витрина «что кит умеет сейчас»,
   выведенная из кода и реестров: у каждой возможности состояние built / built≠wired / partial /
   planned и способ проверки.
+- [feature-catalog.md](feature-catalog.md) — человекочитаемый каталог фич продукта, собранный из
+  реестра фич: по каждой фиче что делает / для кого / как проверить, поверхности и статус —
+  чтобы аналитик разобрался во всех фичах из одного места (в ките — по образцу реестра, в дочке —
+  по её собственному).
 - [decision-boundary.md](decision-boundary.md) — что кит решает сам, а что всегда за человеком:
   почему одно идёт в `inbox` на ваше решение, а другое кит делает без вопроса.
 - [adoption-guide.md](adoption-guide.md) — гайд внедрения по ролям.
@@ -111,7 +115,7 @@ change-brief'ы, отчёты аудита, ретроспективы. Запи
 
 - **Execution Engine** — единый движок «задача → draft PR» с preflight-проверками, tool-loop, evidence collection и quality gates
 - **Spec-First** — модель не запускается, пока спецификация не достаточна
-- **Quality Gates** — 35 <!-- claim:gates-total --> гейта с machine-readable контрактами
+- **Quality Gates** — 36 <!-- claim:gates-total --> гейта с machine-readable контрактами
 - **Provider-Agnostic** — работает с Anthropic, OpenAI, DeepSeek, Claude CLI, локальными моделями
 - **Fail-Closed** — сбой блокирует, а не даёт ложный green
 - **Usage Truth** — честный учёт стоимости: unavailable ≠ 0

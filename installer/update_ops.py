@@ -28,6 +28,12 @@ import yaml
 
 _HERE = Path(__file__).resolve()
 
+# ПОСЛЕ обновления дочка обязана иметь онбординг-поверхность, а не только «N изменений, создайте PR».
+# Строка ПРИГЛАШАЕТ к брифингу по фундаменту (`./ai-ops propose`), но НЕ запускает его сама: разбор
+# фундамента — отдельный шаг владельца, а не побочный эффект применения обновления.
+_PROPOSE_INVITE = ("Кит обновлён. `./ai-ops propose` — что нового и что я рекомендую по фундаменту "
+                   "(ревью + вердикт + Storybook) одним брифингом.")
+
 # Живые глобалы установщика; проставляет `ai_ops._update_ops()`. None -> прямой вызов (fallback).
 _AO_NS = None
 
@@ -59,6 +65,20 @@ def _ao():
 def _core():
     """Хаб общих функций установщика (installer/core.py) через живой экземпляр ai_ops."""
     return _ao()._core()
+
+
+def _changelog_slice(from_version, to_version):
+    """Короткий срез заголовков CHANGELOG кита между версиями — для last-update-report. -> list[str].
+
+    Тонкая обёртка над `devtools.changelog_gen.headlines_between`: смысл «что нового» переносится в
+    ОТЧЁТ (сам CHANGELOG кита в дочку не едет, отчёт — единственный носитель). Любой сбой -> пустой
+    срез: `propose` честно откатится на «версия + число файлов», а не выдумает изменения.
+    """
+    try:
+        from ai_ops_kit.devtools import changelog_gen
+        return changelog_gen.headlines_between(from_version, to_version)
+    except Exception:                                  # noqa: BLE001 — отсутствие смысла «что нового»
+        return []                                      #   не должно ронять применённое обновление
 
 
 def cmd_status():
@@ -393,6 +413,10 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
         out = _core().write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
+    # СМЫСЛ «ЧТО НОВОГО» — В ОТЧЁТ. Число изменённых файлов не говорит владельцу, ЧТО нового; срез
+    # заголовков CHANGELOG между from->to называет фактические изменения. Пусто -> `propose` честно
+    # откатится на «версия + число файлов». CHANGELOG кита в дочку не едет — отчёт единственный носитель.
+    report["changelog_slice"] = _changelog_slice(inst, target)
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
                         f"{n} файлов под контролем."
                         # v3.35.1: back-fill МОДЕЛИ назывался в отчёте, но не в сообщении — человек
@@ -402,4 +426,8 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
                         + " Создайте PR с этим diff — silent update запрещён.")
     out = _core().write_report(report)
     print(report["report"]); print(f"отчёт: {out}")
+    # ПРИГЛАШЕНИЕ К БРИФИНГУ ПО ФУНДАМЕНТУ — ровно после «N изменений, создайте PR». Раньше здесь
+    # путь обрывался: владелец обновлённой дочки не знал ни что нового, ни что делать дальше.
+    if report["status"] == "ok":
+        print(_PROPOSE_INVITE)
     return 0 if report["status"] == "ok" else 1

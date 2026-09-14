@@ -24,6 +24,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from ai_ops_kit.planning.canonical_docs import ARCHITECTURE_PATHS as _ARCH
+
 CONFLICTING = "conflicting"
 
 # Максимум символов на документ: источники истины — проза, а не дампы; читать целиком незачем,
@@ -56,8 +58,9 @@ _DB_DRIVER = {
 }
 
 _README = ("README.md", "README.rst", "README.txt", "README")
-_ARCH = ("ARCHITECTURE.md", "docs/ARCHITECTURE.md", "docs/architecture.md",
-         ".ai/project/context/architecture/ARCHITECTURE.md", "ARCHITECTURE.rst")
+# `_ARCH` (импортирован выше) — единый список частых мест архитектурного документа (canonical_docs):
+# тот же, что использует back-fill установщика, чтобы не сеять черновик поверх реального
+# `docs/architecture/…`.
 _MANIFESTS = ("requirements.txt", "pyproject.toml", "Pipfile", "setup.cfg", "setup.py",
               "package.json", "go.mod", "Gemfile", "pom.xml", "build.gradle", "Cargo.toml")
 

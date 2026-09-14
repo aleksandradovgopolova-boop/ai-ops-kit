@@ -1,0 +1,109 @@
+# registry/feature-registry/feature-registry.schema.yaml
+#
+# СХЕМА РЕЕСТРА ФИЧ ДОЧКИ (W1 фичи feature-registry-coverage). Определяет машиночитаемую форму
+# одной ФИЧИ и одной записи ПОВЕРХНОСТИ (surface). Реестр фич сам по себе — операционный артефакт
+# ДОЧКИ (её `registry/features.yaml` или эквивалент); здесь живёт только КОНТРАКТ формы, как схема,
+# а не сам список функций конкретного продукта. Так же устроена связка entities.yaml (словарь) ↔
+# knowledge/graph.yaml (граф продукта в дочке).
+#
+# ПРИГОДНА ДЛЯ ДЕТЕРМИНИРОВАННОЙ ВАЛИДАЦИИ БЕЗ СЕТИ И МОДЕЛИ. Схема описана декларативно (типы,
+# обязательность, перечни допустимых значений, простые паттерны), поэтому её проверяет обычный
+# валидатор на stdlib+pyyaml — см. tests/unit/test_feature_registry_schema.py. Пример-образец —
+# в соседнем feature-registry.example.yaml.
+#
+# ЗАМЕТКА О ДОСТАВКЕ (honest). Этот файл лежит в ПОДКАТАЛОГЕ registry/, а не плоско в registry/*.yaml,
+# и поэтому НЕ едет в дочку (managed_set копирует только `registry/*.yaml`). Это осознанно: в W1 у
+# схемы ещё НЕТ child-side читателя (извлечение — W2, судья охвата — W3, доставка — W5). По тому же
+# правилу, что `registry/decision-boundary.yaml` (реестр без читателя в дочке не едет), файл поедет
+# в поставку плоским `registry/`-файлом тогда, когда появится читающий его в дочке механизм — и в тот
+# же момент подъём поставки будет записан в quality/delivery-budget.yaml. Не «забыли доставить» —
+# «нечему пока читать».
+
+schema_version: 1
+registry_type: feature-registry-schema
+
+# ── Схема одной ФИЧИ ────────────────────────────────────────────────────────────────────────────
+# Фича — это описанная единица ценности продукта: ЧТО она делает, ДЛЯ КОГО и КАК её проверить,
+# плюс ссылки на поверхности в коде, которыми она наблюдаема.
+feature:
+  required: [id, name, description, surfaces, status, owner]
+  fields:
+    id:
+      type: string
+      pattern: "^[a-z0-9][a-z0-9-]*$"   # kebab/slug, уникален в реестре
+      unique: true
+      doc: "Стабильный идентификатор фичи (slug). Уникален в пределах реестра."
+    name:
+      type: string
+      min_length: 1
+      doc: "Человекочитаемое имя фичи."
+    description:
+      type: object
+      required: [what, who, verify]
+      fields:
+        what: {type: string, min_length: 1, doc: "ЧТО фича делает — наблюдаемое поведение, не реализация."}
+        who:  {type: string, min_length: 1, doc: "ДЛЯ КОГО — роль/сегмент пользователя, чью задачу решает."}
+        verify: {type: string, min_length: 1, doc: "КАК проверить, что фича работает — воспроизводимый способ."}
+      doc: >-
+        Описание с тремя ОБЯЗАТЕЛЬНЫМИ секциями. Пустая секция запрещена: описание без «как проверить»
+        или без «для кого» не считается заполненным (см. стандарт FEAT-001).
+    surfaces:
+      type: list
+      min_items: 0                      # у planned-фичи кода ещё нет → список может быть пуст
+      item_ref: surface                 # каждый элемент — запись по схеме `surface` ниже
+      doc: >-
+        Наблюдаемые поверхности, которыми фича проявляется в коде. Для status=active ОЖИДАЕТСЯ хотя
+        бы одна поверхность (правило силы — в стандарте); для status=planned список обычно пуст.
+    status:
+      type: enum
+      values: [active, planned, deprecated]
+      doc: "active — живёт; planned — объявлена, кода ещё нет; deprecated — выводится из эксплуатации."
+    owner:
+      type: string
+      min_length: 1
+      doc: "Ответственный за фичу (роль/команда/человек). Не пусто."
+
+# ── Схема одной записи ПОВЕРХНОСТИ (surface) ────────────────────────────────────────────────────
+# Поверхность — наблюдаемая точка контакта продукта: маршрут/эндпоинт, CLI-команда, экран UI или
+# публичный API. Извлекается из кода (W2); в реестре фичи она связывает описание с местом в коде.
+surface:
+  required: [kind, ref, confidence, extractor]
+  fields:
+    kind:
+      type: enum
+      values: [route, cli, screen, api]
+      doc: "Вид поверхности: route (маршрут/эндпоинт), cli (команда), screen (экран UI), api (публичный API)."
+    ref:
+      type: string
+      pattern: "^[^:|]+:[0-9]+(\\|.+)?$"   # "file:line" или "file:line|symbol"
+      doc: >-
+        Ссылка на место в коде дочки в форме "file:line" или "file:line|symbol"
+        (например "src/routes/users.py:42|list_users").
+    confidence:
+      type: enum
+      values: [verified, inferred]
+      doc: >-
+        Уверенность вывода поверхности. verified — доказана детерминированно (может блокировать в W4);
+        inferred — предположена эвристикой (только предупреждает). Честность силы = честность confidence.
+    extractor:
+      type: string
+      min_length: 1
+      doc: >-
+        id экстрактора, породившего запись (из registry/feature-registry/surface-extractors.yaml).
+        Позволяет проследить, ЧЕМ и с какой уверенностью получена поверхность.
+
+# ── Пример-образец (короткий, валидный) ─────────────────────────────────────────────────────────
+# Полный валидный образец реестра из трёх фич (включая одну status=planned) — в соседнем файле
+# feature-registry.example.yaml. Здесь — минимальная иллюстрация одной записи каждого вида:
+example_hint:
+  feature:
+    id: user-login
+    name: "Вход пользователя"
+    description:
+      what: "Пользователь входит по email и паролю и получает сессию."
+      who: "Зарегистрированный пользователь продукта."
+      verify: "POST /login с валидными кредами возвращает 200 и cookie сессии; неверные — 401."
+    surfaces:
+      - {kind: route, ref: "src/auth/routes.py:31|login", confidence: verified, extractor: none}
+    status: active
+    owner: "team-identity"

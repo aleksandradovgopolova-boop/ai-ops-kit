@@ -1,0 +1,808 @@
+# registry/feature-registry/surface-extractors.yaml
+#
+# ЧЕСТНАЯ ДЕКЛАРАЦИЯ ЭКСТРАКТОРОВ ПОВЕРХНОСТЕЙ (W1 фичи feature-registry-coverage).
+#
+# Инвариант кита (AGENTS.md): capability-декларации честные — нельзя объявлять возможность, которой
+# нет в коде. На этапе W1 код-экстракторов ещё НЕ существует (извлечение поверхностей — работа W2),
+# поэтому список реализованных экстракторов ПУСТ. Это не заглушка «на будущее»: это честное «пока
+# кит не умеет извлекать ни одной поверхности ни из одного стека».
+#
+# Как читать: `extractors` — то, что кит УМЕЕТ прямо сейчас (у каждого есть код и он проверяем).
+# `planned` — намерения; они помечены status: unsupported + note planned и НЕ заявляют confidence,
+# ровно как планы в registry/capability-index.yaml. Пока экстрактор в `planned`, кит не выдаёт по
+# нему verified-поверхностей и не блокирует по ним (см. правило силы в стандарте FEAT).
+#
+# ЗАМЕТКА О ДОСТАВКЕ (honest): как и схема рядом, файл лежит в подкаталоге registry/ и в дочку пока
+# не едет — child-side читателя нет до W2/W3/W5. Поедет плоским registry/-файлом вместе с первым
+# реализованным экстрактором, и тогда подъём поставки будет записан в quality/delivery-budget.yaml.
+
+schema_version: 1
+registry_type: surface-extractors
+
+# Словарь видов поверхностей, которые вообще бывают (совпадает с surface.kind в схеме реестра фич).
+surface_kinds: [route, cli, screen, api]
+
+# Уровни уверенности вывода. verified — доказано детерминированным разбором кода (может блокировать
+# в W4); inferred — предположено эвристикой (только предупреждает).
+confidence_levels: [verified, inferred]
+
+# ── Реализованные экстракторы ───────────────────────────────────────────────────────────────────
+# Здесь ровно то, что кит УМЕЕТ извлекать ПРЯМО СЕЙЧАС — у каждого есть код и он проверяем тестом.
+# Заявлять стек, для которого кода нет, запрещено инвариантом честных capability-деклараций.
+#
+# W2 добавил ПЕРВЫЙ реальный экстрактор: HTTP-маршруты Flask/FastAPI по декораторам, точным разбором
+# AST без исполнения кода → confidence: verified. Код — ai_ops_kit/checks/surface_extraction.py
+# (функция extract_python_web_routes; ядро обхода — extract_surfaces).
+extractors:
+  - id: python-web-routes
+    stack: {language: python, frameworks: [flask, fastapi]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST: декоратор @<router>.<method>("/path", ...) над (async-)функцией, где
+      <method> ∈ {route, api_route, websocket, get, post, put, delete, patch, head, options, trace},
+      а первый позиционный аргумент — строковый путь-литерал, начинающийся с "/". Код не исполняется.
+      ref = "file:line|symbol" (symbol — имя функции-обработчика).
+    honest_limits:
+      sees: >-
+        маршруты, объявленные декоратором в исходнике со строковым путём-литералом
+        (Flask @app.route/@bp.get, FastAPI @app.get/@router.post и т.п.); даёт точные file:line|symbol.
+      does_not_see: >-
+        маршруты, собранные динамически (Flask add_url_rule, FastAPI include_router через переменную);
+        пути НЕ-литералы (f-строки, константы, конкатенация); Django urlpatterns (список, не декоратор);
+        классовые/method-view; любые не-Python стеки. Их появление НЕ доказывает и не блокирует.
+
+  # CLI-команды продукта (вид поверхности cli). Три экстрактора под три стека объявления команд;
+  # у каждого — свой честный предел. Общий принцип: доказано литералом → verified, динамика → пропуск.
+  - id: python-cli-argparse
+    stack: {language: python, frameworks: [argparse]}
+    surface_kinds: [cli]
+    confidence: verified
+    method: >-
+      статический разбор AST в файле, импортирующем argparse: `<subparsers>.add_parser("<name>", ...)`
+      (имя подкоманды из строкового литерала) и `ArgumentParser(prog="<name>")` (имя программы из
+      литерала, по возможности). Код не исполняется. ref = "file:line|<имя-команды>".
+    honest_limits:
+      sees: >-
+        подкоманды argparse с ЛИТЕРАЛЬНЫМ именем (add_parser("name")) и prog-имя верхнего парсера,
+        заданное строковым литералом, — в файле, который действительно импортирует argparse.
+      does_not_see: >-
+        имена, собранные динамически (переменная/f-строка/имя из данных или конфига); prog из
+        переменной; add_parser без литерала; argparse-обёртки, спрятанные за своим API без импорта
+        argparse в этом файле. Недоказанное verified НЕ помечается.
+  - id: python-cli-click
+    stack: {language: python, frameworks: [click]}
+    surface_kinds: [cli]
+    confidence: verified
+    method: >-
+      статический разбор AST в файле, импортирующем click: декоратор @<x>.command()/@<x>.group()
+      (или @command()/@group() из `from click import ...`) над функцией. Имя — из литерала в
+      декораторе (`"name"` или `name="..."`) либо из имени функции по правилу click (lower + `_`→`-`).
+      ref = "file:line|<имя-команды>".
+    honest_limits:
+      sees: >-
+        команды и группы click, объявленные декоратором command/group в файле с импортом click;
+        имя берётся из литерала или детерминированно из имени функции.
+      does_not_see: >-
+        Typer (@app.command() на typer.Typer — иной стек, не импортирует click) и иные click-надстройки;
+        имя из переменной/f-строки; команды, зарегистрированные в рантайме (add_command из данных);
+        нестандартный cls с собственным правилом именования. Недоказанное verified НЕ помечается.
+  - id: python-console-scripts
+    stack: {language: python, frameworks: [setuptools, poetry]}
+    surface_kinds: [cli]
+    confidence: verified
+    method: >-
+      текстовый разбор объявленных точек входа (БЕЗ tomllib — пол 3.9): ключи-имена в pyproject.toml
+      [project.scripts]/[project.gui-scripts]/[tool.poetry.scripts] и вложенные строки
+      console_scripts/gui_scripts в setup.cfg [options.entry_points]. ref = "file:line|<имя-команды>".
+    honest_limits:
+      sees: >-
+        имена команд, ОБЪЯВЛЕННЫЕ как точки входа дистрибутива в pyproject.toml или setup.cfg —
+        доказуемо объявленный интерфейс запуска продукта.
+      does_not_see: >-
+        entry_points, заданные исполняемым setup.py (аргумент entry_points= вызова setup()); точки
+        входа из плагинов/иных групп; динамически сформированные списки. Только эти два файла.
+  # E2 добавил ещё три верифицированных экстрактора маршрутов для питон-веба (тот же приём: verified
+  # только когда путь/префикс — строковый литерал в исходнике, точным разбором AST без исполнения;
+  # каждый сужен к файлам с импортом своего фреймворка, чтобы одноимённый чужой вызов не дал ложный
+  # verified). Код — те же ai_ops_kit/checks/surface_extraction.py (функции extract_django_urls,
+  # extract_drf_router, extract_aiohttp_routes).
+  - id: django-urls
+    stack: {language: python, frameworks: [django]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST: вызов path("route/", view) или re_path(r"^...$", view) в файле,
+      импортирующем django.urls, где первый позиционный аргумент — строковый путь-литерал.
+      Код не исполняется. ref = "file:line|<вьюха-или-путь>" (имя вьюхи, если она записана именем).
+    honest_limits:
+      sees: >-
+        объявления path()/re_path() со строковым путём-литералом в файле, импортирующем django.urls;
+        symbol — имя вьюхи (views.orders) либо сам путь-литерал.
+      does_not_see: >-
+        include(...) — вложенный urlconf монтируется, конкретный эндпоинт им НЕ доказывается (пропуск);
+        пути НЕ-литералы (переменная/f-строка/конкатенация); маршруты, собранные динамически или за
+        плагинной регистрацией; class-based view с кастомным роутингом; urlpatterns без импорта
+        django.urls в этом файле. Ничего из этого НЕ становится verified.
+  - id: drf-router
+    stack: {language: python, frameworks: [django-rest-framework]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST: вызов <router>.register("prefix", ViewSet) в файле, импортирующем
+      rest_framework, где первый позиционный аргумент — строковый префикс-литерал. Код не
+      исполняется. ref = "file:line|<ViewSet-или-префикс>".
+    honest_limits:
+      sees: >-
+        router.register() со строковым префиксом-литералом в файле, импортирующем rest_framework;
+        symbol — имя ViewSet либо сам префикс.
+      does_not_see: >-
+        префикс-НЕ-литерал (переменная/f-строка); конкретные суффиксы маршрутов, которые роутер
+        разворачивает в рантайме из ViewSet (list/detail/@action) — виден только зарегистрированный
+        префикс, а не порождённые из него URL; чужой .register() в файле без импорта rest_framework.
+  - id: aiohttp-routes
+    stack: {language: python, frameworks: [aiohttp]}
+    surface_kinds: [route]
+    confidence: verified
+    method: >-
+      статический разбор AST в файле, импортирующем aiohttp: app.router.add_route("GET","/p",h)
+      (путь — 2-й арг), app.router.add_get("/p",h) и семейство add_<method> (путь — 1-й арг), а также
+      app.add_routes([web.get("/p",h), web.route("GET","/p",h), ...]) — разбор списка-литерала. Путь —
+      строковый литерал, начинающийся с "/". Код не исполняется. ref = "file:line|<обработчик-или-путь>".
+    honest_limits:
+      sees: >-
+        add_route/add_<method>/add_routes([...]) со строковым путём-литералом (начинается с "/") в
+        файле, импортирующем aiohttp; symbol — имя обработчика либо сам путь.
+      does_not_see: >-
+        путь-НЕ-литерал (переменная/f-строка); add_routes с аргументом-переменной вместо списка-литерала
+        (список собран динамически); маршруты, добавленные через RouteTableDef-декораторы (@routes.get)
+        или другой способ; чужой .add_route()/.add_get() в файле без импорта aiohttp.
+
+  # E3 добавил ПЕРВЫЙ не-Python вид поверхности — экраны UI (screen) фронтенд-роутеров. ВАЖНО про
+  # честность силы: фронтенд разбирается ТЕКСТОМ/регэкспом по исходнику (stdlib ast к JS неприменим),
+  # без исполнения node и без сети. Это НЕ доказательный AST того же класса, что питон-экстракторы →
+  # оба заявляют confidence: inferred (эвристика паттерна: видна аналитику, в W4 НЕ блокирует). Код —
+  # те же ai_ops_kit/checks/surface_extraction.py (extract_react_router_screens/extract_vue_router_screens).
+  - id: react-router
+    stack: {language: [javascript, typescript], frameworks: [react-router]}
+    surface_kinds: [screen]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .jsx/.tsx/.js/.ts без исполнения: JSX-объявление
+      `<Route path="/x" ...>`/`<Route path='/x'/>` (путь — строковый литерал в кавычках) и объектные
+      роуты `createBrowserRouter([{path:"/x", ...}])` / `useRoutes([{path:...}])` (ключ `path:` со
+      строковым литералом — берётся только в файле с индикатором объектного роутера). Регэксп по
+      паттерну — эвристика, не доказательство → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        экраны-маршруты React Router, объявленные ЛИТЕРАЛЬНЫМ строковым путём — JSX-атрибутом path=
+        у <Route> или ключом path: в объектных роутах (createBrowserRouter/useRoutes). Даёт file:line
+        и сам путь как symbol, но помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        путь из ПЕРЕМЕННОЙ / шаблон-строки (backtick) / выражения `{...}` (в кавычки не попадает —
+        пропуск); объектный `path:` в файле БЕЗ индикатора роутера (чтобы чужой объект с ключом path
+        не дал ложный экран); <Route> с JSX-значением пропа (`element={<X/>}`), стоящим ПЕРЕД path в
+        том же теге (символ `>` внутри прерывает скан атрибутов — редиома «path первым» видна, обратный
+        порядок может быть пропущен); маршруты, собранные динамически из данных/конфига; серверные
+        JS-маршруты (Express/Nest/Next) — это иной вид, не screen. Ничего из этого НЕ verified.
+  - id: vue-router
+    stack: {language: [javascript, typescript], frameworks: [vue-router]}
+    surface_kinds: [screen]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .vue/.js/.ts без исполнения: ключи `path: '/x'` в
+      `routes: [{ path: '/x', component: ... }]` (createRouter/VueRouter). Ключ берётся только в файле
+      с индикатором vue-router (createRouter/VueRouter/импорт vue-router), путь — строковый литерал.
+      Регэксп по паттерну — эвристика, не доказательство → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        экраны-маршруты Vue Router, объявленные ЛИТЕРАЛЬНЫМ строковым path: в массиве routes файла с
+        индикатором vue-router. Даёт file:line и путь как symbol, помечает inferred (не блокирует).
+      does_not_see: >-
+        путь из переменной/шаблон-строки/выражения (не литерал — пропуск); routes-массив, собранный
+        динамически или импортированный из другого модуля; `path:` в файле без индикатора vue-router;
+        вложенные роуты, у которых конкретный путь склеивается из родителя в рантайме (виден только
+        объявленный литерал сегмента); серверный рендеринг вне known-роутера. Ничего из этого НЕ verified.
+
+  # E5 добавил ТРЕТИЙ фронтенд-роутер к виду `screen` — Angular Router. Честность силы та же, что у
+  # react-router/vue-router (E3): Angular-роутинг живёт в TypeScript, а stdlib ast к TS неприменим —
+  # разбор ТЕКСТОМ/паттерном по исходнику, без исполнения → confidence: inferred (в W4 НЕ блокирует).
+  # Код — тот же подмодуль ai_ops_kit/checks/surface_extractors/js_ui.py (extract_angular_router_screens,
+  # когезивно рядом с react/vue — один вид поверхности), зарегистрирован в DEFAULT_EXTRACTORS фасада.
+  - id: angular-router
+    stack: {language: typescript, frameworks: [angular]}
+    surface_kinds: [screen]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .ts без исполнения: ключи `path: 'x'` в литеральном массиве
+      маршрутов — `RouterModule.forRoot([{ path: 'billing', component: … }])` / `.forChild([...])` и
+      `const routes: Routes = [{ path: 'x', ... }]`. Ключ берётся ТОЛЬКО в файле с индикатором Angular
+      (`@angular/router` / `RouterModule` / аннотация `: Routes`), путь — строковый литерал. Angular
+      объявляет путь обычно БЕЗ ведущего "/" (`path: 'billing'`) — нормализуется к `/billing` ради
+      единообразия ref с react/vue. Регэксп по паттерну — эвристика, не доказательство → inferred.
+      ref = "file:line|/path".
+    honest_limits:
+      sees: >-
+        экраны-маршруты Angular, объявленные ЛИТЕРАЛЬНЫМ строковым path: в массиве routes файла с
+        индикатором Angular (RouterModule.forRoot/forChild или `const routes: Routes = [...]`).
+        Литеральный динамический сегмент (`users/:id`) сохраняется как есть. Даёт file:line и
+        нормализованный путь как symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        lazy-модули через `loadChildren` (конкретные дочерние пути грузятся лениво, из этого файла не
+        видны); wildcard `path: '**'` (catch-all, конкретный экран им не задаётся — пропуск) и пустой
+        `path: ''` (дефолт/редирект-корень — пропуск); путь из переменной/шаблон-строки/выражения (не
+        литерал — пропуск); матричные/динамически собранные пути; standalone-роуты в `provideRouter`,
+        когда массив маршрутов задан НЕлитералом (переменной/импортом); склейку вложенных `children`
+        в полный путь в рантайме (виден только объявленный литерал сегмента). Ничего из этого НЕ verified.
+
+  # E4 добавил СЕРВЕРНЫЕ JS/TS-маршруты (вид route) для JS-бэкенда — Express, NestJS, Next. Честность
+  # силы та же, что у screen-экстракторов E3: JS/TS разбирается ТЕКСТОМ/паттерном (Express/Nest) или
+  # выводится из РАСКЛАДКИ ФАЙЛОВ (Next), без исполнения node и без сети — это НЕ доказательный AST →
+  # все три заявляют confidence: inferred (в W4 НЕ блокируют). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/js_server.py (extract_express_routes / extract_nest_routes /
+  # extract_next_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: express
+    stack: {language: [javascript, typescript], frameworks: [express]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .js/.ts/.mjs/.cjs без исполнения: вызовы
+      `<obj>.<method>("/path", ...)`, где <method> ∈ {get, post, put, delete, patch, options, head,
+      all, use}, а путь — строковый литерал в кавычках, начинающийся с "/". Берётся ТОЛЬКО в файле с
+      индикатором express (import express / require('express') / from 'express'), чтобы одноимённый
+      чужой `.get(...)` не дал ложный маршрут. Регэксп по паттерну — эвристика → confidence: inferred.
+      ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        объявления маршрутов Express со СТРОКОВЫМ путём-литералом, начинающимся с "/" (app.get,
+        router.post, app.use("/mount", …) и т.п.), в файле, действительно импортирующем express.
+        Даёт file:line и сам путь как symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        путь из ПЕРЕМЕННОЙ / шаблон-строки (backtick) / выражения (в кавычки не попадает — пропуск);
+        маршруты, собранные динамически из данных/конфига; цепочки middleware и вложенные кастомные
+        роутеры, смонтированные через переменную; `.route("/x").get(...).post(...)`-цепочки (виден
+        лишь литеральный вызов метода с путём); файлы без импорта express. Ничего из этого НЕ verified.
+  - id: nest
+    stack: {language: [typescript, javascript], frameworks: [nestjs]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .ts/.tsx/.js/.mjs/.cjs без исполнения: method-декораторы
+      `@Get("/x")`/`@Post(...)`/@Put/@Delete/@Patch/@Options/@Head/@All на методах + `@Controller("/prefix")`
+      на классе; полный маршрут = префикс контроллера + путь метода (для метода берётся ближайший
+      предшествующий @Controller). Путь/префикс — строковый литерал; `@Get()`/`@Controller()` без
+      литерала дают пустой сегмент (маршрут сводится к префиксу/корню). Берётся ТОЛЬКО в файле с
+      индикатором `@nestjs`. Регэксп по паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        маршруты Nest, объявленные method-декоратором со строковым путём-литералом, склеенные с
+        префиксом @Controller того же файла; file:line и путь как symbol, помечает inferred.
+      does_not_see: >-
+        путь/префикс из переменной/шаблон-строки/константы (не литерал — сегмент пустой или пропуск);
+        глобальные и версионные префиксы, заданные в рантайме (app.setGlobalPrefix, versioning);
+        `@Controller`, импортированный/сгенерированный динамически; RouterModule.register с путями из
+        данных; файлы без индикатора @nestjs. Ничего из этого НЕ verified.
+  - id: next
+    stack: {language: [typescript, javascript], frameworks: [nextjs]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      СТРУКТУРНЫЙ вывод из РАСКЛАДКИ ФАЙЛОВ (содержимое не читается, без исполнения): серверные
+      эндпоинты Next — Pages API `pages/api/**` (`pages/api/orders.ts` → `/api/orders`; index → корень
+      сегмента; допускается ведущий `src/`) и App Router Route Handler `app/**/route.ext`
+      (`app/billing/route.ts` → `/billing`). Route-группы `(group)` и параллельные слоты `@slot` в URL
+      опускаются, catch-all `[...slug]` честно пропускается (маршрут не выводим), обычный `[id]`
+      сохраняется. Вывод из имени файла — эвристика раскладки → confidence: inferred. ref =
+      "file:line|<path>" (line = 1: маршрут выведен из пути файла, а не из места в тексте).
+    honest_limits:
+      sees: >-
+        серверные маршруты Next, выводимые из ПУТИ ФАЙЛА: Pages API под pages/api/** и App Router
+        Route Handler app/**/route.ext (с опциональным ведущим src/). Путь как symbol, inferred.
+      does_not_see: >-
+        UI-страницы (pages/index.tsx, app/**/page.tsx — иной вид, не серверный route); catch-all и
+        optional catch-all `[...slug]`/`[[...slug]]` (пропуск); rewrites/redirects/basePath из
+        next.config; middleware.ts; route.ext, не лежащий под app/; перехватывающие роуты `(.)`/`(..)`
+        и иные конвенции App Router сверх route-групп/слотов. Ничего из этого НЕ verified.
+
+  # E6 добавил СЕРВЕРНЫЕ Go-маршруты (вид route) — первый не-Python/не-JS серверный стек. Честность
+  # силы та же, что у js_server (E4): Go разбирается ТЕКСТОМ/паттерном по исходнику (stdlib ast к Go
+  # неприменим), без вызова компилятора Go и без сети — это НЕ доказательный AST → confidence: inferred
+  # (в W4 НЕ блокирует). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/go_web.py
+  # (extract_go_web_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: go-web
+    stack: {language: go, frameworks: [net/http, gin, chi, echo, gorilla/mux]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .go без исполнения: вызовы `<ident>.<Verb>("/path", …)`, где
+      <Verb> — HTTP-глагол или монтирование: net/http `HandleFunc`/`Handle`; gin/echo заглавные
+      GET/POST/PUT/DELETE/PATCH/HEAD/OPTIONS и `Group("/prefix")`; chi CamelCase Get/Post/… и
+      `Route("/prefix")`/`Mount("/prefix")`; gorilla/mux `HandleFunc("/path").Methods("GET")` (метод из
+      цепочки НЕ читаем — берём путь). Путь — строковый литерал ("…" или raw `…`), начинается с "/", за
+      ним `,` или `)` (конкатенация/fmt.Sprintf/переменная/шаблон в кавычки не попадают → пропуск).
+      Берётся ТОЛЬКО в файле с индикатором Go-веба (импорт net/http / gin-gonic/gin / go-chi/chi /
+      labstack/echo / gorilla/mux), чтобы одноимённый чужой `.Get(...)`/`.HandleFunc(...)` не дал
+      ложный маршрут. Регэксп по паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        объявления маршрутов Go со СТРОКОВЫМ путём-литералом, начинающимся с "/" (http.HandleFunc,
+        r.GET/r.Get, e.GET, gorilla r.HandleFunc(...).Methods(...)), а также литеральный путь групп
+        Group/Route/Mount как отдельный route, в файле, действительно импортирующем один из Go-веб-стеков.
+        Даёт file:line и сам путь как symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        middleware (r.Use и цепочки хендлеров); СКЛЕЙКУ префикса роут-группы (Group/Route/Mount) с
+        дочерними путями в полный URL — виден только объявленный литерал каждого сегмента, не собранный
+        рантаймом полный путь; роут-группы с ДИНАМИЧЕСКИМ (нелитеральным) префиксом; роутеры/пути через
+        переменную, конкатенацию, fmt.Sprintf или константу (не литерал — пропуск); генерируемые/
+        рефлексией-собранные маршруты; HTTP-метод gorilla из .Methods(...) (берётся путь, не метод);
+        стеки сверх перечисленных. Ничего из этого НЕ verified.
+
+  # E7 добавил СЕРВЕРНЫЕ Java-маршруты (вид route) Spring — первый JVM-стек. Честность силы та же, что
+  # у go_web (E6) / js_server (E4): Java разбирается ТЕКСТОМ/паттерном по исходнику (stdlib ast к Java
+  # неприменим), без вызова компилятора Java / JVM и без сети — это НЕ доказательный AST → confidence:
+  # inferred (в W4 НЕ блокирует). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/java_spring.py
+  # (extract_spring_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: spring-web
+    stack: {language: java, frameworks: [spring, spring-mvc, spring-boot]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .java без исполнения: method-аннотации `@GetMapping("/x")`,
+      `@PostMapping`, `@PutMapping`, `@DeleteMapping`, `@PatchMapping` и `@RequestMapping(...)`
+      (в т.ч. `@RequestMapping(value="/x", method=RequestMethod.GET)`); путь метода — строковый литерал,
+      позиционный (`"/x"`) или именованный `value=`/`path=`. Class-уровневый `@RequestMapping("/prefix")`
+      над `@RestController`/`@Controller`-классом задаёт ПРЕФИКС, который склеивается с путём метода
+      (оба литералы); сам префикс маршрутом не считается. Метод без литерального пути (`@PostMapping`,
+      `@GetMapping(produces=…)`) сводится к префиксу/корню. Берётся ТОЛЬКО в файле с индикатором Spring
+      (импорт `org.springframework.web.bind.annotation` ИЛИ `@RestController`/`@Controller`), чтобы
+      одноимённая чужая аннотация `@GetMapping` другого фреймворка не дала ложный маршрут. Регэксп по
+      паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        маршруты Spring MVC/Boot, объявленные method-аннотацией @*Mapping со строковым путём-литералом
+        (позиционным или value=/path=), склеенные с литеральным class-префиксом @RequestMapping того же
+        контроллера; file:line и путь как symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        путь/префикс НЕ-литерал — переменная, КОНСТАНТА (`@GetMapping(ORDERS_PATH)`, `value=BASE`),
+        склейка через `+`, шаблон — в кавычки не попадает → пропуск; class-уровневый @RequestMapping с
+        МАССИВОМ путей (`{"/a","/b"}`) и метод-аннотацию с массивом путей (виден 0, не разворачиваем);
+        кастомные мета-аннотации `@*Mapping` (составные @GetMapping-обёртки со своим именем);
+        функциональные роуты WebFlux `RouterFunction`/`route(...)`.route(...); глобальные префиксы из
+        конфигурации (server.servlet.context-path) и путь из `application.properties`/`.yml`
+        (`@GetMapping("${api.base}")`); класс без индикатора Spring. Ничего из этого НЕ verified.
+
+  # E8 добавил ПЕРВЫЙ вид поверхности `api` — операции продукта из GraphQL-схемы (SDL). Честность
+  # силы та же, что у go_web (E6) / spring-web (E7) / js_server (E4): SDL — формальная грамматика, но
+  # разбирается ТЕКСТОМ/паттерном по исходнику (не полноценным GraphQL-парсером, без исполнения,
+  # интроспекции и сети) → это НЕ доказательный AST того же класса, что Python-AST → confidence:
+  # inferred (в W4 НЕ блокирует). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/graphql_api.py (extract_graphql_operations),
+  # зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: graphql-schema
+    stack: {language: graphql, frameworks: [graphql-sdl]}
+    surface_kinds: [api]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не GraphQL-парсер) разбор файлов .graphql/.gql без исполнения: поля КОРНЕВЫХ типов
+      `type Query { … }`, `type Mutation { … }`, `type Subscription { … }` и их расширений
+      `extend type Query { … }` — каждое поле корневого типа есть операция API продукта (имя операции
+      = имя поля). Обычный `type Order { … }` — модель данных, его поля НЕ операции. Комментарии `#…`
+      и описания-строки (`\"\"\"docstring\"\"\"`, `"…"`, дефолтные строковые значения аргументов)
+      маскируются пробелами (позиции/номера строк сохраняются) — ложных полей не дают. Тело блока
+      берётся балансировкой `{…}`; незакрытый блок (обрыв файла) пропускается. Регэксп/скан по
+      паттерну — не грамматический парсер → confidence: inferred. ref = "file:line|<operation>".
+    honest_limits:
+      sees: >-
+        операции GraphQL, объявленные полями корневых типов Query/Mutation/Subscription (и их extend)
+        прямо в SDL-файле .graphql/.gql, включая поля с аргументами (`order(id: ID!): Order`) и
+        директивами; даёт file:line и имя операции как symbol, помечает inferred (не блокирует).
+      does_not_see: >-
+        схемы, заданные SDL-строками В КОДЕ (gql`…`/graphql-tag в .js/.ts) — иной носитель, не .graphql;
+        code-first схемы (Nexus/TypeGraphQL/Strawberry — операции заданы декораторами/классами, не SDL);
+        интроспекцию рантайма; переименование корневых типов через `schema { query: MyQuery }` (берём
+        только конвенциональные имена Query/Mutation/Subscription); директивы схемы как таковые;
+        ОБЪЕДИНЁННУЮ схему federation на уровне рантайма (видны только per-file `extend type`), и поля
+        НЕ-корневых типов (модели данных). Ничего из этого НЕ verified.
+
+  # E9 добавил серверные маршруты Ruby on Rails (вид route) — DSL файла config/routes.rb. Честность
+  # силы та же, что у go_web (E6) / spring-web (E7) / js_server (E4): Ruby разбирается ТЕКСТОМ/паттерном
+  # по исходнику (stdlib ast к Ruby неприменим), без вызова интерпретатора Ruby и без сети — это НЕ
+  # доказательный AST → confidence: inferred (в W4 НЕ блокирует). Развёртка resources/resource в
+  # RESTful — тоже inferred: это КОНВЕНЦИЯ Rails (роутер разворачивает пути в рантайме), а не доказанный
+  # в исходнике литерал. Код — новый подмодуль ai_ops_kit/checks/surface_extractors/ruby_rails.py
+  # (extract_rails_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: rails-routes
+    stack: {language: ruby, frameworks: [rails, ruby-on-rails]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор Ruby-DSL config/routes.rb без исполнения: глаголы
+      `get`/`post`/`put`/`patch`/`delete` со строковым путём-литералом → route (метод из глагола DSL);
+      `root "home#index"` → `GET /`; `resources :orders` → 7 стандартных RESTful-маршрутов Rails
+      (index/create/new/show/edit/update/destroy: `/orders`, `/orders/:id`, `/orders/new`,
+      `/orders/:id/edit`); `resource :profile` → 6 RESTful без index и без `:id`. Блоки
+      `namespace :admin do …` дают префикс пути `/admin`, `scope "/api" do …` (и `scope path: "/api"`) —
+      префикс `/api`, склеиваемый с путями внутри блока. Путь-НЕ-литерал (переменная, символ
+      `get :dashboard`, интерполяция `"/u/#{id}"`, склейка через `+`) → пропуск. Берётся ТОЛЬКО в файле
+      с индикатором Rails (`Rails.application.routes.draw` в тексте ИЛИ имя файла routes.rb), чтобы
+      чужой `.get`/`resources` в стороннем Ruby не дал ложный маршрут. Регэксп/скан по паттерну — не
+      грамматика Ruby → confidence: inferred. ref = "file:line|<МЕТОД> <path>".
+    honest_limits:
+      sees: >-
+        маршруты Rails, объявленные литеральным глаголом (get/post/…), `root`, а также стандартную
+        RESTful-развёртку `resources`/`resource` (inferred-конвенция), с учётом префиксов namespace и
+        scope одного уровня; file:line и "<МЕТОД> <path>" как symbol, помечает inferred (не блокирует).
+      does_not_see: >-
+        `only:`/`except:`-фильтры (полный RESTful-набор выдаётся всегда, конкретные фильтры НЕ
+        применяются); constraints (`constraints:`/`constraint`-блоки); member/collection-маршруты и
+        ВЛОЖЕННЫЕ resources глубже 1 (нутро `resources … do` не разбирается); монтирование движков
+        (`mount Engine => "/x"`); concerns (`concerns:`/`concern`); переименование пути через `as:`/`to:`
+        (берётся путь, не имя); redirect/`match … via:`; динамические пути (переменная/символ/
+        интерполяция/склейка `+`); переименование корня/параметров и любые пути, собранные в рантайме.
+        Ничего из этого НЕ verified.
+
+  # E10 добавил серверные маршруты ASP.NET Core (вид route) — первый стек .NET/C#. Честность силы та
+  # же, что у go_web (E6) / java_spring (E7) / rails-routes (E9): C# разбирается ТЕКСТОМ/паттерном по
+  # исходнику (stdlib ast к C# неприменим), без вызова компилятора Roslyn / .NET runtime и без сети —
+  # это НЕ доказательный AST → confidence: inferred (в W4 НЕ блокирует). Токен `[controller]`
+  # разрешается ДЕТЕРМИНИРОВАННО именем класса без суффикса Controller (выводимо из исходника, не из
+  # рантайма). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/dotnet_aspnet.py
+  # (extract_aspnet_routes), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: aspnet-routes
+    stack: {language: csharp, frameworks: [asp.net-core, asp.net-mvc, minimal-api]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .cs без исполнения. Attribute routing (контроллеры):
+      method-атрибуты `[HttpGet("/p")]`, `[HttpPost]`, `[HttpPut]`, `[HttpDelete]`, `[HttpPatch]`
+      (а также `[HttpHead]`/`[HttpOptions]`) и `[Route("/p")]` на методе — путь метода строковый
+      литерал (позиционный `"…"` или verbatim `@"…"`); class-уровневый `[Route("api/[controller]")]`
+      задаёт ПРЕФИКС, который склеивается с путём метода (оба литералы), сам префикс маршрутом не
+      считается. Токен `[controller]` РАЗРЕШАЕТСЯ детерминированно — имя класса-контроллера без
+      суффикса `Controller` (`UsersController` → `Users`, регистр как в объявлении). Метод без
+      литерального пути (`[HttpGet]`, `[HttpGet(Name="x")]`) сводится к префиксу/корню. Minimal APIs:
+      `app.MapGet("/p", …)`/`MapPost`/`MapPut`/`MapDelete`/`MapPatch` — литеральный путь первого
+      аргумента → route. Берётся ТОЛЬКО в файле с индикатором ASP.NET (`Microsoft.AspNetCore`,
+      `[ApiController]`/`[HttpGet]`/…, либо вызов `MapGet(`/…), чтобы одноимённый чужой атрибут/метод
+      не дал ложный маршрут. Регэксп по паттерну — эвристика → confidence: inferred. ref = "file:line|<path>".
+    honest_limits:
+      sees: >-
+        маршруты ASP.NET Core, объявленные method-атрибутом @[Http*]/[Route] со строковым путём-
+        литералом, склеенные с литеральным class-[Route]-префиксом (с разрешением токена [controller]),
+        и Minimal-API `MapGet/MapPost/…` с литеральным путём; file:line и путь как symbol, помечает
+        inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        conventional routing из Program.cs/Startup (`MapControllerRoute`/`MapDefaultControllerRoute`
+        с шаблоном `{controller=Home}/{action=Index}/{id?}` — конкретные эндпоинты собираются
+        рантаймом рефлексией, не выводимы текстом); area-маршруты; подстановку токена `[action]` и
+        прочих рантайм-токенов (кроме [controller] — он разрешается); атрибуты версионирования
+        (`[ApiVersion]`/`[MapToApiVersion]`) и route constraints как отдельную семантику (constraint
+        внутри литерала `{id:int}` остаётся в пути как есть, не осмысляется); путь/префикс НЕ-литерал —
+        переменная, КОНСТАНТА (`[HttpGet(RouteConst)]`), C#-интерполяция `$"…"`/`$@"…"`, склейка через
+        `+` (в кавычки не попадает → пропуск); Minimal API через переменную-группу
+        (`var g = app.MapGroup("/api"); g.MapGet("/x")` — префикс группы рантайм-переменная, не
+        склеивается, виден только литерал самого MapGet); метод, несущий одновременно параметрless
+        `[HttpGet]` и отдельный `[Route("x")]`, может дать и корень контроллера, и `/x` (атрибуты
+        разбираются независимо, не сливаются); файл без индикатора ASP.NET. Ничего из этого НЕ verified.
+
+  # E11 добавил ВТОРОЙ носитель вида `api` — операции gRPC из Protocol Buffers (.proto). Честность
+  # силы та же, что у graphql-schema (E8): .proto — формальная грамматика, но разбирается ТЕКСТОМ/
+  # паттерном по исходнику (не полноценным protobuf-парсером, без вызова protoc, code-gen, reflection
+  # и сети) → это НЕ доказательный AST того же класса, что Python-AST → confidence: inferred (в W4 НЕ
+  # блокирует). Код — новый подмодуль ai_ops_kit/checks/surface_extractors/grpc_proto.py
+  # (extract_grpc_rpcs), зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: grpc-proto
+    stack: {language: protobuf, frameworks: [grpc]}
+    surface_kinds: [api]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не protobuf-парсер) разбор файлов .proto без исполнения: объявления
+      `rpc <Name>(<Req>) returns (<Resp>);` внутри блока `service <Svc> { … }` — каждое есть операция
+      API продукта (имя операции = `<Svc>/<Name>`, префикс сервиса разводит одноимённые rpc разных
+      сервисов и совпадает с формой пути gRPC `/package.Service/Method`). `stream` (client/server
+      streaming) на факт операции не влияет. Обычные `message`/`enum` — модель данных, их поля/значения
+      НЕ операции (сканируются только тела service-блоков). Комментарии `//…` и `/* … */` и строковые
+      литералы (`"…"`/`'…'` — значения опций/дефолтов) маскируются пробелами (позиции/номера строк
+      сохраняются) — ложных rpc не дают. Тело блока берётся балансировкой `{…}`; незакрытый блок
+      (обрыв файла) пропускается. Регэксп/скан по паттерну — не грамматический парсер → confidence:
+      inferred. ref = "file:line|<Svc>/<Name>".
+    honest_limits:
+      sees: >-
+        операции gRPC, объявленные `rpc` внутри блока `service` прямо в .proto-файле (в т.ч. unary и
+        client/server/bidi streaming через `stream`); даёт file:line и `<Svc>/<Name>` как symbol,
+        помечает inferred (не блокирует).
+      does_not_see: >-
+        СГЕНЕРИРОВАННЫЕ из .proto stubs (code-gen в .py/.go/.java и т.п. — иной носитель, не .proto);
+        server reflection в рантайме; REST-mapping через аннотации `option (google.api.http)` (это
+        HTTP-биндинг поверх rpc, а не отдельный факт операции); поля `message`/значения `enum` (модель
+        данных, НЕ операции); импортированные (`import "other.proto";`) сервисы из другого файла
+        (виден только per-file service-блок); незакрытый `service {` без пары (обрыв файла — пропуск).
+        Ничего из этого НЕ verified.
+
+  # E16 добавил ТРЕТИЙ носитель вида `api` — операции tRPC-роутера (TypeScript). Честность силы та же,
+  # что у graphql-schema (E8) / grpc-proto (E11): tRPC-роутер живёт в TS, а stdlib ast к TS неприменим
+  # — разбирается ТЕКСТОМ/паттерном по исходнику (не полноценным TS-парсером, без вызова node, без
+  # проверки типов и сети) → это НЕ доказательный AST того же класса, что Python-AST → confidence:
+  # inferred (в W4 НЕ блокирует). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/trpc_router.py (extract_trpc_operations), зарегистрирован в
+  # DEFAULT_EXTRACTORS фасада surface_extraction.py (.ts уже в union суффиксов js-экстракторов).
+  - id: trpc-router
+    stack: {language: typescript, frameworks: [trpc]}
+    surface_kinds: [api]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не TS-парсер) разбор файлов .ts без исполнения: роутер объявляется вызовом
+      `createTRPCRouter({ … })` / `t.router({ … })` / `router({ … })`, где первый аргумент —
+      объектный литерал, а КЛЮЧИ верхнего уровня суть процедуры. Процедура = ключ, значение которого
+      содержит вызов `.query(` / `.mutation(` / `.subscription(`; имя операции = ключ. Обычное поле
+      объекта (значение без такого вызова) процедурой НЕ считается. Вложенный роутер как значение
+      ключа (`orders: createTRPCRouter({ … })`) даёт namespace: его процедуры получают префикс
+      `orders.` (форма клиентского вызова tRPC `trpc.orders.getOrders`); сам ключ вложенного роутера
+      операцией НЕ считается. Только НЕдинамические литеральные ключи (идентификатор или строковый
+      литерал); вычисляемый ключ `[expr]:` — пропуск. Комментарии `//…`/`/* … */` и строковые/backtick
+      литералы маскируются пробелами (позиции/номера строк сохраняются) — ложных процедур не дают, и
+      `{`/`}` внутри строк не сбивают балансировку. Тело роутера берётся балансировкой `{…}`; незакрытый
+      объект (обрыв файла) пропускается. Берётся ТОЛЬКО в файле с индикатором tRPC (`initTRPC` /
+      `createTRPCRouter` / `publicProcedure` / импорт из `@trpc/server`), чтобы чужой TS-объект с ключом
+      `query`/полем `router` не дал ложных операций. Регэксп/скан по паттерну — не грамматический TS-парсер
+      → confidence: inferred. ref = "file:line|<namespace.operation>".
+    honest_limits:
+      sees: >-
+        операции tRPC, объявленные ЛИТЕРАЛЬНЫМ ключом-процедурой (значение содержит
+        .query(/.mutation(/.subscription() внутри объектного литерала роутера createTRPCRouter/t.router/
+        router в .ts-файле с индикатором tRPC, включая вложенные роутеры с namespace-префиксом
+        (`orders.getOrders`); даёт file:line и имя операции как symbol, помечает inferred (не блокирует).
+      does_not_see: >-
+        склейку `mergeRouters(a, b)` в рантайме (операции склеиваемых роутеров тут не видны); процедуры,
+        добавленные через spread (`...otherRouter`) или собранные из переменной/импорта, а не литеральным
+        ключом; вычисляемые ключи `[expr]:` (динамика — пропуск); middleware-цепочки как отдельные операции
+        (берётся сам факт процедуры, не её пайплайн); глубокую вложенность роутеров, если объект собран не
+        литералом; code-first без явных ключей; edge-случаи backtick-интерполяции (backtick-строка гасится
+        целиком); файлы без индикатора tRPC; .tsx (берём только .ts). Ничего из этого НЕ verified.
+
+  # E12 добавил извлечение HTTP-эндпоинтов из OpenAPI/Swagger-спеки (вид route) — первый источник
+  # поверхностей из ЗАЯВЛЕННОГО КОНТРАКТА API (спека), а не из кода обработчиков. Честность силы: спека
+  # может РАСХОДИТЬСЯ с реальным кодом (drift — эндпоинт объявлен в спеке, но в коде отсутствует или
+  # наоборот), плюс разбор структурный по тексту спеки (yaml.safe_load/json.loads, без исполнения,
+  # без сети, без резолва remote-$ref), а не доказательство из исполняемого исходника → это НЕ
+  # доказательный AST того же класса, что Python-AST → confidence: inferred (в W4 НЕ блокирует). Файлы
+  # .yaml/.json ОЧЕНЬ распространены, потому экстрактор сужен индикатором top-level `openapi:`/`swagger:`
+  # (иначе чужие package.json/конфиги дали бы ложные поверхности). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/openapi_spec.py (extract_openapi_routes), зарегистрирован в
+  # DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: openapi-spec
+    stack: {language: [yaml, json], frameworks: [openapi, swagger]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      СТРУКТУРНЫЙ (не исполняемый) разбор файлов .yaml/.yml/.json без сети: yaml.safe_load для YAML и
+      json.loads для JSON. Срабатывает ТОЛЬКО когда верхний уровень документа — словарь с ключом
+      `openapi:` (OpenAPI 3.x) ИЛИ `swagger:` (Swagger/OpenAPI 2.0); иначе сразу []. Каждая пара «путь
+      (ключ в секции `paths`) + HTTP-метод (get/post/put/delete/patch)» = одна операция → route. Путь —
+      ключ в `paths` (по контракту OpenAPI начинается с "/"), метод — ключ path-item. ref =
+      "file:line|<METHOD> <path>" (метод в верхнем регистре; line — строка ключа метода в тексте).
+      Битый/не-utf-8 файл не роняет скан (возвращается []). Структурный разбор заявленного контракта ≠
+      доказательный AST → confidence: inferred.
+    honest_limits:
+      sees: >-
+        HTTP-эндпоинты, ОБЪЯВЛЕННЫЕ в секции `paths` спеки OpenAPI 3.x / Swagger 2.0 (.yaml/.yml/.json)
+        как пары путь+метод (get/post/put/delete/patch); даёт file:line и "<METHOD> <path>" как symbol,
+        помечает inferred (заявленный контракт, не блокирует).
+      does_not_see: >-
+        РАСХОЖДЕНИЕ спеки с кодом (drift — спека может отставать: объявленный эндпоинт в коде может
+        отсутствовать, а реальный обработчик — не попасть в спеку); композицию через `$ref`/remote-refs
+        (path-item по ссылке в другой файл НЕ разворачивается); `callbacks` и `webhooks` (OpenAPI 3.1 —
+        они не в `paths`); методы head/options/trace; серверные префиксы из `servers:`/`basePath:` (к
+        путям НЕ приклеиваются — виден только литерал ключа `paths`); спеки, встроенные строкой В КОД
+        (SDL/JSON в .js/.ts/.py), и любую спеку без top-level `openapi:`/`swagger:`; переопределение
+        путей рантайм-роутером поверх спеки. Ничего из этого НЕ verified.
+
+  # E13 добавил серверные маршруты Phoenix (вид route) — первый стек Elixir/BEAM. Честность силы та
+  # же, что у rails-routes (E9) / go_web (E6) / spring-web (E7) / js_server (E4): Elixir разбирается
+  # ТЕКСТОМ/паттерном по исходнику (stdlib ast к Elixir неприменим), без вызова компилятора Elixir /
+  # BEAM и без сети — это НЕ доказательный AST → confidence: inferred (в W4 НЕ блокирует). Развёртка
+  # resources в RESTful — тоже inferred: это КОНВЕНЦИЯ Phoenix (роутер разворачивает пути в рантайме),
+  # а не доказанный в исходнике литерал. Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/phoenix_router.py (extract_phoenix_routes), зарегистрирован в
+  # DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: phoenix-router
+    stack: {language: elixir, frameworks: [phoenix]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор Elixir Phoenix-router-DSL модуля router.ex без исполнения: глаголы
+      `get`/`post`/`put`/`patch`/`delete` с двойными кавычками пути → route (метод из глагола DSL:
+      `get "/x", Controller, :action` → `GET /x`); `resources "/orders", OrderController` → 7
+      стандартных RESTful-маршрутов Phoenix (index/new/create/show/edit/update/delete: `GET /orders`,
+      `GET /orders/new`, `POST /orders`, `GET /orders/:id`, `GET /orders/:id/edit`, `PATCH
+      /orders/:id`, `DELETE /orders/:id`). Блоки `scope "/api" do …` / `scope "/api", AppWeb do …` /
+      `scope path: "/api" do …` дают префикс пути `/api`, склеиваемый с путями внутри блока; `scope
+      "/", AppWeb` — пустой сегмент. Путь-НЕ-литерал (переменная `get some_path, …`, атом-параметр,
+      интерполяция `"/u/#{id}"`, склейка) в двойные кавычки не попадает или содержит `#{` → пропуск.
+      Берётся ТОЛЬКО в файле с индикатором Phoenix (`Phoenix.Router` в тексте, макрос `use <App>Web,
+      :router` ИЛИ имя файла router.ex), чтобы чужой `get`/`resources` в стороннем Elixir не дал
+      ложный маршрут. Регэксп/скан по паттерну — не грамматика Elixir → confidence: inferred. ref =
+      "file:line|<МЕТОД> <path>".
+    honest_limits:
+      sees: >-
+        маршруты Phoenix, объявленные литеральным глаголом (get/post/put/patch/delete) с путём в
+        двойных кавычках и стандартную RESTful-развёртку `resources` (inferred-конвенция), с учётом
+        префиксов scope одного уровня вложенности; file:line и "<МЕТОД> <path>" как symbol, помечает
+        inferred (не блокирует).
+      does_not_see: >-
+        `pipe_through`/пайплайны и их роль в маршруте; `forward` (монтирование plug/роутера) и
+        `live "/x", LiveView` LiveView-роуты (иной вид объявления, не берутся); PUT для update
+        (Phoenix даёт и PUT, и PATCH — эмитируется только PATCH из перечисленного RESTful-набора);
+        `only:`/`except:`-фильтры и `singleton: true` у `resources` (полный плюральный RESTful-набор
+        выдаётся всегда, фильтры/сингулярность НЕ применяются); член/коллекционные и ВЛОЖЕННЫЕ
+        `resources` глубже 1 (нутро `resources … do` не разбирается); склейку ВЛОЖЕННЫХ scope глубже
+        одного уровня в полный путь в рантайме сверх конкатенации объявленных литеральных сегментов;
+        динамические пути (переменная/атом-параметр `get :action`/интерполяция `#{…}`/склейка); файл
+        без индикатора Phoenix. Ничего из этого НЕ verified.
+
+  # E14 добавил серверные маршруты Laravel (вид route) — первый стек PHP. Честность силы та же, что у
+  # go_web (E6) / java_spring (E7) / rails-routes (E9) / aspnet-routes (E10): PHP разбирается ТЕКСТОМ/
+  # паттерном по исходнику (stdlib ast к PHP неприменим), без вызова интерпретатора PHP и без сети —
+  # это НЕ доказательный AST → confidence: inferred (в W4 НЕ блокирует). Развёртка
+  # resource/apiResource в RESTful — тоже inferred: это КОНВЕНЦИЯ Laravel (роутер разворачивает пути
+  # в рантайме), а не доказанный в исходнике литерал. Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/laravel_routes.py (extract_laravel_routes), зарегистрирован
+  # в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: laravel-routes
+    stack: {language: php, frameworks: [laravel]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор фасада Laravel в routes/*.php без исполнения: `Route::get('/x', …)` и
+      `post`/`put`/`patch`/`delete`/`options` со строковым путём-литералом → route (метод из глагола
+      фасада); `Route::resource('orders', …)` → 7 стандартных RESTful-маршрутов Laravel (index/create/
+      store/show/edit/update/destroy: `/orders`, `/orders/create`, `/orders/{id}`, `/orders/{id}/edit`);
+      `Route::apiResource('orders', …)` → те же 5 без форм create/edit. Группы
+      `Route::prefix('api')->group(function () { … })` и `Route::group(['prefix' => 'admin'], …)` дают
+      префикс пути, склеиваемый с путями внутри блока при ЛИТЕРАЛЬНОМ префиксе. Путь-НЕ-литерал
+      (переменная `Route::get($p, …)`, интерполяция двойных кавычек `"/u/{$id}"`/`"$x"`, склейка через
+      `.`) → пропуск. Берётся ТОЛЬКО в файле с индикатором Laravel (фасад `Route::` в тексте,
+      `use Illuminate\Support\Facades\Route`, ИЛИ файл в каталоге routes/), чтобы чужой `Route::`/`->get`
+      в стороннем PHP не дал ложный маршрут. Регэксп/скан по паттерну — не грамматика PHP → confidence:
+      inferred. ref = "file:line|<МЕТОД> <path>".
+    honest_limits:
+      sees: >-
+        маршруты Laravel, объявленные литеральным глаголом фасада (Route::get/post/…), а также
+        стандартную RESTful-развёртку `Route::resource`/`Route::apiResource` (inferred-конвенция), с
+        учётом литерального префикса одной prefix-группы; file:line и "<МЕТОД> <path>" как symbol,
+        помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        `only(...)`/`except(...)`-сужения ресурса (полный RESTful-набор соответствующего типа выдаётся
+        всегда, конкретные фильтры НЕ применяются); invokable-контроллеры (`Route::get('/x', Controller
+        ::class)` — путь виден, но одиночное действие без глагола-фасада как отдельный маршрут не
+        выводится); `Route::match([...], …)`/`Route::any(…)` (несколько/все методы — не разворачиваем);
+        имена/группировку через `->name(...)`/`->middleware(...)`/`->domain(...)` и биндинг модели
+        (`{order}` вместо `{id}` — конвенциональный плейсхолдер нормализован к `{id}`); ВЛОЖЕННЫЕ группы
+        и замыкания-обработчики с фигурными скобками прямо в routes-файле (могут сбить область
+        prefix-группы — declared limit); nested-ресурсы с точечной нотацией (`photos.comments`);
+        динамические пути (переменная/интерполяция/склейка `.`) и любые маршруты, собранные в рантайме
+        (макросы, `Route::macro`, регистрация из провайдеров). Ничего из этого НЕ verified.
+  # E15 добавил серверные маршруты Ktor (вид route) — стек Kotlin/JVM. Честность силы та же, что у
+  # go_web (E6) / java_spring (E7) / rails-routes (E9) / aspnet-routes (E10): Kotlin разбирается
+  # ТЕКСТОМ/паттерном по исходнику (stdlib ast к Kotlin неприменим), без вызова компилятора Kotlin /
+  # JVM и без сети — это НЕ доказательный AST → confidence: inferred (в W4 НЕ блокирует). Вложенность
+  # блоков `route` учитывается балансом скобок (_matching_brace из _common). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/ktor_routing.py (extract_ktor_routes), зарегистрирован в
+  # DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: ktor-routing
+    stack: {language: kotlin, frameworks: [ktor]}
+    surface_kinds: [route]
+    confidence: inferred
+    method: >-
+      ТЕКСТОВЫЙ (не AST) разбор исходника .kt без исполнения: method-вызовы Ktor DSL `get("/p") { … }`,
+      `post`/`put`/`patch`/`delete`/`head`/`options` со строковым путём-литералом → route (метод из
+      глагола DSL). Блок `route("/prefix") { … }` задаёт ПРЕФИКС, склеиваемый с путём вложенного метода
+      (оба литералы); сам блок route маршрутом не считается — эндпоинт делает вложенный method-вызов.
+      Метод без пути (`get { … }`) сводится к самому префиксу. Вложенность блоков `route` учитывается
+      БАЛАНСОМ СКОБОК (`route("/a") { route("/b") { get { … } } }` → `GET /a/b`). Строки и комментарии
+      Kotlin (`//`, вложенные `/* */`, `"…"`, сырые `"""…"""`) маскируются перед сканом (их скобки/
+      кавычки не сбивают баланс, номера строк сохраняются). Берётся ТОЛЬКО в файле с индикатором Ktor
+      (импорт `io.ktor`, `routing {` либо `install(Routing)`); member-вызовы `x.get { }` отсекаются
+      (глагол не после `.`), чтобы обращение к методу объекта не сошло за маршрут. Регэксп по паттерну
+      — эвристика → confidence: inferred. ref = "file:line|<МЕТОД> <path>".
+    honest_limits:
+      sees: >-
+        маршруты Ktor, объявленные method-вызовом DSL (get/post/put/patch/delete/head/options) со
+        строковым путём-литералом, склеенные с литеральными префиксами объемлющих блоков `route`
+        (в т.ч. вложенных); метод без пути — как сам префикс. Даёт file:line и "<МЕТОД> <path>" как
+        symbol, помечает inferred (текстовый разбор, не блокирует).
+      does_not_see: >-
+        обёртки `authenticate { … }` и иные интерсепторы (их семантику не осмысляем — вложенный метод
+        виден как обычный маршрут своего префикса, факт защиты не выводим); `route(path)`/метод через
+        ПЕРЕМЕННУЮ, Kotlin-интерполяцию `$…`/`${…}`, склейку через `+` (в литерал не попадает → пропуск,
+        а НЕлитеральный префикс блока делает вложенные пути неразрешимыми); тип-безопасный
+        `resources`-плагин (`get<Article> { }` — путь из типа, не из строки); глубокую склейку вложенных
+        `route` в полный путь в рантайме сверх объявленных литералов сегментов; регекс-роуты и
+        параметрические сегменты как семантику (литерал `{id}` остаётся в пути как есть); файл без
+        индикатора Ktor. Ничего из этого НЕ verified.
+  # E17 добавил ВТОРОЙ источник поверхностей из ЗАЯВЛЕННОГО КОНТРАКТА спеки (после OpenAPI E12) —
+  # операции AsyncAPI из спеки (вид `api`, событийный API). Честность силы та же, что у openapi-spec
+  # (E12): спека может РАСХОДИТЬСЯ с реальным кодом (drift — операция объявлена в спеке, но продюсера/
+  # консьюмера в коде нет или наоборот), плюс разбор структурный по тексту спеки (yaml.safe_load/
+  # json.loads, без исполнения, без брокера, без сети, без резолва remote-$ref), а не доказательство
+  # из исполняемого исходника → это НЕ доказательный AST того же класса, что Python-AST → confidence:
+  # inferred (в W4 НЕ блокирует). Файлы .yaml/.json ОЧЕНЬ распространены (и OpenAPI-спека — тоже
+  # .yaml/.json), потому экстрактор сужен индикатором top-level `asyncapi:` (иначе чужие
+  # package.json/конфиги и OpenAPI-спеки дали бы ложные поверхности). Код — новый подмодуль
+  # ai_ops_kit/checks/surface_extractors/asyncapi_spec.py (extract_asyncapi_operations),
+  # зарегистрирован в DEFAULT_EXTRACTORS фасада surface_extraction.py.
+  - id: asyncapi-spec
+    stack: {language: [yaml, json], frameworks: [asyncapi]}
+    surface_kinds: [api]
+    confidence: inferred
+    method: >-
+      СТРУКТУРНЫЙ (не исполняемый) разбор файлов .yaml/.yml/.json без сети: yaml.safe_load для YAML и
+      json.loads для JSON. Срабатывает ТОЛЬКО когда верхний уровень документа — словарь с ключом
+      `asyncapi:` (AsyncAPI 2.x/3.x); иначе сразу [] (это разводит его и с OpenAPI-спекой, у которой
+      индикатор `openapi:`/`swagger:`). Учтены ОБЕ версии: AsyncAPI 2.x — каждая пара «канал (ключ в
+      `channels`) + operation (publish/subscribe)» = одна операция → api, имя "<канал> <publish|
+      subscribe>"; AsyncAPI 3.x — каждая операция в top-level `operations` = одна операция → api, имя
+      = её ключ. ref = "file:line|<операция>" (line — строка ключа operation/канала в тексте).
+      Битый/не-utf-8 файл не роняет скан (возвращается []). Структурный разбор заявленного контракта ≠
+      доказательный AST → confidence: inferred.
+    honest_limits:
+      sees: >-
+        событийные операции, ОБЪЯВЛЕННЫЕ в спеке AsyncAPI 2.x/3.x (.yaml/.yml/.json): пары
+        канал+publish/subscribe (2.x) и записи top-level `operations` (3.x); даёт file:line и имя
+        операции как symbol, помечает inferred (заявленный контракт, не блокирует).
+      does_not_see: >-
+        РАСХОЖДЕНИЕ спеки с кодом (drift — спека может отставать: объявленная операция в коде может
+        отсутствовать, а реальный продюсер/консьюмер — не попасть в спеку); композицию через
+        `$ref`/remote-refs (операция/канал по ссылке в другой файл НЕ разворачивается);
+        `components`/`messages`/`schemas` (это МОДЕЛИ данных/сообщения, НЕ операции); `bindings`
+        (транспортные детали, не факт операции); спеки, встроенные строкой В КОД (YAML/JSON в
+        .js/.ts/.py), и любую спеку без top-level `asyncapi:` (в т.ч. OpenAPI `openapi:`/`swagger:`).
+        Ничего из этого НЕ verified.
+
+# ── Планы (намерения, НЕ возможности) ───────────────────────────────────────────────────────────
+# status: unsupported + note planned — тот же честный приём, что для планов в capability-index.yaml.
+# Здесь перечислены НАПРАВЛЕНИЯ, для которых экстрактор задуман, но кода ещё нет. Заявлять по ним
+# поддержку (тем более verified) до появления кода — запрещено инвариантом честных деклараций.
+planned:
+  - intent: python-web-routes-remaining
+    stack: {language: python, frameworks: [flask, fastapi, django, aiohttp]}
+    surface_kinds: [route, api]
+    status: unsupported
+    note: >-
+      planned: осталось за пределами реализованных экстракторов маршрутов (python-web-routes,
+      django-urls, drf-router, aiohttp-routes) — маршруты, собранные ДИНАМИЧЕСКИ: Flask add_url_rule,
+      FastAPI include_router через переменную, Django include(...)-вложенность и class-based view с
+      кастомным роутингом, aiohttp RouteTableDef-декораторы (@routes.get) и add_routes с
+      аргументом-переменной, любая плагинная регистрация в рантайме. Их доказать статическим разбором
+      нельзя — они остаются НЕ verified (пропуск), а не заявляются как возможность.
+    honest_limits:
+      sees: "будет видеть (когда/если реализуем): часть перечисленного как inferred, не verified"
+      does_not_see: "не увидит сейчас: динамически собранные маршруты, маршруты за плагинной регистрацией"
+  - intent: cli-commands-remaining
+    stack: {language: python, frameworks: [typer, setuptools]}
+    surface_kinds: [cli]
+    status: unsupported
+    note: >-
+      planned: осталось за пределами реализованных argparse/click/console_scripts — Typer
+      (@app.command() на typer.Typer, не импортирует click), entry_points в исполняемом setup.py
+      (аргумент вызова setup()), и любые команды, зарегистрированные в рантайме из данных/плагинов.
+    honest_limits:
+      sees: "будет видеть: объявления команд Typer и entry_points из setup.py статически"
+      does_not_see: "не увидит: команды, зарегистрированные в рантайме из данных/плагинов"
+  - intent: ui-screens-remaining
+    stack: {language: [typescript, javascript], frameworks: [react-router, vue-router, angular]}
+    surface_kinds: [screen]
+    status: unsupported
+    note: >-
+      planned: осталось за пределами реализованных screen-экстракторов (react-router, vue-router,
+      angular-router) — экраны, СОБРАННЫЕ ДИНАМИЧЕСКИ (path из переменной/конфига/импортированного
+      модуля), <Route> с JSX-значением пропа перед path (обратный порядок атрибутов), вложенные роуты
+      со склейкой пути в рантайме, Angular lazy `loadChildren` и standalone-роуты `provideRouter` при
+      НЕлитеральном массиве, а также иные фронтенд-роутеры сверх перечисленных. Статически текстом их
+      доказать нельзя — остаются НЕ verified (пропуск), а не заявляются как возможность.
+    honest_limits:
+      sees: "будет видеть (когда/если реализуем): часть перечисленного как inferred, не verified"
+      does_not_see: "не увидит сейчас: динамически собранные экраны, серверный рендеринг вне known-роутера"
+  # ПРИМЕЧАНИЕ О ГРАНИЦЕ: серверные JS-маршруты (Express/Nest/Next) — это вид route, а НЕ screen.
+  # Их извлекают экстракторы express/nest/next выше (работа E4, подмодуль js_server.py); screen-
+  # экстракторы E3 (react-router/vue-router) покрывают только UI-роуты фронтенда.

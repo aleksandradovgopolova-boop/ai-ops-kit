@@ -22,6 +22,7 @@ from pathlib import Path
 from ai_ops_kit.cli.ai_ops_cli_product import (  # noqa: F401 — ре-экспорт для вызывающих/тестов
     build_preview, _print_preview, _BACKLOG_SUBS, _run_backlog, _intent_model, _product_health_report, _product_risks, _intent_contract, _intent_products, _intent_inspect, _intent_delivery, _intent_plan, _intent_session,
 )
+from ai_ops_kit.cli.foundation_proposal import run_intent as _intent_propose  # noqa: F401 — оркестратор `propose`
 from ai_ops_kit.cli.ai_ops_cli_lifecycle import (  # noqa: F401 — ре-экспорт для вызывающих/тестов
     _intent_onboard, _intent_reach, _intent_team, _intent_replan, _intent_governance, _intent_bootstrap, _intent_health, _intent_roadmap, _intent_doctor, _copy_affects_from_plan, _intent_new, _intent_discuss,
 )

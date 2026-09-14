@@ -73,3 +73,47 @@ def test_kit_dogfoods_filled_architecture():
     text = arch.read_text(encoding="utf-8")
     for marker in ("template: true", "Это заготовка"):
         assert marker not in text, f"ARCHITECTURE.md кита — заготовка (маркер {marker!r})"
+
+
+# ── back-fill не сеет черновик поверх реальной архитектуры в docs/ (живой дефект, ии-среда) ──────
+
+def test_seeding_skips_draft_when_arch_doc_lives_in_docs(tmp_path):
+    """Дочка держит реальную архитектуру в docs/architecture/ARCHITECTURE.md — back-fill НЕ сеет
+    корневой черновик и честно называет найденное (existing-at:), не переносит сам."""
+    mod = _load_installer()
+    real = tmp_path / "docs" / "architecture" / "ARCHITECTURE.md"
+    real.parent.mkdir(parents=True)
+    real.write_text("# Архитектура\n\nЕдинственный источник правды. " + ("детали. " * 50),
+                    encoding="utf-8")
+    out = mod._child_scaffolding()._seed_planning_contour(tmp_path)
+    assert not (tmp_path / "ARCHITECTURE.md").exists(), \
+        "back-fill засеял конкурирующий пустой корневой ARCHITECTURE.md поверх реального в docs/"
+    arch = next(x for x in out if x["artifact"] == "ARCHITECTURE.md")
+    assert arch["action"] == "existing-at:docs/architecture/ARCHITECTURE.md", arch
+    # Владельцу сказано словами: документ уже есть, перенос — по его слову.
+    line = mod._core()._assets_report_line({"planning_seeded": out})
+    assert "docs/architecture/ARCHITECTURE.md" in line and "по вашему слову" in line
+
+
+def test_seeding_creates_draft_when_no_architecture_anywhere(tmp_path):
+    """Прежнее поведение сохранено: реального арх-документа нет НИГДЕ — черновик сеётся как раньше."""
+    mod = _load_installer()
+    out = mod._child_scaffolding()._seed_planning_contour(tmp_path)
+    arch = next(x for x in out if x["artifact"] == "ARCHITECTURE.md")
+    assert arch["action"] == "created-draft", arch
+    text = (tmp_path / "ARCHITECTURE.md").read_text(encoding="utf-8")
+    assert "status: draft" in text
+
+
+def test_kit_draft_is_not_treated_as_existing_architecture(tmp_path):
+    """Прежний кит-черновик (status: draft / «Это заготовка») в docs/ НЕ считается существующим —
+    иначе фикс замаскировал бы реально невыполненное требование."""
+    mod = _load_installer()
+    stub = tmp_path / "docs" / "ARCHITECTURE.md"
+    stub.parent.mkdir(parents=True)
+    stub.write_text("---\nstatus: draft\n---\n\n# Architecture\n\n> **Это заготовка.**\n",
+                    encoding="utf-8")
+    out = mod._child_scaffolding()._seed_planning_contour(tmp_path)
+    arch = next(x for x in out if x["artifact"] == "ARCHITECTURE.md")
+    assert arch["action"] == "created-draft", \
+        f"кит-черновик в docs/ ошибочно принят за существующий документ: {arch}"

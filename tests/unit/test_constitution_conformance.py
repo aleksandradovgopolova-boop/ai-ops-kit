@@ -14,6 +14,7 @@ from ai_ops_kit.checks import constitution_conformance as cc
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 REAL_RULES = REPO_ROOT / "standards" / "architecture" / "rules.yaml"
+PROD_RULES = REPO_ROOT / "standards" / "product" / "rules.yaml"
 
 
 def _dup_pair() -> str:
@@ -130,3 +131,171 @@ def test_tests_and_dotdirs_are_skipped(tmp_path):
     (tmp_path / ".ai" / "x.py").write_text(_dup_pair(), encoding="utf-8")
     findings = cc.conform(tmp_path, rules_path=REAL_RULES)
     assert findings == [], "просканирован код из tests/ или .ai/ — не должен"
+
+
+# ── продуктовые advisory-эвристики: читают АРТЕФАКТЫ дочки (не .py) ────────────────────────────────
+# Три грани честности на КАЖДУЮ статью: positive (нарушение видно) / negative (корректно — молчит) /
+# silent-when-absent (артефакта нет вовсе — молчит; unknown ≠ нарушение). rules_path → продуктовый.
+
+def _write(p: Path, text: str) -> None:
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_text(text, encoding="utf-8")
+
+
+def _prod_finding(findings, article_id):
+    return next((f for f in findings if f["article_id"] == article_id), None)
+
+
+# PROD-002 — «Названы ДЛЯ КОГО и задача (JTBD)» ────────────────────────────────────────────────────
+
+def test_prod002_flags_feature_without_audience(tmp_path):
+    """positive: у фичи пустой who — находка PROD-002 с рекомендацией и метаданными из реестра."""
+    _write(tmp_path / "registry" / "features.yaml",
+           "features:\n"
+           "  - id: alerts\n    name: Оповещения\n"
+           "    description: {what: 'Шлём уведомления', who: '', verify: 'x'}\n"
+           "    status: active\n    owner: team\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    f = _prod_finding(findings, "PROD-002")
+    assert f, f"PROD-002 не сработал; находки: {[x['article_id'] for x in findings]}"
+    assert f["recommendation"] and f["title"], "нет рекомендации/заголовка из реестра"
+    assert f["level"] and f["severity"], "level/severity не разрешены из реестра"
+    assert "alerts" in f["locations"][0]
+
+
+def test_prod002_flags_placeholder_what(tmp_path):
+    """positive: плейсхолдер в what (TODO/<...>) считается незаполненным."""
+    _write(tmp_path / "registry" / "features.yaml",
+           "features:\n"
+           "  - id: billing\n    name: Биллинг\n"
+           "    description: {what: 'TODO', who: 'Админ', verify: 'x'}\n"
+           "    status: active\n    owner: team\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    f = _prod_finding(findings, "PROD-002")
+    assert f and "billing" in f["locations"][0]
+    assert "what" in f["details"][0]["detail"]
+
+
+def test_prod002_silent_on_complete_features(tmp_path):
+    """negative: who и what заполнены — находки нет."""
+    _write(tmp_path / "registry" / "features.yaml",
+           "features:\n"
+           "  - id: alerts\n    name: Оповещения\n"
+           "    description: {what: 'Шлём уведомления о событиях', who: 'Оператор', verify: 'x'}\n"
+           "    status: active\n    owner: team\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-002") is None
+
+
+def test_prod002_silent_when_no_registry(tmp_path):
+    """silent-when-absent: реестра фич нет — по PROD-002 находок нет."""
+    (tmp_path / "m.py").write_text("def a():\n    return 1\n", encoding="utf-8")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-002") is None
+
+
+# PROD-008 — «Scope честен — объявлены non-goals» ─────────────────────────────────────────────────
+
+def test_prod008_flags_spec_without_non_goals(tmp_path):
+    """positive: спека без секции `## Out of scope` — находка PROD-008."""
+    _write(tmp_path / "features" / "search" / "prd" / "feature.md",
+           "# Поиск\n\n## Проблема\nПользователю трудно найти товар.\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    f = _prod_finding(findings, "PROD-008")
+    assert f, f"PROD-008 не сработал; находки: {[x['article_id'] for x in findings]}"
+    assert f["recommendation"] and "search" in f["locations"][0]
+
+
+def test_prod008_flags_empty_out_of_scope_body(tmp_path):
+    """positive: заголовок `## Out of scope` есть, но тело пустое — тоже флаг."""
+    _write(tmp_path / "features" / "search" / "discovery" / "problem.md",
+           "# Поиск\n\n## Out of scope\n\n## Следующий раздел\nтекст\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-008") is not None
+
+
+def test_prod008_silent_when_non_goals_declared(tmp_path):
+    """negative: есть непустая секция `## Out of scope` — находки нет."""
+    _write(tmp_path / "features" / "search" / "prd" / "feature.md",
+           "# Поиск\n\n## Out of scope\nГолосовой поиск и синонимы — не сейчас.\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-008") is None
+
+
+def test_prod008_silent_when_no_feature_specs(tmp_path):
+    """silent-when-absent: каталогов features/<id>/ со спеками нет — находок нет."""
+    (tmp_path / "m.py").write_text("def a():\n    return 1\n", encoding="utf-8")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-008") is None
+
+
+# PROD-010 — «После выпуска измеряем исход» ───────────────────────────────────────────────────────
+
+_RELEASED_BP = ("schema_version: 1\nkind: feature-blueprint\n"
+                "feature:\n  id: checkout\n  name: Чекаут\n  status: released\n"
+                "  current_stage: retrospective\n")
+
+
+def test_prod010_flags_released_without_readout(tmp_path):
+    """positive: released-фича без readout/ретроспективы — находка PROD-010."""
+    _write(tmp_path / "features" / "checkout" / "blueprint.yaml",
+           _RELEASED_BP + "artifacts:\n  delivery:\n  - path: pr.md\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    f = _prod_finding(findings, "PROD-010")
+    assert f, f"PROD-010 не сработал; находки: {[x['article_id'] for x in findings]}"
+    assert "checkout" in f["locations"][0] and f["recommendation"]
+
+
+def test_prod010_silent_with_measured_readout(tmp_path):
+    """negative: рядом валидный PRR с измеренным health — находки нет."""
+    base = tmp_path / "features" / "checkout"
+    _write(base / "blueprint.yaml", _RELEASED_BP + "artifacts: {}\n")
+    _write(base / "PRR-001.yaml",
+           "kind: PostReleaseReadout\nid: PRR-001\n"
+           "product_health:\n  band: healthy\n  score: 0.9\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-010") is None
+
+
+def test_prod010_silent_with_retrospective_artifact(tmp_path):
+    """negative: в blueprint.artifacts есть стадия retrospective — исход учтён, находки нет."""
+    _write(tmp_path / "features" / "checkout" / "blueprint.yaml",
+           _RELEASED_BP + "artifacts:\n  retrospective:\n  - path: retro.md\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-010") is None
+
+
+def test_prod010_ignores_not_measured_readout(tmp_path):
+    """PRR c band=not_measured исходом не считается — released всё ещё флагуется."""
+    base = tmp_path / "features" / "checkout"
+    _write(base / "blueprint.yaml", _RELEASED_BP + "artifacts: {}\n")
+    _write(base / "PRR-001.yaml",
+           "kind: PostReleaseReadout\nid: PRR-001\nproduct_health:\n  band: not_measured\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-010") is not None
+
+
+def test_prod010_silent_when_not_released(tmp_path):
+    """negative: статус не released — не выдаём «released без readout»."""
+    _write(tmp_path / "features" / "checkout" / "blueprint.yaml",
+           _RELEASED_BP.replace("status: released", "status: in-progress") + "artifacts: {}\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-010") is None
+
+
+def test_prod010_silent_when_no_features_dir(tmp_path):
+    """silent-when-absent: каталога features/ нет вовсе — находок по PROD-010 нет."""
+    (tmp_path / "m.py").write_text("def a():\n    return 1\n", encoding="utf-8")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    assert _prod_finding(findings, "PROD-010") is None
+
+
+def test_prod_report_is_advisory(tmp_path):
+    """Отчёт по продуктовым находкам — рекомендательный (advisory), а не блок."""
+    _write(tmp_path / "registry" / "features.yaml",
+           "features:\n  - id: x\n    name: X\n"
+           "    description: {what: '', who: '', verify: 'x'}\n"
+           "    status: active\n    owner: team\n")
+    findings = cc.conform(tmp_path, rules_path=PROD_RULES)
+    report = cc.render_report(findings)
+    assert "PROD-002" in report and "не блок" in report.lower()
