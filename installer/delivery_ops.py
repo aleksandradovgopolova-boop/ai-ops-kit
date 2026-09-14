@@ -416,6 +416,12 @@ DEV_ONLY_FILES = frozenset({
     # workflows, spec_levels). По тому же правилу, что `release-claims-stays-in-the-kit`, реестр без
     # читателя в дочке не едет в поставку — поедет, когда появится child-side читатель классификатора.
     "registry/decision-boundary.yaml",
+    # 14.09.2026. `context/product/metric-observations.yaml` — ЖИВЫЕ наблюдения продуктовых метрик
+    # (TTVO) САМОГО кита, снятые на его полигоне (ai-ops-cockpit). Это данные кита о себе, а не
+    # контракт для дочки: у дочки будут СВОИ наблюдения из своих прогонов, а слать ей цифры кита
+    # нельзя. Рантайм-читателя в дочке нет — её `build_data.py` читает СВОЙ файл, которого там не
+    # будет → блок наблюдений на её пульте просто скрыт. Поэтому файл parent-only.
+    "context/product/metric-observations.yaml",
 })
 
 
