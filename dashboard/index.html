@@ -356,7 +356,15 @@
     "north_star_defined": true,
     "outcomes_filled": true,
     "observations": {
-      "honest_note": "n=1 — это первое реальное наблюдение, а не тренд. Значения снимались на полигоне (не в продакшне владельца) и показывают нижнюю границу правдоподобия. Два guardrail-метрики ещё в открытых окнах наблюдения.",
+      "honest_note": "n=4 — это ранний тренд, а не устойчивая норма.",
+      "aggregate": {
+        "n": 4,
+        "median_intent_to_verified": "5m03s",
+        "range": "3m33s–11m23s",
+        "verified_pr_rate": "4/4",
+        "human_intervention_rate": "0/4",
+        "note": "Все четыре наблюдения слиты; окна переделок/дефектов открыты, ещё не закрыты."
+      },
       "observations": [
         {
           "date": "2026-09-14",
@@ -387,6 +395,53 @@
               "status": "observation_window_open",
               "opened_at": "2026-09-14T12:44:07Z"
             }
+          }
+        },
+        {
+          "date": "2026-09-14",
+          "source": "ai-ops-live-587",
+          "feature": "stat-stddev",
+          "pr": 8,
+          "samples": 1,
+          "path_note": "Писал субагент — нет API-ключа; независимый ревьюер и обязательные гейты зелёные.",
+          "metrics": {
+            "intent_to_verified_pr_time": { "value": "4m30s", "samples": 1 },
+            "verified_pr_rate": { "value": "1/1", "samples": 1 },
+            "human_intervention_rate": { "value": "0/1", "samples": 1 },
+            "rework_rate": { "status": "observation_window_open", "window_days": 7, "opened_at": "2026-09-14T13:54:00Z" },
+            "post_merge_defect_rate": { "status": "observation_window_open", "opened_at": "2026-09-14T13:54:00Z" }
+          }
+        },
+        {
+          "date": "2026-09-14",
+          "source": "durationkit-live-668",
+          "feature": "weeks-unit",
+          "pr": 2,
+          "samples": 1,
+          "path_note": "Писал субагент — нет API-ключа.",
+          "caveat": "Базовый парсер был заглушкой — писатель реализовал парсер целиком. CI в репо нет — проверено обзором и локальными тестами (22 passed).",
+          "metrics": {
+            "intent_to_verified_pr_time": { "value": "3m33s", "samples": 1 },
+            "verified_pr_rate": { "value": "1/1", "samples": 1 },
+            "human_intervention_rate": { "value": "0/1", "samples": 1 },
+            "rework_rate": { "status": "observation_window_open", "window_days": 7, "opened_at": "2026-09-14T13:54:00Z" },
+            "post_merge_defect_rate": { "status": "observation_window_open", "opened_at": "2026-09-14T13:54:00Z" }
+          }
+        },
+        {
+          "date": "2026-09-14",
+          "source": "wow-repo",
+          "feature": "footer-updated",
+          "pr": 15,
+          "samples": 1,
+          "path_note": "Писал субагент — нет API-ключа.",
+          "caveat": "Прогон шёл параллельно с двумя другими — нагрузка могла завысить время. Одна нога CI validate красная — пред-существующая инфра-беда репо, не связана с изменением. Проверено обзором, локальной сборкой/тестами (11/11) и 2 из 3 ног validate.",
+          "metrics": {
+            "intent_to_verified_pr_time": { "value": "11m23s", "samples": 1 },
+            "verified_pr_rate": { "value": "1/1", "samples": 1 },
+            "human_intervention_rate": { "value": "0/1", "samples": 1 },
+            "rework_rate": { "status": "observation_window_open", "window_days": 7, "opened_at": "2026-09-14T13:54:00Z" },
+            "post_merge_defect_rate": { "status": "observation_window_open", "opened_at": "2026-09-14T13:54:00Z" }
           }
         }
       ]
@@ -633,28 +688,35 @@
           `Задать: <a href="${link(d,"context/product/ProductMetrics.md")}" target="_blank" rel="noopener">ProductMetrics.md</a> (north star уже есть).`;
       } else $("metrics-callout").hidden=true;
 
-      // first observations (n=1, honest) — снятые числа TTVO с полигона
+      // ранний тренд TTVO (n=4) — снятые числа с полигонов
       const obs=d.metrics&&d.metrics.observations;
-      const first=obs&&obs.observations&&obs.observations[0];
+      const agg=obs&&obs.aggregate;
+      const runs=(obs&&obs.observations)||[];
       const obsBox=$("observations");
-      if(first){
-        const m=first.metrics||{};
-        const num=(k,lbl)=>{const v=m[k];
-          if(!v) return "";
-          if(v.status==="observation_window_open")
-            return `<div class="m"><span class="mk">${lbl}</span><span class="mv" style="color:var(--faint)">окно наблюдения открыто</span></div>`;
-          return `<div class="m"><span class="mk">${lbl}</span><span class="mv">${esc(v.value)}</span></div>`;};
+      if(agg&&runs.length){
+        const row=(lbl,val)=>val?`<div class="m"><span class="mk">${lbl}</span><span class="mv">${esc(val)}</span></div>`:"";
+        // компактный список прогонов: repo/feature → время (сжатая пометка оговорок)
+        const timeOf=r=>{const v=(r.metrics||{}).intent_to_verified_pr_time;return v&&v.value?esc(v.value):"—";};
+        const runLi=runs.map(r=>{
+          const who=[r.source,r.feature].filter(Boolean).map(esc).join(" · ");
+          const cav=r.caveat?`<span class="n" title="${esc(r.caveat)}"> ⚠ оговорка</span>`:"";
+          return `<div class="m"><span class="mk">${who||"прогон"}${cav}</span><span class="mv">${timeOf(r)}</span></div>`;
+        }).join("");
         obsBox.innerHTML=
-          `<div class="eyebrow" style="margin:14px 0 8px"><span>Первые наблюдения (n=1)</span>`+
-            `<span class="n">полигон · TTVO ↗</span></div>`+
-          num("intent_to_verified_pr_time","Идея → результат")+
-          num("verified_pr_rate","Без ручной доводки")+
-          num("human_intervention_rate","Вмешательств")+
-          num("rework_rate","Переделки (7д)")+
-          num("post_merge_defect_rate","Дефекты после слияния")+
+          `<div class="eyebrow" style="margin:14px 0 8px"><span>Ранний тренд (n=${agg.n||runs.length})</span>`+
+            `<span class="n">полигоны · TTVO ↗</span></div>`+
+          row("Идея → результат (медиана)",agg.median_intent_to_verified)+
+          row("Диапазон",agg.range)+
+          row("Без ручной доводки",agg.verified_pr_rate)+
+          row("Вмешательств",agg.human_intervention_rate)+
+          (agg.note?`<div class="m"><span class="mk">Переделки · дефекты</span>`+
+            `<span class="mv" style="color:var(--faint)">окна ещё открыты</span></div>`:"")+
+          `<div class="eyebrow" style="margin:12px 0 6px"><span>Прогоны</span></div>`+
+          runLi+
           `<div class="callout" style="margin-top:10px">`+
-            `<b>n=1 — первое наблюдение, а не тренд.</b> Полигон${first.source?` (${esc(first.source)})`:""}, не продакшн владельца. `+
-            (first.path_note?esc(first.path_note):"")+`</div>`;
+            `<b>n=${agg.n||runs.length} — ранний тренд, а не устойчивая норма.</b> Полигоны, не продакшн владельца; `+
+            `путь субагентный. Прогоны 2–4 шли параллельными субагентами — нагрузка могла завысить время. `+
+            (agg.note?esc(agg.note):"")+`</div>`;
         obsBox.hidden=false;
       } else obsBox.hidden=true;
 

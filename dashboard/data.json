@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-14T13:56:13+00:00",
+  "generated_at": "2026-09-14T14:04:53+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -10,7 +10,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1521,
+    "commits": 1527,
     "code_files": 987
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -91,7 +91,15 @@
     "north_star_defined": true,
     "outcomes_filled": true,
     "observations": {
-      "honest_note": "n=1 — это первое реальное наблюдение, а не тренд. Значения снимались на полигоне (не в продакшне владельца) и показывают нижнюю границу правдоподобия. Два guardrail-метрики ещё в открытых окнах наблюдения.",
+      "honest_note": "n=4 — это ранний тренд, а не устойчивая норма. Выборка маленькая, значения снимались на полигонах (не в продакшне владельца), путь субагентный (нет API-ключа для внутреннего писателя). Прогоны 2–4 шли параллельными субагентами, и машинная нагрузка могла завысить время. Метрики переделок и дефектов после слияния ещё в открытых окнах наблюдения — здоровье продукта на этих данных зелёным не считаем.",
+      "aggregate": {
+        "n": 4,
+        "median_intent_to_verified": "5m03s",
+        "range": "3m33s–11m23s",
+        "verified_pr_rate": "4/4",
+        "human_intervention_rate": "0/4",
+        "note": "Все четыре наблюдения слиты; окна переделок и дефектов после слияния открыты, ещё не закрыты."
+      },
       "observations": [
         {
           "date": "2026-09-14",
@@ -121,6 +129,101 @@
             "post_merge_defect_rate": {
               "status": "observation_window_open",
               "opened_at": "2026-09-14T12:44:07Z"
+            }
+          }
+        },
+        {
+          "date": "2026-09-14",
+          "source": "ai-ops-live-587",
+          "feature": "stat-stddev",
+          "pr": 8,
+          "samples": 1,
+          "path_note": "Писал субагент — нет API-ключа для внутреннего писателя. Независимый ревьюер и обязательные гейты кита — зелёные.",
+          "metrics": {
+            "intent_to_verified_pr_time": {
+              "value": "4m30s",
+              "samples": 1
+            },
+            "verified_pr_rate": {
+              "value": "1/1",
+              "samples": 1
+            },
+            "human_intervention_rate": {
+              "value": "0/1",
+              "samples": 1
+            },
+            "rework_rate": {
+              "status": "observation_window_open",
+              "window_days": 7,
+              "opened_at": "2026-09-14T13:54:00Z"
+            },
+            "post_merge_defect_rate": {
+              "status": "observation_window_open",
+              "opened_at": "2026-09-14T13:54:00Z"
+            }
+          }
+        },
+        {
+          "date": "2026-09-14",
+          "source": "durationkit-live-668",
+          "feature": "weeks-unit",
+          "pr": 2,
+          "samples": 1,
+          "path_note": "Писал субагент — нет API-ключа для внутреннего писателя.",
+          "caveat": "Базовый парсер был заглушкой — писатель реализовал парсер целиком (задача была тяжелее «маленькой добавки»). В репозитории НЕТ CI — проверено независимым обзором и локальными тестами (22 passed).",
+          "metrics": {
+            "intent_to_verified_pr_time": {
+              "value": "3m33s",
+              "samples": 1
+            },
+            "verified_pr_rate": {
+              "value": "1/1",
+              "samples": 1
+            },
+            "human_intervention_rate": {
+              "value": "0/1",
+              "samples": 1
+            },
+            "rework_rate": {
+              "status": "observation_window_open",
+              "window_days": 7,
+              "opened_at": "2026-09-14T13:54:00Z"
+            },
+            "post_merge_defect_rate": {
+              "status": "observation_window_open",
+              "opened_at": "2026-09-14T13:54:00Z"
+            }
+          }
+        },
+        {
+          "date": "2026-09-14",
+          "source": "wow-repo",
+          "feature": "footer-updated",
+          "pr": 15,
+          "samples": 1,
+          "path_note": "Писал субагент — нет API-ключа для внутреннего писателя.",
+          "caveat": "Прогон шёл параллельно с двумя другими — машинная нагрузка могла завысить время. Одна нога CI `validate` красная — пред-существующая инфра-беда репозитория (закреплён тег кита, которого нет в upstream), НЕ связана с изменением. Проверено обзором, локальной сборкой/тестами (11/11) и 2 из 3 ног validate.",
+          "metrics": {
+            "intent_to_verified_pr_time": {
+              "value": "11m23s",
+              "samples": 1
+            },
+            "verified_pr_rate": {
+              "value": "1/1",
+              "samples": 1
+            },
+            "human_intervention_rate": {
+              "value": "0/1",
+              "samples": 1
+            },
+            "rework_rate": {
+              "status": "observation_window_open",
+              "window_days": 7,
+              "opened_at": "2026-09-14T13:54:00Z"
+            },
+            "post_merge_defect_rate": {
+              "status": "observation_window_open",
+              "opened_at": "2026-09-14T13:54:00Z"
             }
           }
         }
@@ -264,7 +367,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1521, файлов кода 987; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1527, файлов кода 987; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -276,7 +379,7 @@
       "name": "Версия и последний релиз",
       "state": "verified",
       "source": "VERSION, git tags",
-      "value": "Версия: **4.3.2**. Последний релиз: **v4.3.1**."
+      "value": "Версия: **4.3.2**. Последний релиз: **v4.3.2**."
     },
     {
       "name": "Текущий milestone и прогресс",
