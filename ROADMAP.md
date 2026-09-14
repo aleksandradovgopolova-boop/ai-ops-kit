@@ -1,7 +1,7 @@
 ---
 read_tier: 1
 stability: evolving
-reviewed_at: 2026-09-09
+reviewed_at: 2026-09-14
 owner: product-team
 ---
 
