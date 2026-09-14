@@ -184,6 +184,58 @@ class TestMergeOwnerSections:
         assert filled, f"пустые разделы после merge: {empty}"
 
 
+# ── здоровье «Продукт» читается из СОСТОЯНИЯ, а не зашито «нет метрик» ─────────────
+# Регресс: раздел «Здоровье → Продукт» печатал зашитую строку «неизвестно (нет метрик —
+# контур analytics)», не глядя, заведены ли метрики. Теперь строка отражает реальное
+# состояние; вердикт не завышается (Green из раннего слоя не ставим).
+
+@pytest.mark.unit
+class TestProductHealth:
+    def _with_metrics(self, tmp_path, n=4):
+        pm = tmp_path / "context" / "product"
+        pm.mkdir(parents=True)
+        (pm / "ProductMetrics.md").write_text(
+            "---\nread_tier: 2\n---\n\n# Product Metrics\n\n"
+            "Семейство TTVO: контракт метрик заведён (что считаем, из чего, кто владеет).\n",
+            encoding="utf-8")
+        (pm / "metric-observations.yaml").write_text(
+            "kind: metric-observations\n"
+            f"aggregate:\n  n: {n}\n  verified_pr_rate: {n}/{n}\n"
+            "observations:\n  - {date: '2026-09-14', pr: 1}\n",
+            encoding="utf-8")
+        return tmp_path
+
+    def test_no_metrics_no_observations_unknown_not_green(self, tmp_path):
+        s = PG._product_health(tmp_path)
+        assert "не заведены" in s
+        assert "Green" not in s
+
+    def test_metrics_and_observations_insufficient_not_green(self, tmp_path):
+        r = self._with_metrics(tmp_path, n=4)
+        s = PG._product_health(r)
+        assert "недостаточно данных" in s
+        assert "n=4" in s
+        assert "Green" not in s
+        assert "нет метрик" not in s
+
+    def test_section_no_metrics_says_not_defined(self, tmp_path):
+        # Полный репо (README+VERSION+CI+тесты), но без слоя метрик.
+        r = _repo(tmp_path)
+        val = PG.sections(r)["Здоровье (продукт / технологии / delivery)"]["value"]
+        assert "метрики продукта ещё не заведены" in val
+        assert "нет метрик" not in val
+
+    def test_section_reflects_metrics_with_n(self, tmp_path):
+        # Репо БЕЗ CI/тестов (tech не Green) + слой метрик — проверяем именно продуктовую часть.
+        r = self._with_metrics(tmp_path, n=4)
+        (r / "README.md").write_text("# X\n\nописание.\n", encoding="utf-8")
+        val = PG.sections(r)["Здоровье (продукт / технологии / delivery)"]["value"]
+        assert "недостаточно данных" in val
+        assert "n=4" in val
+        assert "Green" not in val
+        assert "нет метрик" not in val
+
+
 # ── имя репозитория продукт-, а не каталого-центрично (git-worktree) ──────────────
 
 @pytest.mark.unit

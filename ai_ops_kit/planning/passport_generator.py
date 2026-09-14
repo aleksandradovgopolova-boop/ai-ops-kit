@@ -186,8 +186,8 @@ def sections(repo_root: Path, evidence: dict | None = None) -> dict:
     tech = _tech_health(ev)
     out["Здоровье (продукт / технологии / delivery)"] = {
         "state": INFERRED if tech["state"] != UNKNOWN else UNKNOWN,
-        "source": "CI/тесты (tech); метрики (product); релизы (delivery)",
-        "value": f"Продукт: _неизвестно (нет метрик — контур analytics)_. "
+        "source": "CI/тесты (tech); метрики и наблюдения (product); релизы (delivery)",
+        "value": f"Продукт: {_product_health(root)}. "
                  f"Технологии: **{tech['band']}** — {tech['reason']}. "
                  f"Delivery: {_delivery_health(ev)}."}
 
@@ -226,6 +226,69 @@ def _tech_health(ev: dict) -> dict:
         return {"state": INFERRED, "band": "Yellow",
                 "reason": "есть " + ("CI, но тестов не видно" if ci else "тесты, но CI не найден")}
     return {"state": INFERRED, "band": "Red", "reason": "ни CI, ни тестов не найдено"}
+
+
+def _product_metrics_defined(root: Path) -> bool:
+    """Заведён ли контракт метрик продукта — `ProductMetrics.md` заполнен СВЕРХ шаблона.
+
+    Логику «шаблон vs заполнено» повторяем минимально (как `dashboard/build_data.py ->
+    product_metrics_status`), НО без импорта dashboard: срезаем front-matter и заголовки — если
+    остаётся содержательный текст, контракт метрик заведён, а не пустой каркас.
+    """
+    text = _read(root, "context/product/ProductMetrics.md")
+    if not text:
+        return False
+    body = re.sub(r"^---.*?---", "", text, flags=re.DOTALL)   # front-matter
+    body = re.sub(r"^#.*$", "", body, flags=re.MULTILINE)      # заголовки
+    return bool(body.strip())
+
+
+def _product_metric_observations(root: Path) -> int:
+    """Сколько наблюдений продуктовых метрик снято. Устойчиво: нет файла/нет pyyaml -> 0.
+
+    Берём `aggregate.n`, а если его нет — длину списка `observations`. Ничего не выдумываем: любой
+    сбой чтения означает «наблюдений нет» (0), а не правдоподобное число.
+    """
+    text = _read(root, "context/product/metric-observations.yaml")
+    if not text:
+        return 0
+    try:
+        import yaml
+    except ImportError:
+        return 0
+    try:
+        data = yaml.safe_load(text) or {}
+    except Exception:  # noqa: BLE001 — битый yaml: считаем «наблюдений нет», а не падаем
+        return 0
+    if not isinstance(data, dict):
+        return 0
+    n = (data.get("aggregate") or {}).get("n")
+    if isinstance(n, int) and n >= 0:
+        return n
+    return len(data.get("observations") or [])
+
+
+def _product_health(root: Path) -> str:
+    """Строка продуктового здоровья ИЗ СОСТОЯНИЯ репозитория — без завышения вердикта.
+
+    Ранее здесь стоял зашитый текст «неизвестно (нет метрик — контур analytics)», не смотревший,
+    заведены ли метрики. Теперь три честных состояния (Green из этого раннего слоя НЕ ставим —
+    скорингового экспорта `.ai-ops/product-metrics.yaml` у кита нет, а выборка мала):
+
+      1. метрик нет и наблюдений нет -> «неизвестно — метрики продукта ещё не заведены»;
+      2. метрики заведены + есть первые наблюдения (n>=1) -> «недостаточно данных для вердикта…
+         (n=<n>) …, выборка мала, окна guardrail открыты»;
+      3. метрики заведены, но наблюдений ещё нет -> «недостаточно данных — наблюдений ещё нет».
+    """
+    defined = _product_metrics_defined(root)
+    n = _product_metric_observations(root)
+    if not defined and n == 0:
+        return "_неизвестно — метрики продукта ещё не заведены_"
+    if n >= 1:
+        return (f"_недостаточно данных для вердикта — метрики TTVO заведены, есть первые "
+                f"наблюдения (n={n}), но выборка мала и окна guardrail ещё открыты_")
+    return ("_недостаточно данных для вердикта — метрики TTVO заведены, "
+            "но наблюдений ещё нет_")
 
 
 def _delivery_health(ev: dict) -> str:
