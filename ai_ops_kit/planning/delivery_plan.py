@@ -49,8 +49,9 @@ from ai_ops_kit.planning.plan_model import (
     PLAN_REL, KIND, HISTORY_REL, HISTORY_KIND, DECLARABLE, DERIVED, VALUE,
     OWNER_WAIT_STATUS, OWNER_WAIT_KEY, ACTIVE_DECLARABLE, CLOSED_DECLARABLE,
     LINK_KEYS, FORBIDDEN_ITEM_KEYS, GOAL_STATUSES, _GOAL_LIVENESS,
+    MILESTONE_KEY, MILESTONE_STATUSES,
     FREEZE_DECISION, FREEZE_GOAL, FREEZE_OUTCOME, FREEZE_RELATIONS, FREEZE_LIFT_FIELD,
-    is_template, items, goals, goal_priority, goal_is_live,
+    is_template, items, goals, current_milestone, goal_priority, goal_is_live,
     freeze_state, _field_evidence_present, _freeze_lift_errors,
     goal_freeze_relation, frozen_work,
 )

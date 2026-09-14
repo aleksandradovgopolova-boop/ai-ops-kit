@@ -117,6 +117,54 @@ class TestMilestoneReadsHorizon:
         assert m["state"] == PG.UNKNOWN
 
 
+# ── milestone: ИМЕНОВАННЫЙ из плана перекрывает прокси из роадмапа ─────────────────
+# Повод: раньше «текущий milestone» был ЗАГЛУШКОЙ — первый пункт горизонта «Сейчас» ROADMAP
+# (направление, а не результат). Теперь первоклассный `current_milestone` в плане печатается как
+# есть; ключа нет — откат к прокси сохранён.
+
+@pytest.mark.unit
+class TestMilestoneFromPlan:
+    def _plan(self, root, milestone):
+        import yaml
+        data = {"schema_version": 1, "kind": "delivery-plan",
+                "goals": [{"id": "owner-speaks-product-not-pipeline", "status": "active"},
+                          {"id": "team-works-in-parallel", "status": "active"}],
+                "work": []}
+        if milestone is not None:
+            data["current_milestone"] = milestone
+        (root / "planning").mkdir(parents=True, exist_ok=True)
+        (root / "planning" / "plan.yaml").write_text(
+            yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+    def _roadmap(self, root):
+        (root / "ROADMAP.md").write_text(
+            "# ROADMAP\n\n## Сейчас\n\n- `cel-1` — прокси-направление из роадмапа.\n", encoding="utf-8")
+
+    def test_named_milestone_wins_over_roadmap(self, tmp_path):
+        # План объявляет milestone И есть ROADMAP «Сейчас» — паспорт печатает ИМЯ вехи, не прокси.
+        self._roadmap(tmp_path)
+        self._plan(tmp_path, {"id": "m1-ship-value", "name": "Довести ценность",
+                              "goal": "владелец говорит, кит доказывает цифрами",
+                              "linked_goals": ["owner-speaks-product-not-pipeline"],
+                              "status": "in_progress"})
+        m = PG.sections(tmp_path)["Текущий milestone и прогресс"]
+        assert m["state"] == PG.VERIFIED
+        assert "Довести ценность" in m["value"]
+        assert "владелец говорит, кит доказывает цифрами" in m["value"]
+        assert "owner-speaks-product-not-pipeline" in m["value"]      # связанные направления
+        assert "cel-1" not in m["value"]                              # прокси НЕ печатается
+        assert m["source"] == "planning/plan.yaml -> current_milestone"
+
+    def test_falls_back_to_roadmap_when_no_milestone(self, tmp_path):
+        # Плана нет ключа milestone, но есть ROADMAP «Сейчас» — прежнее поведение целиком.
+        self._roadmap(tmp_path)
+        self._plan(tmp_path, None)
+        m = PG.sections(tmp_path)["Текущий milestone и прогресс"]
+        assert m["state"] == PG.INFERRED
+        assert "cel-1" in m["value"]
+        assert "Из ROADMAP" in m["value"]
+
+
 # ── перегенерация СОХРАНЯЕТ разделы владельца, обновляет машинные ─────────────────
 # Повод: release_bump бампил VERSION, но не перегенерировал паспорт — freshness-ратчет краснел на
 # каждом релизе (4.3.2 регенерировали руками). Слепая перегенерация затирала бы разделы владельца
