@@ -230,6 +230,109 @@ def test_model_flow_writes_answer_form_as_superset(tmp_path, monkeypatch, capsys
     assert out.get("answers_file", "").endswith("onboarding-answers.yaml")
 
 
+def _model_ns(**over):
+    """Argparse-namespace для `_intent_model` с дефолтами (по умолчанию — просмотр без действий)."""
+    import types
+    base = dict(json=True, answer=None, why=None, flow=False, apply=False, budget=None)
+    base.update(over)
+    return types.SimpleNamespace(**base)
+
+
+def test_model_records_several_answers_in_one_call(tmp_path, monkeypatch):
+    """One-screen: `model --answer a "x" --answer b "y"` записывает ВСЕ ответы за один вызов.
+
+    Порядок сохранён, `--why` раздаётся по одному на ответ; лишний ответ идёт без основания.
+    In-process с подменой repo_audit — предмет здесь именно цикл записи, а не разбор argparse.
+    """
+    from ai_ops_kit.cli import ai_ops_cli_intents as I
+    from ai_ops_kit.planning import repo_audit
+
+    ask = {"questions": [{"id": "a", "ask": "?", "blocks_work": True},
+                         {"id": "b", "ask": "?", "blocks_work": True}]}
+    monkeypatch.setattr(repo_audit, "run", lambda root: {"ask": ask, "classification": {}, "conflicts": []})
+    calls = []
+    monkeypatch.setattr(repo_audit, "record_answer",
+                        lambda root, qid, value, a, why=None: (calls.append((qid, value, why)),
+                                                               (True, f"ok {qid}"))[1])
+
+    a = _model_ns(answer=[["a", "первый ответ"], ["b", "второй ответ"]], why=["источник A"])
+    rc = I._intent_model("", str(tmp_path), [], a)
+    assert rc == 0
+    assert calls == [("a", "первый ответ", "источник A"), ("b", "второй ответ", None)], \
+        f"ответы записаны не все/не по порядку/не с тем основанием: {calls}"
+
+
+def test_model_single_answer_path_unchanged(tmp_path, monkeypatch):
+    """Одиночный путь `model --answer <id> "<v>"` (одна пара, без --flow) работает как прежде."""
+    from ai_ops_kit.cli import ai_ops_cli_intents as I
+    from ai_ops_kit.planning import first_hour, repo_audit
+
+    ask = {"questions": [{"id": "a", "ask": "?", "blocks_work": True}]}
+    monkeypatch.setattr(repo_audit, "run", lambda root: {"ask": ask, "classification": {}, "conflicts": []})
+    calls = []
+    monkeypatch.setattr(repo_audit, "record_answer",
+                        lambda root, qid, value, a, why=None: (calls.append(qid), (True, "ok"))[1])
+    flow_called = []
+    monkeypatch.setattr(first_hour, "run", lambda root, **k: flow_called.append(True) or {})
+
+    a = _model_ns(answer=[["a", "ответ"]], why="почему")
+    rc = I._intent_model("", str(tmp_path), [], a)
+    assert rc == 0
+    assert calls == ["a"], "единичный ответ записан не ровно один раз"
+    assert not flow_called, "без --flow первый час запускаться не должен"
+
+
+def test_model_invalid_answer_stops_and_returns_nonzero(tmp_path, monkeypatch):
+    """Невалидный ответ в пакете — стоп и ненулевой код: пакет не применяется наполовину."""
+    from ai_ops_kit.cli import ai_ops_cli_intents as I
+    from ai_ops_kit.planning import first_hour, repo_audit
+
+    ask = {"questions": [{"id": "a", "ask": "?", "blocks_work": True}]}
+    monkeypatch.setattr(repo_audit, "run", lambda root: {"ask": ask, "classification": {}, "conflicts": []})
+    calls = []
+
+    def _rec(root, qid, value, a, why=None):
+        calls.append(qid)
+        return (qid == "a", "ok" if qid == "a" else f"нет вопроса {qid}")
+    monkeypatch.setattr(repo_audit, "record_answer", _rec)
+    flow_called = []
+    monkeypatch.setattr(first_hour, "run", lambda root, **k: flow_called.append(True) or {})
+
+    a = _model_ns(answer=[["a", "ok"], ["bad", "x"], ["c", "y"]], flow=True, apply=True)
+    rc = I._intent_model("", str(tmp_path), [], a)
+    assert rc == 2, "невалидный ответ должен дать код 2"
+    assert calls == ["a", "bad"], "запись не остановилась на первом невалидном ответе"
+    assert not flow_called, "первый час не должен применяться после невалидного ответа"
+
+
+def test_model_answer_then_flow_records_and_applies_on_fresh_understanding(tmp_path, monkeypatch):
+    """`--answer ... --flow --apply` за ОДИН вызов: записал ответы И применил первый час.
+
+    Понимание пересчитывается ПОСЛЕ записи (repo_audit.run вызван дважды) — иначе первый час
+    собирал бы направление по устаревшим фактам."""
+    from ai_ops_kit.cli import ai_ops_cli_intents as I
+    from ai_ops_kit.planning import first_hour, repo_audit
+
+    ask = {"questions": [{"id": "a", "ask": "?", "blocks_work": True}]}
+    runs = []
+    monkeypatch.setattr(repo_audit, "run",
+                        lambda root: runs.append(True) or {"ask": ask, "classification": {}, "conflicts": []})
+    recorded = []
+    monkeypatch.setattr(repo_audit, "record_answer",
+                        lambda root, qid, value, a, why=None: (recorded.append(qid), (True, "ok"))[1])
+    monkeypatch.setattr(repo_audit, "write_question_file", lambda root, ask, **k: tmp_path / "form.yaml")
+    flow_kwargs = {}
+    monkeypatch.setattr(first_hour, "run",
+                        lambda root, **k: (flow_kwargs.update(k), {"kind": "first-hour", "stage": "ready"})[1])
+
+    a = _model_ns(answer=[["a", "ответ владельца"]], flow=True, apply=True)
+    rc = I._intent_model("", str(tmp_path), [], a)
+    assert rc == 0
+    assert recorded == ["a"], "ответ не записан перед применением"
+    assert len(runs) == 2, "понимание не пересчитано после записи ответов (rep остался устаревшим)"
+    assert flow_kwargs.get("apply") is True, "первый час не применён (--apply не дошёл)"
+
+
 def test_do_without_signals_gives_one_clear_message_not_a_contradiction(child):
     """#702: `do` без масштаба/риска не печатает превью «вот что я сделаю / запускай, когда готов»
     И СРАЗУ «данных не хватает» — это противоречие, на котором новичок теряется. Одна ясная реплика:
