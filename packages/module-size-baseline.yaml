@@ -21,7 +21,6 @@ threshold: 700
 ceilings:
   ai_ops_kit/engine/ai_ops_run_exec.py: 725
   ai_ops_kit/planning/contours.py: 724
-  ai_ops_kit/engine/pipeline_evidence.py: 734
 
 raises:
   - at: '2026-09-12'
