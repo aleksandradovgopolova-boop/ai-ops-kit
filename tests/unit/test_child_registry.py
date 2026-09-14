@@ -81,6 +81,47 @@ def test_onboard_offer_is_silent_and_creates_nothing(monkeypatch, tmp_path):
     assert not cr.decision_path(root).is_file()                  # и решение не навязано
 
 
+def _onboardable(tmp_path, name="calc"):
+    """Каталог, на котором отработает detect: как в silent-тесте — с package.json."""
+    root = tmp_path / name
+    root.mkdir()
+    (root / "package.json").write_text('{"name":"%s"}' % name, encoding="utf-8")
+    return root
+
+
+def test_onboard_with_reach_register_records_the_decision_and_registration(tmp_path):
+    """onboard . --reach register РЕАЛЬНО отмечает: создаёт и запись-регистрацию, и решение «да»."""
+    from ai_ops_kit.cli import ai_ops_cli
+    root = _onboardable(tmp_path)
+    rc = ai_ops_cli.main(["onboard", str(root), "--reach", "register"])
+    assert rc == 0
+    assert cr.registration_path(root).is_file()                  # запись-регистрация создана
+    assert cr.decision_path(root).is_file()                      # и решение зафиксировано
+    assert cr.read_decision(root)[0]["decision"] == "registered"
+
+
+def test_onboard_with_reach_decline_records_refusal_without_registration(tmp_path):
+    """onboard . --reach decline фиксирует «нет»: решение есть, но записи-регистрации НЕТ (fail-closed)."""
+    from ai_ops_kit.cli import ai_ops_cli
+    root = _onboardable(tmp_path)
+    rc = ai_ops_cli.main(["onboard", str(root), "--reach", "decline"])
+    assert rc == 0
+    assert cr.decision_path(root).is_file()
+    assert cr.read_decision(root)[0]["decision"] == "declined"
+    assert not cr.registration_path(root).is_file()             # отказ ничего не создаёт
+
+
+def test_onboard_reach_register_twice_keeps_the_same_anon_id(tmp_path):
+    """Два подряд onboard --reach register не плодят вторую запись и сохраняют тот же анонимный id."""
+    from ai_ops_kit.cli import ai_ops_cli
+    root = _onboardable(tmp_path)
+    assert ai_ops_cli.main(["onboard", str(root), "--reach", "register"]) == 0
+    id1 = cr.read_registration(root)[0]["id"]
+    assert ai_ops_cli.main(["onboard", str(root), "--reach", "register"]) == 0
+    id2 = cr.read_registration(root)[0]["id"]
+    assert id1 == id2                                            # стабильность охвата: без дублей
+
+
 # ── Идемпотентность ──────────────────────────────────────────────────────────────────────────────
 
 def test_repeated_register_does_not_duplicate_and_keeps_id(child):
