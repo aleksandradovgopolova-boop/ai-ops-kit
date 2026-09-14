@@ -276,7 +276,11 @@ def metric_observations(root: Path):
     obs = data.get("observations") or []
     if not obs:
         return None
-    return {"honest_note": data.get("honest_note"), "observations": obs}
+    return {
+        "honest_note": data.get("honest_note"),
+        "aggregate": data.get("aggregate"),
+        "observations": obs,
+    }
 
 
 def open_issues(root: Path):
