@@ -30,8 +30,14 @@ from ai_ops_kit.planning import repo_audit
 
 VERIFIED, INFERRED, UNKNOWN = "verified", "inferred", "unknown"
 
+# Разделы, которые генератор из кода достоверно НЕ выводит: их заполняет владелец (grounded в
+# VISION/AGENTS), и перегенерация обязана их СОХРАНИТЬ, а не затереть на «неизвестно». Остальные
+# разделы — машинные снимки (версия, здоровье, статус…), их перегенерируют на релизе/вехе.
+OWNER_SECTIONS = ("Название и описание", "Аудитория и проблема", "Owner и команда")
+
 _H = re.compile(r"^#{1,6}\s+(.*\S)\s*$", re.MULTILINE)
 _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+_L2 = re.compile(r"(?m)^## (.+?)[ \t]*$")  # заголовок раздела паспорта (level-2)
 
 
 def _repo_name(root: Path) -> str:
@@ -278,6 +284,60 @@ def generate(repo_root: Path, evidence: dict | None = None, reg: dict | None = N
             lines.append(f"<!-- источник: {data['source']} · доверие: {data['state']} -->")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _split_sections(text: str) -> tuple[str, list[tuple[str, str]]]:
+    """Разбить паспорт на (шапку, [(заголовок, тело)]).
+
+    Тело — текст ПОСЛЕ строки `## <заголовок>` до следующего `## ` (или конца файла), включая свой
+    источник-комментарий, ДОСЛОВНО (пробелы и переводы строк сохранены). Шапка — всё до первого `##`
+    (маркер версии шаблона + преамбула + `# Product Passport`).
+    """
+    ms = list(_L2.finditer(text))
+    if not ms:
+        return text, []
+    header = text[:ms[0].start()]
+    secs = []
+    for i, m in enumerate(ms):
+        end = ms[i + 1].start() if i + 1 < len(ms) else len(text)
+        secs.append((m.group(1).strip(), text[m.end():end]))
+    return header, secs
+
+
+def _set_template_version(header: str, version) -> str:
+    """Синхронизировать строку `<!-- template-version: N -->` в шапке с реестром (создать, если нет)."""
+    line = f"<!-- template-version: {version} -->"
+    new, n = re.subn(r"(?m)^<!-- template-version: \d+ -->[ \t]*$", line, header, count=1)
+    return new if n else line + "\n" + header
+
+
+def merge_owner_sections(existing: str, generated: str, reg: dict | None = None) -> str:
+    """Свежие МАШИННЫЕ разделы из `generated`, но РАЗДЕЛЫ ВЛАДЕЛЬЦА и шапку-преамбулу — из `existing`.
+
+    Инвариант перегенерации на релизе/вехе (см. `OWNER_SECTIONS`): машинные снимки (версия, здоровье,
+    статус, milestone, риски) не должны отставать, а заполненные человеком разделы (Название,
+    Аудитория и проблема, Owner и команда — grounded в VISION/AGENTS) генератор НЕ затирает на
+    «неизвестно». Маркер версии шаблона синхронизируется с реестром. Порядок и разметку разделов
+    берём из `existing` дословно; раздел, которого в `existing` ещё не было (структура генератора
+    расширилась), дописывается в конце из `generated`.
+    """
+    reg = reg or AR.load()
+    version = ((AR.artifact(reg, "product_passport") or {}).get("template") or {}).get("version", 1)
+    _, gen_secs = _split_sections(generated)
+    gen_body = dict(gen_secs)
+    header, ex_secs = _split_sections(existing)
+    out = [_set_template_version(header, version)]
+    seen = set()
+    for title, body in ex_secs:
+        seen.add(title)
+        # Владельческий раздел — дословно; машинный, известный генератору — свежий снимок; раздел,
+        # который генератор не знает, тоже оставляем как есть (не роняем чужое содержимое).
+        keep = title in OWNER_SECTIONS or title not in gen_body
+        out.append(f"## {title}{body if keep else gen_body[title]}")
+    for title, body in gen_secs:
+        if title not in seen and title not in OWNER_SECTIONS:
+            out.append(f"## {title}{body}")
+    return "".join(out)
 
 
 def is_filled(text: str, required_sections: list) -> tuple[bool, list]:
