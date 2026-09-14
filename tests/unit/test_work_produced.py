@@ -113,14 +113,19 @@ def test_status_and_human_output_use_the_same_predicate():
 
 def test_pipeline_reports_how_the_work_was_produced():
     """Канал работы назван в отчёте: «правок 0» рядом с живым коммитом читается как «кит не работает»."""
-    src = (KIT / "ai_ops_kit" / "engine" / "execution_pipeline.py").read_text(encoding="utf-8")
+    # Разрез монолита: секция отчёта «produced_by» вынесена в pipeline_stages, распознавание сдвига
+    # HEAD (_head_advanced) осталось в execution_pipeline — «конвейер» это фасад+сателлит.
+    _eng = KIT / "ai_ops_kit" / "engine"
+    src = (_eng / "execution_pipeline.py").read_text(encoding="utf-8")
+    stages_src = (_eng / "pipeline_stages.py").read_text(encoding="utf-8")
     # deep-cut: фаза commit (_commit_work) вынесена в pipeline_setup — именование канала работы теперь
-    # там, а секция отчёта и распознавание сдвига HEAD остаются в execution_pipeline.
-    setup_src = (KIT / "ai_ops_kit" / "engine" / "pipeline_setup.py").read_text(encoding="utf-8")
-    assert '"produced_by": work_produced_by' in src, "происхождение работы не попадает в отчёт"
+    # там, а секция отчёта и распознавание сдвига HEAD остаются в конвейере.
+    setup_src = (_eng / "pipeline_setup.py").read_text(encoding="utf-8")
+    assert '"produced_by": work_produced_by' in (src + stages_src), "происхождение работы не попадает в отчёт"
     assert 'work_produced_by = "model-commit"' in setup_src, "свой коммит модели не называется в отчёте"
-    tree = ast.parse(src)
-    called = {getattr(n.func, "id", "") for n in ast.walk(tree) if isinstance(n, ast.Call)}
+    called = set()
+    for _s in (src, stages_src):
+        called |= {getattr(n.func, "id", "") for n in ast.walk(ast.parse(_s)) if isinstance(n, ast.Call)}
     assert "_head_advanced" in called, "конвейер не проверяет, ушёл ли HEAD от базы"
 
 
