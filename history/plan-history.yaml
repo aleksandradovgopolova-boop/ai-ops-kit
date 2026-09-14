@@ -19,6 +19,32 @@ kind: delivery-plan-history
 
 
 work:
+  - id: parallel-autonomy-proven-owner-does-not-design-it
+    title: >-
+      Измеряемый прогон: команда ведёт продукт параллельно, а раскрой «что можно одновременно»
+      проектирует КИТ, не владелец
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-14'
+    evidence: qualification/TEAM-WORKS-PARALLEL-RUN-2026-09-14.md
+    result: >-
+      ЗАКРЫТО 2026-09-14 живым прогоном на ai-ops-cockpit. Владелец назвал ДВЕ задачи и их смысл
+      словами (тема в настройках; горячая клавиша полки виджетов) и НИ РАЗУ не проектировал
+      параллельность — счёт ручных раскроев владельца 0. Раскрой вывел КИТ из РЕАЛЬНЫХ диффов: зоны
+      (work_areas.from_write_scope), обнаружение пересечения двух работ (общие src/App.tsx,
+      src/config/settings.ts, src/__tests__/settings.test.ts; git merge-tree — реальный конфликт),
+      вердикт writer_contention.assess (перекрытая пара parallel_viable:False, независимая True),
+      concurrency_preflight (collision), исключение по зонам (пересечение флагуется, независимая зона
+      чиста). Два писателя-субагента работали ПАРАЛЛЕЛЬНО в отдельных worktree cockpit; кит судил
+      (машинные гейты 3/3 + независимые вердикты code_review, приняты на точном SHA) и довёл до
+      черновых PR cockpit#68 (тема) и cockpit#69 (клавиша), без слияния. Исход
+      `owner_does_not_design_the_parallelism` флипнут в true РЕШЕНИЕМ ВЛАДЕЛЬЦА (протокол: засчёт за
+      владельцем, кит не судит сам себя) — цель team-works-in-parallel достигнута 4/4. Оговорки в
+      артефакте и НЕ стёрты флипом: пара оказалась пересекающейся (кит честно поймал, а не выдал
+      ложный parallel-ок); операторский субагентный путь (внутренний писатель без API-ключа глохнет);
+      PR оформил опсик через gh; публикация заявок на полигоне выключена (межмашинная видимость —
+      отдельный, уже подтверждённый исход).
+
   - id: owner-speaks-proven-by-zero-touch-cockpit-run
     title: >-
       Измеряемый zero-touch прогон на ai-ops-cockpit: от описания задачи до verified PR без
