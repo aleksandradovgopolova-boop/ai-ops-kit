@@ -47,6 +47,9 @@ jobs:
         with:
           python-version: "3.12"
 
+      - name: Зависимости сборщика
+        run: pip install pyyaml   # для планов/решений и живых секций паспорта
+
       - name: Собрать свежие показатели
         env:
           GH_TOKEN: ${{ github.token }}   # build_data.py читает задачи через gh

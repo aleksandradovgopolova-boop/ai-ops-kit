@@ -1,167 +1,178 @@
-<title>Пульт AI Ops Kit</title>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Карта продукта AI Ops Kit</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
 <style>
-  /* Пульт намеренно однотемный: тёмный «пультовый» вид. Все цвета заданы явными
-     токенами, фон body закрашен из токена — страница держится на любом фоне хоста. */
   :root{
-    --bg:#0b0f1a; --bg-2:#0d1220; --panel:#141b2b; --panel-2:#0f1524; --ink:#eaeef7;
+    --bg:#0b0f1a; --panel:#141b2b; --panel-2:#0f1524; --ink:#eaeef7;
     --muted:#98a2ba; --faint:#697293; --line:#232f47; --line-2:#1a2337;
-    --accent:#828af2; --accent-soft:#1f2547;
+    --accent:#8b93f6; --accent-soft:#1f2547;
     --ok:#40c896; --ok-soft:#0f3226;
     --run:#5f95ee; --run-soft:#112441;
     --hold:#e3ac4c; --hold-soft:#33280f;
-    --zero:#828bA3; --zero-soft:#182034;
+    --need:#c98bf0; --need-soft:#2a1b3a;
+    --zero:#828ba3; --zero-soft:#182034;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.42);
     --r:14px;
   }
   *{box-sizing:border-box}
   html{background:var(--bg)}
   body{background:
-      radial-gradient(1200px 620px at 84% -8%, rgba(130,138,242,.12), transparent 60%),
-      radial-gradient(900px 520px at 6% 108%, rgba(64,200,150,.07), transparent 55%),
+      radial-gradient(1200px 620px at 84% -8%, rgba(139,147,246,.13), transparent 60%),
+      radial-gradient(900px 520px at 6% 108%, rgba(64,200,150,.06), transparent 55%),
       var(--bg);
-    color:var(--ink);
-    font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;font-weight:400;
+    color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
     -webkit-font-smoothing:antialiased;line-height:1.45}
   .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
   h1,h2,h3{margin:0;font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;text-wrap:balance}
+  a{color:inherit;text-decoration:none}
 
-  .app{min-height:100dvh;padding:clamp(14px,1.6vw,22px);display:grid;
-    grid-template-rows:auto 1fr auto;gap:clamp(12px,1.3vw,16px);max-width:1560px;margin:0 auto}
+  .app{min-height:100dvh;padding:clamp(13px,1.5vw,20px);display:grid;
+    grid-template-rows:auto auto 1fr auto;gap:clamp(11px,1.2vw,15px);max-width:1580px;margin:0 auto}
 
+  /* header */
   .head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
-  .brand{display:flex;align-items:center;gap:14px;min-width:0}
-  .mark{width:44px;height:44px;border-radius:12px;flex:none;background:var(--accent);
+  .brand{display:flex;align-items:center;gap:13px;min-width:0}
+  .mark{width:42px;height:42px;border-radius:12px;flex:none;background:var(--accent);
     display:grid;place-items:center;color:#0b0f1a;box-shadow:var(--shadow)}
-  .mark svg{width:26px;height:26px}
-  .brand h1{font-size:clamp(20px,2vw,25px);font-weight:700;letter-spacing:-.01em;line-height:1.05}
-  .brand p{margin:2px 0 0;color:var(--muted);font-size:12.5px;max-width:54ch}
-  .head-right{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .chip{display:inline-flex;align-items:center;gap:7px;padding:7px 12px;border-radius:999px;
-    border:1px solid var(--line);background:var(--panel);font-size:12px;box-shadow:var(--shadow)}
+  .mark svg{width:25px;height:25px}
+  .brand h1{font-size:clamp(19px,1.9vw,24px);font-weight:700;letter-spacing:-.01em;line-height:1.05}
+  .brand p{margin:1px 0 0;color:var(--muted);font-size:12px}
+  .head-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+  .chip{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;
+    border:1px solid var(--line);background:var(--panel);font-size:11.5px;box-shadow:var(--shadow)}
   .chip b{font-family:"IBM Plex Mono",monospace;font-weight:600}
   .chip .dot{width:8px;height:8px;border-radius:50%}
-  .chip.ver{color:var(--muted)}
-  .chip.chan{background:var(--hold-soft);border-color:transparent;color:var(--hold);font-weight:500}
+  .chip.chan{background:var(--hold-soft);border-color:transparent;color:var(--hold)}
   .chip.chan .dot{background:var(--hold)}
+  .chip.mat{color:var(--muted)}
   .src{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--faint)}
   .src .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
   .src.live{color:var(--ok)} .src.live .dot{background:var(--ok)}
 
-  .grid{display:grid;gap:clamp(12px,1.3vw,16px);
-    grid-template-columns:1.22fr 1.04fr 1.08fr;align-items:stretch;min-height:0}
-  .col{display:flex;flex-direction:column;gap:clamp(12px,1.3vw,16px);min-height:0}
+  /* north star banner */
+  .north{background:linear-gradient(100deg,var(--accent-soft),var(--panel-2));
+    border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r);
+    padding:12px 16px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow)}
+  .north .lbl{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--accent);flex:none;writing-mode:horizontal-tb}
+  .north .txt{font-size:13.5px;color:var(--ink);line-height:1.4}
+  .north .txt b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600}
 
-  .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));
-    border:1px solid var(--line);border-radius:var(--r);
-    padding:16px 16px 15px;box-shadow:var(--shadow);display:flex;flex-direction:column;min-height:0}
+  .grid{display:grid;gap:clamp(11px,1.2vw,15px);grid-template-columns:1.12fr 1.16fr 1fr;
+    align-items:stretch;min-height:0}
+  .col{display:flex;flex-direction:column;gap:clamp(11px,1.2vw,15px);min-height:0}
+  .panel{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+    border-radius:var(--r);padding:14px 15px 13px;box-shadow:var(--shadow);display:flex;
+    flex-direction:column;min-height:0}
   .panel.grow{flex:1}
-  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.14em;
+  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
     text-transform:uppercase;color:var(--faint);margin-bottom:10px;display:flex;
     justify-content:space-between;align-items:center;gap:8px}
   .eyebrow .n{color:var(--muted)}
 
-  .purpose{font-size:14.5px;color:var(--ink);line-height:1.5}
-  .purpose .lede{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:16px}
-  .metarow{display:flex;flex-wrap:wrap;gap:6px 8px;margin-top:12px}
-  .tag{font-size:11.5px;padding:4px 9px;border-radius:8px;background:var(--panel-2);
-    border:1px solid var(--line-2);color:var(--muted)}
-  .tag b{color:var(--ink);font-family:"IBM Plex Mono",monospace;font-weight:600}
+  /* spine (product map) */
+  .spine{display:flex;flex-direction:column;gap:6px}
+  .node{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:10px;
+    border:1px solid var(--line-2);background:var(--panel-2);transition:border-color .12s,background .12s}
+  a.node:hover{border-color:var(--accent);background:#151d30}
+  .node .idx{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint);width:14px;flex:none;text-align:center}
+  .node .body{min-width:0;flex:1}
+  .node .t{font-size:13.5px;font-weight:500;line-height:1.15;display:flex;align-items:center;gap:7px}
+  .node .d{font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .node .go{flex:none;color:var(--faint);font-size:14px}
+  a.node:hover .go{color:var(--accent)}
+  .badge{font-family:"IBM Plex Mono",monospace;font-size:9px;text-transform:uppercase;letter-spacing:.04em;
+    padding:2px 6px;border-radius:5px;flex:none}
+  .badge.filled{background:var(--ok-soft);color:var(--ok)}
+  .badge.generated{background:var(--run-soft);color:var(--run)}
+  .badge.template{background:var(--hold-soft);color:var(--hold)}
+  .badge.missing{background:var(--need-soft);color:var(--need)}
 
-  .ladder{display:flex;gap:6px;margin:2px 0 12px}
-  .step{flex:1;text-align:center;padding:8px 4px 7px;border-radius:10px;border:1px solid var(--line-2);
-    background:var(--panel-2)}
-  .step .lv{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
-  .step .st{font-size:10px;color:var(--faint);margin-top:2px}
-  .step.done{background:var(--ok-soft);border-color:transparent}
-  .step.done .lv{color:var(--ok)}
-  .step.cur{background:var(--hold-soft);border-color:transparent;box-shadow:inset 0 0 0 1.5px var(--hold)}
-  .step.cur .lv{color:var(--hold);font-weight:600}
-  .step.todo{opacity:.7}
-  .reqs{display:flex;flex-direction:column;gap:7px}
-  .req{display:flex;gap:9px;align-items:flex-start;font-size:12.5px}
-  .req .ic{width:16px;height:16px;border-radius:50%;flex:none;margin-top:1px;display:grid;
-    place-items:center;font-size:10px;color:#0b0f1a;font-weight:700}
-  .req.y .ic{background:var(--ok)} .req.n .ic{background:var(--hold)}
-  .req .tx{color:var(--muted)} .req .tx b{color:var(--ink);font-weight:500}
-  .goals{margin-top:8px;padding-left:25px;display:flex;flex-wrap:wrap;gap:4px 6px}
-  .goals span{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint);
-    background:var(--zero-soft);padding:2px 7px;border-radius:6px}
-
-  .tiles{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-  .tile{border:1px solid var(--line-2);border-radius:11px;padding:11px 12px;background:var(--panel-2)}
-  .tile .v{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:26px;
-    line-height:1;letter-spacing:-.02em}
-  .tile .k{font-size:11.5px;color:var(--muted);margin-top:5px}
-  .tile .s{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint);margin-top:3px}
-  .subline{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px}
-  .pill{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);
+  /* metrics col */
+  .health{display:flex;gap:7px;margin-bottom:11px}
+  .hp{flex:1;border-radius:10px;padding:9px 10px;border:1px solid var(--line-2);background:var(--panel-2)}
+  .hp .hl{font-size:10.5px;color:var(--muted)}
+  .hp .hv{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:15px;margin-top:3px;display:flex;align-items:center;gap:6px}
+  .hp .hv .d{width:9px;height:9px;border-radius:50%}
+  .green .hv{color:var(--ok)} .green .hv .d{background:var(--ok)}
+  .amber .hv{color:var(--hold)} .amber .hv .d{background:var(--hold)}
+  .unknownc .hv{color:var(--need)} .unknownc .hv .d{background:var(--need)}
+  .callout{font-size:11.5px;color:var(--muted);background:var(--need-soft);border-radius:9px;
+    padding:8px 11px;line-height:1.4;margin-bottom:11px}
+  .callout b{color:var(--ink)} .callout a{color:var(--need);border-bottom:1px dotted var(--need)}
+  .measures{display:flex;flex-direction:column;gap:8px}
+  .m{display:flex;align-items:center;gap:10px}
+  .m .mk{font-size:12px;color:var(--muted);flex:none;width:104px}
+  .m .mv{font-size:12.5px;color:var(--ink);font-family:"IBM Plex Mono",monospace}
+  .bar{flex:1;height:7px;border-radius:5px;background:var(--zero-soft);overflow:hidden;position:relative}
+  .bar > i{position:absolute;left:0;top:0;bottom:0;background:var(--ok);border-radius:5px}
+  .caplist{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
+  .cap{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);
     background:var(--panel-2);border:1px solid var(--line-2);border-radius:7px;padding:3px 8px}
-  .pill b{color:var(--ink);font-weight:600}
+  .cap b{color:var(--ink);font-weight:600}
+  .caplink{margin-top:9px;font-size:11px}
+  .caplink a{color:var(--accent);border-bottom:1px dotted var(--accent)}
 
-  .kidhead{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:4px}
-  .kidhead .big{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:30px;line-height:1}
-  .kidhead .lbl{font-size:12px;color:var(--muted)}
-  .note{font-size:11.5px;color:var(--faint);line-height:1.4;margin:2px 0 11px}
-  .fields{display:flex;flex-direction:column;gap:7px}
-  .field{display:flex;align-items:center;gap:10px;font-size:12.5px;padding:7px 10px;
-    background:var(--panel-2);border:1px solid var(--line-2);border-radius:9px}
-  .field .repo{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--ink)}
-  .field .vv{font-family:"IBM Plex Mono",monospace;color:var(--muted);font-size:11px;margin-left:auto}
-  .field .ok{color:var(--ok);font-weight:600;font-size:11px;display:inline-flex;gap:4px;align-items:center}
-  .field .bad{color:var(--hold)}
-
-  .issues{display:flex;flex-direction:column;gap:8px;overflow:auto;min-height:0}
-  .roadnote{font-size:11.5px;color:var(--muted);background:var(--accent-soft);
-    border-radius:9px;padding:8px 11px;line-height:1.4;margin-bottom:2px}
-  .roadnote b{color:var(--ink)}
-  .roadnote .ok{color:var(--ok);font-weight:600}
-  .issue{border:1px solid var(--line-2);border-radius:11px;padding:10px 12px;background:var(--panel-2);
-    display:flex;flex-direction:column;gap:5px}
+  /* right col lists */
+  .now{display:flex;flex-direction:column;gap:7px}
+  .nowi{font-size:12px;color:var(--ink);line-height:1.35;padding:7px 10px;border-radius:9px;
+    background:var(--panel-2);border:1px solid var(--line-2)}
+  .nowi b{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--accent);font-size:11px}
+  .wait{display:flex;flex-direction:column;gap:7px}
+  .waiti{font-size:11.5px;color:var(--ink);line-height:1.35;padding:8px 10px;border-radius:9px;
+    background:var(--need-soft);border:1px solid transparent;border-left:2px solid var(--need)}
+  .issues{display:flex;flex-direction:column;gap:7px;overflow:auto;min-height:0}
+  .issue{border:1px solid var(--line-2);border-radius:10px;padding:8px 11px;background:var(--panel-2);
+    display:flex;flex-direction:column;gap:4px}
+  a.issue:hover{border-color:var(--accent)}
   .issue .top{display:flex;align-items:center;gap:8px}
-  .issue .id{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;color:var(--accent)}
-  .issue .kind{margin-left:auto;font-size:9.5px;font-family:"IBM Plex Mono",monospace;
-    text-transform:uppercase;letter-spacing:.05em;padding:2px 7px;border-radius:6px}
+  .issue .id{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;color:var(--accent)}
+  .issue .kind{margin-left:auto;font-size:9px;font-family:"IBM Plex Mono",monospace;text-transform:uppercase;
+    letter-spacing:.05em;padding:2px 6px;border-radius:5px}
   .kind.dir{background:var(--run-soft);color:var(--run)}
   .kind.enh{background:var(--accent-soft);color:var(--accent)}
   .kind.task{background:var(--zero-soft);color:var(--zero)}
-  .issue .ti{font-size:13px;line-height:1.35;color:var(--ink);font-weight:450}
-  .issue .dt{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint)}
+  .issue .ti{font-size:12px;line-height:1.3;color:var(--ink)}
 
-  .cycle{background:linear-gradient(180deg,var(--panel),var(--panel-2));
-    border:1px solid var(--line);border-radius:var(--r);padding:13px 16px;box-shadow:var(--shadow)}
-  .cyc-head{display:flex;align-items:center;gap:10px;margin-bottom:9px}
-  .cyc-head .loop{margin-left:auto;font-size:11px;color:var(--ok);font-family:"IBM Plex Mono",monospace;
-    display:inline-flex;align-items:center;gap:5px}
-  .flow{display:flex;align-items:stretch;gap:0;flex-wrap:wrap}
-  .node{flex:1 1 0;min-width:120px;display:flex;align-items:center;gap:9px;padding:6px 8px;position:relative}
-  .node:not(:last-child)::after{content:"›";position:absolute;right:-3px;top:50%;transform:translateY(-50%);
-    color:var(--faint);font-size:16px;z-index:1}
-  .node .num{width:22px;height:22px;border-radius:7px;flex:none;background:var(--accent-soft);
-    color:var(--accent);display:grid;place-items:center;font-family:"IBM Plex Mono",monospace;
-    font-size:11px;font-weight:600}
-  .node .lab{font-size:11.5px;line-height:1.2;color:var(--ink)}
-  .node .lab small{display:block;color:var(--faint);font-size:10px}
+  /* passport strip */
+  .passport{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
+    border-radius:var(--r);padding:12px 15px;box-shadow:var(--shadow)}
+  .pp-head{display:flex;align-items:center;gap:10px;margin-bottom:9px;flex-wrap:wrap}
+  .pp-head .legend{margin-left:auto;display:flex;gap:12px;font-size:10.5px;color:var(--muted)}
+  .pp-head .legend span{display:inline-flex;align-items:center;gap:5px}
+  .pp-head .legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+  .pgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .pcell{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:9px;
+    background:var(--panel-2);border:1px solid var(--line-2)}
+  .pcell .d{width:9px;height:9px;border-radius:50%;flex:none}
+  .pcell .pn{display:block;font-size:11.5px;color:var(--ink);line-height:1.2}
+  .pcell .ps{display:block;font-size:10px;color:var(--faint);margin-top:2px}
+  .pcell > span:last-child{min-width:0}
+  .st-verified .d{background:var(--ok)} .st-inferred .d{background:var(--hold)}
+  .st-unknown .d{background:var(--need)}
+  .st-verified .pn{color:var(--ink)} .st-unknown .pn{color:var(--need)}
+  .lg-verified{background:var(--ok)} .lg-inferred{background:var(--hold)} .lg-unknown{background:var(--need)}
+  a.pcell:hover{border-color:var(--accent)}
 
-  .foot{margin-top:11px;text-align:center;color:var(--faint);font-size:11px}
+  .foot{text-align:center;color:var(--faint);font-size:10.5px}
   .foot b{color:var(--muted);font-weight:500}
 
-  @media (max-width:980px){
+  @media (max-width:1040px){
     .app{min-height:0}
     .grid{grid-template-columns:1fr}
-    .node{min-width:45%}
+    .pgrid{grid-template-columns:1fr 1fr}
   }
   @media (max-width:560px){
-    .tiles{grid-template-columns:1fr 1fr}
-    .node{min-width:100%}
-    .node:not(:last-child)::after{content:"";}
+    .pgrid{grid-template-columns:1fr}
+    .north{flex-direction:column;align-items:flex-start;gap:6px}
+    .m .mk{width:88px}
   }
 </style>
 
 <div class="app">
-
   <header class="head">
     <div class="brand">
       <div class="mark" aria-hidden="true">
@@ -171,194 +182,442 @@
         </svg>
       </div>
       <div>
-        <h1>AI Ops Kit</h1>
-        <p>AI-операционная система продуктовой команды. Ведёт продукт от намерения до измеренного результата — и не умеет притворяться, что «готово».</p>
+        <h1>Карта продукта · AI Ops Kit</h1>
+        <p>Видение → стратегия → возможности → роадмап → бэклог. Каждый блок ведёт в артефакт репозитория.</p>
       </div>
     </div>
     <div class="head-right">
-      <span class="chip ver">версия <b id="version">4.2.0</b></span>
-      <span class="chip chan"><span class="dot"></span>канал: <span id="channel">qualification</span></span>
-      <span class="src" id="src"><span class="dot"></span><span id="src-text">снимок · 14.09.2026</span></span>
+      <span class="chip">версия <b id="version">—</b></span>
+      <span class="chip chan"><span class="dot"></span>канал: <span id="channel">—</span></span>
+      <span class="chip mat" id="maturity">—</span>
+      <span class="src" id="src"><span class="dot"></span><span id="src-text">снимок</span></span>
     </div>
   </header>
 
-  <div class="grid">
-
-    <!-- COLUMN 1 — PASSPORT -->
-    <section class="col">
-      <div class="panel">
-        <div class="eyebrow"><span>Паспорт продукта</span><span class="n mono" id="std">стандарт v9 · профиль ai-product</span></div>
-        <div class="purpose">
-          <span class="lede">Открытая AI Product Operating System.</span>
-          Не набор агентов, а участник всей команды: от discovery до эксплуатации. Каждая функция получает продуктовые, дизайнерские, технические и аналитические артефакты — и без них не считается завершённой.
-        </div>
-        <div class="metarow">
-          <span class="tag">версия <b id="m-version">4.2.0</b></span>
-          <span class="tag">контуров модели <b id="m-contours">8</b></span>
-          <span class="tag">принцип <b>writer ≠ judge</b></span>
-          <span class="tag">нет доказательства — <b>нет заявления</b></span>
-        </div>
-      </div>
-
-      <div class="panel grow">
-        <div class="eyebrow"><span>Готовность к каналу stable</span><span class="n">2 из 3 условий</span></div>
-        <div class="ladder">
-          <div class="step done"><div class="lv">edge</div><div class="st">пройден</div></div>
-          <div class="step cur"><div class="lv">qualification</div><div class="st">сейчас здесь</div></div>
-          <div class="step todo"><div class="lv">stable</div><div class="st">рубеж</div></div>
-        </div>
-        <div class="reqs">
-          <div class="req y"><span class="ic">✓</span><span class="tx"><b>Собственный контур зелёный.</b> Тег выпущен, все проверки пройдены.</span></div>
-          <div class="req y"><span class="ic">✓</span><span class="tx"><b>Обкатка в поле — <span id="req-field">2 из 2</span> репозиториев.</b> Обновление реально доехало и ничего не сломало.</span></div>
-          <div class="req n"><span class="ic">!</span><span class="tx"><b>Продуктовый слой готов — ещё не закрыт.</b> Пять целей Product OS:</span></div>
-        </div>
-        <div class="goals" id="goals">
-          <span>product-operating-layer</span><span>backlog-intelligence</span><span>roadmap-and-delivery</span><span>ai-product-operations</span><span>autonomous-product-loop</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- COLUMN 2 — HEALTH + CHILDREN -->
-    <section class="col">
-      <div class="panel">
-        <div class="eyebrow"><span>Здоровье и охват движка</span><span class="n">источник истины — реестр</span></div>
-        <div class="tiles">
-          <div class="tile"><div class="v" id="t-gates">36</div><div class="k">гейтов качества</div><div class="s" id="t-gates-sub">23 блокируют · 13 advisory</div></div>
-          <div class="tile"><div class="v" id="t-tests">1&nbsp;678</div><div class="k">тестов</div><div class="s" id="t-tests-sub">покрытие 71%</div></div>
-          <div class="tile"><div class="v" id="t-agents">42</div><div class="k">роли-агента</div><div class="s">в реестре agents.yaml</div></div>
-          <div class="tile"><div class="v" id="t-validators">87</div><div class="k">валидаторов</div><div class="s">каждый реально исполняется</div></div>
-        </div>
-        <div class="subline">
-          <span class="pill">команд владельца <b id="t-commands">32</b></span>
-          <span class="pill">pre-commit <b id="t-precommit">11</b></span>
-          <span class="pill">извлекателей поверхности <b id="t-extractors">25</b></span>
-        </div>
-      </div>
-
-      <div class="panel grow">
-        <div class="eyebrow"><span>Дочерние проекты</span><span class="n">reach · добровольно, без сети</span></div>
-        <div class="kidhead">
-          <div class="big" id="kid-count">0</div>
-          <div class="lbl">проектов отметилось добровольно (opt-in). Пусто — честное состояние, а не сбой: кит ничего не отправляет сам.</div>
-        </div>
-        <div class="note" id="kid-note">При этом обновление реально обкатано в поле — 3 успешных заезда на 2 репозиториях:</div>
-        <div class="fields" id="fields">
-          <div class="field"><span class="repo">ai-ops-cockpit</span><span class="vv">v3.36.12 · v3.39.0</span><span class="ok">● ок</span></div>
-          <div class="field"><span class="repo">wow-repo</span><span class="vv">v3.39.0</span><span class="ok">● ок</span></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- COLUMN 3 — NEAREST WORK -->
-    <section class="col">
-      <div class="panel grow">
-        <div class="eyebrow"><span>Ближайшие задачи</span><span class="n"><span id="issue-count">4</span> открытых · GitHub</span></div>
-        <div class="issues" id="issues-wrap">
-          <div class="roadnote">Приоритет «Сейчас»: <b>команда работает параллельно</b> и <b>владелец говорит на языке продукта</b>. Цель «каждая проверка реально исполняется» — <span class="ok">✓ достигнута 11.09</span>.</div>
-          <div id="issues">
-            <div class="issue"><div class="top"><span class="id">#748</span><span class="kind dir">направление</span></div><div class="ti">Владелец описывает задачу обычным языком, кит ведёт остальное</div><div class="dt">обновлено 11.09.2026</div></div>
-            <div class="issue"><div class="top"><span class="id">#745</span><span class="kind dir">направление</span></div><div class="ti">Над продуктом работает команда одновременно, без конфликтов и дублей</div><div class="dt">обновлено 11.09.2026</div></div>
-            <div class="issue"><div class="top"><span class="id">#611</span><span class="kind enh">улучшение</span></div><div class="ti">Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code / Codex / Qwen)</div><div class="dt">обновлено 09.09.2026</div></div>
-            <div class="issue"><div class="top"><span class="id">#930</span><span class="kind task">задача</span></div><div class="ti">CI на update-PR: поддержать PAT/GitHub App, чтобы проверки шли на автообновлении</div><div class="dt">обновлено 14.09.2026</div></div>
-          </div>
-        </div>
-      </div>
-    </section>
-
+  <div class="north">
+    <span class="lbl">North Star</span>
+    <a class="txt" id="northstar" href="#" target="_blank" rel="noopener">—</a>
   </div>
 
-  <section class="cycle">
-    <div class="cyc-head">
-      <div class="eyebrow" style="margin:0">Операционная модель продукта — восемь контуров</div>
-      <span class="loop">↺ цикл замкнут: аналитика возвращается в стратегию</span>
+  <div class="grid">
+    <section class="col">
+      <div class="panel grow">
+        <div class="eyebrow"><span>Карта продукта</span><span class="n">клик → файл в репозитории ↗</span></div>
+        <div class="spine" id="spine"></div>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="panel">
+        <div class="eyebrow"><span>Метрики продукта · здоровье</span><span class="n" id="health-src">по паспорту</span></div>
+        <div class="health" id="health"></div>
+        <div class="callout" id="metrics-callout"></div>
+        <div class="measures" id="measures"></div>
+        <div class="caplink" id="caplink"></div>
+      </div>
+    </section>
+
+    <section class="col">
+      <div class="panel">
+        <div class="eyebrow"><span>Роадмап · сейчас</span><span class="n">горизонт «Now» ↗</span></div>
+        <div class="now" id="now"></div>
+      </div>
+      <div class="panel">
+        <div class="eyebrow"><span>Ждут решения владельца</span><span class="n" id="wait-n"></span></div>
+        <div class="wait" id="wait"></div>
+      </div>
+      <div class="panel grow">
+        <div class="eyebrow"><span>Открытые задачи</span><span class="n"><span id="issue-count">0</span> · GitHub ↗</span></div>
+        <div class="issues" id="issues"></div>
+      </div>
+    </section>
+  </div>
+
+  <section class="passport">
+    <div class="pp-head">
+      <div class="eyebrow" style="margin:0">Паспорт продукта — показатели и что нужно от владельца</div>
+      <div class="legend">
+        <span><i class="lg-verified"></i>подтверждено</span>
+        <span><i class="lg-inferred"></i>предположение</span>
+        <span><i class="lg-unknown"></i>нужен владелец</span>
+      </div>
     </div>
-    <div class="flow" id="flow">
-      <div class="node"><span class="num">1</span><span class="lab">Стратегия<small>product_strategy</small></span></div>
-      <div class="node"><span class="num">2</span><span class="lab">Исследования и решения<small>research_decisions</small></span></div>
-      <div class="node"><span class="num">3</span><span class="lab">Планирование<small>planning_execution</small></span></div>
-      <div class="node"><span class="num">4</span><span class="lab">Архитектура<small>system_architecture</small></span></div>
-      <div class="node"><span class="num">5</span><span class="lab">Данные и контракты<small>data_contracts</small></span></div>
-      <div class="node"><span class="num">6</span><span class="lab">Инженерия · качество · безопасность<small>engineering_quality_security</small></span></div>
-      <div class="node"><span class="num">7</span><span class="lab">Доставка и эксплуатация<small>delivery_operations</small></span></div>
-      <div class="node"><span class="num">8</span><span class="lab">Аналитика и обучение<small>analytics_learning</small></span></div>
-    </div>
+    <div class="pgrid" id="passport"></div>
   </section>
 
-  <div class="foot">Пульт состояния продукта · показатели взяты из реестра, гейтов и открытых задач репозитория · <b>всё, что не доказано, помечено как недоказанное</b></div>
-
+  <div class="foot">Продуктовый пульт · всё ведёт в реальные артефакты · <b>что не доказано из источника — помечено, а не выдумано</b></div>
 </div>
 
 <script>
-  // Живое чтение: страница пробует подтянуть data.json, собранный build_data.py.
-  // Получилось — обновляет числа и ставит зелёную метку «живые данные».
-  // Не получилось (нет файла, или предпросмотр без сети) — тихо остаётся встроенный снимок.
+  const SNAPSHOT = {
+  "generated_at": "2026-09-14T11:19:08+00:00",
+  "repo": {
+    "owner": "aleksandradovgopolova-boop",
+    "name": "ai-ops-kit",
+    "blob_base": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main"
+  },
+  "version": "4.3.1",
+  "channel": "stable",
+  "maturity": {
+    "cls": "EXISTING_PRODUCT",
+    "confidence": "high",
+    "commits": 1516,
+    "code_files": 985
+  },
+  "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
+  "spine": [
+    {
+      "key": "vision",
+      "title": "Видение",
+      "desc": "Куда идёт продукт и зачем",
+      "path": "VISION.md",
+      "state": "filled"
+    },
+    {
+      "key": "strategy",
+      "title": "Стратегия · North Star",
+      "desc": "Центральное обещание и модель продукта",
+      "path": "decisions/registry.yaml",
+      "state": "filled"
+    },
+    {
+      "key": "capability",
+      "title": "Карта возможностей",
+      "desc": "Что продукт умеет: built / wired / planned",
+      "path": "docs/capability-map.md",
+      "state": "generated"
+    },
+    {
+      "key": "discovery",
+      "title": "Исследования",
+      "desc": "Свидетельства, гипотезы, решения",
+      "path": ".research",
+      "state": "filled"
+    },
+    {
+      "key": "roadmap",
+      "title": "Роадмап",
+      "desc": "Четыре горизонта: сейчас → дальше → later",
+      "path": "ROADMAP.md",
+      "state": "filled"
+    },
+    {
+      "key": "backlog",
+      "title": "Бэклог целей",
+      "desc": "Цели и работа, что берётся следующим",
+      "path": "planning/plan.yaml",
+      "state": "filled"
+    },
+    {
+      "key": "metrics",
+      "title": "Метрики продукта",
+      "desc": "North star, outcome-метрики, guardrails",
+      "path": "context/product/ProductMetrics.md",
+      "state": "template"
+    },
+    {
+      "key": "passport",
+      "title": "Паспорт продукта",
+      "desc": "Сводка показателей продукта",
+      "path": "ai_ops_kit/planning/passport_generator.py",
+      "state": "generated"
+    }
+  ],
+  "capability_map": {
+    "commands": 34,
+    "gates": 36,
+    "enforced": 23,
+    "advisory": 13,
+    "roles": 42,
+    "built_not_wired": 1,
+    "planned": 4
+  },
+  "discovery": {
+    "evidence": 233,
+    "decisions": 15,
+    "requests": 17,
+    "experiments": 4
+  },
+  "metrics": {
+    "north_star_defined": true,
+    "outcomes_filled": false,
+    "health": {
+      "product": "unknown",
+      "tech": "green",
+      "delivery": "green"
+    }
+  },
+  "goals": {
+    "total": 23,
+    "achieved": 20,
+    "active": 2,
+    "paused": 1,
+    "active_list": [
+      "team-works-in-parallel",
+      "owner-speaks-product-not-pipeline"
+    ],
+    "paused_list": [
+      "advisory-gates-obkatka"
+    ]
+  },
+  "waiting_on_owner": [
+    {
+      "id": "owner-speaks-proven-by-zero-touch-cockpit-run",
+      "title": "Измеряемый zero-touch прогон на ai-ops-cockpit: путь от описания задачи до verified PR без единого технического вмешательства владельца"
+    },
+    {
+      "id": "parallel-autonomy-proven-owner-does-not-design-it",
+      "title": "Измеряемый прогон: команда ведёт продукт параллельно, а раскрой «что можно одновременно» проектирует КИТ, не владелец — участник не сомневается в нужности задачи и не дублирует чужую"
+    }
+  ],
+  "roadmap_now": [
+    "team-works-in-parallel — над продуктом работает КОМАНДА одновременно, и это не оплачивается конфликтами и дублями. Решение владельца 18.08.2026 (ep-20",
+    "owner-speaks-product-not-pipeline — владелец описывает задачу обычным языком, а кит отделяет факты от предположений, называет варианты с trade-offs, б"
+  ],
+  "issues": [
+    {
+      "id": 748,
+      "title": "Владелец описывает задачу обычным языком, кит ведёт остальное",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-09-11"
+    },
+    {
+      "id": 745,
+      "title": "Над продуктом работает команда одновременно, без конфликтов и дублей",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-09-11"
+    },
+    {
+      "id": 611,
+      "title": "Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code/Codex/Qwen), §25 как протокол",
+      "kind": "enh",
+      "kind_ru": "улучшение",
+      "updated": "2026-09-09"
+    }
+  ],
+  "field_evidence": [
+    {
+      "repo": "ai-ops-cockpit",
+      "versions": [
+        "3.36.12",
+        "3.39.0",
+        "4.3.0"
+      ],
+      "outcome": "ok"
+    },
+    {
+      "repo": "wow-repo",
+      "versions": [
+        "3.39.0"
+      ],
+      "outcome": "ok"
+    },
+    {
+      "repo": "ai-ops-live-587",
+      "versions": [
+        "4.3.0"
+      ],
+      "outcome": "ok"
+    }
+  ],
+  "reach_registered": 0,
+  "passport_sections": [
+    {
+      "name": "Название и описание",
+      "state": "inferred",
+      "source": "README.md",
+      "value": "**AI Ops Kit** — Кит живёт в репозитории продукта и ведёт его по полному циклу — от намерения до измеренного результата: discovery → delivery → release → measurement → следующий цикл. Он организует работу людей и AI-исполнителей, проверяет качество по риску и — главное — не выдаёт утверждение без"
+    },
+    {
+      "name": "Аудитория и проблема",
+      "state": "unknown",
+      "source": null,
+      "value": "_неизвестно — аудитория и Problem/JTBD из кода не выводятся — нужен ответ владельца (контур product_strategy)_"
+    },
+    {
+      "name": "Repository и окружения",
+      "state": "verified",
+      "source": "структура репозитория",
+      "value": "Репозиторий `whale-status-dashboard-02f8c3`, стек: python. CI: .github/workflows. Какое окружение считать production — за владельцем."
+    },
+    {
+      "name": "Owner и команда",
+      "state": "unknown",
+      "source": null,
+      "value": "_неизвестно — владелец и команда из кода достоверно не выводятся — назвать должен человек_"
+    },
+    {
+      "name": "Статус и зрелость",
+      "state": "inferred",
+      "source": "repo_audit.classify",
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1516, файлов кода 985; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+    },
+    {
+      "name": "Здоровье (продукт / технологии / delivery)",
+      "state": "inferred",
+      "source": "CI/тесты (tech); метрики (product); релизы (delivery)",
+      "value": "Продукт: _неизвестно (нет метрик — контур analytics)_. Технологии: **Green** — есть CI и тесты. Delivery: есть история релизов (4 последних тегов) — _отклонение от плана нужно считать отдельно_."
+    },
+    {
+      "name": "Версия и последний релиз",
+      "state": "verified",
+      "source": "VERSION, git tags",
+      "value": "Версия: **4.3.1**. Последний релиз: **v4.3.0**."
+    },
+    {
+      "name": "Текущий milestone и прогресс",
+      "state": "unknown",
+      "source": null,
+      "value": "_неизвестно — текущий milestone нечем определить — ни ROADMAP (Now), ни delivery-плана_"
+    },
+    {
+      "name": "Риски и зависимости",
+      "state": "inferred",
+      "source": "манифесты зависимостей, API-схемы",
+      "value": "Зависимости (по манифестам): requirements.txt, pyproject.toml. Продуктовые риски из кода не выводятся — назвать должен владелец."
+    }
+  ],
+  "contours": [
+    {
+      "id": "product_strategy",
+      "label": "Стратегия"
+    },
+    {
+      "id": "research_decisions",
+      "label": "Исследования и решения"
+    },
+    {
+      "id": "planning_execution",
+      "label": "Планирование"
+    },
+    {
+      "id": "system_architecture",
+      "label": "Архитектура"
+    },
+    {
+      "id": "data_contracts",
+      "label": "Данные и контракты"
+    },
+    {
+      "id": "engineering_quality_security",
+      "label": "Инженерия · качество · безопасность"
+    },
+    {
+      "id": "delivery_operations",
+      "label": "Доставка и эксплуатация"
+    },
+    {
+      "id": "analytics_learning",
+      "label": "Аналитика и обучение"
+    }
+  ]
+};
   (function(){
     const $ = id => document.getElementById(id);
-    const dash = "—";
-    const nf = n => (n==null ? dash : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, " "));
-    const MONTHS = ["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
-    const ruDate = iso => { if(!iso) return dash; const [y,m,d]=iso.split("-"); return `${+d} ${MONTHS[+m-1]} ${y}`; };
+    const esc = s => String(s==null?"":s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+    const MONTHS=["янв","фев","мар","апр","мая","июн","июл","авг","сен","окт","ноя","дек"];
+    const ruDate=iso=>{if(!iso)return"";const[y,m,d]=iso.split("-");return `${+d} ${MONTHS[+m-1]} ${y}`;};
+    const blob=d=>d.repo?d.repo.blob_base:"#";
+    const link=(d,path)=>{if(!d.repo)return"#";const base=d.repo.blob_base;const last=path.split("/").pop();
+      return (last.indexOf(".")<0? base.replace("/blob/","/tree/") : base)+"/"+path;};
+    const HSTATE={green:"green",yellow:"amber",red:"amber",unknown:"unknownc"};
+    const HRU={green:"Green",yellow:"Yellow",red:"Red",unknown:"неизвестно"};
 
-    function render(data){
-      try{
-        if(data.version){ $("version").textContent=data.version; $("m-version").textContent=data.version; }
-        if(data.channel) $("channel").textContent=data.channel;
-        if(data.standard){ $("std").textContent=`стандарт v${data.standard.version ?? dash} · профиль ${data.standard.profile ?? dash}`; }
+    function render(d){
+      $("version").textContent=d.version||"—";
+      $("channel").textContent=d.channel||"—";
+      if(d.maturity&&d.maturity.cls){
+        $("maturity").innerHTML=`зрелость: <b>${esc(d.maturity.cls.replace("_"," ").toLowerCase())}</b>`;
+      } else $("maturity").hidden=true;
 
-        const h=data.health||{};
-        if(h.gates_total!=null) $("t-gates").textContent=nf(h.gates_total);
-        if(h.gates_blocking!=null||h.gates_advisory!=null)
-          $("t-gates-sub").textContent=`${nf(h.gates_blocking)} блокируют · ${nf(h.gates_advisory)} advisory`;
-        if(h.tests!=null) $("t-tests").innerHTML=nf(h.tests);
-        if(h.coverage!=null) $("t-tests-sub").textContent=`покрытие ${h.coverage}%`;
-        if(h.agents!=null) $("t-agents").textContent=nf(h.agents);
-        if(h.validators!=null) $("t-validators").textContent=nf(h.validators);
-        if(h.commands!=null) $("t-commands").textContent=nf(h.commands);
-        if(h.precommit!=null) $("t-precommit").textContent=nf(h.precommit);
-        if(h.extractors!=null) $("t-extractors").textContent=nf(h.extractors);
+      if(d.north_star){const a=$("northstar");a.innerHTML=`<b>«${esc(d.north_star)}»</b>`;
+        a.href=link(d,"decisions/registry.yaml");}
 
-        if(Array.isArray(data.contours)) $("m-contours").textContent=data.contours.length;
-        if(Array.isArray(data.product_os_goals) && data.product_os_goals.length)
-          $("goals").innerHTML=data.product_os_goals.map(g=>`<span>${g}</span>`).join("");
+      // spine
+      const BADGE={filled:"заполнено",generated:"генерируется",template:"пустой шаблон",missing:"нет"};
+      $("spine").innerHTML=(d.spine||[]).map((s,i)=>
+        `<a class="node" href="${link(d,s.path)}" target="_blank" rel="noopener">`+
+        `<span class="idx">${i+1}</span><span class="body">`+
+        `<span class="t">${esc(s.title)} <span class="badge ${s.state}">${BADGE[s.state]||s.state}</span></span>`+
+        `<span class="d">${esc(s.desc)} · ${esc(s.path)}</span></span>`+
+        `<span class="go">↗</span></a>`).join("");
 
-        const c=data.children||{};
-        if(c.registered!=null) $("kid-count").textContent=nf(c.registered);
-        if(Array.isArray(c.field_evidence)){
-          const total=c.field_evidence.reduce((s,f)=>s+(f.versions?f.versions.length:0),0);
-          const repos=c.field_repos ?? c.field_evidence.length;
-          $("req-field").textContent=`${repos} из 2`;
-          $("kid-note").textContent=`При этом обновление реально обкатано в поле — ${total} ${total===1?"успешный заезд":"успешных заезда"} на ${repos} ${repos===1?"репозитории":"репозиториях"}:`;
-          $("fields").innerHTML=c.field_evidence.map(f=>{
-            const vers=(f.versions||[]).map(v=>"v"+v).join(" · ");
-            const ok=f.outcome==="ok";
-            return `<div class="field"><span class="repo">${f.repo}</span><span class="vv">${vers}</span><span class="${ok?"ok":"ok bad"}">● ${ok?"ок":f.outcome}</span></div>`;
-          }).join("");
-        }
+      // health
+      const h=(d.metrics&&d.metrics.health)||{};
+      const hcell=(lbl,v)=>{const cls=HSTATE[v]||"unknownc";return `<div class="hp ${cls}"><div class="hl">${lbl}</div>`+
+        `<div class="hv"><span class="d"></span>${HRU[v]||"—"}</div></div>`;};
+      $("health").innerHTML=hcell("Продукт",h.product)+hcell("Технологии",h.tech)+hcell("Delivery",h.delivery);
 
-        if(Array.isArray(data.issues)){
-          $("issue-count").textContent=data.issues.length;
-          $("issues").innerHTML=data.issues.map(it=>
-            `<div class="issue"><div class="top"><span class="id">#${it.id}</span><span class="kind ${it.kind}">${it.kind_ru||it.kind}</span></div>`+
-            `<div class="ti">${it.title}</div><div class="dt">обновлено ${ruDate(it.updated)}</div></div>`
-          ).join("");
-        }
+      // callout — honest metric gap
+      if(d.metrics&&d.metrics.outcomes_filled===false){
+        $("metrics-callout").innerHTML=`<b>Outcome-метрики продукта не заданы</b> — поэтому здоровье продукта не измеряется. `+
+          `Задать: <a href="${link(d,"context/product/ProductMetrics.md")}" target="_blank" rel="noopener">ProductMetrics.md</a> (north star уже есть).`;
+      } else $("metrics-callout").hidden=true;
 
-        if(Array.isArray(data.contours) && data.contours.length){
-          $("flow").innerHTML=data.contours.map((c,i)=>
-            `<div class="node"><span class="num">${i+1}</span><span class="lab">${c.label}<small>${c.id}</small></span></div>`
-          ).join("");
-        }
+      // measures
+      const g=d.goals||{}; const pct=g.total?Math.round(100*g.achieved/g.total):0;
+      const fe=d.field_evidence||[]; const disc=d.discovery||{};
+      $("measures").innerHTML=
+        `<div class="m"><span class="mk">Цели продукта</span><div class="bar"><i style="width:${pct}%"></i></div>`+
+          `<span class="mv">${g.achieved}/${g.total}</span></div>`+
+        `<div class="m"><span class="mk">В работе · пауза</span><span class="mv">${g.active} · ${g.paused}</span></div>`+
+        `<div class="m"><span class="mk">Обкатка в поле</span><span class="mv">${fe.length} репо · ${fe.reduce((s,f)=>s+(f.versions?f.versions.length:0),0)} заезда ✓</span></div>`+
+        `<div class="m"><span class="mk">Отметилось дочек</span><span class="mv">${d.reach_registered} (opt-in)</span></div>`+
+        `<div class="m"><span class="mk">Исследования</span><span class="mv">${disc.evidence} свид · ${disc.decisions} реш · ${disc.experiments} эксп</span></div>`;
 
-        const when=data.generated_at ? new Date(data.generated_at) : null;
-        const stamp=when ? `${when.getDate()}.${String(when.getMonth()+1).padStart(2,"0")}.${when.getFullYear()} ${String(when.getHours()).padStart(2,"0")}:${String(when.getMinutes()).padStart(2,"0")}` : "";
-        $("src").classList.add("live");
-        $("src-text").textContent=`живые данные${stamp?" · "+stamp:""}`;
-      }catch(e){ /* сломанный data.json — оставляем снимок */ }
+      // capability line
+      const cm=d.capability_map||{};
+      $("caplink").innerHTML=`<div class="caplist">`+
+        `<span class="cap">команд <b>${cm.commands??"—"}</b></span>`+
+        `<span class="cap">гейтов <b>${cm.gates??"—"}</b> <span style="color:var(--faint)">(${cm.enforced??"—"}/${cm.advisory??"—"})</span></span>`+
+        `<span class="cap">ролей <b>${cm.roles??"—"}</b></span>`+
+        `<span class="cap">planned <b>${cm.planned??"—"}</b></span></div>`+
+        `<div style="margin-top:7px">→ <a href="${link(d,"docs/capability-map.md")}" target="_blank" rel="noopener">полная карта возможностей</a></div>`;
+
+      // roadmap now
+      $("now").innerHTML=(d.roadmap_now||[]).map(t=>{
+        const m=String(t).match(/^([\w-]+)\s+—\s+(.*)$/);
+        const id=m?m[1]:""; const rest=m?m[2]:t;
+        return `<a class="nowi" href="${link(d,"ROADMAP.md")}" target="_blank" rel="noopener">`+
+          (id?`<b>${esc(id)}</b> — `:"")+esc(rest.slice(0,150))+`…</a>`;
+      }).join("")||`<div class="nowi">—</div>`;
+
+      // waiting on owner
+      const w=d.waiting_on_owner||[];
+      $("wait-n").textContent=w.length?`${w.length} · нужен ты`:"";
+      $("wait").innerHTML=w.length?w.map(x=>`<div class="waiti">${esc(x.title)}</div>`).join("")
+        :`<div class="nowi">нет — решения не ждут</div>`;
+
+      // issues
+      const iss=d.issues||[];
+      $("issue-count").textContent=iss.length;
+      const iurl=d.repo?`https://github.com/${d.repo.owner}/${d.repo.name}/issues/`:"#";
+      $("issues").innerHTML=iss.length?iss.map(it=>
+        `<a class="issue" href="${iurl}${it.id}" target="_blank" rel="noopener"><div class="top">`+
+        `<span class="id">#${it.id}</span><span class="kind ${it.kind}">${esc(it.kind_ru||it.kind)}</span></div>`+
+        `<div class="ti">${esc(it.title)}</div></a>`).join("")
+        :`<div class="nowi">нет открытых задач${d.issues===null?" (данные недоступны)":""}</div>`;
+
+      // passport strip
+      $("passport").innerHTML=(d.passport_sections||[]).map(s=>{
+        const st=s.state||"unknown";
+        return `<a class="pcell st-${st}" href="${link(d,"ai_ops_kit/planning/passport_generator.py")}" target="_blank" rel="noopener">`+
+          `<span class="d"></span><span><span class="pn">${esc(s.name)}</span>`+
+          `<span class="ps">${st==="unknown"?"нужен ответ владельца":esc(s.source||st)}</span></span></a>`;
+      }).join("");
+
+      // source badge
+      const when=d.generated_at?new Date(d.generated_at):null;
+      const stamp=when?`${when.getDate()}.${String(when.getMonth()+1).padStart(2,"0")}.${when.getFullYear()} ${String(when.getHours()).padStart(2,"0")}:${String(when.getMinutes()).padStart(2,"0")}`:"";
+      $("src").classList.toggle("live", !!LIVE);
+      $("src-text").textContent=(LIVE?"живые данные":"снимок")+(stamp?" · "+stamp:"");
     }
 
-    fetch("data.json", {cache:"no-store"})
-      .then(r => r.ok ? r.json() : Promise.reject())
-      .then(render)
-      .catch(()=>{ /* нет файла или сеть закрыта — снимок уже отрисован в разметке */ });
+    let LIVE=false;
+    if(SNAPSHOT) try{render(SNAPSHOT);}catch(e){}
+    fetch("data.json",{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject())
+      .then(d=>{LIVE=true;render(d);}).catch(()=>{});
   })();
 </script>
