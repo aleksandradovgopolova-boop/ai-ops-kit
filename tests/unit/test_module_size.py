@@ -169,7 +169,12 @@ class TestTheBaselineHasOneHome:
     def test_baseline_declares_ceilings_with_numbers(self):
         baseline = load_baseline(BASELINE_FILE)
         ceilings = ceilings_of(baseline)
-        assert ceilings, "baseline не объявляет ни одного потолка"
+        # ПУСТОЙ `ceilings` — законное состояние, а не пробел: это ратчет, дошедший до нуля, когда ни
+        # одного файла сверх порога не осталось (последний монолит contours.py разрезан). Требовать
+        # «хотя бы один потолок» значило бы краснеть ровно на успехе ратчета. Проверяем ТИП значений
+        # (нецелой потолок — по-прежнему дефект), а не их наличие; равенство составу замера держит
+        # `test_baseline_matches_current_measurement`.
+        assert isinstance(ceilings, dict), ceilings
         assert all(isinstance(v, int) for v in ceilings.values()), ceilings
 
 
