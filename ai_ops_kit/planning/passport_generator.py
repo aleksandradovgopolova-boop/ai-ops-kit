@@ -35,7 +35,33 @@ _HTML_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
 
 
 def _repo_name(root: Path) -> str:
-    """Имя репозитория. resolve() — иначе `Path('.').name` пусто, и паспорт печатал «Репозиторий ``»."""
+    """Имя репозитория — как называется ПРОДУКТ, а не каталог, из которого его собирают.
+
+    `Path(root).name` подводит в git-worktree: там это имя каталога worktree
+    (`whale-status-dashboard-02f8c3`), а не продукта — паспорт печатал бы служебное имя. Спрашиваем
+    git: сперва basename origin (имя продукта на форже), затем каталог главного репозитория
+    (`--git-common-dir` -> родитель `.git`). Нет git/remote — падаем на `resolve().name`, как раньше.
+    """
+    import subprocess
+    try:
+        rc, out, _ = git(root, "remote", "get-url", "origin", timeout=10)
+        if rc == 0 and out.strip():
+            name = out.strip().rstrip("/").rsplit("/", 1)[-1]
+            name = name[:-4] if name.endswith(".git") else name
+            if name:
+                return name
+    except (OSError, subprocess.SubprocessError):
+        pass
+    try:
+        rc, out, _ = git(root, "rev-parse", "--git-common-dir", timeout=10)
+        if rc == 0 and out.strip():
+            common = Path(out.strip())
+            if not common.is_absolute():
+                common = (Path(root) / common).resolve()
+            if common.name == ".git" and common.parent.name:
+                return common.parent.name
+    except (OSError, subprocess.SubprocessError):
+        pass
     return Path(root).resolve().name
 
 
@@ -204,24 +230,31 @@ def _delivery_health(ev: dict) -> str:
 
 
 def _milestone(root: Path) -> dict:
-    """Текущий milestone из ROADMAP.md (раздел Now) или плана. Иначе честный пробел."""
+    """Текущий milestone из горизонта «Сейчас» ROADMAP или плана. Иначе честный пробел.
+
+    Горизонт читаем НЕ по литералу `Now`: канонический roadmap кита и русскоязычных дочек называет
+    его «Сейчас» (`ai_ops_kit/planning/roadmap.py -> HORIZONS`, где `now` = «сейчас»|«now»). Прежде
+    здесь стояло `if "now" in headers`, и на своём же roadmap кит выдавал «milestone неизвестно» —
+    паспорт не мог прочитать собственное направление. Теперь горизонт находит тот же парсер, что и
+    контракт roadmap, поэтому и «Сейчас», и «Now» одинаково распознаются.
+    """
     # Единый резолвер направления (SR-2): прежде читали `ROADMAP.md` ИЛИ `.ai-ops/ROADMAP.md` —
     # два пути в одной строке означали, что канонический источник не определён. Теперь путь решает
     # одно место (roadmap.resolve_roadmap_path), общее с health/drift/planning.
     from ai_ops_kit.planning import roadmap as _roadmap
     rp = _roadmap.resolve_roadmap_path(root)
-    roadmap = rp.read_text(encoding="utf-8") if rp.is_file() else None
-    if roadmap:
-        headers = {m.group(1).strip().lower(): m.start() for m in _H.finditer(roadmap)}
-        if "now" in headers:
-            start = headers["now"]
-            tail = roadmap[start:].split("\n", 1)[1] if "\n" in roadmap[start:] else ""
-            body = tail.split("\n#", 1)[0].strip()
-            body = _HTML_COMMENT.sub("", body).strip()
+    if rp.is_file():
+        now = _roadmap.parse(rp.read_text(encoding="utf-8")).get("now") or {}
+        items = now.get("items") or []
+        if items:
+            # Пункты «Сейчас» — маркированные строки; берём их первые строки (суть направления),
+            # сняв markdown-маркер и inline-комментарии.
+            body = " · ".join(_HTML_COMMENT.sub("", i).lstrip("-*").strip() for i in items)
+            body = body.strip()
             if body:
-                return {"state": INFERRED, "source": "ROADMAP.md -> Now",
-                        "value": f"Из ROADMAP (Now): {body[:200]}"}
-    return _unknown("текущий milestone нечем определить — ни ROADMAP (Now), ни delivery-плана")
+                return {"state": INFERRED, "source": "ROADMAP.md -> Сейчас",
+                        "value": f"Из ROADMAP (Сейчас): {body[:200]}"}
+    return _unknown("текущий milestone нечем определить — ни ROADMAP (Сейчас), ни delivery-плана")
 
 
 def generate(repo_root: Path, evidence: dict | None = None, reg: dict | None = None) -> str:
