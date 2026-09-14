@@ -202,17 +202,51 @@ def waiting_on_owner(plan):
             for w in wk if w.get("status") == "waiting_on_owner"]
 
 
-def roadmap_now(root: Path):
-    text = _read(root, "ROADMAP.md")
-    block = re.search(r"^## Сейчас\n(.*?)^## ", text, re.DOTALL | re.MULTILINE)
-    if not block:
-        return []
+# Три горизонта роадмапа для пульта: что показать и из какой секции ROADMAP.md взять.
+# «Следующий результат» на пульт не выносим — он осознанно пуст (см. ROADMAP.md).
+ROAD_HORIZONS = [
+    ("now",   "Сейчас", "Сейчас"),
+    ("next",  "Дальше", "Дальше"),
+    ("later", "Позже",  "Later"),
+]
+
+
+def _road_bullets(block: str, limit: int = 3):
+    """Ёмкие названия направлений из буллитов секции — на понятном языке, без id и YAML.
+
+    Жирный заголовок буллита (`**...**`) — уже готовое название направления. Если его нет
+    (горизонт «Сейчас» — буллиты вида `` `goal-id` — фраза``), берём фразу после id и режем
+    по первому предложению или запятой, чтобы вышло коротко и по-человечески.
+    """
     items = []
-    for m in re.finditer(r"^- (.+?)(?=\n- |\n\(|\n## |\Z)", block.group(1), re.DOTALL | re.MULTILINE):
-        line = " ".join(m.group(1).split())
-        line = line.replace("`", "")
-        items.append(line[:150])
-    return items
+    for m in re.finditer(r"^-\s+(.+?)(?=\n-\s|\n\(|\n##\s|\Z)", block, re.DOTALL | re.MULTILINE):
+        raw = " ".join(m.group(1).split())
+        bold = re.match(r"\*\*(.+?)\*\*", raw)
+        if bold:
+            label = bold.group(1)
+        else:
+            rest = re.sub(r"^`[^`]+`\s*[—-]\s*", "", raw)
+            label = re.split(r"[.,](?:\s|$)", rest)[0]
+        label = label.replace("`", "").strip().rstrip(":—- .").strip()
+        if len(label) > 90:
+            label = label[:88].rstrip() + "…"
+        if label:
+            items.append(label)
+    return {"items": items[:limit], "total": len(items)}
+
+
+def roadmap(root: Path):
+    text = _read(root, "ROADMAP.md")
+
+    def section(title: str) -> str:
+        m = re.search(rf"^## {re.escape(title)}\n(.*?)(?=^## |\Z)", text, re.DOTALL | re.MULTILINE)
+        return m.group(1) if m else ""
+
+    out = []
+    for key, label, sect in ROAD_HORIZONS:
+        b = _road_bullets(section(sect))
+        out.append({"key": key, "label": label, "items": b["items"], "total": b["total"]})
+    return out
 
 
 def product_metrics_status(root: Path):
@@ -317,7 +351,7 @@ def build(root: Path) -> dict:
         },
         "goals": goals(plan),
         "waiting_on_owner": waiting_on_owner(plan),
-        "roadmap_now": roadmap_now(root),
+        "roadmap": roadmap(root),
         "issues": open_issues(root),
         "field_evidence": field_evidence(root),
         "reach_registered": children_registered(root),
