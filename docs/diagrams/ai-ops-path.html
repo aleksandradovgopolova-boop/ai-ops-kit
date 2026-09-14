@@ -222,18 +222,219 @@
   .proc .fn{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--accent)}
   .proc .note{font-size:12.5px; color:var(--warm); background:var(--warm-soft); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-family:"Golos Text",sans-serif; line-height:1.45; margin:0}
 
+  /* ---- block zero: primer on product development ---- */
+  section.zero{background:var(--surface-2); border-bottom:1px solid var(--line)}
+  section.zero .kicker{color:var(--accent)}
+  .z-frame{background:var(--surface); border:1px solid var(--line); border-left:4px solid var(--accent); border-radius:var(--radius); padding:20px 24px; box-shadow:var(--shadow); margin-bottom:8px}
+  .z-frame p{margin:0; font-size:17px; line-height:1.62}
+  .z-frame b{font-weight:600; background:var(--accent-soft); padding:0 4px; border-radius:4px}
+
+  .z-phases{display:grid; grid-template-columns:1fr auto 1fr auto 1fr; align-items:stretch; gap:8px; margin-bottom:12px}
+  .z-phase{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px 18px; border-top:3px solid var(--accent)}
+  .z-phase.prod{border-top-color:var(--warm)}
+  .z-phase .pn{font-family:"Golos Text",sans-serif; font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--accent)}
+  .z-phase.prod .pn{color:var(--warm)}
+  .z-phase h4{font-family:"Golos Text",sans-serif; font-size:16.5px; font-weight:700; margin:3px 0 6px}
+  .z-phase p{margin:0; font-size:13.5px; line-height:1.5; color:var(--muted)}
+  .z-phase .q{display:block; margin-top:9px; font-size:12.5px; color:var(--ink); font-family:"Golos Text",sans-serif; font-style:italic}
+  .z-arrow{display:flex; align-items:center; justify-content:center; color:var(--faint); font-size:20px}
+  .z-loopnote{font-family:"Golos Text",sans-serif; font-size:13.5px; color:var(--muted); margin-bottom:8px; line-height:1.5}
+  .z-loopnote b{color:var(--ink); font-weight:600}
+  @media(max-width:720px){.z-phases{grid-template-columns:1fr}.z-arrow{transform:rotate(90deg)}}
+
+  .z-two{display:grid; grid-template-columns:1.12fr .88fr; gap:16px; align-items:start; margin-bottom:8px}
+  @media(max-width:820px){.z-two{grid-template-columns:1fr}}
+  .z-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow)}
+  .z-card h3{font-family:"Golos Text",sans-serif; font-size:17px; font-weight:700; margin:0 0 6px; display:flex; align-items:baseline; gap:9px; flex-wrap:wrap}
+  .z-card h3 .en3{font-family:"Golos Text",sans-serif; font-size:12.5px; font-weight:500; color:var(--faint)}
+  .z-card > p{margin:0 0 12px; font-size:14px; line-height:1.55; color:var(--ink)}
+  .z-card > p:last-child{margin-bottom:0}
+  .z-card b{font-weight:600}
+  .z-fig{width:100%; height:auto; display:block; margin:8px 0 14px}
+  .z-steps{list-style:none; margin:0; padding:0}
+  .z-steps li{display:flex; gap:11px; align-items:baseline; padding:7px 0; border-bottom:1px dashed var(--line); font-family:"Golos Text",sans-serif; font-size:13.5px; line-height:1.35}
+  .z-steps li:last-child{border-bottom:0}
+  .z-steps .k{flex:0 0 auto; font-size:12px; font-weight:700; color:var(--accent); width:16px; text-align:center}
+  .z-steps .en3{color:var(--faint); font-size:12px}
+  .z-bridge{background:var(--accent-soft); border:1px solid var(--line); border-radius:var(--radius); padding:18px 22px; margin-top:8px}
+  .z-bridge h4{font-family:"Golos Text",sans-serif; font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--accent); margin:0 0 8px}
+  .z-bridge p{margin:0 0 11px; font-size:14.5px; line-height:1.55}
+  .z-bridge b{font-weight:600}
+  .z-map{display:flex; flex-wrap:wrap; gap:8px}
+  .z-map .m{background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:7px 12px; font-family:"Golos Text",sans-serif; font-size:12.5px}
+  .z-map .m b{color:var(--accent); font-weight:600}
+
+  /* ---- persona scenarios ---- */
+  .personas{display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; align-items:start}
+  .persona{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); border-top:3px solid var(--accent)}
+  .persona.analyst{border-top-color:var(--accent-2)}
+  .persona.founder{border-top-color:var(--warm)}
+  .persona.designer{border-top-color:var(--warm)}
+  .persona.sysa{border-top-color:var(--accent-2)}
+  .persona .ph{display:flex; align-items:center; gap:12px; margin-bottom:2px}
+  .persona .av{font-size:30px; line-height:1}
+  .persona .who b{font-family:"Golos Text",sans-serif; font-size:17px; font-weight:700; display:block; line-height:1.2}
+  .persona .who span{font-family:"Golos Text",sans-serif; font-size:12.5px; color:var(--muted)}
+  /* task in the person's own words */
+  .persona .say{margin:13px 0 14px; padding:11px 15px; background:var(--surface-2); border:1px solid var(--line); border-left:3px solid var(--accent); border-radius:10px; font-size:15px; line-height:1.5}
+  .persona.founder .say, .persona.designer .say{border-left-color:var(--warm)}
+  .persona.analyst .say, .persona.sysa .say{border-left-color:var(--accent-2)}
+  .persona .say .lbl{display:block; font-family:"Golos Text",sans-serif; font-size:10px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--faint); margin-bottom:4px}
+  .persona .say .t{font-style:italic}
+  .persona .say b{font-weight:600; font-style:normal}
+  /* what the kit takes off their plate */
+  .persona .doeslbl{font-family:"Golos Text",sans-serif; font-size:11px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--accent); margin-bottom:9px}
+  .persona.founder .doeslbl, .persona.designer .doeslbl{color:var(--warm)}
+  .persona.analyst .doeslbl, .persona.sysa .doeslbl{color:var(--accent-2)}
+  .persona ul.does{list-style:none; margin:0 0 14px; padding:0; display:flex; flex-direction:column; gap:9px}
+  .persona ul.does li{position:relative; padding-left:25px; font-size:13.5px; line-height:1.48}
+  .persona ul.does li::before{content:"✓"; position:absolute; left:0; top:1px; width:17px; height:17px; border-radius:50%; background:var(--accent-soft); color:var(--accent); font-family:"Golos Text",sans-serif; font-size:10px; font-weight:700; display:flex; align-items:center; justify-content:center}
+  .persona.founder ul.does li::before, .persona.designer ul.does li::before{background:var(--warm-soft); color:var(--warm)}
+  .persona.analyst ul.does li::before, .persona.sysa ul.does li::before{background:var(--accent-soft); color:var(--accent-2)}
+  .persona .fn2{font-family:"IBM Plex Mono",monospace; font-size:11.5px; color:var(--accent-2)}
+  .persona .result{background:var(--good-soft); border:1px solid var(--line); border-left:3px solid var(--good); border-radius:9px; padding:12px 14px; font-size:13.5px; line-height:1.5}
+  .persona .result b{font-family:"Golos Text",sans-serif; font-weight:700; color:var(--good); display:block; margin-bottom:3px; font-size:11px; text-transform:uppercase; letter-spacing:.06em}
+
+  /* ---- kit constitutions ---- */
+  .consts{display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:16px; align-items:start}
+  .const{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:20px 22px; box-shadow:var(--shadow); border-top:3px solid var(--accent)}
+  .const.design{border-top-color:var(--warm)}
+  .const.product{border-top-color:var(--accent-2)}
+  .const.product .cnt2{color:var(--accent-2)}
+  .const .ch{display:flex; align-items:baseline; justify-content:space-between; gap:10px; flex-wrap:wrap}
+  .const h3{font-family:"Golos Text",sans-serif; font-size:17px; font-weight:700; margin:0}
+  .const .cnt2{font-family:"IBM Plex Mono",monospace; font-size:12px; color:var(--accent); font-weight:500; white-space:nowrap}
+  .const.design .cnt2{color:var(--warm)}
+  .const .scope{font-size:13.5px; color:var(--muted); margin:7px 0 12px; line-height:1.5}
+  .const .scope b{color:var(--ink); font-weight:600}
+  .const .parts{display:flex; flex-wrap:wrap; gap:6px; margin-bottom:6px}
+  .const .part{font-family:"Golos Text",sans-serif; font-size:11.5px; background:var(--surface-2); border:1px solid var(--line); border-radius:6px; padding:3px 8px; color:var(--muted)}
+  .const .part b{font-weight:600; color:var(--accent)}
+  .const.design .part b{color:var(--warm)}
+  .const .row{display:flex; gap:9px; align-items:flex-start; font-size:13px; line-height:1.46; padding:9px 0; border-top:1px dashed var(--line)}
+  .const .row .ic2{flex:0 0 auto; font-size:14px; line-height:1.4}
+  .const .row b{font-weight:600; color:var(--ink)}
+  .const .row span{color:var(--muted)}
+  .const .fn{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--accent)}
+
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
 <header class="top">
   <div class="wrap">
-    <div class="eyebrow">AI Ops Kit 4.0 · главная схема</div>
+    <div class="eyebrow">AI Ops Kit 4.1 · главная схема</div>
     <h1>Весь путь с&nbsp;AI&nbsp;Ops</h1>
     <p class="lead">От момента, когда у вас есть продукт — новый или уже работающий — и вы подключаете
       помощника, и дальше по всем этапам. <span class="muted">Видно, какие следы (артефакты) остаются
       в репозитории, где решает человек, а где помощник делает сам.</span></p>
   </div>
 </header>
+
+<section class="zero">
+  <div class="wrap">
+    <div class="kicker">0 · Основы перед схемой</div>
+    <h2>Как вообще устроена продуктовая разработка</h2>
+    <p class="sec-intro">Дальше будет подробная схема пути. Чтобы она читалась легко, договоримся о нескольких
+      словах, которые встречаются в любой продуктовой команде. Две минуты — и всё остальное станет понятнее.
+      Английские термины оставлены намеренно: вы увидите их в документах, поэтому объясняем прямо рядом.</p>
+
+    <div class="z-frame">
+      <p>Вся продуктовая разработка крутится вокруг двух вопросов: <b>ту&nbsp;ли вещь мы строим</b> — и
+        <b>строим&nbsp;ли мы её правильно</b>. Первый — про смысл и пользу («это вообще кому-то нужно?»).
+        Второй — про исполнение («работает, надёжно, вовремя?»). Хорошая команда их не путает: сильный код,
+        решающий ненужную задачу, — всё равно потраченное время.</p>
+    </div>
+
+    <div class="subhead">Три большие фазы — и это круг, а не прямая <span class="cnt">Discovery → Delivery → Production</span></div>
+    <div class="z-phases">
+      <div class="z-phase">
+        <div class="pn">Discovery</div>
+        <h4>Разведка</h4>
+        <p>Понять проблему и того, для кого решаем. Убедиться, что она реальна и стоит труда. Много
+          неизвестного — и ошибаться здесь дёшево, пока не написан код.</p>
+        <span class="q">Ту ли вещь строим?</span>
+      </div>
+      <div class="z-arrow">→</div>
+      <div class="z-phase">
+        <div class="pn">Delivery</div>
+        <h4>Доставка</h4>
+        <p>Спроектировать, построить и проверить решение. Неизвестного всё меньше, но ошибка уже дороже —
+          отсюда проверки и независимое ревью.</p>
+        <span class="q">Строим ли правильно?</span>
+      </div>
+      <div class="z-arrow">→</div>
+      <div class="z-phase prod">
+        <div class="pn">Production</div>
+        <h4>Жизнь у людей</h4>
+        <p>Решение выпущено и работает у пользователей. Смотрим, как оно ведёт себя на самом деле — и это
+          подсказывает, что разведывать следующим.</p>
+        <span class="q">Как оно работает в бою?</span>
+      </div>
+    </div>
+    <p class="z-loopnote"><b>↺ Это круг.</b> Production — не финиш: то, что мы узнали от живых пользователей,
+      запускает новую разведку. Продукт не «доделывают» раз и навсегда — его ведут по кругу.</p>
+
+    <div class="subhead">Две классические карты того же самого <span class="cnt">Double Diamond · SDLC</span></div>
+    <div class="z-two">
+      <div class="z-card">
+        <h3>Двойной ромб <span class="en3">Double Diamond</span></h3>
+        <p>Картинка о том, как приходят к хорошему решению. Дважды повторяется одно движение: сначала
+          <b>расширяем</b> взгляд (смотрим много вариантов), потом <b>сужаем</b> (выбираем один). Первый ромб —
+          про задачу, второй — про решение.</p>
+        <svg class="z-fig" viewBox="0 0 680 258" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Двойной ромб: Discover, Define, Develop, Deliver">
+          <text x="180" y="18" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">1 · Правильная задача</text>
+          <text x="500" y="18" text-anchor="middle" font-size="12" font-weight="700" fill="var(--ink)">2 · Правильное решение</text>
+          <polygon points="20,126 180,40 340,126 180,212" fill="var(--accent-soft)" stroke="var(--accent)" stroke-width="2"/>
+          <polygon points="340,126 500,40 660,126 500,212" fill="var(--warm-soft)" stroke="var(--warm)" stroke-width="2"/>
+          <line x1="340" y1="34" x2="340" y2="218" stroke="var(--line-strong)" stroke-width="1" stroke-dasharray="3 4"/>
+          <text x="105" y="122" text-anchor="middle" font-size="10.5" fill="var(--muted)">изучаем широко</text>
+          <text x="255" y="122" text-anchor="middle" font-size="10.5" fill="var(--muted)">выбираем одну</text>
+          <text x="425" y="122" text-anchor="middle" font-size="10.5" fill="var(--muted)">ищем варианты</text>
+          <text x="575" y="122" text-anchor="middle" font-size="10.5" fill="var(--muted)">доводим одно</text>
+          <text x="105" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">Discover</text>
+          <text x="105" y="252" text-anchor="middle" font-size="11" fill="var(--muted)">исследуем</text>
+          <text x="255" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="var(--accent)">Define</text>
+          <text x="255" y="252" text-anchor="middle" font-size="11" fill="var(--muted)">определяем</text>
+          <text x="425" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="var(--warm)">Develop</text>
+          <text x="425" y="252" text-anchor="middle" font-size="11" fill="var(--muted)">разрабатываем</text>
+          <text x="575" y="238" text-anchor="middle" font-size="13" font-weight="700" fill="var(--warm)">Deliver</text>
+          <text x="575" y="252" text-anchor="middle" font-size="11" fill="var(--muted)">доставляем</text>
+        </svg>
+        <p><b>Одной фразой:</b> сначала найди правильную задачу, потом правильно её реши — и не спеши сужаться,
+          пока не осмотрелся вокруг.</p>
+      </div>
+      <div class="z-card">
+        <h3>SDLC <span class="en3">жизненный цикл разработки</span></h3>
+        <p>Software Development Life&nbsp;Cycle — просто имя для повторяющихся шагов, через которые проходит
+          каждая единица работы. За аббревиатурой ничего страшного: это тот же круг, только по шагам.</p>
+        <ol class="z-steps">
+          <li><span class="k">1</span><span>Замысел <span class="en3">idea</span> — зачем это</span></li>
+          <li><span class="k">2</span><span>Требования <span class="en3">requirements</span> — что нужно</span></li>
+          <li><span class="k">3</span><span>Проектирование <span class="en3">design</span> — как сделаем</span></li>
+          <li><span class="k">4</span><span>Реализация <span class="en3">build</span> — пишем</span></li>
+          <li><span class="k">5</span><span>Проверка <span class="en3">test</span> — честно ли готово</span></li>
+          <li><span class="k">6</span><span>Выпуск <span class="en3">release</span> — отдаём людям</span></li>
+          <li><span class="k">7</span><span>Эксплуатация <span class="en3">operate</span> — живёт и измеряется</span></li>
+          <li><span class="k">↺</span><span>…и снова к замыслу — уже с тем, что узнали</span></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="z-bridge">
+      <h4>Зачем это здесь — и как ложится на AI Ops</h4>
+      <p>Схема ниже — не отдельная методология, а ровно эти фазы, сделанные <b>явными шагами</b> с воротами
+        и следами в репозитории. Если держать в голове три фазы и двойной ромб, вся дорожка читается как
+        знакомая история, а не набор новых слов.</p>
+      <div class="z-map">
+        <div class="m"><b>Discovery</b> → Разведка</div>
+        <div class="m"><b>Delivery</b> → План · Изготовление · Проверка · Приёмка</div>
+        <div class="m"><b>Production</b> → Выпуск · Замер · Выводы</div>
+        <div class="m"><b>Двойной ромб</b> → сначала «что и зачем», потом «как»</div>
+        <div class="m"><b>SDLC-круг</b> → непрерывный цикл Observe → … → Replan</div>
+      </div>
+    </div>
+  </div>
+</section>
 
 <section>
   <div class="wrap">
@@ -351,7 +552,7 @@
       <h2>Обязательные документы продукта</h2>
       <p class="lead2">Это «контекст продукта». Помощник восстанавливает их из репозитория, а чего не хватает —
         помечает как пробел и спрашивает. Разложены по <b>восьми контурам</b> — у каждого свой владелец-роль.
-        Всего <b>обязательных — 11</b>, остальные по желанию.</p>
+        Всего <b>обязательных — 12</b>, остальные по желанию.</p>
       <div class="contours" id="contours"></div>
     </div>
 
@@ -406,6 +607,84 @@
       </div>
     </div>
 
+    <!-- BLOCK: kit constitutions -->
+    <div class="block">
+      <div class="kicker">Свод правил самого помощника</div>
+      <h2>Конституции кита: как он пишет и проверяет</h2>
+      <p class="lead2">Кроме документов вашего продукта, у самого помощника есть свои <b>конституции</b> —
+        своды правил, по которым он пишет код и проверяет результат. Их <b>три</b> — как писать код, как
+        строить интерфейс и как принимать продуктовые решения. Это не пожелания, а машиночитаемые,
+        проверяемые статьи со стабильными номерами: у каждой сказано, чем она обоснована и какой тест её
+        ловит. Часть правил помощник доставляет прямо в ваш репозиторий — и <b>честно помечает</b>, что
+        проверяется у вас, а что пока только у него.</p>
+
+      <div class="consts">
+        <div class="const arch">
+          <div class="ch"><h3>Архитектурная конституция</h3><span class="cnt2">38 статей</span></div>
+          <p class="scope">Свод «<b>как НЕ писать код и как НЕ строить архитектуру</b>». Не про конкретные
+            файлы, а про общее зло: монолиты, слишком большие функции, циклы зависимостей, мёртвый код и
+            ложную зрелость («объявлено, но не исполняется»).</p>
+          <div class="parts">
+            <span class="part"><b>Честность</b> 5</span>
+            <span class="part"><b>Архитектура</b> 8</span>
+            <span class="part"><b>Код</b> 10</span>
+            <span class="part"><b>Безопасность</b> 8</span>
+            <span class="part"><b>Данные и контракты</b> 7</span>
+          </div>
+          <div class="row"><span class="ic2">📄</span><span><b>Один источник.</b> Правила живут в одном
+            документе <span class="fn">ARCHITECTURE_CONSTITUTION.md</span>; из него собираются памятка для
+            помощника и машинный реестр для проверок. Ручная правка генерата краснит контур.</span></div>
+          <div class="row"><span class="ic2">🔎</span><span><b>Честное поле «где проверяется».</b> У каждой
+            статьи помечено, работает её проверка только у помощника, в вашем репозитории или там и там.
+            «Правило есть» и «правило проверяется у вас» — это не одно и то же, и помощник их не путает.</span></div>
+          <div class="row"><span class="ic2">📦</span><span><b>Едет в дочку.</b> Бо́льшую часть правил
+            помощник сверяет и советует, не блокируя. Исключение — <b>безопасность</b>: в каждом репозитории
+            обязательны два артефакта — <span class="fn">SECURITY.md</span> (архитектура безопасности) и
+            <span class="fn">security/security-policy.md</span> (куда сообщать об уязвимости и порядок
+            раскрытия). Помощник сидирует черновики и проверяет их по смыслу.</span></div>
+        </div>
+
+        <div class="const design">
+          <div class="ch"><h3>UI/UX-конституция</h3><span class="cnt2">65 правил · 8 частей</span></div>
+          <p class="scope">Единый <b>источник дизайна</b>: «как надо» для создания и проверки интерфейса —
+            доступность, состояния экранов, единый облик. Тоже машиночитаемо, а не текстом-подсказкой.</p>
+          <div class="parts">
+            <span class="part"><b>UI-*</b> правила интерфейса</span>
+            <span class="part"><b>AI-*</b> поведение помощника в UI</span>
+            <span class="part"><b>UI-FORBIDDEN-*</b> прямые запреты</span>
+          </div>
+          <div class="row"><span class="ic2">📄</span><span><b>Один источник.</b> Правила в
+            <span class="fn">UI_CONSTITUTION.md</span> → памятка и машинный реестр, с тем же зеркалом против
+            расхождения.</span></div>
+          <div class="row"><span class="ic2">🎨</span><span><b>Питает проверки.</b> Ворота дизайна и код-ревью
+            ссылаются на номера правил; из неё же углубляются оценка UI-здоровья и ревьюеры интерфейса.</span></div>
+          <div class="row"><span class="ic2">🌊</span><span><b>Внедряется волнами.</b> Источник и сверка уже
+            готовы; полное проектирование интерфейса через Storybook — направление на ROADMAP («построено,
+            но пока не подключено»).</span></div>
+        </div>
+
+        <div class="const product">
+          <div class="ch"><h3>Продуктовая конституция</h3><span class="cnt2">10 статей</span></div>
+          <p class="scope">Свод «<b>как принимать продуктовые решения и не строить вслепую</b>». Про метрики
+            успеха, JTBD (для кого и какая задача), обратимость ставок, честность заявок и измерение исхода —
+            вообще, а не про конкретный продукт.</p>
+          <div class="parts">
+            <span class="part"><b>Ценность и решения</b></span>
+            <span class="part"><b>Реестр, discovery, охват</b></span>
+            <span class="part"><b>+ преамбула честности</b></span>
+          </div>
+          <div class="row"><span class="ic2">📄</span><span><b>Один источник.</b> Правила в
+            <span class="fn">PRODUCT_CONSTITUTION.md</span> → памятка и машинный реестр, с тем же зеркалом
+            против расхождения.</span></div>
+          <div class="row"><span class="ic2">🎯</span><span><b>О чём именно.</b> У фичи объявлена метрика
+            успеха и non-goals; discovery до кода для нетривиального; после выпуска исход измеряется; заявки
+            честны, а ставки предпочтительно обратимы.</span></div>
+          <div class="row"><span class="ic2">🤫</span><span><b>Молчит без повода.</b> Нет артефакта — не
+            ругается: «не вижу» ≠ «нарушение». Едет в дочку советами (advisory), а не блокировкой.</span></div>
+        </div>
+      </div>
+    </div>
+
     <!-- BLOCK: tasks / plan / prioritization -->
     <div class="block">
       <div class="kicker">Обязательные артефакты</div>
@@ -432,6 +711,96 @@
         <span class="cmd">replan</span> — переприоритизировать под реальность.</div>
     </div>
 
+    <!-- BLOCK: persona scenarios -->
+    <div class="block">
+      <div class="kicker">Тот же путь — шесть живых историй</div>
+      <h2>Как это выглядит словами: шесть сценариев</h2>
+      <p class="lead2">Одна и та же машина по-разному ощущается разными людьми. Ниже — шесть коротких
+        рассказов от установки до результата: разработчик, бизнес-аналитик, основатель стартапа, дизайнер,
+        системный аналитик и фронтенд-разработчик. Команды настоящие, а исходы описаны честно — где кит не
+        уверен, он так и говорит.</p>
+
+      <div class="personas">
+        <div class="persona dev">
+          <div class="ph"><span class="av">🧑‍💻</span><div class="who"><b>Дима</b><span>разработчик · есть рабочий репозиторий</span></div></div>
+          <p class="say"><span class="lbl">Говорит</span><span class="t">«Добавь экспорт отчёта в CSV — и чтобы я потом <b>не гадал</b>, всё ли проверено.»</span></p>
+          <div class="doeslbl">AI Ops делает сам</div>
+          <ul class="does">
+            <li>Уточняет пару деталей и сам решает, что и в каком объёме делать.</li>
+            <li>Пишет код в изолированном участке, чтобы не задеть чужую работу.</li>
+            <li>Прогоняет тесты и безопасность; ревью делает независимый проверяющий, не автор.</li>
+            <li>Собирает черновик правок с доказательствами — что проверено, а что нет.</li>
+          </ul>
+          <div class="result"><b>Что получает</b>Черновик PR, который не врёт: рядом доказательства — что проверено, а что нет. Минуты на решения вместо часов на рутину, и «готово» здесь значит проверено.</div>
+        </div>
+
+        <div class="persona analyst">
+          <div class="ph"><span class="av">📊</span><div class="who"><b>Марина</b><span>бизнес-аналитик · анализ конкурентов</span></div></div>
+          <p class="say"><span class="lbl">Говорит</span><span class="t">«Сделай <b>сравнительный анализ продуктов конкурентов</b> — с доказательствами и ссылками, а не по памяти.»</span></p>
+          <div class="doeslbl">Центр исследований делает сам</div>
+          <ul class="does">
+            <li>Сначала смотрит, что команда уже собрала по конкурентам, и только потом ищет новое — не с нуля.</li>
+            <li>Каждый факт кладёт как доказательство <span class="fn2">(EV-*)</span> со ссылкой на источник, а не пересказом.</li>
+            <li>Сводит в пакет для решения <span class="fn2">(DP-*)</span>: где мы сильнее, где слабее, где пробелы, какие варианты.</li>
+            <li>Автор находки не объявляет её надёжной сам — нужен независимый обзор; устаревшие данные о конкурентах ловит «дозор свежести».</li>
+          </ul>
+          <div class="result"><b>Что получает</b>Сравнение конкурентов на проверяемых фактах со ссылками, а не «кажется». Где данных не хватает — центр это показывает, а не выдаёт пробел за полную картину.</div>
+        </div>
+
+        <div class="persona founder">
+          <div class="ph"><span class="av">🚀</span><div class="who"><b>Костя</b><span>основатель · без своей команды разработки</span></div></div>
+          <p class="say"><span class="lbl">Говорит</span><span class="t">«Хочу сделать приложение — и чтобы оно <b>правильно разрабатывалось</b>, без своей команды разработчиков.»</span></p>
+          <div class="doeslbl">AI Ops делает сам</div>
+          <ul class="does">
+            <li>Ведёт продукт по процессу разработки: разведка → план → написание → проверка, а не «просто пишет код».</li>
+            <li>Пишет код исполнителем в изолированном участке; Костя одобряет только важные развилки.</li>
+            <li>Держит каждую правку в рамках: тесты, безопасность, независимое ревью — «готово» только когда проверено.</li>
+            <li>Всё знание о продукте и решениях складывает в репозиторий — не в голову подрядчика.</li>
+          </ul>
+          <div class="result"><b>Что получает</b>Приложение растёт по правилам продуктовой разработки, хотя штатных разработчиков нет. Костя принимает решения, а не пишет код — и качество держится на проверках, а не на честном слове.</div>
+        </div>
+
+        <div class="persona designer">
+          <div class="ph"><span class="av">🎨</span><div class="who"><b>Лена</b><span>дизайнер · продукт уже есть</span></div></div>
+          <p class="say"><span class="lbl">Говорит</span><span class="t">«У меня уже есть продукт — <b>собери его дизайн-систему</b> и дай проводить эксперименты без Figma.»</span></p>
+          <div class="doeslbl">AI Ops делает сам</div>
+          <ul class="does">
+            <li>Восстанавливает дизайн-систему из уже существующего продукта — единый источник стиля из того, что есть.</li>
+            <li>Держит любой эксперимент с интерфейсом в рамках этой системы и 65 правил дизайна.</li>
+            <li>Собирает состояния экранов в доказательства прямо в коде — отдельный макет в Figma не нужен.</li>
+            <li>Проверяет доступность — контраст WCAG&nbsp;AA, клавиатуру, регрессии — правилом, а не на глаз.</li>
+          </ul>
+          <div class="result"><b>Что получает</b>Дизайн-система собрана из живого продукта, а не нарисована заново; эксперименты идут в коде, без Figma, и не ломают единый облик. Честно: полный визуальный цикл через Storybook ещё внедряется.</div>
+        </div>
+
+        <div class="persona sysa">
+          <div class="ph"><span class="av">🧩</span><div class="who"><b>Игорь</b><span>системный аналитик · документация и спеки</span></div></div>
+          <p class="say"><span class="lbl">Говорит</span><span class="t">«Хочу, чтобы <b>вся документация и спеки</b> были доступны и описаны — прийти, посмотреть и изучить.»</span></p>
+          <div class="doeslbl">AI Ops делает сам</div>
+          <ul class="does">
+            <li>Восстанавливает и держит в репозитории обязательные документы продукта — по восьми контурам, у каждого свой владелец.</li>
+            <li>Спецификацию каждой задачи и значимые решения (ADR) кладёт файлами рядом с кодом — версионируются, ищутся, читаются.</li>
+            <li>Одна дверь: карта репозитория и индекс документации, откуда виден весь охват.</li>
+            <li>Чего не хватает — честно помечает как пробел и спрашивает, а не выдаёт «всё описано».</li>
+          </ul>
+          <div class="result"><b>Что получает</b>Документация и спеки — не в головах и не в переписке, а доступны, описаны и связаны. Прийти, открыть и изучить может любой; где знание отсутствует — это видно явно, а не замаскировано.</div>
+        </div>
+
+        <div class="persona frontend">
+          <div class="ph"><span class="av">💻</span><div class="who"><b>Соня</b><span>фронтенд-разработчик · интерфейс</span></div></div>
+          <p class="say"><span class="lbl">Говорит</span><span class="t">«Свёрстай экран настроек профиля с <b>тёмной темой</b> — на компонентах из дизайн-системы.»</span></p>
+          <div class="doeslbl">AI Ops делает сам</div>
+          <ul class="does">
+            <li>Берёт готовые компоненты и токены из дизайн-системы, а не верстает заново «с нуля».</li>
+            <li>Пишет вёрстку в своём участке кода, чтобы не задеть соседние экраны.</li>
+            <li>Собирает состояния экрана (светлая / тёмная, загрузка, ошибка) в доказательства и проверяет контраст и клавиатуру.</li>
+            <li>Отдаёт интерфейс на независимое ревью, не автору.</li>
+          </ul>
+          <div class="result"><b>Что получает</b>Готовый экран в тёмной теме, собранный из компонентов системы и с доказательствами состояний. «Storybook собрался» ≠ «дизайн готов» — это различает кит, а не Соня.</div>
+        </div>
+      </div>
+    </div>
+
     <div class="always">
       <h3>Что работает всё время, на каждом этапе</h3>
       <div class="sub">Это не отдельные шаги, а постоянные правила помощника — фон под всей дорожкой.</div>
@@ -441,7 +810,7 @@
     <div class="honesty">
       <h4>Что здесь правда, а что — привязка</h4>
       <p>Этапы и артефакты — реальные, из самого помощника (сверено с его авто-картой возможностей,
-        версия 4.0.0). Раскладка «этот файл появляется именно на этом шаге» местами моя трактовка — двигаем,
+        версия 4.1.0). Раскладка «этот файл появляется именно на этом шаге» местами моя трактовка — двигаем,
         где у вас иначе. Часть механизмов помечена честно: «построено, но не подключено» — написано, но ещё
         не в рабочем пути. Это черновик для вычитки.</p>
     </div>
@@ -450,8 +819,8 @@
 
 <footer>
   <div class="wrap">
-    Источник — исходники и авто-карта возможностей помощника на версии кита 4.0.0 (32 команды владельца,
-    36 ворот качества). Английские слова оставлены и пояснены рядом. Черновик · сентябрь 2026.
+    Источник — исходники и авто-карта возможностей помощника на версии кита 4.1.0 (34 команды владельца,
+    36 ворот качества: 23 обязательных, 13 совещательных; три конституции). Английские слова оставлены и пояснены рядом. Черновик · сентябрь 2026.
   </div>
 </footer>
 
@@ -472,7 +841,8 @@ const STAGES = [
     human:{t:"Отвечает на вопросы о продукте (направление, правила автономии) и подтверждает базовые развилки."},
     kit:{t:"Строит модель продукта: классификация, контуры ответственности, пробелы и вопросы. Заводит обязательные документы — архитектуру (устройство системы, восстанавливается из репозитория и подтверждается владельцем), паспорт, направление, план выпуска, политику, дизайн-систему и первый план."},
     repo:[
-      ["SystemOverview.md · RepositoryMap.md","архитектура: устройство системы и карта репозитория"],
+      ["ARCHITECTURE.md","архитектура: устройство системы — обязательный документ контура"],
+      ["SECURITY.md","как сообщить об уязвимости и политика ответа — обязателен в каждом репо"],
       ["PRODUCT_PASSPORT.md","паспорт продукта"],
       ["ROADMAP.md","направление: сейчас / дальше / потом"],
       ["DELIVERY.md","план выпуска"],
@@ -602,8 +972,9 @@ const CONTOURS = [
     [".ai/runtime/active-work.yaml","оперативное состояние (ведёт кит)",0],
   ]},
   { t:"Система и архитектура", en:"System & Architecture", owner:"архитектор", docs:[
-    ["context/system/SystemOverview.md","из чего система и как связана",1],
-    ["context/system/RepositoryMap.md","карта репозитория",1],
+    ["ARCHITECTURE.md","устройство системы: из чего собрана и как связана — единый обязательный документ контура",1],
+    ["context/system/SystemOverview.md","обзор системы, если ведёте его отдельно",0],
+    ["context/system/RepositoryMap.md","карта репозитория",0],
     ["context/system/IntegrationMap.md","интеграции",0],
   ]},
   { t:"Данные и контракты", en:"Data & Contracts", owner:"дата-инженер", docs:[
@@ -613,7 +984,9 @@ const CONTOURS = [
   { t:"Инженерия, качество, безопасность", en:"Engineering, Quality & Security", owner:"инженер", docs:[
     ["context/team/DevelopmentProcess.md","как ведётся разработка",1],
     [".ai-ops.yaml","границы, доступы, согласования",1],
-    ["security/","безопасность",0],
+    ["SECURITY.md","архитектура безопасности: границы доверия — обязателен в каждом репо",1],
+    ["security/security-policy.md","куда сообщить об уязвимости и порядок раскрытия — обязателен в каждом репо",1],
+    ["security/","прочие материалы безопасности",0],
   ]},
   { t:"Выпуск и эксплуатация", en:"Delivery & Operations", owner:"релиз", docs:[
     ["CHANGELOG.md","история изменений",0],
