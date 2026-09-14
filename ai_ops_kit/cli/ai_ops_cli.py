@@ -436,6 +436,12 @@ def _build_cli_arg_parser():
     ap.add_argument("--class", dest="observation_class",
                     choices=["defect", "friction", "question", "idea"],
                     help="feedback: дефект / трение / вопрос / идея (по умолчанию выводится из улик)")
+    # voluntary-child-registration: `onboard . --reach register|decline` записывает РЕШЕНИЕ о
+    # добровольной отметке прямо в онбординге (opt-in, без сети). По умолчанию (флага нет) онбординг
+    # НИЧЕГО не создаёт — только предлагает; согласие остаётся явным действием владельца.
+    ap.add_argument("--reach", choices=["register", "decline"], default=None,
+                    help="onboard: записать решение о добровольной отметке (opt-in, без сети): "
+                         "register — отметиться, decline — отказаться")
     ap.add_argument("--json", action="store_true")
     # #675: `help --all` — показать весь список команд, а не только человеческую дверь. Разбирается
     # в human_help.handle ДО argparse; объявлен здесь, чтобы флаг был настоящим (printed-commands-runnable).
