@@ -193,12 +193,105 @@ def _run_managed_intent(root: Path, intent: str, *extra, timeout=300):
     return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()
 
 
-def _setup_remaining(root: Path):
+# Стадии первого часа (контракт `ai_ops_kit/planning/first_hour.py`, поле `stage`). Дублируем
+# строками, а не импортом: installer/ — не пакет, и завязывать финальный экран на импорт движка
+# из managed-слоя дороже, чем держать три литерала синхронно с контрактом.
+_STAGE_READY = "ready"
+_STAGE_NEEDS_ANSWERS = "needs_answers"
+_STAGE_BLOCKED = "blocked_understanding"
+
+# ЕДИНСТВЕННЫЕ пути, которые setup вправе зафиксировать сам: их создаёт установка. Продуктовые
+# файлы (planning/, features/, код и любые правки пользователя) сюда НЕ входят и не коммитятся.
+_KIT_PATHS = (".ai", ".ai-ops.yaml", ".claude/skills", ".claude/commands", "AI-OPS-ONBOARDING.md")
+
+
+def _parse_first_hour_json(out: str):
+    """Разобрать JSON первого часа из вывода `model --flow --apply --json`. -> dict | None.
+
+    None означает «не разобралось»: старый managed-слой без `--json`/`--apply` у `model`,
+    argparse-ошибка или посторонний вывод. Вызывающий на None НЕ падает, а ведёт себя как раньше.
+    Вывод объединяет stdout+stderr, поэтому берём срез от первого `{` до последнего `}` (терпим
+    предупреждения вокруг), а не всю строку. Проверяем `kind`, чтобы не принять чужой JSON."""
+    if not out:
+        return None
+    s = out.strip()
+    start, end = s.find("{"), s.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    try:
+        data = json.loads(s[start:end + 1])
+    except (json.JSONDecodeError, ValueError):
+        return None
+    if not isinstance(data, dict) or data.get("kind") != "first-hour":
+        return None
+    return data
+
+
+def _first_hour_done_lines(first_hour):
+    """Строки блока «сделано» по СТАДИИ первого часа. -> list[str].
+
+    Вынесено из cmd_setup, чтобы наименование первой работы (stage=ready) проверялось юнит-тестом
+    без полного прогона. blocked_understanding в «сделано» ничего не добавляет — честная строка про
+    нечитаемый репозиторий уходит в «осталось от тебя»."""
+    if not first_hour:
+        return []
+    stage = first_hour.get("stage")
+    lines = []
+    if stage == _STAGE_READY:
+        lines.append("первый час пройден: направление и план собраны")
+        nb = (first_hour.get("next") or {}).get("next_best") or {}
+        title = nb.get("title") or nb.get("id")
+        if title:
+            lines.append(f"Дальше имеет смысл взять: {title}")
+    elif stage == _STAGE_NEEDS_ANSWERS:
+        lines.append("первый час показан: что понято и что осталось узнать")
+    return lines
+
+
+def _commit_kit_files(root: Path):
+    """Зафиксировать ТОЛЬКО служебные файлы кита (создаваемые установкой). -> (committed, detail).
+
+    Жёсткое ограничение: трогаем лишь пути из `_KIT_PATHS`, и НИКОГДА `git add -A`.
+    `git commit -m … -- <paths>` фиксирует ровно указанные пути и не затрагивает остальной индекс и
+    рабочее дерево пользователя — это и есть защита продуктовых файлов. Идемпотентно: если по этим
+    путям нет изменений -> (False, «уже зафиксированы»). Все git-вызовы обёрнуты; сбой git не роняет
+    setup — возвращаем (False, «ошибка git: …»), а вызывающий помещает это в «не получилось»."""
+    paths = [p for p in _KIT_PATHS if (root / p).exists()]
+    if not paths:
+        return False, "служебных файлов кита не найдено"
+
+    def _git(*args):
+        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+
+    try:
+        add = _git("add", "--", *paths)
+        if add.returncode != 0:
+            return False, f"ошибка git add: {(add.stderr or add.stdout).strip()[:200]}"
+        # Есть ли что коммитить по ЭТИМ путям? diff --cached --quiet: код 0 — нет изменений, 1 — есть.
+        staged = _git("diff", "--cached", "--quiet", "--", *paths)
+        if staged.returncode == 0:
+            return False, "файлы кита уже зафиксированы"
+        version = _core().pkg_version()
+        commit = _git("commit", "-m", f"chore: install AI Ops Kit {version}", "--", *paths)
+        if commit.returncode != 0:
+            return False, f"ошибка git commit: {(commit.stderr or commit.stdout).strip()[:200]}"
+        return True, f"коммит «chore: install AI Ops Kit {version}»"
+    except OSError as e:
+        return False, f"ошибка git: {e}"
+
+
+def _setup_remaining(root: Path, first_hour=None):
     """Список «осталось от тебя» — ПО ФАКТУ, а не общими словами.
 
-    Три вещи автоматизировать нельзя, и setup их не прячет: секреты/провайдеры в `.ai-ops.yaml`,
-    ответы на продуктовые вопросы (`ai-ops model`), финальный коммит файлов кита. Перечень
-    плейсхолдеров конфига берём у валидатора `validate_child_config_filled`, а не угадываем.
+    Автоматизировать нельзя две вещи, и setup их не прячет: секреты/провайдеры в `.ai-ops.yaml` и
+    ответы на продуктовые вопросы (`ai-ops model`). Финальный коммит служебных файлов кита раньше
+    тоже был здесь — теперь его делает сам setup (`_commit_kit_files`), поэтому из остатка он убран.
+    Перечень плейсхолдеров конфига берём у валидатора `validate_child_config_filled`, а не угадываем.
+
+    Пункт про ответы зависит от СТАДИИ первого часа (`first_hour`), а не от простого наличия файла
+    формы: при stage=ready фактов хватило — вопросов не осталось; при needs_answers называем, каких
+    именно; при blocked_understanding честно говорим, что репозиторий пока не читается. Если
+    first_hour не разобрался (None) — прежнее поведение по наличию формы (обратная совместимость).
     """
     out = []
     # 1) Плейсхолдеры .ai-ops.yaml: провайдеры/токены и project.name вписывает ТОЛЬКО человек.
@@ -214,22 +307,39 @@ def _setup_remaining(root: Path):
         fields = ", ".join(p["field"] for p in _cfg["placeholders"])
         out.append(f"впишите в .ai-ops.yaml значения проекта (сейчас заготовки: {fields}) — "
                    f"имя продукта и доступы провайдеров вписывает человек, кит их не знает")
-    # 2) Ответы на вопросы онбординга: `model` создал форму, ответы — за человеком.
+    # 2) Ответы на вопросы онбординга — ПО СТАДИИ первого часа, а не по простому наличию формы.
     _answers = root / ".ai" / "project" / "onboarding-answers.yaml"
-    if _answers.is_file():
-        out.append("ответьте на продуктовые вопросы: `ai-ops model` (форма — "
-                   ".ai/project/onboarding-answers.yaml)")
-    # 3) Финальный коммит — необратим, подтверждает человек; кит сам не коммитит.
-    out.append("закоммитьте файлы кита (.ai/, .ai-ops.yaml и др.) — это делает человек")
-    # 4) CI: если workflow-ов нет, включить их (иначе гейты кита в PR не отработают).
+    stage = (first_hour or {}).get("stage") if first_hour else None
+    _answers_hint = ("ответьте на продуктовые вопросы: `ai-ops model` (форма — "
+                     ".ai/project/onboarding-answers.yaml)")
+    if first_hour is None:
+        # Первый час не разобрался (старый слой/сбой) — прежнее поведение: по наличию формы.
+        if _answers.is_file():
+            out.append(_answers_hint)
+    elif stage == _STAGE_NEEDS_ANSWERS:
+        out.append(_answers_hint)
+        # Назвать, каких ИМЕННО ответов не хватает, чтобы человек видел, что закрыть.
+        for q in first_hour.get("blocking_questions") or []:
+            qid = q.get("id") or "?"
+            text = (q.get("ask") or "").strip()
+            out.append(f"  — [{qid}] {text}" if text else f"  — [{qid}]")
+    elif stage == _STAGE_BLOCKED:
+        out.append("репозиторий пока не читается — начните с `ai-ops model` "
+                   "(без этого направление собрать не из чего)")
+    # stage == ready: пункт про ответы НЕ добавляем — фактов хватило, вопросов не осталось.
+    # 3) CI: если workflow-ов нет, включить их (иначе гейты кита в PR не отработают). Пункт про
+    #    финальный коммит убран — служебные файлы кита фиксирует сам setup (`_commit_kit_files`).
     _wf = root / ".github" / "workflows"
     if not (_wf.is_dir() and any(_wf.glob("*.yml"))):
         out.append("включите CI (.github/workflows) — без него quality-гейты в PR не запускаются")
     return out
 
 
-def _setup_summary(root: Path, steps_done, steps_failed):
-    """Один финальный экран: «сделано автоматически» и «осталось от тебя» (продуктовый язык)."""
+def _setup_summary(root: Path, steps_done, steps_failed, first_hour=None):
+    """Один финальный экран: «сделано автоматически» и «осталось от тебя» (продуктовый язык).
+
+    `first_hour` — разобранный результат `model --flow --apply --json` (или None): по нему остаток
+    «ответь на вопросы» зависит от стадии первого часа, а не от простого наличия формы."""
     print()
     print("AI Ops установлен одной командой. Ниже — что сделано и что осталось.")
     print("\nСделано автоматически:")
@@ -241,7 +351,7 @@ def _setup_summary(root: Path, steps_done, steps_failed):
             first = (detail.splitlines()[0][:200] if detail else "")
             print(f"  • {name}" + (f" — {first}" if first else ""))
     print("\nОсталось от тебя (это по своей природе за человеком — секреты и решения кит не делает):")
-    for r in _setup_remaining(root):
+    for r in _setup_remaining(root, first_hour):
         print(f"  • {r}")
 
 
@@ -254,9 +364,12 @@ def cmd_setup(target_dir, *, apply=True):
     (`model --flow`, честно останавливается на «нужны ответы»), а ответы человек вписывает потом.
 
     Проходит цепочку сама и печатает ОДИН экран: «сделано автоматически» и «осталось от тебя».
-    Делает ВСЁ автоматизируемое; три вещи автоматизировать нельзя и она их честно называет, а не
-    прячет: токены/провайдеры и `project.name` в `.ai-ops.yaml`, ответы на продуктовые вопросы,
-    финальный коммит. Секретов не вводит, ничего не коммитит. Идемпотентна — можно перезапускать.
+    Делает ВСЁ автоматизируемое; две вещи автоматизировать нельзя и она их честно называет, а не
+    прячет: токены/провайдеры и `project.name` в `.ai-ops.yaml` и ответы на продуктовые вопросы.
+    Секретов не вводит. КОММИТИТ ровно свои служебные файлы (`.ai/`, `.ai-ops.yaml`, `.claude/…`,
+    онбординг) — продуктовые файлы и правки пользователя НИКОГДА (`_commit_kit_files`). Первый час
+    доводит до конца: при достатке фактов называет первую работу; иначе честно останавливается на
+    «нужны ответы» (гейт честности в first_hour — setup его не обходит). Идемпотентна.
 
     apply=True (по умолчанию): bootstrap РЕАЛЬНО пишет отсутствующие черновики направления/плана.
     apply=False (`--dry-run`): bootstrap только показывает, что создал бы, ничего не записывая.
@@ -312,18 +425,33 @@ def cmd_setup(target_dir, *, apply=True):
     else:
         failed.append(("черновик направления/плана (bootstrap)", bout))
 
-    # 5) model --flow — первый час ОДНИМ нарративом: понял → знаю/не знаю → (если ответы есть)
-    #    направление+план → следующая работа. Пишет и форму вопросов (место для ответов человека) —
-    #    `--flow` здесь надмножество обычного `model`. Честно останавливается на «нужны ответы»:
-    #    setup неинтерактивен, ответы всё равно за человеком, поэтому шаг НЕ блокирует установку.
+    # 5) model --flow --apply --json — первый час ДО КОНЦА и СТРУКТУРНО. `--apply` безопасен: при
+    #    needs_answers/blocked_understanding first_hour возвращается ДО apply (гейт честности в
+    #    planning/first_hour.py — есть блокирующие вопросы или конфликты → ничего лишнего не пишется);
+    #    при ready он собирает направление/план и считает первую работу, и экран её называет. `--flow`
+    #    надмножество обычного `model` — форма вопросов пишется в любом случае. Шаг НЕ блокирует
+    #    установку: setup неинтерактивен, ответы всё равно за человеком.
     print("→ шаг 5/5: первый час — что понял и что нужно (model --flow)")
-    mrc, mout = _run_managed_intent(root, "model", "--flow")
-    if mrc == 0:
-        done.append("первый час пройден: что понято и что осталось узнать — показано")
-    else:
+    mrc, mout = _run_managed_intent(root, "model", "--flow", "--apply", "--json")
+    first_hour = _parse_first_hour_json(mout)
+    if first_hour is None:
+        # Старый managed-слой без `--json`/`--apply`, argparse-ошибка или посторонний вывод — НЕ
+        # роняем setup: помечаем шаг и ведём себя как раньше (остаток «ответь на вопросы» по форме).
         failed.append(("первый час (model --flow)", mout))
+    else:
+        done.extend(_first_hour_done_lines(first_hour))
 
-    _setup_summary(root, done, failed)
+    # Финал автоматизируемого: setup фиксирует СВОИ служебные файлы (только пути установки).
+    print("→ фиксирую служебные файлы кита (только пути установки, продуктовые — никогда)")
+    committed, cdetail = _commit_kit_files(root)
+    if committed:
+        done.append(f"служебные файлы кита закоммичены — {cdetail}")
+    elif cdetail.startswith("ошибка"):
+        failed.append(("фиксация файлов кита", cdetail))
+    else:
+        done.append(f"служебные файлы кита: {cdetail}")
+
+    _setup_summary(root, done, failed, first_hour)
 
     # Код возврата: 0 — автоматизируемое прошло (человеческие шаги остаются, это норма);
     # 1 — упал автоматизируемый шаг (onboard/bootstrap), сбой за успех не выдаём; жёсткий провал

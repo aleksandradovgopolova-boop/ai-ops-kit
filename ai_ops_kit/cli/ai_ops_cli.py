@@ -335,12 +335,15 @@ def _build_cli_arg_parser():
     ap.add_argument("rest", nargs="*")
     ap.add_argument("--signals", default="{}")
     ap.add_argument("--feature")
-    # #612 (первый час): `model --answer <qid> "<value>"` записывает один ответ онбординга без ручной
+    # #612 (первый час): `model --answer <qid> "<value>"` записывает ответ онбординга без ручной
     # правки .ai/project/onboarding-answers.yaml. `--why` — основание (источник), станет комментарием.
-    ap.add_argument("--answer", nargs=2, metavar=("QID", "VALUE"), default=None,
-                    help="model: записать один ответ онбординга (без ручной правки YAML)")
-    ap.add_argument("--why", default=None,
-                    help="model --answer: основание ответа (источник) — ляжет комментарием")
+    # One-screen: флаг ПОВТОРЯЕМ — `--answer a "x" --answer b "y"` записывает несколько ответов за
+    # один вызов; с `--flow --apply` тем же вызовом применяет первый час на свежих фактах.
+    ap.add_argument("--answer", nargs=2, action="append", metavar=("QID", "VALUE"), default=None,
+                    help="model: записать ответ(ы) онбординга (без ручной правки YAML); повторяем")
+    ap.add_argument("--why", action="append", default=None,
+                    help="model --answer: основание ответа (источник) — ляжет комментарием; "
+                         "повторяем, по одному на ответ в том же порядке (лишние ответы — без основания)")
     # #863 (живой zero-touch прогон): `specify --answers "зачем=...; как-поймём=..."` записывает
     # ответы обычными словами в features/<wid>/spec.yaml БЕЗ ручной правки YAML. Разбор — в
     # ai_ops_kit.shared.spec_answers (те же короткие слова, что называет сообщение presenter'а).
