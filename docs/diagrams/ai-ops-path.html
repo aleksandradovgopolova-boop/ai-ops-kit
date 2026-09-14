@@ -50,6 +50,9 @@
   h1{font-family:"Golos Text",sans-serif; font-size:clamp(30px,4.6vw,50px); font-weight:700; line-height:1.05}
   header .lead{margin-top:15px; font-size:18.5px; max-width:62ch}
   header .lead .muted{color:var(--muted)}
+  .repo{margin:4px 0 20px; font-family:"Golos Text",sans-serif; font-size:14px}
+  .repo a{display:inline-flex; align-items:center; gap:7px; color:var(--accent); text-decoration:none;
+    background:var(--surface); border:1px solid var(--line); border-radius:8px; padding:6px 12px}
 
   section{padding:34px 0}
   .kicker{font-family:"Golos Text",sans-serif; font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--warm); font-weight:600; margin-bottom:10px}
@@ -317,18 +320,96 @@
   .const .row span{color:var(--muted)}
   .const .fn{font-family:"IBM Plex Mono",monospace; font-size:11px; color:var(--accent)}
 
+  /* ---- prompt example plaque ---- */
+  .promptbar{display:flex; flex-wrap:wrap; align-items:center; gap:10px 14px; margin:4px 0 24px}
+  .pb-cue{font-family:"Golos Text",sans-serif; font-size:13px; color:var(--muted)}
+  .pb-box{font-family:"IBM Plex Mono",ui-monospace,monospace; font-size:16px; font-weight:500; color:var(--ink);
+    background:var(--surface); border:1.5px solid var(--accent); border-radius:11px; padding:11px 16px;
+    display:inline-flex; align-items:center; gap:10px; box-shadow:var(--shadow)}
+  .pb-box .pb-caret{color:var(--accent); font-weight:700}
+  .pb-alt{font-family:"Golos Text",sans-serif; font-size:12.5px; color:var(--faint)}
+
   @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 </style>
 
-<header class="top">
+<section>
   <div class="wrap">
-    <div class="eyebrow">AI Ops Kit 4.1 · главная схема</div>
-    <h1>Весь путь с&nbsp;AI&nbsp;Ops</h1>
-    <p class="lead">От момента, когда у вас есть продукт — новый или уже работающий — и вы подключаете
-      помощника, и дальше по всем этапам. <span class="muted">Видно, какие следы (артефакты) остаются
-      в репозитории, где решает человек, а где помощник делает сам.</span></p>
+    <div class="kicker">Открытая AI Product Operating System</div>
+    <h2>Что такое AI&nbsp;Ops Kit</h2>
+    <p class="repo"><a href="https://github.com/aleksandradovgopolova-boop/ai-ops-kit">🔗&nbsp; github.com/aleksandradovgopolova-boop/ai-ops-kit</a></p>
+    <div class="definition">
+      <p>Открытая <b>операционная система продукта на базе ИИ</b> <span class="en">(AI Product Operating System)</span>
+        для продуктово-технологических команд. Превращает репозиторий в управляемую среду разработки:
+        от постановки проблемы и проектирования решения — до реализации, проверки, черновика правок
+        <span class="en">(PR)</span>, релиза, измерения результата и следующего цикла разведки <span class="en">(discovery)</span>.</p>
+    </div>
+
+    <div class="subhead">Пять фундаментальных механизмов <span class="cnt">внутри</span></div>
+    <div class="mechs">
+      <div class="mech">
+        <div class="mnum">1 · Product context</div>
+        <h4>Контекст продукта</h4>
+        <p>Система понимает, что это за продукт: его контуры, архитектуру, ограничения — <span class="g">и честно фиксирует, что ей неизвестно.</span></p>
+      </div>
+      <div class="mech">
+        <div class="mnum">2 · Execution</div>
+        <h4>Исполнение</h4>
+        <p>Человек формулирует задачу обычным языком → спецификация → план → рабочий пакет <span class="en">(work package)</span> → выполнение → доказательства <span class="en">(evidence)</span> → проверки → PR.</p>
+      </div>
+      <div class="mech">
+        <div class="mnum">3 · Governance</div>
+        <h4>Управление и контроль</h4>
+        <p>ИИ не может просто сказать «готово». Есть ворота качества <span class="en">(quality gates)</span>, доказательства, разделение «пишущий ≠ судящий» <span class="en">(writer ≠ judge)</span>, безопасность, политика, верификация.</p>
+      </div>
+      <div class="mech">
+        <div class="mnum">4 · Product intelligence</div>
+        <h4>Продуктовый интеллект</h4>
+        <p>Система смотрит не только на код, но и на бэклог, состояние работ, расхождения, приоритеты, перепланирование <span class="g">и исходы функций (зачем каждая существует и измерен ли результат).</span></p>
+      </div>
+      <div class="mech">
+        <div class="mnum">5 · Continuous loop</div>
+        <h4>Непрерывный цикл</h4>
+        <p>Продукт двигается по кругу:</p>
+        <div class="loopchain">Observe → Understand → Decide → Plan → Execute →<br>Verify → Release → Measure → Learn → Replan</div>
+        <p style="margin-top:7px"><span class="g">наблюдать → понять → решить → спланировать → выполнить → проверить → выпустить → измерить → извлечь урок → перепланировать.</span></p>
+      </div>
+    </div>
+
+    <div class="subhead">Главные преимущества <span class="cnt">6</span></div>
+    <div class="advs">
+      <div class="adv">
+        <div class="anum">№1</div>
+        <h4>Product-first, а не code-first</h4>
+        <p>Большинство ИИ-инструментов начинают с «какой код написать?». AI Ops начинает с <b>«какую проблему решаем и зачем?»</b>. Product First закреплён на уровне видения.</p>
+      </div>
+      <div class="adv">
+        <div class="anum">№2</div>
+        <h4>Доказательства вместо доверия</h4>
+        <p>Не «ИИ сказал, что сделал», а <b>«вот утверждение → вот доказательство → вот проверка → вот вердикт»</b>. Возможно, главный moat.</p>
+      </div>
+      <div class="adv">
+        <div class="anum">№3</div>
+        <h4>Writer ≠ Judge (пишущий ≠ судящий)</h4>
+        <p>Сильный принцип управления. Масштабируется далеко за пределы кода: <b>требования, архитектура, UX, безопасность, аналитика, релиз, продуктовые решения.</b></p>
+      </div>
+      <div class="adv">
+        <div class="anum">№4</div>
+        <h4>Не привязан к модели</h4>
+        <p>Дешёвый API как писатель, сильный (напр. Claude CLI) как основной писатель, независимый (напр. DeepSeek) как ревьюер. <b>Модель — ресурс, а не центр продукта.</b></p>
+      </div>
+      <div class="adv">
+        <div class="anum">№5</div>
+        <h4>Everything as Code (всё как код)</h4>
+        <p>Знания о продукте, планы, политики, контракты, реестры, доказательства — в репозитории. Отсюда: <b>версионирование, воспроизводимость, аудируемость, откат, ревью, совместная работа.</b></p>
+      </div>
+      <div class="adv">
+        <div class="anum">№6</div>
+        <h4>ИИ управляет системой, а не только выполняет команды</h4>
+        <p><span class="en">next → audit → replan → backlog intelligence.</span> Движение от <b>«ИИ-ассистента» к «ИИ-операционной системе».</b></p>
+      </div>
+    </div>
   </div>
-</header>
+</section>
 
 <section class="zero">
   <div class="wrap">
@@ -436,79 +517,45 @@
   </div>
 </section>
 
+<header class="top">
+  <div class="wrap">
+    <div class="eyebrow">AI Ops Kit 4.1 · главная схема</div>
+    <h1>Весь путь с&nbsp;AI&nbsp;Ops</h1>
+    <p class="lead">От момента, когда у вас есть продукт — новый или уже работающий — и вы подключаете
+      помощника, и дальше по всем этапам. <span class="muted">Видно, какие следы (артефакты) остаются
+      в репозитории, где решает человек, а где помощник делает сам.</span></p>
+  </div>
+</header>
+
 <section>
   <div class="wrap">
-    <div class="kicker">Открытая AI Product Operating System</div>
-    <h2>Что такое AI&nbsp;Ops Kit</h2>
-    <div class="definition">
-      <p>Открытая <b>операционная система продукта на базе ИИ</b> <span class="en">(AI Product Operating System)</span>
-        для продуктово-технологических команд. Превращает репозиторий в управляемую среду разработки:
-        от постановки проблемы и проектирования решения — до реализации, проверки, черновика правок
-        <span class="en">(PR)</span>, релиза, измерения результата и следующего цикла разведки <span class="en">(discovery)</span>.</p>
+    <div class="kicker">Первый шаг</div>
+    <h2>Как подключить кит к своему репозиторию</h2>
+    <p class="sec-intro">Если вы работаете в Claude Code — в приложении или в терминале — подключение
+      делается <b>одной фразой</b>. Кит поставляется как плагин Claude Code, а внутри него живёт скилл,
+      который берёт установку на себя.</p>
+
+    <div class="promptbar">
+      <span class="pb-cue">Пишете в чат Claude Code:</span>
+      <span class="pb-box"><span class="pb-caret">▹</span>установи&nbsp;AI&nbsp;Ops</span>
+      <span class="pb-alt">— годится и «подключи кит», и просто «ai ops»</span>
     </div>
 
-    <div class="subhead">Пять фундаментальных механизмов <span class="cnt">внутри</span></div>
-    <div class="mechs">
-      <div class="mech">
-        <div class="mnum">1 · Product context</div>
-        <h4>Контекст продукта</h4>
-        <p>Система понимает, что это за продукт: его контуры, архитектуру, ограничения — <span class="g">и честно фиксирует, что ей неизвестно.</span></p>
+    <div class="two">
+      <div class="lvl">
+        <h3>🗣️ Просто скажите «установи AI Ops»</h3>
+        <p>Скилл <b>ai-ops</b> срабатывает на эту фразу и делает всё сам: ставит кит в репозиторий,
+          проверяет установку, изучает продукт и сохраняет служебные файлы. <b>Руками команды вводить не
+          нужно</b> — ни в приложении, ни в терминале Claude Code.</p>
+        <p>Дальше можно сразу давать задачу словами — «добавь…», «сделай…» — и кит поведёт её своим
+          процессом, а не напрямую.</p>
       </div>
-      <div class="mech">
-        <div class="mnum">2 · Execution</div>
-        <h4>Исполнение</h4>
-        <p>Человек формулирует задачу обычным языком → спецификация → план → рабочий пакет <span class="en">(work package)</span> → выполнение → доказательства <span class="en">(evidence)</span> → проверки → PR.</p>
-      </div>
-      <div class="mech">
-        <div class="mnum">3 · Governance</div>
-        <h4>Управление и контроль</h4>
-        <p>ИИ не может просто сказать «готово». Есть ворота качества <span class="en">(quality gates)</span>, доказательства, разделение «пишущий ≠ судящий» <span class="en">(writer ≠ judge)</span>, безопасность, политика, верификация.</p>
-      </div>
-      <div class="mech">
-        <div class="mnum">4 · Product intelligence</div>
-        <h4>Продуктовый интеллект</h4>
-        <p>Система смотрит не только на код, но и на бэклог, состояние работ, расхождения, приоритеты, перепланирование <span class="g">и исходы функций (зачем каждая существует и измерен ли результат).</span></p>
-      </div>
-      <div class="mech">
-        <div class="mnum">5 · Continuous loop</div>
-        <h4>Непрерывный цикл</h4>
-        <p>Продукт двигается по кругу:</p>
-        <div class="loopchain">Observe → Understand → Decide → Plan → Execute →<br>Verify → Release → Measure → Learn → Replan</div>
-        <p style="margin-top:7px"><span class="g">наблюдать → понять → решить → спланировать → выполнить → проверить → выпустить → измерить → извлечь урок → перепланировать.</span></p>
-      </div>
-    </div>
-
-    <div class="subhead">Главные преимущества <span class="cnt">6</span></div>
-    <div class="advs">
-      <div class="adv">
-        <div class="anum">№1</div>
-        <h4>Product-first, а не code-first</h4>
-        <p>Большинство ИИ-инструментов начинают с «какой код написать?». AI Ops начинает с <b>«какую проблему решаем и зачем?»</b>. Product First закреплён на уровне видения.</p>
-      </div>
-      <div class="adv">
-        <div class="anum">№2</div>
-        <h4>Доказательства вместо доверия</h4>
-        <p>Не «ИИ сказал, что сделал», а <b>«вот утверждение → вот доказательство → вот проверка → вот вердикт»</b>. Возможно, главный moat.</p>
-      </div>
-      <div class="adv">
-        <div class="anum">№3</div>
-        <h4>Writer ≠ Judge (пишущий ≠ судящий)</h4>
-        <p>Сильный принцип управления. Масштабируется далеко за пределы кода: <b>требования, архитектура, UX, безопасность, аналитика, релиз, продуктовые решения.</b></p>
-      </div>
-      <div class="adv">
-        <div class="anum">№4</div>
-        <h4>Не привязан к модели</h4>
-        <p>Дешёвый API как писатель, сильный (напр. Claude CLI) как основной писатель, независимый (напр. DeepSeek) как ревьюер. <b>Модель — ресурс, а не центр продукта.</b></p>
-      </div>
-      <div class="adv">
-        <div class="anum">№5</div>
-        <h4>Everything as Code (всё как код)</h4>
-        <p>Знания о продукте, планы, политики, контракты, реестры, доказательства — в репозитории. Отсюда: <b>версионирование, воспроизводимость, аудируемость, откат, ревью, совместная работа.</b></p>
-      </div>
-      <div class="adv">
-        <div class="anum">№6</div>
-        <h4>ИИ управляет системой, а не только выполняет команды</h4>
-        <p><span class="en">next → audit → replan → backlog intelligence.</span> Движение от <b>«ИИ-ассистента» к «ИИ-операционной системе».</b></p>
+      <div class="lvl">
+        <h3>⌨️ Команды под рукой</h3>
+        <p>После установки владельческие команды доступны прямо в чате как слэш-команды:</p>
+        <div class="cmds"><span class="cmd">/status</span><span class="cmd">/inbox</span><span class="cmd">/next</span><span class="cmd">/explain</span><span class="cmd">/do</span></div>
+        <p>Они и завязаны на автоподключение: если кита в репозитории ещё нет, любая из них сама предложит
+          «установи AI Ops». Под этими пятью — полный движок: <span class="cmd">model</span> <span class="cmd">run</span> <span class="cmd">review</span> и остальные.</p>
       </div>
     </div>
   </div>
@@ -806,23 +853,8 @@
       <div class="sub">Это не отдельные шаги, а постоянные правила помощника — фон под всей дорожкой.</div>
       <div class="items" id="always"></div>
     </div>
-
-    <div class="honesty">
-      <h4>Что здесь правда, а что — привязка</h4>
-      <p>Этапы и артефакты — реальные, из самого помощника (сверено с его авто-картой возможностей,
-        версия 4.1.0). Раскладка «этот файл появляется именно на этом шаге» местами моя трактовка — двигаем,
-        где у вас иначе. Часть механизмов помечена честно: «построено, но не подключено» — написано, но ещё
-        не в рабочем пути. Это черновик для вычитки.</p>
-    </div>
   </div>
 </section>
-
-<footer>
-  <div class="wrap">
-    Источник — исходники и авто-карта возможностей помощника на версии кита 4.1.0 (34 команды владельца,
-    36 ворот качества: 23 обязательных, 13 совещательных; три конституции). Английские слова оставлены и пояснены рядом. Черновик · сентябрь 2026.
-  </div>
-</footer>
 
 <script>
 const STAGES = [
