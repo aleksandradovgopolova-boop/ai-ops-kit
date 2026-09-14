@@ -85,3 +85,51 @@ def test_check_names_the_out_of_sync_surface(tmp_path):
     (root / "README.md").write_text("**v0.0.1 qualification**\n", encoding="utf-8")
     bad = rb.check(root)
     assert "README.md" in bad
+
+
+# ── бамп перегенерирует Product Passport кита, сохраняя разделы владельца ──────────
+# Повод: release_bump бампил VERSION, но не трогал паспорт → freshness-ратчет
+# (tests/contracts/test_kit_product_passport.py::test_version_fact_is_fresh) краснел на КАЖДОМ
+# релизе, паспорт регенерировали руками. Слепая перегенерация затёрла бы разделы владельца.
+
+def _seed_kit_passport(root):
+    """Разложить в fixture собственный паспорт кита с заполненными человеком разделами владельца."""
+    from ai_ops_kit.planning import passport_generator as pg
+    text = pg.generate(root)
+    header, secs = pg._split_sections(text)
+    parts = [header]
+    for title, body in secs:
+        if title in pg.OWNER_SECTIONS:
+            body = f"\nВЛАДЕЛЕЦ-{title}: grounded в VISION.md.\n"
+        parts.append(f"## {title}{body}")
+    p = root / ".ai" / "project" / "context" / "product"
+    p.mkdir(parents=True)
+    (p / "PRODUCT_PASSPORT.md").write_text("".join(parts), encoding="utf-8")
+    return p / "PRODUCT_PASSPORT.md"
+
+
+@pytest.mark.unit
+def test_bump_refreshes_kit_passport_version_and_keeps_owner_sections(tmp_path):
+    from ai_ops_kit.planning import passport_generator as pg
+    root = _fixture_repo(tmp_path / "r", ver="1.2.3")
+    passport = _seed_kit_passport(root)
+
+    changed = rb.bump(root, "1.2.4", title="Заголовок", date="2026-09-01")
+
+    text = passport.read_text(encoding="utf-8")
+    # 1) паспорт в списке изменённого и содержит НОВУЮ версию (freshness-ратчет больше не краснит)
+    assert ".ai/project/context/product/PRODUCT_PASSPORT.md" in changed
+    assert "1.2.4" in text
+    assert "Версия: **1.2.4**" in text
+    # 2) разделы владельца НЕ затёрты на «неизвестно»
+    for s in pg.OWNER_SECTIONS:
+        assert f"ВЛАДЕЛЕЦ-{s}" in text, f"раздел владельца затёрт: {s}"
+
+
+@pytest.mark.unit
+def test_bump_without_passport_does_not_fail(tmp_path):
+    # Не-родительский репозиторий без паспорта: бамп из-за отсутствия паспорта не падает.
+    root = _fixture_repo(tmp_path / "r", ver="1.2.3")
+    changed = rb.bump(root, "1.2.4", title="x", date="2026-09-01")
+    assert not any("PRODUCT_PASSPORT" in c for c in changed)
+    assert rb.refresh_kit_passport(root) is None
