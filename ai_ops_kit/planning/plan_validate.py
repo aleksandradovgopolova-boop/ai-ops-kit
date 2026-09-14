@@ -13,10 +13,11 @@ from pathlib import Path
 
 from ai_ops_kit.planning import contours as _contours
 from ai_ops_kit.planning.plan_model import (
-    items, goals, freeze_state, _freeze_lift_errors, frozen_work,
+    items, goals, current_milestone, freeze_state, _freeze_lift_errors, frozen_work,
     KIND, DECLARABLE, DERIVED, ACTIVE_DECLARABLE, CLOSED_DECLARABLE, VALUE,
     FORBIDDEN_ITEM_KEYS, OWNER_WAIT_STATUS, OWNER_WAIT_KEY, HISTORY_REL,
     GOAL_STATUSES, FREEZE_RELATIONS, FREEZE_DECISION,
+    MILESTONE_KEY, MILESTONE_STATUSES,
 )
 
 
@@ -93,6 +94,43 @@ def _workitem_status_errors(w, where):
                       f"выглядит осмысленным, а чего он ждёт — нигде. Назовите ожидаемый шаг: "
                       f"`{OWNER_WAIT_KEY}: <какое действие владельца разблокирует работу>`")
     return errors, warns
+
+
+def _milestone_errors(m, gids) -> list:
+    """Минимальная проверка ИМЕНОВАННОГО текущего milestone (`current_milestone`). -> список ошибок.
+
+    Аддитивно к остальным правилам плана. Milestone — тот же уровень объявления, что и работа,
+    поэтому и правила те же по духу: `id` — slug (движок и `--feature` ждут его же), `status` — из
+    объявляемого набора, `linked_goals` — существующие id целей плана, и — как у работы — НАЗВАТЬ
+    ИСПОЛНИТЕЛЯ нельзя (роль/направление, не вендор: иначе смена runtime переписывала бы веху).
+    Отсутствие ключа — не ошибка: milestone необязателен, паспорт тогда откатывается к прокси.
+    """
+    errors = []
+    if not isinstance(m, dict):
+        return [f"{MILESTONE_KEY}: ожидался mapping, получен {type(m).__name__}"]
+    mid = m.get("id")
+    if not mid or not _engine_id_ok(str(mid)):
+        errors.append(f"{MILESTONE_KEY}: id '{mid}' непригоден — нужен slug нижнего регистра "
+                      f"({_engine_id_pattern()})")
+    if not (m.get("name") or "").strip():
+        errors.append(f"{MILESTONE_KEY}: нет name — веха без имени не первоклассна")
+    st = m.get("status")
+    if st not in MILESTONE_STATUSES:
+        errors.append(f"{MILESTONE_KEY}: status '{st}' вне объявляемого набора "
+                      f"({list(MILESTONE_STATUSES)})")
+    linked = m.get("linked_goals")
+    if not isinstance(linked, list) or not linked:
+        errors.append(f"{MILESTONE_KEY}: linked_goals должен быть непустым списком id целей — "
+                      f"веха без связи с направлением не приоритизируется")
+    else:
+        for g in linked:
+            if g not in gids:
+                errors.append(f"{MILESTONE_KEY}: linked_goals '{g}' не резолвится в goals плана")
+    for k in FORBIDDEN_ITEM_KEYS:
+        if k in m:
+            errors.append(f"{MILESTONE_KEY}: поле '{k}' запрещено — веха называет направление, "
+                          f"исполнителя выбирает роутер в момент запуска")
+    return errors
 
 
 def validate_history(closed, plan=None) -> dict:
@@ -199,6 +237,12 @@ def validate(plan, model=None, closed=None, root=None):
         if st is not None and st not in GOAL_STATUSES:
             errors.append(f"цель '{g['id']}': status '{st}' вне {list(GOAL_STATUSES)} — "
                           f"от статуса зависит приоритет работ этой цели")
+
+    # ИМЕНОВАННЫЙ ТЕКУЩИЙ MILESTONE (необязателен). Если объявлен — проверяем минимально: id/slug,
+    # статус из набора, связь с существующими целями, запрет исполнителей.
+    m = current_milestone(plan)
+    if m is not None:
+        errors.extend(_milestone_errors(m, gids))
 
     ws = items(plan)
     if not ws:

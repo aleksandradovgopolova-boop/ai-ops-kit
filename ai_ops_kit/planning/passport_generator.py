@@ -299,14 +299,40 @@ def _delivery_health(ev: dict) -> str:
 
 
 def _milestone(root: Path) -> dict:
-    """Текущий milestone из горизонта «Сейчас» ROADMAP или плана. Иначе честный пробел.
+    """Текущий milestone: сперва ИМЕНОВАННЫЙ из плана, иначе прокси из горизонта «Сейчас» ROADMAP.
 
-    Горизонт читаем НЕ по литералу `Now`: канонический roadmap кита и русскоязычных дочек называет
-    его «Сейчас» (`ai_ops_kit/planning/roadmap.py -> HORIZONS`, где `now` = «сейчас»|«now»). Прежде
-    здесь стояло `if "now" in headers`, и на своём же roadmap кит выдавал «milestone неизвестно» —
-    паспорт не мог прочитать собственное направление. Теперь горизонт находит тот же парсер, что и
-    контракт roadmap, поэтому и «Сейчас», и «Now» одинаково распознаются.
+    Прежде здесь был ТОЛЬКО прокси — первый пункт горизонта «Сейчас» из ROADMAP.md (INFERRED,
+    «Из ROADMAP (Сейчас): …»): направление, а не названный результат. Теперь если план объявляет
+    первоклассный `current_milestone` (`planning/plan.yaml`), паспорт печатает ИМЕННО его — имя,
+    цель для пользователя и связанные направления. Ключа нет — откат к прежнему прокси целиком
+    сохранён (молодой репозиторий без плана видит то же, что раньше).
     """
+    # 1. ИМЕНОВАННЫЙ текущий milestone плана. Читаем через штатный загрузчик (он же резолвит путь
+    #    плана в монорепо и падает PlanCorrupt на битом файле — на который откат к прокси честнее
+    #    выдумывания вехи). Импорт локальный: планировщик тянут только когда паспорт правда строят.
+    from ai_ops_kit.planning import delivery_plan as _plan
+    try:
+        plan = _plan.load(root)
+    except _plan.PlanCorrupt:
+        plan = None
+    if plan:
+        m = _plan.current_milestone(plan)
+        if m and (str(m.get("name") or "").strip() or str(m.get("goal") or "").strip()):
+            name = str(m.get("name") or "").strip() or str(m.get("id") or "").strip()
+            goal = str(m.get("goal") or "").strip()
+            linked = [str(g).strip() for g in (m.get("linked_goals") or []) if str(g).strip()]
+            value = f"**{name}**" + (f" — {goal}" if goal else "")
+            if linked:
+                value += f" Связанные направления: {', '.join(linked)}."
+            return {"state": VERIFIED, "source": "planning/plan.yaml -> current_milestone",
+                    "value": value}
+
+    # 2. Откат (прежнее поведение): прокси из горизонта «Сейчас» ROADMAP.
+    # Горизонт читаем НЕ по литералу `Now`: канонический roadmap кита и русскоязычных дочек называет
+    # его «Сейчас» (`ai_ops_kit/planning/roadmap.py -> HORIZONS`, где `now` = «сейчас»|«now»). Прежде
+    # здесь стояло `if "now" in headers`, и на своём же roadmap кит выдавал «milestone неизвестно» —
+    # паспорт не мог прочитать собственное направление. Теперь горизонт находит тот же парсер, что и
+    # контракт roadmap, поэтому и «Сейчас», и «Now» одинаково распознаются.
     # Единый резолвер направления (SR-2): прежде читали `ROADMAP.md` ИЛИ `.ai-ops/ROADMAP.md` —
     # два пути в одной строке означали, что канонический источник не определён. Теперь путь решает
     # одно место (roadmap.resolve_roadmap_path), общее с health/drift/planning.
