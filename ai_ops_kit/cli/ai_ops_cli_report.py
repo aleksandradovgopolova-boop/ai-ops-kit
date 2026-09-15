@@ -460,7 +460,12 @@ def _inbox_outcome_candidate(child_root):
     if not cand:
         return None
     rec, ins = result.get("recommendation") or {}, result.get("insight") or {}
+    # #987 (P0 №4): последний шаг петли — конкретное действие + «потому что <что произошло с
+    # продуктом>». Именно `action`/`because` показывает `next`; остальное — детали для inbox.
+    na = result.get("next_action") or {}
     return {"wid": cand.get("id"), "what": cand.get("title"), "confidence": ins.get("confidence"),
+            "action": na.get("action") or cand.get("title"), "because": na.get("because") or "",
+            "owner_role": na.get("owner_role") or cand.get("owner_role"),
             "proposal": rec.get("proposal") or "", "facts": rec.get("facts") or [],
             "assumptions": rec.get("assumptions") or [],
             "critical_unknowns": rec.get("critical_unknowns") or [], "sources": rec.get("sources")}
