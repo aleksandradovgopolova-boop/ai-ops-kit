@@ -326,18 +326,6 @@
     <div class="spine" id="spine"></div>
   </section>
 
-  <section class="passport">
-    <div class="pp-head">
-      <div class="eyebrow" style="margin:0">Паспорт продукта — кит собирает сам, владелец нужен точечно</div>
-      <div class="legend">
-        <span><i class="lg-verified"></i>подтверждено фактом</span>
-        <span><i class="lg-inferred"></i>кит вывел сам</span>
-        <span><i class="lg-unknown"></i>только владелец знает</span>
-      </div>
-    </div>
-    <div class="pgrid" id="passport"></div>
-  </section>
-
   <div class="foot">Продуктовый пульт · всё ведёт в реальные артефакты · <b>что не доказано из источника — помечено, а не выдумано</b></div>
 </div>
 
@@ -1105,17 +1093,6 @@
         `<span class="id">#${it.id}</span><span class="kind ${it.kind}">${esc(it.kind_ru||it.kind)}</span></div>`+
         `<div class="ti">${esc(it.title)}</div></a>`).join("")
         :`<div class="nowi">нет открытых задач${d.issues===null?" (данные недоступны)":""}</div>`;
-
-      // passport strip
-      $("passport").innerHTML=(d.passport_sections||[]).map(s=>{
-        const st=s.state||"unknown";
-        const psub = st==="unknown" ? "только владелец знает"
-                   : st==="inferred" ? "кит вывел сам"
-                   : esc(s.source||"подтверждено фактом");
-        return `<a class="pcell st-${st}" href="${link(d,"ai_ops_kit/planning/passport_generator.py")}" target="_blank" rel="noopener">`+
-          `<span class="d"></span><span><span class="pn">${esc(s.name)}</span>`+
-          `<span class="ps">${psub}</span></span></a>`;
-      }).join("");
 
       // source badge
       const when=d.generated_at?new Date(d.generated_at):null;
