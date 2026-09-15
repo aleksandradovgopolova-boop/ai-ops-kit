@@ -624,24 +624,27 @@ goals:
 
 work:
   # ── Направление one-feature-end-to-end (North Star из ревью #958, product-freeze) ─────────────
-  - id: one-feature-slice-measured-where-pipeline-leaks
+  # Диагностический прогон one-feature-slice-measured-where-pipeline-leaks ЗАКРЫТ в историю
+  # 2026-09-15 (замер ~14 утечек, все 5 исходов false) — qualification/ONE-FEATURE-SLICE-LEAK-
+  # AUDIT-2026-09-15.md. Ниже — первая точечная работа из находок (утечка исхода 1); остальные
+  # кандидаты перечислены в артефакте, берём по одной под product-freeze.
+  - id: specify-hides-feature-id-and-cli-from-the-human
     title: >-
-      Пройти ОДНУ фичу end-to-end как новый пользователь и замерить, ГДЕ трубопровод протекает
-      наружу (feature id / YAML / гейты / стадии) — список конкретных утечек, а не заявление
+      Единый вход: описание задачи не показывает человеку внутренний feature id и CLI-механику
+      (--feature/--answers/--signals, «потом запускай plan») — одна фраза, трубопровод скрыт
     type: product
     goal: one-feature-end-to-end
     status: todo
-    owner_role: product
+    owner_role: engineer
     value: high
-    write_scope: [qualification/]
+    write_scope: [ai_ops_kit/]
     reason: >-
-      Product-freeze требует сперва ДОКАЗАТЬ срез, а не строить. Первый шаг направления —
-      диагностический прогон по образцу leak-находок owner-speaks (#863/#864/#865): пройти один
-      реальный vertical slice как новый пользователь и зафиксировать КОНКРЕТНЫЕ места, где кит
-      показывает человеку внутренние сущности (feature id / YAML / гейты / стадии) вместо продукта,
-      и где нет «Verified — вот почему», выбора процесса по риску, outcome после merge и совета
-      кита «что нужно продукту». Готово, когда утечки перечислены артефактом (замер), а из них
-      заведены точечные работы под пять исходов направления.
+      Из диагностического замера #958 (qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md):
+      самый частый класс утечки исхода `one_input_hides_the_pipeline` — describe/specify показывает
+      человеку случайный feature id (`wi-…`), CLI-синтаксис (`--feature/--answers/--signals`) и сам
+      трубопровод («потом запускай ./ai-ops plan»). Готово, когда человеко-обращённый вывод
+      описания задачи говорит продуктом и одной фразой, без id и команд, а механику (id, флаги,
+      переход к плану) кит держит на своей стороне.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО

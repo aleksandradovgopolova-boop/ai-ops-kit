@@ -19,6 +19,29 @@ kind: delivery-plan-history
 
 
 work:
+  - id: one-feature-slice-measured-where-pipeline-leaks
+    title: >-
+      Пройти ОДНУ фичу end-to-end как новый пользователь и замерить, ГДЕ трубопровод протекает
+      наружу — список конкретных утечек, а не заявление
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    evidence: qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md
+    result: >-
+      ЗАКРЫТО 2026-09-15 диагностическим прогоном на ai-ops-cockpit (задача «показывать номер версии
+      в настройках», аудитория product). Замерено ~14 конкретных мест, где кит показывает человеку
+      внутреннюю кухню вместо продукта, распределены по всем пяти исходам направления: (1) feature id
+      `wi-…` и CLI-механика (`--feature/--answers/--signals`, «потом запускай plan»), заявки/ветки/
+      worktree в `status`/`explain`; (2) готовность как «гейты 3/3», не «Verified — вот почему»;
+      (3) размер/риск утекает уровнями/разделами (L0 QUICK / L1 ENGINEERING / «9 разделов») вместо
+      «насколько опасно?»; (4) поток кончается на PR, без «после merge покажу outcome» (readout не
+      вплетён); (5) `advise`/`propose` советуют про фундамент/инженерию кита (контуры, `.ai-ops.yaml`,
+      `ProductOverview.md`, Storybook, workflow), а не про то, что нужно ПРОДУКТУ. Все пять исходов
+      на естественном пути пока false (ожидаемо для стартового замера). Из находок заведена первая
+      точечная работа `specify-hides-feature-id-and-cli-from-the-human` (исход 1), остальные —
+      кандидатами в артефакте (берём по одной под product-freeze). Оговорка: «глаза нового
+      пользователя» применял опсик, не сторонний человек.
+
   - id: parallel-autonomy-proven-owner-does-not-design-it
     title: >-
       Измеряемый прогон: команда ведёт продукт параллельно, а раскрой «что можно одновременно»
