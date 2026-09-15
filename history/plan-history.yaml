@@ -19,6 +19,25 @@ kind: delivery-plan-history
 
 
 work:
+  - id: owner-judges-one-feature-outcomes-achieved
+    title: >-
+      Владелец засчитывает исходы направления one-feature-end-to-end (первые шаги всех пяти закрыты и
+      перемерены чистыми) — или заказывает чистый замер на релизнутом ките сторонним пользователем
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    evidence: qualification/ONE-FEATURE-SLICE-REMEASURE-2026-09-15.md
+    result: >-
+      ЗАКРЫТО 2026-09-16 РЕШЕНИЕМ ВЛАДЕЛЬЦА (протокол: засчёт за владельцем, кит себя не судит — как
+      #745/#748 и исход #1 в #980). Владелец выбрал «признать исходы достигнутыми по уже сделанному
+      перемеру» и распорядился снять product-freeze. Все четыре оставшихся исхода направления флипнуты
+      в true (verified_is_shown_as_trust_not_gate_list, risk_selects_the_process_not_the_human,
+      after_merge_kit_shows_what_happened_to_the_product, kit_recommends_what_the_product_needs);
+      исход #1 (one_input_hides_the_pipeline) был засчитан ранее (#980). Цель one-feature-end-to-end ->
+      achieved (5/5). Основание — перемер 15.09 (evidence): ~13 из ~14 утечек закрыты. ОГОВОРКА,
+      ПРИНЯТАЯ ВЛАДЕЛЬЦЕМ ОСОЗНАННО и НЕ стёртая засчётом: перемер делал сам кит новым кодом; чистого
+      живого замера на релизнутом ките сторонним пользователем ещё не было — она живёт в артефакте.
+      Направление закрыто, взято следующее (packages-run-truly-in-parallel), фриз снят.
   - id: propose-speaks-product-not-kit-foundation
     title: >-
       `propose` советует, что нужно продукту, а не про фундамент кита
