@@ -250,12 +250,18 @@ def test_from_review_needs_reviewer_is_degraded_not_done():
 
 
 def test_from_review_pass_says_checked():
-    """Независимая проверка прошла → status=ok «Проверено»."""
+    """Независимая проверка прошла → status=ok «Проверено», и свод называет ЧТО проверено (#958)."""
     msg = PR.from_review({"verdict": "pass", "readiness": {"ready_for_merge": True},
-                          "reviews": [{"gate": "code_review", "status": "pass"}],
+                          "reviews": [{"gate": "code_review", "status": "pass", "valid": True}],
+                          "reviewable": ["code_review"],
                           "changed_files": ["a.py", "b.py"]})
     assert msg["status"] == "ok"
     assert msg["headline"] == "Проверено"
+    body = PR.render(msg, audience="product")
+    # #958 (verified_is_shown_as_trust_not_gate_list): продуктовое измерение, а не счёт гейтов/число.
+    assert "код" in body
+    assert "code_review" not in body
+    assert " из " not in body  # ни «N из M», ни «проверено машиной X из Y»
 
 
 # ── from_review: внутренние термины не просачиваются на уровень product ────────────────────────
