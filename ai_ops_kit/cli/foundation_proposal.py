@@ -7,12 +7,19 @@
 модуль её и есть (пункт ROADMAP «Дальше», Claude-native онбординг).
 
 ЧТО ЭТО НЕ. Не новый вычислитель и не второй реестр. Все кирпичи уже есть; здесь только ОРКЕСТРАЦИЯ
-их в один продуктовый брифинг из четырёх частей:
+их в один брифинг из частей:
   1. ЧТО НОВОГО   — дельта версии кита и стандарта (из last-update-report.json + planning.standard);
   2. РЕВЬЮ ФУНДАМЕНТА — единый вердикт (planning.product_contract.resolve/validate);
   3. ЧТО ПРЕДЛАГАЮ — 1-3 рекомендации «рекомендую X, потому что Y» (planning.next_work +
      пробелы вердикта), а не голый список;
   4. STORYBOOK   — честная зрелость UI-evidence (ui.ui_readiness.assess).
+
+#958 (`kit_recommends_what_the_product_needs`, сестра `advise`): в ЛИЦО человека `propose` ВЕДЁТ с
+того, что нужно ПРОДУКТУ (`intelligence.product_advice.recommend`, впрыснут из обработчика интента),
+а перечисленные выше части — про НАСТРОЙКУ САМОГО КИТА — подаёт ОТДЕЛЬНО, продуктовым языком и без
+жаргона: версии/контуры/пути/Storybook/workflow/блокеры фундамента уходят в технические детали (по
+запросу). Инвариант честности `product_advice` не трогаем: нет продуктового сигнала -> так и говорим,
+потребность не выдумываем; настройка кита остаётся честной (незакрытое называется незакрытым).
 
 СЛОЙ. Модуль живёт в `cli` (точка входа): ему МОЖНО звать planning и ui вниз. Здоровье/риски меряет
 `intelligence` (выше planning) — они ВПРЫСКИВАЮТСЯ параметрами из обработчика интента (как в
@@ -139,10 +146,14 @@ def storybook(child_root) -> dict:
     return ui_readiness.assess(child_root)
 
 
-def build_briefing(child_root, *, health=None, risks=None, budget_left=None, me=None) -> dict:
-    """Собрать весь брифинг ОДНИМ объектом из четырёх частей. Ничего не пишет.
+def build_briefing(child_root, *, health=None, risks=None, budget_left=None, me=None,
+                   product_advice=None) -> dict:
+    """Собрать весь брифинг ОДНИМ объектом. Ничего не пишет.
 
     health/risks впрыскиваются сверху (их меряет intelligence, слой выше planning) — как в `contract`.
+    `product_advice` — «что нужно ПРОДУКТУ» (#958): его меряет intelligence.product_advice, поэтому
+    он тоже ВПРЫСКИВАЕТСЯ из обработчика интента, а не считается здесь (иначе оркестратор потянул бы
+    intelligence). Нет впрыска -> None: человеко-обращённый вывод честно скажет «данных не хватает».
     """
     contract, verdict = foundation_review(child_root, health=health, risks=risks)
     return {
@@ -154,6 +165,7 @@ def build_briefing(child_root, *, health=None, risks=None, budget_left=None, me=
         "recommendations": recommendations(child_root, verdict,
                                            budget_left=budget_left, me=me),
         "storybook": storybook(child_root),
+        "product_advice": product_advice,
     }
 
 
@@ -204,54 +216,106 @@ def _whats_new_line(wn: dict) -> str:
     return line
 
 
+def _kit_setup_line(verdict: dict) -> str:
+    """Одна человеческая строка про НАСТРОЙКУ САМОГО КИТА — отдельно от продукта, продуктовым языком.
+
+    Честно называет, закончена ли настройка (вердикт фундамента), НО без жаргона (контур/источник
+    истины/пути файлов/Storybook/workflow) — детали уходят в технические, по запросу. Ключевые слова
+    «настройку самого кита» и «не про продукт» разводят её с продуктовой частью, как в `advise`."""
+    if verdict.get("verdict") == "valid":
+        return ("отдельно — про настройку самого кита (обновление и базовая настройка): она в "
+                "порядке; это не про продукт, детали покажу по запросу")
+    return ("отдельно — про настройку самого кита (обновление и базовая настройка): часть ещё не "
+            "закончена; это не про продукт, детали покажу по запросу")
+
+
+def _kit_setup_technical(briefing: dict) -> dict:
+    """Все подробности про настройку кита (обновление, фундамент, Storybook) — в технические детали.
+
+    Ничего не теряем: жаргон (версии/пути/контуры/Storybook/workflow) живёт ТОЛЬКО здесь, доступен
+    по запросу и на technical/debug, а из человеческого текста убран."""
+    wn, verdict, sb = briefing["whats_new"], briefing["verdict"], briefing["storybook"]
+    recs = briefing["recommendations"]
+    blocking = verdict.get("blocking") or []
+    std = wn.get("standard") or {}
+    return {
+        "— это про НАСТРОЙКУ КИТА, не про продукт —": "обновление, фундамент, storybook",
+        "что нового (подробно)": _whats_new_line(wn),
+        "версия": f"{wn.get('from_version') or '—'} → {wn.get('to_version') or '—'}",
+        "что нового": " | ".join(wn.get("changelog_slice") or []) or "—",
+        "изменённых файлов": wn.get("changed_files", "—"),
+        "изменения": ", ".join(p for p in (wn.get("change_paths") or []) if p) or "—",
+        "отчёт обновления": wn.get("summary_text") or "—",
+        "стандарт": f"установлен {std.get('installed')} / доступен {std.get('available')}"
+                    + (" (отстал)" if std.get("behind") else ""),
+        "вердикт фундамента": verdict.get("verdict"),
+        "блокеры фундамента": "; ".join(blocking) or "—",
+        "storybook (подробно)": _storybook_line(sb),
+        "storybook": sb.get("storybook_maturity"),
+        "рекомендации по фундаменту": " | ".join(f"{r['what']} — {r['why']}" for r in recs) or "—",
+    }
+
+
 def to_message(briefing: dict):
     """FoundationProposal -> UserMessage через РЕАЛЬНЫЙ presenter (аудитория product по умолчанию).
 
-    Четыре вопроса контракта в порядке: что произошло (что нового) → почему важно (вердикт
-    фундамента) → нужно ли что-то от меня (главная рекомендация) → что дальше (остальные + Storybook).
+    #958 (`kit_recommends_what_the_product_needs`, сестра `advise`): вывод ВЕДЁТ с того, что нужно
+    ПРОДУКТУ (`product_advice`, впрыснут в брифинг), а «настройку/фундамент самого кита» подаёт
+    ОТДЕЛЬНО, продуктовым языком и без жаргона (детали — в технических, по запросу). Инвариант
+    честности `product_advice` не трогаем: нет продуктового сигнала -> так и говорим, потребность
+    не выдумываем.
+
+    Четыре вопроса контракта в порядке: что произошло (что нужно продукту) → почему важно (причина
+    главной потребности) → нужно ли что-то от меня (главная потребность) → что дальше (остальное по
+    продукту + отдельная строка про настройку кита).
     """
     from ai_ops_kit.ui import presenter
-    wn, verdict = briefing["whats_new"], briefing["verdict"]
-    recs, sb = briefing["recommendations"], briefing["storybook"]
+    verdict = briefing["verdict"]
+    pa = briefing.get("product_advice") or {}
+    precs = list(pa.get("recommendations") or [])
+    enough = pa.get("enough_product_data")
 
-    valid = verdict.get("verdict") == "valid"
-    why = ("Фундамент в порядке: все обязательные артефакты и источники истины контуров на месте."
-           if valid else
-           "Фундамент пока не полон — есть незакрытые обязательные части.")
-    blocking = verdict.get("blocking") or []
-    if blocking:
-        why += " Главное: " + blocking[0]
+    technical: dict[str, object] = {"продуктовых рекомендаций": len(precs)}
+    technical.update({f"продукт · {p.get('kind')} {i + 1}":
+                      f"{p.get('need')} — {p.get('why')} (источник: {p.get('source')})"
+                      for i, p in enumerate(precs)})
+    if pa.get("note"):
+        technical["продукт · примечание"] = pa["note"]
+    technical.update(_kit_setup_technical(briefing))
 
-    decision = None
-    if recs:
-        top = recs[0]
-        decision = {"question": "что предлагаю сделать по фундаменту в первую очередь",
-                    "recommendation": f"{top['what']} — потому что {top['why']}"}
+    kit_line = _kit_setup_line(verdict)
 
-    next_steps = [f"{r['what']} — {r['why']}" for r in recs[1:]]
-    next_steps.append(_storybook_line(sb))
+    # ВЕДЁМ С ПРОДУКТА. Есть продуктовая потребность -> она в заголовке, сводке, «почему» и решении;
+    # настройка кита — отдельной строкой в «Дальше».
+    if precs:
+        lead = precs[0]
+        needs = "; ".join(p.get("need", "") for p in precs)
+        decision = {"question": "что предлагаю взять по продукту в первую очередь",
+                    "recommendation": f"{lead.get('need')} — потому что {lead.get('why')}"}
+        next_steps = []
+        if len(precs) > 1:
+            next_steps.append("остальное по продукту покажу списком")
+        next_steps.append(kit_line)
+        return presenter.message(
+            status="ok", headline="Что нужно продукту",
+            summary=f"Вот что сейчас важно для твоего продукта: {needs}.",
+            why_it_matters=lead.get("why"),
+            decision=decision, next_steps=next_steps, technical=technical)
 
-    std = wn.get("standard") or {}
+    # Продуктовых рекомендаций нет — честно различаем «данных не хватает» и «данные есть, срочного нет».
+    if not enough:
+        return presenter.message(
+            status="degraded", headline="Пока не могу советовать по продукту",
+            summary="Пока не хватает продуктовых данных, чтобы советовать по продукту.",
+            why_it_matters="Придумывать продуктовую потребность я не буду — это была бы выдумка, "
+                           "а не совет.",
+            next_steps=[kit_line], technical=technical)
+
     return presenter.message(
-        status=("ok" if valid else "degraded"),
-        headline="Кит обновлён — предложение по фундаменту",
-        summary=_whats_new_line(wn),
-        why_it_matters=why,
-        decision=decision,
-        next_steps=next_steps,
-        technical={
-            "версия": f"{wn.get('from_version') or '—'} → {wn.get('to_version') or '—'}",
-            "что нового": " | ".join(wn.get("changelog_slice") or []) or "—",
-            "изменённых файлов": wn.get("changed_files", "—"),
-            "изменения": ", ".join(p for p in (wn.get("change_paths") or []) if p) or "—",
-            "отчёт обновления": wn.get("summary_text") or "—",
-            "стандарт": f"установлен {std.get('installed')} / доступен {std.get('available')}"
-                        + (" (отстал)" if std.get("behind") else ""),
-            "вердикт фундамента": verdict.get("verdict"),
-            "блокеры фундамента": "; ".join(blocking) or "—",
-            "storybook": sb.get("storybook_maturity"),
-            "рекомендации": " | ".join(f"{r['what']} — {r['why']}" for r in recs) or "—",
-        })
+        status="ok", headline="По продукту сейчас советовать нечего",
+        summary="Продуктовые данные есть, но срочного по продукту сейчас нет.",
+        why_it_matters=pa.get("note") or "срочной работы по продукту сейчас нет",
+        next_steps=[kit_line], technical=technical)
 
 
 def run_intent(task, child_root, signals, a):
@@ -263,14 +327,20 @@ def run_intent(task, child_root, signals, a):
     module-size: оркестратор и его вход — одна когезивная единица.
     """
     from ai_ops_kit.cli.ai_ops_cli_product import _product_health_report, _product_risks
+    from ai_ops_kit.intelligence import product_advice
     from ai_ops_kit.planning import artifact_registry as _AR
     from ai_ops_kit.ui import presenter
     js = a.json
     health = _product_health_report(child_root)
     risks = _product_risks(child_root)
+    # #958: propose ВЕДЁТ с «что нужно продукту» — тот же тонкий слой, что у `advise`. Считаем его
+    # здесь (в обработчике интента) и ВПРЫСКИВАЕМ вниз, как health/risks: intelligence выше planning,
+    # оркестратор его не импортирует. Слой честен сам: нет сигнала -> пусто, ничего не выдумывает.
+    advice = product_advice.recommend(str(child_root))
     try:
         briefing = build_briefing(child_root, health=health, risks=risks,
-                                  budget_left=getattr(a, "budget", None))
+                                  budget_left=getattr(a, "budget", None),
+                                  product_advice=advice)
     except _AR.RegistryCorrupt as e:
         print(f"ОШИБКА: реестр артефактов недостоверен: {e}")
         return 1
