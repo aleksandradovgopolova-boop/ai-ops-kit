@@ -280,9 +280,14 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             steps.append("несколько слов из ответа я не узнала: " + ", ".join(unmatched)
                         + " — назови их словами из вопросов ниже")
         steps.append("ответь словами, не открывая файл: " + ask)
+        steps.append("потом скажи, что переходим к плану — дальше я работаю сама")
+        # #958 (исход one_input_hides_the_pipeline): точные команды (синтаксис `--answers`,
+        # следующий шаг) — НЕ в лицо человеку. В next_steps остаётся продуктовая формулировка
+        # «ответь словами», а сама механика (и внутренний feature id кит держит на своей стороне)
+        # уезжает в технические детали, которые presenter показывает только по запросу.
         if answer_command:
-            steps.append(f"так, например: {answer_command}")
-        steps.append(f"потом запускай: {next_command}")
+            tech["ответить командой"] = answer_command
+        tech["следующий шаг"] = next_command
         return message(
             status="needs_input",
             summary=("Описание задачи " + _origin
@@ -297,9 +302,11 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
                            "файл не обязательно — можно просто сказать словами.",
             next_steps=steps,
             technical=tech)
+    tech["следующий шаг"] = next_command
     return message(status="ok", headline="Описание задачи готово",
                    summary="Всё, что нужно было описать, описано." + _disclosure,
-                   next_steps=[f"запускай: {next_command}"], technical=tech)
+                   next_steps=["скажи, что переходим к плану — дальше я работаю сама"],
+                   technical=tech)
 
 
 def from_discovery_draft(path, created) -> dict:

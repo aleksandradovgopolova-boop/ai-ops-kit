@@ -385,6 +385,8 @@ class TestPlanTellsTruthAboutTheRun:
         assert rc == 0
         out = capsys.readouterr().out
         hint = next((l for l in out.splitlines() if l.startswith("Дальше")), "")
-        assert "plan" in hint, f"подсказка обязана назвать шаг plan: {hint!r}"
+        # #958: подсказка ведёт к плану ПРОДУКТОВЫМ языком (без CLI-механики и id) — называем шаг
+        # словом «план», а не флагом `./ai-ops plan … --feature wi-…».
+        assert "план" in hint.lower(), f"подсказка обязана назвать шаг плана: {hint!r}"
         assert "--execute" not in hint, (
             f"подсказка после specify не должна прыгать на run --execute, минуя plan: {hint!r}")
