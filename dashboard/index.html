@@ -208,6 +208,12 @@
   /* metrics panel — clarified */
   .hint{font-size:11.5px;color:var(--muted);line-height:1.4;margin-bottom:11px}
   .hint b{color:var(--need)}
+  .maturity{margin-top:auto;padding-top:11px;border-top:1px solid var(--line-2);font-size:12px;
+    color:var(--muted);display:flex;flex-wrap:wrap;align-items:baseline;gap:7px}
+  .maturity .lb{color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:10px;
+    letter-spacing:.06em;text-transform:uppercase}
+  .maturity b{color:var(--ink);font-weight:600;font-family:"Bricolage Grotesque",sans-serif}
+  .maturity .cf{color:var(--faint)}
   .northstar-metric{border:1px solid var(--line-2);border-radius:11px;background:var(--panel-2);
     padding:10px 12px;margin-bottom:12px}
   .northstar-metric .k{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:7px}
@@ -290,7 +296,6 @@
     <div class="head-right">
       <span class="chip">версия <b id="version">—</b></span>
       <span class="chip chan"><span class="dot"></span>канал: <span id="channel">—</span></span>
-      <span class="chip mat" id="maturity">—</span>
       <span class="src" id="src"><span class="dot"></span><span id="src-text">снимок</span></span>
     </div>
   </header>
@@ -312,6 +317,7 @@
     <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span></div>
     <div class="health" id="health"></div>
     <div class="hint" id="health-hint"></div>
+    <div class="maturity" id="maturity" hidden></div>
   </section>
 
   <section class="panel roadstrip" aria-label="Роадмап">
@@ -354,7 +360,7 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-09-15T11:13:44+00:00",
+  "generated_at": "2026-09-15T11:17:25+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -365,7 +371,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1546,
+    "commits": 1547,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -645,13 +651,6 @@
   ],
   "issues": [
     {
-      "id": 745,
-      "title": "Над продуктом работает команда одновременно, без конфликтов и дублей",
-      "kind": "dir",
-      "kind_ru": "направление",
-      "updated": "2026-09-14"
-    },
-    {
       "id": 958,
       "title": "Одна фича от фразы до outcome — ноль трубопровода (North Star из ревью)",
       "kind": "dir",
@@ -721,7 +720,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1546, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1547, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -1007,8 +1006,15 @@
       DATA=d;
       $("version").textContent=d.version||"—";
       $("channel").textContent=d.channel||"—";
+      const MRU={EXISTING_PRODUCT:"действующий продукт",NEW_PRODUCT:"новый продукт",
+        EARLY_PRODUCT:"ранний продукт",LIBRARY:"библиотека",EMPTY:"пустой репозиторий"};
+      const CRU={high:"высокая",medium:"средняя",low:"низкая"};
       if(d.maturity&&d.maturity.cls){
-        $("maturity").innerHTML=`зрелость: <b>${esc(d.maturity.cls.replace("_"," ").toLowerCase())}</b>`;
+        const cls=MRU[d.maturity.cls]||d.maturity.cls.replace(/_/g," ").toLowerCase();
+        const conf=CRU[d.maturity.confidence]||d.maturity.confidence;
+        $("maturity").innerHTML=`<span class="lb">Зрелость</span><b>${esc(cls)}</b>`+
+          (conf?`<span class="cf">· уверенность ${esc(conf)}</span>`:"");
+        $("maturity").hidden=false;
       } else $("maturity").hidden=true;
 
       const tg=d.product_tagline||{};
