@@ -659,47 +659,9 @@ work:
   # историю (владелец решил: не засчитывать, заказать реальный P0 + внешний замер). Freeze ДЕРЖИТСЯ:
   # новые capability (parallel/runtime/Figma/MCP/portfolio/nightly/новые agents-gates-commands) не
   # берём, пока P0 ниже не закрыт. Приоритет — outcome-loop (#4), это главный moat. Берём по одной.
-  - id: verify-propose-speaks-product-not-kit-foundation
-    title: >-
-      Проверить `propose` на текущем main живым прогоном; если советует про фундамент кита, а не про
-      продукт — переоткрыть и дочинить (сестра `advise`, переиспользует product_advice)
-    type: product
-    goal: one-feature-end-to-end
-    status: todo
-    owner_role: product
-    value: high
-    write_scope: [ai_ops_kit/, tests/, qualification/]
-    reason: >-
-      P0 №1 ревью 16.09. Кит считает propose закрытым (#978 в истории), ревьюер видит утечку на main —
-      сверить по факту. Последняя очевидная утечка product-owner-опыта на входе.
-  - id: define-canonical-one-feature-zero-pipeline-scenario
-    title: >-
-      Зафиксировать canonical-сценарий «ONE FEATURE / ZERO PIPELINE»: одна конкретная фича, все
-      границы (intent→discovery→decision→spec→design→impl→tests→review→PR→merge→deploy→analytics→
-      outcome→recommendation) с вопросом «что получил человек?»
-    type: product
-    goal: one-feature-end-to-end
-    status: todo
-    owner_role: product
-    value: high
-    write_scope: [qualification/]
-    reason: >-
-      P0 №2 ревью 16.09. Нужен один зафиксированный сквозной сценарий как эталон, по которому меряем
-      весь путь — не абстрактно, а с человеческим результатом на каждой границе.
-  - id: verified-readout-is-knowledge-level-not-gate-count
-    title: >-
-      `Verified`-readout как УРОВЕНЬ ЗНАНИЯ, а не счёт гейтов («реализовано / проверено независимым
-      ревьюером / критические сценарии прошли / аналитика подключена / deploy проверен / события идут
-      / product outcome ещё не накоплен»)
-    type: product
-    goal: one-feature-end-to-end
-    status: todo
-    owner_role: product
-    value: high
-    write_scope: [ai_ops_kit/, tests/]
-    reason: >-
-      P0 №5 ревью 16.09. Прямо соответствует «No evidence → no claim»: Verified описывает, ЧТО именно
-      известно, а не сколько зелёных галочек. Исход verified_is_shown_as_trust_not_gate_list.
+  # P0 №1 (verify-propose, #983), №2 (canonical-сценарий, #984), №5 (Verified как уровень знания, #985)
+  # ЗАКРЫТЫ в history/plan-history.yaml 2026-09-16. Исходы направления при этом НЕ флипаются: механика
+  # доведена, но по решению ep-2026-09-16 срез не засчитан, пока не доказан живым внешним прогоном.
   - id: outcome-readout-shows-what-happened-to-the-product
     title: >-
       `Outcome`-readout: что изменение сделало с продуктом (не «shipped», не «verified», а сдвиг
