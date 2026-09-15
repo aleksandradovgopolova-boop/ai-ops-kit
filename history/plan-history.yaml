@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: propose-speaks-product-not-kit-foundation
+    title: >-
+      `propose` советует, что нужно продукту, а не про фундамент кита
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 978
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #978, слит). Продолжение исхода `kit_recommends_what_the_product_needs`
+      (сестра advise #960, последняя крупная утечка из перемера): `propose` (foundation_proposal)
+      вёл про ФУНДАМЕНТ кита (контуры, ProductOverview.md, decisions/registry.yaml, Storybook,
+      workflow). Теперь ВЕДЁТ с «Что нужно продукту» (переиспользует `intelligence/product_advice`,
+      как advise), настройку кита подаёт отдельно и по запросу (technical), без жаргона в лице
+      человека (тест стережёт «фундамент»/«контур»/«источник истины»/пути). Честность цела: нет
+      сигнала → «данных не хватает», потребность не выдумывается. Независимое ревью APPROVE (+2 его
+      замечания доделаны: «фундамент» убран, аннотация типа), три группы CI + mypy зелёные.
+
   - id: explain-next-step-command-hides-work-id
     title: >-
       Команда «Дальше» в `explain` (blocked/draft) не показывает человеку внутренний work-id
