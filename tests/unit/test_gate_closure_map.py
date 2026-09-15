@@ -125,7 +125,11 @@ def test_the_pipeline_puts_the_breakdown_into_run_report_json():
            + "\n" + (PKG / "ai_ops_kit" / "engine" / "pipeline_stages.py").read_text(encoding="utf-8"))
     assert '"closure": gates.get("closure"),' in src, (
         "отчёт прогона больше не несёт разбивку — дочка снова видит все гейты одинаковыми")
-    assert 'проверено машиной' in src, "человеку разбивку не печатают"
+    # #958 (verified_is_shown_as_trust_not_gate_list): в ЛИЦО человеку разбивку печатают ПРОДУКТОВЫМИ
+    # словами (что проверено и кем), а не счётом «проверено машиной X из Y; остальное — мнение: id».
+    assert 'run_verified_lines' in src, "человеку «что проверено» продуктовыми словами не сводят"
+    assert 'проверено машиной' not in src, (
+        "счёт «проверено машиной X из Y» вернулся в лицо человеку на пути прогона")
 
 
 def test_a_conditional_human_approval_escalates_only_on_its_signal():

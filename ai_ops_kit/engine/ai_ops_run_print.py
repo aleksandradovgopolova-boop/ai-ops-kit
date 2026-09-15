@@ -191,6 +191,14 @@ def _print_pipeline(r, audience="technical"):
                   f" — эти критерии проверь сам")
     print(f"  гейты: оценено {len(gates.get('evaluated') or [])} · "
           f"не закрыто {gates.get('unmet') or []} · блокирует: {gates.get('blocked')}")
+    # РАЗБИВКА ЗАКРЫТИЯ — счёт «N из M» и id гейтов ЗДЕСЬ, в technical (#958): продуктовому человеку
+    # её печатает pipeline_stages словами, а машинный счёт и внутренние id — только на этом уровне.
+    _cl = gates.get("closure") or {}
+    if _cl:
+        _op = _cl.get("judged_or_human") or []
+        print(f"  разбивка закрытия: машиной {(_cl.get('counts') or {}).get('validator', 0)} "
+              f"из {len(gates.get('evaluated') or [])}"
+              + (f"; мнением/человеком: {', '.join(_op)}" if _op else "; мнением не закрыт ни один"))
     lc = r.get("lifecycle")
     if lc:
         pf = (lc.get("concurrency_preflight") or {})

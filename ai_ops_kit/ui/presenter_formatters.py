@@ -13,6 +13,7 @@
 """
 from __future__ import annotations
 
+from ai_ops_kit.shared import gate_dimensions  # карта gate -> продуктовая фраза (общий нижний слой)
 from ai_ops_kit.ui.presenter import _q, message
 
 # Вторая, более крупная группа переводчиков (ход и решения работы) вынесена в модуль-сосед
@@ -329,29 +330,11 @@ def from_discovery_draft(path, created) -> dict:
 
 
 # id гейта -> короткая ПРОДУКТОВАЯ фраза о том, ЧТО проверено (#958, исход
-# `verified_is_shown_as_trust_not_gate_list`): в «Проверено» человек видит основание доверять — какие
-# измерения приняты, — а не число «гейты 3/3», и внутренний id гейта не видит. Ключи — РЕАЛЬНЫЕ гейты
-# `quality/gates.yaml`, ТОЛЬКО ai-review (те, что и попадают в `ready`). Гейта нет в карте -> смысл НЕ
-# выдумываем: пропускаем, свод падает на нейтральную формулировку.
-_GATE_PRODUCT_DIMENSION = {
-    "code_review": "код",
-    "security": "безопасность",
-    "architecture_review": "архитектуру",
-    "analytics_design_readiness": "контракт аналитики",
-    "analytics_runtime_verification": "поступление аналитики",
-    "ux_review": "пользовательский опыт",
-    "accessibility_review": "доступность",
-    "visual_regression": "визуальную регрессию",
-    "design_system_usage": "следование дизайн-системе",
-    "ai_eval": "качество AI-функции",
-    "ai_red_team": "устойчивость AI-функции к атакам",
-    "decision_quality": "качество продуктового решения",
-    "release_safety": "безопасность выпуска",
-    "observability_readiness": "наблюдаемость",
-    "evidence": "доказательную базу",
-    "stakeholder_readiness": "готовность для заинтересованных сторон",
-    "discovery_completeness": "полноту discovery",
-}
+# `verified_is_shown_as_trust_not_gate_list`). Карта ВЫНЕСЕНА в общий нижний слой
+# `ai_ops_kit/shared/gate_dimensions.py`, потому что тот же смысл нужен на пути ПРОГОНА (engine),
+# а engine не вправе импортировать `ui` (обратный импорт запрещён). Здесь — только чтение карты ВНИЗ,
+# поведение `from_review` не меняется.
+_GATE_PRODUCT_DIMENSION = gate_dimensions.GATE_PRODUCT_DIMENSION
 
 
 def _verified_why(passed_gates) -> tuple:

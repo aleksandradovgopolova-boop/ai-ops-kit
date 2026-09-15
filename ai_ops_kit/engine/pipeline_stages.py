@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ai_ops_kit.engine import tool_broker
 from ai_ops_kit.gates import gate_executor
+from ai_ops_kit.shared import gate_dimensions
 from ai_ops_kit.engine.pipeline_readiness import _assess_readiness
 from ai_ops_kit.engine.pipeline_failure import _diff_checks, _env_proven_ok
 from ai_ops_kit.engine.pipeline_git import _committed_changed_files
@@ -149,15 +150,20 @@ def _pipeline_run_gates(plan, gate_ev, committed_sha, signals, not_applicable, e
                                    gate_ids=_gate_ids, tested_revision=committed_sha,
                                    signals=signals, not_applicable=not_applicable,
                                    exempt_reason=exempt_reason)
-    # КТО ЗАКРЫЛ — ЧЕЛОВЕКУ, А НЕ ТОЛЬКО В JSON. Замер 19.08.2026: 19 гейтов из 35 не имеют
-    # исполняемого валидатора, и в выводе прогона это ничем не отличалось от проверенного машиной.
-    # Строка печатается всегда: молчать о ней там, где мнения нет, значило бы приучать к тому, что
-    # её отсутствие ничего не значит.
-    _cl = gates.get("closure") or {}
-    _cnt = _cl.get("counts") or {}
-    _opinion = _cl.get("judged_or_human") or []
-    print(f"  гейты: проверено машиной {_cnt.get('validator', 0)} из {len(_gate_ids)}"
-          + (f"; остальное — мнение: {', '.join(_opinion)}" if _opinion else "; мнением не закрыт ни один"))
+    # ЧТО ПРОВЕРЕНО — ЧЕЛОВЕКУ ПРОДУКТОВЫМИ СЛОВАМИ, А НЕ СЧЁТОМ ГЕЙТОВ. #958
+    # (verified_is_shown_as_trust_not_gate_list): в лицо человеку идёт основание доверять — какие
+    # измерения приняты и КЕМ (детерминированная машина vs независимый ревьюер), — а не «проверено
+    # машиной X из Y; остальное — мнение: <id гейтов>». Счёт «N из M» и id гейтов остаются в
+    # technical-readout (_print_pipeline) и в JSON-отчёте (closure), но не здесь.
+    # Инвариант «no false green»: свод берёт evidence_verdict, где пройденные гейты уже разделены по
+    # источнику, — называется ТОЛЬКО реально пройденное, мнение машиной не зовётся.
+    _verified = gate_dimensions.run_verified_lines(gates.get("evidence_verdict") or {})
+    if _verified:
+        print("  Проверено — вот что:")
+        for _line in _verified:
+            print(f"    · {_line}")
+    else:
+        print("  Пока ничем не подтверждено — верифицировать нечего.")
     # веха 4.2 (#588): вердикт честности evidence — «зелёное» без детерминированной опоры advisory.
     _ev = gates.get("evidence_verdict") or {}
     if _ev and not _ev.get("verified") and _ev.get("advisory"):
