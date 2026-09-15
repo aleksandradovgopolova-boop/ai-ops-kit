@@ -237,6 +237,17 @@
   .northstar-metric .v{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:26px;
     color:var(--ink);margin-top:5px;line-height:1;display:flex;align-items:baseline;gap:9px}
   .northstar-metric .v .u{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:500;color:var(--faint)}
+  .northstar-metric .k .dir{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:9.5px;
+    letter-spacing:.03em;color:var(--faint);flex:none}
+  .hint .path{display:inline-block;margin-top:5px;color:var(--faint);font-size:11px;line-height:1.4}
+  /* следующий шаг (когда решений не ждут) */
+  .nextcard{display:block;background:var(--panel-2);border:1px solid var(--line-2);
+    border-left:2px solid var(--run);border-radius:9px;padding:9px 11px}
+  a.nextcard:hover{border-color:var(--accent);border-left-color:var(--run)}
+  .nexti .nx{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--faint)}
+  .nexti .nt{font-size:12.5px;color:var(--ink);line-height:1.35;margin-top:4px}
+  .nexti .nl{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--run);margin-top:5px}
   .metric-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
   .mtile{border:1px solid var(--line-2);border-radius:10px;background:var(--panel-2);padding:9px 11px}
   .mtile .mk{font-size:10.5px;color:var(--muted);line-height:1.25}
@@ -334,7 +345,6 @@
       <button class="more" data-modal="metrics">подробнее →</button></div>
     <div class="northstar-metric" id="ns-metric"></div>
     <div class="metric-tiles" id="metric-tiles"></div>
-    <div class="measures" id="measures"></div>
   </section>
 
   <section class="panel" aria-label="Пульс продукта">
@@ -342,6 +352,11 @@
     <div class="health" id="health"></div>
     <div class="hint" id="health-hint"></div>
     <div class="maturity" id="maturity" hidden></div>
+  </section>
+
+  <section class="panel" aria-label="Состояние продукта">
+    <div class="eyebrow"><span>Состояние продукта</span><button class="more" data-modal="backlog">бэклог →</button></div>
+    <div class="measures" id="state"></div>
   </section>
 
   <section class="panel roadstrip" aria-label="Роадмап">
@@ -384,7 +399,7 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-09-15T11:59:27+00:00",
+  "generated_at": "2026-09-15T12:13:18+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -395,7 +410,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1548,
+    "commits": 1549,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -778,7 +793,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1548, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1549, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -1059,6 +1074,13 @@
       return (last.indexOf(".")<0? base.replace("/blob/","/tree/") : base)+"/"+path;};
     const HSTATE={green:"green",yellow:"amber",red:"amber",early:"amber",unknown:"unknownc"};
     const HRU={green:"в норме",yellow:"под контролем",red:"риск",early:"первые данные",unknown:"нет данных"};
+    const OUTCOME_RU={
+      one_input_hides_the_pipeline:"Единый вход скрывает трубопровод",
+      verified_is_shown_as_trust_not_gate_list:"«Verified — вот почему», а не список гейтов",
+      risk_selects_the_process_not_the_human:"Риск выбирает процесс, не человек",
+      after_merge_kit_shows_what_happened_to_the_product:"После merge кит показывает результат для продукта",
+      kit_recommends_what_the_product_needs:"Кит сам советует, что нужно продукту"};
+    const outcomeRu=k=>OUTCOME_RU[k]||String(k).replace(/_/g," ");
 
     function render(d){
       DATA=d;
@@ -1084,20 +1106,13 @@
       // текущий фокус — прогресс активного направления по его исходам
       const cf=d.current_focus, fb=$("focus-block");
       if(cf&&cf.total){
-        const OUTCOME_RU={
-          one_input_hides_the_pipeline:"Единый вход скрывает трубопровод",
-          verified_is_shown_as_trust_not_gate_list:"«Verified — вот почему», а не список гейтов",
-          risk_selects_the_process_not_the_human:"Риск выбирает процесс, не человек",
-          after_merge_kit_shows_what_happened_to_the_product:"После merge кит показывает результат для продукта",
-          kit_recommends_what_the_product_needs:"Кит сам советует, что нужно продукту"};
         $("focus-title").textContent=(d.roadmap&&d.roadmap[0]&&(d.roadmap[0].items||[])[0])||cf.id;
         const pct=cf.total?Math.round(100*cf.reached/cf.total):0;
         $("focus-bar").style.width=pct+"%";
         $("focus-n").textContent=`${cf.reached} из ${cf.total} исходов доказано`;
-        $("focus-list").innerHTML=(cf.outcomes||[]).map(o=>{
-          const t=OUTCOME_RU[o.key]||String(o.key).replace(/_/g," ");
-          return `<div class="focus-item ${o.done?"done":""}"><span class="mark">${o.done?"✓":"○"}</span>${esc(t)}</div>`;
-        }).join("");
+        $("focus-list").innerHTML=(cf.outcomes||[]).map(o=>
+          `<div class="focus-item ${o.done?"done":""}"><span class="mark">${o.done?"✓":"○"}</span>${esc(outcomeRu(o.key))}</div>`
+        ).join("");
         fb.hidden=false;
       } else fb.hidden=true;
 
@@ -1126,7 +1141,7 @@
         hcell("Технологии и качество",h.tech,HRU[h.tech]||"—")+
         hcell("Доставка и релизы",h.delivery,HRU[h.delivery]||"—");
       $("health-hint").innerHTML = (prodState==="early")
-        ? `Технологии и доставка — <b>в норме</b>. По ценности для пользователя есть <b>первые данные (n=${nObs})</b> и сигналы положительные — но выборка мала, окончательный вывод делать рано.`
+        ? `Технологии и доставка — <b>в норме</b>. По ценности для пользователя есть <b>первые данные (n=${nObs})</b> и сигналы положительные — но выборка мала, окончательный вывод делать рано.<br><span class="path">Что закроет вердикт: больше наблюдений + закрытые окна guardrail (переделки и дефекты после релиза, 7 дней).</span>`
         : (h.product==="unknown"
            ? `Технологии и доставка — в норме. Ценность для пользователя пока не измерена.`
            : `Три оси пульса продукта — из паспорта.`);
@@ -1136,7 +1151,8 @@
       const agg=obs&&obs.aggregate;
       const nsm=$("ns-metric");
       if(agg&&agg.median_intent_to_verified){
-        nsm.innerHTML=`<div class="k"><span class="tag">North Star</span>Идея → проверенный результат · медиана</div>`+
+        nsm.innerHTML=`<div class="k"><span class="tag">North Star</span>Идея → проверенный результат · медиана`+
+          `<span class="dir">↓ меньше — лучше</span></div>`+
           `<div class="v">${esc(agg.median_intent_to_verified)}<span class="u">n=${agg.n||"—"} · разброс ${esc(agg.range||"—")} · ранний тренд</span></div>`;
         nsm.hidden=false;
       } else nsm.hidden=true;
@@ -1153,15 +1169,13 @@
         tiles.hidden=false;
       } else tiles.hidden=true;
 
-      // measures
+      // состояние продукта — продуктовые счётчики (без внутренних)
       const g=d.goals||{}; const pct=g.total?Math.round(100*g.achieved/g.total):0;
       const fe=d.field_evidence||[]; const disc=d.discovery||{};
-      $("measures").innerHTML=
+      $("state").innerHTML=
         `<div class="m"><span class="mk">Цели продукта</span><div class="bar"><i style="width:${pct}%"></i></div>`+
           `<span class="mv">${g.achieved}/${g.total}</span></div>`+
-        `<div class="m"><span class="mk">В работе · пауза</span><span class="mv">${g.active} · ${g.paused}</span></div>`+
         `<div class="m"><span class="mk">Обкатка в поле</span><span class="mv">${fe.length} репо · ${fe.reduce((s,f)=>s+(f.versions?f.versions.length:0),0)} заезда ✓</span></div>`+
-        `<div class="m"><span class="mk">Отметилось дочек</span><span class="mv">${d.reach_registered} (opt-in)</span></div>`+
         `<div class="m"><span class="mk">Исследования</span><span class="mv">${disc.evidence} свид · ${disc.decisions} реш · ${disc.experiments} эксп</span></div>`;
 
 
@@ -1176,11 +1190,25 @@
           `<span class="ct">${h.total||items.length}</span></div>${body}</button>`;
       }).join("")||`<div class="rh-empty">—</div>`;
 
-      // waiting on owner
+      // waiting on owner — если решений не ждут, показываем следующий шаг по текущему фокусу
       const w=d.waiting_on_owner||[];
       $("wait-n").textContent=w.length?`${w.length} · нужен ты`:"";
-      $("wait").innerHTML=w.length?w.map(x=>`<div class="waiti">${esc(x.title)}</div>`).join("")
-        :`<div class="nowi">нет — решения не ждут</div>`;
+      if(w.length){
+        $("wait").innerHTML=w.map(x=>`<div class="waiti">${esc(x.title)}</div>`).join("");
+      } else {
+        const pend=cf&&(cf.outcomes||[]).find(o=>!o.done);
+        const dirIss=(d.issues||[]).find(it=>it.kind==="dir");
+        if(pend){
+          const href=dirIss&&d.repo?`https://github.com/${d.repo.owner}/${d.repo.name}/issues/${dirIss.id}`:null;
+          const inner=`<div class="nexti"><span class="nx">Следующий шаг</span>`+
+            `<div class="nt">Доказать исход: ${esc(outcomeRu(pend.key))}</div>`+
+            (dirIss?`<div class="nl">направление #${dirIss.id}${href?" ↗":""}</div>`:"")+`</div>`;
+          $("wait").innerHTML=`<div class="nowi" style="margin-bottom:8px">решения не ждут</div>`+
+            (href?`<a class="nextcard" href="${href}" target="_blank" rel="noopener">${inner}</a>`:`<div class="nextcard">${inner}</div>`);
+        } else {
+          $("wait").innerHTML=`<div class="nowi">нет — решения не ждут</div>`;
+        }
+      }
 
       // issues — направления/улучшения/задачи владельца; work-items (реализация) скрыты в сводку
       const iss=d.issues||[];
