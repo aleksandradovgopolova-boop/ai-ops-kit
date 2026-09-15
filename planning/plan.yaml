@@ -655,23 +655,24 @@ work:
   # НЕ достигнуты (это первые шаги, не полное закрытие) — направление остаётся active. Ниже —
   # следующая работа (продолжение исхода 3, найдено ревью #963); остальные кандидаты (run-путь
   # «гейты N/M», status/explain/propose продуктом) в артефакте, берём по одной под product-freeze.
-  - id: explain-next-step-command-hides-work-id
+  - id: propose-speaks-product-not-kit-foundation
     title: >-
-      Команда «Дальше» в `explain` (blocked/draft) не показывает человеку внутренний work-id
-      (`./ai-ops resume … wi-…`) — продолжение исхода 1
+      `propose` советует продуктом (как advise, #960), а не про фундамент/инженерию кита (контуры,
+      .ai-ops.yaml, Storybook, workflow) — продолжение исхода 5
     type: product
     goal: one-feature-end-to-end
     status: todo
     owner_role: engineer
-    value: low
+    value: medium
     write_scope: [ai_ops_kit/]
     reason: >-
-      Найдено при независимом ревью работы status-and-explain-speak-product-not-machinery (PR #973):
-      `_explain_next` (ai_ops_kit/cli/ai_ops_cli_report.py) для статусов blocked/needs_more_evidence/
-      draft печатает в product-выводе сырой work-id внутри команды next-step («Дальше: … ./ai-ops
-      resume . wi-… --execute»). Последнее место, где внутренний id ещё достигает человека на пути
-      `explain`. Готово, когда product-текст `explain` не показывает work-id/команду с id (продуктом:
-      «доведу — скажи „продолжай“»), а точная команда — в технических деталях.
+      Из диагностического замера #958 (qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md):
+      `propose` (cli/foundation_proposal.py) в лицо человеку говорит про ФУНДАМЕНТ кита (контур
+      product_strategy, context/product/ProductOverview.md, decisions/registry.yaml, Storybook,
+      workflow) — не про то, что нужно продукту. Сестра `advise`: исход 5 закрыт для advise в #960
+      тонким слоем `intelligence/product_advice` над существующими сигналами. Готово, когда `propose`
+      ведёт с продуктовой рекомендации (переиспользуя product_advice/существующие сигналы), а
+      фундамент/настройка кита — отдельно и по запросу; честный инвариант «нет сигнала → не выдумываю».
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО

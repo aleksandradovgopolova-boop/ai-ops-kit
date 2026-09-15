@@ -19,6 +19,22 @@ kind: delivery-plan-history
 
 
 work:
+  - id: explain-next-step-command-hides-work-id
+    title: >-
+      Команда «Дальше» в `explain` (blocked/draft) не показывает человеку внутренний work-id
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 976
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #976, слит). Продолжение исхода `one_input_hides_the_pipeline` (найдено
+      ревью #973): `_explain_next` (cli/ai_ops_cli_report.py) для blocked/needs_more_evidence/draft
+      показывал человеку work-id в команде next-step (`./ai-ops resume . wi-… --execute`). Стало
+      продуктовым («покажу, что не прошло, и доведу — скажи „продолжай“»); точная команда уведена в
+      `technical["продолжить командой"]` (новый `_explain_next_command`), функциональность цела.
+      Последнее место, где id достигал человека на пути `explain`. Независимое ревью APPROVE, mypy
+      включён (чист), три группы CI зелёные.
+
   - id: status-and-explain-speak-product-not-machinery
     title: >-
       `status` и `explain` говорят человеку продуктом, а не заявками/ветками/worktree
