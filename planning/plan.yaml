@@ -648,27 +648,27 @@ work:
   # ── Направление one-feature-end-to-end (North Star из ревью #958, product-freeze) ─────────────
   # Диагностический прогон one-feature-slice-measured-where-pipeline-leaks ЗАКРЫТ 2026-09-15 (замер
   # ~14 утечек) — qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md. Из находок ЗАКРЫТЫ в
-  # историю 2026-09-15: specify-hides-feature-id-and-cli-from-the-human (PR #959, исход 1, первый шаг)
-  # и kit-advises-what-the-product-needs (PR #960, исход 5, первый шаг). Ниже — следующая работа
-  # (исход 3); остальные кандидаты в артефакте, берём по одной под product-freeze.
-  - id: risk-picks-process-not-human-stages
+  # историю 2026-09-15: specify-hides-feature-id-and-cli-from-the-human (PR #959, исход 1),
+  # kit-advises-what-the-product-needs (PR #960, исход 5), risk-picks-process-not-human-stages
+  # (PR #963, исход 3, первый шаг). Ниже — следующая работа (продолжение исхода 3, найдено ревью
+  # #963); остальные кандидаты в артефакте, берём по одной под product-freeze.
+  - id: grown-spec-summary-drops-process-level-name
     title: >-
-      Описание задачи спрашивает «насколько это рискованно/крупно», а НЕ показывает человеку
-      стадии/уровни процесса (L0 QUICK / L1 ENGINEERING / «ещё 9 разделов») — риск выбирает процесс
+      Когда описание задачи уже существовало и подросло, в тексте для человека всё ещё мелькает имя
+      уровня процесса (напр. «L0 QUICK») — убрать; уровень держать в технических деталях
     type: product
     goal: one-feature-end-to-end
     status: todo
     owner_role: engineer
-    value: high
+    value: medium
     write_scope: [ai_ops_kit/]
     reason: >-
-      Из диагностического замера #958 (qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md):
-      исход `risk_selects_the_process_not_the_human` — человека просят заявить size/risk, и это подано
-      СТАДИЯМИ/УРОВНЯМИ («уровень станет L1 ENGINEERING, добавится ещё 9 разделов»; L0 QUICK). Наружу
-      течёт процесс, а не простой вопрос «насколько это опасно?». Готово, когда человеко-обращённый
-      текст размера/риска спрашивает по-человечески (крупная/мелкая, опасная/безопасная) и НЕ
-      показывает имена уровней/стадий и число разделов — кит держит маппинг риск→процесс у себя,
-      а уровни/разделы уходят в технические детали.
+      Найдено при независимом ревью работы risk-picks-process-not-human-stages (PR #963): ветка
+      `_origin` в `from_specification` (ai_ops_kit/ui/presenter_formatters.py) печатает в summary
+      «…больше под <level_name>» с именем уровня процесса, когда спека уже существовала и выросла
+      (`created=False`). Тот же класс утечки исхода `risk_selects_the_process_not_the_human`, но на
+      другом пути, не покрыт тестами и не введён PR #963. Готово, когда человеко-обращённый текст
+      «описание подросло» не называет уровень процесса, а уровень остаётся в технических деталях.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО
