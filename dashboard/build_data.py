@@ -334,6 +334,52 @@ def open_issues(root: Path):
     return res
 
 
+def tech_dimensions(root: Path):
+    """Здоровье «Технологии» по направлениям — на воспроизводимых статических гейтах.
+
+    Архитектура — кольцо зависимостей (`packages/layering.yaml -> mutual_pairs`).
+    Код — ратчет размера модулей (`packages/module-size-baseline.yaml -> ceilings`).
+    Документация — резолвятся ли ссылки из `docs/index.md` (лёгкий сигнал охвата).
+    Чего измерить не можем — честно `unknown`, а не зелёное.
+    """
+    dims = []
+
+    lay = _read(root, "packages/layering.yaml")
+    mp = _first(r"mutual_pairs:\s*(\d+)", lay, int)
+    dims.append({"key": "architecture", "label": "Архитектура",
+                 "state": ("green" if mp == 0 else "amber") if mp is not None else "unknown",
+                 "detail": (f"кольцо зависимостей = DAG (взаимных пар {mp})" if mp == 0
+                            else f"взаимных пар: {mp}") if mp is not None else "не измерено",
+                 "source": "packages/layering.yaml"})
+
+    thr, n = "700", None
+    if yaml:
+        try:
+            ms = yaml.safe_load(_read(root, "packages/module-size-baseline.yaml")) or {}
+            n = len(ms.get("ceilings") or {})
+            thr = str(ms.get("threshold", thr))
+        except Exception:  # noqa: BLE001
+            n = None
+    dims.append({"key": "code", "label": "Код",
+                 "state": ("green" if n == 0 else "amber") if n is not None else "unknown",
+                 "detail": f"монолитов ≥{thr} строк: {n}" if n is not None else "не измерено",
+                 "source": "packages/module-size-baseline.yaml"})
+
+    idx = _read(root, "docs/index.md")
+    if idx:
+        links = re.findall(r"\]\(([^)#]+\.md)(?:#[^)]*)?\)", idx)
+        rel = [ln for ln in links if not ln.startswith(("http://", "https://"))]
+        missing = [ln for ln in rel if not (root / "docs" / ln).exists() and not (root / ln).exists()]
+        dims.append({"key": "docs", "label": "Документация",
+                     "state": "green" if not missing else "amber",
+                     "detail": f"ссылок индекса: {len(rel)}, битых: {len(missing)}",
+                     "source": "docs/index.md"})
+    else:
+        dims.append({"key": "docs", "label": "Документация", "state": "unknown",
+                     "detail": "нет docs/index.md", "source": "docs/index.md"})
+    return dims
+
+
 def current_focus(plan):
     """Активное направление и прогресс по его исходам — «где мы на текущем деле»."""
     gs = (plan or {}).get("goals", []) or []
@@ -545,6 +591,7 @@ def build(root: Path) -> dict:
             "outcomes_filled": pm["outcomes_filled"],
             "observations": obs,
             "health": _health_from_passport(psections),
+            "tech_dimensions": tech_dimensions(root),
         },
         "goals": g,
         "current_focus": current_focus(plan),

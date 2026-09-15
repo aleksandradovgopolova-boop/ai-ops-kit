@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-15T12:29:18+00:00",
+  "generated_at": "2026-09-15T12:41:54+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -10,7 +10,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1555,
+    "commits": 1556,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -237,7 +237,30 @@
       "product": "unknown",
       "tech": "green",
       "delivery": "green"
-    }
+    },
+    "tech_dimensions": [
+      {
+        "key": "architecture",
+        "label": "Архитектура",
+        "state": "green",
+        "detail": "кольцо зависимостей = DAG (взаимных пар 0)",
+        "source": "packages/layering.yaml"
+      },
+      {
+        "key": "code",
+        "label": "Код",
+        "state": "green",
+        "detail": "монолитов ≥700 строк: 0",
+        "source": "packages/module-size-baseline.yaml"
+      },
+      {
+        "key": "docs",
+        "label": "Документация",
+        "state": "green",
+        "detail": "ссылок индекса: 48, битых: 0",
+        "source": "docs/index.md"
+      }
+    ]
   },
   "goals": {
     "total": 24,
@@ -393,7 +416,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1555, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1556, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",

@@ -235,7 +235,14 @@
   /* metrics panel — clarified */
   .hint{font-size:11.5px;color:var(--muted);line-height:1.4;margin-bottom:11px}
   .hint b{color:var(--need)}
-  .maturity{margin-top:auto;padding-top:11px;border-top:1px solid var(--line-2);font-size:12px;
+  .techdims{display:flex;flex-wrap:wrap;align-items:center;gap:7px 12px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line-2)}
+  .techdims .td-lb{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .td{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:help}
+  .td .d{width:8px;height:8px;border-radius:50%;background:var(--zero)}
+  .td.green{color:var(--ink)} .td.green .d{background:var(--ok)}
+  .td.amber{color:var(--hold)} .td.amber .d{background:var(--hold)}
+  .td.unknownc .d{background:var(--need)}
+  .maturity{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-2);font-size:12px;
     color:var(--muted);display:flex;flex-wrap:wrap;align-items:baseline;gap:7px}
   .maturity .lb{color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:10px;
     letter-spacing:.06em;text-transform:uppercase}
@@ -353,6 +360,7 @@
   <section class="panel" aria-label="Пульс продукта">
     <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span></div>
     <div class="health" id="health"></div>
+    <div class="techdims" id="tech-dims" hidden></div>
     <div class="maturity" id="maturity" hidden></div>
   </section>
 
@@ -409,7 +417,7 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-09-15T12:29:18+00:00",
+  "generated_at": "2026-09-15T12:41:54+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -420,7 +428,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1555,
+    "commits": 1556,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -647,7 +655,30 @@
       "product": "unknown",
       "tech": "green",
       "delivery": "green"
-    }
+    },
+    "tech_dimensions": [
+      {
+        "key": "architecture",
+        "label": "Архитектура",
+        "state": "green",
+        "detail": "кольцо зависимостей = DAG (взаимных пар 0)",
+        "source": "packages/layering.yaml"
+      },
+      {
+        "key": "code",
+        "label": "Код",
+        "state": "green",
+        "detail": "монолитов ≥700 строк: 0",
+        "source": "packages/module-size-baseline.yaml"
+      },
+      {
+        "key": "docs",
+        "label": "Документация",
+        "state": "green",
+        "detail": "ссылок индекса: 48, битых: 0",
+        "source": "docs/index.md"
+      }
+    ]
   },
   "goals": {
     "total": 24,
@@ -803,7 +834,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1555, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1556, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -1159,6 +1190,19 @@
         hcell("Ценность для пользователя",prodState,prodVal,tipProduct)+
         hcell("Технологии и качество",h.tech,HRU[h.tech]||"—",tipTech)+
         hcell("Доставка и релизы",h.delivery,HRU[h.delivery]||"—",tipDelivery);
+
+      // разбивка «Технологии» по направлениям (гейтовые замеры)
+      const td=(d.metrics&&d.metrics.tech_dimensions)||[];
+      const TDRU={green:"в норме",amber:"есть замечания",unknown:"не измерено"};
+      const tdm=$("tech-dims");
+      if(td.length){
+        tdm.innerHTML=`<span class="td-lb">Технологии по направлениям</span>`+td.map(x=>{
+          const st=x.state==="green"?"green":(x.state==="amber"?"amber":"unknownc");
+          const tip=`${x.label} — ${TDRU[x.state]||x.state}. ${x.detail||""}${x.source?` (${x.source})`:""}`;
+          return `<span class="td ${st}" title="${esc(tip)}"><span class="d"></span>${esc(x.label)}: ${esc(TDRU[x.state]||"—")}</span>`;
+        }).join("");
+        tdm.hidden=false;
+      } else tdm.hidden=true;
 
       // north-star metric — одна понятная цифра: идея → проверенный результат
       const obs=d.metrics&&d.metrics.observations;
