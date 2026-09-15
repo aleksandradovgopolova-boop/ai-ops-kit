@@ -85,15 +85,18 @@
   .eyebrow .n{color:var(--muted)}
 
   /* roadmap — three horizons side by side */
-  .road{display:grid;grid-template-columns:repeat(3,1fr);gap:11px}
+  .road{display:grid;grid-template-columns:repeat(3,1fr);gap:11px;align-items:start}
   .rh{display:block;border:1px solid var(--line-2);border-radius:11px;background:var(--panel-2);
     padding:9px 11px 10px;transition:border-color .12s}
   a.rh:hover{border-color:var(--accent)}
   .rh-h{display:flex;align-items:center;gap:8px;margin-bottom:7px}
   .rh-h .dot{width:8px;height:8px;border-radius:50%;flex:none}
-  .rh-h .lb{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:13px;color:var(--ink)}
+  .rh-h .lb{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:13px;color:var(--ink)}
   .rh-h .ct{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint)}
-  .rh.now .dot{background:var(--run)} .rh.next .dot{background:var(--accent)} .rh.later .dot{background:var(--zero)}
+  /* горизонт выделяется цветом заголовка, а не точкой-маркером */
+  .rh.now .rh-h .lb{color:var(--run)}
+  .rh.next .rh-h .lb{color:var(--accent)}
+  .rh.later .rh-h .lb{color:var(--zero)}
   .rh-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
   .rh-list li{position:relative;padding-left:15px;font-size:12px;color:var(--muted);line-height:1.35}
   .rh-list li::before{content:"";position:absolute;left:3px;top:7px;width:5px;height:5px;border-radius:50%;
@@ -351,7 +354,7 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-09-15T10:48:54+00:00",
+  "generated_at": "2026-09-15T10:54:17+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -362,7 +365,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1543,
+    "commits": 1544,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -718,7 +721,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1543, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1544, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -1085,7 +1088,7 @@
           ? `<ul class="rh-list">${items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`
           : `<div class="rh-empty">пусто — осознанно</div>`;
         return `<button class="rh ${esc(h.key)}" data-modal="roadmap">`+
-          `<div class="rh-h"><span class="dot"></span><span class="lb">${esc(h.label)}</span>`+
+          `<div class="rh-h"><span class="lb">${esc(h.label)}</span>`+
           `<span class="ct">${h.total||items.length}</span></div>${body}</button>`;
       }).join("")||`<div class="rh-empty">—</div>`;
 
