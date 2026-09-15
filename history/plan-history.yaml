@@ -19,6 +19,26 @@ kind: delivery-plan-history
 
 
 work:
+  - id: run-completion-shows-what-checked-not-gate-count
+    title: >-
+      Итог прогона показывает «что проверено» продуктовыми словами, а не счёт гейтов
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 971
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #971, слит). Продолжение исхода `verified_is_shown_as_trust_not_gate_list`
+      (follow-up #965 — from_review закрыт, run-путь нет): `pipeline_stages._print_pipeline` печатал
+      «гейты: проверено машиной X из Y; остальное — мнение: <id>». Стало «Проверено — вот что:» с
+      честным разделением машина (детерминированный валидатор) / мнение (независимый ревьюер),
+      называется только пройденное (нет пройденных → «верифицировать нечего»). Карта gate→продуктовая
+      фраза вынесена из ui в общий foundation-слой `ai_ops_kit/shared/gate_dimensions.py` (и ui, и
+      engine импортируют ВНИЗ — инвариант engine↛ui соблюдён, LAYERING-OK), расширена машинными
+      гейтами; from_review переиспользует ту же карту без смены поведения; id/счёт — в technical.
+      Бухгалтерия: print-discipline 139→142, delivery-budget 642→643 (новый доставляемый файл), с
+      записями. Независимое ревью APPROVE, CI зелёный (в т.ч. mypy строгий на shared — потребовал
+      аннотацию, добавлена).
+
   - id: grown-spec-summary-drops-process-level-name
     title: >-
       Текст «описание подросло» не показывает человеку имя уровня процесса
