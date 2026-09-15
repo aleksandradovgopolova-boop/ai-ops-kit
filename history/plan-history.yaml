@@ -19,6 +19,20 @@ kind: delivery-plan-history
 
 
 work:
+  - id: grown-spec-summary-drops-process-level-name
+    title: >-
+      Текст «описание подросло» не показывает человеку имя уровня процесса
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 968
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #968, слит). Продолжение исхода `risk_selects_the_process_not_the_human`
+      (найдено ревью #963): ветка `_origin` в `from_specification` печатала «уже была, стало на N
+      вопросов больше под <level_name>» с именем уровня («L0 QUICK» / «L1 ENGINEERING») на пути
+      created=False. Стало «уже была — добавила N вопросов»; уровень остался в technical. Инвариант
+      закреплён тестом. Независимое ревью APPROVE, три группы CI зелёные.
+
   - id: verified-is-shown-as-trust-not-gate-list
     title: >-
       Проверенный результат показывает «что проверено» продуктовыми словами, а не счёт гейтов
