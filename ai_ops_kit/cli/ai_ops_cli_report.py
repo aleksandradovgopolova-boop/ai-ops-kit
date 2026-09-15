@@ -164,18 +164,35 @@ def _explain_blocker(status, human_approval, conflicts):
 
 
 def _explain_next(status, wid, task, no_active):
-    """Следующий шаг простыми словами."""
+    """Следующий шаг простыми словами — БЕЗ команды и внутреннего id работы (#958).
+
+    Продуктовая строка говорит, ЧТО я сделаю, и как это запустить по-человечески («скажи
+    „продолжай“»): внутренний id работы (`wi-…`) и синтаксис `./ai-ops …` — техническая кухня
+    (как SHA/gate-id), их место в технических деталях карточки (`_explain_next_command`), а не в
+    строке, которую читает человек. Кит и сам доводит по «продолжай» — функциональность цела."""
     if no_active:
         return "скажи, что взять, или спроси «что дальше» — предложу с обоснованием"
-    q = task or wid
     return {
-        "blocked": f"покажу, что именно не прошло, и доведу: ./ai-ops resume . {wid} --execute",
+        "blocked": "покажу, что именно не прошло, и доведу — скажи «продолжай»",
         "needs_human_decision": "подтверди изменение — и я продолжу",
-        "needs_more_evidence": f"соберу недостающие доказательства: ./ai-ops resume . {wid} --execute",
+        "needs_more_evidence": "соберу недостающие доказательства — скажи «продолжай»",
         "in_progress": "продолжу то, что уже в работе",
-        "draft": f'опишу и запущу: ./ai-ops specify "{q}" --feature {wid}',
+        "draft": "опишу и запущу — скажи «продолжай»",
         "done": "работа готова — можно доставлять или брать следующую",
     }.get(status, "продолжу то, что уже в работе")
+
+
+def _explain_next_command(status, wid, task):
+    """Точная CLI-команда продолжения — для технических деталей (по запросу), не в лицо человеку.
+
+    Ничего не теряем: команда с внутренним id работы остаётся доступна на уровне technical/по
+    запросу «покажи технические детали»; product-строка её не показывает (#958). -> строка|None."""
+    if status in ("blocked", "needs_more_evidence"):
+        return f"./ai-ops resume . {wid} --execute"
+    if status == "draft":
+        q = task or wid
+        return f'./ai-ops specify "{q}" --feature {wid}'
+    return None
 
 
 def _explain_living_note(doc):
@@ -324,17 +341,23 @@ def _explain_message(state):
     else:
         why = "Сейчас ничего не мешает — работа продолжается."
         status = "ok"
+    # Точную команду продолжения (с внутренним wi-id) держим в технических деталях — в
+    # продуктовый next-step она не летит (#958). Кита можно продолжить и словом «продолжай».
+    cmd = _explain_next_command(st, f["wid"], f["task"])
+    technical = {"работа": f["wid"], "workflow": f.get("workflow") or "—", "статус": st,
+                 "гейтов в плане": state.get("gates") if state.get("gates") is not None else "—",
+                 "оценка стоимости": _explain_cost_tech(cost), "ветка": f.get("branch") or "—",
+                 "идёт работ всего": state.get("active_count"),
+                 "пересечение областей": ", ".join(state.get("conflicts") or []) or "—",
+                 "статус-док": ls}
+    if cmd:
+        technical["продолжить командой"] = cmd
     return _explain_apply_outcome(presenter.message(
         status=status, headline=f'«{f["task"]}» — {label}',
         summary=f"{where} {_explain_cost_line(cost)}",
         why_it_matters=why,
         next_steps=[_explain_next(st, f["wid"], f["task"], no_active=False)],
-        technical={"работа": f["wid"], "workflow": f.get("workflow") or "—", "статус": st,
-                   "гейтов в плане": state.get("gates") if state.get("gates") is not None else "—",
-                   "оценка стоимости": _explain_cost_tech(cost), "ветка": f.get("branch") or "—",
-                   "идёт работ всего": state.get("active_count"),
-                   "пересечение областей": ", ".join(state.get("conflicts") or []) or "—",
-                   "статус-док": ls}), po)
+        technical=technical), po)
 
 
 def _intent_explain(task, child_root, signals, a):
