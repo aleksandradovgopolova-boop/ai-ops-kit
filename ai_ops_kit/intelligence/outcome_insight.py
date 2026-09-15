@@ -69,6 +69,69 @@ def _reported_guardrails(readout: dict) -> set[str]:
             if isinstance(g, dict) and _text(g.get("name"))}
 
 
+def _needed_to_measure(evaluation: dict) -> str:
+    """Что КОНКРЕТНО нужно, чтобы продуктовый итог стало можно измерить. Условие берём из состояния
+    самого замера, а не общими словами: нет числового baseline/цели -> задать их; нет замера с датой ->
+    снять его после выпуска. Так «результат ещё не накоплен» несёт названное условие, а не отписку."""
+    ev = evaluation or {}
+    if ev.get("baseline") is None or ev.get("target") is None:
+        return "задать в контракте результата числовые baseline и цель — сравнивать замер пока не с чем"
+    return "снять замер целевой метрики с датой после реального выпуска и повторить свод"
+
+
+def build_outcome_readout(contract: dict | None, readout: dict | None,
+                          evaluation: dict | None) -> dict | None:
+    """Человеко-ориентированный свод ПРОДУКТОВОГО ИТОГА: сдвиг целевой метрики baseline→после релиза
+    против цели — «что изменение сделало с продуктом», а не «shipped»/«verified» (P0 №6).
+
+    Чистая ПРОЕКЦИЯ уже посчитанного `evaluate_outcome` (met/failed/unknown ИЗ ЧИСЕЛ) плюс контракта и
+    отчёта; ничего не измеряет и не пишет. -> None без контракта (итог из воздуха не выдумываем).
+
+    ЧЕСТНОСТЬ (инвариант «no evidence → no claim»):
+      * есть реальный замер (met/failed) -> `measured=True`, несём сдвиг baseline→value против target,
+        гипотезу и названные пробитые guardrail'ы;
+      * замера ещё нет (unknown) -> `measured=False`, `value=None` (измеренного числа НЕ выдумываем),
+        `not_accumulated_reason` + `needed_to_measure` (названное условие, что нужно, чтобы измерить).
+
+    Значения для показа берём СЫРЫМИ из контракта/отчёта (сохраняя единицы вроде «42%»); числовой
+    разбор для вердикта уже сделан в `evaluation`. `goal` — человеческая формулировка цели
+    (`contract.decision`), а НЕ ключ метрики: ключ метрики — внутреннее имя, наружу не идёт.
+    """
+    if not isinstance(contract, dict):
+        return None
+    ev = evaluation or {}
+    r = readout if isinstance(readout, dict) else {}
+    verdict = ev.get("verdict", "unknown")
+    measured = bool(ev.get("is_real_measurement")) and verdict in REAL_VERDICTS
+    goal = _text(contract.get("decision"))
+    metric_key = _text((contract.get("primary_metric") or {}).get("name"))
+    baseline_disp = (contract.get("baseline") or {}).get("value")
+    target_disp = (contract.get("target") or {}).get("value")
+    value_disp = (r.get("measured") or {}).get("value") if measured else None
+    hyp = _text(r.get("hypothesis")) or None
+    out = {
+        "kind": "OutcomeReadoutHuman",
+        "goal": goal or None,
+        "metric_key": metric_key or None,       # внутреннее имя — только для технических деталей
+        "measured": measured,
+        "verdict": verdict,
+        "baseline": baseline_disp,
+        "value": value_disp,
+        "target": target_disp,
+        "measured_at": ev.get("measured_at"),
+        "direction": ev.get("direction"),
+        "guardrail_breaches": list(ev.get("guardrail_breaches") or []),
+        "hypothesis": hyp,
+        "not_accumulated_reason": None,
+        "needed_to_measure": None,
+    }
+    if not measured:
+        out["not_accumulated_reason"] = (_text(ev.get("reason"))
+                                         or "итог по релизу ещё не измерен")
+        out["needed_to_measure"] = _needed_to_measure(ev)
+    return out
+
+
 def no_insight_reason(evaluation: dict | None) -> str | None:
     """Почему инсайта нет. -> строка-причина, если вердикт `unknown`; None, если инсайт рождается.
 
