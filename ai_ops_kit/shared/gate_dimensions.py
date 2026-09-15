@@ -62,7 +62,7 @@ GATE_PRODUCT_DIMENSION = {
 }
 
 
-def dimensions(gate_ids) -> list:
+def dimensions(gate_ids: list[str] | None) -> list[str]:
     """Продуктовые фразы для набора id — пропуская незнакомые (смысл не выдумываем)."""
     return [d for gid in (gate_ids or []) for d in (GATE_PRODUCT_DIMENSION.get(gid),) if d]
 
