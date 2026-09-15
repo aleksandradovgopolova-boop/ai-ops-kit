@@ -272,8 +272,8 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
     if created:
         _origin = "начата"
     elif n_added:
-        _origin = (f"уже была, стало на {n_added} "
-                   f"{_q(n_added, 'вопрос', 'вопроса', 'вопросов')} больше под {level_name}")
+        # #958 (risk_selects_the_process_not_the_human): без имени уровня процесса — оно в tech.
+        _origin = f"уже была — добавила {n_added} {_q(n_added, 'вопрос', 'вопроса', 'вопросов')}"
     else:
         _origin = "уже была"
     if n_missing:

@@ -108,6 +108,31 @@ def test_provisional_weight_asks_about_size_and_risk_in_plain_words_not_process_
     assert "L1 ENGINEERING" in shown
 
 
+def test_grown_spec_summary_hides_process_level_name():
+    """#958 (risk_selects_the_process_not_the_human, путь created=False): когда описание УЖЕ было
+    и подросло (дописаны разделы под поднявшийся уровень), человеко-обращённый текст «описание
+    подросло» НЕ называет имя уровня процесса (L0/L1/QUICK/ENGINEERING). Уровень остаётся в
+    технических деталях. Утечка того же класса, что закрыли для created=True, но на другом пути —
+    найдена независимым ревью #963, тестами не была покрыта."""
+    pf = _load_formatters()
+    task = "добавить экспорт отчёта в CSV"
+    msg = pf.from_specification(
+        path="features/wi-deadbeef/spec.yaml", created=False, level_name="L1 ENGINEERING",
+        sections=[{"id": "goal", "status": "missing"}], blocking_missing=["goal", "scope"],
+        added=["requirements", "acceptance_scenarios"],
+        next_command='./ai-ops plan "экспорт в CSV"', task=task)
+
+    human = msg["summary"] + " " + " ".join(msg.get("next") or [])
+    for leak in ("L0", "L1", "QUICK", "ENGINEERING"):
+        assert leak not in human, f"имя уровня процесса утекло в текст «подросло»: {leak!r} в {human!r}"
+    # факт «стало больше вопросов» человеку сказан, слова пользователя видны
+    assert "добавила" in human, human
+    assert task in human, human
+    # уровень не потерян — он в технических деталях
+    tech_text = " ".join(str(v) for v in msg["technical_details"]["payload"].values())
+    assert "L1 ENGINEERING" in tech_text, tech_text
+
+
 def test_ok_branch_next_step_is_product_language_not_a_command():
     """Ветка «описание готово» тоже ведёт словами, а точную команду plan держит в technical."""
     pf = _load_formatters()
