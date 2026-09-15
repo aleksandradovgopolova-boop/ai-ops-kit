@@ -334,13 +334,18 @@ class TestPlanTellsTruthAboutTheRun:
             s for s in spec_levels.required_sections(1) if s not in l0]
 
     def test_specify_disclosure_reaches_the_human_message_before_filling(self, tmp_path, capsys):
-        """То же раскрытие доходит до человекочитаемого сообщения (не только --json)."""
+        """Исход 3 (#768) + #958 (risk_selects_the_process_not_the_human): когда тяжесть не заявлена,
+        человеку в лицо летит ПРОСТОЙ вопрос про крупноту/риск, а НЕ имена уровней процесса
+        (L0/L1/QUICK/ENGINEERING), число разделов или термин size/risk. Точный уровень эскалации
+        остаётся в технических деталях (по запросу), см. --json тест выше."""
         from ai_ops_kit.cli import ai_ops_cli
         assert ai_ops_cli.main(["specify", "владелец открывает Окошко", str(tmp_path),
                                 "--feature", "wi-h"]) == 0
         out = capsys.readouterr().out
-        assert "предварительн" in out and "L1 ENGINEERING" in out, (
-            f"человек не увидел, что форма предварительная и до какого уровня дорастёт: {out!r}")
+        for leak in ("L0", "L1", "QUICK", "ENGINEERING", "size/risk", "разделов"):
+            assert leak not in out, f"процесс утёк в человеко-обращённый вывод: {leak!r} в {out!r}"
+        assert "крупн" in out and "рискован" in out, (
+            f"человек не увидел простого вопроса про крупноту/риск: {out!r}")
 
     def test_specify_with_declared_weight_does_not_disclose(self, tmp_path, capsys):
         """Заявлена тяжесть (size/risk) -> форма сразу нужного уровня, ложного раскрытия нет."""

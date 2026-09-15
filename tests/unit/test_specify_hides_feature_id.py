@@ -79,6 +79,35 @@ def test_product_output_hides_feature_id_and_cli_but_technical_keeps_command():
     assert "--answers" in shown
 
 
+def test_provisional_weight_asks_about_size_and_risk_in_plain_words_not_process_levels():
+    """#958 (risk_selects_the_process_not_the_human): когда тяжесть задачи не заявлена, человеку
+    в лицо летит ПРОСТОЙ вопрос «насколько крупно и рискованно», а НЕ имена уровней процесса
+    (L0/L1/QUICK/ENGINEERING), число разделов или термин size/risk. Точный уровень и разделы
+    эскалации остаются в технических деталях — presenter показывает их только по запросу."""
+    pf = _load_formatters()
+    task = "добавить экспорт отчёта в CSV"
+    msg = pf.from_specification(
+        path="features/wi-deadbeef/spec.yaml", created=True, level_name="L0 QUICK",
+        sections=[{"id": "goal", "status": "missing"}], blocking_missing=["goal", "scope"],
+        next_command='./ai-ops plan "экспорт в CSV"',
+        spec_provisional=True, level_if_escalated="L1 ENGINEERING",
+        sections_if_escalated=["requirements", "acceptance_scenarios"], task=task)
+
+    human = msg["summary"] + " " + " ".join(msg.get("next") or [])
+    for leak in ("L0", "L1", "QUICK", "ENGINEERING", "разделов", "раздела", "size/risk",
+                 "эскалац", "уровень"):
+        assert leak not in human, f"утечка процесса в человеко-обращённый текст: {leak!r} в {human!r}"
+    # простой вопрос про тяжесть человек видит
+    assert "крупн" in human and "рискован" in human, human
+
+    # точный уровень и разделы эскалации не потеряны — они в технических деталях
+    tech_text = " ".join(str(v) for v in msg["technical_details"]["payload"].values())
+    assert "L1 ENGINEERING" in tech_text, tech_text
+    # и при явном запросе технических деталей уровень действительно печатается
+    shown = render(msg, audience="product", show_technical=True)
+    assert "L1 ENGINEERING" in shown
+
+
 def test_ok_branch_next_step_is_product_language_not_a_command():
     """Ветка «описание готово» тоже ведёт словами, а точную команду plan держит в technical."""
     pf = _load_formatters()
