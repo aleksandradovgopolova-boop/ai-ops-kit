@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: owner-judges-one-feature-outcomes-achieved
+    title: >-
+      Владелец засчитывает исходы направления one-feature-end-to-end — или заказывает чистый замер
+      на релизнутом ките сторонним пользователем
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    evidence: decisions/registry.yaml
+    result: >-
+      ЗАКРЫТО 2026-09-16 РЕШЕНИЕМ ВЛАДЕЛЬЦА по продуктовому ревью (ep-2026-09-16-product-freeze-held-
+      until-external-clean-run). Развилка «засчитать по перемеру ИЛИ заказать чистый внешний замер»
+      разрешена в пользу ВТОРОГО: исходы НЕ засчитываются достигнутыми — вертикальный срез не доказан
+      живым ВНЕШНИМ прогоном (перемер 15.09 делался новым кодом кита против cockpit, managed 4.3.2, без
+      живого пути до Verified/outcome на чистой установке). Кратковременный засчёт 5/5 + снятие freeze +
+      parallel (PR #981) ОТМЕНЁН, PR закрыт без слияния. Product-freeze ДЕРЖИТСЯ. Вместо засчёта
+      заведена P0-кампания ревью под тем же направлением (verify-propose, canonical-сценарий,
+      Verified/Outcome-readouts, outcome-loop, прогон на чистом stable, внешний замер).
   - id: propose-speaks-product-not-kit-foundation
     title: >-
       `propose` советует, что нужно продукту, а не про фундамент кита
