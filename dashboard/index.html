@@ -331,15 +331,6 @@
     <div class="txt"><b id="tagline">—</b><span id="tagsub" class="sub"></span></div>
   </div>
 
-  <section class="panel focus" id="focus-block" aria-label="Текущий фокус" hidden>
-    <div class="eyebrow"><span>Текущий фокус · веха</span>
-      <button class="more" data-modal="roadmap">роадмап →</button></div>
-    <div class="focus-title" id="focus-title">—</div>
-    <div class="focus-prog"><div class="bar"><i id="focus-bar"></i></div>
-      <span class="focus-n" id="focus-n"></span></div>
-    <div class="focus-list" id="focus-list"></div>
-  </section>
-
   <section class="panel" aria-label="Метрики продукта">
     <div class="eyebrow"><span>Метрики продукта · North Star</span>
       <button class="more" data-modal="metrics">подробнее →</button></div>
@@ -363,6 +354,14 @@
     <div class="eyebrow"><span>Роадмап · направление</span>
       <button class="more" data-modal="roadmap">весь роадмап →</button></div>
     <div class="road" id="road"></div>
+  </section>
+
+  <section class="panel focus" id="focus-block" aria-label="Текущий фокус" hidden>
+    <div class="eyebrow"><span>Текущий фокус · веха</span></div>
+    <div class="focus-title" id="focus-title">—</div>
+    <div class="focus-prog"><div class="bar"><i id="focus-bar"></i></div>
+      <span class="focus-n" id="focus-n"></span></div>
+    <div class="focus-list" id="focus-list"></div>
   </section>
 
   <section class="panel" aria-label="Ближайшие задачи и задачи в работе">
@@ -399,7 +398,7 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-09-15T12:13:18+00:00",
+  "generated_at": "2026-09-15T12:16:06+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -410,7 +409,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1549,
+    "commits": 1550,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -793,7 +792,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1549, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1550, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
