@@ -19,6 +19,37 @@ kind: delivery-plan-history
 
 
 work:
+  - id: outcome-loop-after-merge-feeds-next
+    title: >-
+      Outcome-loop доводит до «что делать дальше», и это появляется в `next`
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 988
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #988). P0 №4 ревью — главный moat. Петля после релиза доходит до
+      конкретного следующего действия (`intelligence/outcome_insight.next_action`), и оно появляется
+      в `next` с обоснованием «потому что <что произошло с продуктом>»; замыкается idea→decision→
+      build→release→measure→learn→next decision. Слои соблюдены (next в planning не тронут,
+      композиция в cli вниз — восходящей зависимости нет). Честность: unknown/нет замера → next
+      ничего из петли не добавляет; failed-гипотеза — валидный вход; числа реальные. Писал субагент,
+      проверял независимо судья (cherry-pick поверх #987 — обе функции сосуществуют): 108 тестов +
+      266 contracts, ruff/layering чисто. Исход after_merge_kit_shows_what_happened_to_the_product НЕ
+      флипнут — засчёт за живым внешним прогоном (ep-2026-09-16).
+  - id: outcome-readout-shows-what-happened-to-the-product
+    title: >-
+      `Outcome`-readout: что изменение сделало с продуктом (сдвиг целевой метрики)
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 987
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #987). P0 №6 ревью — третий слой поверх «сделали»/«проверили»:
+      пост-релизный путь (`readout`) показывает сдвиг целевой метрики «было X → стало Y (цель Z)» +
+      гипотеза + названные пробитые guardrail'ы; нет замера → честно «продуктовый результат ещё не
+      накоплен» + условие, без выдуманных цифр (intelligence/outcome_insight.build_outcome_readout,
+      проведён в контур через post_release_loop и presenter_work). Писал субагент, проверял судья:
+      74 unit + 266 contracts, ruff/layering чисто. Исход НЕ флипнут — засчёт за внешним прогоном.
   - id: verified-readout-is-knowledge-level-not-gate-count
     title: >-
       `Verified`-readout как уровень знания, а не счёт гейтов

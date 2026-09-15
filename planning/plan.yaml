@@ -662,32 +662,10 @@ work:
   # P0 №1 (verify-propose, #983), №2 (canonical-сценарий, #984), №5 (Verified как уровень знания, #985)
   # ЗАКРЫТЫ в history/plan-history.yaml 2026-09-16. Исходы направления при этом НЕ флипаются: механика
   # доведена, но по решению ep-2026-09-16 срез не засчитан, пока не доказан живым внешним прогоном.
-  - id: outcome-readout-shows-what-happened-to-the-product
-    title: >-
-      `Outcome`-readout: что изменение сделало с продуктом (не «shipped», не «verified», а сдвиг
-      целевой метрики / поведения после релиза)
-    type: analytics
-    goal: one-feature-end-to-end
-    status: todo
-    owner_role: analytics
-    value: high
-    write_scope: [ai_ops_kit/, tests/]
-    reason: >-
-      P0 №6 ревью 16.09. Исход after_merge_kit_shows_what_happened_to_the_product — сторона показа.
-  - id: outcome-loop-after-merge-feeds-next
-    title: >-
-      Outcome-loop после merge: события пришли? → поведение изменилось? → метрика сдвинулась? →
-      гипотеза подтверждена? → чему научились? → что делать дальше — и последнее действие появляется
-      в `next`
-    type: engineering
-    goal: one-feature-end-to-end
-    status: todo
-    owner_role: engineer
-    value: high
-    write_scope: [ai_ops_kit/, tests/]
-    reason: >-
-      P0 №4 ревью 16.09 — «следующая настоящая большая фича продукта» и главный moat, поднята над
-      остальным. Замыкает петлю idea→decision→build→release→measure→learn→next decision.
+  # P0 №6 (Outcome-readout, #987) и P0 №4 (outcome-loop → next, moat, #988) ЗАКРЫТЫ в
+  # history/plan-history.yaml 2026-09-16. Весь КОД-P0 ревью закрыт (№1/№2/№4/№5/№6). Исходы
+  # направления НЕ флипаются: по ep-2026-09-16 срез не засчитан, пока не доказан живым внешним
+  # прогоном. Остаются две НЕ-кодовые работы — прогон на чистой установке и внешний замер.
   - id: one-feature-run-on-clean-installed-stable
     title: >-
       Прогнать canonical-сценарий на ЧИСТО УСТАНОВЛЕННОМ stable (init→doctor→onboard), а не через
