@@ -19,6 +19,24 @@ kind: delivery-plan-history
 
 
 work:
+  - id: risk-picks-process-not-human-stages
+    title: >-
+      Описание задачи спрашивает о риске по-человечески, а не показывает человеку стадии/уровни
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 963
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #963, слит). Первый шаг исхода `risk_selects_the_process_not_the_human`:
+      человеко-обращённый текст `specify` про неназванную тяжесть больше не показывает имена уровней
+      процесса (L0 QUICK / L1 ENGINEERING), число разделов и термин size/risk — спрашивает
+      по-человечески («насколько задача крупная и рискованная… «небольшая, неопасная» или «крупная,
+      рискованная»»). Правка чисто презентационная: приём слов (`--signals`, #864), маппинг
+      слова→уровень и данные уровня (`--json`, escalation_disclosure) целы; уровень остался в
+      technical. Проверено тремя группами (not-slow 6328 / selftests-a 298 / smoke 635), независимое
+      ревью APPROVE (writer≠judge), CI зелёный. Ревью нашло смежную утечку того же класса на пути
+      `created=False` → заведена работа grown-spec-summary-drops-process-level-name.
+
   - id: specify-hides-feature-id-and-cli-from-the-human
     title: >-
       Единый вход: описание задачи не показывает человеку внутренний feature id и CLI-механику
