@@ -646,49 +646,29 @@ current_milestone:
 
 work:
   # ── Направление one-feature-end-to-end (North Star из ревью #958, product-freeze) ─────────────
-  # Диагностический прогон one-feature-slice-measured-where-pipeline-leaks ЗАКРЫТ в историю
-  # 2026-09-15 (замер ~14 утечек, все 5 исходов false) — qualification/ONE-FEATURE-SLICE-LEAK-
-  # AUDIT-2026-09-15.md. Ниже — первая точечная работа из находок (утечка исхода 1); остальные
-  # кандидаты перечислены в артефакте, берём по одной под product-freeze.
-  - id: specify-hides-feature-id-and-cli-from-the-human
+  # Диагностический прогон one-feature-slice-measured-where-pipeline-leaks ЗАКРЫТ 2026-09-15 (замер
+  # ~14 утечек) — qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md. Из находок ЗАКРЫТЫ в
+  # историю 2026-09-15: specify-hides-feature-id-and-cli-from-the-human (PR #959, исход 1, первый шаг)
+  # и kit-advises-what-the-product-needs (PR #960, исход 5, первый шаг). Ниже — следующая работа
+  # (исход 3); остальные кандидаты в артефакте, берём по одной под product-freeze.
+  - id: risk-picks-process-not-human-stages
     title: >-
-      Единый вход: описание задачи не показывает человеку внутренний feature id и CLI-механику
-      (--feature/--answers/--signals, «потом запускай plan») — одна фраза, трубопровод скрыт
+      Описание задачи спрашивает «насколько это рискованно/крупно», а НЕ показывает человеку
+      стадии/уровни процесса (L0 QUICK / L1 ENGINEERING / «ещё 9 разделов») — риск выбирает процесс
     type: product
     goal: one-feature-end-to-end
-    status: in_progress
-    branch: fix/specify-hides-feature-id-958
+    status: todo
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/]
     reason: >-
       Из диагностического замера #958 (qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md):
-      самый частый класс утечки исхода `one_input_hides_the_pipeline` — describe/specify показывает
-      человеку случайный feature id (`wi-…`), CLI-синтаксис (`--feature/--answers/--signals`) и сам
-      трубопровод («потом запускай ./ai-ops plan»). Готово, когда человеко-обращённый вывод
-      описания задачи говорит продуктом и одной фразой, без id и команд, а механику (id, флаги,
-      переход к плану) кит держит на своей стороне.
-
-  - id: kit-advises-what-the-product-needs
-    title: >-
-      Кит советует, что нужно ПРОДУКТУ (возможности / пробел метрики результата / следующий шаг по
-      ценности), а не только про свою инженерию и настройку — advise ведёт продуктом
-    type: product
-    goal: one-feature-end-to-end
-    status: in_progress
-    branch: feat/advise-product-needs-958
-    owner_role: engineer
-    value: high
-    write_scope: [ai_ops_kit/]
-    reason: >-
-      Из диагностического замера #958 (qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md):
-      исход `kit_recommends_what_the_product_needs` — сейчас `advise`/`propose` советуют про фундамент
-      и инженерию кита, а не про то, что нужно продукту. Тонкий слой над УЖЕ существующими сигналами
-      (roadmap «направление без работы», health_product метрика результата, next_work) подаёт их как
-      продуктовые рекомендации человеческим языком, продуктом вперёд; инженерия — отдельно и по
-      запросу; честный инвариант «нет сигнала → не выдумываю». Готово, когда `advise` ведёт с
-      продуктовой потребности, заземлённой на реальный артефакт, без внутренних терминов в лице
-      человека. Первый шаг исхода — на `advise`; `propose` и прочее — следом, по одной под freeze.
+      исход `risk_selects_the_process_not_the_human` — человека просят заявить size/risk, и это подано
+      СТАДИЯМИ/УРОВНЯМИ («уровень станет L1 ENGINEERING, добавится ещё 9 разделов»; L0 QUICK). Наружу
+      течёт процесс, а не простой вопрос «насколько это опасно?». Готово, когда человеко-обращённый
+      текст размера/риска спрашивает по-человечески (крупная/мелкая, опасная/безопасная) и НЕ
+      показывает имена уровней/стадий и число разделов — кит держит маппинг риск→процесс у себя,
+      а уровни/разделы уходят в технические детали.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО
