@@ -136,7 +136,9 @@ def test_no_kit_jargon_in_human_facing_propose(tmp_path):
     briefing, _ = _briefing_with_product_signal(child)
     text = presenter.render(fp.to_message(briefing), audience="product")
     low = text.lower()
-    for term in ("контур", "источник истины", "источники истины", "productoverview.md",
+    # «фундамент»/«контур» — ровно тот внутренний язык, что мы убираем (#958): человек говорит
+    # «продукт» и «настройка», а не «фундамент кита» и «контур».
+    for term in ("фундамент", "контур", "источник истины", "источники истины", "productoverview.md",
                  "decisions/registry.yaml", "storybook", "workflow", "предложение по фундаменту"):
         assert term not in low, f"жаргон настройки кита «{term}» просочился в лицо человека"
 
