@@ -473,15 +473,18 @@ def _intent_specify(task, child_root, signals, a):
     _answer_command = None
     if _answer_words:
         _pairs = "; ".join(f"{w}=..." for w in _answer_words)
-        _answer_command = f'./ai-ops specify "{task or wid}" --feature {wid} --answers "{_pairs}"'
+        # #958: feature id (wi-…) детерминирован от текста задачи — кит резолвит ту же фичу по
+        # тексту без `--feature`, поэтому в человеко-обращённую команду id не подставляем.
+        _answer_command = f'./ai-ops specify "{task or "<задача>"}" --answers "{_pairs}"'
     # obs e09fe515 (поле 20.08.2026): подсказка после specify вела СРАЗУ на `run --execute`, минуя
     # plan. Заявленный путь кита — specify -> plan -> run; следующий шаг — `plan`.
     _say(child_root, "from_specification", shown, created, cov["level_name"],
          cov["sections"], cov["blocking_missing"],
-         f"./ai-ops plan \"{task or '<задача>'}\" --feature {wid}",
+         f"./ai-ops plan \"{task or '<задача>'}\"",
          spec_rep["added"], spec_rep["error"],
          spec_provisional, _disc.get("sections_if_escalated"), _disc.get("level_if_escalated"),
-         _answer_command, ans_rep["applied"], ans_rep["unmatched"], ans_rep["error"])
+         _answer_command, ans_rep["applied"], ans_rep["unmatched"], ans_rep["error"],
+         task=task)
     return 0
 
 

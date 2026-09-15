@@ -213,7 +213,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
                        added=None, add_error=None, spec_provisional=False,
                        sections_if_escalated=None, level_if_escalated=None,
                        answer_command=None, applied=None, unmatched=None,
-                       answer_error=None) -> dict:
+                       answer_error=None, task=None) -> dict:
     """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа.
 
     F-029: `added` — разделы, ДОПИСАННЫЕ в уже существующий файл под поднявшийся уровень. Без него
@@ -262,6 +262,11 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             f"прогоне уровень станет {level_if_escalated} и добавится ещё {n_esc} "
             f"{_q(n_esc, 'раздел', 'раздела', 'разделов')} (какие — в технических деталях). "
             f"Заявишь размер/риск сразу — и форма выйдет нужного уровня.")
+    # F-032 + #958: слова пользователя — не внутренняя кухня. Кит эхом повторяет, ЧТО он понял,
+    # продуктовым языком, БЕЗ feature id и БЕЗ CLI-флагов. Так текст задачи виден человеку в самом
+    # выводе (а путь репозитория и id остаются в технических деталях), и подтверждение задачи —
+    # лучший UX, чем эхо CLI-команды, которое эту роль раньше нечаянно выполняло.
+    _echo = f"Поняла: «{task.strip()}». " if (task or "").strip() else ""
     if created:
         _origin = "начата"
     elif n_added:
@@ -280,12 +285,17 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             steps.append("несколько слов из ответа я не узнала: " + ", ".join(unmatched)
                         + " — назови их словами из вопросов ниже")
         steps.append("ответь словами, не открывая файл: " + ask)
+        steps.append("потом скажи, что переходим к плану — дальше я работаю сама")
+        # #958 (исход one_input_hides_the_pipeline): точные команды (синтаксис `--answers`,
+        # следующий шаг) — НЕ в лицо человеку. В next_steps остаётся продуктовая формулировка
+        # «ответь словами», а сама механика (и внутренний feature id кит держит на своей стороне)
+        # уезжает в технические детали, которые presenter показывает только по запросу.
         if answer_command:
-            steps.append(f"так, например: {answer_command}")
-        steps.append(f"потом запускай: {next_command}")
+            tech["ответить командой"] = answer_command
+        tech["следующий шаг"] = next_command
         return message(
             status="needs_input",
-            summary=("Описание задачи " + _origin
+            summary=(_echo + "Описание задачи " + _origin
                      + f"; осталось ответить на {n_missing} "
                        f"{_q(n_missing, 'вопрос', 'вопроса', 'вопросов')}."
                      + (f" Записано в этом ответе: {n_applied}." if n_applied else "")
@@ -297,9 +307,11 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
                            "файл не обязательно — можно просто сказать словами.",
             next_steps=steps,
             technical=tech)
+    tech["следующий шаг"] = next_command
     return message(status="ok", headline="Описание задачи готово",
-                   summary="Всё, что нужно было описать, описано." + _disclosure,
-                   next_steps=[f"запускай: {next_command}"], technical=tech)
+                   summary=_echo + "Всё, что нужно было описать, описано." + _disclosure,
+                   next_steps=["скажи, что переходим к плану — дальше я работаю сама"],
+                   technical=tech)
 
 
 def from_discovery_draft(path, created) -> dict:
