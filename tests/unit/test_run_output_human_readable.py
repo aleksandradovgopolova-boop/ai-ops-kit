@@ -366,3 +366,42 @@ def test_pipeline_technical_audience_still_shows_the_full_report(capsys):
     _print_pipeline(_pipeline_report(ready_for_pr=True))  # default technical
     out = capsys.readouterr().out
     assert "tool-loop" in out and "base_workflow" in out
+
+
+# ── #958 (исход after_merge_kit_shows_what_happened_to_the_product): нарратив завершения ─────────
+# обещает продолжение — после слияния кит покажет ЭФФЕКТ на продукт, а точная команда readout
+# живёт в технических деталях. Раньше поток обрывался на «открыть черновик PR».
+
+def test_pipeline_product_promises_product_outcome_after_merge(capsys):
+    """Готовый результат в лицо человека обещает: после слияния покажу, что стало с продуктом
+    (эффект/итог) — по-человечески, БЕЗ точной команды readout, и честно как будущий шаг."""
+    _print_pipeline(_pipeline_report(ready_for_pr=True, acceptance_criteria={"declared": False}),
+                    audience="product")
+    out = capsys.readouterr().out
+    # обещание про эффект на продукт ПОСЛЕ слияния
+    assert "после слияния" in out
+    assert "эффект" in out
+    assert "продукт" in out
+    # честность: это будущий шаг, а не уже известный итог; кит не следит за merge сам
+    assert "не отслеживаю" in out
+    # точная команда/жаргон readout НЕ в лицо продакту
+    assert "ai-ops readout" not in out
+    assert "outcome" not in out
+
+
+def test_pipeline_technical_names_the_exact_readout_command(capsys):
+    """Точная команда пост-релизного readout — в технических деталях, с id функции, и честной
+    оговоркой, что о merge кит не узнаёт сам (не «автомагия»)."""
+    _print_pipeline(_pipeline_report(ready_for_pr=True))  # default technical
+    out = capsys.readouterr().out
+    assert "ai-ops readout --feature WI-437" in out
+    assert "автоматически" in out  # честно: возврата по merge нет сам собой
+
+
+def test_pipeline_product_not_ready_makes_no_outcome_promise(capsys):
+    """Пока не готово — обещать итог продукта не за что: обещание не появляется на непроверенном."""
+    _print_pipeline(_pipeline_report(ready_for_pr=False, draft_pr=None,
+                                     acceptance_criteria={"declared": False}),
+                    audience="product")
+    out = capsys.readouterr().out
+    assert "после слияния" not in out
