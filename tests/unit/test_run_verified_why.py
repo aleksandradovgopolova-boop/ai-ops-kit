@@ -80,10 +80,14 @@ def test_unknown_passed_gate_does_not_invent_meaning():
 
 
 def test_pipeline_stages_renders_the_summary_on_the_run_path():
-    """ШОВ: путь прогона печатает свод продуктовыми словами, а не счёт «проверено машиной X из Y»."""
+    """ШОВ: путь прогона печатает «Проверено» УРОВНЯМИ ЗНАНИЯ (P0 №5, #982), а не счёт гейтов.
+
+    #958 закрыл «N/M гейтов» продуктовыми словами; P0 №5 поднял свод до уровня знания —
+    run-путь зовёт `shared.gate_dimensions.knowledge_readout`, а не плоский `run_verified_lines`.
+    """
     from pathlib import Path
     pkg = Path(__file__).resolve().parents[2]
     src = (pkg / "ai_ops_kit" / "engine" / "pipeline_stages.py").read_text(encoding="utf-8")
-    assert "run_verified_lines" in src
-    assert "Проверено — вот что:" in src
+    assert "knowledge_readout" in src
+    assert "Проверено — вот что уже известно о работе:" in src
     assert "проверено машиной" not in src, "старый счёт в лицо человеку вернулся"
