@@ -213,7 +213,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
                        added=None, add_error=None, spec_provisional=False,
                        sections_if_escalated=None, level_if_escalated=None,
                        answer_command=None, applied=None, unmatched=None,
-                       answer_error=None) -> dict:
+                       answer_error=None, task=None) -> dict:
     """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа.
 
     F-029: `added` — разделы, ДОПИСАННЫЕ в уже существующий файл под поднявшийся уровень. Без него
@@ -237,7 +237,6 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
     from ai_ops_kit.shared import spec_answers
     n_missing = len(blocking_missing or [])
     n_added = len(added or [])
-    n_esc = len(sections_if_escalated or [])
     n_applied = len(applied or [])
     tech = {"spec": str(path), "уровень": level_name, "разделов": len(sections or []),
             "не заполнено": ", ".join(blocking_missing or []) or "—",
@@ -250,18 +249,26 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
         tech["не узнала слова"] = ", ".join(unmatched)
     if answer_error:
         tech["запись ответа не удалась"] = str(answer_error)
-    # Исход 3: провизорность и точные разделы эскалации — в технические детали (там уместны id
-    # разделов); в summary уходит плоское предупреждение с уровнем и числом разделов.
+    # Исход 3 (#768) + #958 (risk_selects_the_process_not_the_human): провизорность — это внутренний
+    # выбор процесса по тяжести задачи, а НЕ вопрос человеку. В лицо человеку летит простой вопрос
+    # «насколько это крупно и опасно» обычными словами — БЕЗ имён уровней (L0/L1/QUICK/ENGINEERING),
+    # БЕЗ числа разделов и БЕЗ терминов size/risk/эскалация. Точный уровень, разделы и то, что форма
+    # предварительная, остаются в технических деталях (presenter показывает их по запросу) — кит
+    # держит связь «слова тяжести -> уровень процесса» у себя.
     _disclosure = ""
     if spec_provisional:
         tech["форма предварительная"] = (
             f"тяжесть (size/risk) не заявлена; при эскалации уровень {level_if_escalated}, "
             f"добавятся разделы: {', '.join(sections_if_escalated or []) or '—'}")
         _disclosure = (
-            f" Форма предварительная: тяжесть задачи (size/risk) не заявлена — при эскалации на "
-            f"прогоне уровень станет {level_if_escalated} и добавится ещё {n_esc} "
-            f"{_q(n_esc, 'раздел', 'раздела', 'разделов')} (какие — в технических деталях). "
-            f"Заявишь размер/риск сразу — и форма выйдет нужного уровня.")
+            " Скажи заодно, насколько задача крупная и рискованная — от этого зависит, "
+            "насколько тщательно я её проведу. Можно просто словами: «небольшая, неопасная» "
+            "или «крупная, рискованная».")
+    # F-032 + #958: слова пользователя — не внутренняя кухня. Кит эхом повторяет, ЧТО он понял,
+    # продуктовым языком, БЕЗ feature id и БЕЗ CLI-флагов. Так текст задачи виден человеку в самом
+    # выводе (а путь репозитория и id остаются в технических деталях), и подтверждение задачи —
+    # лучший UX, чем эхо CLI-команды, которое эту роль раньше нечаянно выполняло.
+    _echo = f"Поняла: «{task.strip()}». " if (task or "").strip() else ""
     if created:
         _origin = "начата"
     elif n_added:
@@ -280,12 +287,17 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             steps.append("несколько слов из ответа я не узнала: " + ", ".join(unmatched)
                         + " — назови их словами из вопросов ниже")
         steps.append("ответь словами, не открывая файл: " + ask)
+        steps.append("потом скажи, что переходим к плану — дальше я работаю сама")
+        # #958 (исход one_input_hides_the_pipeline): точные команды (синтаксис `--answers`,
+        # следующий шаг) — НЕ в лицо человеку. В next_steps остаётся продуктовая формулировка
+        # «ответь словами», а сама механика (и внутренний feature id кит держит на своей стороне)
+        # уезжает в технические детали, которые presenter показывает только по запросу.
         if answer_command:
-            steps.append(f"так, например: {answer_command}")
-        steps.append(f"потом запускай: {next_command}")
+            tech["ответить командой"] = answer_command
+        tech["следующий шаг"] = next_command
         return message(
             status="needs_input",
-            summary=("Описание задачи " + _origin
+            summary=(_echo + "Описание задачи " + _origin
                      + f"; осталось ответить на {n_missing} "
                        f"{_q(n_missing, 'вопрос', 'вопроса', 'вопросов')}."
                      + (f" Записано в этом ответе: {n_applied}." if n_applied else "")
@@ -297,9 +309,11 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
                            "файл не обязательно — можно просто сказать словами.",
             next_steps=steps,
             technical=tech)
+    tech["следующий шаг"] = next_command
     return message(status="ok", headline="Описание задачи готово",
-                   summary="Всё, что нужно было описать, описано." + _disclosure,
-                   next_steps=[f"запускай: {next_command}"], technical=tech)
+                   summary=_echo + "Всё, что нужно было описать, описано." + _disclosure,
+                   next_steps=["скажи, что переходим к плану — дальше я работаю сама"],
+                   technical=tech)
 
 
 def from_discovery_draft(path, created) -> dict:
@@ -400,35 +414,73 @@ def from_review(rep: dict) -> dict:
 
 
 def from_advice(result: dict) -> dict:
-    """`engineering_advisor.advise()` -> UserMessage. Совет — не исполнение, и это должно быть видно."""
-    recs = list(result.get("recommendations") or [])
-    urgent = [r for r in recs if int(r.get("priority") or 3) == 1]
-    tech = {"repository": result.get("repository"), "task_type": result.get("task_type") or "—",
-            "рекомендаций": len(recs), "сводка": result.get("summary")}
-    tech.update({f"[{r.get('category')}] {i + 1}": f"{r.get('advice')} (источник: {r.get('source')})"
-                 for i, r in enumerate(recs)})
-    if not recs:
-        return message(status="ok", headline="Замечаний по инженерной части нет",
-                       summary="Смотрела окружения, поставку и процесс — советовать нечего.",
-                       next_steps=["спроси «что дальше» — предложу работу"], technical=tech)
-    n = len(recs)
-    if urgent:
+    """`advise` -> UserMessage. ВЕДЁТ с «что нужно ПРОДУКТУ» (#958), инженерная настройка кита —
+    после и явно отделена. Совет — не исполнение, и это должно быть видно.
+
+    Продуктовая часть говорит о продукте пользователя простым языком: возможности, пробелы,
+    следующий шаг. Инженерная часть (окружения/поставка/процесс — про настройку самого кита)
+    уходит в технические детали и в отдельную строку «Дальше», чтобы её не спутать с продуктом.
+    Инвариант честности: нет продуктовых данных → так и говорим, потребность не выдумываем.
+    """
+    pa = result.get("product_advice") or {}
+    precs = list(pa.get("recommendations") or [])
+    enough = pa.get("enough_product_data")
+
+    eng_recs = list(result.get("recommendations") or [])
+
+    # Технические детали: сперва продуктовые рекомендации с источниками, затем — ЯВНО отделённая
+    # инженерная часть про настройку кита (её лексика — .ai-ops.yaml, CI и т.п. — живёт только тут).
+    tech = {"продуктовых рекомендаций": len(precs)}
+    tech.update({f"продукт · {p.get('kind')} {i + 1}":
+                 f"{p.get('need')} — {p.get('why')} (источник: {p.get('source')})"
+                 for i, p in enumerate(precs)})
+    if pa.get("note"):
+        tech["продукт · примечание"] = pa["note"]
+    tech["— ниже про НАСТРОЙКУ КИТА, не про продукт —"] = (
+        f"{len(eng_recs)} инженерных заметок")
+    tech["repository"] = result.get("repository")
+    tech["task_type"] = result.get("task_type") or "—"
+    tech.update({f"настройка кита · [{r.get('category')}] {i + 1}":
+                 f"{r.get('advice')} (источник: {r.get('source')})"
+                 for i, r in enumerate(eng_recs)})
+
+    # Инженерная часть подаётся ПОСЛЕ и отдельными словами: «это про настройку кита, не про продукт».
+    eng_line = (f"отдельно есть заметки про настройку самого кита — это не про продукт, "
+                f"покажу по запросу") if eng_recs else None
+
+    if precs:
+        lead = precs[0]
+        needs = "; ".join(p.get("need", "") for p in precs)
+        next_steps = ["возьмусь за первое, если скажешь"]
+        if len(precs) > 1:
+            next_steps.append("остальное по продукту покажу списком")
+        if eng_line:
+            next_steps.append(eng_line)
         return message(
-            status="degraded", headline="Есть то, что стоит починить сначала",
-            summary=f"Нашла {n} {_q(n, 'совет', 'совета', 'советов')} по инженерной части, "
-                    f"из них {len(urgent)} "
-                    f"{_q(len(urgent), 'срочный', 'срочных', 'срочных')}.",
-            why_it_matters="Срочное здесь значит: пока это так, остальная работа будет идти "
-                           "медленнее или её результат будет труднее проверить. "
-                           + urgent[0].get("advice", ""),
-            next_steps=["возьмусь за срочное, если скажешь", "остальное покажу списком"],
-            technical=tech)
+            status="ok", headline="Что нужно продукту",
+            summary=f"Вот что, по-моему, сейчас важно для твоего продукта: {needs}.",
+            why_it_matters=lead.get("why"),
+            next_steps=next_steps, technical=tech)
+
+    # Продуктовых рекомендаций нет. Честно различаем «данных не хватает» и «данные есть, срочного нет».
+    if not enough:
+        next_steps = ["заполним продуктовую картину — тогда смогу советовать по продукту"]
+        if eng_line:
+            next_steps.append(eng_line)
+        return message(
+            status="degraded", headline="Пока не могу советовать по продукту",
+            summary="Пока не хватает продуктовых данных, чтобы советовать по продукту.",
+            why_it_matters="Придумывать продуктовую потребность я не буду — это была бы выдумка, "
+                           "а не совет.",
+            next_steps=next_steps, technical=tech)
+
+    next_steps = ["спроси «что дальше» — предложу работу"]
+    if eng_line:
+        next_steps.append(eng_line)
     return message(
-        status="ok", headline="Совет по инженерной части",
-        summary=f"Нашла {n} {_q(n, 'место', 'места', 'мест')}, где можно сделать лучше; "
-                f"срочного нет.",
-        why_it_matters=recs[0].get("advice"),
-        next_steps=["покажу список целиком, если нужно"], technical=tech)
+        status="ok", headline="По продукту сейчас советовать нечего",
+        summary="Продуктовые данные есть, но срочного по продукту сейчас нет.",
+        next_steps=next_steps, technical=tech)
 
 
 # ── Переводчики внутренних отчётов: чтение состояния проекта ───────────────────────────────────

@@ -319,7 +319,12 @@ def _intent_review(task, child_root, signals, a):
 def _intent_advise(task, child_root, signals, a):
     js = a.json
     from ai_ops_kit.engops import engineering_advisor
+    from ai_ops_kit.intelligence import product_advice
     result = engineering_advisor.advise(str(child_root), task_type=signals.get("task_type"))
+    # #958: совет ВЕДЁТ с «что нужно продукту», а инженерная настройка кита идёт после и отдельно.
+    # Продуктовые рекомендации — тонкий слой поверх существующих сигналов; инженерную часть
+    # (engineering_advisor) не трогаем, лишь подаём её второй.
+    result["product_advice"] = product_advice.recommend(str(child_root))
     if js:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
