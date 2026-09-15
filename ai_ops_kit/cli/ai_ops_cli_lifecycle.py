@@ -483,7 +483,8 @@ def _intent_specify(task, child_root, signals, a):
          f"./ai-ops plan \"{task or '<задача>'}\"",
          spec_rep["added"], spec_rep["error"],
          spec_provisional, _disc.get("sections_if_escalated"), _disc.get("level_if_escalated"),
-         _answer_command, ans_rep["applied"], ans_rep["unmatched"], ans_rep["error"])
+         _answer_command, ans_rep["applied"], ans_rep["unmatched"], ans_rep["error"],
+         task=task)
     return 0
 
 

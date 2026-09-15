@@ -56,16 +56,20 @@ def test_product_output_hides_feature_id_and_cli_but_technical_keeps_command():
     """summary + next при audience=product не содержат `wi-` и `--feature`; точная команда
     (`--answers …`) не потеряна — она в технических деталях, доступных по запросу."""
     pf = _load_formatters()
+    task = "добавить экспорт отчёта в CSV"
     # входы строятся как их строит реальный вызывающий (без --feature)
     msg = pf.from_specification(
         path="features/wi-deadbeef/spec.yaml", created=True, level_name="L0 QUICK",
         sections=[{"id": "goal", "status": "missing"}], blocking_missing=["goal", "scope"],
         next_command='./ai-ops plan "экспорт в CSV"',
-        answer_command='./ai-ops specify "экспорт в CSV" --answers "зачем=...; что=..."')
+        answer_command='./ai-ops specify "экспорт в CSV" --answers "зачем=...; что=..."',
+        task=task)
 
     human = msg["summary"] + " " + " ".join(msg.get("next") or [])
     assert "wi-" not in human, human
     assert "--feature" not in human, human
+    # F-032: слова пользователя не теряются — задача видна человеку в самом выводе
+    assert task in human, human
 
     # точная команда сохранена в технических деталях
     tech_text = " ".join(str(v) for v in msg["technical_details"]["payload"].values())
@@ -78,12 +82,14 @@ def test_product_output_hides_feature_id_and_cli_but_technical_keeps_command():
 def test_ok_branch_next_step_is_product_language_not_a_command():
     """Ветка «описание готово» тоже ведёт словами, а точную команду plan держит в technical."""
     pf = _load_formatters()
+    task = "добавить экспорт отчёта в CSV"
     msg = pf.from_specification(
         path="features/wi-deadbeef/spec.yaml", created=False, level_name="L0 QUICK",
         sections=[{"id": "goal", "status": "complete"}], blocking_missing=[],
-        next_command='./ai-ops plan "экспорт в CSV"')
+        next_command='./ai-ops plan "экспорт в CSV"', task=task)
     human = msg["summary"] + " " + " ".join(msg.get("next") or [])
     assert "wi-" not in human and "--feature" not in human and "./ai-ops" not in human
+    assert task in human, human  # слова пользователя видны и на «готово»
     assert "./ai-ops plan" in " ".join(
         str(v) for v in msg["technical_details"]["payload"].values())
 
@@ -92,13 +98,16 @@ def test_real_cli_specify_output_shows_no_feature_id_or_flag(tmp_path):
     """Сквозная защита: реальный `specify` (не --json) при дефолтном product не печатает
     человеку ни `wi-`, ни `--feature` — чтобы правка вызывающего не вернула id в вывод."""
     _py_repo(tmp_path)
+    task = "добавить экспорт отчёта в CSV"
     import io
     from contextlib import redirect_stdout
     buf = io.StringIO()
     with redirect_stdout(buf):
-        rc = ai_ops_cli.main(["specify", "добавить экспорт отчёта в CSV", str(tmp_path)])
+        rc = ai_ops_cli.main(["specify", task, str(tmp_path)])
     assert rc == 0
     out = buf.getvalue()
-    # отрезаем строку технических деталей — она по запросу, а не в лицо (её тут и нет при product)
+    # технические детали при product скрыты (только «по запросу»), поэтому в выводе их нет
     assert "wi-" not in out, out
     assert "--feature" not in out, out
+    # F-032: слова пользователя не теряются по дороге через CLI — задача видна
+    assert task in out, out
