@@ -110,6 +110,28 @@ class TestExplainIntent:
         assert "ai-ops/other" in tech and "calm-top-bar" in tech, \
             "сырьё пересечения обязано быть в технических деталях: " + tech
 
+    @pytest.mark.parametrize("status", ["blocked", "needs_more_evidence", "draft"])
+    def test_next_step_hides_work_id_and_command_but_technical_keeps_it(self, status):
+        """#958 (one_input_hides_the_pipeline): human-facing next-step explain для blocked/
+        needs_more_evidence/draft не показывает внутренний id работы (`wi-`/`w-1`) и CLI-команду
+        (`./ai-ops …`, `--feature`, `--execute`); точная команда сохранена в технических деталях."""
+        msg = _intents._explain_message(_focus_state(status=status))
+        prod = _presenter.render(msg, audience="product")
+        for leak in ("w-1", "wi-", "./ai-ops", "--feature", "--execute", "resume ."):
+            assert leak not in prod, f"{leak!r} просочился в product next-step: {prod}"
+        # говорит продуктом: продолжение по-человечески («скажи „продолжай“»)
+        assert "продолжай" in prod
+        # точная команда не потеряна — она в технических деталях, доступных по запросу
+        tech = _presenter.render(msg, audience="technical")
+        assert "./ai-ops" in tech
+        if status == "draft":
+            assert "--feature" in tech
+        else:
+            assert "resume . w-1 --execute" in tech
+        # и по явному запросу технических деталей команда печатается на product-уровне
+        shown = _presenter.render(msg, audience="product", show_technical=True)
+        assert "./ai-ops" in shown
+
     def test_product_audience_suppresses_jargon(self):
         """Для product внутренний статус/workflow скрыты; на technical — доступны."""
         msg = _intents._explain_message(_focus_state())
