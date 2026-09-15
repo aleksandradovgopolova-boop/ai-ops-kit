@@ -87,7 +87,7 @@ class TestSeamPlanChangesTheAnswer:
         """«Ничего не идёт» обязано называть основание: это не «я всё осмотрел», а два конкретных
         факта. Иначе «не знаю» снова читается как «нет»."""
         out = _status(_repo(tmp_path, alpha="todo"))
-        assert "заявок на работу нет" in out.lower() and "в плане" in out.lower(), out
+        assert "начатых работ нет" in out.lower() and "в плане" in out.lower(), out
 
     def test_registry_and_plan_agree_no_false_alarm(self, tmp_path):
         """КОНТРОЛЬ: заявка есть и она про ТУ ЖЕ работу — расхождения нет, тревоги быть не должно."""
@@ -152,7 +152,7 @@ class TestPresenterNamesDivergenceOnBothBranches:
             {"active": [{"id": "wi-9", "workitem": "wi-9", "title": "живая", "status": "in_progress"}]},
             crosscheck=self._cross(["wi-1"]))
         assert msg["status"] == "degraded", msg
-        assert "без заявки" in (msg.get("why_it_matters") or ""), msg
+        assert "без начатой работы" in (msg.get("why_it_matters") or ""), msg
 
     def test_no_crosscheck_at_all_keeps_the_old_answer(self):
         """Совместимость: вызывающий без сверки (например JSON-путь или чужой код) получает прежний

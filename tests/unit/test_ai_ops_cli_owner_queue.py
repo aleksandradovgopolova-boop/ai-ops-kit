@@ -90,11 +90,25 @@ class TestExplainIntent:
         assert "реш" in out.lower()                     # «жду твоего решения» / «подтверди»
 
     def test_scope_conflict_becomes_a_blocker(self):
-        """Пересечение области записи — тоже причина остановиться, названная последствием."""
+        """Пересечение области записи — тоже причина остановиться, названная последствием, БЕЗ
+        имени ветки/внутреннего id в лице человека: сырьё остаётся в технических деталях."""
         line = _intents._explain_blocker("in_progress", False, ["ai-ops/other"])
         assert line is not None
-        assert "перепишут одно место" in line
-        assert "ai-ops/other" in line
+        assert "заденут одни и те же места" in line
+        assert "ai-ops/" not in line and "ветк" not in line, \
+            "имя ветки/жаргон просочились в человеческий блокер: " + line
+
+    def test_scope_conflict_names_the_overlap_only_in_technical(self):
+        """Продуктовая карточка explain не называет ветки/id пересечения человеку, но держит их
+        в технических деталях — факт не потерян, только язык другой."""
+        msg = _intents._explain_message(_focus_state(conflicts=["ai-ops/other", "calm-top-bar"]))
+        prod = _presenter.render(msg, audience="product")
+        assert "ai-ops/" not in prod and "calm-top-bar" not in prod, \
+            "ветки/id пересечения просочились в product: " + prod
+        assert "заявк" not in prod.lower() and "worktree" not in prod.lower(), prod
+        tech = _presenter.render(msg, audience="technical")
+        assert "ai-ops/other" in tech and "calm-top-bar" in tech, \
+            "сырьё пересечения обязано быть в технических деталях: " + tech
 
     def test_product_audience_suppresses_jargon(self):
         """Для product внутренний статус/workflow скрыты; на technical — доступны."""

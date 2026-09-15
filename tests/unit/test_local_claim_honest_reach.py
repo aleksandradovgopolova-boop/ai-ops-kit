@@ -214,6 +214,41 @@ def test_presenter_empty_local_is_about_this_machine(presenter):
     assert "эту машину" in text or "этой машин" in text or "эта машина" in text, text
 
 
+# ------------------------------------------ status говорит продуктом, а не заявками/ветками (#958)
+
+def test_status_product_output_speaks_product_not_branches(presenter):
+    """Человеко-обращённый вывод `status` (audience=product) НЕ сыплет внутренней кухней: ни имени
+    ветки (`ai-ops/…`), ни слова «заявк», ни «рабочих копи»/«worktree», ни внутреннего id работы.
+    Сырьё (ветка/id/рабочая копия) при этом обязано остаться в технических деталях."""
+    rep = {"active": [
+        {"id": "wi-7cf4f63f098d", "workitem": "wi-7cf4f63f098d", "title": "Показывать номер версии",
+         "status": "in_progress", "branch": "ai-ops/calm-top-bar",
+         "worktree": "/tmp/wt/calm-top-bar", "affected_areas": ["src/settings/"]}]}
+    msg = presenter.from_active_work(rep, published=True)
+    prod = presenter.render(msg, audience="product")
+    low = prod.lower()
+    for leak in ("ai-ops/", "заявк", "worktree", "рабочих копи", "рабочая копи",
+                 "wi-7cf4f63f098d", "calm-top-bar"):
+        assert leak not in low, f"внутренняя кухня «{leak}» просочилась в product:\n{prod}"
+    assert "Показывать номер версии" in prod, "человек не видит, ЧТО идёт: " + prod
+    tech = presenter.render(msg, audience="technical")
+    assert "ai-ops/calm-top-bar" in tech and "wi-7cf4f63f098d" in tech, \
+        "ветка/id обязаны остаться в технических деталях: " + tech
+
+
+def test_status_divergence_names_it_without_the_word_claim(presenter):
+    """Расхождение плана с реальной работой называется человеку СЛЕДСТВИЕМ, без слова «заявк»."""
+    msg = presenter.from_active_work(
+        {"active": []},
+        crosscheck={"plan_exists": True, "registry_exists": True, "registry_count": 0,
+                    "declared": [{"id": "wi-1", "title": "Тёмная тема"}],
+                    "only_in_plan": [{"id": "wi-1", "title": "Тёмная тема"}]})
+    prod = presenter.render(msg, audience="product")
+    assert "расход" in prod.lower(), "расхождение не названо: " + prod
+    assert "заявк" not in prod.lower(), "слово «заявк» в лице человека: " + prod
+    assert "wi-1" not in prod, "внутренний id в лице человека: " + prod
+
+
 # ---------------------------------------------------------- ШОВ: status спрашивает публикацию
 
 def _make_repo(root: Path, publish):
