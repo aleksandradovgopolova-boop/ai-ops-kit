@@ -53,19 +53,39 @@ jobs:
       - uses: actions/checkout@v4
       # ПРЕДПОЛЁТ: включён ли в репозитории code scanning. Без него analyze падает с
       # configuration-error (выгрузка SARIF некуда идти) и красит PR у дочки, которая его не включала.
-      # Спрашиваем у API: включённый code scanning отвечает на /code-scanning/alerts кодом 200 (пусть и
-      # пустым списком), выключенный — 403/404. Если выключен — гасим шаг analyze и завершаемся ЗЕЛЁНЫМ
-      # с инструкцией: SAST не роняет PR из-за настройки, которую включает владелец репозитория.
-      # (`gh` предустановлен на раннерах GitHub; на своём раннере без `gh` предполёт тоже честно
-      # пропустит скан зелёным, а не свалит джобу глубже и невнятнее.)
+      # Спрашиваем у API /code-scanning/alerts: включённый code scanning отвечает 200 (пусть и пустым
+      # списком), выключенный — 404 (или 403 «not enabled»/«Advanced Security is not enabled»).
+      #
+      # ВАЖНО: `gh api` возвращает ненулевой код на ЛЮБОМ не-2xx — не только на 404/403, но и на
+      # rate-limit (403/429), 5xx, сетевом сбое, отсутствии `gh`, сбое auth. Если схлопнуть все эти
+      # исходы в «выключено», транзиентный сбой на репозитории, где code scanning ВКЛЮЧЁН, тихо
+      # пропустил бы analyze и позеленил бы джобу — SAST молча не сработал, и креста нет. Для контроля
+      # безопасности это недопустимо. Поэтому отказ БЕЗОПАСЕН В СТОРОНУ СКАНИРОВАНИЯ:
+      #   * «выключено» (enabled=false, зелёный пропуск с notice) — ТОЛЬКО явный 404 или 403 с телом
+      #     про «not enabled»/«Advanced Security»;
+      #   * любой другой исход (429, 5xx, сеть, нет `gh`, неизвестный код) → enabled=true: пойдёт
+      #     обычный путь init/autobuild/analyze. Реально включён → просканирует; реально выключен, но
+      #     код был не 403/404 → честно покраснеет старым configuration-error, а не тихо пропустит.
       - id: preflight
         name: Предполёт — включён ли code scanning
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if gh api "repos/${{ github.repository }}/code-scanning/alerts" --silent >/dev/null 2>&1; then
+          set +e   # gh api на не-2xx возвращает ненулевой код — разбираем ИСХОД сами, не через set -e
+          out="$(gh api "repos/${{ github.repository }}/code-scanning/alerts" --silent -i 2>&1)"
+          rc=$?
+          enabled=true   # по умолчанию — сканируем (fail-safe); «выключено» надо ДОКАЗАТЬ кодом 404/403
+          if [ "$rc" -ne 0 ]; then
+            code="$(printf '%s' "$out" | grep -oiE 'HTTP[ /][0-9.]*[ ]?[0-9]{3}' | grep -oE '[0-9]{3}' | tail -n1)"
+            if [ "$code" = "404" ]; then
+              enabled=false
+            elif [ "$code" = "403" ] && printf '%s' "$out" | grep -qiE 'not enabled|Advanced Security'; then
+              enabled=false
+            fi
+          fi
+          if [ "$enabled" = "true" ]; then
             echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "code scanning включён — запускаю CodeQL SAST."
+            echo "code scanning включён (или статус неясен — сканируем на всякий случай) — запускаю CodeQL SAST."
           else
             echo "enabled=false" >> "$GITHUB_OUTPUT"
             echo "::notice::code scanning не включён — включите его в Settings → Code security, чтобы SAST заработал; пока пропускаю (PR не роняется)."
