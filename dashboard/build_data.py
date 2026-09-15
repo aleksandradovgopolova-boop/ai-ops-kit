@@ -89,6 +89,25 @@ def channel(root: Path):
     return _first(r"^channel:\s*([a-z_]+)", _read(root, "registry/release-claims.yaml"))
 
 
+def product_tagline(root: Path):
+    """Ёмкая формулировка продукта — жирный подзаголовок под H1 в README + одно пояснение.
+
+    Источник — README.md (реальный артефакт), не выдумка. Нет README → None.
+    """
+    t = _read(root, "README.md")
+    m = re.search(r"^#\s+.+?\n+\*\*(.+?)\*\*", t, re.DOTALL)
+    if not m:
+        return None
+    tagline = " ".join(m.group(1).split())
+    sub = None
+    rest = t[m.end():]
+    pm = re.search(r"^\s*([^\n#>].+?)(?:\n\n|\n#|\Z)", rest, re.DOTALL)
+    if pm:
+        first = re.split(r"(?<=[.])\s", " ".join(pm.group(1).split()))[0]
+        sub = first
+    return {"tagline": tagline, "subtitle": sub}
+
+
 def north_star(root: Path):
     text = _read(root, "decisions/registry.yaml")
     if yaml:
@@ -131,7 +150,8 @@ def _health_from_passport(sections):
         m = re.search(label + r"[^.]*?\*\*(Green|Yellow|Red)\*\*", val)
         if m:
             return m.group(1).lower()
-        if re.search(label + r"[^.]*?неизвестно", val):
+        # Кит формулирует «нет вердикта» по-разному — все варианты читаем как unknown.
+        if re.search(label + r"[^.]*?(неизвестно|недостаточно данных|нет вердикта)", val):
             return "unknown"
         return None
     out["product"] = sig("Продукт")
@@ -211,7 +231,7 @@ ROAD_HORIZONS = [
 ]
 
 
-def _road_bullets(block: str, limit: int = 3):
+def _road_bullets(block: str, limit: int = 20):
     """Ёмкие названия направлений из буллитов секции — на понятном языке, без id и YAML.
 
     Жирный заголовок буллита (`**...**`) — уже готовое название направления. Если его нет
@@ -341,6 +361,133 @@ def contours(root: Path):
     return [{"id": c, "label": CONTOUR_LABELS.get(c, c)} for c in ids]
 
 
+def _demd(s):
+    """Снять markdown-разметку жирного/курсива — текст в модалке показывается как есть."""
+    return re.sub(r"[*_`]{1,2}", "", s) if s else s
+
+
+def _vision_detail(root: Path):
+    """Содержимое модалки «Видение»: вступление + принципы из VISION.md."""
+    t = _read(root, "VISION.md")
+    if not t:
+        return None
+    intro = None
+    m = re.search(r"^#\s+.+?\n+(.+?)(?=\n##\s)", t, re.DOTALL)
+    if m:
+        intro = _demd(" ".join(m.group(1).split()))
+    principles = []
+    pm = re.search(r"^## Принципы\n(.*?)(?=\n##\s)", t, re.DOTALL | re.MULTILINE)
+    if pm:
+        for b in re.finditer(r"^\d+\.\s+\*\*(.+?)\*\*\s*(.*?)(?=\n\d+\.\s|\Z)",
+                             pm.group(1), re.DOTALL | re.MULTILINE):
+            name = _demd(b.group(1).strip().rstrip("."))
+            rest = _demd(" ".join(b.group(2).split()))
+            rest = re.split(r"(?<=[.])\s", rest)[0] if rest else ""
+            principles.append({"name": name, "desc": rest})
+    return {"intro": intro, "principles": principles}
+
+
+def _metrics_detail(root: Path):
+    """Содержимое модалки «Метрики продукта» из ProductMetrics.md."""
+    t = _read(root, "context/product/ProductMetrics.md")
+    if not t:
+        return None
+    ns = None
+    m = re.search(r"^## North star\n+\*\*(.+?)\*\*\s*(.*?)(?=\n##\s)", t, re.DOTALL | re.MULTILINE)
+    if m:
+        ns = _demd(re.split(r"(?<=[.])\s", " ".join((m.group(1) + " " + m.group(2)).split()))[0])
+    note = None
+    bm = re.search(r"((?:^>.*\n?)+)", t, re.MULTILINE)
+    if bm:
+        note = " ".join(re.sub(r"^>\s?", "", bm.group(1), flags=re.MULTILINE).split())
+        note = note.replace("**", "")  # снять markdown-жирный — в модалке текст показывается как есть
+    outcomes = []
+    om = re.search(r"^## Outcome metrics\n(.*?)(?=\n##\s)", t, re.DOTALL | re.MULTILINE)
+    if om:
+        for b in re.finditer(r"^-\s+\*\*(.+?)\*\*\s*(.*?)(?=\n-\s|\Z)",
+                             om.group(1), re.DOTALL | re.MULTILINE):
+            name = _demd(b.group(1).strip())
+            rest = _demd(" ".join(b.group(2).split()).lstrip("—- ").strip())
+            if len(rest) > 150:
+                rest = rest[:148].rstrip() + "…"
+            outcomes.append({"name": name, "desc": rest})
+    return {"north_star": ns, "unmeasured_note": note, "outcomes": outcomes}
+
+
+def build_modals(root: Path, *, roadmap_data, goals_data, waiting, capmap, obs):
+    """Содержимое модальных окон для пяти разделов карты продукта.
+
+    Каждый раздел ведёт в реальный артефакт (`path` → ссылка на репозиторий внутри модалки).
+    Текст берётся из артефактов; чего в артефакте нет — того нет и в модалке, не выдумываем.
+    """
+    def norm(items):
+        return [i if isinstance(i, dict) else {"name": i} for i in items]
+
+    modals = {}
+
+    vis = _vision_detail(root)
+    if vis:
+        secs = []
+        if vis["principles"]:
+            secs.append({"h": "Принципы", "list": vis["principles"]})
+        modals["vision"] = {"title": "Видение", "path": "VISION.md",
+                            "lead": vis["intro"], "sections": secs}
+
+    cm = capmap or {}
+    modals["capability"] = {
+        "title": "Карта возможностей", "path": "docs/capability-map.md",
+        "lead": "Достоверная витрина «что продукт умеет прямо сейчас» — выведена из реестров и "
+                "кода при генерации, а не написана руками.",
+        "sections": [{"h": "Сводка", "list": [
+            {"name": "Команды владельца", "desc": str(cm.get("commands", "—"))},
+            {"name": "Quality gates", "desc": f"{cm.get('gates','—')} "
+                f"(enforced {cm.get('enforced','—')} · advisory {cm.get('advisory','—')})"},
+            {"name": "Роли в реестре", "desc": str(cm.get("roles", "—"))},
+            {"name": "built ≠ wired", "desc": str(cm.get("built_not_wired", "—"))},
+            {"name": "planned / unsupported", "desc": str(cm.get("planned", "—"))},
+        ]}]}
+
+    modals["roadmap"] = {
+        "title": "Роадмап", "path": "ROADMAP.md",
+        "lead": "Куда движется продукт — три горизонта. «Следующий результат» осознанно один за раз.",
+        "sections": [{"h": f"{h['label']} · {h.get('total', len(h['items']))}",
+                      "list": norm(h["items"])} for h in (roadmap_data or [])]}
+
+    g = goals_data or {}
+    bsec = []
+    if g.get("active_list"):
+        bsec.append({"h": "В работе", "list": norm(g["active_list"])})
+    if g.get("paused_list"):
+        bsec.append({"h": "На паузе", "list": norm(g["paused_list"])})
+    if waiting:
+        bsec.append({"h": "Ждёт решения владельца", "list": [{"name": w["title"]} for w in waiting]})
+    modals["backlog"] = {
+        "title": "Бэклог целей", "path": "planning/plan.yaml",
+        "lead": f"{g.get('achieved','—')} из {g.get('total','—')} целей достигнуто · "
+                f"{g.get('active',0)} в работе · {g.get('paused',0)} на паузе.",
+        "sections": bsec}
+
+    md = _metrics_detail(root)
+    agg = (obs or {}).get("aggregate") if obs else None
+    msec = []
+    if md and md.get("outcomes"):
+        msec.append({"h": "Пять метрик семейства TTVO", "list": md["outcomes"]})
+    if agg:
+        msec.append({"h": f"Ранний тренд (n={agg.get('n','—')})", "list": [
+            {"name": "Идея → проверенный результат (медиана)", "desc": agg.get("median_intent_to_verified", "—")},
+            {"name": "Диапазон", "desc": agg.get("range", "—")},
+            {"name": "Без ручной доводки", "desc": agg.get("verified_pr_rate", "—")},
+            {"name": "Вмешательств человека", "desc": agg.get("human_intervention_rate", "—")},
+        ]})
+    modals["metrics"] = {
+        "title": "Метрики продукта", "path": "context/product/ProductMetrics.md",
+        "lead": (md or {}).get("north_star"),
+        "note": (md or {}).get("unmeasured_note"),
+        "sections": msec}
+
+    return modals
+
+
 def build_spine(root: Path, metrics_filled: bool):
     out = []
     for key, title, desc, path in SPINE:
@@ -359,6 +506,11 @@ def build(root: Path) -> dict:
     plan = _plan(root)
     psections = passport(root)
     pm = product_metrics_status(root)
+    capmap = capability_map(root)
+    road = roadmap(root)
+    g = goals(plan)
+    waiting = waiting_on_owner(plan)
+    obs = metric_observations(root)
     return {
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "repo": repo_slug(root),
@@ -366,24 +518,45 @@ def build(root: Path) -> dict:
         "channel": channel(root),
         "maturity": _maturity_from_passport(psections),
         "north_star": north_star(root),
+        "product_tagline": product_tagline(root),
         "spine": build_spine(root, pm["outcomes_filled"]),
-        "capability_map": capability_map(root),
+        "capability_map": capmap,
         "discovery": discovery(root),
         "metrics": {
             "north_star_defined": bool(north_star(root)),
             "outcomes_filled": pm["outcomes_filled"],
-            "observations": metric_observations(root),
+            "observations": obs,
             "health": _health_from_passport(psections),
         },
-        "goals": goals(plan),
-        "waiting_on_owner": waiting_on_owner(plan),
-        "roadmap": roadmap(root),
+        "goals": g,
+        "waiting_on_owner": waiting,
+        "roadmap": road,
         "issues": open_issues(root),
         "field_evidence": field_evidence(root),
         "reach_registered": children_registered(root),
         "passport_sections": psections,
         "contours": contours(root),
+        "modals": build_modals(root, roadmap_data=road, goals_data=g,
+                               waiting=waiting, capmap=capmap, obs=obs),
     }
+
+
+def sync_snapshot(html_path: Path, data: dict) -> int:
+    """Переписать встроенный в index.html снимок теми же данными, что и в data.json.
+
+    Так страница остаётся актуальной и когда её открывают локально/статическим снимком (когда
+    fetch data.json недоступен), а не только на Pages. Возвращает число заменённых блоков.
+    """
+    if not html_path.exists():
+        return 0
+    html = html_path.read_text(encoding="utf-8")
+    payload = "  const SNAPSHOT = " + json.dumps(data, ensure_ascii=False, indent=2) + ";"
+    new, n = re.subn(
+        r"(/\* SNAPSHOT:BEGIN[^\n]*\*/\n).*?(\n\s*/\* SNAPSHOT:END \*/)",
+        lambda m: m.group(1) + payload + m.group(2), html, flags=re.DOTALL)
+    if n:
+        html_path.write_text(new, encoding="utf-8")
+    return n
 
 
 def main() -> int:
@@ -398,11 +571,15 @@ def main() -> int:
     out = Path(args.out) if args.out else Path(__file__).resolve().parent / "data.json"
     data = build(root)
     out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    # Держать встроенный снимок в index.html в синхроне с data.json (актуальность вне Pages).
+    synced = sync_snapshot(Path(__file__).resolve().parent / "index.html", data)
     g = data["goals"]
     print(f"[build_data] записано: {out}")
     print(f"[build_data] версия {data['version']} · целей {g['total']} "
           f"(достигнуто {g['achieved']}, в работе {g['active']}) · "
           f"задач {len(data['issues']) if data['issues'] is not None else '—'}")
+    print(f"[build_data] встроенный снимок index.html: "
+          f"{'обновлён' if synced else 'маркеры не найдены — пропущено'}")
     return 0
 
 

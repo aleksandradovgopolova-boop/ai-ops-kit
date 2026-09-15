@@ -20,6 +20,15 @@ on:
       - "registry/**"
       - "quality/gates.yaml"
       - "dashboard/**"
+      # продуктовые артефакты, которые пульт читает в блоки и модалки
+      - "README.md"
+      - "VISION.md"
+      - "ROADMAP.md"
+      - "decisions/registry.yaml"
+      - "planning/plan.yaml"
+      - "docs/capability-map.md"
+      - "context/product/**"
+      - ".research/**"
       - ".github/workflows/status-dashboard.yml"
 
 # Токен нужен только на чтение задач и на публикацию Pages — не на запись в репозиторий.
