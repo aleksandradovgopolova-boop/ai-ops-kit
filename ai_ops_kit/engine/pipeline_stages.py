@@ -150,20 +150,21 @@ def _pipeline_run_gates(plan, gate_ev, committed_sha, signals, not_applicable, e
                                    gate_ids=_gate_ids, tested_revision=committed_sha,
                                    signals=signals, not_applicable=not_applicable,
                                    exempt_reason=exempt_reason)
-    # ЧТО ПРОВЕРЕНО — ЧЕЛОВЕКУ ПРОДУКТОВЫМИ СЛОВАМИ, А НЕ СЧЁТОМ ГЕЙТОВ. #958
-    # (verified_is_shown_as_trust_not_gate_list): в лицо человеку идёт основание доверять — какие
-    # измерения приняты и КЕМ (детерминированная машина vs независимый ревьюер), — а не «проверено
-    # машиной X из Y; остальное — мнение: <id гейтов>». Счёт «N из M» и id гейтов остаются в
-    # technical-readout (_print_pipeline) и в JSON-отчёте (closure), но не здесь.
-    # Инвариант «no false green»: свод берёт evidence_verdict, где пройденные гейты уже разделены по
-    # источнику, — называется ТОЛЬКО реально пройденное, мнение машиной не зовётся.
-    _verified = gate_dimensions.run_verified_lines(gates.get("evidence_verdict") or {})
-    if _verified:
-        print("  Проверено — вот что:")
-        for _line in _verified:
-            print(f"    · {_line}")
+    # «ПРОВЕРЕНО» — ЭТО УРОВЕНЬ ЗНАНИЯ, А НЕ СЧЁТ ГЕЙТОВ. #958 + P0 №5 (#982): в лицо человеку идёт
+    # хребет НАЗВАННЫХ уровней знания, каждый с честным состоянием (известно / ещё неизвестно), а не
+    # счёт «N из M» и не id гейтов. Так «Проверено» не выглядит увереннее заслуженного: непройденное
+    # (деплой, события, продуктовый результат) НАЗЫВАЕТСЯ, а не замалчивается — прямое следствие
+    # инварианта «no evidence → no claim». Счёт «N из M» и id гейтов остаются в technical-readout
+    # (_print_pipeline) и в JSON-отчёте (closure), но не здесь. Атрибуция источника (детерминированная
+    # машина vs независимый ревьюер) вшита в формулировки — мнение за автоматический тест не выдаётся.
+    _ev = gates.get("evidence_verdict") or {}
+    _readout = gate_dimensions.knowledge_readout(_ev)
+    if gate_dimensions.knowledge_has_known(_ev):
+        print("  Проверено — вот что уже известно о работе:")
     else:
-        print("  Пока ничем не подтверждено — верифицировать нечего.")
+        print("  Проверено — подтверждать пока нечего; вот граница знания:")
+    for _line in _readout:
+        print(f"    · {_line}")
     # веха 4.2 (#588): вердикт честности evidence — «зелёное» без детерминированной опоры advisory.
     _ev = gates.get("evidence_verdict") or {}
     if _ev and not _ev.get("verified") and _ev.get("advisory"):
