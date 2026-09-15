@@ -19,6 +19,50 @@ kind: delivery-plan-history
 
 
 work:
+  - id: verified-readout-is-knowledge-level-not-gate-count
+    title: >-
+      `Verified`-readout как уровень знания, а не счёт гейтов
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 985
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #985). P0 №5 ревью 16.09. На run-пути «Проверено» показывает ХРЕБЕТ
+      уровней знания (реализовано / проверено независимым ревьюером / критические сценарии / аналитика
+      подключена / deploy проверен / события идут / продуктовый результат), каждый с честным
+      состоянием; непройденное собирается в строку «Что пока неизвестно: …», а не замалчивается
+      (shared/gate_dimensions.py: knowledge_levels/knowledge_readout/knowledge_has_known). Инвариант
+      «no evidence → no claim»: уровень «известно» только при реально пройденном источнике; outcome —
+      из измерения. Писал субагент, проверял независимо судья: 106 тестов, ruff/mypy строгий на shared,
+      validate_layering OK (0 взаимных пар). Исход verified_is_shown_as_trust_not_gate_list при этом НЕ
+      флипнут — механика есть, засчёт исхода за живым внешним прогоном (ep-2026-09-16).
+  - id: define-canonical-one-feature-zero-pipeline-scenario
+    title: >-
+      Зафиксировать canonical-сценарий «ONE FEATURE / ZERO PIPELINE»
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 984
+    evidence: qualification/ONE-FEATURE-ZERO-PIPELINE-SCENARIO.md
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #984). P0 №2 ревью 16.09. Зафиксирован эталонный сквозной сценарий
+      (qualification/ONE-FEATURE-ZERO-PIPELINE-SCENARIO.md): одна фича, 14 границ intent→…→
+      recommendation, на каждой проверяемый вопрос «что получил человек?», критерий прохождения из 6
+      пунктов (ноль утечек / Verified=уровень знания / показан Outcome / петля замкнута в next /
+      прогон на чистом stable / внешний замер). Якорь для P0 №3 и readouts.
+  - id: verify-propose-speaks-product-not-kit-foundation
+    title: >-
+      `propose` говорит продуктом, а не про фундамент кита (описание команды)
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 983
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #983). P0 №1 ревью 16.09. Живой прогон `propose .` подтвердил: ВЫВОД уже
+      продуктовый (#978), утечка была в ОПИСАНИИ команды в меню владельца («предложение по фундаменту…
+      ревью фундамента») — переписано на «что продукту нужно дальше: рекомендации человеческим языком
+      + можно ли двигаться; настройка кита и детали по запросу». Тест-замок в test_ai_ops_cli.py;
+      витрина capability-map регенерирована (генерируется из описаний). Последняя утечка на самом входе.
   - id: owner-judges-one-feature-outcomes-achieved
     title: >-
       Владелец засчитывает исходы направления one-feature-end-to-end — или заказывает чистый замер
