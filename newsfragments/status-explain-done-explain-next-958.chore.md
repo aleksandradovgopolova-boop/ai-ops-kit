@@ -1,0 +1,1 @@
+Направление `one-feature-end-to-end` (#958): закрыт follow-up исхода 1 — `status`/`explain` говорят человеку продуктом, а не заявками/ветками/worktree (PR #973) → история. Следующей взят остаток `explain`: команда next-step на blocked/draft всё ещё несёт work-id (найдено ревью #973).

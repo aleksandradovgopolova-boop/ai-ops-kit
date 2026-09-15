@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: status-and-explain-speak-product-not-machinery
+    title: >-
+      `status` и `explain` говорят человеку продуктом, а не заявками/ветками/worktree
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 973
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #973, слит). Продолжение исхода `one_input_hides_the_pipeline`:
+      человеко-обращённый вывод `status` (`presenter_work.from_active_work`) и `explain`
+      (`cli_report._explain_blocker`/`_explain_message`) больше не показывает имена веток (`ai-ops/…`),
+      «заявки», worktree/«рабочие копии», внутренние id работ — говорит продуктом («Сейчас в работе:
+      <заголовок>», «заденут одни и те же места»); сырьё сохранено в technical (по запросу). Честность
+      publish=False цела («вижу только эту машину»). Независимое ревью APPROVE (mypy включён — чист),
+      три группы CI зелёные. Ревью нашло смежный остаток (`_explain_next` показывает work-id в команде
+      next-step на blocked/draft) → заведена работа explain-next-step-command-hides-work-id.
+
   - id: run-completion-shows-what-checked-not-gate-count
     title: >-
       Итог прогона показывает «что проверено» продуктовыми словами, а не счёт гейтов
