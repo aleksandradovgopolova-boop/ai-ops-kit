@@ -120,6 +120,20 @@ class TestIntentsRegistry:
             assert isinstance(action, str)
             assert isinstance(needs_task, bool)
 
+    def test_propose_description_speaks_product_not_kit_foundation(self):
+        """P0 №1 ревью 16.09: описание `propose` в меню владельца ведёт с ПРОДУКТА, а не «фундамента».
+
+        Вывод команды #978 уже сделал продуктовым, но ОПИСАНИЕ в меню оставалось «предложение по
+        фундаменту… ревью фундамента» — последняя утечка product-owner-опыта на входе. Правило ревью:
+        любая команда, которую видит владелец, отвечает на продуктовый вопрос. Тест виден красным на
+        прежнем тексте.
+        """
+        desc = ai_ops_cli.INTENTS["propose"][0].lower()
+        assert "продукт" in desc, "описание propose обязано вести с продукта"
+        assert "по фундаменту" not in desc and "ревью фундамента" not in desc, (
+            "описание propose не должно вести владельца «по фундаменту» самого кита"
+        )
+
 
 @pytest.mark.critical_path
 @pytest.mark.unit
