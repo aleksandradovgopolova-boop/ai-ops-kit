@@ -648,10 +648,13 @@ work:
   # ── Направление one-feature-end-to-end (North Star из ревью #958, product-freeze) ─────────────
   # Диагностический прогон one-feature-slice-measured-where-pipeline-leaks ЗАКРЫТ 2026-09-15 (замер
   # ~14 утечек) — qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md. Из находок ЗАКРЫТЫ в
-  # историю 2026-09-15: specify-hides-feature-id-and-cli-from-the-human (PR #959, исход 1),
-  # kit-advises-what-the-product-needs (PR #960, исход 5), risk-picks-process-not-human-stages
-  # (PR #963, исход 3, первый шаг). Ниже — следующая работа (продолжение исхода 3, найдено ревью
-  # #963); остальные кандидаты в артефакте, берём по одной под product-freeze.
+  # историю 2026-09-15 ПЕРВЫЕ ШАГИ ВСЕХ ПЯТИ ИСХОДОВ: исход 1 specify-hides-feature-id-and-cli
+  # (PR #959), исход 5 kit-advises-what-the-product-needs (PR #960), исход 3
+  # risk-picks-process-not-human-stages (PR #963), исход 2 verified-is-shown-as-trust-not-gate-list
+  # (PR #965), исход 4 after-merge-kit-shows-what-happened-to-the-product (PR #966). Сами исходы ещё
+  # НЕ достигнуты (это первые шаги, не полное закрытие) — направление остаётся active. Ниже —
+  # следующая работа (продолжение исхода 3, найдено ревью #963); остальные кандидаты (run-путь
+  # «гейты N/M», status/explain/propose продуктом) в артефакте, берём по одной под product-freeze.
   - id: grown-spec-summary-drops-process-level-name
     title: >-
       Когда описание задачи уже существовало и подросло, в тексте для человека всё ещё мелькает имя
