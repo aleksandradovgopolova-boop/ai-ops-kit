@@ -328,6 +328,50 @@ def from_discovery_draft(path, created) -> dict:
         technical={"draft": str(path), "создан": bool(created)})
 
 
+# id гейта -> короткая ПРОДУКТОВАЯ фраза о том, ЧТО проверено (#958, исход
+# `verified_is_shown_as_trust_not_gate_list`): в «Проверено» человек видит основание доверять — какие
+# измерения приняты, — а не число «гейты 3/3», и внутренний id гейта не видит. Ключи — РЕАЛЬНЫЕ гейты
+# `quality/gates.yaml`, ТОЛЬКО ai-review (те, что и попадают в `ready`). Гейта нет в карте -> смысл НЕ
+# выдумываем: пропускаем, свод падает на нейтральную формулировку.
+_GATE_PRODUCT_DIMENSION = {
+    "code_review": "код",
+    "security": "безопасность",
+    "architecture_review": "архитектуру",
+    "analytics_design_readiness": "контракт аналитики",
+    "analytics_runtime_verification": "поступление аналитики",
+    "ux_review": "пользовательский опыт",
+    "accessibility_review": "доступность",
+    "visual_regression": "визуальную регрессию",
+    "design_system_usage": "следование дизайн-системе",
+    "ai_eval": "качество AI-функции",
+    "ai_red_team": "устойчивость AI-функции к атакам",
+    "decision_quality": "качество продуктового решения",
+    "release_safety": "безопасность выпуска",
+    "observability_readiness": "наблюдаемость",
+    "evidence": "доказательную базу",
+    "stakeholder_readiness": "готовность для заинтересованных сторон",
+    "discovery_completeness": "полноту discovery",
+}
+
+
+def _verified_why(passed_gates) -> tuple:
+    """Свод «что проверено» продуктовыми словами для ветки `ready`. -> (clause, why).
+    ИНВАРИАНТ ЧЕСТНОСТИ (ядро кита, «no false green»): называем ТОЛЬКО реально пройденные измерения и
+    НЕ выдаём мнение за машинную проверку. Источник различаем без запроса в слой гейтов (`ui` не
+    зависит от `gates`): в `ready` попадают ИСКЛЮЧИТЕЛЬНО ai-review гейты (`_reviewable_gates` берёт
+    `classify == "ai-review"`, writer≠judge) — значит измерение здесь заключение НЕЗАВИСИМОГО РЕВЬЮЕРА,
+    не детерминированного валидатора; машинной проверкой это не зовём.
+    """
+    dims = [d for gid in passed_gates for d in (_GATE_PRODUCT_DIMENSION.get(gid),) if d]
+    if not dims:  # пройденные гейты есть, но продуктовых имён нет — измерения не выдумываем
+        return ("Независимая проверка пройдена — смотрел не тот, кто делал работу.", None)
+    clause = ("Независимый ревьюер (не тот, кто делал работу) посмотрел и принял: "
+              + ", ".join(dims) + ".")
+    # опора доверия честна: заключение ревьюера, не автоматические тесты (инвариант «no false green»)
+    return clause, ("Это заключение независимого ревьюера, а не автоматических тестов, — но проверял "
+                    "не тот, кто делал работу, и потому «замечаний нет» здесь имеет основание.")
+
+
 def from_review(rep: dict) -> dict:
     """`review_branch.review()` -> UserMessage.
 
@@ -392,10 +436,16 @@ def from_review(rep: dict) -> dict:
             technical=tech)
 
     if ready:
+        # #958 (verified_is_shown_as_trust_not_gate_list): в «Проверено» человек видит, ЧТО ИМЕННО
+        # проверено продуктовыми словами, а не число «гейты 3/3»/«замечаний нет». Основание доверять
+        # важнее счётчика; имена гейтов и числа остаются в технических деталях (см. `tech`).
+        passed_gates = [r.get("gate") for r in reviews
+                        if r.get("status") == "pass" and r.get("valid", True) and r.get("gate")]
+        clause, why = _verified_why(passed_gates)
         return message(
             status="ok", headline="Проверено",
-            summary=f"Независимая проверка прошла: изменений в {changed} "
-                    f"{_q(changed, 'файле', 'файлах', 'файлах')}, замечаний нет.",
+            summary="Вот что именно проверено. " + clause,
+            why_it_matters=why,
             next_steps=["можно вливать"], technical=tech)
 
     if verdict != "needs-changes":
