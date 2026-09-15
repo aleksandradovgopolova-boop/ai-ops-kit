@@ -1,3 +1,4 @@
+<html lang="ru">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Карта продукта AI Ops Kit</title>
@@ -28,6 +29,13 @@
   .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
   h1,h2,h3{margin:0;font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;text-wrap:balance}
   a{color:inherit;text-decoration:none}
+  /* UI-029 — видимый фокус на всех интерактивных элементах (WCAG 2.2 AA, 2.4.7/2.4.11) */
+  a:focus-visible,button:focus-visible,[tabindex]:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px;border-radius:8px}
+  /* уважать prefers-reduced-motion — не навязывать анимации */
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;scroll-behavior:auto!important}
+  }
 
   .app{min-height:100dvh;padding:clamp(13px,1.5vw,20px);display:flex;flex-direction:column;
     gap:clamp(11px,1.2vw,15px);max-width:1580px;margin:0 auto}
@@ -35,6 +43,7 @@
      распирают всю сетку и появляется горизонтальный разъезд */
   .app > *{min-width:0}
   .col,.panel,.node,.rh{min-width:0}
+  .main{display:flex;flex-direction:column;gap:clamp(11px,1.2vw,15px);min-width:0}
 
   /* header */
   .head{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap}
@@ -283,11 +292,12 @@
     </div>
   </header>
 
+  <main class="main">
   <div class="north">
     <div class="txt"><b id="tagline">—</b><span id="tagsub" class="sub"></span></div>
   </div>
 
-  <section class="panel">
+  <section class="panel" aria-label="Метрики продукта">
     <div class="eyebrow"><span>Метрики продукта · North Star</span>
       <button class="more" data-modal="metrics">подробнее →</button></div>
     <div class="northstar-metric" id="ns-metric"></div>
@@ -295,19 +305,19 @@
     <div class="measures" id="measures"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel" aria-label="Пульс продукта">
     <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span></div>
     <div class="health" id="health"></div>
     <div class="hint" id="health-hint"></div>
   </section>
 
-  <section class="panel roadstrip">
+  <section class="panel roadstrip" aria-label="Роадмап">
     <div class="eyebrow"><span>Роадмап · направление</span>
       <button class="more" data-modal="roadmap">весь роадмап →</button></div>
     <div class="road" id="road"></div>
   </section>
 
-  <section class="panel">
+  <section class="panel" aria-label="Ближайшие задачи и задачи в работе">
     <div class="eyebrow"><span>Ближайшие задачи · в работе</span></div>
     <div class="tasks">
       <div class="tasks-col">
@@ -321,10 +331,11 @@
     </div>
   </section>
 
-  <section class="panel mapstrip">
+  <section class="panel mapstrip" aria-label="Артефакты продукта">
     <div class="eyebrow"><span>Артефакты</span><span class="n">клик → раздел, внутри — ссылка в репозиторий ↗</span></div>
     <div class="spine" id="spine"></div>
   </section>
+  </main>
 
   <div class="foot">Продуктовый пульт · всё ведёт в реальные артефакты · <b>что не доказано из источника — помечено, а не выдумано</b></div>
 </div>
@@ -340,7 +351,7 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-09-15T10:08:47+00:00",
+  "generated_at": "2026-09-15T10:48:54+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -351,7 +362,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1534,
+    "commits": 1543,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -707,7 +718,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1534, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1543, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -1102,10 +1113,13 @@
     }
 
     // ── модальные окна разделов карты продукта ──────────────────────────────
-    let DATA=null;
-    function openModal(key){
+    let DATA=null, lastTrigger=null;
+    const focusablesIn=el=>[...el.querySelectorAll('a[href],button,[tabindex]:not([tabindex="-1"])')]
+      .filter(x=>!x.disabled&&x.offsetParent!==null);
+    function openModal(key,trigger){
       const d=DATA; if(!d) return;
       const m=(d.modals||{})[key]; if(!m) return;
+      lastTrigger=trigger||document.activeElement;
       $("modal-title").textContent=m.title||"";
       const parts=[];
       if(m.lead) parts.push(`<div class="lead">${esc(m.lead)}</div>`);
@@ -1124,15 +1138,30 @@
       $("modal-foot").innerHTML=m.path
         ? `<a href="${link(d,m.path)}" target="_blank" rel="noopener">Открыть в репозитории · ${esc(m.path)} ↗</a>`
         : "";
-      const bd=$("backdrop"); bd.hidden=false; requestAnimationFrame(()=>bd.classList.add("on"));
+      const bd=$("backdrop"); bd.hidden=false;
+      requestAnimationFrame(()=>{bd.classList.add("on"); ($("modal-x")||bd).focus();});
     }
-    function closeModal(){const bd=$("backdrop");bd.classList.remove("on");setTimeout(()=>{bd.hidden=true;},170);}
+    function closeModal(){
+      const bd=$("backdrop"); if(bd.hidden) return;
+      bd.classList.remove("on"); setTimeout(()=>{bd.hidden=true;},170);
+      if(lastTrigger&&lastTrigger.focus) lastTrigger.focus();
+      lastTrigger=null;
+    }
     document.addEventListener("click",e=>{
       const t=e.target.closest("[data-modal]");
-      if(t){e.preventDefault();openModal(t.getAttribute("data-modal"));return;}
-      if(e.target.id==="backdrop"||e.target.id==="modal-x") closeModal();
+      if(t){e.preventDefault();openModal(t.getAttribute("data-modal"),t);return;}
+      if(e.target.id==="backdrop"||e.target.closest("#modal-x")) closeModal();
     });
-    document.addEventListener("keydown",e=>{if(e.key==="Escape")closeModal();});
+    document.addEventListener("keydown",e=>{
+      const bd=$("backdrop"); if(bd.hidden) return;
+      if(e.key==="Escape"){closeModal();return;}
+      if(e.key==="Tab"){                                   // UI-026 — запереть Tab внутри окна
+        const f=focusablesIn(bd); if(!f.length){e.preventDefault();return;}
+        const first=f[0], last=f[f.length-1], a=document.activeElement;
+        if(e.shiftKey&&a===first){e.preventDefault();last.focus();}
+        else if(!e.shiftKey&&a===last){e.preventDefault();first.focus();}
+      }
+    });
 
     let LIVE=false;
     if(SNAPSHOT) try{render(SNAPSHOT);}catch(e){}
