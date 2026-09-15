@@ -634,7 +634,8 @@ work:
       (--feature/--answers/--signals, «потом запускай plan») — одна фраза, трубопровод скрыт
     type: product
     goal: one-feature-end-to-end
-    status: todo
+    status: in_progress
+    branch: fix/specify-hides-feature-id-958
     owner_role: engineer
     value: high
     write_scope: [ai_ops_kit/]
