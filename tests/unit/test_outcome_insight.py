@@ -153,7 +153,108 @@ def test_run_post_release_says_no_data_on_unknown():
     res = _prr_ok_result(None)
     assert res["insight"] is None
     assert res["candidate_work"] is None
+    assert res["next_action"] is None             # #987: без замера — «что дальше» из петли НЕТ
     assert res["insight_gap"]                      # причина названа
+
+
+# ── (P0 №4, #987) последний шаг петли: КОНКРЕТНОЕ действие + «потому что <что произошло с продуктом>» ──
+_JARGON = ("baseline", "gate", "write_scope", "tested_revision", "sha", "budget", "verdict",
+           "insight", "outcome", "candidate", "guardrail")
+
+
+def _assert_no_jargon(text: str):
+    low = text.lower()
+    for term in _JARGON:
+        assert term not in low, f"внутренний термин «{term}» в лицо человеку: {text!r}"
+
+
+def test_next_action_on_failed_grounds_reason_in_the_product():
+    """failed -> действие «разобраться/скорректировать», обоснование = метрика НЕ взяла цель (числа)."""
+    r = _readout(21)
+    bundle = oi.from_outcome(CONTRACT, r, _eval(r))
+    na = bundle["next_action"]
+    assert na is not None and na["kind"] == "NextAction" and na["verdict"] == "failed"
+    assert na["action"] == bundle["candidate_work"]["title"]      # действие — из DRAFT-кандидата
+    assert na["candidate_id"] == bundle["candidate_work"]["id"]
+    # обоснование от произошедшего с продуктом: имя метрики, замер и цель — реальные числа
+    assert "activation_rate" in na["because"]
+    assert "21" in na["because"] and "35" in na["because"]
+    assert "не взяла" in na["because"]
+    _assert_no_jargon(na["because"])                              # (д) без жаргона в лицо product
+
+
+def test_next_action_on_met_grounds_reason_in_the_product():
+    """met -> действие «закрепить и выбрать следующую гипотезу», обоснование = цель взята (числа)."""
+    r = _readout(40, target_met="yes", hypothesis="confirmed",
+                 guardrails=[{"name": "error_rate", "value": "1%", "within": True},
+                             {"name": "latency", "value": "80", "within": True}])
+    na = oi.from_outcome(CONTRACT, r, _eval(r))["next_action"]
+    assert na["verdict"] == "met"
+    assert "дошла до 40" in na["because"] and "цели 35" in na["because"]
+    assert "гипотеза подтвердилась" in na["because"]              # разрешённая гипотеза — в обосновании
+    _assert_no_jargon(na["because"])
+
+
+def test_next_action_on_refuted_hypothesis_is_a_valid_revise_input():
+    """Гипотеза не подтвердилась — валидный вход: пересмотреть подход, потому что метрика не сдвинулась."""
+    r = _readout(20, hypothesis="refuted")               # замер == старт (baseline 20): не сдвинулась
+    na = oi.from_outcome(CONTRACT, r, _eval(r))["next_action"]
+    assert na["verdict"] == "failed"
+    assert "не сдвинулась" in na["because"]
+    assert "гипотеза не подтвердилась" in na["because"]
+    _assert_no_jargon(na["because"])
+
+
+def test_next_action_does_not_fabricate_unresolved_hypothesis():
+    """inconclusive-гипотеза в обоснование НЕ попадает — причину не сочиняем (no evidence → no claim)."""
+    r = _readout(21, hypothesis="inconclusive")
+    na = oi.from_outcome(CONTRACT, r, _eval(r))["next_action"]
+    assert "гипотеза" not in na["because"]
+
+
+def test_next_action_absent_on_unknown_verdict():
+    """Замера нет -> вердикт unknown -> next_action None: «что дальше» из петли не выдумывается."""
+    assert oi.next_action(None, None, vpo.evaluate_outcome(CONTRACT, None)) is None
+
+
+def test_run_post_release_next_action_reaches_result_on_measurement():
+    """Проводка: на реальном замере результат петли несёт next_action с действием и обоснованием."""
+    res = _prr_ok_result(_readout(21))
+    na = res["next_action"]
+    assert na and na["action"] and na["because"]
+    text = prl.render(res)
+    assert "что делать дальше" in text and "потому что" in text
+
+
+# ── проводка до `next`: источник, который читает `next` (_inbox_outcome_candidate), несёт действие ──
+import yaml as _yaml  # noqa: E402
+
+
+def _write_outcome(root, *, with_measurement):
+    (root / "outcome-contract.yaml").write_text(
+        _yaml.safe_dump(CONTRACT, allow_unicode=True), encoding="utf-8")
+    if with_measurement:
+        (root / "outcome-readout.yaml").write_text(
+            _yaml.safe_dump(_readout(21), allow_unicode=True), encoding="utf-8")
+
+
+def test_next_source_surfaces_action_and_because_on_measurement(tmp_path):
+    """`next` берёт кандидата из _inbox_outcome_candidate: на замере тот несёт КОНКРЕТНОЕ действие и
+    обоснование «потому что <что произошло с продуктом>» — без внутренних терминов."""
+    from ai_ops_kit.cli.ai_ops_cli_report import _inbox_outcome_candidate
+    _write_outcome(tmp_path, with_measurement=True)
+    cand = _inbox_outcome_candidate(tmp_path)
+    assert cand is not None
+    assert cand["action"] and cand["because"]
+    assert "activation_rate" in cand["because"] and "не взяла" in cand["because"]
+    _assert_no_jargon(cand["because"])
+
+
+def test_next_source_adds_nothing_without_measurement(tmp_path):
+    """Нет замера (только контракт) -> кандидата из петли нет: `next` НИЧЕГО не добавляет (no false claim)."""
+    from ai_ops_kit.cli.ai_ops_cli_report import _inbox_outcome_candidate
+    _write_outcome(tmp_path, with_measurement=False)
+    assert _inbox_outcome_candidate(tmp_path) is None
 
 
 def test_loop_writes_nothing_to_child(tmp_path):

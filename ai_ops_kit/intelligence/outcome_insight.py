@@ -293,15 +293,83 @@ def build_recommendation(insight: dict, candidate: dict) -> dict:
     }
 
 
+def _metric_name(insight: dict, contract: dict | None) -> str:
+    """Имя основной метрики в ПРОДУКТОВЫХ словах. Из контракта, иначе — из заголовка инсайта."""
+    if isinstance(contract, dict):
+        name = _text((contract.get("primary_metric") or {}).get("name"))
+        if name:
+            return name
+    # headline имеет вид «metric»: …; достаём metric без служебных кавычек.
+    return _text((insight.get("headline") or "").strip("«").split("»")[0]) or _text(insight.get("outcome_id"))
+
+
+def _because(insight: dict, evaluation: dict, readout: dict | None, contract: dict | None) -> str:
+    """Обоснование «потому что <что произошло с продуктом>» — ТОЛЬКО из снятого замера и разрешённой
+    гипотезы. Никаких внутренних терминов в лицо человеку (не «baseline», а «старт»); числа — те же,
+    что посчитал evaluate_outcome, ничего не выдумано. Гипотеза попадает в обоснование, лишь если она
+    реально разрешилась (confirmed/refuted); inconclusive/отсутствует — молчим, а не досочиняем."""
+    metric = _metric_name(insight, contract)
+    verdict = insight.get("verdict")
+    b, m, t = evaluation.get("baseline"), evaluation.get("measured"), evaluation.get("target")
+    breaches = list(evaluation.get("guardrail_breaches") or [])
+    parts: list[str] = []
+    if verdict == "met":
+        parts.append(f"метрика «{metric}» дошла до {m} при цели {t} (старт {b})")
+    elif breaches:
+        # цель провалена соседней метрикой — это и есть «что произошло с продуктом».
+        parts.append(f"защитная метрика просела ({', '.join(breaches)}), "
+                     f"а «{metric}» была на {m} при цели {t}")
+    elif m is not None and m == b:
+        parts.append(f"метрика «{metric}» не сдвинулась (осталась {b}) и цель {t} не взяла")
+    else:
+        parts.append(f"метрика «{metric}» сдвинулась с {b} до {m}, но цель {t} не взяла")
+    hyp = _text((readout or {}).get("hypothesis"))
+    if hyp == "confirmed":
+        parts.append("гипотеза подтвердилась")
+    elif hyp == "refuted":
+        parts.append("гипотеза не подтвердилась")
+    return "; ".join(parts)
+
+
+def next_action(insight: dict | None, candidate: dict | None, evaluation: dict | None,
+                readout: dict | None = None, contract: dict | None = None) -> dict | None:
+    """ПОСЛЕДНИЙ шаг петли — КОНКРЕТНОЕ следующее действие с обоснованием от произошедшего с продуктом.
+
+    Замыкает measure → learn → next decision: САМО действие берётся из кандидата (тот же DRAFT,
+    writer ≠ judge — активной работой без решения человека не станет), а обоснование `because` —
+    ТОЛЬКО из снятого замера и разрешённой гипотезы (`_because`), продуктовым языком.
+
+    -> None, если инсайта/кандидата/замера нет (`unknown` — данных для «что дальше» нет; причину
+    называет `no_insight_reason`). Причину не сочиняем: не разрешилась гипотеза — её в `because` нет.
+    """
+    if not isinstance(insight, dict) or not isinstance(candidate, dict) or not isinstance(evaluation, dict):
+        return None
+    return {
+        "schema_version": 1,
+        "kind": "NextAction",
+        "verdict": insight.get("verdict"),
+        "action": candidate.get("title"),            # конкретная следующая работа
+        "owner_role": candidate.get("owner_role"),
+        "candidate_id": candidate.get("id"),
+        "because": _because(insight, evaluation, readout, contract),
+        "confidence": insight.get("confidence"),
+    }
+
+
 def from_outcome(contract: dict | None, readout: dict | None,
                  evaluation: dict | None) -> dict | None:
-    """Полная петля одним вызовом: Outcome(+замер) -> {insight, candidate_work, recommendation}.
+    """Полная петля одним вызовом: Outcome(+замер) -> {insight, candidate_work, recommendation,
+    next_action}.
 
     -> None, если вердикт `unknown` (нет данных — инсайт не фабрикуется; причину даёт
-    `no_insight_reason`). Чистая проекция: ничего не пишет, кандидат — DRAFT (writer ≠ judge)."""
+    `no_insight_reason`). Чистая проекция: ничего не пишет, кандидат — DRAFT (writer ≠ judge).
+    `next_action` — последний шаг петли: конкретное действие + «потому что <что произошло с продуктом>»,
+    ровно то, что кит показывает в `next`."""
     insight = derive_insight(contract, readout, evaluation)
     if insight is None:
         return None
     candidate = propose_candidate_work(insight, contract, readout)
     recommendation = build_recommendation(insight, candidate)
-    return {"insight": insight, "candidate_work": candidate, "recommendation": recommendation}
+    action = next_action(insight, candidate, evaluation, readout, contract)
+    return {"insight": insight, "candidate_work": candidate, "recommendation": recommendation,
+            "next_action": action}
