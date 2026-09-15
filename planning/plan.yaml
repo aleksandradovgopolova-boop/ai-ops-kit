@@ -651,40 +651,110 @@ current_milestone:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
-  # ── Направление one-feature-end-to-end (North Star из ревью #958, product-freeze) ─────────────
-  # Диагностический прогон one-feature-slice-measured-where-pipeline-leaks ЗАКРЫТ 2026-09-15 (замер
-  # ~14 утечек) — qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md. Из находок ЗАКРЫТЫ в
-  # историю 2026-09-15 ПЕРВЫЕ ШАГИ ВСЕХ ПЯТИ ИСХОДОВ: исход 1 specify-hides-feature-id-and-cli
-  # (PR #959), исход 5 kit-advises-what-the-product-needs (PR #960), исход 3
-  # risk-picks-process-not-human-stages (PR #963), исход 2 verified-is-shown-as-trust-not-gate-list
-  # (PR #965), исход 4 after-merge-kit-shows-what-happened-to-the-product (PR #966). Сами исходы ещё
-  # НЕ достигнуты (это первые шаги, не полное закрытие) — направление остаётся active. Ниже —
-  # следующая работа (продолжение исхода 3, найдено ревью #963); остальные кандидаты (run-путь
-  # «гейты N/M», status/explain/propose продуктом) в артефакте, берём по одной под product-freeze.
-  - id: owner-judges-one-feature-outcomes-achieved
+  # ── Направление one-feature-end-to-end (North Star, product-freeze СОХРАНЁН) ──────────────────
+  # РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-16 по продуктовому ревью (ep-2026-09-16-product-freeze-held-until-
+  # external-clean-run): исходы НЕ засчитываются достигнутыми — вертикальный срез не доказан живым
+  # ВНЕШНИМ прогоном. Пивот прошлой части сессии (засчёт 5/5 + снятие freeze + parallel, PR #981)
+  # ОТМЕНЁН, PR закрыт без слияния. Работа owner-judges-one-feature-outcomes-achieved закрыта в
+  # историю (владелец решил: не засчитывать, заказать реальный P0 + внешний замер). Freeze ДЕРЖИТСЯ:
+  # новые capability (parallel/runtime/Figma/MCP/portfolio/nightly/новые agents-gates-commands) не
+  # берём, пока P0 ниже не закрыт. Приоритет — outcome-loop (#4), это главный moat. Берём по одной.
+  - id: verify-propose-speaks-product-not-kit-foundation
     title: >-
-      Владелец засчитывает исходы направления one-feature-end-to-end (первые шаги всех пяти закрыты и
-      перемерены чистыми) — или заказывает чистый замер на релизнутом ките сторонним пользователем
+      Проверить `propose` на текущем main живым прогоном; если советует про фундамент кита, а не про
+      продукт — переоткрыть и дочинить (сестра `advise`, переиспользует product_advice)
     type: product
+    goal: one-feature-end-to-end
+    status: todo
+    owner_role: product
+    value: high
+    write_scope: [ai_ops_kit/, tests/, qualification/]
+    reason: >-
+      P0 №1 ревью 16.09. Кит считает propose закрытым (#978 в истории), ревьюер видит утечку на main —
+      сверить по факту. Последняя очевидная утечка product-owner-опыта на входе.
+  - id: define-canonical-one-feature-zero-pipeline-scenario
+    title: >-
+      Зафиксировать canonical-сценарий «ONE FEATURE / ZERO PIPELINE»: одна конкретная фича, все
+      границы (intent→discovery→decision→spec→design→impl→tests→review→PR→merge→deploy→analytics→
+      outcome→recommendation) с вопросом «что получил человек?»
+    type: product
+    goal: one-feature-end-to-end
+    status: todo
+    owner_role: product
+    value: high
+    write_scope: [qualification/]
+    reason: >-
+      P0 №2 ревью 16.09. Нужен один зафиксированный сквозной сценарий как эталон, по которому меряем
+      весь путь — не абстрактно, а с человеческим результатом на каждой границе.
+  - id: verified-readout-is-knowledge-level-not-gate-count
+    title: >-
+      `Verified`-readout как УРОВЕНЬ ЗНАНИЯ, а не счёт гейтов («реализовано / проверено независимым
+      ревьюером / критические сценарии прошли / аналитика подключена / deploy проверен / события идут
+      / product outcome ещё не накоплен»)
+    type: product
+    goal: one-feature-end-to-end
+    status: todo
+    owner_role: product
+    value: high
+    write_scope: [ai_ops_kit/, tests/]
+    reason: >-
+      P0 №5 ревью 16.09. Прямо соответствует «No evidence → no claim»: Verified описывает, ЧТО именно
+      известно, а не сколько зелёных галочек. Исход verified_is_shown_as_trust_not_gate_list.
+  - id: outcome-readout-shows-what-happened-to-the-product
+    title: >-
+      `Outcome`-readout: что изменение сделало с продуктом (не «shipped», не «verified», а сдвиг
+      целевой метрики / поведения после релиза)
+    type: analytics
+    goal: one-feature-end-to-end
+    status: todo
+    owner_role: analytics
+    value: high
+    write_scope: [ai_ops_kit/, tests/]
+    reason: >-
+      P0 №6 ревью 16.09. Исход after_merge_kit_shows_what_happened_to_the_product — сторона показа.
+  - id: outcome-loop-after-merge-feeds-next
+    title: >-
+      Outcome-loop после merge: события пришли? → поведение изменилось? → метрика сдвинулась? →
+      гипотеза подтверждена? → чему научились? → что делать дальше — и последнее действие появляется
+      в `next`
+    type: engineering
+    goal: one-feature-end-to-end
+    status: todo
+    owner_role: engineer
+    value: high
+    write_scope: [ai_ops_kit/, tests/]
+    reason: >-
+      P0 №4 ревью 16.09 — «следующая настоящая большая фича продукта» и главный moat, поднята над
+      остальным. Замыкает петлю idea→decision→build→release→measure→learn→next decision.
+  - id: one-feature-run-on-clean-installed-stable
+    title: >-
+      Прогнать canonical-сценарий на ЧИСТО УСТАНОВЛЕННОМ stable (init→doctor→onboard), а не через
+      PYTHONPATH из main; довести реальный merge→deploy→analytics→outcome
+    type: quality
+    goal: one-feature-end-to-end
+    status: todo
+    owner_role: qa
+    value: high
+    write_scope: [qualification/]
+    reason: >-
+      P0 №3+4 ревью 16.09. Прежний перемер 15.09 делался новым кодом кита против cockpit (managed 4.3.2),
+      живого пути до Verified/outcome на чистой установке не было — это и есть недостающий тип evidence.
+  - id: external-clean-run-measured-by-outside-person
+    title: >-
+      Независимый ВНЕШНИЙ замер всего пути человеком со стороны (новый репозиторий, установить кит,
+      одна человеческая фраза → изменение → PR → merge → outcome), с минимумом знаний о внутренностях
+    type: quality
     goal: one-feature-end-to-end
     status: waiting_on_owner
     waiting_on: >-
-      владелец решает, какие из пяти исходов считать достигнутыми по перемеру
-      (qualification/ONE-FEATURE-SLICE-REMEASURE-2026-09-15.md) — кит не судит себя сам; для полной
-      чистоты — живой замер на релизнутом ките сторонним пользователем
-    owner_role: product
+      нужен человек со стороны (не автор кита, не Клод, знающий внутренности) — владелец организует
+      участника; кит один этого сделать не может
+    owner_role: qa
     value: high
-    human_decision: >-
-      Первые шаги всех пяти исходов закрыты и слиты (specify без id/CLI, risk без уровней, advise и
-      propose продуктом, Verified в review и итоге прогона, outcome после merge, status/explain/
-      explain-next продуктом), перемер 15.09 подтвердил ~13 из ~14 утечек закрытыми. Что считать
-      «исход достигнут» и когда — решает владелец (кит себя не судит), родственно засчётам #745/#748.
-    write_scope: [qualification/, planning/]
+    write_scope: [qualification/]
     reason: >-
-      Механизм направления доведён по всем пяти осям и перемерен чистым (артефакты диагностики и
-      перемера в qualification/). Остаток по природе — не код, а ЗАСЧЁТ владельца: какие исходы
-      признать достигнутыми и нужен ли чистый живой замер на релизнутом ките сторонним пользователем.
-      Кит не флипает исходы сам. Родственно остаткам owner-speaks (#748) и team-works (#745).
+      P0 №7 ревью 16.09 — самое сильное доказательство «stable», сильнее сотни контрактных тестов.
+      Единственный элемент P0, который кит НЕ может сделать автономно.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО

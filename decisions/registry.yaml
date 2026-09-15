@@ -971,6 +971,36 @@ episodes:
     date: 2026-09-10
     source: чат-сессия (автономный заезд по бэклогу аудита)
 
+  - id: ep-2026-09-16-product-freeze-held-until-external-clean-run
+    question: >
+      После засчёта исходов one-feature-end-to-end снять product-freeze и расти вширь
+      (параллельный запуск и т.д.) — или сохранить freeze до доказанного вертикального среза?
+    decision: >
+      СОХРАНИТЬ product-freeze. Вертикальный срез НЕ считается пройденным, пока не доказан ЖИВЫМ
+      ВНЕШНИМ прогоном: чистая установка stable (init→doctor→onboard, без PYTHONPATH из main), одна
+      человеческая фраза → изменение → PR → merge → deploy → analytics → РЕАЛЬНЫЙ outcome →
+      рекомендация «что дальше», замерено человеком со стороны. До этого НЕ берём новые
+      capability: parallel execution, runtime-адаптеры (#611), Figma, MCP-дизайн, portfolio,
+      полноценные nightly, новые agents/gates/commands/registries. Приоритет — outcome-loop
+      (после merge кит показывает, что произошло с продуктом, и сам советует следующее): это
+      главный moat, поднят над остальным. Предыдущее решение той же сессии (засчёт 5/5 + снятие
+      freeze + parallel, PR #981) ОТМЕНЕНО — PR закрыт без слияния.
+    reason: >
+      Продуктовое ревью владельца 16.09 (на текущем main v4.3.2): инженерия опережает продуктовую
+      ценность; полный путь до реального product outcome не доказан живым пользовательским прогоном —
+      это главный gap. Больше intelligence до достаточного feedback бесполезно; сначала один срез
+      целиком, потом масштаб. Совпадает с прежним правилом roadmap «не расти вширь без одного
+      сквозного сценария» и с ep-2026-08-14-product-os.
+    context: >
+      Продуктовое ревью 16.09 (в чате). P0: закрыть/проверить propose; canonical-сценарий
+      «ONE FEATURE / ZERO PIPELINE»; прогон на чисто установленном stable; merge→deploy→analytics→
+      outcome; Verified-readout как уровень знания (не счёт гейтов); Outcome-readout; внешний замер.
+      P1: свести 34 команды к человеческой модели; спрятать pipeline-понятия; проверить 42 роли;
+      свести README↔capability-map (32 vs 34). P2 (заморожено): parallel/runtime/Figma/KG/portfolio.
+    reversibility: two-way
+    date: 2026-09-16
+    source: продуктовое ревью владельца 16.09.2026 (чат-сессия); отменяет пивот PR #981
+
 
 outcomes:
   - decision: ep-2026-07-13-systems
