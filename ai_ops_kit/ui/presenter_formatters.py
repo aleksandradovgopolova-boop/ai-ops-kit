@@ -400,35 +400,73 @@ def from_review(rep: dict) -> dict:
 
 
 def from_advice(result: dict) -> dict:
-    """`engineering_advisor.advise()` -> UserMessage. Совет — не исполнение, и это должно быть видно."""
-    recs = list(result.get("recommendations") or [])
-    urgent = [r for r in recs if int(r.get("priority") or 3) == 1]
-    tech = {"repository": result.get("repository"), "task_type": result.get("task_type") or "—",
-            "рекомендаций": len(recs), "сводка": result.get("summary")}
-    tech.update({f"[{r.get('category')}] {i + 1}": f"{r.get('advice')} (источник: {r.get('source')})"
-                 for i, r in enumerate(recs)})
-    if not recs:
-        return message(status="ok", headline="Замечаний по инженерной части нет",
-                       summary="Смотрела окружения, поставку и процесс — советовать нечего.",
-                       next_steps=["спроси «что дальше» — предложу работу"], technical=tech)
-    n = len(recs)
-    if urgent:
+    """`advise` -> UserMessage. ВЕДЁТ с «что нужно ПРОДУКТУ» (#958), инженерная настройка кита —
+    после и явно отделена. Совет — не исполнение, и это должно быть видно.
+
+    Продуктовая часть говорит о продукте пользователя простым языком: возможности, пробелы,
+    следующий шаг. Инженерная часть (окружения/поставка/процесс — про настройку самого кита)
+    уходит в технические детали и в отдельную строку «Дальше», чтобы её не спутать с продуктом.
+    Инвариант честности: нет продуктовых данных → так и говорим, потребность не выдумываем.
+    """
+    pa = result.get("product_advice") or {}
+    precs = list(pa.get("recommendations") or [])
+    enough = pa.get("enough_product_data")
+
+    eng_recs = list(result.get("recommendations") or [])
+
+    # Технические детали: сперва продуктовые рекомендации с источниками, затем — ЯВНО отделённая
+    # инженерная часть про настройку кита (её лексика — .ai-ops.yaml, CI и т.п. — живёт только тут).
+    tech = {"продуктовых рекомендаций": len(precs)}
+    tech.update({f"продукт · {p.get('kind')} {i + 1}":
+                 f"{p.get('need')} — {p.get('why')} (источник: {p.get('source')})"
+                 for i, p in enumerate(precs)})
+    if pa.get("note"):
+        tech["продукт · примечание"] = pa["note"]
+    tech["— ниже про НАСТРОЙКУ КИТА, не про продукт —"] = (
+        f"{len(eng_recs)} инженерных заметок")
+    tech["repository"] = result.get("repository")
+    tech["task_type"] = result.get("task_type") or "—"
+    tech.update({f"настройка кита · [{r.get('category')}] {i + 1}":
+                 f"{r.get('advice')} (источник: {r.get('source')})"
+                 for i, r in enumerate(eng_recs)})
+
+    # Инженерная часть подаётся ПОСЛЕ и отдельными словами: «это про настройку кита, не про продукт».
+    eng_line = (f"отдельно есть заметки про настройку самого кита — это не про продукт, "
+                f"покажу по запросу") if eng_recs else None
+
+    if precs:
+        lead = precs[0]
+        needs = "; ".join(p.get("need", "") for p in precs)
+        next_steps = ["возьмусь за первое, если скажешь"]
+        if len(precs) > 1:
+            next_steps.append("остальное по продукту покажу списком")
+        if eng_line:
+            next_steps.append(eng_line)
         return message(
-            status="degraded", headline="Есть то, что стоит починить сначала",
-            summary=f"Нашла {n} {_q(n, 'совет', 'совета', 'советов')} по инженерной части, "
-                    f"из них {len(urgent)} "
-                    f"{_q(len(urgent), 'срочный', 'срочных', 'срочных')}.",
-            why_it_matters="Срочное здесь значит: пока это так, остальная работа будет идти "
-                           "медленнее или её результат будет труднее проверить. "
-                           + urgent[0].get("advice", ""),
-            next_steps=["возьмусь за срочное, если скажешь", "остальное покажу списком"],
-            technical=tech)
+            status="ok", headline="Что нужно продукту",
+            summary=f"Вот что, по-моему, сейчас важно для твоего продукта: {needs}.",
+            why_it_matters=lead.get("why"),
+            next_steps=next_steps, technical=tech)
+
+    # Продуктовых рекомендаций нет. Честно различаем «данных не хватает» и «данные есть, срочного нет».
+    if not enough:
+        next_steps = ["заполним продуктовую картину — тогда смогу советовать по продукту"]
+        if eng_line:
+            next_steps.append(eng_line)
+        return message(
+            status="degraded", headline="Пока не могу советовать по продукту",
+            summary="Пока не хватает продуктовых данных, чтобы советовать по продукту.",
+            why_it_matters="Придумывать продуктовую потребность я не буду — это была бы выдумка, "
+                           "а не совет.",
+            next_steps=next_steps, technical=tech)
+
+    next_steps = ["спроси «что дальше» — предложу работу"]
+    if eng_line:
+        next_steps.append(eng_line)
     return message(
-        status="ok", headline="Совет по инженерной части",
-        summary=f"Нашла {n} {_q(n, 'место', 'места', 'мест')}, где можно сделать лучше; "
-                f"срочного нет.",
-        why_it_matters=recs[0].get("advice"),
-        next_steps=["покажу список целиком, если нужно"], technical=tech)
+        status="ok", headline="По продукту сейчас советовать нечего",
+        summary="Продуктовые данные есть, но срочного по продукту сейчас нет.",
+        next_steps=next_steps, technical=tech)
 
 
 # ── Переводчики внутренних отчётов: чтение состояния проекта ───────────────────────────────────
