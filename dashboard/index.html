@@ -130,6 +130,20 @@
   .badge.template{background:var(--hold-soft);color:var(--hold)}
   .badge.missing{background:var(--need-soft);color:var(--need)}
 
+  /* current focus */
+  .focus{border-left:3px solid var(--run)}
+  .focus-title{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:15px;
+    color:var(--ink);line-height:1.35;margin-bottom:11px}
+  .focus-prog{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+  .focus-prog .bar{flex:1;height:7px;border-radius:5px;background:var(--zero-soft);overflow:hidden;position:relative}
+  .focus-prog .bar > i{position:absolute;left:0;top:0;bottom:0;background:var(--run);border-radius:5px;transition:width .3s}
+  .focus-n{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .focus-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 16px}
+  .focus-item{display:flex;gap:8px;font-size:12px;color:var(--muted);line-height:1.35;align-items:baseline}
+  .focus-item .mark{color:var(--faint);flex:none;font-size:11px}
+  .focus-item.done{color:var(--ink)}
+  .focus-item.done .mark{color:var(--ok)}
+
   /* metrics col */
   .health{display:flex;gap:7px;margin-bottom:11px}
   .hp{flex:1;border-radius:10px;padding:9px 10px;border:1px solid var(--line-2);background:var(--panel-2)}
@@ -175,6 +189,7 @@
   .kind.enh{background:var(--accent-soft);color:var(--accent)}
   .kind.task{background:var(--zero-soft);color:var(--zero)}
   .issue .ti{font-size:12px;line-height:1.3;color:var(--ink)}
+  .worknote{font-size:11px;color:var(--faint);font-family:"IBM Plex Mono",monospace;margin-top:2px;padding:4px 2px}
 
   /* passport strip */
   .passport{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
@@ -305,6 +320,15 @@
     <div class="txt"><b id="tagline">—</b><span id="tagsub" class="sub"></span></div>
   </div>
 
+  <section class="panel focus" id="focus-block" aria-label="Текущий фокус" hidden>
+    <div class="eyebrow"><span>Текущий фокус · веха</span>
+      <button class="more" data-modal="roadmap">роадмап →</button></div>
+    <div class="focus-title" id="focus-title">—</div>
+    <div class="focus-prog"><div class="bar"><i id="focus-bar"></i></div>
+      <span class="focus-n" id="focus-n"></span></div>
+    <div class="focus-list" id="focus-list"></div>
+  </section>
+
   <section class="panel" aria-label="Метрики продукта">
     <div class="eyebrow"><span>Метрики продукта · North Star</span>
       <button class="more" data-modal="metrics">подробнее →</button></div>
@@ -360,7 +384,7 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-09-15T11:17:25+00:00",
+  "generated_at": "2026-09-15T11:59:27+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -371,7 +395,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1547,
+    "commits": 1548,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -612,6 +636,33 @@
       "advisory-gates-obkatka"
     ]
   },
+  "current_focus": {
+    "id": "one-feature-end-to-end",
+    "reached": 0,
+    "total": 5,
+    "outcomes": [
+      {
+        "key": "one_input_hides_the_pipeline",
+        "done": false
+      },
+      {
+        "key": "verified_is_shown_as_trust_not_gate_list",
+        "done": false
+      },
+      {
+        "key": "risk_selects_the_process_not_the_human",
+        "done": false
+      },
+      {
+        "key": "after_merge_kit_shows_what_happened_to_the_product",
+        "done": false
+      },
+      {
+        "key": "kit_recommends_what_the_product_needs",
+        "done": false
+      }
+    ]
+  },
   "waiting_on_owner": [],
   "roadmap": [
     {
@@ -659,10 +710,17 @@
     },
     {
       "id": 611,
-      "title": "Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code/Codex/Qwen), §25 как протокол",
+      "title": "runtime-agnostic-core: кит исполняется любым харнессом (Claude Code / Codex / Qwen), не привязан к одному",
       "kind": "enh",
       "kind_ru": "улучшение",
-      "updated": "2026-09-09"
+      "updated": "2026-09-15"
+    },
+    {
+      "id": 970,
+      "title": "Когда описание задачи уже существовало и подросло, в тексте для человека всё ещё мелька…",
+      "kind": "work",
+      "kind_ru": "work-item",
+      "updated": "2026-09-15"
     }
   ],
   "field_evidence": [
@@ -720,7 +778,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1547, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1548, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -1023,6 +1081,26 @@
       // длинное самодостаточное описание не дублируем подзаголовком
       $("tagsub").textContent=(tgl.length>90)?"":(tg.subtitle||"");
 
+      // текущий фокус — прогресс активного направления по его исходам
+      const cf=d.current_focus, fb=$("focus-block");
+      if(cf&&cf.total){
+        const OUTCOME_RU={
+          one_input_hides_the_pipeline:"Единый вход скрывает трубопровод",
+          verified_is_shown_as_trust_not_gate_list:"«Verified — вот почему», а не список гейтов",
+          risk_selects_the_process_not_the_human:"Риск выбирает процесс, не человек",
+          after_merge_kit_shows_what_happened_to_the_product:"После merge кит показывает результат для продукта",
+          kit_recommends_what_the_product_needs:"Кит сам советует, что нужно продукту"};
+        $("focus-title").textContent=(d.roadmap&&d.roadmap[0]&&(d.roadmap[0].items||[])[0])||cf.id;
+        const pct=cf.total?Math.round(100*cf.reached/cf.total):0;
+        $("focus-bar").style.width=pct+"%";
+        $("focus-n").textContent=`${cf.reached} из ${cf.total} исходов доказано`;
+        $("focus-list").innerHTML=(cf.outcomes||[]).map(o=>{
+          const t=OUTCOME_RU[o.key]||String(o.key).replace(/_/g," ");
+          return `<div class="focus-item ${o.done?"done":""}"><span class="mark">${o.done?"✓":"○"}</span>${esc(t)}</div>`;
+        }).join("");
+        fb.hidden=false;
+      } else fb.hidden=true;
+
       // spine — разделы с модалкой открывают её, остальные ведут прямо в репозиторий
       const BADGE={filled:"заполнено",generated:"генерируется",template:"пустой шаблон",missing:"нет"};
       const MODALS=d.modals||{};
@@ -1104,15 +1182,18 @@
       $("wait").innerHTML=w.length?w.map(x=>`<div class="waiti">${esc(x.title)}</div>`).join("")
         :`<div class="nowi">нет — решения не ждут</div>`;
 
-      // issues
+      // issues — направления/улучшения/задачи владельца; work-items (реализация) скрыты в сводку
       const iss=d.issues||[];
-      $("issue-count").textContent=iss.length;
+      const shownIss=iss.filter(it=>it.kind!=="work");
+      const workN=iss.length-shownIss.length;
+      $("issue-count").textContent=shownIss.length;
       const iurl=d.repo?`https://github.com/${d.repo.owner}/${d.repo.name}/issues/`:"#";
-      $("issues").innerHTML=iss.length?iss.map(it=>
+      const workNote=workN?`<div class="worknote">+ ${workN} work-item под направлениями</div>`:"";
+      $("issues").innerHTML=(shownIss.length?shownIss.map(it=>
         `<a class="issue" href="${iurl}${it.id}" target="_blank" rel="noopener"><div class="top">`+
         `<span class="id">#${it.id}</span><span class="kind ${it.kind}">${esc(it.kind_ru||it.kind)}</span></div>`+
         `<div class="ti">${esc(it.title)}</div></a>`).join("")
-        :`<div class="nowi">нет открытых задач${d.issues===null?" (данные недоступны)":""}</div>`;
+        :`<div class="nowi">нет открытых задач${d.issues===null?" (данные недоступны)":""}</div>`)+workNote;
 
       // source badge
       const when=d.generated_at?new Date(d.generated_at):null;

@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-09-15T11:17:25+00:00",
+  "generated_at": "2026-09-15T11:59:27+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
@@ -10,7 +10,7 @@
   "maturity": {
     "cls": "EXISTING_PRODUCT",
     "confidence": "high",
-    "commits": 1547,
+    "commits": 1548,
     "code_files": 990
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
@@ -251,6 +251,33 @@
       "advisory-gates-obkatka"
     ]
   },
+  "current_focus": {
+    "id": "one-feature-end-to-end",
+    "reached": 0,
+    "total": 5,
+    "outcomes": [
+      {
+        "key": "one_input_hides_the_pipeline",
+        "done": false
+      },
+      {
+        "key": "verified_is_shown_as_trust_not_gate_list",
+        "done": false
+      },
+      {
+        "key": "risk_selects_the_process_not_the_human",
+        "done": false
+      },
+      {
+        "key": "after_merge_kit_shows_what_happened_to_the_product",
+        "done": false
+      },
+      {
+        "key": "kit_recommends_what_the_product_needs",
+        "done": false
+      }
+    ]
+  },
   "waiting_on_owner": [],
   "roadmap": [
     {
@@ -298,10 +325,17 @@
     },
     {
       "id": 611,
-      "title": "Горизонт-2: рантайм-агностичное ядро + тонкие адаптеры (Claude Code/Codex/Qwen), §25 как протокол",
+      "title": "runtime-agnostic-core: кит исполняется любым харнессом (Claude Code / Codex / Qwen), не привязан к одному",
       "kind": "enh",
       "kind_ru": "улучшение",
-      "updated": "2026-09-09"
+      "updated": "2026-09-15"
+    },
+    {
+      "id": 970,
+      "title": "Когда описание задачи уже существовало и подросло, в тексте для человека всё ещё мелька…",
+      "kind": "work",
+      "kind_ru": "work-item",
+      "updated": "2026-09-15"
     }
   ],
   "field_evidence": [
@@ -359,7 +393,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1547, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1548, файлов кода 990; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",

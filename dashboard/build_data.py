@@ -306,7 +306,7 @@ def metric_observations(root: Path):
 def open_issues(root: Path):
     try:
         out = subprocess.run(["gh", "issue", "list", "--state", "open", "--limit", "40",
-                              "--json", "number,title,labels,updatedAt"],
+                              "--json", "number,title,labels,updatedAt,body"],
                              cwd=root, capture_output=True, text=True, timeout=30, check=True).stdout
     except Exception as exc:  # noqa: BLE001
         print(f"[build_data] задачи не собраны ({exc.__class__.__name__})", file=sys.stderr)
@@ -315,7 +315,12 @@ def open_issues(root: Path):
     res = []
     for it in raw:
         labels = {l["name"] for l in it.get("labels", [])}
-        if "roadmap-direction" in labels:
+        body = it.get("body") or ""
+        # work-item и эпик-направление несут разные sync-маркеры в теле — различаем по ним,
+        # чтобы work-items (реализация) не засоряли список направлений/улучшений владельца.
+        if re.search(r"<!--\s*roadmap-sync:\s*work:", body):
+            kind, kru = "work", "work-item"
+        elif "roadmap-direction" in labels:
             kind, kru = "dir", "направление"
         elif "enhancement" in labels:
             kind, kru = "enh", "улучшение"
@@ -324,9 +329,22 @@ def open_issues(root: Path):
         title = re.sub(r"^\[[^\]]+\]\s*", "", it["title"]).strip()
         res.append({"id": it["number"], "title": title, "kind": kind,
                     "kind_ru": kru, "updated": it["updatedAt"][:10]})
-    order = {"dir": 0, "enh": 1, "task": 2}
+    order = {"dir": 0, "enh": 1, "task": 2, "work": 3}
     res.sort(key=lambda x: (order[x["kind"]], x["updated"]))
     return res
+
+
+def current_focus(plan):
+    """Активное направление и прогресс по его исходам — «где мы на текущем деле»."""
+    gs = (plan or {}).get("goals", []) or []
+    active = [g for g in gs if g.get("status") == "active"]
+    if not active:
+        return None
+    g = active[0]
+    oc = g.get("outcome") if isinstance(g.get("outcome"), dict) else {}
+    outcomes = [{"key": k, "done": bool(v)} for k, v in oc.items()]
+    reached = sum(1 for o in outcomes if o["done"])
+    return {"id": g.get("id"), "reached": reached, "total": len(outcomes), "outcomes": outcomes}
 
 
 def field_evidence(root: Path):
@@ -529,6 +547,7 @@ def build(root: Path) -> dict:
             "health": _health_from_passport(psections),
         },
         "goals": g,
+        "current_focus": current_focus(plan),
         "waiting_on_owner": waiting,
         "roadmap": road,
         "issues": open_issues(root),
