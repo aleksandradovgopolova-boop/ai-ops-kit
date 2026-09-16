@@ -19,6 +19,32 @@ kind: delivery-plan-history
 
 
 work:
+  - id: external-clean-run-measured-by-outside-person
+    title: >-
+      Живой прогон всего пути на реальном репозитории (P0 №7 ревью)
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    evidence: qualification/ONE-FEATURE-EXTERNAL-RUN-ii-sreda-2026-09-16.md
+    result: >-
+      ЗАКРЫТО 2026-09-16 живым owner-led прогоном на ии-среде (боевой репо, установленный кит v4.4.2
+      тегом — не PYTHONPATH). Владелец сделал НЕСКОЛЬКО реальных фич через кит; кит НИГДЕ не показал
+      технику (feature id / YAML / агенты / стадии / гейты), владельцу ок. На основании прогона владелец
+      засчитал все 5 исходов направления one-feature-end-to-end (кит себя не судит). Оговорка: прогон
+      owner-led, не «человек совсем со стороны» — планка «незнакомец» остаётся отдельной, флипа не
+      отменяет (как #745/#748/#701). Дал field_evidence минора 4.4 (release-claims). Отчёт — evidence.
+  - id: one-feature-run-on-clean-installed-stable
+    title: >-
+      Прогон на чисто установленном ките (не PYTHONPATH) — P0 №3 ревью
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    evidence: qualification/ONE-FEATURE-ZERO-PIPELINE-REHEARSAL-2026-09-16.md
+    result: >-
+      ЗАКРЫТО 2026-09-16. Репетиция чистой установки (setup из main, не PYTHONPATH) подтвердила: продуктовые
+      входные поверхности честны и без утечек на реальном инсталле (отчёт-репетиция). Полный путь до
+      Verified/Outcome закрыт живым прогоном на ии-среде (см. external-clean-run…). Каveat «мерил сам кит
+      новым кодом» снят: обе стороны — чистая установка и боевой репо на теге v4.4.2 — пройдены.
   - id: outcome-loop-after-merge-feeds-next
     title: >-
       Outcome-loop доводит до «что делать дальше», и это появляется в `next`
