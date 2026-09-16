@@ -352,3 +352,23 @@ class TestDegradedContextIsVisible:
         ai_ops_cli._print_preview(pv)
         out = capsys.readouterr().out
         assert "данные: агентов" in out and "КОНТЕКСТ НЕ СОБРАН" not in out
+
+
+def test_readme_and_capability_map_command_count_match_intents():
+    """P1 №11 продуктового ревью: README писал «32 команды», а фактически (INTENTS) и в
+    capability-map — 34. Число команд владельца в README и в витрине обязано совпадать с реальным
+    реестром INTENTS. Маркер `claim:commands-total` делает README-число машинно проверяемым (как
+    gates/agents). Мутация: вернуть «32» -> тест краснеет.
+    """
+    import re
+    from pathlib import Path
+    kit = Path(__file__).resolve().parents[2]
+    n = len(ai_ops_cli.INTENTS)
+    readme = (kit / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"(\d+)\s*<!-- claim:commands-total -->", readme)
+    assert m, "в README нет числа команд с маркером claim:commands-total"
+    assert int(m.group(1)) == n, f"README: {m.group(1)} команд, а INTENTS={n}"
+    capmap = (kit / "docs" / "capability-map.md").read_text(encoding="utf-8")
+    cm = re.search(r"Команды владельца[^|]*\|\s*(\d+)\s*\|", capmap)
+    assert cm and int(cm.group(1)) == n, (
+        f"capability-map: {cm.group(1) if cm else '—'} команд, а INTENTS={n}")
