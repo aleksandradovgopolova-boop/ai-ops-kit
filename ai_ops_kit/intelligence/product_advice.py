@@ -39,20 +39,35 @@ _GOAL_IN_WARNING = re.compile(r"цель '([^']+)'")
 def _opportunities(child_root, plan) -> list[dict]:
     """Направление без работы -> продуктовая возможность. Источник — `roadmap.check`."""
     from ai_ops_kit.planning import roadmap as _roadmap
+    from ai_ops_kit.planning import delivery_plan as _plan
     try:
         rep = _roadmap.check(child_root, plan)
     except Exception:  # noqa: BLE001 — тонкий слой не обязан ронять совет из-за одного источника
         return []
     rel = _roadmap.roadmap_rel(child_root)
     recs = []
+    seen = set()
     for w in rep.get("warnings", []):
         if "направление без работы" not in w:
             continue
         m = _GOAL_IN_WARNING.search(w)
-        goal = m.group(1) if m else "?"
+        goal = m.group(1) if m else None
+        # Пока у цели нет человеческого имени (id-заглушка `goal-id-N` из bootstrap-черновика),
+        # не echo'им внутренний id в лицо владельца — называем безымянным направлением и
+        # подсказываем, чем это чинится. Иначе — направление «<имя>».
+        if goal and not _plan.is_placeholder_goal(goal):
+            subject = f"направление «{goal}»"
+        else:
+            subject = _plan.UNNAMED_GOAL_LABEL
+        # Несколько безымянных направлений схлопываются в один и тот же текст — не повторяем его
+        # дважды: две одинаковые строки читателю ничего не добавляют (следствие правки: id больше
+        # не различает эти направления в тексте).
+        if subject in seen:
+            continue
+        seen.add(subject)
         recs.append({
             "kind": OPPORTUNITY,
-            "need": f"начать двигать направление «{goal}» — оно объявлено как цель продукта, "
+            "need": f"начать двигать {subject} — оно объявлено как цель продукта, "
                     "но им пока никто не занят",
             "why": "объявленная цель без единого шага — это ценность продукта, которая простаивает; "
                    "начать её значит превратить намерение в результат для пользователя",
