@@ -43,6 +43,13 @@ on:
 permissions:
   contents: read
   pull-requests: write
+concurrency:
+  # Отменять УСТАРЕВШИЕ прогоны — но ТОЛЬКО для PR (новый пуш в тот же PR гасит прежний).
+  # На push в main / schedule / release / record отмена НЕ применяется: там каждый прогон
+  # относится к своему коммиту/событию, и его потеря = дыра в проверке или в записи.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   storybook-preview:
     # Раннер выбирается ПЕРЕМЕННОЙ, а не зашит (как в остальных workflow кита): `ubuntu-latest`
@@ -50,9 +57,6 @@ jobs:
     runs-on: ${{ vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
-      # ЧЕСТНЫЙ ГЕЙТ. Собираем ТОЛЬКО если у дочки есть свой build-скрипт Storybook. Проверка —
-      # буквальная (build-storybook / storybook build в package.json), совпадает с зрелостью,
-      # которую меряет ui_readiness. Нет скрипта -> ничего не собираем, job скипается честно.
       # ЧЕСТНЫЙ ГЕЙТ + РЕАЛЬНОЕ ИМЯ СКРИПТА + УЖЕ СОБРАННЫЙ Storybook. Приоритет:
       #   1) есть build-скрипт -> собрать СВЕЖЕЕ (отражает изменения этого PR);
       #   2) build-скрипта нет, но в репозитории уже лежит готовая статическая сборка
@@ -100,6 +104,15 @@ jobs:
         if: steps.detect.outputs.script != ''
         with:
           node-version: '20'
+      - name: Кэш npm (ускоряет установку зависимостей)
+        # Кэшируем только когда есть lock-файл (иначе ключ нестабилен, а setup-node cache вовсе падает
+        # без lock). Гейт на script != '' — кэш нужен лишь на пути СБОРКИ, не для готовой статики.
+        if: steps.detect.outputs.script != '' && hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json') != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json') }}
+          restore-keys: ${{ runner.os }}-npm-
       - name: Собрать Storybook СКРИПТОМ ДОЧКИ
         if: steps.detect.outputs.script != ''
         run: |
