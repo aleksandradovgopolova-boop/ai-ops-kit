@@ -8,6 +8,7 @@
 """
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import yaml
@@ -53,6 +54,36 @@ LINK_KEYS = ("pr", "branch", "commit", "evidence", "decision", "finding")
 FORBIDDEN_ITEM_KEYS = ("runtime", "model", "provider", "executor", "assignee", "agent")
 
 
+# ИД-ЗАГЛУШКИ ЦЕЛЕЙ ИЗ BOOTSTRAP-ЧЕРНОВИКА. Установщик рисует черновой план с целями `goal-id-1`/
+# `goal-id-2` — это внутренние плейсхолдеры, а НЕ имя направления. Пока человек не задал имя
+# (`ai-ops model`), такой id нельзя echo'ить владельцу: «начать двигать направление «goal-id-1»» —
+# утечка трубопровода в лицо человека (репетиция P0 №3, 2026-09-16). Распознаём и НАБОР заглушек
+# (is_template), и одиночный id (для отображения через `goal_display_name`).
+PLACEHOLDER_GOAL_IDS = frozenset({"goal-id-1", "goal-id-2"})
+_PLACEHOLDER_GOAL_RE = re.compile(r"^goal-id-\d+$")
+# Как назвать безымянное направление ВЛАДЕЛЬЦУ вместо сырого id — с подсказкой, чем это чинится.
+UNNAMED_GOAL_LABEL = "безымянное направление (задай имя через `ai-ops model`)"
+
+
+def is_placeholder_goal(gid) -> bool:
+    """id цели — это заглушка bootstrap-черновика (`goal-id-N`), а не заданное человеком имя?"""
+    return bool(gid) and bool(_PLACEHOLDER_GOAL_RE.match(str(gid).strip()))
+
+
+def goal_display_name(gid, title=None) -> str:
+    """Как назвать цель ВЛАДЕЛЬЦУ. Пока у неё нет человеческого имени (id-заглушка `goal-id-N` или
+    пустой title), не показываем сырой id — называем «безымянным направлением» и подсказываем, чем
+    это чинится. Иначе — человеческий заголовок, а при его отсутствии осмысленный id как есть.
+    """
+    t = (title or "").strip()
+    if t and not is_placeholder_goal(t):
+        return t
+    g = str(gid).strip() if gid is not None else ""
+    if not g or is_placeholder_goal(g):
+        return UNNAMED_GOAL_LABEL
+    return g
+
+
 def is_template(plan) -> bool:
     """Это ещё заготовка кита, а не план продукта?
 
@@ -66,7 +97,7 @@ def is_template(plan) -> bool:
     if plan.get("template") is True:
         return True
     gids = {g.get("id") for g in (plan.get("goals") or []) if isinstance(g, dict)}
-    return bool(gids) and gids <= {"goal-id-1", "goal-id-2"}
+    return bool(gids) and gids <= PLACEHOLDER_GOAL_IDS
 
 
 def items(plan) -> list:

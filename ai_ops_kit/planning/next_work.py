@@ -134,8 +134,9 @@ def _rank(w, res, model, plan):
     if not _plan.goal_is_live(plan, gid):
         # Названо вслух: работа осталась под целью, которая больше никуда не ведёт. Молча опустить
         # её было бы вторым дефектом того же рода — человек не понял бы, почему совет изменился.
-        why.append(f"цель '{gid}' уже не ведёт вперёд (достигнута или на паузе) — "
-                   f"приоритет ниже живых целей; работу стоит перевесить в плане")
+        # Имя цели — человеческое: id-заглушку `goal-id-N` в лицо владельца не echo'им.
+        why.append(f"цель «{_plan.goal_display_name(gid)}» уже не ведёт вперёд (достигнута или "
+                   f"на паузе) — приоритет ниже живых целей; работу стоит перевесить в плане")
     if w.get("value") == "high":
         why.append("объявленная ценность высокая")
     if risk_score:
@@ -469,7 +470,9 @@ def render(rep) -> str:
     for g in rep["where_are_we"]:
         mark = "✓" if g["outcome_reached"] else "·"
         rm = "" if g["in_roadmap"] else "  ⚠ цели нет в roadmap (работа без направления)"
-        L.append(f"  {mark} цель {g['goal']} [{g['status']}] — работа {g['work_done']}/{g['work_total']}{rm}")
+        # Не echo'им id-заглушку `goal-id-N` из bootstrap-черновика в лицо владельца.
+        name = _plan.goal_display_name(g["goal"])
+        L.append(f"  {mark} цель {name} [{g['status']}] — работа {g['work_done']}/{g['work_total']}{rm}")
         for k, v in (g["outcome"] or {}).items():
             L.append(f"      outcome {k}: {'достигнут' if v else 'не достигнут'}")
 

@@ -54,6 +54,7 @@ from ai_ops_kit.planning.plan_model import (
     is_template, items, goals, current_milestone, goal_priority, goal_is_live,
     freeze_state, _field_evidence_present, _freeze_lift_errors,
     goal_freeze_relation, frozen_work,
+    PLACEHOLDER_GOAL_IDS, UNNAMED_GOAL_LABEL, is_placeholder_goal, goal_display_name,
 )
 from ai_ops_kit.planning.plan_validate import (
     validate, validate_history, _workitem_status_errors, _cycles,

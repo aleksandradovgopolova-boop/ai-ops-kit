@@ -91,6 +91,38 @@ def test_direction_without_work_is_an_opportunity_grounded_in_roadmap(tmp_path):
     assert out["enough_product_data"] is True
 
 
+# ── (а') безымянное направление из bootstrap-черновика не течёт сырым id в лицо человека ──
+
+@pytest.mark.unit
+def test_placeholder_goal_id_is_not_echoed_to_owner(tmp_path):
+    """Свежая установка: bootstrap рисует цели-заглушки `goal-id-N`. `propose` НЕ должен говорить
+    «начать двигать направление «goal-id-1»» — внутренний id в лицо владельца это утечка трубопровода
+    (репетиция P0 №3, находка №1). Ожидаем «безымянное направление» + подсказку `ai-ops model`."""
+    _write_roadmap(tmp_path, goal="goal-id-1")
+    _write_plan(tmp_path, goal="goal-id-1", work_goal="other")   # работы под goal-id-1 нет
+    out = PA.recommend(str(tmp_path))
+    opps = [r for r in out["recommendations"] if r["kind"] == PA.OPPORTUNITY]
+    assert opps, "направление 'goal-id-1' объявлено, работы под него нет — ожидали opportunity"
+    need = opps[0]["need"]
+    assert "goal-id-1" not in need, f"сырой id-заглушка утёк в текст рекомендации: {need!r}"
+    assert "безымянное направление" in need, "безымянное направление должно называться словами"
+    assert "ai-ops model" in need, "нет подсказки, чем задать имя направлению"
+
+
+@pytest.mark.unit
+def test_multiple_placeholder_goals_collapse_to_one_opportunity(tmp_path):
+    """Несколько безымянных направлений (`goal-id-1`/`goal-id-2` из bootstrap) дают ОДИН и тот же
+    текст — не повторяем его дважды: две одинаковые строки читателю ничего не добавляют."""
+    (tmp_path / "ROADMAP.md").write_text(
+        "# Roadmap\n\n## Сейчас\n- `goal-id-1` — боль пользователя\n"
+        "- `goal-id-2` — проверяемый результат\n\n"
+        "## Следующий результат\n- что-то меняется\n", encoding="utf-8")
+    _write_plan(tmp_path, goal="goal-id-1", work_goal="other")
+    out = PA.recommend(str(tmp_path))
+    opps = [r for r in out["recommendations"] if r["kind"] == PA.OPPORTUNITY]
+    assert len(opps) == 1, f"две безымянные цели схлопываются в один совет, получили: {opps}"
+
+
 # ── (б) продукт есть, метрики результата нет -> честный gap, а не выдумка ──
 
 @pytest.mark.unit

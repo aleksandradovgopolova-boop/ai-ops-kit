@@ -405,3 +405,27 @@ def test_fingerprints_go_to_the_served_repo_not_the_current_one(tmp_path, monkey
     assert (served / ".ai" / "runtime" / "ci-templates.json").is_file(), \
         "отпечатки не попали в обслуживаемый репозиторий"
     assert not (here / ".ai").exists(), "кит наследил в текущем репозитории, обслуживая чужой"
+
+
+def test_storybook_preview_runs_the_childs_actual_script_name_not_a_hardcoded_one():
+    """Полевая находка ии-среда (2026-09-16): рассинхрон в шаблоне ai-ops-storybook-preview.yml.
+
+    Обнаружение принимает ЛЮБОЙ скрипт, чья команда собирает Storybook (имя произвольное:
+    `build-storybook` / `build:storybook` / `storybook:build`), а сборка звала ЗАШИТЫЙ
+    `npm run build-storybook`. Если у дочки скрипт назван иначе — обнаружение проходит, а запуск
+    падает на несуществующем имени. Фикс: сборка зовёт РЕАЛЬНОЕ имя из detect.
+
+    Мутация: вернуть `npm run build-storybook` -> тест краснеет.
+    """
+    tpl = (KIT / "templates" / "ci" / "ai-ops-storybook-preview.yml").read_text(encoding="utf-8")
+    # Сборка НЕ зашивает имя скрипта…
+    assert "npm run build-storybook" not in tpl, \
+        "сборка Storybook зашивает имя `build-storybook` — упадёт у дочки с иначе названным скриптом"
+    # …а зовёт РЕАЛЬНОЕ имя, зарезолвленное шагом detect.
+    assert 'npm run "${{ steps.detect.outputs.script }}"' in tpl, \
+        "сборка Storybook должна звать реальное имя скрипта из detect"
+    # detect ЭКСПОРТИРУЕТ имя скрипта (script=…), а не только факт наличия.
+    assert "script=" in tpl, "detect должен резолвить и отдавать реальное имя скрипта"
+    # УЖЕ СОБРАННЫЙ Storybook (проект собирает вне этого CI) не пропускается, а выкладывается как есть.
+    assert "prebuilt=" in tpl, "detect должен учитывать уже готовую статику Storybook"
+    assert "storybook-static" in tpl, "готовая статика выкладывается как артефакт storybook-static"
