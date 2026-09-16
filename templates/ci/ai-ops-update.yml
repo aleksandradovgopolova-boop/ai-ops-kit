@@ -30,6 +30,13 @@ on:
 permissions:
   contents: write
   pull-requests: write
+concurrency:
+  # Отменять УСТАРЕВШИЕ прогоны — но ТОЛЬКО для PR (новый пуш в тот же PR гасит прежний).
+  # На push в main / schedule / release / record отмена НЕ применяется: там каждый прогон
+  # относится к своему коммиту/событию, и его потеря = дыра в проверке или в записи.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   update:
     # Раннер выбирается ПЕРЕМЕННОЙ, а не зашит. `ubuntu-latest` существует только у
