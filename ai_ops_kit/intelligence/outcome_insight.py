@@ -69,6 +69,69 @@ def _reported_guardrails(readout: dict) -> set[str]:
             if isinstance(g, dict) and _text(g.get("name"))}
 
 
+def _needed_to_measure(evaluation: dict) -> str:
+    """Что КОНКРЕТНО нужно, чтобы продуктовый итог стало можно измерить. Условие берём из состояния
+    самого замера, а не общими словами: нет числового baseline/цели -> задать их; нет замера с датой ->
+    снять его после выпуска. Так «результат ещё не накоплен» несёт названное условие, а не отписку."""
+    ev = evaluation or {}
+    if ev.get("baseline") is None or ev.get("target") is None:
+        return "задать в контракте результата числовые baseline и цель — сравнивать замер пока не с чем"
+    return "снять замер целевой метрики с датой после реального выпуска и повторить свод"
+
+
+def build_outcome_readout(contract: dict | None, readout: dict | None,
+                          evaluation: dict | None) -> dict | None:
+    """Человеко-ориентированный свод ПРОДУКТОВОГО ИТОГА: сдвиг целевой метрики baseline→после релиза
+    против цели — «что изменение сделало с продуктом», а не «shipped»/«verified» (P0 №6).
+
+    Чистая ПРОЕКЦИЯ уже посчитанного `evaluate_outcome` (met/failed/unknown ИЗ ЧИСЕЛ) плюс контракта и
+    отчёта; ничего не измеряет и не пишет. -> None без контракта (итог из воздуха не выдумываем).
+
+    ЧЕСТНОСТЬ (инвариант «no evidence → no claim»):
+      * есть реальный замер (met/failed) -> `measured=True`, несём сдвиг baseline→value против target,
+        гипотезу и названные пробитые guardrail'ы;
+      * замера ещё нет (unknown) -> `measured=False`, `value=None` (измеренного числа НЕ выдумываем),
+        `not_accumulated_reason` + `needed_to_measure` (названное условие, что нужно, чтобы измерить).
+
+    Значения для показа берём СЫРЫМИ из контракта/отчёта (сохраняя единицы вроде «42%»); числовой
+    разбор для вердикта уже сделан в `evaluation`. `goal` — человеческая формулировка цели
+    (`contract.decision`), а НЕ ключ метрики: ключ метрики — внутреннее имя, наружу не идёт.
+    """
+    if not isinstance(contract, dict):
+        return None
+    ev = evaluation or {}
+    r = readout if isinstance(readout, dict) else {}
+    verdict = ev.get("verdict", "unknown")
+    measured = bool(ev.get("is_real_measurement")) and verdict in REAL_VERDICTS
+    goal = _text(contract.get("decision"))
+    metric_key = _text((contract.get("primary_metric") or {}).get("name"))
+    baseline_disp = (contract.get("baseline") or {}).get("value")
+    target_disp = (contract.get("target") or {}).get("value")
+    value_disp = (r.get("measured") or {}).get("value") if measured else None
+    hyp = _text(r.get("hypothesis")) or None
+    out = {
+        "kind": "OutcomeReadoutHuman",
+        "goal": goal or None,
+        "metric_key": metric_key or None,       # внутреннее имя — только для технических деталей
+        "measured": measured,
+        "verdict": verdict,
+        "baseline": baseline_disp,
+        "value": value_disp,
+        "target": target_disp,
+        "measured_at": ev.get("measured_at"),
+        "direction": ev.get("direction"),
+        "guardrail_breaches": list(ev.get("guardrail_breaches") or []),
+        "hypothesis": hyp,
+        "not_accumulated_reason": None,
+        "needed_to_measure": None,
+    }
+    if not measured:
+        out["not_accumulated_reason"] = (_text(ev.get("reason"))
+                                         or "итог по релизу ещё не измерен")
+        out["needed_to_measure"] = _needed_to_measure(ev)
+    return out
+
+
 def no_insight_reason(evaluation: dict | None) -> str | None:
     """Почему инсайта нет. -> строка-причина, если вердикт `unknown`; None, если инсайт рождается.
 
@@ -230,15 +293,83 @@ def build_recommendation(insight: dict, candidate: dict) -> dict:
     }
 
 
+def _metric_name(insight: dict, contract: dict | None) -> str:
+    """Имя основной метрики в ПРОДУКТОВЫХ словах. Из контракта, иначе — из заголовка инсайта."""
+    if isinstance(contract, dict):
+        name = _text((contract.get("primary_metric") or {}).get("name"))
+        if name:
+            return name
+    # headline имеет вид «metric»: …; достаём metric без служебных кавычек.
+    return _text((insight.get("headline") or "").strip("«").split("»")[0]) or _text(insight.get("outcome_id"))
+
+
+def _because(insight: dict, evaluation: dict, readout: dict | None, contract: dict | None) -> str:
+    """Обоснование «потому что <что произошло с продуктом>» — ТОЛЬКО из снятого замера и разрешённой
+    гипотезы. Никаких внутренних терминов в лицо человеку (не «baseline», а «старт»); числа — те же,
+    что посчитал evaluate_outcome, ничего не выдумано. Гипотеза попадает в обоснование, лишь если она
+    реально разрешилась (confirmed/refuted); inconclusive/отсутствует — молчим, а не досочиняем."""
+    metric = _metric_name(insight, contract)
+    verdict = insight.get("verdict")
+    b, m, t = evaluation.get("baseline"), evaluation.get("measured"), evaluation.get("target")
+    breaches = list(evaluation.get("guardrail_breaches") or [])
+    parts: list[str] = []
+    if verdict == "met":
+        parts.append(f"метрика «{metric}» дошла до {m} при цели {t} (старт {b})")
+    elif breaches:
+        # цель провалена соседней метрикой — это и есть «что произошло с продуктом».
+        parts.append(f"защитная метрика просела ({', '.join(breaches)}), "
+                     f"а «{metric}» была на {m} при цели {t}")
+    elif m is not None and m == b:
+        parts.append(f"метрика «{metric}» не сдвинулась (осталась {b}) и цель {t} не взяла")
+    else:
+        parts.append(f"метрика «{metric}» сдвинулась с {b} до {m}, но цель {t} не взяла")
+    hyp = _text((readout or {}).get("hypothesis"))
+    if hyp == "confirmed":
+        parts.append("гипотеза подтвердилась")
+    elif hyp == "refuted":
+        parts.append("гипотеза не подтвердилась")
+    return "; ".join(parts)
+
+
+def next_action(insight: dict | None, candidate: dict | None, evaluation: dict | None,
+                readout: dict | None = None, contract: dict | None = None) -> dict | None:
+    """ПОСЛЕДНИЙ шаг петли — КОНКРЕТНОЕ следующее действие с обоснованием от произошедшего с продуктом.
+
+    Замыкает measure → learn → next decision: САМО действие берётся из кандидата (тот же DRAFT,
+    writer ≠ judge — активной работой без решения человека не станет), а обоснование `because` —
+    ТОЛЬКО из снятого замера и разрешённой гипотезы (`_because`), продуктовым языком.
+
+    -> None, если инсайта/кандидата/замера нет (`unknown` — данных для «что дальше» нет; причину
+    называет `no_insight_reason`). Причину не сочиняем: не разрешилась гипотеза — её в `because` нет.
+    """
+    if not isinstance(insight, dict) or not isinstance(candidate, dict) or not isinstance(evaluation, dict):
+        return None
+    return {
+        "schema_version": 1,
+        "kind": "NextAction",
+        "verdict": insight.get("verdict"),
+        "action": candidate.get("title"),            # конкретная следующая работа
+        "owner_role": candidate.get("owner_role"),
+        "candidate_id": candidate.get("id"),
+        "because": _because(insight, evaluation, readout, contract),
+        "confidence": insight.get("confidence"),
+    }
+
+
 def from_outcome(contract: dict | None, readout: dict | None,
                  evaluation: dict | None) -> dict | None:
-    """Полная петля одним вызовом: Outcome(+замер) -> {insight, candidate_work, recommendation}.
+    """Полная петля одним вызовом: Outcome(+замер) -> {insight, candidate_work, recommendation,
+    next_action}.
 
     -> None, если вердикт `unknown` (нет данных — инсайт не фабрикуется; причину даёт
-    `no_insight_reason`). Чистая проекция: ничего не пишет, кандидат — DRAFT (writer ≠ judge)."""
+    `no_insight_reason`). Чистая проекция: ничего не пишет, кандидат — DRAFT (writer ≠ judge).
+    `next_action` — последний шаг петли: конкретное действие + «потому что <что произошло с продуктом>»,
+    ровно то, что кит показывает в `next`."""
     insight = derive_insight(contract, readout, evaluation)
     if insight is None:
         return None
     candidate = propose_candidate_work(insight, contract, readout)
     recommendation = build_recommendation(insight, candidate)
-    return {"insight": insight, "candidate_work": candidate, "recommendation": recommendation}
+    action = next_action(insight, candidate, evaluation, readout, contract)
+    return {"insight": insight, "candidate_work": candidate, "recommendation": recommendation,
+            "next_action": action}

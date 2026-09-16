@@ -8,7 +8,10 @@
 
 Место паспорта у кита-родителя — слой продуктового контекста рядом с ProductStatus.md
 (`.ai/project/context/product/PRODUCT_PASSPORT.md`); у дочки-родителя — `.ai-ops/PRODUCT_PASSPORT.md`.
-Перегенерация: `python3 -m ai_ops_kit.planning.passport_generator generate . -o <путь>`.
+Перегенерацию машинных разделов под новую версию теперь делает сам релизный бамп
+(`ai_ops_kit/devtools/release_bump.py -> refresh_kit_passport`, сохраняя разделы владельца), так что
+этот ратчет остаётся зелёным без ручного шага. Прямая перегенерация (машинные разделы затрут разделы
+владельца!) — `python3 -m ai_ops_kit.planning.passport_generator generate . -o <путь>`.
 """
 from __future__ import annotations
 

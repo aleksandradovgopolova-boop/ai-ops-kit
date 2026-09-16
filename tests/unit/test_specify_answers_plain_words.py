@@ -71,17 +71,23 @@ class TestPlainWordsFillTheSpec:
 
     def test_message_offers_a_way_to_answer_in_words_not_a_file_edit(self):
         """Presenter НЕ велит открывать файл: инструкции «заполни разделы в <path>» быть не
-        должно, а способ ответить словами — обязан быть."""
+        должно, а способ ответить словами — обязан быть.
+
+        #958: точная команда (`--answers …`) и внутренний id больше не летят в лицо человеку —
+        продукт видит вопрос словами, а сама команда доступна в технических деталях по запросу."""
         msg = pf.from_specification(
             path="features/wi-1/spec.yaml", created=True, level_name="L0 QUICK",
             sections=[{"id": "goal", "status": "missing"}], blocking_missing=["goal", "scope"],
-            next_command='./ai-ops plan "x" --feature wi-1',
-            answer_command='./ai-ops specify "x" --feature wi-1 --answers "зачем=...; что=..."')
+            next_command='./ai-ops plan "x"',
+            answer_command='./ai-ops specify "x" --answers "зачем=...; что=..."')
         text = " ".join(msg["next"]) + " " + msg["summary"] + " " + msg["why_it_matters"]
         assert "заполни разделы в" not in text
         assert "features/wi-1/spec.yaml" not in text
-        assert "--answers" in text
+        assert "--answers" not in text  # синтаксис ушёл в технические детали
         assert "Зачем" in text or "зачем" in text  # человеческий вопрос, не id раздела
+        # но точная команда не потеряна — она лежит в technical
+        assert "--answers" in " ".join(str(v) for v in
+                                       msg["technical_details"]["payload"].values())
 
 
 # ------------------------------------------------------------- fail-closed ---

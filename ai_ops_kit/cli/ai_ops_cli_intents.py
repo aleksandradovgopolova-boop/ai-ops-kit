@@ -27,7 +27,7 @@ from ai_ops_kit.cli.ai_ops_cli_lifecycle import (  # noqa: F401 — ре-экс�
     _intent_onboard, _intent_reach, _intent_team, _intent_replan, _intent_governance, _intent_bootstrap, _intent_health, _intent_roadmap, _intent_doctor, _copy_affects_from_plan, _intent_new, _intent_discuss,
 )
 from ai_ops_kit.cli.ai_ops_cli_report import (  # noqa: F401 — ре-экспорт для вызывающих/тестов
-    _EXPLAIN_STATUS_LABEL, _explain_wid, _explain_reconcile, _explain_active, _explain_workitem, _explain_gates, _explain_conflicts, _explain_cost, _explain_blocker, _explain_next, _explain_living_note, _explain_cost_line, _explain_cost_tech, _explain_outcome, _explain_state, _explain_apply_outcome, _explain_message, _intent_explain, _inbox_decisions, _inbox_works, _INBOX_BRIEFS_LATEST_REL, _inbox_insight, _inbox_outcome_candidate, _inbox_findings, _inbox_release_warnings, _inbox_attention, _inbox_collect, _inbox_status, _inbox_counts, _inbox_render, _intent_inbox,
+    _EXPLAIN_STATUS_LABEL, _explain_wid, _explain_reconcile, _explain_active, _explain_workitem, _explain_gates, _explain_conflicts, _explain_cost, _explain_blocker, _explain_next, _explain_next_command, _explain_living_note, _explain_cost_line, _explain_cost_tech, _explain_outcome, _explain_state, _explain_apply_outcome, _explain_message, _intent_explain, _inbox_decisions, _inbox_works, _INBOX_BRIEFS_LATEST_REL, _inbox_insight, _inbox_outcome_candidate, _inbox_findings, _inbox_release_warnings, _inbox_attention, _inbox_collect, _inbox_status, _inbox_counts, _inbox_render, _intent_inbox,
 )
 
 

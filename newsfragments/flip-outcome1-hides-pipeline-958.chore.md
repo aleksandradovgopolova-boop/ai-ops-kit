@@ -1,0 +1,1 @@
+Направление `one-feature-end-to-end` (#958): исход `one_input_hides_the_pipeline` (единый вход скрывает трубопровод) флипнут в true РЕШЕНИЕМ ВЛАДЕЛЬЦА (кит себя не судит) — по слитым работам specify #959 / status-explain #973 / explain-next #976 и перемеру 15.09. Остальные четыре исхода остаются false, цель active.

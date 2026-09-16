@@ -138,9 +138,12 @@ def test_status_and_health_speak_to_a_human(tmp_path):
          "status": "in-progress", "owner_session": "s1"}]})
     busy_product = PR.render(busy, audience="product")
     assert "w1" not in busy_product, "id работы продакту не нужен"
-    # но рабочая копия (ветка/лента) — называется: ответ говорит, ГДЕ идёт работа, а не только «здесь».
-    assert "wave6/api-refactor" in busy_product, "рабочая копия должна быть названа человеку"
+    # имя ветки (рабочая копия) — жаргон для product (как SHA/gate-id): человеку его НЕ показываем,
+    # но технической/debug-аудитории оно доступно — факт не потерян, только язык другой.
+    assert "wave6/api-refactor" not in busy_product, "имя ветки продакту не показываем"
     assert "w1" in PR.render(busy, audience="debug")
+    assert "wave6/api-refactor" in PR.render(busy, audience="debug"), \
+        "ветка обязана остаться в технических деталях"
 
     # HEALTH без данных: честность сохранена, жаргон убран, следующий шаг назван.
     no_data = PR.from_product_health(None)

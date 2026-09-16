@@ -14,6 +14,7 @@ from pathlib import Path
 
 from ai_ops_kit.engine import tool_broker
 from ai_ops_kit.gates import gate_executor
+from ai_ops_kit.shared import gate_dimensions
 from ai_ops_kit.engine.pipeline_readiness import _assess_readiness
 from ai_ops_kit.engine.pipeline_failure import _diff_checks, _env_proven_ok
 from ai_ops_kit.engine.pipeline_git import _committed_changed_files
@@ -149,15 +150,21 @@ def _pipeline_run_gates(plan, gate_ev, committed_sha, signals, not_applicable, e
                                    gate_ids=_gate_ids, tested_revision=committed_sha,
                                    signals=signals, not_applicable=not_applicable,
                                    exempt_reason=exempt_reason)
-    # КТО ЗАКРЫЛ — ЧЕЛОВЕКУ, А НЕ ТОЛЬКО В JSON. Замер 19.08.2026: 19 гейтов из 35 не имеют
-    # исполняемого валидатора, и в выводе прогона это ничем не отличалось от проверенного машиной.
-    # Строка печатается всегда: молчать о ней там, где мнения нет, значило бы приучать к тому, что
-    # её отсутствие ничего не значит.
-    _cl = gates.get("closure") or {}
-    _cnt = _cl.get("counts") or {}
-    _opinion = _cl.get("judged_or_human") or []
-    print(f"  гейты: проверено машиной {_cnt.get('validator', 0)} из {len(_gate_ids)}"
-          + (f"; остальное — мнение: {', '.join(_opinion)}" if _opinion else "; мнением не закрыт ни один"))
+    # «ПРОВЕРЕНО» — ЭТО УРОВЕНЬ ЗНАНИЯ, А НЕ СЧЁТ ГЕЙТОВ. #958 + P0 №5 (#982): в лицо человеку идёт
+    # хребет НАЗВАННЫХ уровней знания, каждый с честным состоянием (известно / ещё неизвестно), а не
+    # счёт «N из M» и не id гейтов. Так «Проверено» не выглядит увереннее заслуженного: непройденное
+    # (деплой, события, продуктовый результат) НАЗЫВАЕТСЯ, а не замалчивается — прямое следствие
+    # инварианта «no evidence → no claim». Счёт «N из M» и id гейтов остаются в technical-readout
+    # (_print_pipeline) и в JSON-отчёте (closure), но не здесь. Атрибуция источника (детерминированная
+    # машина vs независимый ревьюер) вшита в формулировки — мнение за автоматический тест не выдаётся.
+    _ev = gates.get("evidence_verdict") or {}
+    _readout = gate_dimensions.knowledge_readout(_ev)
+    if gate_dimensions.knowledge_has_known(_ev):
+        print("  Проверено — вот что уже известно о работе:")
+    else:
+        print("  Проверено — подтверждать пока нечего; вот граница знания:")
+    for _line in _readout:
+        print(f"    · {_line}")
     # веха 4.2 (#588): вердикт честности evidence — «зелёное» без детерминированной опоры advisory.
     _ev = gates.get("evidence_verdict") or {}
     if _ev and not _ev.get("verified") and _ev.get("advisory"):

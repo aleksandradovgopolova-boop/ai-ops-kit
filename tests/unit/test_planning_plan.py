@@ -256,3 +256,61 @@ def test_human_decision_blocks_even_with_deps_done(tmp_path):
     res = P.resolve(P.load(tmp_path), tmp_path, MODEL)
     assert res["b"]["status"] == "blocked"
     assert any("решение человека" in r for r in res["b"]["reasons"])
+
+
+# ── именованный текущий milestone: аддитивная минимальная проверка ──────────────────────────────
+# Первоклассная запись `current_milestone` (2026-09-14). Правила плана действуют и на ней: id — slug,
+# status — из объявляемого набора, linked_goals — существующие цели, исполнителей называть нельзя.
+
+def _plan_with_milestone(milestone):
+    """План с двумя целями и заданным (или отсутствующим) current_milestone. -> dict для P.validate."""
+    data = {"schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "g1", "status": "active"}, {"id": "g2", "status": "active"}],
+            "work": []}
+    if milestone is not None:
+        data["current_milestone"] = milestone
+    return data
+
+
+def _good_milestone(**kw):
+    m = {"id": "m1-ship-value", "name": "Довести ценность", "goal": "владелец говорит — кит доказывает",
+         "linked_goals": ["g1", "g2"], "status": "in_progress"}
+    m.update(kw)
+    return m
+
+
+def test_valid_milestone_accepted():
+    rep = P.validate(_plan_with_milestone(_good_milestone()), MODEL)
+    assert rep["errors"] == [], rep["errors"]
+
+
+def test_absent_milestone_is_not_an_error():
+    # milestone необязателен: его отсутствие не должно краснить валидатор.
+    rep = P.validate(_plan_with_milestone(None), MODEL)
+    assert rep["errors"] == [], rep["errors"]
+
+
+def test_milestone_bad_status_rejected():
+    rep = P.validate(_plan_with_milestone(_good_milestone(status="achieved")), MODEL)
+    assert any("current_milestone" in e and "status" in e for e in rep["errors"]), rep["errors"]
+
+
+def test_milestone_unknown_linked_goal_rejected():
+    rep = P.validate(_plan_with_milestone(_good_milestone(linked_goals=["g1", "no-such-goal"])), MODEL)
+    assert any("current_milestone" in e and "no-such-goal" in e for e in rep["errors"]), rep["errors"]
+
+
+def test_milestone_empty_linked_goals_rejected():
+    rep = P.validate(_plan_with_milestone(_good_milestone(linked_goals=[])), MODEL)
+    assert any("current_milestone" in e and "linked_goals" in e for e in rep["errors"]), rep["errors"]
+
+
+def test_milestone_bad_id_rejected():
+    rep = P.validate(_plan_with_milestone(_good_milestone(id="M1 Ship")), MODEL)
+    assert any("current_milestone" in e and "id" in e for e in rep["errors"]), rep["errors"]
+
+
+def test_milestone_executor_field_rejected():
+    # Правило 2 (роль, не исполнитель) действует и на веху: `runtime`/`assignee`/… запрещены.
+    rep = P.validate(_plan_with_milestone(_good_milestone(runtime="claude-code")), MODEL)
+    assert any("current_milestone" in e and "runtime" in e for e in rep["errors"]), rep["errors"]

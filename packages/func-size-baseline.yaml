@@ -42,11 +42,14 @@ scopes:
     max_function_lineno: 476
 
   # planning/ — контур Planning & Execution.
+  # Опущено 157 -> 138 (2026-09-14): проверку milestone вынесли из `validate` в помощники
+  # `_milestone_errors`/`_goal_errors`, `validate` ужалась до 137 строк, и новым максимумом стала
+  # `next_work.compute` (138). Ратчет ходит только вниз.
   - path: ai_ops_kit/planning/
-    max_function_lines: 157
-    max_function: validate
-    max_function_file: plan_validate.py
-    max_function_lineno: 148
+    max_function_lines: 138
+    max_function: compute
+    max_function_file: next_work.py
+    max_function_lineno: 306
 
   # providers/ — адаптеры исполнителей и оркестрация workflow.
   - path: ai_ops_kit/providers/

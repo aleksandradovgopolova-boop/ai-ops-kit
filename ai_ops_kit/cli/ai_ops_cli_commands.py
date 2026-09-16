@@ -266,9 +266,17 @@ def _intent_next(task, child_root, signals, a):
         aud = presenter.audience_from_config(child_root)
         print(presenter.render(presenter.from_next_work(rep), audience=aud))
         if candidate:
-            print(f"\n  Предложение по итогу релиза (черновик, требует решения): {candidate['what']}"
-                  f"\n      основано на {candidate.get('sources')} набл. (уверенность "
-                  f"{candidate.get('confidence')}); активной не станет без твоего решения")
+            # P0 №4: петля доходит до КОНКРЕТНОГО следующего действия, и оно появляется здесь, в
+            # `next`, с обоснованием от произошедшего с продуктом — «потому что <что случилось>».
+            # Так замыкается idea → decision → build → release → measure → learn → next decision.
+            print(f"\n  Что делать дальше по итогу релиза (черновик, требует решения): "
+                  f"{candidate.get('action') or candidate['what']}")
+            if candidate.get("because"):
+                print(f"      потому что {candidate['because']} (уверенность "
+                      f"{candidate.get('confidence')}) — активной не станет без твоего решения")
+            else:
+                print(f"      основано на {candidate.get('sources')} набл. (уверенность "
+                      f"{candidate.get('confidence')}); активной не станет без твоего решения")
         for _cand in (findings or {}).get("candidates") or []:
             print(f"\n  Наблюдение из прогона к разбору (черновик, требует решения): "
                   f"{_cand.get('title')}"
@@ -319,7 +327,12 @@ def _intent_review(task, child_root, signals, a):
 def _intent_advise(task, child_root, signals, a):
     js = a.json
     from ai_ops_kit.engops import engineering_advisor
+    from ai_ops_kit.intelligence import product_advice
     result = engineering_advisor.advise(str(child_root), task_type=signals.get("task_type"))
+    # #958: совет ВЕДЁТ с «что нужно продукту», а инженерная настройка кита идёт после и отдельно.
+    # Продуктовые рекомендации — тонкий слой поверх существующих сигналов; инженерную часть
+    # (engineering_advisor) не трогаем, лишь подаём её второй.
+    result["product_advice"] = product_advice.recommend(str(child_root))
     if js:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:

@@ -183,11 +183,17 @@ def _assess_outcome(contract, readout, feature) -> dict | None:
         trace = vpo.trace_feature_rationale(graph, feature)
     node = (graph.get("nodes") or [{}])[0]
     measured = vpo.evaluate_outcome(contract, readout)   # ФЛИП: met/failed/unknown ИЗ ЧИСЕЛ
+    # P0 №6: человеко-ориентированный OUTCOME-READOUT — «что изменение сделало с ПРОДУКТОМ» (сдвиг
+    # целевой метрики baseline→после релиза против цели), а не «shipped»/«verified». Чистая проекция
+    # уже посчитанного `measured`; нет замера -> честное «ещё не накоплен» + условие (см. модуль).
+    from ai_ops_kit.intelligence import outcome_insight
+    human_readout = outcome_insight.build_outcome_readout(contract, readout, measured)
     return {
         "projected": True,
         "verdict": node.get("verdict", "pending"),
         "measured_verdict": measured["verdict"],
         "measured_evaluation": measured,
+        "human_readout": human_readout,
         "flip_ready": measured["verdict"] in ("met", "failed"),
         "outcome_id": node.get("id"),
         "graph": graph,
@@ -387,6 +393,9 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     insight = (loop or {}).get("insight")
     candidate_work = (loop or {}).get("candidate_work")
     recommendation = (loop or {}).get("recommendation")
+    # #987 (P0 №4): ПОСЛЕДНИЙ шаг петли — конкретное следующее действие с обоснованием от произошедшего
+    #     с продуктом. Именно оно доходит до `next` (measure→learn→next decision замкнуты).
+    next_action = (loop or {}).get("next_action")
     insight_gap = None if insight else outcome_insight.no_insight_reason(measured_eval)
 
     # (h)+(i) #584: провести кластер обучения в контур — стоимостная аналитика прогонов и триггеры
@@ -415,7 +424,11 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
     elif outcome_verdict != "unknown":
         notes.append(f"итог по релизу измерен: {outcome_verdict} "
                      "(" + (outcome.get("measured_evaluation") or {}).get("reason", "") + ")")
-    if candidate_work:
+    if next_action:
+        notes.append(f"что делать дальше: {next_action.get('action')} — "
+                     f"потому что {next_action.get('because')} "
+                     f"(черновик, активной не станет без твоего решения)")
+    elif candidate_work:
         notes.append(f"обратная петля: из измеренного итога родился инсайт (уверенность "
                      f"{insight.get('confidence')}) и кандидат-работа «{candidate_work.get('title')}» "
                      f"— черновик, активной не станет без твоего решения")
@@ -442,6 +455,9 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
         "outcome_verdict": outcome_verdict,
         # `product_status` — явный статус, в т.ч. «технически done, продуктово нет».
         "product_status": product_status,
+        # P0 №6: OUTCOME-READOUT — сдвиг целевой метрики baseline→после релиза против цели человеческим
+        # языком; None без контракта, `measured=False`+условие без замера (итог из воздуха не выдумываем).
+        "outcome_readout": (outcome or {}).get("human_readout"),
         # ФЛИП ГОТОВ, когда пришёл реальный замер (met/failed). Без замера — False (честный дефолт).
         # Сам флип goal.outcome не делается здесь: это отдельный координационный PR (см. #566).
         "outcome_flip_ready": outcome_flip_ready,
@@ -451,6 +467,9 @@ def run_post_release(prr_ref, child_root, *, contract=None, readout=None,
         "insight": insight,
         "candidate_work": candidate_work,
         "recommendation": recommendation,
+        # #987 (P0 №4): последний шаг петли — конкретное действие + «потому что <что произошло с
+        # продуктом>». None, если итог не измерен (тогда `next` НИЧЕГО из петли не добавляет).
+        "next_action": next_action,
         "insight_gap": insight_gap,
         # #584: кластер обучения проведён в контур — стоимостная аналитика и триггеры развития.
         "cost_analytics": cost_analytics,
@@ -553,6 +572,9 @@ def render(result: dict) -> str:
         if cand:
             L.append(f"    кандидат-работа {cand.get('id')} [{cand.get('status')}, требует решения "
                      f"человека]: {cand.get('title')} (роль {cand.get('owner_role')})")
+        na = result.get("next_action")
+        if na:
+            L.append(f"    что делать дальше: {na.get('action')} — потому что {na.get('because')}")
     elif result.get("insight_gap"):
         L.append(f"  инсайт не строю: {result['insight_gap']}")
     for n in result.get("notes") or []:

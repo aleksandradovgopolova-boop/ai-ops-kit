@@ -28,6 +28,12 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
+# Собственный Product Passport кита (parent): машинные разделы — снимок версии/здоровья/статуса,
+# которые обязаны перегенерироваться на релизе, иначе freshness-ратчет
+# (tests/contracts/test_kit_product_passport.py) краснит на каждом бампе. Разделы владельца при этом
+# сохраняются (см. passport_generator.merge_owner_sections).
+_KIT_PASSPORT_REL = ".ai/project/context/product/PRODUCT_PASSPORT.md"
+
 
 def _channel(root: Path) -> str:
     """Текущий канал из release-claims.yaml (`channel: X`). Нужен для строки версии в README/ROADMAP."""
@@ -63,6 +69,26 @@ def _apply(root: Path, rel: str, pattern: str, repl: str) -> None:
     p.write_text(new_txt, encoding="utf-8")
 
 
+def refresh_kit_passport(root: Path) -> str | None:
+    """Перегенерировать машинные разделы собственного паспорта кита под текущую VERSION.
+
+    Вызывается ПОСЛЕ подъёма VERSION: генератор читает уже новую версию. Разделы владельца
+    (Название, Аудитория и проблема, Owner и команда) сохраняются дословно из текущего файла — их
+    кит из кода не выводит и затирать не вправе. -> относительный путь, если паспорт есть и обновлён;
+    None — если паспорта нет (не-родительский / не-китовый репозиторий): бамп из-за этого не падает.
+    """
+    p = root / _KIT_PASSPORT_REL
+    if not p.is_file():
+        return None
+    # Импорт локальный: планировщик — тяжёлая зависимость (git/аудит репозитория), нужен только на
+    # реальном бампе кита, а не при каждом импорте devtools.
+    from ai_ops_kit.planning import passport_generator as pg
+    existing = p.read_text(encoding="utf-8")
+    merged = pg.merge_owner_sections(existing, pg.generate(root))
+    p.write_text(merged, encoding="utf-8")
+    return _KIT_PASSPORT_REL
+
+
 def bump(root: Path, new: str, title: str, date: str, body: str = "") -> list:
     """Поднять версию до `new` во всех поверхностях + раздел CHANGELOG + release-newsfragment.
 
@@ -93,6 +119,10 @@ def bump(root: Path, new: str, title: str, date: str, body: str = "") -> list:
     frag = root / "newsfragments" / f"release-v{new}.chore.md"
     frag.write_text(f"Релиз v{new} ({channel}): {title}\n", encoding="utf-8")
     changed.append(str(frag.relative_to(root)))
+    # Product Passport кита: машинные разделы — снимок под новую версию (разделы владельца сохранены).
+    passport_rel = refresh_kit_passport(root)
+    if passport_rel:
+        changed.append(passport_rel)
     return changed
 
 

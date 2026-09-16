@@ -117,6 +117,173 @@ class TestMilestoneReadsHorizon:
         assert m["state"] == PG.UNKNOWN
 
 
+# ── milestone: ИМЕНОВАННЫЙ из плана перекрывает прокси из роадмапа ─────────────────
+# Повод: раньше «текущий milestone» был ЗАГЛУШКОЙ — первый пункт горизонта «Сейчас» ROADMAP
+# (направление, а не результат). Теперь первоклассный `current_milestone` в плане печатается как
+# есть; ключа нет — откат к прокси сохранён.
+
+@pytest.mark.unit
+class TestMilestoneFromPlan:
+    def _plan(self, root, milestone):
+        import yaml
+        data = {"schema_version": 1, "kind": "delivery-plan",
+                "goals": [{"id": "owner-speaks-product-not-pipeline", "status": "active"},
+                          {"id": "team-works-in-parallel", "status": "active"}],
+                "work": []}
+        if milestone is not None:
+            data["current_milestone"] = milestone
+        (root / "planning").mkdir(parents=True, exist_ok=True)
+        (root / "planning" / "plan.yaml").write_text(
+            yaml.safe_dump(data, allow_unicode=True, sort_keys=False), encoding="utf-8")
+
+    def _roadmap(self, root):
+        (root / "ROADMAP.md").write_text(
+            "# ROADMAP\n\n## Сейчас\n\n- `cel-1` — прокси-направление из роадмапа.\n", encoding="utf-8")
+
+    def test_named_milestone_wins_over_roadmap(self, tmp_path):
+        # План объявляет milestone И есть ROADMAP «Сейчас» — паспорт печатает ИМЯ вехи, не прокси.
+        self._roadmap(tmp_path)
+        self._plan(tmp_path, {"id": "m1-ship-value", "name": "Довести ценность",
+                              "goal": "владелец говорит, кит доказывает цифрами",
+                              "linked_goals": ["owner-speaks-product-not-pipeline"],
+                              "status": "in_progress"})
+        m = PG.sections(tmp_path)["Текущий milestone и прогресс"]
+        assert m["state"] == PG.VERIFIED
+        assert "Довести ценность" in m["value"]
+        assert "владелец говорит, кит доказывает цифрами" in m["value"]
+        assert "owner-speaks-product-not-pipeline" in m["value"]      # связанные направления
+        assert "cel-1" not in m["value"]                              # прокси НЕ печатается
+        assert m["source"] == "planning/plan.yaml -> current_milestone"
+
+    def test_falls_back_to_roadmap_when_no_milestone(self, tmp_path):
+        # Плана нет ключа milestone, но есть ROADMAP «Сейчас» — прежнее поведение целиком.
+        self._roadmap(tmp_path)
+        self._plan(tmp_path, None)
+        m = PG.sections(tmp_path)["Текущий milestone и прогресс"]
+        assert m["state"] == PG.INFERRED
+        assert "cel-1" in m["value"]
+        assert "Из ROADMAP" in m["value"]
+
+
+# ── перегенерация СОХРАНЯЕТ разделы владельца, обновляет машинные ─────────────────
+# Повод: release_bump бампил VERSION, но не перегенерировал паспорт — freshness-ратчет краснел на
+# каждом релизе (4.3.2 регенерировали руками). Слепая перегенерация затирала бы разделы владельца
+# (Название/Аудитория/Owner) на «неизвестно». merge_owner_sections держит оба инварианта.
+
+@pytest.mark.unit
+class TestMergeOwnerSections:
+    def _owned(self, tmp_path):
+        """Паспорт со свежесгенерированной структурой, но разделами владельца, заполненными человеком."""
+        r = _repo(tmp_path)
+        text = PG.generate(r, reg=REG)
+        header, secs = PG._split_sections(text)
+        parts = [header]
+        for title, body in secs:
+            if title in PG.OWNER_SECTIONS:
+                body = f"\nВЛАДЕЛЕЦ описал: {title}. Grounded в VISION.md.\n"
+            parts.append(f"## {title}{body}")
+        return r, "".join(parts)
+
+    def test_owner_sections_preserved_verbatim(self, tmp_path):
+        r, existing = self._owned(tmp_path)
+        # версия ушла вперёд — машинный раздел «Версия» ДОЛЖЕН обновиться
+        (r / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        merged = PG.merge_owner_sections(existing, PG.generate(r, reg=REG), reg=REG)
+        _, ex = PG._split_sections(existing)
+        _, mg = PG._split_sections(merged)
+        exd, mgd = dict(ex), dict(mg)
+        for s in PG.OWNER_SECTIONS:
+            assert mgd[s] == exd[s], f"раздел владельца затёрт: {s}"
+            assert "ВЛАДЕЛЕЦ описал" in mgd[s]
+
+    def test_machine_sections_refreshed(self, tmp_path):
+        r, existing = self._owned(tmp_path)
+        (r / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+        merged = PG.merge_owner_sections(existing, PG.generate(r, reg=REG), reg=REG)
+        assert "9.9.9" in merged
+        _, mg = PG._split_sections(merged)
+        assert "9.9.9" in dict(mg)["Версия и последний релиз"]
+
+    def test_owner_sections_not_replaced_by_unknown(self, tmp_path):
+        # Генератор для этих разделов даёт «неизвестно» — слепая перегенерация именно так и затирала.
+        r, existing = self._owned(tmp_path)
+        merged = PG.merge_owner_sections(existing, PG.generate(r, reg=REG), reg=REG)
+        _, mg = PG._split_sections(merged)
+        assert "неизвестно" not in dict(mg)["Аудитория и проблема"].lower()
+
+    def test_idempotent_on_fresh_passport(self, tmp_path):
+        # Перегенерация уже-свежего паспорта — байт-в-байт тот же файл (разметка не дрейфует).
+        r, existing = self._owned(tmp_path)
+        merged = PG.merge_owner_sections(existing, PG.generate(r, reg=REG), reg=REG)
+        again = PG.merge_owner_sections(merged, PG.generate(r, reg=REG), reg=REG)
+        assert again == merged
+
+    def test_template_version_marker_synced_from_registry(self, tmp_path):
+        r, existing = self._owned(tmp_path)
+        stale = existing.replace("<!-- template-version: 1 -->", "<!-- template-version: 0 -->", 1)
+        merged = PG.merge_owner_sections(stale, PG.generate(r, reg=REG), reg=REG)
+        version = (AR.artifact(REG, "product_passport")["template"]).get("version", 1)
+        assert merged.splitlines()[0] == f"<!-- template-version: {version} -->"
+
+    def test_still_structurally_filled(self, tmp_path):
+        r, existing = self._owned(tmp_path)
+        merged = PG.merge_owner_sections(existing, PG.generate(r, reg=REG), reg=REG)
+        filled, empty = PG.is_filled(merged, REQUIRED)
+        assert filled, f"пустые разделы после merge: {empty}"
+
+
+# ── здоровье «Продукт» читается из СОСТОЯНИЯ, а не зашито «нет метрик» ─────────────
+# Регресс: раздел «Здоровье → Продукт» печатал зашитую строку «неизвестно (нет метрик —
+# контур analytics)», не глядя, заведены ли метрики. Теперь строка отражает реальное
+# состояние; вердикт не завышается (Green из раннего слоя не ставим).
+
+@pytest.mark.unit
+class TestProductHealth:
+    def _with_metrics(self, tmp_path, n=4):
+        pm = tmp_path / "context" / "product"
+        pm.mkdir(parents=True)
+        (pm / "ProductMetrics.md").write_text(
+            "---\nread_tier: 2\n---\n\n# Product Metrics\n\n"
+            "Семейство TTVO: контракт метрик заведён (что считаем, из чего, кто владеет).\n",
+            encoding="utf-8")
+        (pm / "metric-observations.yaml").write_text(
+            "kind: metric-observations\n"
+            f"aggregate:\n  n: {n}\n  verified_pr_rate: {n}/{n}\n"
+            "observations:\n  - {date: '2026-09-14', pr: 1}\n",
+            encoding="utf-8")
+        return tmp_path
+
+    def test_no_metrics_no_observations_unknown_not_green(self, tmp_path):
+        s = PG._product_health(tmp_path)
+        assert "не заведены" in s
+        assert "Green" not in s
+
+    def test_metrics_and_observations_insufficient_not_green(self, tmp_path):
+        r = self._with_metrics(tmp_path, n=4)
+        s = PG._product_health(r)
+        assert "недостаточно данных" in s
+        assert "n=4" in s
+        assert "Green" not in s
+        assert "нет метрик" not in s
+
+    def test_section_no_metrics_says_not_defined(self, tmp_path):
+        # Полный репо (README+VERSION+CI+тесты), но без слоя метрик.
+        r = _repo(tmp_path)
+        val = PG.sections(r)["Здоровье (продукт / технологии / delivery)"]["value"]
+        assert "метрики продукта ещё не заведены" in val
+        assert "нет метрик" not in val
+
+    def test_section_reflects_metrics_with_n(self, tmp_path):
+        # Репо БЕЗ CI/тестов (tech не Green) + слой метрик — проверяем именно продуктовую часть.
+        r = self._with_metrics(tmp_path, n=4)
+        (r / "README.md").write_text("# X\n\nописание.\n", encoding="utf-8")
+        val = PG.sections(r)["Здоровье (продукт / технологии / delivery)"]["value"]
+        assert "недостаточно данных" in val
+        assert "n=4" in val
+        assert "Green" not in val
+        assert "нет метрик" not in val
+
+
 # ── имя репозитория продукт-, а не каталого-центрично (git-worktree) ──────────────
 
 @pytest.mark.unit

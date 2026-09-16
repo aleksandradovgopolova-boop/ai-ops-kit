@@ -284,3 +284,99 @@ def test_classify_product_status_matrix():
     assert prl.classify_product_status(False, "failed")["technically_done_not_product"] is False
     assert prl.classify_product_status(True, "met")["status"] == "delivered_and_met"
     assert prl.classify_product_status(True, "unknown")["status"] == "delivered_outcome_unmeasured"
+
+
+# ── P0 №6: OUTCOME-READOUT — «что изменение сделало с ПРОДУКТОМ» (сдвиг метрики), а не shipped/verified ──
+# Третье, чего не хватало поверх delivery/verify: «доля X выросла с 20 до 40 (цель 35)» человеческим
+# языком, честно. Нет замера -> «результат ещё не накоплен» + названное условие, без выдуманных чисел.
+from ai_ops_kit.intelligence import outcome_insight as OI  # noqa: E402
+
+
+def test_builder_returns_none_without_a_contract():
+    """Без OutcomeContract свода нет — не выдумываем продуктовый итог из воздуха."""
+    assert OI.build_outcome_readout(None, None, {"verdict": "unknown"}) is None
+
+
+def test_builder_reports_the_measured_shift_against_target():
+    """Замер взял цель -> свод несёт сдвиг baseline→после релиза против цели и подтверждённую гипотезу."""
+    ev = prl._assess_outcome(CONTRACT, _readout(40, target_met="yes"), None)["measured_evaluation"]
+    oro = OI.build_outcome_readout(CONTRACT, _readout(40, target_met="yes"), ev)
+    assert oro["measured"] is True
+    assert oro["verdict"] == "met"
+    # сдвиг: было 20 → стало 40 (цель 35) — реальными значениями контракта/отчёта, не выдумкой
+    assert oro["baseline"] == 20 and oro["value"] == 40 and oro["target"] == 35
+    assert oro["goal"] == "ускорить онбординг"     # человеческая цель, а не ключ метрики
+    assert oro["not_accumulated_reason"] is None
+
+
+def test_builder_says_not_accumulated_with_named_condition_when_unmeasured():
+    """Замера нет -> measured False, названо условие ИЗМЕРЕНИЯ, «стало Y» не выдумано (value None)."""
+    ev = prl._assess_outcome(CONTRACT, None, None)["measured_evaluation"]
+    oro = OI.build_outcome_readout(CONTRACT, None, ev)
+    assert oro["measured"] is False
+    assert oro["verdict"] == "unknown"
+    assert oro["value"] is None                    # измеренного значения нет — не выдумываем
+    assert oro["needed_to_measure"]                # условие названо
+    assert "замер" in oro["needed_to_measure"].lower()
+
+
+def test_readout_path_shows_metric_shift_not_shipped_or_verified(tmp_path):
+    """(а) Пост-релизный свод продукту показывает СДВИГ X→Y против цели, а не «shipped/verified»."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT,
+                               readout=_readout(40, target_met="yes"))
+    assert res["outcome_readout"]["measured"] is True     # проведено в контур результата петли
+    text = presenter.render(presenter.from_post_release_loop(res), audience="product")
+    head = text.split("Технические детали")[0]
+    assert "было" in head.lower() and "стало" in head.lower()
+    assert "20" in head and "40" in head and "35" in head  # baseline→измерено против цели
+    assert "verified" not in head.lower() and "shipped" not in head.lower()
+    assert "activation_rate" not in head                   # сырой ключ метрики — не в лицо продукту
+
+
+def test_readout_path_names_the_gap_when_target_missed(tmp_path):
+    """Цель не взята -> сдвиг назван числами (было 20 → стало 21, цель 35), без жаргона наружу."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT, readout=_readout(21))
+    text = presenter.render(presenter.from_post_release_loop(res), audience="product")
+    head = text.split("Технические детали")[0]
+    assert "было" in head.lower()
+    assert "20" in head and "21" in head and "35" in head
+    assert "activation_rate" not in head
+
+
+def test_readout_path_says_not_accumulated_yet_with_condition(tmp_path):
+    """(б) Контракт есть, замера нет -> «результат ещё не накоплен» + условие; чисел не выдумывает."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT, feature="x")
+    assert res["outcome_readout"]["measured"] is False
+    text = presenter.render(presenter.from_post_release_loop(res), audience="product")
+    head = text.split("Технические детали")[0]
+    assert "не накоплен" in head.lower()
+    assert "замер" in head.lower()                 # условие измерения названо
+    assert "стало" not in head.lower()             # измеренного значения не выдумываем
+
+
+def test_readout_path_names_a_broken_guardrail(tmp_path):
+    """(в) Пробитая защитная метрика НАЗВАНА продукту, а итог считается провалом."""
+    guard = [{"name": "error_rate", "value": 5, "within": False}]
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT,
+                               readout=_readout(40, target_met="yes", guardrails=guard))
+    assert res["outcome_verdict"] == "failed"
+    text = presenter.render(presenter.from_post_release_loop(res), audience="product")
+    head = text.split("Технические детали")[0]
+    assert "защитн" in head.lower()                # защитная метрика названа как класс
+    assert "error_rate" in text                    # и по имени (в своде/деталях)
+
+
+def test_readout_path_hides_no_jargon_from_product(tmp_path):
+    """(г) На product-уровне в своде нет внутреннего жаргона (ключ метрики/гейт/PRR)."""
+    root = _child(tmp_path, catalog=CATALOG, seen=None)
+    res = prl.run_post_release(str(EXAMPLE_PRR), root, contract=CONTRACT,
+                               readout=_readout(40, target_met="yes"))
+    head = presenter.render(presenter.from_post_release_loop(res),
+                            audience="product").split("Технические детали")[0]
+    for j in ("activation_rate", "events_verified_live", "analytics_runtime_verification",
+              "measured_verdict", "guardrail_breaches"):
+        assert j not in head

@@ -19,6 +19,339 @@ kind: delivery-plan-history
 
 
 work:
+  - id: outcome-loop-after-merge-feeds-next
+    title: >-
+      Outcome-loop доводит до «что делать дальше», и это появляется в `next`
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 988
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #988). P0 №4 ревью — главный moat. Петля после релиза доходит до
+      конкретного следующего действия (`intelligence/outcome_insight.next_action`), и оно появляется
+      в `next` с обоснованием «потому что <что произошло с продуктом>»; замыкается idea→decision→
+      build→release→measure→learn→next decision. Слои соблюдены (next в planning не тронут,
+      композиция в cli вниз — восходящей зависимости нет). Честность: unknown/нет замера → next
+      ничего из петли не добавляет; failed-гипотеза — валидный вход; числа реальные. Писал субагент,
+      проверял независимо судья (cherry-pick поверх #987 — обе функции сосуществуют): 108 тестов +
+      266 contracts, ruff/layering чисто. Исход after_merge_kit_shows_what_happened_to_the_product НЕ
+      флипнут — засчёт за живым внешним прогоном (ep-2026-09-16).
+  - id: outcome-readout-shows-what-happened-to-the-product
+    title: >-
+      `Outcome`-readout: что изменение сделало с продуктом (сдвиг целевой метрики)
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 987
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #987). P0 №6 ревью — третий слой поверх «сделали»/«проверили»:
+      пост-релизный путь (`readout`) показывает сдвиг целевой метрики «было X → стало Y (цель Z)» +
+      гипотеза + названные пробитые guardrail'ы; нет замера → честно «продуктовый результат ещё не
+      накоплен» + условие, без выдуманных цифр (intelligence/outcome_insight.build_outcome_readout,
+      проведён в контур через post_release_loop и presenter_work). Писал субагент, проверял судья:
+      74 unit + 266 contracts, ruff/layering чисто. Исход НЕ флипнут — засчёт за внешним прогоном.
+  - id: verified-readout-is-knowledge-level-not-gate-count
+    title: >-
+      `Verified`-readout как уровень знания, а не счёт гейтов
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 985
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #985). P0 №5 ревью 16.09. На run-пути «Проверено» показывает ХРЕБЕТ
+      уровней знания (реализовано / проверено независимым ревьюером / критические сценарии / аналитика
+      подключена / deploy проверен / события идут / продуктовый результат), каждый с честным
+      состоянием; непройденное собирается в строку «Что пока неизвестно: …», а не замалчивается
+      (shared/gate_dimensions.py: knowledge_levels/knowledge_readout/knowledge_has_known). Инвариант
+      «no evidence → no claim»: уровень «известно» только при реально пройденном источнике; outcome —
+      из измерения. Писал субагент, проверял независимо судья: 106 тестов, ruff/mypy строгий на shared,
+      validate_layering OK (0 взаимных пар). Исход verified_is_shown_as_trust_not_gate_list при этом НЕ
+      флипнут — механика есть, засчёт исхода за живым внешним прогоном (ep-2026-09-16).
+  - id: define-canonical-one-feature-zero-pipeline-scenario
+    title: >-
+      Зафиксировать canonical-сценарий «ONE FEATURE / ZERO PIPELINE»
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 984
+    evidence: qualification/ONE-FEATURE-ZERO-PIPELINE-SCENARIO.md
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #984). P0 №2 ревью 16.09. Зафиксирован эталонный сквозной сценарий
+      (qualification/ONE-FEATURE-ZERO-PIPELINE-SCENARIO.md): одна фича, 14 границ intent→…→
+      recommendation, на каждой проверяемый вопрос «что получил человек?», критерий прохождения из 6
+      пунктов (ноль утечек / Verified=уровень знания / показан Outcome / петля замкнута в next /
+      прогон на чистом stable / внешний замер). Якорь для P0 №3 и readouts.
+  - id: verify-propose-speaks-product-not-kit-foundation
+    title: >-
+      `propose` говорит продуктом, а не про фундамент кита (описание команды)
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    pr: 983
+    result: >-
+      ЗАКРЫТО 2026-09-16 (PR #983). P0 №1 ревью 16.09. Живой прогон `propose .` подтвердил: ВЫВОД уже
+      продуктовый (#978), утечка была в ОПИСАНИИ команды в меню владельца («предложение по фундаменту…
+      ревью фундамента») — переписано на «что продукту нужно дальше: рекомендации человеческим языком
+      + можно ли двигаться; настройка кита и детали по запросу». Тест-замок в test_ai_ops_cli.py;
+      витрина capability-map регенерирована (генерируется из описаний). Последняя утечка на самом входе.
+  - id: owner-judges-one-feature-outcomes-achieved
+    title: >-
+      Владелец засчитывает исходы направления one-feature-end-to-end — или заказывает чистый замер
+      на релизнутом ките сторонним пользователем
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    evidence: decisions/registry.yaml
+    result: >-
+      ЗАКРЫТО 2026-09-16 РЕШЕНИЕМ ВЛАДЕЛЬЦА по продуктовому ревью (ep-2026-09-16-product-freeze-held-
+      until-external-clean-run). Развилка «засчитать по перемеру ИЛИ заказать чистый внешний замер»
+      разрешена в пользу ВТОРОГО: исходы НЕ засчитываются достигнутыми — вертикальный срез не доказан
+      живым ВНЕШНИМ прогоном (перемер 15.09 делался новым кодом кита против cockpit, managed 4.3.2, без
+      живого пути до Verified/outcome на чистой установке). Кратковременный засчёт 5/5 + снятие freeze +
+      parallel (PR #981) ОТМЕНЁН, PR закрыт без слияния. Product-freeze ДЕРЖИТСЯ. Вместо засчёта
+      заведена P0-кампания ревью под тем же направлением (verify-propose, canonical-сценарий,
+      Verified/Outcome-readouts, outcome-loop, прогон на чистом stable, внешний замер).
+  - id: propose-speaks-product-not-kit-foundation
+    title: >-
+      `propose` советует, что нужно продукту, а не про фундамент кита
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 978
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #978, слит). Продолжение исхода `kit_recommends_what_the_product_needs`
+      (сестра advise #960, последняя крупная утечка из перемера): `propose` (foundation_proposal)
+      вёл про ФУНДАМЕНТ кита (контуры, ProductOverview.md, decisions/registry.yaml, Storybook,
+      workflow). Теперь ВЕДЁТ с «Что нужно продукту» (переиспользует `intelligence/product_advice`,
+      как advise), настройку кита подаёт отдельно и по запросу (technical), без жаргона в лице
+      человека (тест стережёт «фундамент»/«контур»/«источник истины»/пути). Честность цела: нет
+      сигнала → «данных не хватает», потребность не выдумывается. Независимое ревью APPROVE (+2 его
+      замечания доделаны: «фундамент» убран, аннотация типа), три группы CI + mypy зелёные.
+
+  - id: explain-next-step-command-hides-work-id
+    title: >-
+      Команда «Дальше» в `explain` (blocked/draft) не показывает человеку внутренний work-id
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 976
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #976, слит). Продолжение исхода `one_input_hides_the_pipeline` (найдено
+      ревью #973): `_explain_next` (cli/ai_ops_cli_report.py) для blocked/needs_more_evidence/draft
+      показывал человеку work-id в команде next-step (`./ai-ops resume . wi-… --execute`). Стало
+      продуктовым («покажу, что не прошло, и доведу — скажи „продолжай“»); точная команда уведена в
+      `technical["продолжить командой"]` (новый `_explain_next_command`), функциональность цела.
+      Последнее место, где id достигал человека на пути `explain`. Независимое ревью APPROVE, mypy
+      включён (чист), три группы CI зелёные.
+
+  - id: status-and-explain-speak-product-not-machinery
+    title: >-
+      `status` и `explain` говорят человеку продуктом, а не заявками/ветками/worktree
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 973
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #973, слит). Продолжение исхода `one_input_hides_the_pipeline`:
+      человеко-обращённый вывод `status` (`presenter_work.from_active_work`) и `explain`
+      (`cli_report._explain_blocker`/`_explain_message`) больше не показывает имена веток (`ai-ops/…`),
+      «заявки», worktree/«рабочие копии», внутренние id работ — говорит продуктом («Сейчас в работе:
+      <заголовок>», «заденут одни и те же места»); сырьё сохранено в technical (по запросу). Честность
+      publish=False цела («вижу только эту машину»). Независимое ревью APPROVE (mypy включён — чист),
+      три группы CI зелёные. Ревью нашло смежный остаток (`_explain_next` показывает work-id в команде
+      next-step на blocked/draft) → заведена работа explain-next-step-command-hides-work-id.
+
+  - id: run-completion-shows-what-checked-not-gate-count
+    title: >-
+      Итог прогона показывает «что проверено» продуктовыми словами, а не счёт гейтов
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 971
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #971, слит). Продолжение исхода `verified_is_shown_as_trust_not_gate_list`
+      (follow-up #965 — from_review закрыт, run-путь нет): `pipeline_stages._print_pipeline` печатал
+      «гейты: проверено машиной X из Y; остальное — мнение: <id>». Стало «Проверено — вот что:» с
+      честным разделением машина (детерминированный валидатор) / мнение (независимый ревьюер),
+      называется только пройденное (нет пройденных → «верифицировать нечего»). Карта gate→продуктовая
+      фраза вынесена из ui в общий foundation-слой `ai_ops_kit/shared/gate_dimensions.py` (и ui, и
+      engine импортируют ВНИЗ — инвариант engine↛ui соблюдён, LAYERING-OK), расширена машинными
+      гейтами; from_review переиспользует ту же карту без смены поведения; id/счёт — в technical.
+      Бухгалтерия: print-discipline 139→142, delivery-budget 642→643 (новый доставляемый файл), с
+      записями. Независимое ревью APPROVE, CI зелёный (в т.ч. mypy строгий на shared — потребовал
+      аннотацию, добавлена).
+
+  - id: grown-spec-summary-drops-process-level-name
+    title: >-
+      Текст «описание подросло» не показывает человеку имя уровня процесса
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 968
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #968, слит). Продолжение исхода `risk_selects_the_process_not_the_human`
+      (найдено ревью #963): ветка `_origin` в `from_specification` печатала «уже была, стало на N
+      вопросов больше под <level_name>» с именем уровня («L0 QUICK» / «L1 ENGINEERING») на пути
+      created=False. Стало «уже была — добавила N вопросов»; уровень остался в technical. Инвариант
+      закреплён тестом. Независимое ревью APPROVE, три группы CI зелёные.
+
+  - id: verified-is-shown-as-trust-not-gate-list
+    title: >-
+      Проверенный результат показывает «что проверено» продуктовыми словами, а не счёт гейтов
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 965
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #965, слит). Первый шаг исхода `verified_is_shown_as_trust_not_gate_list`:
+      в момент «Проверено» (`from_review`, ветка ready) человек видит, ЧТО именно проверено —
+      продуктовыми словами (код / безопасность / архитектура …), честно поданными как заключение
+      НЕЗАВИСИМОГО ревьюера (а не автотестов), потому что в эту ветку по построению попадают только
+      ai-review гейты (`_reviewable_gates`, writer≠judge). Заземлено на реально пройденные гейты
+      (`rep["reviews"]`, status=pass) через тонкую карту id→продуктовая фраза; незнакомый гейт не
+      выдумывается; имена гейтов и «N из M» остались в technical. Слои соблюдены (нет импорта gates в
+      ui). Инвариант «no false green» держится. Независимое ревью APPROVE, три группы CI зелёные.
+      Follow-up: run-путь «проверено машиной X из Y» (`pipeline_stages._print_pipeline`, полный набор
+      гейтов) не тронут — отдельной работой.
+
+  - id: after-merge-kit-shows-what-happened-to-the-product
+    title: >-
+      После результата кит обещает показать, что стало с продуктом после слияния (вплетён readout)
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 966
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #966, слит). Первый шаг исхода
+      `after_merge_kit_shows_what_happened_to_the_product`: в момент готового/доставленного результата
+      (`ready or draft_pr.url`) кит обещает человеку продолжение — «когда сольёшь, приходи за итогом,
+      покажу, что изменилось для продукта (эффект)» — и вплетает существующий `ai-ops readout` (#545).
+      Честно, без «автомагии»: явно сказано «сам момент merge я не отслеживаю», точная команда — в
+      технических деталях, обещания нет на непроверенном. Тронут только `ai_ops_run_print.py`
+      (`from_review` не задет). Ратчет print-discipline поднят на +2 (2 новые печати). Независимое
+      ревью APPROVE, три группы CI зелёные.
+
+  - id: risk-picks-process-not-human-stages
+    title: >-
+      Описание задачи спрашивает о риске по-человечески, а не показывает человеку стадии/уровни
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 963
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #963, слит). Первый шаг исхода `risk_selects_the_process_not_the_human`:
+      человеко-обращённый текст `specify` про неназванную тяжесть больше не показывает имена уровней
+      процесса (L0 QUICK / L1 ENGINEERING), число разделов и термин size/risk — спрашивает
+      по-человечески («насколько задача крупная и рискованная… «небольшая, неопасная» или «крупная,
+      рискованная»»). Правка чисто презентационная: приём слов (`--signals`, #864), маппинг
+      слова→уровень и данные уровня (`--json`, escalation_disclosure) целы; уровень остался в
+      technical. Проверено тремя группами (not-slow 6328 / selftests-a 298 / smoke 635), независимое
+      ревью APPROVE (writer≠judge), CI зелёный. Ревью нашло смежную утечку того же класса на пути
+      `created=False` → заведена работа grown-spec-summary-drops-process-level-name.
+
+  - id: specify-hides-feature-id-and-cli-from-the-human
+    title: >-
+      Единый вход: описание задачи не показывает человеку внутренний feature id и CLI-механику
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 959
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #959, слит). Первый шаг исхода `one_input_hides_the_pipeline`:
+      человеко-обращённый вывод `specify` больше не показывает внутренний feature id (`wi-…`) и
+      CLI-механику (`--feature`). Опора: id детерминирован от текста задачи (`wi-<sha256(task)[:12]>`),
+      поэтому `--feature` избыточен. Точные команды уведены в «технические детали — по запросу»;
+      добавлено продуктовое подтверждение «Поняла: «<текст задачи>».» (инвариант F-032: слова
+      пользователя не теряются). Инвариант-тест: в человеческом выводе нет `wi-`/`--feature`.
+      Независимое ревью APPROVE (writer≠judge), полный контур CI зелёный.
+
+  - id: kit-advises-what-the-product-needs
+    title: >-
+      Кит советует, что нужно ПРОДУКТУ, а не только про свою инженерию и настройку
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    pr: 960
+    result: >-
+      ЗАКРЫТО 2026-09-15 (PR #960, слит). Первый шаг исхода `kit_recommends_what_the_product_needs`:
+      `advise` теперь ВЕДЁТ с того, что нужно продукту (метрика результата / следующий шаг по
+      ценности / возможность «направление без работы»), инженерию/настройку кита подаёт отдельно и по
+      запросу. Тонкий слой (`intelligence/product_advice.py`) над УЖЕ существующими сигналами
+      (roadmap.check, health_product, next_work) — без нового движка (product-freeze). Каждая
+      рекомендация несёт source (реальный артефакт); честный инвариант — на пустом репо ничего не
+      выдумывается (подтверждено кодом и тестами). Независимое ревью APPROVE (writer≠judge),
+      полный контур CI зелёный.
+
+  - id: one-feature-slice-measured-where-pipeline-leaks
+    title: >-
+      Пройти ОДНУ фичу end-to-end как новый пользователь и замерить, ГДЕ трубопровод протекает
+      наружу — список конкретных утечек, а не заявление
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-15'
+    evidence: qualification/ONE-FEATURE-SLICE-LEAK-AUDIT-2026-09-15.md
+    result: >-
+      ЗАКРЫТО 2026-09-15 диагностическим прогоном на ai-ops-cockpit (задача «показывать номер версии
+      в настройках», аудитория product). Замерено ~14 конкретных мест, где кит показывает человеку
+      внутреннюю кухню вместо продукта, распределены по всем пяти исходам направления: (1) feature id
+      `wi-…` и CLI-механика (`--feature/--answers/--signals`, «потом запускай plan»), заявки/ветки/
+      worktree в `status`/`explain`; (2) готовность как «гейты 3/3», не «Verified — вот почему»;
+      (3) размер/риск утекает уровнями/разделами (L0 QUICK / L1 ENGINEERING / «9 разделов») вместо
+      «насколько опасно?»; (4) поток кончается на PR, без «после merge покажу outcome» (readout не
+      вплетён); (5) `advise`/`propose` советуют про фундамент/инженерию кита (контуры, `.ai-ops.yaml`,
+      `ProductOverview.md`, Storybook, workflow), а не про то, что нужно ПРОДУКТУ. Все пять исходов
+      на естественном пути пока false (ожидаемо для стартового замера). Из находок заведена первая
+      точечная работа `specify-hides-feature-id-and-cli-from-the-human` (исход 1), остальные —
+      кандидатами в артефакте (берём по одной под product-freeze). Оговорка: «глаза нового
+      пользователя» применял опсик, не сторонний человек.
+
+  - id: parallel-autonomy-proven-owner-does-not-design-it
+    title: >-
+      Измеряемый прогон: команда ведёт продукт параллельно, а раскрой «что можно одновременно»
+      проектирует КИТ, не владелец
+    goal: team-works-in-parallel
+    status: done
+    closed_at: '2026-09-14'
+    evidence: qualification/TEAM-WORKS-PARALLEL-RUN-2026-09-14.md
+    result: >-
+      ЗАКРЫТО 2026-09-14 живым прогоном на ai-ops-cockpit. Владелец назвал ДВЕ задачи и их смысл
+      словами (тема в настройках; горячая клавиша полки виджетов) и НИ РАЗУ не проектировал
+      параллельность — счёт ручных раскроев владельца 0. Раскрой вывел КИТ из РЕАЛЬНЫХ диффов: зоны
+      (work_areas.from_write_scope), обнаружение пересечения двух работ (общие src/App.tsx,
+      src/config/settings.ts, src/__tests__/settings.test.ts; git merge-tree — реальный конфликт),
+      вердикт writer_contention.assess (перекрытая пара parallel_viable:False, независимая True),
+      concurrency_preflight (collision), исключение по зонам (пересечение флагуется, независимая зона
+      чиста). Два писателя-субагента работали ПАРАЛЛЕЛЬНО в отдельных worktree cockpit; кит судил
+      (машинные гейты 3/3 + независимые вердикты code_review, приняты на точном SHA) и довёл до
+      черновых PR cockpit#68 (тема) и cockpit#69 (клавиша), без слияния. Исход
+      `owner_does_not_design_the_parallelism` флипнут в true РЕШЕНИЕМ ВЛАДЕЛЬЦА (протокол: засчёт за
+      владельцем, кит не судит сам себя) — цель team-works-in-parallel достигнута 4/4. Оговорки в
+      артефакте и НЕ стёрты флипом: пара оказалась пересекающейся (кит честно поймал, а не выдал
+      ложный parallel-ок); операторский субагентный путь (внутренний писатель без API-ключа глохнет);
+      PR оформил опсик через gh; публикация заявок на полигоне выключена (межмашинная видимость —
+      отдельный, уже подтверждённый исход).
+
+  - id: owner-speaks-proven-by-zero-touch-cockpit-run
+    title: >-
+      Измеряемый zero-touch прогон на ai-ops-cockpit: от описания задачи до verified PR без
+      технического вмешательства владельца
+    goal: owner-speaks-product-not-pipeline
+    status: done
+    closed_at: '2026-09-14'
+    evidence: qualification/OWNER-SPEAKS-ZERO-TOUCH-RUN-2026-09-14.md
+    result: >-
+      ЗАКРЫТО 2026-09-14 живым прогоном на ai-ops-cockpit (задача «добавь в настройки перетаскивание
+      рабочих мест мышью»): владелец описал задачу ОДНОЙ фразой, счёт технических вмешательств
+      владельца 0 (не правил YAML, не знал feature id, не выбирал агентов/workflow, не запускал
+      внутренних команд, не толковал гейты). Финиш — готовый PR cockpit#66 (гейты 3/3 на 4.3.2, main
+      не тронут). Исход `owner_never_edits_yaml_or_knows_feature_id` флипнут в true РЕШЕНИЕМ ВЛАДЕЛЬЦА
+      (протокол: засчёт за владельцем, кит не судит сам себя). Оговорки записаны в артефакте и НЕ
+      стёрты флипом: продуктовые вопросы заполнил опсик (не человек); прогон не автономен end-to-end
+      (внутренний писатель без API-ключа заглох → операторский субагентный путь); путь вскрыл 2
+      дефекта кита (data_isolation ложно на слове «workspace» #945; scorecard @v2 не резолвился #946),
+      выпущены в 4.3.2 (#947). Побочная полевая ценность: две реальные правки кита + запись
+      квалификации #951 (OWNER-SPEAKS-ZERO-TOUCH-PROTOCOL/RUN).
+
   - id: types-enforced-on-foundation-or-mypy-removed
     title: mypy включён и строгий на всём фундаменте (kernel+shared под disallow_untyped_defs)
     goal: checks-that-run
