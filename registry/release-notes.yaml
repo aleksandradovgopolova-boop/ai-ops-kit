@@ -18,4 +18,4 @@
 schema_version: 1
 registry_type: release-notes
 patch_note: '4.3.1 — Канал `stable` заработан на минорe 4.3: два полевых подтверждения обкатки на живых дочках (ai-ops-cockpit и ai-ops-live-587) переводят пакет qualification → stable. Функциональных изменений кода нет — это административное объявление заработанного канала.'
-version: 4.3.2
+version: 4.4.0
