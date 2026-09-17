@@ -668,6 +668,31 @@ goals:
       zero_touch_claim_matches_the_readme: true            # B4 #1028
       sixty_second_human_onboarding_exists: true           # B6 #1030
 
+  # ── Направление kit-measured-as-a-product (взято 2026-09-17 решением владельца) ──────────────────
+  # Из внешнего продуктового ревью 17.09: перестать мерить развитие кита ЧИСЛОМ возможностей (34
+  # команды, 36 гейтов, 89 валидаторов) и начать мерить его как ПРОДУКТ — 5 метрик, где пятая
+  # (learning-to-decision) показывает, стал ли кит обучающимся, а не накопителем. Замер
+  # (qualification/KIT-AS-PRODUCT-METRICS-MEASUREMENT-2026-09-17.md): единой карты продукта кита нет,
+  # сырьё для 2/3/4 есть (validate_claims, KG gaps), 1 и 5 не считаются. Три метрики (1/2/3) —
+  # на существующих данных; 4-real и 5 упираются в живую аналитику (тот же фронтир, что петля
+  # outcome→learning в product-memory) — берутся КАРКАСОМ, не задваивая параллельную работу. Работы по одной.
+  - id: kit-measured-as-a-product
+    # заморозка: новая мера продукта — расширение умений кита (не условие прогона). Freeze снят
+    # (ep-2026-08-19), extension-цели легальны; берётся осознанно как продуктовый сдвиг ревью 17.09.
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Кит мерит СЕБЯ как продукт единой картой (не числом возможностей), честно «не измерено» где данных нет.
+      kit_scored_as_a_product_not_by_capability_count: false
+      # Доля фич idea→release без ручного проектирования конвейера — считается.
+      feature_completion_rate_measured: false
+      # Доля утверждений кита с реальным evidence — выражена долей охвата, не pass/fail.
+      evidence_coverage_measured_as_ratio: false
+      # Доля выпущенных фич с ПОЛНОЙ life story — агрегат поверх Knowledge Graph.
+      product_memory_coverage_measured: false
+      # Слоты outcome-охвата и learning-to-decision стоят каркасом (честное «не измерено»); наполнение — с петлёй.
+      outcome_and_learning_metric_slots_stand_honestly: false
+
 # ─── ТЕКУЩИЙ MILESTONE (первоклассная запись, 2026-09-14) ──────────────────────────────────────
 # Уровень МЕЖДУ направлением (goals/ROADMAP) и работой: какой ИМЕНОВАННЫЙ результат кит доводит
 # ПРЯМО СЕЙЧАС. Прежде «текущий milestone» существовал только как ПРОКСИ — паспорт брал первый пункт
@@ -773,6 +798,47 @@ work:
   # перестала быть пустой: graph trace <фича> рассказывает правдивую историю. Остаток направления —
   # persist-review-verdict-then-link-to-feature (ниже) и наполнение outcome/learning (упирается в
   # реальную аналитику продукта — отдельно).
+
+  # ── Направление kit-measured-as-a-product — из ревью 17.09 (замер: KIT-AS-PRODUCT-METRICS-…-2026-09-17) ─
+  # Мерить кит ПРОДУКТОМ, не числом возможностей. Метрики 1/2/3 считаются на существующих данных →
+  # scorecard берётся сейчас; 4-real и 5 упираются в живую аналитику (общий фронтир с петлёй
+  # close-outcome-learning-loop) → берутся КАРКАСОМ, наполнение координируется, не задваивается.
+  - id: kit-product-scorecard
+    title: >-
+      Единая карта продукта кита: первоклассный scorecard из 5 метрик (feature completion, evidence
+      coverage, product-memory coverage — считаются сейчас; outcome/learning — честные слоты «не измерено»)
+    type: product
+    goal: kit-measured-as-a-product
+    status: todo
+    owner_role: product
+    value: high
+    write_scope: [ai_ops_kit/, registry/, tests/, docs/]
+    reason: >-
+      Замер 2026-09-17 (qualification/KIT-AS-PRODUCT-METRICS-MEASUREMENT-2026-09-17.md): кит не мерит
+      себя как продукт — сырьё разрознено (validate_claims, knowledge_graph.gaps), 1 и 5 не считаются.
+      Собрать существующие сигналы в одну первоклассную карту (метрики 1/2/3 из данных, 4/5 — каркас с
+      честным «не измерено»). Заменяет счёт возможностей как главную меру продукта. Не ждёт аналитики.
+  - id: outcome-and-learning-metrics-populated
+    title: >-
+      Наполнить слоты outcome-coverage и learning-to-decision реальными данными (метрики 4/5 scorecard)
+    type: product
+    goal: kit-measured-as-a-product
+    status: waiting_on_owner
+    waiting_on: >-
+      тот же живой поток аналитики, что и close-outcome-learning-loop-with-real-analytics: без реальных
+      наблюдений «реальный outcome» и «learning влияет на решения» честно «не измерены». Координируется с
+      параллельной работой над петлёй — не задваивать; наполняется, как только петля даст сигнал.
+    owner_role: product
+    value: high
+    human_decision: >-
+      Метрики 4 (реальный outcome) и 5 (learning-to-decision) — тот же фронтир, что петля
+      outcome→learning: их каркас ставит scorecard, а наполнение упирается в живую аналитику продукта.
+      На каком продукте и когда — общее решение с close-outcome-learning-loop, чтобы не дублировать.
+    write_scope: [ai_ops_kit/, tests/]
+    reason: >-
+      Слоты 4/5 стоят честным «не измерено» после scorecard; наполнение — не отдельный механизм, а те же
+      реальные наблюдения, что нужны петле обучения. Отдельная работа, потому что ждёт того же потока
+      данных и должна идти В КООРДИНАЦИИ с параллельной сессией, а не параллельно ей.
 
   # ── Направление audit-remediation ДОСТИГНУТО 2026-09-17 (2/2 волны, 7/7 исходов) ────────────────
   # Остаток второй волны закрыт в историю: B1 #1029 (тёзки-каталоги размежёваны — не дубли, слияние было
