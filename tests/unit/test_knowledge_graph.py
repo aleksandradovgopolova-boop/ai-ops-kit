@@ -182,3 +182,143 @@ def test_empty_repo_yields_empty_but_valid_graph(tmp_path: Path):
     assert graph["schema_version"] == 1
     assert graph["nodes"] == []
     assert graph["edges"] == []
+
+
+# ── «Зачем функция существует»: связь РЕШЕНИЕ → ФУНКЦИЯ из истории, а не пересказ кода ──────────────
+
+
+@pytest.fixture()
+def child_decision(tmp_path: Path) -> Path:
+    """Синтетический child с журналом решений: одна функция ссылается на решение, другая — нет.
+
+    express-checkout объявляет `links.decision: ep-...` -> в графе появляется узел решения и ребро
+    decision -motivates-> feature. wishlist решения не объявляет -> ребра нет (честно: причина не
+    записана). Это доказывает и «зачем» из истории, и инвариант «нет ссылки — нет связи».
+    """
+    root = tmp_path / "child_dec"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+        "work": [],
+    })
+    _write(root / "decisions" / "registry.yaml", {
+        "schema_version": 1, "kind": "decisions-registry",
+        "episodes": [
+            {"id": "ep-2026-08-14-product-os",
+             "question": "Куда идёт кит после закрытия quality-контура?",
+             "decision": "Владелец объявил Product OS: одна вертикальная функция целиком.",
+             "reason": "Разрыв между обещанным и исполняемым закрывается одной функцией.",
+             "reversibility": "two-way", "date": "2026-08-14"},
+        ],
+        "principles": [
+            {"id": "dp-004",
+             "principle": "Оптимизируем расстояние от намерения до проверенного результата."},
+        ],
+    })
+    _write(root / "features" / "express-checkout" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "express-checkout", "name": "Экспресс-чекаут",
+                    "status": "in-progress", "current_stage": "analytics"},
+        "links": {"goal": "grow-repeat-purchases", "decision": "ep-2026-08-14-product-os"},
+        "artifacts": {},
+    })
+    _write(root / "features" / "wishlist" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "wishlist", "name": "Список желаний",
+                    "status": "planned", "current_stage": "discovery"},
+        "links": {},
+        "artifacts": {},
+    })
+    return root
+
+
+def test_decision_edge_built_from_blueprint_link(child_decision: Path):
+    """Ссылка `links.decision` -> узел decision (текст решения) + ребро decision -motivates-> feature."""
+    graph = kg.build_graph(child_decision)
+    by_id = {n["id"]: n for n in graph["nodes"]}
+
+    # Узел решения появился из decisions/registry.yaml с ЧЕЛОВЕЧЕСКИМ текстом, а не пересказом кода.
+    assert "ep-2026-08-14-product-os" in by_id
+    dnode = by_id["ep-2026-08-14-product-os"]
+    assert dnode["type"] == "decision"
+    assert "Product OS" in dnode["title"]
+
+    # Ребро decision -motivates-> feature построено.
+    assert {"from": "ep-2026-08-14-product-os", "type": "motivates",
+            "to": "express-checkout"} in graph["edges"]
+
+
+def test_trace_reports_why_a_feature_exists_from_decision(child_decision: Path):
+    """`trace` называет РЕШЕНИЕ, из которого функция появилась — ответ на «зачем она есть»."""
+    graph = kg.build_graph(child_decision)
+    result = kg.trace(graph, "express-checkout")
+
+    assert result["decision"] is not None
+    assert result["decision"]["id"] == "ep-2026-08-14-product-os"
+    assert "Product OS" in result["decision"]["title"]
+
+
+def test_no_decision_link_means_no_edge_and_not_a_gap(child_decision: Path):
+    """Нет ссылки в blueprint -> нет ребра motivates. Это честная неизвестность, а НЕ пробел."""
+    graph = kg.build_graph(child_decision)
+    motivates_to_wishlist = [e for e in graph["edges"]
+                             if e["type"] == "motivates" and e["to"] == "wishlist"]
+    assert motivates_to_wishlist == []
+
+    result = kg.trace(graph, "wishlist")
+    assert result["decision"] is None
+    # Отсутствие «зачем» из истории не объявляется пробелом: причина может быть просто не записана.
+    assert not any("motivates" in g or "решени" in g for g in result["gaps"])
+
+
+def test_broken_decision_ref_is_rejected_by_validator(tmp_path: Path):
+    """Ссылка на несуществующее решение оставляет висящее ребро -> validate_knowledge_graph краснит."""
+    root = tmp_path / "child_broken"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    _write(root / "decisions" / "registry.yaml", {
+        "schema_version": 1, "kind": "decisions-registry", "episodes": [],
+    })
+    _write(root / "features" / "express-checkout" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "express-checkout", "name": "Экспресс-чекаут",
+                    "status": "in-progress", "current_stage": "analytics"},
+        # Ссылка на решение, которого в реестре НЕТ — сломанная декларация.
+        "links": {"goal": "grow-repeat-purchases", "decision": "ep-does-not-exist"},
+        "artifacts": {},
+    })
+    graph = kg.build_graph(root)
+
+    # Ребро выпущено (декларация есть), но узла решения нет — граф не сходится сам с собой.
+    assert {"from": "ep-does-not-exist", "type": "motivates",
+            "to": "express-checkout"} in graph["edges"]
+    assert "ep-does-not-exist" not in {n["id"] for n in graph["nodes"]}
+
+    graph_dir = root / "knowledge"
+    for n in graph["nodes"]:
+        if n.get("blueprint"):
+            n["blueprint"] = str((graph_dir / n["blueprint"]).resolve())
+    types, rels = vkg.load_dictionary()
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "graph.yaml"
+        p.write_text(yaml.safe_dump(graph, allow_unicode=True), encoding="utf-8")
+        errors = vkg.validate_graph(p, types, rels)
+    assert any("ep-does-not-exist" in e for e in errors), \
+        f"валидатор обязан поймать висящую ссылку на решение: {errors}"
+
+
+def test_decision_graph_passes_validator_when_ref_resolves(child_decision: Path):
+    """Граф с валидной ссылкой на решение проходит ссылочную целостность validate_knowledge_graph."""
+    graph = kg.build_graph(child_decision)
+    graph_dir = child_decision / "knowledge"
+    for n in graph["nodes"]:
+        if n.get("blueprint"):
+            n["blueprint"] = str((graph_dir / n["blueprint"]).resolve())
+    types, rels = vkg.load_dictionary()
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "graph.yaml"
+        p.write_text(yaml.safe_dump(graph, allow_unicode=True), encoding="utf-8")
+        errors = vkg.validate_graph(p, types, rels)
+    assert errors == [], f"граф с решением не прошёл валидатор: {errors}"

@@ -90,6 +90,47 @@ class _Builder:
         return self.nodes.get(_slug(nid), {}).get("type", "")
 
 
+def _load_decisions(root: Path) -> dict[str, str]:
+    """id решения -> человекочитаемый текст. Источник — `decisions/registry.yaml`.
+
+    Индексирует и эпизоды (`episodes`, id вида `ep-YYYY-MM-DD-…`, текст — поле `decision`), и
+    принципы (`principles`, id вида `dp-***`, текст — поле `principle`): blueprint вправе сослаться
+    на любой из них. Нет файла/секции -> пустой индекс (решений в проекте просто нет).
+    """
+    reg = _load_yaml(root / "decisions" / "registry.yaml")
+    index: dict[str, str] = {}
+    for ep in reg.get("episodes") or []:
+        if isinstance(ep, dict) and _text(ep.get("id")):
+            index[_slug(ep["id"])] = (_text(ep.get("decision")) or _text(ep.get("question"))
+                                      or _text(ep["id"]))
+    for pr in reg.get("principles") or []:
+        if isinstance(pr, dict) and _text(pr.get("id")):
+            index[_slug(pr["id"])] = _text(pr.get("principle")) or _text(pr["id"])
+    return index
+
+
+def _decision_refs(links: dict) -> list[str]:
+    """Ссылки функции на решения из blueprint: `links.decision` (одна) и `links.decisions` (список).
+
+    Обе формы поддержаны; порядок сохраняется, дубли по slug убираются. Пусто -> [].
+    """
+    raw: list[str] = []
+    single = links.get("decision")
+    if _text(single):
+        raw.append(_text(single))
+    many = links.get("decisions")
+    if isinstance(many, list):
+        raw.extend(_text(r) for r in many if _text(r))
+    seen: set[str] = set()
+    out: list[str] = []
+    for r in raw:
+        s = _slug(r)
+        if s not in seen:
+            seen.add(s)
+            out.append(r)
+    return out
+
+
 def _iter_blueprints(root: Path):
     """Пути к blueprint'ам функций: и дочернее `features/<id>/`, и демо-каталог кита."""
     seen = set()
@@ -124,6 +165,8 @@ def build_graph(child_root) -> dict:
         `outcome -measured-by-> metric`.
       * `product-learning/FL-*.yaml`: узлы `insight`; `insight -feeds-> feature` при совпадении
         `feature`; `insight -derived-from-> outcome`, если эта функция нацелена на outcome.
+      * `decisions/registry.yaml` + blueprint `links.decision`/`links.decisions`: узел `decision`
+        (текст решения) и ребро `decision -motivates-> feature` — «зачем функция появилась».
 
     Пути blueprint'а в узлах — ОТНОСИТЕЛЬНО `<child_root>/knowledge` (туда пишется graph.yaml),
     чтобы `validate_knowledge_graph` проверил их существование без ложного срабатывания.
@@ -134,6 +177,8 @@ def build_graph(child_root) -> dict:
 
     # feature -> id outcome-узла, на который она нацелена (для привязки ins‑ов и метрик).
     feature_outcome: dict[str, str] = {}
+    # id решения -> текст (для узла decision, из которого «появилась» функция).
+    decisions = _load_decisions(root)
 
     # 1) plan.yaml — цели, их outcome, работы как initiative.
     plan = _load_yaml(root / "planning" / "plan.yaml")
@@ -204,6 +249,21 @@ def build_graph(child_root) -> dict:
             for mid in metric_ids:
                 b.edge(oid, "measured-by", mid)
 
+        # Решение, из которого функция появилась («зачем она вообще есть» — из истории, не из кода).
+        # Ссылку ОБЪЯВЛЯЕТ автор blueprint'а (links.decision / links.decisions) — это НЕ авто-вывод
+        # из данных, как `targets`, а декларация. Поэтому и правило другое: объявленную связь мы
+        # ВЫПУСКАЕМ ребром всегда, а узел решения создаём только если ссылка резолвится в
+        # decisions/registry.yaml. Ссылка на несуществующее решение оставляет ребро с висящим
+        # концом — и validate_knowledge_graph честно отвергает граф целиком: сломанная декларация
+        # обязана быть громкой, а не тихо пропасть. Нет ссылки -> нет ребра (функция без «зачем»
+        # допустима, история просто честно не знает причину — это НЕ пробел).
+        for ref in _decision_refs(links):
+            did = _slug(ref)
+            text = decisions.get(did)
+            if text:
+                b.node(did, "decision", title=text[:160], ref="decisions/registry.yaml")
+            b.edge(did, "motivates", fid)
+
     # 3) FL-*.yaml — выводы из данных.
     learning_dir = root / "product-learning"
     for fl_path in sorted(learning_dir.glob("FL-*.yaml")) if learning_dir.is_dir() else []:
@@ -243,7 +303,11 @@ def trace(graph: dict, feature: str) -> dict:
     цепочка — если данных на полный путь нет, отдаётся лучший фрагмент с НАЗВАННЫМИ `gaps`.
 
     Результат: `{"feature", "chain": [{id,type,title}], "goal": id|None, "outcome": {...}|None,
-    "verdict": str, "gaps": [...]}`.
+    "decision": {id,title}|None, "verdict": str, "gaps": [...]}`.
+
+    `decision` — из какого РЕШЕНИЯ (истории) появилась функция; это ответ на «зачем она есть»
+    словами человека, а не пересказом кода. Нет объявленного решения -> None (не пробел: причина
+    просто не записана, а не потеряна).
     """
     nodes, edges = _index(graph)
     fid = _slug(feature)
@@ -255,7 +319,7 @@ def trace(graph: dict, feature: str) -> dict:
                 "title": _text(n.get("title")) or nid}
 
     if fid not in nodes:
-        return {"feature": fid, "chain": [], "goal": None, "outcome": None,
+        return {"feature": fid, "chain": [], "goal": None, "outcome": None, "decision": None,
                 "verdict": "unknown",
                 "gaps": [f"узла «{fid}» нет в графе — цепочку строить не от чего"]}
 
@@ -291,9 +355,18 @@ def trace(graph: dict, feature: str) -> dict:
         gaps.append(f"у «{fid}» нет outcome (ребро targets) — зачем функция существует, "
                     f"не подтверждается измеримым результатом")
 
+    # Решение, из которого функция появилась («зачем она есть» — из истории). Отсутствие решения
+    # НЕ пробел: причина может быть просто не записана. Но если решение есть, история его называет.
+    decision_ids = [e["from"] for e in edges if e.get("type") == "motivates"
+                    and e.get("to") == fid and e.get("from") in nodes]
+    decision = None
+    if decision_ids:
+        dn = nodes[decision_ids[0]]
+        decision = {"id": decision_ids[0], "title": _text(dn.get("title")) or decision_ids[0]}
+
     verdict = _verdict(goal, outcome)
     return {"feature": fid, "chain": [summary(i) for i in chain_ids], "goal": goal,
-            "outcome": outcome, "verdict": verdict, "gaps": gaps}
+            "outcome": outcome, "decision": decision, "verdict": verdict, "gaps": gaps}
 
 
 def _verdict(goal, outcome) -> str:

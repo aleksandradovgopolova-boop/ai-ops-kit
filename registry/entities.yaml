@@ -23,6 +23,7 @@ entity_types:
   experiment:    {description: "Эксперимент, проверяющий гипотезу"}
   insight:       {description: "Вывод из данных/инцидентов/экспериментов; вход следующего Discovery"}
   outcome:       {description: "Проверяемый результат функции: baseline→target под guardrails и что реально измерено. Проекция OutcomeContract+OutcomeReadout (validate_product_objects).", attributes: [baseline, target, guardrails, measured, verdict]}
+  decision:      {description: "Решение из decisions/registry.yaml (эпизод ep-* или принцип dp-*): ЗАЧЕМ появилась функция. Узел несёт текст решения, а не пересказ кода."}
 
 # Допустимые связи: from -> to (валидатор отклоняет рёбра вне этого списка).
 relations:
@@ -50,3 +51,5 @@ relations:
   - {type: targets,      from: feature,    to: outcome}
   - {type: measured-by,  from: outcome,    to: metric}
   - {type: derived-from, from: insight,    to: outcome}
+  # Decision -> feature: из какого решения появилась функция (история «зачем», не пересказ кода).
+  - {type: motivates,    from: decision,   to: feature}
