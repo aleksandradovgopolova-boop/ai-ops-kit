@@ -683,15 +683,18 @@ goals:
     status: active
     outcome:
       # Кит мерит СЕБЯ как продукт единой картой (не числом возможностей), честно «не измерено» где данных нет.
+      # ЕЩЁ НЕ ЗАКРЫТ: карта (команда `scorecard`) построена (PR #1040), но ГЛАВНОЙ мерой продукта пока
+      # не стала — паспорт/дашборд по-прежнему ведут числом возможностей. Остаток направления —
+      # возвести scorecard в заглавную меру (заменить счёт возможностей там, где он сейчас главный).
       kit_scored_as_a_product_not_by_capability_count: false
-      # Доля фич idea→release без ручного проектирования конвейера — считается.
-      feature_completion_rate_measured: false
-      # Доля утверждений кита с реальным evidence — выражена долей охвата, не pass/fail.
-      evidence_coverage_measured_as_ratio: false
-      # Доля выпущенных фич с ПОЛНОЙ life story — агрегат поверх Knowledge Graph.
-      product_memory_coverage_measured: false
-      # Слоты outcome-охвата и learning-to-decision стоят каркасом (честное «не измерено»); наполнение — с петлёй.
-      outcome_and_learning_metric_slots_stand_honestly: false
+      # Доля фич idea→release без ручного проектирования конвейера — считается. ЗАКРЫТ scorecard'ом (PR #1040): метрика 1 даёт 5/5.
+      feature_completion_rate_measured: true
+      # Доля утверждений кита с реальным evidence — выражена долей охвата, не pass/fail. ЗАКРЫТ (PR #1040): метрика 2 даёт долю 8/8.
+      evidence_coverage_measured_as_ratio: true
+      # Доля выпущенных фич с ПОЛНОЙ life story — агрегат поверх Knowledge Graph. ЗАКРЫТ (PR #1040): метрика 3 даёт долю (сейчас 0/5, честный ноль).
+      product_memory_coverage_measured: true
+      # Слоты outcome-охвата и learning-to-decision стоят каркасом (честное «не измерено»); наполнение — с петлёй. ЗАКРЫТ (PR #1040): метрики 4/5 стоят честным «не измерено» с причиной.
+      outcome_and_learning_metric_slots_stand_honestly: true
 
 # ─── ТЕКУЩИЙ MILESTONE (первоклассная запись, 2026-09-14) ──────────────────────────────────────
 # Уровень МЕЖДУ направлением (goals/ROADMAP) и работой: какой ИМЕНОВАННЫЙ результат кит доводит
@@ -803,21 +806,11 @@ work:
   # Мерить кит ПРОДУКТОМ, не числом возможностей. Метрики 1/2/3 считаются на существующих данных →
   # scorecard берётся сейчас; 4-real и 5 упираются в живую аналитику (общий фронтир с петлёй
   # close-outcome-learning-loop) → берутся КАРКАСОМ, наполнение координируется, не задваивается.
-  - id: kit-product-scorecard
-    title: >-
-      Единая карта продукта кита: первоклассный scorecard из 5 метрик (feature completion, evidence
-      coverage, product-memory coverage — считаются сейчас; outcome/learning — честные слоты «не измерено»)
-    type: product
-    goal: kit-measured-as-a-product
-    status: todo
-    owner_role: product
-    value: high
-    write_scope: [ai_ops_kit/, registry/, tests/, docs/]
-    reason: >-
-      Замер 2026-09-17 (qualification/KIT-AS-PRODUCT-METRICS-MEASUREMENT-2026-09-17.md): кит не мерит
-      себя как продукт — сырьё разрознено (validate_claims, knowledge_graph.gaps), 1 и 5 не считаются.
-      Собрать существующие сигналы в одну первоклассную карту (метрики 1/2/3 из данных, 4/5 — каркас с
-      честным «не измерено»). Заменяет счёт возможностей как главную меру продукта. Не ждёт аналитики.
+  # kit-product-scorecard ЗАКРЫТА в историю 2026-09-17 (#1040): команда `scorecard` — единая карта из 5
+  # метрик; 1/2/3 считаются (5/5, 8/8, 0/5 честный ноль), 4/5 стоят честным «не измерено» с причиной.
+  # Закрыла 4 из 5 исходов направления. ОСТАТОК исхода kit_scored…not_by_capability_count: карта
+  # построена, но заглавной мерой продукта пока не стала (паспорт/дашборд ведут числом возможностей) —
+  # возведение scorecard в главную меру ещё впереди. Наполнение слотов 4/5 — работа ниже (ждёт владельца).
   - id: outcome-and-learning-metrics-populated
     title: >-
       Наполнить слоты outcome-coverage и learning-to-decision реальными данными (метрики 4/5 scorecard)
