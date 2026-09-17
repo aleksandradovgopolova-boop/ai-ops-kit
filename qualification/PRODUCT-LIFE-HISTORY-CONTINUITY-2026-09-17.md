@@ -8,8 +8,16 @@
 что выпустили (релиз) → что произошло (outcome) → чему научились (урок) → следующее решение.**
 Кит должен уметь пройти её за один обход и ответить «зачем эта фича существует и что она дала».
 
+## Поправка (2026-09-17, по ходу закрытия разрыва №1)
+Первичный замер назвал `visible-writer-queue`/`voluntary-child-registration` фичами с blueprint — это
+НЕВЕРНО: они существуют только как имена код-модулей (в baseline размеров/тестов), а НЕ как
+`features/<id>/blueprint.yaml`. Единственный живой feature-blueprint в самом ките — демо
+`examples/feature-blueprint-demo/express-checkout`. Это усиливает вывод: у кита почти нет собственных
+feature-узлов, поэтому «история жизни продукта» не прослеживается ещё и из-за ОТСУТСТВИЯ фич как узлов —
+отдельный разрыв (feature-узлы существуют лишь в демо), кандидат в работы направления.
+
 ## Метод
-Реальные фичи с blueprint: `visible-writer-queue`, `voluntary-child-registration`. Проверены:
+Проверены (фичи-blueprint в живом графе — по факту только демо `express-checkout`):
 `registry/entities.yaml` (типы+relations), Knowledge Graph (`intelligence/knowledge_graph.py`, сборка из
 plan.yaml + features/<id>/blueprint.yaml + product-learning/FL-*), команда `graph trace`, содержимое
 blueprint. Инвариант KG честен: «нет источника — нет узла, связь не выдумывается».
