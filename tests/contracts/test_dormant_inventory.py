@@ -312,12 +312,13 @@ def test_legitimate_standalone_entry_is_not_flagged():
     assert validator not in dormant, "валидатор — легит-вход по префиксу, не дормант"
 
     # nightly_review — легит process-вход (Robin/night-review.md зовут по расписанию), НО с P1 №8/№9
-    # он ПРОВЕДЁН В КОНТУР: cli/ai_ops_cli импортирует его для `review all` (полный обзор продукта по
-    # требованию). Импорт вниз по слоям (cli=entrypoints выше intelligence) разрешён. Значит теперь у
-    # него есть легит-импортёр — и он не дормант уже поэтому, не только по allowlist. Проверка заодно
+    # он ПРОВЕДЁН В КОНТУР: cli/human_facade импортирует его для `review all` (полный обзор продукта по
+    # требованию — символ `_review_all` вынесен из ai_ops_cli в спутник human_facade ратчетом
+    # module-size). Импорт вниз по слоям (cli=entrypoints выше intelligence) разрешён. Значит у него
+    # есть легит-импортёр — и он не дормант уже поэтому, не только по allowlist. Проверка заодно
     # держит проводку `review all` (без импорта обзор продукта по требованию не запускается).
     dispatched = f"{PKG}.intelligence.nightly_review"
-    assert importers[dispatched] == {f"{PKG}.cli.ai_ops_cli"}, (
+    assert importers[dispatched] == {f"{PKG}.cli.human_facade"}, (
         "review all обязан импортировать nightly_review из cli (иначе обзор продукта не проведён)")
     assert dispatched not in dormant, "проведённый в контур обзор (review all) — не дормант"
 
