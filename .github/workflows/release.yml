@@ -67,6 +67,17 @@ jobs:
           # чтобы выпуск ждал ровно доказательство «тесты ловят регрессии», а не агрегатный bench.
           python3 -m pytest tests/unit/test_mutation_probe.py -q -m nightly
 
+      # ГЕЙТ ДРЕНАЖА ОЧЕРЕДИ ЗАЯВЛЕНИЙ (работа `release-drains-the-changelog-queue`, аудит A2).
+      # Релиз собирает CHANGELOG из newsfragments/ и очищает очередь (сборка towncrier в release_bump
+      # на бампе версии). Здесь — ДОКАЗАТЕЛЬСТВО результата на релизном SHA: если очередь непуста
+      # (сборка не выполнялась/не добежала), тег НЕ создаётся. Проверка ничего не собирает и не
+      # удаляет — только сверяет, поэтому она в release.yml, а не в CI-джобе с `check` (сама сборка
+      # фрагментов в workflow запрещена, см. test_release_gates про запрет сборки в CI).
+      # Стоит ДО создания тега и под тем же условием needed, что и мутационный гейт.
+      - name: Очередь заявлений пуста на релизе (гейт дренажа newsfragments)
+        if: steps.check_release.outputs.needed == 'true'
+        run: python3 ai_ops_kit/validation/validate_changelog_queue_drained.py --release
+
       - name: Создать тег и Release из CHANGELOG
         if: steps.check_release.outputs.needed == 'true'
         env:
