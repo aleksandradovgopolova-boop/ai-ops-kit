@@ -702,10 +702,13 @@ work:
   # (релиз/outcome/метрика/урок), но рвётся в начале и середине — НЕТ рёбер decision→feature,
   # work/PR→feature, review-verdict→feature, и фича не входит в граф без объявленного outcome.
   # Разрывы разбираем по одной; первая — decision→feature (зачем существует фича).
-  - id: link-decision-to-feature-why-it-exists
+  # link-decision-to-feature-why-it-exists ЗАКРЫТА в историю 2026-09-17 (#1015): ребро decision→feature
+  # («зачем существует») в KG, `graph trace` отвечает решением. Замер также вскрыл: фича-blueprint без
+  # outcome В ГРАФ ВХОДИТ (express-checkout) — «разрыв №2» не реален, снят. Остаток нити — ниже.
+  - id: complete-life-history-traceability-edges
     title: >-
-      Связать РЕШЕНИЕ с ФИЧЕЙ: ребро decision→feature в Knowledge Graph (+ ссылка в blueprint/решении),
-      чтобы кит отвечал «зачем эта фича существует» из истории, а не пересказом кода
+      Достроить рёбра нити истории в KG: work/PR→feature («что построили»), review-verdict→feature
+      («кто проверил»), learning→outcome («чему научились по результату») — доказать на живом blueprint
     type: engineering
     goal: product-memory-org-intelligence
     status: todo
@@ -713,10 +716,11 @@ work:
     value: high
     write_scope: [ai_ops_kit/, registry/, tests/]
     reason: >-
-      Разрыв №1 замера 2026-09-17: у фичи нет связи с решением, из-за которого она появилась
-      (decisions/registry.yaml и features/<id>/blueprint.yaml не связаны ничем). Это первое звено нити
-      «истории жизни продукта» и прямой вход к исходу kit_answers_why_a_feature_exists_from_history.
-      Тонкий слой поверх существующего KG (intelligence/knowledge_graph.py), без второго графа.
+      Разрывы №3/№4/№5 замера 2026-09-17: середина и хвост нити не связаны — из графа не достать, ЧТО
+      построило фичу (работа/PR из history), КТО её проверил (review-вердикт) и ЧЕМУ научились по её
+      результату (learning→outcome). Три почти одинаковых ребра поверх существующего KG — одной работой,
+      без второго графа; доказать на живом blueprint (express-checkout). Замыкает нить
+      зачем→построено→проверено→выпущено→outcome→урок для исхода product_has_machine_readable_life_history.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО

@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: link-decision-to-feature-why-it-exists
+    title: >-
+      Решение → фича в Knowledge Graph («зачем эта фича существует» из истории)
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1015
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1015). Разрыв №1 нити истории: у фичи не было связи с решением, её
+      породившим. Добавлено: поле links.decision/decisions в feature-blueprint (ссылка на ep-*/dp- из
+      decisions/registry.yaml), тип сущности decision + связь motivates (decision→feature) в
+      registry/entities.yaml, узел+ребро в knowledge_graph.py, «Появилась из решения: «…»» в
+      presenter_graph. Честность: нет ссылки → нет ребра; битая ссылка → validate_knowledge_graph
+      отвергает граф (негатив-тест). Живой смоук `graph trace express-checkout` называет решение
+      ep-2026-08-14-product-os. Проверено судьёй: 15 тестов KG + слои + product-model + ruff зелёные.
+      Поправка замера: visible-writer-queue/voluntary-child-registration — код-модули, не blueprints;
+      единственный живой blueprint кита — демо express-checkout (у кита почти нет feature-узлов).
   - id: measure-product-life-history-continuity
     title: >-
       Замер непрерывности «истории жизни продукта» на реальной фиче
