@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: persist-review-verdict-then-link-to-feature
+    title: >-
+      Персистентный review-вердикт + ребро review→feature («кто проверил») — последнее звено нити
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1031
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1031). Разрыв №4 нити («кто/что проверил») замкнут через ПЕРСИСТЕНТНОСТЬ,
+      а не пустое ребро: shared/review_verdict.py (объект features/<id>/review/verdict.yaml — что
+      проверено + кем: машина/независимый ревьюер/человек + ревизия, проекция evidence_verdict #588),
+      путь ревью (engine/review_branch.py, независимый reviewer — writer≠judge) ПЕРСИСТИТ вердикт, тип
+      review + relation reviewed в entities, узел+ребро в KG, «Проверили: …» в presenter. Честно:
+      вердикты 5 существующим фичам НЕ выдуманы (граф чист), населяется по мере будущих ревью; нет
+      записи → нет ребра; битая ссылка → validate_knowledge_graph краснит. Проверено судьёй: 50 тестов
+      + слои + product-model + mypy строгий на shared + ruff зелёные; footprint 644→645 (новый файл).
+      МЕХАНИЗМ НИТИ ИСТОРИИ ПОСТРОЕН ЦЕЛИКОМ (decision/work/review→feature, learning→outcome).
   - id: kit-represents-its-features-as-blueprints
     title: >-
       Кит представляет свои фичи как feature-blueprints — нить истории наполнена реальными фичами
