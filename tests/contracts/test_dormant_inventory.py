@@ -61,7 +61,9 @@ ALLOWLIST_PREFIXES: tuple[str, ...] = (
 # поэтому нулевой импорт для них ожидаем и легитимен. Каждый — с точной ссылкой на команду.
 ALLOWLIST_MODULES: dict[str, str] = {
     f"{PKG}.intelligence.nightly_review":
-        "commands/maintenance/night-review.md зовёт процессом; Robin запускает по расписанию",
+        "commands/maintenance/night-review.md зовёт процессом; Robin запускает по расписанию. "
+        "С P1 №8/№9 ТАКЖЕ импортируется cli/ai_ops_cli для `review all` (обзор продукта по "
+        "требованию) — запись оставлена, т.к. process-вход по расписанию сохраняется",
     f"{PKG}.lifecycle.merge_memory":
         "commands/task/ai-finish-task.md зовёт `ai_ops_kit.lifecycle.merge_memory record …`",
     f"{PKG}.cli.entry":
@@ -309,9 +311,15 @@ def test_legitimate_standalone_entry_is_not_flagged():
     assert importers[validator] == set(), "валидатор ожидаемо без импортеров (его зовут процессом)"
     assert validator not in dormant, "валидатор — легит-вход по префиксу, не дормант"
 
+    # nightly_review — легит process-вход (Robin/night-review.md зовут по расписанию), НО с P1 №8/№9
+    # он ПРОВЕДЁН В КОНТУР: cli/ai_ops_cli импортирует его для `review all` (полный обзор продукта по
+    # требованию). Импорт вниз по слоям (cli=entrypoints выше intelligence) разрешён. Значит теперь у
+    # него есть легит-импортёр — и он не дормант уже поэтому, не только по allowlist. Проверка заодно
+    # держит проводку `review all` (без импорта обзор продукта по требованию не запускается).
     dispatched = f"{PKG}.intelligence.nightly_review"
-    assert importers[dispatched] == set(), "nightly_review зовут процессом из команды, не импортом"
-    assert dispatched not in dormant, "диспетчируемый CLI-main — легит-вход, не дормант"
+    assert importers[dispatched] == {f"{PKG}.cli.ai_ops_cli"}, (
+        "review all обязан импортировать nightly_review из cli (иначе обзор продукта не проведён)")
+    assert dispatched not in dormant, "проведённый в контур обзор (review all) — не дормант"
 
 
 @pytest.mark.contract
