@@ -642,10 +642,14 @@ goals:
   # Источник — мультидисциплинарный аудит 17.09: восемь находок P0/P1/P2, каждая перепроверена в коде
   # на v4.4.2 (не по тексту ревью). Это НЕ новое умение, а гашение долгов (дефект / цена процесса /
   # каноны); заморозка снята (ep-2026-08-19-freeze-lifted), оговорка про capability не применяется.
-  # ПЕРВАЯ ВОЛНА ЗАКРЫТА 2026-09-17 (параллельные писатели, кит судил): A1 #1019 (root-независимый
-  # критический тест), B3 #1020 (стоячий сторож глушителей, линия 57), B2 #1021 (тяжёлая история в
-  # history/). Три исхода ниже → true, работы в history/plan-history.yaml. Остаток (A2/B1/B4/B6) — todo.
-  # B5 (16 partial + 5 built≠wired) отложено осознанно как расширение периметра.
+  # ДОСТИГНУТА 2026-09-17: все семь заявленных долгов аудита погашены двумя волнами параллельных
+  # писателей (кит судил, owner слил). 1-я волна: A1 #1019 (root-независимый критический тест),
+  # B3 #1020 (стоячий сторож глушителей, линия 57), B2 #1021 (тяжёлая история в history/). 2-я волна:
+  # B1 #1029 (тёзки-каталоги размежёваны — аудит ошибся, это не дубли, слияние было бы вредным),
+  # B4 #1028 (zero-touch↔README сведены к одной правде: установка ручная), B6 #1030 (человеческий вход),
+  # A2 #1032 (релиз гасит очередь заявлений + сторож пустоты очереди). Все работы в
+  # history/plan-history.yaml. B5 (16 partial + 5 built≠wired) отложено осознанно как расширение периметра
+  # — оно НЕ входило в исходы этой цели.
   - id: audit-remediation
     # заморозка: гашение долгов, найденных аудитом (дефект / цена процесса / каноны) — не расширение
     # умений, а условие честности собственных прогонов кита; заморозкой не приостанавливается.
@@ -654,15 +658,15 @@ goals:
       Погасить долги мультидисциплинарного аудита 17.09: критический путь честен при любых правах,
       очередь заявлений гасится на релизе, один каталог на смысл, стоячий сторож против молчаливых
       глушителей, тяжёлая история вне входа, заявление zero-touch совпадает с README, человеческий вход
-    status: active
+    status: achieved
     outcome:
-      critical_path_green_under_any_privilege: true       # A1 #1019 — закрыт 2026-09-17
-      standing_guard_against_swallowed_exceptions: true    # B3 #1020 — закрыт 2026-09-17
-      heavy_history_out_of_the_entry_path: true            # B2 #1021 — закрыт 2026-09-17
-      release_drains_the_changelog_queue: false            # A2 — todo
-      one_directory_per_meaning: false                     # B1 — todo
-      zero_touch_claim_matches_the_readme: false           # B4 — todo
-      sixty_second_human_onboarding_exists: false          # B6 — todo
+      critical_path_green_under_any_privilege: true       # A1 #1019
+      standing_guard_against_swallowed_exceptions: true    # B3 #1020
+      heavy_history_out_of_the_entry_path: true            # B2 #1021
+      release_drains_the_changelog_queue: true             # A2 #1032
+      one_directory_per_meaning: true                      # B1 #1029 (размежевание — тёзки, не дубли)
+      zero_touch_claim_matches_the_readme: true            # B4 #1028
+      sixty_second_human_onboarding_exists: true           # B6 #1030
 
 # ─── ТЕКУЩИЙ MILESTONE (первоклассная запись, 2026-09-14) ──────────────────────────────────────
 # Уровень МЕЖДУ направлением (goals/ROADMAP) и работой: какой ИМЕНОВАННЫЙ результат кит доводит
@@ -770,65 +774,12 @@ work:
   # persist-review-verdict-then-link-to-feature (ниже) и наполнение outcome/learning (упирается в
   # реальную аналитику продукта — отдельно).
 
-  # ── Направление audit-remediation — остаток аудита 17.09 (первая волна A1/B3/B2 закрыта в history) ─
-  # Все перепроверены в коде на v4.4.2. A2 и B1 тяжелее и конфликтуют по файлам — вести аккуратно;
-  # B4 и B6 правят README — по очереди, не вместе. B5 отложено как расширение периметра.
-  - id: release-drains-the-changelog-queue
-    title: >-
-      Релиз гасит очередь заявлений: towncrier собирает CHANGELOG.md из newsfragments/, но ~690
-      фрагментов лежат непогашенными — добавить сборку на релизе и проверку «на релизе очередь пуста»
-    type: delivery
-    goal: audit-remediation
-    status: todo
-    owner_role: delivery
-    value: high
-    write_scope: [ai_ops_kit/, tests/, .github/, CHANGELOG.md, newsfragments/]
-    reason: >-
-      pyproject.toml [tool.towncrier] настроен на CHANGELOG.md из newsfragments/, но релиз v4.4.2 (16.09)
-      очередь не съел — сотни фрагментов на диске. Дисциплина заявлений подтекает там, где декларируется.
-      Погасить очередь в CHANGELOG и завести проверку, которая краснит релиз при непустой очереди.
-  - id: one-directory-per-meaning
-    title: >-
-      Один каталог на смысл: свести три context/ (./context, .ai/project/context, ai_ops_kit/context)
-      и дубли research/.research, decisions/.research/decisions к одному источнику + закрепить решением
-    type: architecture
-    goal: audit-remediation
-    status: todo
-    owner_role: architect
-    value: medium
-    write_scope: [ai_ops_kit/, registry/, docs/, standards/, decisions/]
-    reason: >-
-      На диске одновременно ./context, .ai/project/context, ai_ops_kit/context, а также research+.research
-      и decisions+.research/decisions. Смысловой дубль усложняет навигацию и провоцирует дрейф двух правд.
-      Свести к одному каталогу на смысл, остальное — ссылками; правило закрепить решением (ADR).
-  - id: reconcile-zero-touch-claim-with-readme
-    title: >-
-      Сверить заявление zero-touch с README: ROADMAP объявляет цель достигнутой (14.09), а README всё
-      ещё показывает ручной шаг установки — устранить противоречие в одну сторону
-    type: docs
-    goal: audit-remediation
-    status: todo
-    owner_role: docs
-    value: medium
-    write_scope: [README.md, ROADMAP.md]
-    reason: >-
-      ROADMAP.md называет zero-touch направление достигнутым (owner-led прогон 14.09), а README подаёт
-      установку с ручным первым шагом. Либо README отстаёт от факта, либо заявление шире доказанного.
-      Свести к одной правде: поправить README или уточнить формулировку заявления (что именно доказано).
-  - id: sixty-second-human-onboarding
-    title: >-
-      Человеческий вход за 60 секунд: короткое «что это и зачем» для человека отдельно от системной
-      витрины capability-map и истории
-    type: docs
-    goal: audit-remediation
-    status: todo
-    owner_role: docs
-    value: medium
-    write_scope: [README.md, docs/]
-    reason: >-
-      Нетехническому участнику трудно отличить витрину (docs/capability-map) от истории (тяжёлый архив
-      в history/). Добавить короткий человеческий вход «что это и зачем» за минуту, не расширяя периметр —
-      отдельно от машинной витрины.
+  # ── Направление audit-remediation ДОСТИГНУТО 2026-09-17 (2/2 волны, 7/7 исходов) ────────────────
+  # Остаток второй волны закрыт в историю: B1 #1029 (тёзки-каталоги размежёваны — не дубли, слияние было
+  # бы вредным), B4 #1028 (zero-touch↔README сведены к одной правде — установка ручная), B6 #1030
+  # (человеческий вход за 60 сек), A2 #1032 (релиз гасит очередь заявлений + сторож пустоты очереди,
+  # гейт через pytest-маркер release_gate). Все работы — в history/plan-history.yaml. B5 (16 partial +
+  # 5 built≠wired) отложено осознанно как расширение периметра, в исходы цели не входило.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО
