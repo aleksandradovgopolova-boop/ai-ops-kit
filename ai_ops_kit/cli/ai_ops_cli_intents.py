@@ -307,3 +307,38 @@ def _intent_graph(task, child_root, signals, a):
         print(presenter.render(presenter.from_graph_gaps(result), audience=aud))
     total = sum(len(v) for v in result.values())
     return 0 if total == 0 else 1
+
+
+def _kit_claim_results(child_root):
+    """Результаты проверки реестра честности (`knowledge/claims.yaml`) для доли покрытия evidence.
+
+    Композиция ЖИВЁТ на слое CLI СОЗНАТЕЛЬНО: `validate_claims` — из `validation` (entrypoints), а
+    `product_scorecard` (`intelligence`) её не импортирует (это была бы зависимость вверх, тот же
+    инвариант, что у графа знаний). Поэтому «прочитать реестр» делает entrypoint, а долю из него
+    считает карта. Нет файла/сбой чтения -> None (метрика 2 честно «не измерено», не выдумка)."""
+    from ai_ops_kit.validation import validate_claims
+    claims_file = Path(child_root) / "knowledge" / "claims.yaml"
+    if not claims_file.is_file():
+        return None
+    try:
+        return validate_claims.build(claims_file)
+    except Exception:  # noqa: BLE001 — один недоступный источник не роняет всю карту
+        return None
+
+
+def _intent_scorecard(task, child_root, signals, a):
+    """`ai-ops scorecard` — единая карта продукта кита из 5 метрик (мерит СЕБЯ как продукт).
+
+    Метрики 1/3 считаются из графа знаний, 2 — из реестра честности (читает этот слой, долю считает
+    карта), 4/5 стоят честным каркасом «не измерено». Только чтение, ничего не пишет."""
+    from ai_ops_kit.intelligence import product_scorecard as ps
+    from ai_ops_kit.ui import presenter
+    root = Path(child_root)
+    scorecard = ps.build_scorecard(root, claim_results=_kit_claim_results(root))
+    if a.json:
+        print(json.dumps(scorecard, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(presenter.render(presenter.from_scorecard(scorecard),
+                               audience=presenter.audience_from_config(root)))
+    # Код возврата: вся карта измерена -> 0, иначе 1 (честно: часть карты ещё «не измерено»).
+    return 0 if not scorecard.get("unmeasured_count") else 1
