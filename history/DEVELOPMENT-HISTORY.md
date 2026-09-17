@@ -1,11 +1,11 @@
 # DEVELOPMENT-HISTORY — детальная инженерная история (архив)
 
 Подробная история релизов кита: что и почему менялось внутри, с инженерными деталями.
-Вынесена из [CHANGELOG.md](CHANGELOG.md), чтобы тот оставался коротким и отвечал человеку
+Вынесена из [CHANGELOG.md](../CHANGELOG.md), чтобы тот оставался коротким и отвечал человеку
 на вопрос «что изменилось» — свежие релизы там, полная история здесь.
 
 Формат: [SemVer](https://semver.org/lang/ru/). Актуальные релизы (свежее 3.38.0) — в
-[CHANGELOG.md](CHANGELOG.md). Ниже — релизы 3.37.0 → 3.20.1 и ссылки на более старые архивы.
+[CHANGELOG.md](../CHANGELOG.md). Ниже — релизы 3.37.0 → 3.20.1 и ссылки на более старые архивы.
 
 ## [3.37.0] — 2026-08-21 · Product Operating System
 
@@ -3289,8 +3289,8 @@ json parse, _record_call, retries).
 История до v3.20.0 вынесена из этого файла — он вырос до 6623 строк за месяц и перестал
 читаться. Разбиение не меняет содержание, только размещение:
 
-- [v3.0 — v3.19](docs/changelog/v3.0-v3.19.md)
-- [v2.x](docs/changelog/v2.md)
-- [v0.x — v1.x](docs/changelog/v0-v1.md)
+- [v3.0 — v3.19](../docs/changelog/v3.0-v3.19.md)
+- [v2.x](../docs/changelog/v2.md)
+- [v0.x — v1.x](../docs/changelog/v0-v1.md)
 
-Правила ведения и каденция релизов — [docs/agent-guides/release-cadence.md](docs/agent-guides/release-cadence.md).
+Правила ведения и каденция релизов — [docs/agent-guides/release-cadence.md](../docs/agent-guides/release-cadence.md).

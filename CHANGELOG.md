@@ -143,7 +143,7 @@ god-функций ядра и др. (полный список — `newsfragmen
 Детальная инженерная история и релизы старше 3.38.0 вынесены, чтобы этот файл оставался
 читаемым и отвечал на вопрос «что изменилось и почему».
 
-**Полная история — [DEVELOPMENT-HISTORY.md](DEVELOPMENT-HISTORY.md)** (релизы 3.37.0 → 3.20.1;
+**Полная история — [DEVELOPMENT-HISTORY.md](history/DEVELOPMENT-HISTORY.md)** (релизы 3.37.0 → 3.20.1;
 оттуда — ссылки на более старые архивы `docs/changelog/`).
 
 Правила ведения и каденция релизов — [docs/agent-guides/release-cadence.md](docs/agent-guides/release-cadence.md).
