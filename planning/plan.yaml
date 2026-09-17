@@ -697,20 +697,26 @@ work:
   # Первый шаг — ЗАМЕР, а не постройка (как во всех прошлых направлениях): что из «истории жизни
   # продукта» уже связано в ките (decisions/entities/outcomes/knowledge_graph), а где нить рвётся —
   # на РЕАЛЬНОЙ фиче. Из находок берём работы по одной.
-  - id: measure-product-life-history-continuity
+  # measure-product-life-history-continuity ЗАКРЫТА в историю 2026-09-17 (замер, evidence:
+  # qualification/PRODUCT-LIFE-HISTORY-CONTINUITY-2026-09-17.md): нить связана на концах
+  # (релиз/outcome/метрика/урок), но рвётся в начале и середине — НЕТ рёбер decision→feature,
+  # work/PR→feature, review-verdict→feature, и фича не входит в граф без объявленного outcome.
+  # Разрывы разбираем по одной; первая — decision→feature (зачем существует фича).
+  - id: link-decision-to-feature-why-it-exists
     title: >-
-      Замерить на реальной фиче, где в ките уже связана «история жизни продукта» (зачем→решение→
-      построено→проверено→выпущено→outcome→урок), а где нить рвётся; назвать контракт прослеживаемости
-    type: product
+      Связать РЕШЕНИЕ с ФИЧЕЙ: ребро decision→feature в Knowledge Graph (+ ссылка в blueprint/решении),
+      чтобы кит отвечал «зачем эта фича существует» из истории, а не пересказом кода
+    type: engineering
     goal: product-memory-org-intelligence
     status: todo
-    owner_role: product
+    owner_role: engineer
     value: high
-    write_scope: [qualification/, docs/]
+    write_scope: [ai_ops_kit/, registry/, tests/]
     reason: >-
-      Ревью владельца: главная ставка — memory+execution+evidence+learning loop продукта. Сущности уже
-      есть по частям; неизвестно, СВЯЗАНЫ ли они в одну прослеживаемую нить на живой фиче. Прежде чем
-      строить — замер разрывов, по образцу диагностических первых шагов прошлых направлений.
+      Разрыв №1 замера 2026-09-17: у фичи нет связи с решением, из-за которого она появилась
+      (decisions/registry.yaml и features/<id>/blueprint.yaml не связаны ничем). Это первое звено нити
+      «истории жизни продукта» и прямой вход к исходу kit_answers_why_a_feature_exists_from_history.
+      Тонкий слой поверх существующего KG (intelligence/knowledge_graph.py), без второго графа.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО
