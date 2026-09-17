@@ -75,9 +75,40 @@ def from_graph_trace(result: dict) -> dict:
         title = title[:1].upper() + title[1:]
         note = "" if review.get("verified") else " (держится на суждении, без машинной опоры)"
         summary += f" {title}{note}."
-    headline = "Результат не достигнут" if verdict == "refuted" else None
+    # «Что произошло с продуктом» — РЕАЛЬНЫЙ сдвиг целевой метрики после релиза (baseline→после против
+    # цели), а не «shipped»/«pending». Проекция уже посчитанного evaluate_outcome (met/failed ИЗ ЧИСЕЛ),
+    # которую слой CLI кладёт в `measured_outcome`. Нет замера -> честное «ещё не накоплен» + условие.
+    mo = result.get("measured_outcome") or {}
+    measured_verdict = None
+    if mo.get("measured"):
+        measured_verdict = mo.get("verdict")
+        took = "цель взята" if measured_verdict == "met" else "цель пока не взята"
+        summary += (f" Результат по релизу: было {mo.get('baseline')} → стало {mo.get('value')} "
+                    f"при цели {mo.get('target')} — {took}.")
+        hyp = mo.get("hypothesis")
+        if hyp == "confirmed":
+            summary += " Гипотеза подтвердилась."
+        elif hyp == "refuted":
+            summary += " Гипотеза не подтвердилась."
+        for br in (mo.get("guardrail_breaches") or []):
+            summary += f" Защитная метрика просела: {br}."
+    elif mo:
+        # Контракт есть, замера ещё нет: называем ПОЧЕМУ и ЧТО нужно, а не молчим «pending».
+        reason = mo.get("not_accumulated_reason") or "итог по релизу ещё не измерен"
+        need = mo.get("needed_to_measure")
+        summary += f" Результат ещё не накоплен: {reason}."
+        if need:
+            summary += f" Чтобы измерить: {need}."
+    # «Что делать дальше по этому уроку» — конкретное действие + «потому что <что произошло>», из петли
+    # outcome→insight→next (writer≠judge: это предложение, активным без решения человека не станет).
+    na = result.get("next_action") or {}
+    if na.get("because"):
+        summary += f" Дальше по этому уроку: {na.get('action')} — потому что {na.get('because')}."
+    headline = ("Результат не достигнут" if verdict == "refuted" or measured_verdict == "failed"
+                else None)
+    ok = verdict == "confirmed" or measured_verdict == "met"
     return message(
-        status=("ok" if verdict == "confirmed" else "degraded"),
+        status=("ok" if ok else "degraded"),
         headline=headline,
         summary=summary,
         why_it_matters="Раньше этот ответ собирали вручную из плана, обучения, паспорта функции, "
@@ -85,8 +116,10 @@ def from_graph_trace(result: dict) -> dict:
                        "(работа/PR), и «кто проверил» (вердикт), и «подтвердилось ли» (результат) "
                        "читаются по одному графу.",
         next_steps=(list(result.get("gaps") or []) or None),
-        technical={"verdict": verdict, "chain": [c.get("id") for c in chain],
-                   "outcome": result.get("outcome"), "decision": decision,
+        technical={"verdict": verdict, "measured_verdict": measured_verdict,
+                   "chain": [c.get("id") for c in chain],
+                   "outcome": result.get("outcome"), "measured_outcome": mo or None,
+                   "next_action": na or None, "decision": decision,
                    "built_by": built_by, "review": review})
 
 

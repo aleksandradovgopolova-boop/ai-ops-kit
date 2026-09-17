@@ -190,6 +190,45 @@ def _graph_help(js):
         print(msg)
 
 
+def _feature_measured_outcome(child_root, feature):
+    """РЕАЛЬНЫЙ outcome фичи из её контракта+отчёта: сдвиг метрики после релиза (met/failed ИЗ ЧИСЕЛ)
+    + следующий шаг по уроку. -> (measured_outcome_human|None, next_action|None).
+
+    Композиция живёт на слое CLI СОЗНАТЕЛЬНО: `evaluate_outcome` — из `validation`, а граф знаний
+    (`intelligence`) её не импортирует (это была бы зависимость вверх — тот же инвариант, что у
+    `outcome_insight`). Поэтому «посчитать вердикт из чисел» делает entrypoint, а не сам граф.
+
+    Источник — `features/<id>/outcome-contract.yaml` (+ `outcome-readout.yaml`, если снят замер).
+    Нет контракта -> (None, None): исход из воздуха не выдумываем (no evidence → no claim)."""
+    import yaml as _yaml
+    root = Path(child_root)
+    base = root / "features" / str(feature)
+    cpath = base / "outcome-contract.yaml"
+    if not cpath.is_file():
+        return None, None
+
+    def _load(p):
+        if not p.is_file():
+            return None
+        try:
+            doc = _yaml.safe_load(p.read_text(encoding="utf-8"))
+        except (OSError, _yaml.YAMLError):
+            return None
+        return doc if isinstance(doc, dict) else None
+
+    contract = _load(cpath)
+    if contract is None:
+        return None, None
+    readout = _load(base / "outcome-readout.yaml")
+    from ai_ops_kit.validation import validate_product_objects as vpo
+    from ai_ops_kit.intelligence import outcome_insight
+    evaluation = vpo.evaluate_outcome(contract, readout)
+    human = outcome_insight.build_outcome_readout(contract, readout, evaluation)
+    loop = outcome_insight.from_outcome(contract, readout, evaluation)
+    next_action = (loop or {}).get("next_action")
+    return human, next_action
+
+
 def _intent_graph(task, child_root, signals, a):
     """`ai-ops graph build|trace <feature>|gaps` — один граф из трёх источников, вопрос за проход."""
     js = a.json
@@ -239,6 +278,17 @@ def _intent_graph(task, child_root, signals, a):
             _graph_help(js)
             return 2
         result = kg.trace(graph, feature)
+        # РЕАЛЬНЫЙ outcome (сдвиг метрики после релиза) + следующий шаг по уроку — из контракта фичи.
+        # Граф чист от validation; вердикт из чисел считает этот слой (см. _feature_measured_outcome).
+        measured_outcome, next_action = _feature_measured_outcome(root, feature)
+        if measured_outcome is not None:
+            result["measured_outcome"] = measured_outcome
+            if next_action:
+                result["next_action"] = next_action
+            if measured_outcome.get("measured"):
+                # Замер снят: «нет outcome / нечем измерить» больше не пробел — исход есть и измерен.
+                result["gaps"] = [g for g in (result.get("gaps") or [])
+                                  if "targets" not in g and "measured-by" not in g]
         if js:
             print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         else:
