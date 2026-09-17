@@ -66,6 +66,15 @@ def from_graph_trace(result: dict) -> dict:
         pr = f" (PR #{first['pr']})" if first.get("pr") else ""
         more = f" и ещё {len(built_by) - 1}" if len(built_by) > 1 else ""
         summary += f" Построена работой: «{first.get('title')}»{pr}{more}."
+    # «Кто/что проверил» — из ПЕРСИСТЕНТНОГО вердикта (путь ревью, не писатель). Заголовок узла уже
+    # несёт, кем проверено («проверили: машина, независимый ревьюер»); verified отличает машинную опору
+    # от одного лишь суждения. Нет записи -> строки нет (проверки могло не быть — это НЕ пробел).
+    review = result.get("review")
+    if review:
+        title = review.get("title") or "проверено"
+        title = title[:1].upper() + title[1:]
+        note = "" if review.get("verified") else " (держится на суждении, без машинной опоры)"
+        summary += f" {title}{note}."
     headline = "Результат не достигнут" if verdict == "refuted" else None
     return message(
         status=("ok" if verdict == "confirmed" else "degraded"),
@@ -73,11 +82,12 @@ def from_graph_trace(result: dict) -> dict:
         summary=summary,
         why_it_matters="Раньше этот ответ собирали вручную из плана, обучения, паспорта функции, "
                        "журнала решений и истории работ; теперь и «зачем» (решение), и «что построили» "
-                       "(работа/PR), и «подтвердилось ли» (результат) читаются по одному графу.",
+                       "(работа/PR), и «кто проверил» (вердикт), и «подтвердилось ли» (результат) "
+                       "читаются по одному графу.",
         next_steps=(list(result.get("gaps") or []) or None),
         technical={"verdict": verdict, "chain": [c.get("id") for c in chain],
                    "outcome": result.get("outcome"), "decision": decision,
-                   "built_by": built_by})
+                   "built_by": built_by, "review": review})
 
 
 def from_graph_gaps(result: dict) -> dict:

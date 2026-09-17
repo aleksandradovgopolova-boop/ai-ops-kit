@@ -545,3 +545,115 @@ def test_no_derived_from_outcome_field_means_no_declared_edge(tmp_path: Path):
     graph = kg.build_graph(root)
     derived = [e for e in graph["edges"] if e["from"] == "fl-012" and e["type"] == "derived-from"]
     assert derived == []
+
+
+# ── «Кто/что проверил функцию»: связь REVIEW-ВЕРДИКТ → ФУНКЦИЯ из персистентной записи ─────────────
+
+
+@pytest.fixture()
+def child_review(tmp_path: Path) -> Path:
+    """Child, где у одной функции ЕСТЬ персистентный review-вердикт, а у другой — нет.
+
+    express-checkout несёт `features/express-checkout/review/verdict.yaml` (проверено машиной и
+    независимым ревьюером) -> узел review + ребро review -reviewed-> feature. wishlist записи не имеет
+    -> ребра нет (честно: проверки могло не быть, это НЕ пробел).
+    """
+    root = tmp_path / "child_review"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    _write(root / "features" / "express-checkout" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "express-checkout", "name": "Экспресс-чекаут",
+                    "status": "in-progress", "current_stage": "analytics"},
+        "links": {"goal": "grow-repeat-purchases"},
+        "artifacts": {},
+    })
+    _write(root / "features" / "wishlist" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "wishlist", "name": "Список желаний",
+                    "status": "planned", "current_stage": "discovery"},
+        "links": {},
+        "artifacts": {},
+    })
+    _write(root / "features" / "express-checkout" / "review" / "verdict.yaml", {
+        "schema_version": 1, "kind": "review-verdict", "feature": "express-checkout",
+        "reviewed_revision": "abc1234", "reviewed_at": "2026-09-17T00:00:00+00:00",
+        "verified": True,
+        "checked_by": {"deterministic": ["implementation_verification"],
+                       "ai_judgment": ["code_review"], "human": []},
+        "reason": "есть детерминированная опора (implementation_verification) — verified",
+    })
+    return root
+
+
+def test_review_edge_built_from_persistent_record(child_review: Path):
+    """Запись review/verdict.yaml -> узел review (кем проверено) + ребро review -reviewed-> feature."""
+    graph = kg.build_graph(child_review)
+    by_id = {n["id"]: n for n in graph["nodes"]}
+
+    assert "review-express-checkout" in by_id
+    rnode = by_id["review-express-checkout"]
+    assert rnode["type"] == "review"
+    assert rnode["verified"] is True
+    # Заголовок называет, КЕМ проверено — машиной и независимым ревьюером.
+    assert "машина" in rnode["title"] and "независимый ревьюер" in rnode["title"]
+
+    assert {"from": "review-express-checkout", "type": "reviewed",
+            "to": "express-checkout"} in graph["edges"]
+
+
+def test_trace_reports_who_checked_a_feature(child_review: Path):
+    """`trace` называет, КТО проверил функцию — ответ на «кто/что проверил» из истории, не из прогона."""
+    graph = kg.build_graph(child_review)
+    result = kg.trace(graph, "express-checkout")
+    assert result["review"] is not None
+    assert result["review"]["verified"] is True
+    assert "машина" in result["review"]["title"]
+    assert result["review"]["reviewed_revision"] == "abc1234"
+
+
+def test_no_review_record_means_no_edge_and_not_a_gap(child_review: Path):
+    """Нет записи -> нет ребра reviewed. Честная неизвестность (проверки могло не быть), а НЕ пробел."""
+    graph = kg.build_graph(child_review)
+    reviewed_to_wishlist = [e for e in graph["edges"]
+                            if e["type"] == "reviewed" and e["to"] == "wishlist"]
+    assert reviewed_to_wishlist == []
+
+    result = kg.trace(graph, "wishlist")
+    assert result["review"] is None
+    assert not any("reviewed" in g or "провер" in g for g in result["gaps"])
+
+
+def test_review_graph_passes_validator_when_feature_resolves(child_review: Path):
+    """Граф с валидной записью review проходит ссылочную целостность validate_knowledge_graph."""
+    graph = kg.build_graph(child_review)
+    errors = _validate_built(child_review, graph)
+    assert errors == [], f"граф с review-вердиктом не прошёл валидатор: {errors}"
+
+
+def test_broken_review_ref_is_rejected_by_validator(tmp_path: Path):
+    """Запись, ссылающаяся на несуществующую фичу, оставляет висящее ребро -> валидатор краснит."""
+    root = tmp_path / "child_review_broken"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    # Запись review есть, а blueprint функции — НЕТ: сломанная запись.
+    _write(root / "features" / "ghost-feature" / "review" / "verdict.yaml", {
+        "schema_version": 1, "kind": "review-verdict", "feature": "ghost-feature",
+        "reviewed_revision": "def5678", "reviewed_at": "2026-09-17T00:00:00+00:00",
+        "verified": False,
+        "checked_by": {"deterministic": [], "ai_judgment": ["code_review"], "human": []},
+        "reason": "принял независимый ревьюер",
+    })
+    graph = kg.build_graph(root)
+
+    assert {"from": "review-ghost-feature", "type": "reviewed",
+            "to": "ghost-feature"} in graph["edges"]
+    assert "ghost-feature" not in {n["id"] for n in graph["nodes"]}
+
+    errors = _validate_built(root, graph)
+    assert any("ghost-feature" in e for e in errors), \
+        f"валидатор обязан поймать висящую ссылку review на фичу: {errors}"

@@ -26,6 +26,8 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared import review_verdict
+
 # Пары (from_type, relation, to_type), которые вокабуляр (registry/entities.yaml) разрешает и
 # которыми пользуется сборщик. Не источник истины (им остаётся реестр) — но сборщик обязан выпускать
 # только валидные рёбра, иначе validate_knowledge_graph отвергнет граф целиком.
@@ -186,6 +188,23 @@ def _iter_blueprints(root: Path):
                 yield p
 
 
+def _iter_review_verdicts(root: Path):
+    """Записи review-вердиктов: `features/<id>/review/verdict.yaml` и демо-каталог кита.
+
+    Источник — тот же, что пишет ПУТЬ РЕВЬЮ (`shared.review_verdict.persist`, судья ≠ писатель); здесь
+    только читаем. Нечитаемое/не тот kind -> запись пропускается (нет источника — нет узла)."""
+    seen: set = set()
+    for pattern in ("features/*/review/verdict.yaml",
+                    "examples/feature-blueprint-demo/*/review/verdict.yaml"):
+        for p in sorted(root.glob(pattern)):
+            if not p.is_file() or p in seen:
+                continue
+            seen.add(p)
+            rec = _load_yaml(p)
+            if isinstance(rec, dict) and rec.get("kind") == review_verdict.RECORD_KIND:
+                yield rec
+
+
 def _outcome_verdict(outcome: dict) -> str:
     """Свод булевых исходов цели в вердикт узла outcome. Пусто/не булево -> `pending`."""
     values = [v for v in outcome.values() if isinstance(v, bool)]
@@ -215,6 +234,8 @@ def build_graph(child_root) -> dict:
         (название + PR) и ребро `work -builds-> feature` — «что построило функцию и где».
       * `product-learning/FL-*.yaml` `derived_from_outcome`: явное ребро `insight -derived-from->
         outcome` — «чему научились по этому конкретному результату» (без косвенного вывода).
+      * `features/<id>/review/verdict.yaml`: узел `review` (кем проверено + verified + ревизия) и ребро
+        `review -reviewed-> feature` — «кто/что проверил функцию». Пишет путь ревью (судья), не писатель.
 
     Пути blueprint'а в узлах — ОТНОСИТЕЛЬНО `<child_root>/knowledge` (туда пишется graph.yaml),
     чтобы `validate_knowledge_graph` проверил их существование без ложного срабатывания.
@@ -361,6 +382,24 @@ def build_graph(child_root) -> dict:
         if _text(oref):
             b.edge(iid, "derived-from", _slug(oref))
 
+    # 4) review-вердикты — «кто/что проверил функцию» как ПЕРСИСТЕНТНАЯ запись, а не эхо прогона.
+    # Источник — `features/<id>/review/verdict.yaml`, который пишет ПУТЬ РЕВЬЮ (независимый судья), а не
+    # построившая работа: иначе «проверку» приписали бы писателю и нарушили бы writer≠judge. Узел review
+    # создаётся ИЗ САМОЙ ЗАПИСИ (она и есть источник), ребро `review -reviewed-> feature` выпускается
+    # всегда. Запись на несуществующую фичу оставляет висящий конец -> validate_knowledge_graph краснит
+    # (сломанная запись обязана быть громкой). Нет записи -> нет узла (проверки могло не быть — это НЕ
+    # пробел; trace честно молчит «проверка не записана», а не объявляет дыру).
+    for rec in _iter_review_verdicts(root):
+        feat_ref = _slug(rec.get("feature")) if _text(rec.get("feature")) else None
+        if not feat_ref:
+            continue
+        rid = b.node(f"review-{feat_ref}", "review",
+                     title=review_verdict.node_title(rec),
+                     verified=bool(rec.get("verified")),
+                     reviewed_revision=_text(rec.get("reviewed_revision")) or None,
+                     ref=review_verdict.record_rel(feat_ref))
+        b.edge(rid, "reviewed", feat_ref)
+
     return {"schema_version": 1, "kind": "knowledge-graph",
             "nodes": list(b.nodes.values()), "edges": b.edges}
 
@@ -383,10 +422,12 @@ def trace(graph: dict, feature: str) -> dict:
     цепочка — если данных на полный путь нет, отдаётся лучший фрагмент с НАЗВАННЫМИ `gaps`.
 
     Результат: `{"feature", "chain": [{id,type,title}], "goal": id|None, "outcome": {...}|None,
-    "decision": {id,title}|None, "built_by": [{id,title,pr}], "verdict": str, "gaps": [...]}`.
+    "decision": {id,title}|None, "built_by": [{id,title,pr}], "review": {...}|None, "verdict": str,
+    "gaps": [...]}`.
 
     `decision` — из какого РЕШЕНИЯ (истории) появилась функция («зачем она есть»); `built_by` — какая
-    РАБОТА/PR её построила («что построили и где»). Оба — словами человека, а не пересказом кода. Нет
+    РАБОТА/PR её построила («что построили и где»); `review` — КТО/ЧТО её проверил (персистентный
+    вердикт: кем проверено + verified + ревизия). Все — словами человека, а не пересказом кода. Нет
     объявленной связи -> пусто (не пробел: связь просто не записана, а не потеряна).
     """
     nodes, edges = _index(graph)
@@ -400,7 +441,7 @@ def trace(graph: dict, feature: str) -> dict:
 
     if fid not in nodes:
         return {"feature": fid, "chain": [], "goal": None, "outcome": None, "decision": None,
-                "built_by": [], "verdict": "unknown",
+                "built_by": [], "review": None, "verdict": "unknown",
                 "gaps": [f"узла «{fid}» нет в графе — цепочку строить не от чего"]}
 
     # Вверх по contains до цели.
@@ -453,9 +494,20 @@ def trace(graph: dict, feature: str) -> dict:
         built_by.append({"id": wid, "title": _text(wn.get("title")) or wid,
                          "pr": _text(wn.get("pr")) or None})
 
+    # Кто/что проверил функцию («проверено кем» — из ПЕРСИСТЕНТНОЙ записи, не из прогона). Отсутствие
+    # НЕ пробел: проверки могло не быть, а её запись — не потеряна. Есть запись -> называем, кем.
+    review = None
+    review_ids = [e["from"] for e in edges if e.get("type") == "reviewed"
+                  and e.get("to") == fid and e.get("from") in nodes]
+    if review_ids:
+        rn = nodes[review_ids[0]]
+        review = {"id": review_ids[0], "title": _text(rn.get("title")) or review_ids[0],
+                  "verified": bool(rn.get("verified")),
+                  "reviewed_revision": _text(rn.get("reviewed_revision")) or None}
+
     verdict = _verdict(goal, outcome)
     return {"feature": fid, "chain": [summary(i) for i in chain_ids], "goal": goal,
-            "outcome": outcome, "decision": decision, "built_by": built_by,
+            "outcome": outcome, "decision": decision, "built_by": built_by, "review": review,
             "verdict": verdict, "gaps": gaps}
 
 
