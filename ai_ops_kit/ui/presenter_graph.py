@@ -53,16 +53,22 @@ def from_graph_trace(result: dict) -> dict:
                    f"{phrase.capitalize()}.")
     else:
         summary = f"Функция «{feature}»: {chain_line}. {phrase.capitalize()}."
+    # «Зачем функция появилась» — из РЕШЕНИЯ (истории), а не из пересказа кода. Если решение
+    # объявлено в паспорте функции, история его называет прямо в ответе.
+    decision = result.get("decision")
+    if decision:
+        summary += f" Появилась из решения: «{decision.get('title')}»."
     headline = "Результат не достигнут" if verdict == "refuted" else None
     return message(
         status=("ok" if verdict == "confirmed" else "degraded"),
         headline=headline,
         summary=summary,
-        why_it_matters="Раньше этот ответ собирали вручную из трёх файлов — плана, обучения и "
-                       "паспорта функции; теперь он читается по одному графу.",
+        why_it_matters="Раньше этот ответ собирали вручную из плана, обучения, паспорта функции и "
+                       "журнала решений; теперь и «зачем» (решение), и «подтвердилось ли» "
+                       "(результат) читаются по одному графу.",
         next_steps=(list(result.get("gaps") or []) or None),
         technical={"verdict": verdict, "chain": [c.get("id") for c in chain],
-                   "outcome": result.get("outcome")})
+                   "outcome": result.get("outcome"), "decision": decision})
 
 
 def from_graph_gaps(result: dict) -> dict:

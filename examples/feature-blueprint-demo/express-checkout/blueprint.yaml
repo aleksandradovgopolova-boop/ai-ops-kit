@@ -8,6 +8,10 @@ feature:
   current_stage: ux
 links:
   goal: рост конверсии повторных покупок
+  # ЗАЧЕМ эта функция существует — из решения, а не из пересказа кода. Демо-функция проведена
+  # через feature-blueprint-процесс, который появился решением ep-2026-08-14-product-os (Product OS:
+  # одна вертикальная функция целиком). `graph trace express-checkout` теперь называет эту причину.
+  decision: ep-2026-08-14-product-os
   epic: ''
   stories: []
   experiments:
