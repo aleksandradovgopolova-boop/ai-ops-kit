@@ -19,6 +19,42 @@ kind: delivery-plan-history
 
 
 work:
+  - id: scorecard-becomes-headline-product-measure
+    title: >-
+      Возвести scorecard в ГЛАВНУЮ меру продукта кита: самоотчёт о себе ведёт картой из 5 метрик,
+      счёт возможностей — контекст ширины, а не заглавная мера
+    goal: kit-measured-as-a-product
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1045
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1045). Последний, 5-й исход направления kit-measured-as-a-product:
+      самоотчёт кита о СЕБЕ (витрина `devtools/capability_inventory` — `docs/capability-map.md` и
+      `--json`) вёл разделом «Сводка» из счёта команд/гейтов/ролей — та мера ширины, от которой ревью
+      17.09 предложило уйти. Теперь `self_report()` ВЕДЁТ картой продукта из 5 метрик
+      (`headline.scorecard` = build_scorecard), а счёт возможностей демотирован до «ширины» (`breadth`,
+      контекст). Проверено координатором лично: `--json` ведёт `headline.measure=kit-product-scorecard`
+      с 5 метриками (3 измерены, 2 честно «не измерено»), `breadth` ниже. Слои соблюдены (validate_claims
+      инъектится на слое entrypoints, intelligence не тянет validation вверх). Компромисс осознанный:
+      живые числа ведут в ДАННЫХ (`--json`/`./ai-ops scorecard`), committed-страница — составом карты
+      (иначе меняющиеся доли краснили бы freshness-гейт на посторонних PR), синхронность держит
+      контракт-тест. Все проверки кита зелёные (включая совместимость по версиям Python); 6 контракт-
+      тестов + 12 целевых. Дашборд/UI не тронуты (граница — параллельная сессия); заглавная мера в
+      данных, дашборд их прочитает отдельной работой. Направление kit-measured-as-a-product ДОСТИГНУТО 5/5.
+  - id: outcome-and-learning-metrics-populated
+    title: >-
+      Наполнить слоты outcome-coverage и learning-to-decision реальными данными (метрики 4/5 scorecard)
+    goal: kit-measured-as-a-product
+    status: dropped
+    closed_at: '2026-09-17'
+    result: >-
+      ОТЛОЖЕНО как расширение периметра 2026-09-17 (ср. B5 audit-remediation): наполнение слотов 4/5
+      реальными данными НЕ входило в 5 объявленных исходов направления (исход требовал лишь «слоты стоят
+      честным „не измерено“», что закрыто scorecard'ом #1040). Отдельная работа не заводится, чтобы не
+      задваивать: та же зависимость от живой аналитики, что у close-outcome-learning-loop-with-real-
+      analytics (направление product-memory-org-intelligence, ждёт решения владельца — на каком живом
+      продукте замыкать петлю). Слоты 4/5 наполнятся АВТОМАТИЧЕСКИ, как только та петля даст реальный
+      outcome-сигнал: scorecard читает граф знаний, метрики пересчитаются без отдельного механизма.
   - id: kit-product-scorecard
     title: >-
       Единая карта продукта кита: первоклассный scorecard из 5 метрик (feature completion, evidence
