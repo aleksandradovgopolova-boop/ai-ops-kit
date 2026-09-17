@@ -43,6 +43,7 @@ STANDALONE = [
     "validate_bootstrap_qualification",
     "validate_budget_contract",
     "validate_capability_policy",
+    "validate_changelog_queue_drained",   # A2: standalone; без --release советует (0), с --release краснит непустую очередь
     "validate_claims",
     "validate_container_assets",
     "validate_container_delivery",
