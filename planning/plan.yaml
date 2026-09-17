@@ -744,6 +744,7 @@ work:
     title: >-
       Наполнить хвост нити реальными данными: outcome (сдвиг метрики после релиза) и петля
       «уроки→следующие решения» — на продукте с живой аналитикой
+    type: product
     goal: product-memory-org-intelligence
     status: waiting_on_owner
     waiting_on: >-
