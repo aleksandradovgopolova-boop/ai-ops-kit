@@ -281,6 +281,20 @@ class TestPreviewClassificationAndData:
             {"task_type": "ENGINEERING", "risk": "medium", "affected_areas": ["core"]})
         assert bool(pv["expected_result"])
 
+    def test_preview_research_expected_speaks_research_not_delivery(self, child_root):
+        """RESEARCH-прогон: превью обещает исследование и доказательства, а не pull request.
+
+        `run` роутит research-вопрос на RESEARCH-workflow (итог — доказательства и пакет для
+        решения, не изменение кода). Общий текст поставки про PR здесь был бы утечкой чужого
+        сценария в самое частое сообщение владельцу — предпусковое превью.
+        """
+        pv = ai_ops_cli.build_preview(
+            "run", "нужен ли офлайн-режим", child_root, {"task_type": "research"})
+        assert pv["understood"]["workflow"] == "RESEARCH"
+        exp = pv["expected_result"].lower()
+        assert "исследован" in exp and "доказательств" in exp
+        assert "pull request" not in exp and "слияни" not in exp and "pr" not in exp.split()
+
     def test_preview_without_task_type_agrees_with_router(self, child_root):
         """v2.107: без task_type preset согласован с роутером (QUICK ИЛИ review&&author включены)."""
         (child_root / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
