@@ -19,6 +19,50 @@ kind: delivery-plan-history
 
 
 work:
+  - id: fix-root-dependent-critical-test
+    title: >-
+      Критический тест fs-guard честен при любых правах (A1, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1019
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1019). Находка A1 мультидисциплинарного аудита: критический тест
+      test_failed_revert_is_named_and_file_stays держался на том, что chmod 0o500 ломает unlink через
+      EACCES; под root unlink обходит r-x, откат «удаётся», первый assert падал — тест зеленел ТОЛЬКО
+      не под root, молчаливая зависимость fail-closed от привилегий среды. Добавлен skipif под root
+      (с защитой для систем без geteuid): под root честный skip, под обычным пользователем (как в CI)
+      исполняется по-настоящему, ассерты не ослаблены. Написано писателем-субагентом, судил кит-
+      координатор независимо: дифф ровно по заявке, 21 тест зелёный при euid≠0, PRODUCT-MODEL-OK, CI зелёный.
+  - id: standing-guard-against-swallowed-exceptions
+    title: >-
+      Стоячий ратчет против роста молчаливых глушителей исключений (B3, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1020
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1020). Находка B3: в живом коде 57 конструкций except…: pass глушат ошибку
+      молча, а прежний исход swallowed_exceptions_reviewed был РАЗОВЫМ ревью (#721) без стоячего сторожа.
+      Заведён AST-детектор + ратчет (validate_swallowed_exceptions.py, baseline 57 в
+      packages/swallowed-exceptions-baseline.yaml, объявлен в enforcement-inventory, внесён в STANDALONE-
+      контракт): рост сверх линии краснит, снижение подсказывает опустить линию. Судил кит-координатор
+      независимым прогоном из копии: сторож даёт зелёное (57≤57), проба покраснения настоящая
+      (check(58,57)→ошибка; 2 глушителя при линии 1→ошибка), 16 тестов зелёные, CI зелёный.
+  - id: heavy-history-out-of-the-entry-path
+    title: >-
+      Тяжёлая история вынесена из входного пути в history/ (B2, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1021
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1021). Находка B2: 360-КБ DEVELOPMENT-HISTORY.md — самый тяжёлый файл в
+      корне — делал вход «стеной». Перенесён git mv в history/ (содержимое не тронуто, внутри правились
+      только относительные ссылки), обновлены референсы в README, FILE_INDEX, field-lessons.yaml и
+      CHANGELOG. docs/changelog/* оставлены осознанно (уже не в корне, завязаны на защищённые файлы).
+      Судил кит-координатор: висячих ссылок не осталось, охват докового индекса цел (файл был в корне,
+      не в docs/**), 274 док-теста + OWN-MEDICINE-OK + PRODUCT-MODEL-OK, CI зелёный.
   - id: complete-life-history-traceability-edges
     title: >-
       Рёбра нити истории в KG: work→feature, learning→outcome (review→feature отложено)
