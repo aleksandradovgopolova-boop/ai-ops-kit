@@ -12,6 +12,13 @@ links:
   # через feature-blueprint-процесс, который появился решением ep-2026-08-14-product-os (Product OS:
   # одна вертикальная функция целиком). `graph trace express-checkout` теперь называет эту причину.
   decision: ep-2026-08-14-product-os
+  # ЧТО построило эту функцию — из работы (истории), а не из пересказа кода. Демо проведено через
+  # feature-blueprint-процесс, который был впервые проведён целиком (проблема→…→измеренный результат)
+  # работой cockpit-vertical-slice (history/plan-history.yaml, тот же Product OS, ep-2026-08-14-
+  # product-os). `graph trace express-checkout` теперь называет и эту работу. Иллюстративная ссылка
+  # на уровне процесса — как и decision выше: демо-фикстура, а не боевая фича с собственным PR.
+  built_by:
+  - cockpit-vertical-slice
   epic: ''
   stories: []
   experiments:
