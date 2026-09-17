@@ -19,6 +19,23 @@ kind: delivery-plan-history
 
 
 work:
+  - id: kit-represents-its-features-as-blueprints
+    title: >-
+      Кит представляет свои фичи как feature-blueprints — нить истории наполнена реальными фичами
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1025
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1025). Владелец делегировал объём («сделай как лучше, не оставляй пустой
+      механизм»). Выбран КУРАТОРСКИЙ набор из 5 реальных фич кита (не всё подряд — против оргсимуляции)
+      с настоящим провенансом: verified-readout-knowledge-level (#985), outcome-readout (#987),
+      outcome-loop-next (#988), propose-speaks-product (#983/#978), decision-to-feature-in-graph (#1015)
+      — каждая с links.decision (реальный ep-*) и links.built_by (реальный PR). Нить истории перестала
+      быть пустой: `graph trace <фича>` рассказывает правдивую историю «Появилась из решения… Построена
+      работой…». Честно: outcome/learning ни у одной (нет продуктовой аналитики) → «результат не
+      накоплен»; status in-progress (не released — нет SHA-verified receipt); фасад #1012 отброшен (нет
+      в plan-history). .gitignore: features/* + явные 5 каталогов (рантайм прогонов остаётся в игноре).
   - id: fix-root-dependent-critical-test
     title: >-
       Критический тест fs-guard честен при любых правах (A1, аудит 17.09)
