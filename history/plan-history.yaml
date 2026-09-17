@@ -19,6 +19,21 @@ kind: delivery-plan-history
 
 
 work:
+  - id: measure-product-life-history-continuity
+    title: >-
+      Замер непрерывности «истории жизни продукта» на реальной фиче
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    evidence: qualification/PRODUCT-LIFE-HISTORY-CONTINUITY-2026-09-17.md
+    result: >-
+      ЗАКРЫТО 2026-09-17. Первый шаг направления product-memory. Замер на реальных фичах
+      (visible-writer-queue, voluntary-child-registration) + Knowledge Graph: нить связана на КОНЦАХ
+      (feature→release delivered-by, feature→outcome targets, feature→metric measured-by, insight→feature
+      feeds, уроки FL-*), но РВЁТСЯ в начале и середине — НЕТ рёбер decision→feature («зачем существует»),
+      work/PR→feature («что построили»), review-verdict→feature («кто проверил»); и фича без объявленного
+      outcome вообще не входит в граф (`graph trace visible-writer-queue` → «функции нет в графе»).
+      Назван контракт прослеживаемости и порядок закрытия разрывов (по одной). Первый — decision→feature.
   - id: external-clean-run-measured-by-outside-person
     title: >-
       Живой прогон всего пути на реальном репозитории (P0 №7 ревью)
