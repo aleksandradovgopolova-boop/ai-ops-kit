@@ -19,6 +19,22 @@ kind: delivery-plan-history
 
 
 work:
+  - id: complete-life-history-traceability-edges
+    title: >-
+      Рёбра нити истории в KG: work→feature, learning→outcome (review→feature отложено)
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1022
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1022). Разрывы №3/№5 нити закрыты: work/PR→feature (blueprint.links.built_by
+      → узел work из history + relation builds) и learning→outcome (FL derived_from_outcome → ребро
+      derived-from). `graph trace express-checkout` теперь печатает «Появилась из решения… Построена
+      работой…». Разрыв №4 (review-verdict→feature) ЧЕСТНО ОТЛОЖЕН: персистентного узла-вердикта нет
+      (verified эфемерен), привязка к построившей работе нарушила бы writer≠judge — заведена отдельная
+      работа persist-review-verdict-then-link-to-feature. Проверено судьёй: 25 тестов KG + слои +
+      product-model + ruff зелёные, негатив на каждое ребро. Доказано на демо-blueprint (у кита почти
+      нет feature-узлов — заведена waiting_on_owner работа kit-represents-its-features-as-blueprints).
   - id: link-decision-to-feature-why-it-exists
     title: >-
       Решение → фича в Knowledge Graph («зачем эта фича существует» из истории)

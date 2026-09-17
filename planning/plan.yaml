@@ -705,22 +705,47 @@ work:
   # link-decision-to-feature-why-it-exists ЗАКРЫТА в историю 2026-09-17 (#1015): ребро decision→feature
   # («зачем существует») в KG, `graph trace` отвечает решением. Замер также вскрыл: фича-blueprint без
   # outcome В ГРАФ ВХОДИТ (express-checkout) — «разрыв №2» не реален, снят. Остаток нити — ниже.
-  - id: complete-life-history-traceability-edges
+  # complete-life-history-traceability-edges ЗАКРЫТА в историю 2026-09-17 (#1022): рёбра work→feature
+  # («что построили») и learning→outcome («чему научились») построены; review-verdict→feature ЧЕСТНО
+  # ОТЛОЖЕНО (нет персистентного узла-вердикта; привязка к построившей работе нарушила бы writer≠judge).
+  # Нить теперь: зачем(decision)→фича→построено(work)→…→outcome→урок; смоук graph trace express-checkout
+  # печатает «Появилась из решения… Построена работой…». Остаток — ниже, две работы разной природы.
+  - id: persist-review-verdict-then-link-to-feature
     title: >-
-      Достроить рёбра нити истории в KG: work/PR→feature («что построили»), review-verdict→feature
-      («кто проверил»), learning→outcome («чему научились по результату») — доказать на живом blueprint
+      Персистентный объект review-вердикта (сейчас живёт только в прогоне) и ребро verdict→feature в KG —
+      звено «кто/что проверил» нити истории
     type: engineering
     goal: product-memory-org-intelligence
     status: todo
     owner_role: engineer
-    value: high
+    value: medium
     write_scope: [ai_ops_kit/, registry/, tests/]
     reason: >-
-      Разрывы №3/№4/№5 замера 2026-09-17: середина и хвост нити не связаны — из графа не достать, ЧТО
-      построило фичу (работа/PR из history), КТО её проверил (review-вердикт) и ЧЕМУ научились по её
-      результату (learning→outcome). Три почти одинаковых ребра поверх существующего KG — одной работой,
-      без второго графа; доказать на живом blueprint (express-checkout). Замыкает нить
-      зачем→построено→проверено→выпущено→outcome→урок для исхода product_has_machine_readable_life_history.
+      Разрыв №4 замера отложен в #1022 честно: verified-вердикт эфемерен (только рантайм прогона),
+      персистентного узла нет — привязать «проверку» к построившей работе нельзя (writer≠judge). Нужен
+      сначала персистентный review-verdict-объект (кто/машина/ревьюер проверил, что именно), затем ребро
+      verdict→feature. Отдельная работа, потому что это НОВЫЙ объект, а не ещё одно ребро поверх готового.
+  - id: kit-represents-its-features-as-blueprints
+    title: >-
+      Кит представляет СВОИ фичи как feature-blueprints (сейчас узлов-фич почти нет — только демо), чтобы
+      нить истории населялась реальными фичами, а не оставалась пустым механизмом
+    type: product
+    goal: product-memory-org-intelligence
+    status: waiting_on_owner
+    waiting_on: >-
+      решение владельца: заводить ли feature-blueprints на собственные фичи кита (объём и где граница —
+      каждая фича? только пользовательские поверхности?) — это продуктовое решение, не механика
+    owner_role: product
+    value: high
+    human_decision: >-
+      Замер 2026-09-17 вскрыл: механизм нити построен (decision/work/learning→feature/outcome), но
+      населять его нечем — у самого кита почти нет feature-blueprints (единственный живой — демо
+      express-checkout). Чтобы «история жизни продукта» работала на реальных фичах, кит должен завести
+      blueprints на свои фичи. Сколько и где — граница, которую задаёт владелец.
+    write_scope: [features/, ai_ops_kit/, tests/]
+    reason: >-
+      Без feature-узлов нить истории — рабочий, но пустой механизм. Наполнение упирается в продуктовое
+      решение об объёме blueprint-покрытия собственных фич кита — это за владельцем, кит не решает сам.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО
