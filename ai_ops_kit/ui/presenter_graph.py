@@ -123,6 +123,37 @@ def from_graph_trace(result: dict) -> dict:
                    "built_by": built_by, "review": review})
 
 
+def from_scorecard(scorecard: dict) -> dict:
+    """`product_scorecard.build_scorecard()` -> UserMessage. Карта продукта кита из 5 метрик.
+
+    Мерит кит КАК ПРОДУКТ, а не числом возможностей. Измеренная метрика печатается долей в
+    процентах, неизмеренная — честным «не измерено» с причиной (а не нулём и не выдуманным числом):
+    инвариант карты «честность превыше полноты» обязан быть виден и человеку."""
+    metrics = scorecard.get("metrics") or []
+    measured = scorecard.get("measured_count") or 0
+    total = len(metrics)
+    lines = []
+    for m in metrics:
+        if m.get("measured"):
+            pct = round((m.get("value") or 0) * 100)
+            lines.append(f"• {m.get('title')}: {pct}% ({m.get('numerator')}/{m.get('denominator')})")
+        else:
+            lines.append(f"• {m.get('title')}: не измерено — {m.get('reason')}")
+    summary = ("Мерю себя как продукт, а не числом возможностей — карта из 5 метрик:\n"
+               + "\n".join(lines))
+    if scorecard.get("unmeasured_count"):
+        status = "degraded"
+        headline = f"Карта продукта: измерено честно {measured} из {total} метрик"
+        why = ("Результат после релиза и влияние уроков на решения честно стоят «не измерено»: "
+               "у самого кита живой аналитики нет, а выдуманное число было бы враньём.")
+    else:
+        status = "ok"
+        headline = "Карта продукта: все метрики измерены"
+        why = "Кит меряет себя как продукт единой картой, а не числом возможностей."
+    return message(status=status, headline=headline, summary=summary,
+                   why_it_matters=why, technical=scorecard)
+
+
 def from_graph_gaps(result: dict) -> dict:
     """`knowledge_graph.gaps()` -> UserMessage. Что не покрыто измеримым результатом."""
     oc = result.get("outcomes_without_metric") or []

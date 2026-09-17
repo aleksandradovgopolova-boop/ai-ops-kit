@@ -23,7 +23,7 @@ README ссылаются на неё, а не дублируют список �
 
 | Категория | Сколько |
 |---|---|
-| Команды владельца (`./ai-ops …`) | 34 |
+| Команды владельца (`./ai-ops …`) | 35 |
 | Quality gates — всего | 36 |
 | — из них enforced (blocking) | 23 |
 | — из них advisory (partial) | 13 |
@@ -79,6 +79,7 @@ README ссылаются на неё, а не дублируют список �
 | `./ai-ops review` | независимый ревью произведённого | direct | built |
 | `./ai-ops roadmap` | roadmap Now/Next/Later из плана + отклонение от авторского ROADMAP.md | direct | built |
 | `./ai-ops run` | выполнить задачу движком (авто-подбор стадий) | engine | built |
+| `./ai-ops scorecard` | карта продукта кита: 5 метрик, которыми кит мерит себя как продукт (а не числом возможностей); нет данных — честно «не измерено» | direct | built |
 | `./ai-ops session` | снимок телеметрии сессии + рекомендация (continue/compact/clear/new_session) | direct | built |
 | `./ai-ops specify` | построить спецификацию нужной глубины | engine | built |
 | `./ai-ops status` | статус активной работы | direct | built |
