@@ -57,7 +57,7 @@ probes:
     _deliver_pr -> open_draft_pr, и именно этот вызов ломается вместе с `def`.'
 - id: cli-is-dir-oserror-guard
   kind: guard
-  file: ai_ops_kit/cli/ai_ops_cli.py
+  file: ai_ops_kit/cli/human_facade.py
   find: '    except OSError:'
   replace_with: '    except ValueError:'
   tests:
@@ -65,6 +65,19 @@ probes:
   why: '#161: _is_dir_safe гасит OSError (ENAMETOOLONG) от Path.is_dir() на первом позиционном
     аргументе — тексте задачи длиннее ~255 байт. Снять guard (ловить не тот класс) — вернуть падение
     main() на 3.11/3.12, которое ложно закрыли коммитом, не тронувшим код.'
+- id: cli-facade-seam-main-dispatches
+  kind: seam
+  covers: ['ai_ops_kit/cli/human_facade.py', 'ai_ops_kit/cli/ai_ops_cli.py']
+  file: ai_ops_kit/cli/ai_ops_cli.py
+  find: '    _facade = _dispatch_human_action(argv, main)'
+  replace_with: '    _facade = None  # SEAM-DISABLED'
+  tests:
+  - tests/unit/test_human_actions_facade.py
+  why: 'ШОВ: фасад владельца (human_facade) — механизм с охранной пробой, но модульные тесты
+    facade_plan (чистая функция) остаются зелёными, даже если main() перестал ЗВАТЬ фасад — тогда
+    ни один из 7 глаголов не роутится, а тесты routing этого не видят. Проба отключает единственную
+    точку, где main зовёт _dispatch_human_action: test_review_all_calls_run_nightly (main[review all]
+    -> run_nightly) краснеет, доказывая, что проводка фасада в main реально исполняется.'
 - id: delivery-head-sha-authoritative-local
   kind: guard
   file: ai_ops_kit/delivery/pr_open.py
