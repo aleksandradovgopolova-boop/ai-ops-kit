@@ -1,0 +1,33 @@
+schema_version: 1
+kind: feature-blueprint
+feature:
+  id: decision-to-feature-in-graph
+  name: Решение → фича в Knowledge Graph («зачем эта фича» из истории)
+  owner: ai-ops-kit
+  status: in-progress            # инженерия выпущена; продуктовый outcome не накоплен
+  profile: lean
+  current_stage: delivery
+links:
+  # ЗАЧЕМ: решение снять freeze и взять направление product-memory-org-intelligence, в рамках
+  # которого замер нити истории вскрыл разрыв «нет ребра decision→feature».
+  decision: ep-2026-09-16b-freeze-lifted-by-owner-led-ii-sreda-run
+  # ЧТО построило: работа link-decision-to-feature-why-it-exists, PR #1015.
+  built_by: 1015
+artifacts:
+  discovery:
+  - path: discovery/problem-statement.md
+    status: declined
+    declined_reason: >-
+      Кураторский паспорт-провенанс: проблема (кит не мог ответить «зачем эта фича» из истории —
+      решения и фичи не были связаны) зафиксирована замером
+      qualification/PRODUCT-LIFE-HISTORY-CONTINUITY-2026-09-17.md (разрыв №1) и решением
+      links.decision; отдельный discovery-артефакт не создавался.
+  definition:
+  - path: prd/feature.md
+    status: declined
+    declined_reason: >-
+      Определение фичи несёт построившая её работа и её PR (links.built_by, PR #1015); отдельный PRD
+      не велся — паспорт курирует провенанс, а не полный жизненный цикл.
+  delivery:
+  - path: delivery/shipped.md
+    status: done
