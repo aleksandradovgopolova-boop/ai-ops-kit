@@ -348,6 +348,8 @@
 
 Карта знаний о продукте/системе/команде; источники истины DesignSystem.md и MetricCatalog.md — заполняются в child-репозитории.
 
+> **Тёзки по имени, разные смыслы** (решение `ep-2026-09-17-one-directory-per-meaning` — НЕ дубли, а размежёванные роли): `context/` (здесь) — прозаический контекст/шаблон; `.ai/project/context/` — фактический managed-слой контекста кита-как-родителя (now-снимок, PRODUCT_PASSPORT); `ai_ops_kit/context/` — КОД context-движка (Python-пакет), не контент.
+
 - `context/README.md`
 - `context/now.md`
 - `context/product/BusinessRules.md`
@@ -382,7 +384,10 @@ Knowledge Integrity (v2.9): claims — утверждения документа
 
 Decision Intelligence (v2.10): реестр решений — принципы (способ мышления), эпизоды, исходы; recommendation-first + one-way-door. В child живёт в `.ai/project/decisions/`.
 
+> **Тёзка:** `decisions/` — решения САМОГО кита (ADR-* + registry: dp-*/ep-*); `.research/decisions/` — это иное: DecisionPackage-ы research (DP-*, `research.decision-package`), отдельный namespace research (см. `ep-2026-09-17-one-directory-per-meaning`).
+
 - `decisions/registry.yaml`
+- `decisions/adr/` — ArchitectureDecision-записи (ADR-*.yaml), проверяются `adr_registry.py`
 
 ## product-learning/
 
