@@ -64,13 +64,16 @@ class TestGateIsWiredIntoRelease:
 
     def _gate_step(self):
         for s in self._release_steps():
-            if "validate_changelog_queue_drained.py" in str(s.get("run", "")):
+            if "test_changelog_queue_release_gate.py" in str(s.get("run", "")):
                 return s
         raise AssertionError("в release.yml нет шага, вызывающего гейт дренажа очереди")
 
-    def test_gate_is_called_with_release_flag(self):
-        assert "--release" in str(self._gate_step()["run"]), \
-            "гейт вызван без --release — вне release-режима он всегда зелёный, то есть не гейт"
+    def test_gate_runs_through_pytest_with_release_marker(self):
+        """PYTEST-ONLY (validate_agents_checklist): гейт бежит через pytest с маркером release_gate,
+        а не прямым вызовом валидатора. Без маркера гейт гонялся бы обычным CI и краснел на 708."""
+        run = str(self._gate_step()["run"])
+        assert "-m pytest" in run and "-m release_gate" in run, \
+            f"гейт зовётся не через pytest с маркером release_gate: {run}"
 
     def test_gate_is_conditional_on_need_release(self):
         assert str(self._gate_step().get("if")) == "steps.check_release.outputs.needed == 'true'"
