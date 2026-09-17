@@ -322,3 +322,226 @@ def test_decision_graph_passes_validator_when_ref_resolves(child_decision: Path)
         p.write_text(yaml.safe_dump(graph, allow_unicode=True), encoding="utf-8")
         errors = vkg.validate_graph(p, types, rels)
     assert errors == [], f"граф с решением не прошёл валидатор: {errors}"
+
+
+# ── «Что построило функцию»: связь РАБОТА/PR → ФУНКЦИЯ из истории, а не пересказ кода ──────────────
+
+
+def _validate_built(root: Path, graph: dict) -> list[str]:
+    """Прогнать собранный граф через validate_knowledge_graph (blueprint-пути -> абсолютные)."""
+    graph_dir = root / "knowledge"
+    for n in graph["nodes"]:
+        if n.get("blueprint"):
+            n["blueprint"] = str((graph_dir / n["blueprint"]).resolve())
+    types, rels = vkg.load_dictionary()
+    with tempfile.TemporaryDirectory() as td:
+        p = Path(td) / "graph.yaml"
+        p.write_text(yaml.safe_dump(graph, allow_unicode=True), encoding="utf-8")
+        return vkg.validate_graph(p, types, rels)
+
+
+@pytest.fixture()
+def child_work(tmp_path: Path) -> Path:
+    """Child с историей работ: одна функция ссылается на работу по id, вторая — по № PR, третья — нет.
+
+    express-checkout объявляет `built_by: [checkout-speedup]` -> узел work + ребро work -builds->
+    feature. quick-buy объявляет `built_by: 991` (№ PR той же работы) -> резолвится в тот же узел.
+    wishlist не объявляет built_by -> ребра нет (честно: история не записала, кто построил).
+    """
+    root = tmp_path / "child_work"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    _write(root / "history" / "plan-history.yaml", {
+        "schema_version": 1, "kind": "delivery-plan-history",
+        "work": [
+            {"id": "checkout-speedup", "title": "Ускорить чекаут", "pr": 991,
+             "status": "done", "result": "ЗАКРЫТО: чекаут ускорен, конверсия выросла."},
+        ],
+    })
+    _write(root / "features" / "express-checkout" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "express-checkout", "name": "Экспресс-чекаут",
+                    "status": "in-progress", "current_stage": "analytics"},
+        "links": {"goal": "grow-repeat-purchases", "built_by": ["checkout-speedup"]},
+        "artifacts": {},
+    })
+    _write(root / "features" / "quick-buy" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "quick-buy", "name": "Покупка в один клик",
+                    "status": "in-progress", "current_stage": "delivery"},
+        "links": {"built_by": 991},   # ссылка по НОМЕРУ PR, а не по id работы
+        "artifacts": {},
+    })
+    _write(root / "features" / "wishlist" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "wishlist", "name": "Список желаний",
+                    "status": "planned", "current_stage": "discovery"},
+        "links": {},
+        "artifacts": {},
+    })
+    return root
+
+
+def test_builds_edge_from_blueprint_link(child_work: Path):
+    """Ссылка `links.built_by` -> узел work (название + PR) + ребро work -builds-> feature."""
+    graph = kg.build_graph(child_work)
+    by_id = {n["id"]: n for n in graph["nodes"]}
+
+    assert "checkout-speedup" in by_id
+    wnode = by_id["checkout-speedup"]
+    assert wnode["type"] == "work"
+    assert wnode["title"] == "Ускорить чекаут"
+    assert wnode["pr"] == "991"
+
+    assert {"from": "checkout-speedup", "type": "builds",
+            "to": "express-checkout"} in graph["edges"]
+
+
+def test_built_by_by_pr_number_resolves_to_the_same_work(child_work: Path):
+    """Ссылка `built_by` номером PR резолвится в тот же узел работы, что и ссылка по id."""
+    graph = kg.build_graph(child_work)
+    # quick-buy сослалась на PR 991 -> ребро из работы checkout-speedup (её PR), не из узла «991».
+    assert {"from": "checkout-speedup", "type": "builds", "to": "quick-buy"} in graph["edges"]
+    assert "991" not in {n["id"] for n in graph["nodes"]}
+
+
+def test_no_built_by_means_no_edge_and_not_a_gap(child_work: Path):
+    """Нет ссылки в blueprint -> нет ребра builds. Честная неизвестность, а НЕ пробел."""
+    graph = kg.build_graph(child_work)
+    builds_to_wishlist = [e for e in graph["edges"]
+                          if e["type"] == "builds" and e["to"] == "wishlist"]
+    assert builds_to_wishlist == []
+
+    result = kg.trace(graph, "wishlist")
+    assert result["built_by"] == []
+    assert not any("builds" in g or "построил" in g for g in result["gaps"])
+
+
+def test_trace_reports_what_built_a_feature(child_work: Path):
+    """`trace` называет РАБОТУ (и PR), построившую функцию — ответ на «что построили и где»."""
+    graph = kg.build_graph(child_work)
+    result = kg.trace(graph, "express-checkout")
+    assert result["built_by"]
+    first = result["built_by"][0]
+    assert first["id"] == "checkout-speedup"
+    assert first["title"] == "Ускорить чекаут"
+    assert first["pr"] == "991"
+
+
+def test_broken_built_by_ref_is_rejected_by_validator(tmp_path: Path):
+    """Ссылка на несуществующую работу оставляет висящее ребро -> validate_knowledge_graph краснит."""
+    root = tmp_path / "child_work_broken"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    _write(root / "history" / "plan-history.yaml", {
+        "schema_version": 1, "kind": "delivery-plan-history", "work": [],
+    })
+    _write(root / "features" / "express-checkout" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "express-checkout", "name": "Экспресс-чекаут",
+                    "status": "in-progress", "current_stage": "analytics"},
+        "links": {"built_by": ["work-does-not-exist"]},
+        "artifacts": {},
+    })
+    graph = kg.build_graph(root)
+
+    assert {"from": "work-does-not-exist", "type": "builds",
+            "to": "express-checkout"} in graph["edges"]
+    assert "work-does-not-exist" not in {n["id"] for n in graph["nodes"]}
+
+    errors = _validate_built(root, graph)
+    assert any("work-does-not-exist" in e for e in errors), \
+        f"валидатор обязан поймать висящую ссылку на работу: {errors}"
+
+
+def test_work_graph_passes_validator_when_ref_resolves(child_work: Path):
+    """Граф с валидной ссылкой на работу проходит ссылочную целостность validate_knowledge_graph."""
+    graph = kg.build_graph(child_work)
+    errors = _validate_built(child_work, graph)
+    assert errors == [], f"граф с работой не прошёл валидатор: {errors}"
+
+
+# ── «Чему научились по результату»: явная связь УРОК → OUTCOME (декларация, не косвенный вывод) ─────
+
+
+@pytest.fixture()
+def child_learning(tmp_path: Path) -> Path:
+    """Child, где урок ЯВНО объявляет outcome, из которого извлечён (без совпадения по feature).
+
+    FL-010 объявляет `derived_from_outcome: grow-repeat-purchases-outcome` -> ребро insight
+    -derived-from-> outcome, хотя его `feature` не совпадает ни с одним узлом функции (косвенной
+    привязки нет — работает только декларация).
+    """
+    root = tmp_path / "child_learning"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    _write(root / "product-learning" / "FL-010.yaml", {
+        "schema_version": 1, "kind": "FeatureLearning", "id": "FL-010",
+        "feature": "architecture:some-module",       # НЕ узел-функция графа -> feeds не сработает
+        "learnings": ["Повторные покупки растут при сохранённом адресе"],
+        "derived_from_outcome": "grow-repeat-purchases-outcome",
+    })
+    return root
+
+
+def test_learning_derived_from_outcome_edge_is_declared(child_learning: Path):
+    """`derived_from_outcome` -> ребро insight -derived-from-> outcome напрямую (без косвенного вывода)."""
+    graph = kg.build_graph(child_learning)
+    ids = {n["id"] for n in graph["nodes"]}
+    assert "fl-010" in ids
+    assert {"from": "fl-010", "type": "derived-from",
+            "to": "grow-repeat-purchases-outcome"} in graph["edges"]
+    # Косвенной привязки по feature нет: feeds к функции не появилось.
+    assert [e for e in graph["edges"] if e["from"] == "fl-010" and e["type"] == "feeds"] == []
+
+
+def test_learning_graph_passes_validator_when_outcome_ref_resolves(child_learning: Path):
+    """Граф с явной ссылкой урок->outcome проходит validate_knowledge_graph."""
+    graph = kg.build_graph(child_learning)
+    errors = _validate_built(child_learning, graph)
+    assert errors == [], f"граф с уроком->outcome не прошёл валидатор: {errors}"
+
+
+def test_broken_derived_from_outcome_ref_is_rejected_by_validator(tmp_path: Path):
+    """Ссылка урока на несуществующий outcome оставляет висящее ребро -> валидатор краснит."""
+    root = tmp_path / "child_learning_broken"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    _write(root / "product-learning" / "FL-011.yaml", {
+        "schema_version": 1, "kind": "FeatureLearning", "id": "FL-011",
+        "feature": "architecture:some-module",
+        "learnings": ["Урок из несуществующего исхода"],
+        "derived_from_outcome": "no-such-outcome",
+    })
+    graph = kg.build_graph(root)
+    assert {"from": "fl-011", "type": "derived-from", "to": "no-such-outcome"} in graph["edges"]
+    assert "no-such-outcome" not in {n["id"] for n in graph["nodes"]}
+
+    errors = _validate_built(root, graph)
+    assert any("no-such-outcome" in e for e in errors), \
+        f"валидатор обязан поймать висящую ссылку урока на outcome: {errors}"
+
+
+def test_no_derived_from_outcome_field_means_no_declared_edge(tmp_path: Path):
+    """Нет поля `derived_from_outcome` и нет совпадения по feature -> объявленного ребра нет."""
+    root = tmp_path / "child_learning_none"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}],
+    })
+    _write(root / "product-learning" / "FL-012.yaml", {
+        "schema_version": 1, "kind": "FeatureLearning", "id": "FL-012",
+        "feature": "architecture:some-module",
+        "learnings": ["Урок без объявленного исхода"],
+    })
+    graph = kg.build_graph(root)
+    derived = [e for e in graph["edges"] if e["from"] == "fl-012" and e["type"] == "derived-from"]
+    assert derived == []

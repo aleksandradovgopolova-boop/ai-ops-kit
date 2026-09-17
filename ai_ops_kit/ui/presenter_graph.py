@@ -58,17 +58,26 @@ def from_graph_trace(result: dict) -> dict:
     decision = result.get("decision")
     if decision:
         summary += f" Появилась из решения: «{decision.get('title')}»."
+    # «Что построило функцию» — из РАБОТЫ (истории), а не из пересказа кода. Если работа объявлена в
+    # паспорте функции, история называет её (и PR) прямо в ответе.
+    built_by = result.get("built_by") or []
+    if built_by:
+        first = built_by[0]
+        pr = f" (PR #{first['pr']})" if first.get("pr") else ""
+        more = f" и ещё {len(built_by) - 1}" if len(built_by) > 1 else ""
+        summary += f" Построена работой: «{first.get('title')}»{pr}{more}."
     headline = "Результат не достигнут" if verdict == "refuted" else None
     return message(
         status=("ok" if verdict == "confirmed" else "degraded"),
         headline=headline,
         summary=summary,
-        why_it_matters="Раньше этот ответ собирали вручную из плана, обучения, паспорта функции и "
-                       "журнала решений; теперь и «зачем» (решение), и «подтвердилось ли» "
-                       "(результат) читаются по одному графу.",
+        why_it_matters="Раньше этот ответ собирали вручную из плана, обучения, паспорта функции, "
+                       "журнала решений и истории работ; теперь и «зачем» (решение), и «что построили» "
+                       "(работа/PR), и «подтвердилось ли» (результат) читаются по одному графу.",
         next_steps=(list(result.get("gaps") or []) or None),
         technical={"verdict": verdict, "chain": [c.get("id") for c in chain],
-                   "outcome": result.get("outcome"), "decision": decision})
+                   "outcome": result.get("outcome"), "decision": decision,
+                   "built_by": built_by})
 
 
 def from_graph_gaps(result: dict) -> dict:
