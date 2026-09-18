@@ -15,11 +15,22 @@ validate_ai_first_registry), но уже ПОСТФАКТУМ — класс «�
 Дату не берём из системных часов автоматически (в CI/офлайн они разные) — если --date не задан,
 берём из последней записи CHANGELOG-заголовка недопустимо, поэтому дату называет вызывающий; в
 --check дата не нужна. Возврат: 0 — ок; 1 — ошибка (битый semver, поверхность не найдена, рассинхрон).
+
+РЕЛИЗ ГАСИТ ОЧЕРЕДЬ ЗАЯВЛЕНИЙ (аудит A2, 17.09.2026). towncrier собирает CHANGELOG.md из
+newsfragments/, но раньше релиз `build` НЕ звал — фрагменты копились сотнями, «дисциплина заявлений
+подтекала там, где декларируется». Теперь бамп СЛИВАЕТ накопленную очередь в раздел CHANGELOG через
+`towncrier build` и очищает newsfragments/. Дренаж включается, когда он реально возможен (towncrier
+доступен, есть [tool.towncrier] в pyproject и маркер вставки в CHANGELOG) И очередь непуста; иначе —
+прежний ручной раздел (не-китовый / офлайн-репозиторий). Что результат достигнут, ДОКАЗЫВАЕТ отдельный
+гейт на самом выпуске (`validation/validate_changelog_queue_drained.py --release`): непустая очередь
+на релизе краснит джобу и тег не создаётся — обещание «на релизе очередь пуста» стало проверяемым.
 """
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -27,6 +38,10 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
            Path(__file__).resolve().parents[2])
 
 _SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
+
+# Маркер towncrier: строка, ПОСЛЕ которой `build` вставляет собранный раздел. Держим её в CHANGELOG
+# сразу под `## [Unreleased]`, чтобы каждый релиз ложился под Unreleased и над прошлой версией.
+_TOWNCRIER_MARKER = "<!-- towncrier release notes start -->"
 
 # Собственный Product Passport кита (parent): машинные разделы — снимок версии/здоровья/статуса,
 # которые обязаны перегенерироваться на релизе, иначе freshness-ратчет
@@ -69,6 +84,83 @@ def _apply(root: Path, rel: str, pattern: str, repl: str) -> None:
     p.write_text(new_txt, encoding="utf-8")
 
 
+def _pending_fragments(root: Path) -> list:
+    """Накопленные newsfragments (всё, кроме README.md) — очередь заявлений к следующему релизу."""
+    d = root / "newsfragments"
+    if not d.is_dir():
+        return []
+    return [p for p in sorted(d.glob("*.md")) if p.name != "README.md"]
+
+
+def _towncrier_ready(root: Path) -> bool:
+    """Возможен ли релизный дренаж очереди через `towncrier build` в ЭТОМ репозитории.
+
+    Три условия, и все обязательны: (1) towncrier импортируется в текущем интерпретаторе — тем же
+    `sys.executable` мы его и вызовем; (2) в pyproject объявлен `[tool.towncrier]`; (3) в CHANGELOG
+    есть маркер вставки. Иначе (не-китовый / офлайн-репозиторий, тестовая фикстура без конфига) дренаж
+    невозможен — пишем раздел вручную, как раньше. Детерминированно: не зависит от того, стоит ли
+    towncrier «где-то в системе», а только от того, чем этот процесс реально располагает."""
+    if importlib.util.find_spec("towncrier") is None:
+        return False
+    pyproject = root / "pyproject.toml"
+    if not pyproject.is_file() or "[tool.towncrier]" not in pyproject.read_text(encoding="utf-8"):
+        return False
+    ch = root / "CHANGELOG.md"
+    return ch.is_file() and _TOWNCRIER_MARKER in ch.read_text(encoding="utf-8")
+
+
+def _drain_changelog(root: Path, new: str, date: str, title: str, body: str) -> None:
+    """Слить накопленные newsfragments в раздел CHANGELOG и очистить очередь — через `towncrier build`.
+
+    towncrier вставляет раздел `## [<new>] — <date>` под маркером (из title_format) и УДАЛЯЕТ фрагменты.
+    Затем шапку доводим до формата кита `## [<new>] — <date> · <title>` и, если задано, вкладываем `body`
+    ведущим абзацем — ровно ту шапку ждёт извлечение записок в release.yml и соседние проверки. В конце
+    ГЕЙТ: очередь обязана опустеть; иначе — ошибка (релиз не имеет права выйти с недренированной очередью).
+    """
+    subprocess.run([sys.executable, "-m", "towncrier", "build", "--yes", "--version", new,
+                    "--date", date], cwd=str(root), check=True, capture_output=True, text=True)
+    ch = root / "CHANGELOG.md"
+    txt = ch.read_text(encoding="utf-8")
+    header = f"## [{new}] — {date}"
+    decorated = header + (f" · {title}" if title else "")
+    if body:
+        decorated += "\n\n" + body.rstrip()
+    txt2, n = re.subn(re.escape(header) + r"(?=\n)", lambda _m: decorated, txt, count=1)
+    if n != 1:
+        raise ValueError(f"CHANGELOG.md: шапка '{header}' после сборки towncrier не найдена")
+    ch.write_text(txt2, encoding="utf-8")
+    left = _pending_fragments(root)
+    if left:
+        raise RuntimeError("очередь newsfragments не опустела после релизной сборки: "
+                           + ", ".join(p.name for p in left[:5]))
+
+
+def _record_changelog(root: Path, new: str, title: str, date: str, body: str, channel: str) -> list:
+    """Записать раздел CHANGELOG новой версии. -> список изменённых относительных путей.
+
+    Если дренаж возможен И очередь непуста — сгребаем накопленные заявления в раздел через towncrier
+    (очередь очищается). Иначе — прежний ручной раздел под `## [Unreleased]` + release-newsfragment
+    (towncrier требует запись на ветке): путь для не-китового/офлайн-репозитория и тестовых фикстур."""
+    if _towncrier_ready(root) and _pending_fragments(root):
+        _drain_changelog(root, new, date, title, body)
+        return ["CHANGELOG.md"]
+    # Ручной раздел: репозиторий без towncrier-дренажа. Раздел вставляем под [Unreleased].
+    ch = root / "CHANGELOG.md"
+    ctxt = ch.read_text(encoding="utf-8")
+    section = f"## [{new}] — {date} · {title}\n"
+    if body:
+        section += "\n" + body.rstrip() + "\n"
+    ctxt2, n = re.subn(r"(?m)^## \[Unreleased\]\s*$",
+                       f"## [Unreleased]\n\n{section.rstrip()}", ctxt, count=1)
+    if n != 1:
+        raise ValueError("CHANGELOG.md: не найден раздел '## [Unreleased]' для вставки")
+    ch.write_text(ctxt2, encoding="utf-8")
+    frag = root / "newsfragments" / f"release-v{new}.chore.md"
+    frag.parent.mkdir(parents=True, exist_ok=True)
+    frag.write_text(f"Релиз v{new} ({channel}): {title}\n", encoding="utf-8")
+    return ["CHANGELOG.md", str(frag.relative_to(root))]
+
+
 def refresh_kit_passport(root: Path) -> str | None:
     """Перегенерировать машинные разделы собственного паспорта кита под текущую VERSION.
 
@@ -103,22 +195,8 @@ def bump(root: Path, new: str, title: str, date: str, body: str = "") -> list:
     for rel, pattern, repl in _surfaces(old, new, channel):
         _apply(root, rel, pattern, repl)
         changed.append(rel)
-    # CHANGELOG: новый раздел под [Unreleased]
-    ch = root / "CHANGELOG.md"
-    ctxt = ch.read_text(encoding="utf-8")
-    section = f"## [{new}] — {date} · {title}\n"
-    if body:
-        section += "\n" + body.rstrip() + "\n"
-    ctxt2, n = re.subn(r"(?m)^## \[Unreleased\]\s*$",
-                       f"## [Unreleased]\n\n{section.rstrip()}", ctxt, count=1)
-    if n != 1:
-        raise ValueError("CHANGELOG.md: не найден раздел '## [Unreleased]' для вставки")
-    ch.write_text(ctxt2, encoding="utf-8")
-    changed.append("CHANGELOG.md")
-    # release-newsfragment (towncrier требует запись на ветке; заодно фиксирует релиз)
-    frag = root / "newsfragments" / f"release-v{new}.chore.md"
-    frag.write_text(f"Релиз v{new} ({channel}): {title}\n", encoding="utf-8")
-    changed.append(str(frag.relative_to(root)))
+    # CHANGELOG: раздел новой версии. Дренаж очереди, если он возможен; иначе — ручной раздел.
+    changed += _record_changelog(root, new, title, date, body, channel)
     # Product Passport кита: машинные разделы — снимок под новую версию (разделы владельца сохранены).
     passport_rel = refresh_kit_passport(root)
     if passport_rel:

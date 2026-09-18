@@ -1,0 +1,1 @@
+Гигиена плана: работа link-decision-to-feature-why-it-exists (#1015, разрыв №1 нити истории) перенесена в историю; заведена следующая — complete-life-history-traceability-edges (рёбра work/PR→feature, review-verdict→feature, learning→outcome одной работой). «Разрыв №2» (фича в графе без outcome) снят как нереальный: blueprint без outcome в граф входит.

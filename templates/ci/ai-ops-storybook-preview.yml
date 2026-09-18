@@ -4,7 +4,7 @@
 # получал workflow, которому нечего собирать. Опт-аут: удалить этот файл.
 #
 # ЧТО ДЕЛАЕТ. На pull_request, ЗАТРАГИВАЮЩИХ UI (пути ниже), собирает Storybook СОБСТВЕННЫМ
-# build-скриптом дочки (`npm run build-storybook`), выкладывает статическую сборку как CI-артефакт
+# build-скриптом дочки (её собственный npm-скрипт сборки Storybook), выкладывает статическую сборку как CI-артефакт
 # `storybook-static` и оставляет в PR комментарий «превью собрано, скачайте артефакт». Так превью
 # доступно ревьюеру без внешнего хостинга.
 #
@@ -43,6 +43,13 @@ on:
 permissions:
   contents: read
   pull-requests: write
+concurrency:
+  # Отменять УСТАРЕВШИЕ прогоны — но ТОЛЬКО для PR (новый пуш в тот же PR гасит прежний).
+  # На push в main / schedule / release / record отмена НЕ применяется: там каждый прогон
+  # относится к своему коммиту/событию, и его потеря = дыра в проверке или в записи.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   storybook-preview:
     # Раннер выбирается ПЕРЕМЕННОЙ, а не зашит (как в остальных workflow кита): `ubuntu-latest`
@@ -50,26 +57,64 @@ jobs:
     runs-on: ${{ vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
-      # ЧЕСТНЫЙ ГЕЙТ. Собираем ТОЛЬКО если у дочки есть свой build-скрипт Storybook. Проверка —
-      # буквальная (build-storybook / storybook build в package.json), совпадает с зрелостью,
-      # которую меряет ui_readiness. Нет скрипта -> ничего не собираем, job скипается честно.
-      - name: Есть ли у дочки build-скрипт Storybook?
+      # ЧЕСТНЫЙ ГЕЙТ + РЕАЛЬНОЕ ИМЯ СКРИПТА + УЖЕ СОБРАННЫЙ Storybook. Приоритет:
+      #   1) есть build-скрипт -> собрать СВЕЖЕЕ (отражает изменения этого PR);
+      #   2) build-скрипта нет, но в репозитории уже лежит готовая статическая сборка
+      #      (`storybook-static/`) -> выложить её как есть (проект собирает Storybook вне этого CI);
+      #   3) ни того, ни другого -> честный skip (это НЕ ошибка).
+      # Имя скрипта произвольное (`build-storybook` / `build:storybook` / `storybook:build` …), поэтому
+      # запускать сборку ЗАШИТЫМ именем нельзя — обнаружение пройдёт, а запуск упадёт на несуществующем
+      # имени (полевая находка ии-среда, 2026-09-16). Резолвим РЕАЛЬНОЕ имя; python3 есть до setup-node.
+      - name: Есть ли у дочки Storybook (скрипт сборки или готовая статика)?
         id: detect
         run: |
-          if [ -f package.json ] && grep -Eq 'build-storybook|storybook build' package.json; then
-            echo "has=true" >> "$GITHUB_OUTPUT"
-            echo "Storybook build-скрипт найден — собираю превью."
+          DETECT=$(python3 - <<'PY'
+          import json, os, sys
+          scripts = {}
+          try:
+              scripts = (json.load(open("package.json")).get("scripts") or {})
+          except (OSError, ValueError):
+              scripts = {}
+          # 1) канонический скрипт по имени; 2) любой скрипт, чья КОМАНДА собирает Storybook.
+          name = "build-storybook" if "build-storybook" in scripts else next(
+              (k for k, v in scripts.items()
+               if isinstance(v, str) and ("storybook build" in v or "build-storybook" in v)), "")
+          # Уже собранная статика (несколько известных имён каталога вывода Storybook).
+          prebuilt_dir = next((d for d in ("storybook-static", ".storybook-static", "storybook_static")
+                               if os.path.isdir(d) and os.listdir(d)), "")
+          if name:
+              print(f"has=true\nscript={name}\nprebuilt=")
+          elif prebuilt_dir:
+              print(f"has=true\nscript=\nprebuilt={prebuilt_dir}")
+          else:
+              print("has=false")
+          PY
+          )
+          echo "$DETECT" >> "$GITHUB_OUTPUT"
+          if echo "$DETECT" | grep -q '^script=.\+'; then
+            echo "Storybook build-скрипт найден ($(echo "$DETECT" | sed -n 's/^script=//p')) — собираю свежее превью."
+          elif echo "$DETECT" | grep -q '^prebuilt=.\+'; then
+            echo "Готовая статика Storybook найдена ($(echo "$DETECT" | sed -n 's/^prebuilt=//p')) — выкладываю как есть (без пересборки)."
           else
-            echo "has=false" >> "$GITHUB_OUTPUT"
-            echo "Storybook build-скрипт не найден — превью пропущено (это НЕ ошибка): сначала"
-            echo "настройте Storybook у себя (шаблон скрипта: ai-ops ui-status), потом превью заработает."
+            echo "Storybook не найден (ни build-скрипта, ни готовой статики) — превью пропущено (это НЕ ошибка):"
+            echo "сначала настройте Storybook у себя (шаблон скрипта: ai-ops ui-status), потом превью заработает."
           fi
       - uses: actions/setup-node@v4
-        if: steps.detect.outputs.has == 'true'
+        # node нужен только для СБОРКИ; для уже готовой статики его не ставим.
+        if: steps.detect.outputs.script != ''
         with:
           node-version: '20'
+      - name: Кэш npm (ускоряет установку зависимостей)
+        # Кэшируем только когда есть lock-файл (иначе ключ нестабилен, а setup-node cache вовсе падает
+        # без lock). Гейт на script != '' — кэш нужен лишь на пути СБОРКИ, не для готовой статики.
+        if: steps.detect.outputs.script != '' && hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json') != ''
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json') }}
+          restore-keys: ${{ runner.os }}-npm-
       - name: Собрать Storybook СКРИПТОМ ДОЧКИ
-        if: steps.detect.outputs.has == 'true'
+        if: steps.detect.outputs.script != ''
         run: |
           # Эфемерный раннер CI: ставим объявленные владельцем зависимости (его lock-файл) и зовём
           # ЕГО скрипт. Кит не добавляет и не меняет зависимости — только собирает уже настроенное.
@@ -78,7 +123,16 @@ jobs:
           else
             npm install
           fi
-          npm run build-storybook
+          # РЕАЛЬНОЕ имя скрипта дочки (из detect), а не зашитое имя.
+          npm run "${{ steps.detect.outputs.script }}"
+      - name: Взять уже готовую статику Storybook
+        # Проект собирает Storybook вне этого CI — берём его каталог вывода как есть.
+        if: steps.detect.outputs.script == '' && steps.detect.outputs.prebuilt != ''
+        run: |
+          if [ "${{ steps.detect.outputs.prebuilt }}" != "storybook-static" ]; then
+            cp -R "${{ steps.detect.outputs.prebuilt }}" storybook-static
+          fi
+          echo "Использую готовую статику из «${{ steps.detect.outputs.prebuilt }}» без пересборки."
       - name: Выложить сборку как артефакт превью
         if: steps.detect.outputs.has == 'true'
         uses: actions/upload-artifact@v4

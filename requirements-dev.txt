@@ -6,11 +6,11 @@
 # Testing
 pytest>=8.0
 pytest-cov>=7.1.0
-pytest-xdist>=3.0     # параллельный прогон (-n auto): полный набор 11мин -> ~5мин, набор параллель-безопасен
+pytest-xdist>=3.8.0     # параллельный прогон (-n auto): полный набор 11мин -> ~5мин, набор параллель-безопасен
 hypothesis>=6.100
 
 # Linting
-ruff>=0.8.0
+ruff>=0.16.7
 
 # Type checking
 mypy>=1.8

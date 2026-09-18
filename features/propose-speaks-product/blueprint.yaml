@@ -1,0 +1,35 @@
+schema_version: 1
+kind: feature-blueprint
+feature:
+  id: propose-speaks-product
+  name: propose советует, что нужно продукту, а не про фундамент кита
+  owner: ai-ops-kit
+  status: in-progress            # инженерия выпущена; продуктовый outcome не накоплен
+  profile: lean
+  current_stage: delivery
+links:
+  # ЗАЧЕМ: продуктовое ревью владельца 16.09 (P0 №1, «закрыть/проверить propose») — в context решения.
+  decision: ep-2026-09-16-product-freeze-held-until-external-clean-run
+  # ЧТО построило: две работы одной нити — propose-speaks-product-not-kit-foundation (PR #978,
+  # вывод переведён на продукт) и verify-propose-speaks-product-not-kit-foundation (PR #983,
+  # закрыта последняя утечка в ОПИСАНИИ команды).
+  built_by:
+  - 983
+  - 978
+artifacts:
+  discovery:
+  - path: discovery/problem-statement.md
+    status: declined
+    declined_reason: >-
+      Кураторский паспорт-провенанс: продуктовая проблема (propose вёл про фундамент кита —
+      контуры, ProductOverview, реестр решений — а не про то, что нужно продукту) зафиксирована
+      решением (links.decision, P0 №1 ревью 16.09); отдельный discovery-артефакт не создавался.
+  definition:
+  - path: prd/feature.md
+    status: declined
+    declined_reason: >-
+      Определение фичи несут построившие её работы и их PR (links.built_by, PR #978 и #983);
+      отдельный PRD не велся — паспорт курирует провенанс, а не полный жизненный цикл.
+  delivery:
+  - path: delivery/shipped.md
+    status: done

@@ -1,0 +1,1 @@
+Автоматическое обновление actions/setup-python 5 -> 7 (dependabot). Newsfragment для towncrier-гейта кита.

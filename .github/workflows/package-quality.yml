@@ -61,7 +61,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # история нужна eval-гейту для diff изменённых агентов
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
@@ -87,7 +87,7 @@ jobs:
       # ветку с базой, и на shallow-клоне базы просто нет (гейт молча не нашёл бы diff).
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       # ВЕРСИЯ ПИНУЕТСЯ, и это замер, а не аккуратность. Здесь стояло `pip install ruff`
       # (то есть последний), а `.pre-commit-config.yaml` пинит v0.8.0 — два РАЗНЫХ линтера.
@@ -210,7 +210,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужна история для git diff против origin/main
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "Security scan: секреты, зависимости, injection-surface"
@@ -230,7 +230,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}   # нужен origin/main как база превью слияния
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       - run: pip install pyyaml
       - name: "Advisory: объём+число файлов доставляемого итога слияния (merge-preview ∩ managed_set)"
@@ -258,7 +258,7 @@ jobs:
     # набора на 3.13; механика чистой установки (копирование файлов) версие-независима.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       - run: pip install pyyaml          # РОВНО рантайм-зависимость, ничего сверх
       - name: "Установка в чистый репозиторий без кита рядом"
@@ -279,7 +279,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}          # нужны ТЕГИ: обновляемся с предыдущего выпуска
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       - run: pip install pyyaml         # РОВНО рантайм-зависимость, как у пользователя
       - name: "Обновление предыдущий выпуск -> рабочее дерево"
@@ -298,7 +298,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with: {fetch-depth: 0}
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "${{ matrix.python-version }}"}
       # 2026-08-12: pytest-cov здесь БОЛЬШЕ НЕ НУЖЕН. Прежде `--cov` стоял в addopts pytest.ini,
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
@@ -318,7 +318,7 @@ jobs:
     continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
       - name: "macOS advisory: critical_path на платформе владельца (не блокирует)"
