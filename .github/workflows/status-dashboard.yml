@@ -64,7 +64,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}   # build_data.py читает задачи через gh
         run: python3 dashboard/build_data.py --repo .
 
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
 
       - name: Подготовить страницу к публикации
         uses: actions/upload-pages-artifact@v5
