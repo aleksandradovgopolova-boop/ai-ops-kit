@@ -49,6 +49,18 @@ from ai_ops_kit.intelligence.nightly_schedule import (  # noqa: F401
     install_schedule,
     schedule_status,
 )
+# Недельный тренд находок (ось времени) вынесен в сателлит nightly_trends; ре-экспорт сохраняет
+# доступ `nightly_review.<имя>` для оркестрации и тестов. Обзор больше не только снимок: история
+# находок копится в собственном файле обзора, а бриф называет направление за неделю.
+from ai_ops_kit.intelligence.nightly_trends import (  # noqa: F401
+    HISTORY_REL,
+    TREND_WINDOW_DAYS,
+    compute_trends,
+    finding_counts,
+    format_trends,
+    read_history,
+    record_history,
+)
 
 
 # ТОЧКА ОТСЧЁТА — ПОСЛЕДНИЙ ПОДТВЕРЖДЁННЫЙ ОБЗОР, А НЕ «24 ЧАСА» (v0, 20.08.2026).
@@ -242,8 +254,11 @@ def collect_delta(root: Path, since: str | None = None) -> dict:
         "plan": _check_plan_status(root),
         "ci": _check_ci_status(root),
         "prs": _check_open_prs(root),
-        "findings": run_checks(root),
+        "findings": (findings := run_checks(root)),
         "false_positive_rate": false_positive_rate(root),
+        # Тренд считаем ДО записи текущего прогона: сравниваем сегодняшние находки с историей,
+        # которая ещё не включает этот обзор (иначе сравнивали бы прогон сам с собой).
+        "trends": compute_trends(read_history(root), findings),
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -295,6 +310,13 @@ def format_brief(delta: dict, root: Path) -> str:
         L.append(f"- план: " + ", ".join(f"{k} — {v}" for k, v in sorted(plan["by_status"].items())))
     elif plan.get("error"):
         L.append(f"- план: {plan['error']}")
+
+    # 2.7 ТРЕНД ЗА НЕДЕЛЮ — не только снимок, а направление. Снимок отвечает «что сейчас», тренд —
+    # «лучше или хуже за неделю». Нет истории для сравнения — так и говорим, тренд НЕ выдумываем:
+    # «нет истории» не сворачивается в «без изменений».
+    trend = delta.get("trends") or compute_trends(read_history(root), findings)
+    L += ["", "## Тренд за неделю", ""]
+    L += format_trends(trend)
 
     # 2.5 НАСКОЛЬКО ДОВЕРЯТЬ ФЛАГАМ — частота ложных срабатываний названа ПЕРВОКЛАССНО.
     # Обзор, который флагает, но не меряет свою точность, неотличим от гадания. Число берётся из
@@ -554,6 +576,10 @@ def run_nightly(root: Path, *, since: str | None = None, deliver: bool = True,
     root = Path(root)
     delta = collect_delta(root, since)
     brief = format_brief(delta, root)
+    # Записываем находки этого прогона ПОСЛЕ брифа: бриф сравнивался с прошлой историей, а теперь
+    # текущий обзор становится точкой сравнения для следующего. Это единственная запись обзора в
+    # дочку помимо его собственного состояния — граница v0 (обзор не правит продукт) цела.
+    record_history(root, delta.get("findings", []))
     receipt = deliver_brief(root, brief, date=date) if deliver else None
     return {"brief": brief, "receipt": receipt, "baseline": delta.get("baseline")}
 

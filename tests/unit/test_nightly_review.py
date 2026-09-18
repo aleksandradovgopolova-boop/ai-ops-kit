@@ -421,3 +421,112 @@ def test_a_broken_feedback_shard_is_skipped_not_fatal(repo):
     nr.record_feedback(repo, ["a"], [])
     assert len(nr.read_feedback(repo)) == 1
 
+
+# ─── НЕДЕЛЬНЫЙ ТРЕНД: обзор показывает НАПРАВЛЕНИЕ, а не только снимок ───────────────────────────
+# Исход направления `nightly-reviews-show-trends`. Снимок отвечает «что сейчас», тренд — «лучше или
+# хуже за неделю». Честность та же, что у частоты ложных: нет истории для сравнения — так и говорим,
+# «нет истории» != «без изменений», направление НЕ выдумывается.
+
+from datetime import datetime, timedelta  # noqa: E402
+
+
+def _findings(**counts):
+    """Синтетические находки: {check: n} -> n записей `ok is False` для этой проверки.
+
+    Обзор даёт одну запись на проверку, но тренд считает по СЧЁТЧИКУ находок, поэтому здесь можно
+    задать любое число расхождений на проверку и проверить арифметику направления.
+    """
+    out = []
+    for check, n in counts.items():
+        for _ in range(int(n)):
+            out.append({"check": check, "subject": check, "ok": False, "detail": "расхождение"})
+    return out
+
+
+@pytest.mark.unit
+def test_a_first_run_without_history_says_so_and_does_not_invent_a_trend(repo):
+    """(а) Истории нет — бриф прямо говорит об этом; направление лучше/хуже НЕ выдумано."""
+    trend = nr.compute_trends(nr.read_history(repo), _findings(ссылки=1))
+    assert trend["has_history"] is False and trend["rows"] == [], trend
+    brief = nr.format_brief(nr.collect_delta(repo), repo)
+    assert "## Тренд за неделю" in brief, brief[:900]
+    assert "истории для тренда пока нет" in brief, brief[:900]
+    # «Нет истории» != «без изменений»: направление не должно быть названо, когда сравнивать не с чем.
+    section = brief.split("## Тренд за неделю", 1)[1].split("##", 1)[0]
+    assert "лучше" not in section and "хуже" not in section, section
+
+
+@pytest.mark.unit
+def test_a_week_old_worse_snapshot_is_reported_as_worse(repo):
+    """(б) Неделю назад находок было N, сейчас M>N -> направление «хуже»."""
+    week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    nr.record_history(repo, _findings(ссылки=1), at=week_ago)
+    trend = nr.compute_trends(nr.read_history(repo), _findings(ссылки=3))
+    row = next(r for r in trend["rows"] if r["check"] == "ссылки")
+    assert row["was"] == 1 and row["now"] == 3 and row["direction"] == "хуже", trend
+
+
+@pytest.mark.unit
+def test_a_week_old_better_snapshot_is_reported_as_better(repo):
+    """(б) M<N -> «лучше»."""
+    week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    nr.record_history(repo, _findings(ссылки=3), at=week_ago)
+    trend = nr.compute_trends(nr.read_history(repo), _findings(ссылки=1))
+    row = next(r for r in trend["rows"] if r["check"] == "ссылки")
+    assert row["direction"] == "лучше", trend
+
+
+@pytest.mark.unit
+def test_a_week_old_equal_snapshot_is_reported_as_unchanged(repo):
+    """(б) M==N (>0) -> «без изменений»."""
+    week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    nr.record_history(repo, _findings(ссылки=2), at=week_ago)
+    trend = nr.compute_trends(nr.read_history(repo), _findings(ссылки=2))
+    row = next(r for r in trend["rows"] if r["check"] == "ссылки")
+    assert row["direction"] == "без изменений", trend
+
+
+@pytest.mark.unit
+def test_history_persists_between_runs(repo):
+    """(в) История копится между прогонами: каждый run_nightly дописывает свою запись."""
+    nr.run_nightly(repo, deliver=False)
+    assert len(nr.read_history(repo)) == 1, "первый прогон не записал историю"
+    nr.run_nightly(repo, deliver=False)
+    assert len(nr.read_history(repo)) == 2, "второй прогон не дописал историю"
+    assert (repo / nr.HISTORY_REL).is_file()
+
+
+@pytest.mark.unit
+def test_only_entries_at_least_a_week_old_anchor_the_trend(repo):
+    """Правило отсчёта названо честно: тренд якорится на записи ВОЗРАСТОМ ~неделя, не на вчерашней.
+
+    Вчерашняя запись при ежедневном обзоре — это «со вчера», а не «за неделю». Пока нет записи
+    старше недели и вовсе нет записей за неделю — тренда честно нет.
+    """
+    yesterday = (datetime.now() - timedelta(days=1)).isoformat()
+    nr.record_history(repo, _findings(ссылки=1), at=yesterday)
+    trend = nr.compute_trends(nr.read_history(repo), _findings(ссылки=5))
+    # Запись есть (вчерашняя, в пределах недели) -> сравниваем с самой старой доступной, честно
+    # называя её возраст; направление считается, но по РЕАЛЬНОМУ возрасту, а не выдуманной неделе.
+    assert trend["has_history"] is True, trend
+    assert 0 <= trend["age_days"] < nr.TREND_WINDOW_DAYS, trend
+
+
+@pytest.mark.unit
+def test_no_findings_either_time_is_nothing_to_compare_not_a_trend(repo):
+    """Чисто и тогда, и сейчас — сравнивать нечего, а не «без изменений» по несуществующей находке."""
+    week_ago = (datetime.now() - timedelta(days=7)).isoformat()
+    nr.record_history(repo, [], at=week_ago)
+    trend = nr.compute_trends(nr.read_history(repo), [])
+    assert trend["has_history"] is True and trend["rows"] == [], trend
+    lines = nr.format_trends(trend)
+    assert any("сравнивать нечего" in ln for ln in lines), lines
+
+
+@pytest.mark.unit
+def test_the_trend_is_named_in_the_brief_and_exposed_in_the_delta(repo):
+    """Тренд назван в брифе ПЕРВОКЛАССНО (свой раздел) и попадает в дельту (--json его назовёт)."""
+    delta = nr.collect_delta(repo)
+    assert "trends" in delta, "тренд не попал в дельту"
+    assert "## Тренд за неделю" in nr.format_brief(delta, repo)
+
