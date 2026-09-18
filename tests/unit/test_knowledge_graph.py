@@ -657,3 +657,84 @@ def test_broken_review_ref_is_rejected_by_validator(tmp_path: Path):
     errors = _validate_built(root, graph)
     assert any("ghost-feature" in e for e in errors), \
         f"валидатор обязан поймать висящую ссылку review на фичу: {errors}"
+
+
+# ── РЕАЛЬНЫЙ outcome фичи: сдвиг метрики после релиза + петля «урок → следующее решение» ──────────
+# Хвост «нити истории продукта»: `graph trace` печатает не «pending», а НАСТОЯЩИЙ сдвиг целевой
+# метрики (было X → стало Y против цели, met/failed ИЗ ЧИСЕЛ) и следующий шаг по уроку. Числа —
+# реальные, снятые с живого продукта ии-среда (здоровье main фичи `main-health-signal`: доля
+# успешных прогонов на main, август 76% → сентябрь 87% при цели 90%). Композиция «посчитать вердикт»
+# живёт на слое CLI (`_feature_measured_outcome`), граф знаний чист от validation.
+from ai_ops_kit.cli.ai_ops_cli_intents import _feature_measured_outcome  # noqa: E402
+from ai_ops_kit.ui import presenter_graph  # noqa: E402
+
+
+def _ii_sreda_outcome(root: Path, *, with_readout: bool = True) -> None:
+    """Реальный контракт+отчёт фичи `main-health-signal` (числа сняты с ии-среды)."""
+    _write(root / "features" / "main-health-signal" / "outcome-contract.yaml", {
+        "schema_version": 1, "kind": "OutcomeContract",
+        "decision": "красный main должен становиться видимым и быстро чиниться",
+        "primary_metric": {"name": "доля успешных прогонов на main"},
+        "baseline": {"value": "76%", "measured_at": "2026-08-31",
+                     "source": "GitHub Actions ci на main, август"},
+        "target": {"value": "90%", "by": "2026-09-30"},
+        "guardrails": [],
+    })
+    if with_readout:
+        _write(root / "features" / "main-health-signal" / "outcome-readout.yaml", {
+            "schema_version": 1, "kind": "OutcomeReadout",
+            "measured": {"metric": "доля успешных прогонов на main", "value": "87%",
+                         "measured_at": "2026-09-17"},
+            "target_met": "no", "hypothesis": "refuted",
+        })
+
+
+def test_measured_outcome_reports_real_metric_shift_from_numbers(tmp_path: Path):
+    """Замер снят: helper даёт сдвиг baseline→после против цели и вердикт failed ИЗ ЧИСЕЛ."""
+    root = tmp_path / "child"
+    _ii_sreda_outcome(root)
+    mo, na = _feature_measured_outcome(root, "main-health-signal")
+    assert mo is not None and mo["measured"] is True
+    assert mo["verdict"] == "failed"          # 87% < 90% при направлении increase — цель не взята
+    assert mo["baseline"] == "76%" and mo["value"] == "87%" and mo["target"] == "90%"
+    # Петля не молчит на реальном вердикте: есть конкретное следующее действие с обоснованием.
+    assert na and na.get("because")
+
+
+def test_missing_readout_is_honest_not_accumulated_not_a_fabricated_number(tmp_path: Path):
+    """Контракт есть, замера нет: measured=False, число НЕ выдумано, названо условие измерения."""
+    root = tmp_path / "child"
+    _ii_sreda_outcome(root, with_readout=False)
+    mo, na = _feature_measured_outcome(root, "main-health-signal")
+    assert mo is not None and mo["measured"] is False
+    assert mo["value"] is None                # измеренного числа из воздуха нет
+    assert mo["needed_to_measure"]            # честно назвали, что нужно, чтобы измерить
+    assert na is None                         # без замера «что дальше» не фабрикуется
+
+
+def test_no_contract_means_no_outcome_not_an_invented_one(tmp_path: Path):
+    """Нет контракта -> (None, None): связь/исход из воздуха не выдумываем."""
+    root = tmp_path / "child"
+    _write(root / "features" / "plain-feature" / "blueprint.yaml",
+           {"schema_version": 1, "kind": "feature-blueprint", "feature": {"id": "plain-feature"}})
+    assert _feature_measured_outcome(root, "plain-feature") == (None, None)
+
+
+def test_trace_presenter_prints_real_shift_and_next_step():
+    """Презентер печатает «было X → стало Y при цели Z — цель пока не взята» и следующий шаг."""
+    result = {
+        "feature": "main-health-signal", "chain": [], "goal": None, "outcome": None,
+        "decision": None, "built_by": [], "review": None, "verdict": "no-outcome", "gaps": [],
+        "measured_outcome": {"measured": True, "verdict": "failed", "baseline": "76%",
+                             "value": "87%", "target": "90%", "hypothesis": "refuted",
+                             "guardrail_breaches": []},
+        "next_action": {"action": "разобраться, почему цель не взята",
+                        "because": "метрика дошла до 87 при цели 90"},
+    }
+    msg = presenter_graph.from_graph_trace(result)
+    text = msg["summary"]
+    assert "было 76% → стало 87% при цели 90%" in text
+    assert "цель пока не взята" in text
+    assert "Гипотеза не подтвердилась" in text
+    assert "Дальше по этому уроку" in text
+    assert msg["technical_details"]["payload"]["measured_verdict"] == "failed"

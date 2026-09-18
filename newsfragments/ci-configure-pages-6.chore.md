@@ -1,0 +1,1 @@
+Автоматическое обновление actions/configure-pages 5 -> 6 (dependabot). Newsfragment для towncrier-гейта кита.

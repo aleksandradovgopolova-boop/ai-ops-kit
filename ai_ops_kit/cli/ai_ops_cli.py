@@ -141,6 +141,13 @@ INTENTS = {
     # ждёт реального выпуска дочки.
     "readout": ("пост-релизная петля: доставили -> дошли ли события в аналитику -> исход -> один "
                 "вердикт (без выгрузки аналитики — честно «ещё нечем проверить»)", "readout", False),
+    # kit-product-scorecard: ЕДИНАЯ карта продукта кита из 5 метрик — кит мерит СЕБЯ как продукт, а
+    # не числом возможностей. Метрики 1 (доля фич идея->релиз) и 3 (доля фич с полной историей жизни)
+    # считаются из графа знаний; метрика 2 (доля утверждений с evidence) — доля поверх реестра
+    # честности; метрики 4 (результат после релиза) и 5 (уроки->решения) стоят честным каркасом «не
+    # измерено» (у самого кита живой аналитики нет). Только чтение. Форма карты ещё устаканивается.
+    "scorecard": ("карта продукта кита: 5 метрик, которыми кит мерит себя как продукт (а не числом "
+                  "возможностей); нет данных — честно «не измерено»", "scorecard", True),
 }
 
 
@@ -150,7 +157,8 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "propose", "products", "team",
-                  "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach")
+                  "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach",
+                  "scorecard")
 
 
 # ── Фасад владельца (P1 №8/№9 ревью): 7 действий человеческим языком поверх 34 intents ──────────────
@@ -291,7 +299,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
     _intent_explain, _intent_inbox, _intent_work, _intent_readout, _intent_graph,
-    _intent_reach, _WORK_SUBS,
+    _intent_reach, _intent_scorecard, _WORK_SUBS,
 )
 
 # --- Слой реализации команд (ai_ops_cli_commands): проб-несущие обработчики намерений и путь
@@ -321,6 +329,7 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("explain", _intent_explain), ("inbox", _intent_inbox),
                    ("work", _intent_work), ("readout", _intent_readout),
                    ("graph", _intent_graph), ("reach", _intent_reach),
+                   ("scorecard", _intent_scorecard),
                    # проб-несущие обработчики из ai_ops_cli_commands:
                    ("backlog", _intent_backlog), ("feedback", _intent_feedback),
                    ("status", _intent_status), ("next", _intent_next),

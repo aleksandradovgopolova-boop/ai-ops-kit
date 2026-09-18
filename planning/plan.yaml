@@ -107,6 +107,70 @@ goals:
       # Уроки из накопленных outcome ВЛИЯЮТ на следующие решения (не просто записаны) — петля обучения замкнута.
       learnings_from_outcomes_shape_next_decisions: false
 
+  - id: nightly-reviews-show-trends
+    # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-18. Первый срез roadmap-пункта «Дальше» «ночные обзоры
+    # по всем направлениям с трендами»: базовый ночной обзор уже есть (цель nightly-product-review), но
+    # он ТОЧЕЧНЫЙ — delta с последнего обзора, без «стало лучше/хуже за неделю». Здесь — недельные
+    # ТРЕНДЫ: ротация по всем направлениям, hotspot и portfolio-intelligence остаются в «Дальше».
+    freeze_relation: extension
+    # ДОСТИГНУТО 2026-09-18 (2/2): недельные тренды в ночном обзоре доставлены (#1053).
+    status: achieved
+    outcome:
+      # Находки ночного обзора СОХРАНЯЮТСЯ во времени (счётчики по проверкам/направлениям), а не только снимком.
+      # ЗАКРЫТ (#1053): журнал `.ai/project/nightly-review/history.yaml`, запись на каждый прогон.
+      nightly_review_persists_findings_over_time: true
+      # Бриф показывает НАПРАВЛЕНИЕ за неделю. ЗАКРЫТ (#1053): раздел «Тренд за неделю» — было N → стало M
+      # (лучше/хуже/без изменений); «нет истории» честно отделено от «без изменений», тренд не выдуман.
+      owner_sees_week_over_week_direction: true
+
+  - id: nightly-review-covers-all-dimensions
+    # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-18. Продолжение того же roadmap-пункта «ночные обзоры по
+    # всем направлениям»: тренды уже есть (nightly-reviews-show-trends), здесь — РОТАЦИЯ ПО ОСЯМ. Сейчас
+    # ночной сбор даёт плоский список (коммиты/CI/PR/валидаторы) без разбивки по направлениям и без
+    # ротации фокуса. hotspot detection, findings→validators и portfolio-intelligence остаются в «Дальше».
+    freeze_relation: extension
+    # ДОСТИГНУТО 2026-09-18 (2/2): оси + ротация фокуса доставлены (#1058).
+    status: achieved
+    outcome:
+      # Находки организованы по НАЗВАННЫМ осям. ЗАКРЫТ (#1058): сателлит `intelligence/nightly_dimensions.py`
+      # (6 осей по каталогу `agents/quality/`); ось без сигнала честно «не наблюдается», не «ок».
+      nightly_review_organizes_findings_by_named_dimension: true
+      # РОТАЦИЯ фокуса. ЗАКРЫТ (#1058): round-robin, курсор `.ai/project/nightly-review/focus-cursor.json`
+      # двигает только реальный прогон; оси питают недельный тренд (#1053).
+      dimensions_rotate_so_none_is_silently_unreviewed: true
+
+  - id: nightly-review-detects-hotspots
+    # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-18. Ещё кусок roadmap-пункта «ночные обзоры по всем
+    # направлениям»: тренды (#1053) и оси+ротация (#1058) есть, история хранит счётчики по проверкам/
+    # осям — здесь HOTSPOT: агрегат по истории «что чаще всего краснеет». Сосед findings→validators
+    # НЕ берём: находки = выходы валидаторов (run_checks), новое findings→validators упирается в
+    # AI-ревью (в этой среде без ключа молчит — awaiting_reviewer). Hotspot же полностью незаблокирован.
+    freeze_relation: extension
+    # ДОСТИГНУТО 2026-09-18 (2/2): горячие точки из истории доставлены (#1063).
+    status: achieved
+    outcome:
+      # АГРЕГАТ истории в горячие точки. ЗАКРЫТ (#1063): сателлит `intelligence/nightly_hotspots.py`
+      # (окно 14, частота покраснения по проверкам И осям, хроническое выше разового).
+      nightly_review_aggregates_history_into_hotspots: true
+      # Честный показ. ЗАКРЫТ (#1063): раздел «Горячие точки» в брифе; <3 записей → «мало истории»,
+      # и «мало данных» НЕ сворачивается в «за окно ничто не краснело» (разные ответы).
+      hotspots_surfaced_in_brief_honestly: true
+
+  - id: delivery-survives-repo-transfer
+    # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-18 (из «Дальше» роадмапа). Известный разрыв
+    # (docs/changelog): при переносе/переименовании репо на GitHub старый origin-URL отдаёт 301 на
+    # новый; `git push` редирект следует, но создание PR/API в `delivery/pr_open.py` бьёт по СТАРОМУ
+    # слагу из origin-URL (`_parse_owner_repo`) → PR не туда/не дозавершается (outcome_unknown).
+    freeze_relation: extension
+    # ДОСТИГНУТО 2026-09-18 (1/1): доставка следует 301 переноса репо (#1068).
+    status: achieved
+    outcome:
+      # ЗАКРЫТ (#1068): `delivery/pr_open._canonical_owner_repo` резолвит текущий слаг через GET
+      # /repos/{owner}/{name} (urllib следует 301, `full_name`); по нему идут дефолт-ветка,
+      # идемпотентность, POST, сверка. Резолв — улучшение: 404/сбой → откат к исходному слагу (не новая
+      # точка отказа). git push не тронут (сам следует 301).
+      delivery_follows_repo_transfer_redirect: true
+
   - id: real-product-qualification
     # заморозка: сама петля квалификации: прогон, находки, закрытие
     freeze_relation: run_condition
@@ -642,10 +706,14 @@ goals:
   # Источник — мультидисциплинарный аудит 17.09: восемь находок P0/P1/P2, каждая перепроверена в коде
   # на v4.4.2 (не по тексту ревью). Это НЕ новое умение, а гашение долгов (дефект / цена процесса /
   # каноны); заморозка снята (ep-2026-08-19-freeze-lifted), оговорка про capability не применяется.
-  # ПЕРВАЯ ВОЛНА ЗАКРЫТА 2026-09-17 (параллельные писатели, кит судил): A1 #1019 (root-независимый
-  # критический тест), B3 #1020 (стоячий сторож глушителей, линия 57), B2 #1021 (тяжёлая история в
-  # history/). Три исхода ниже → true, работы в history/plan-history.yaml. Остаток (A2/B1/B4/B6) — todo.
-  # B5 (16 partial + 5 built≠wired) отложено осознанно как расширение периметра.
+  # ДОСТИГНУТА 2026-09-17: все семь заявленных долгов аудита погашены двумя волнами параллельных
+  # писателей (кит судил, owner слил). 1-я волна: A1 #1019 (root-независимый критический тест),
+  # B3 #1020 (стоячий сторож глушителей, линия 57), B2 #1021 (тяжёлая история в history/). 2-я волна:
+  # B1 #1029 (тёзки-каталоги размежёваны — аудит ошибся, это не дубли, слияние было бы вредным),
+  # B4 #1028 (zero-touch↔README сведены к одной правде: установка ручная), B6 #1030 (человеческий вход),
+  # A2 #1032 (релиз гасит очередь заявлений + сторож пустоты очереди). Все работы в
+  # history/plan-history.yaml. B5 (16 partial + 5 built≠wired) отложено осознанно как расширение периметра
+  # — оно НЕ входило в исходы этой цели.
   - id: audit-remediation
     # заморозка: гашение долгов, найденных аудитом (дефект / цена процесса / каноны) — не расширение
     # умений, а условие честности собственных прогонов кита; заморозкой не приостанавливается.
@@ -654,15 +722,44 @@ goals:
       Погасить долги мультидисциплинарного аудита 17.09: критический путь честен при любых правах,
       очередь заявлений гасится на релизе, один каталог на смысл, стоячий сторож против молчаливых
       глушителей, тяжёлая история вне входа, заявление zero-touch совпадает с README, человеческий вход
-    status: active
+    status: achieved
     outcome:
-      critical_path_green_under_any_privilege: true       # A1 #1019 — закрыт 2026-09-17
-      standing_guard_against_swallowed_exceptions: true    # B3 #1020 — закрыт 2026-09-17
-      heavy_history_out_of_the_entry_path: true            # B2 #1021 — закрыт 2026-09-17
-      release_drains_the_changelog_queue: false            # A2 — todo
-      one_directory_per_meaning: false                     # B1 — todo
-      zero_touch_claim_matches_the_readme: false           # B4 — todo
-      sixty_second_human_onboarding_exists: false          # B6 — todo
+      critical_path_green_under_any_privilege: true       # A1 #1019
+      standing_guard_against_swallowed_exceptions: true    # B3 #1020
+      heavy_history_out_of_the_entry_path: true            # B2 #1021
+      release_drains_the_changelog_queue: true             # A2 #1032
+      one_directory_per_meaning: true                      # B1 #1029 (размежевание — тёзки, не дубли)
+      zero_touch_claim_matches_the_readme: true            # B4 #1028
+      sixty_second_human_onboarding_exists: true           # B6 #1030
+
+  # ── Направление kit-measured-as-a-product (взято 2026-09-17 решением владельца) ──────────────────
+  # Из внешнего продуктового ревью 17.09: перестать мерить развитие кита ЧИСЛОМ возможностей (34
+  # команды, 36 гейтов, 89 валидаторов) и начать мерить его как ПРОДУКТ — 5 метрик, где пятая
+  # (learning-to-decision) показывает, стал ли кит обучающимся, а не накопителем. Замер
+  # (qualification/KIT-AS-PRODUCT-METRICS-MEASUREMENT-2026-09-17.md): единой карты продукта кита нет,
+  # сырьё для 2/3/4 есть (validate_claims, KG gaps), 1 и 5 не считаются. Три метрики (1/2/3) —
+  # на существующих данных; 4-real и 5 упираются в живую аналитику (тот же фронтир, что петля
+  # outcome→learning в product-memory) — берутся КАРКАСОМ, не задваивая параллельную работу. Работы по одной.
+  - id: kit-measured-as-a-product
+    # заморозка: новая мера продукта — расширение умений кита (не условие прогона). Freeze снят
+    # (ep-2026-08-19), extension-цели легальны; берётся осознанно как продуктовый сдвиг ревью 17.09.
+    freeze_relation: extension
+    # ДОСТИГНУТО 2026-09-17 (5/5): scorecard построен (#1040) и стал ГЛАВНОЙ мерой самоотчёта (#1045).
+    status: achieved
+    outcome:
+      # Кит мерит СЕБЯ как продукт единой картой (не числом возможностей), честно «не измерено» где данных нет.
+      # ЗАКРЫТ 2026-09-17 (PR #1045): самоотчёт кита о себе (витрина capability-map / `--json`) теперь
+      # ВЕДЁТ картой продукта из 5 метрик (`headline.scorecard`), а счёт возможностей демотирован до
+      # «ширины» (`breadth`) — контекст, не главная мера.
+      kit_scored_as_a_product_not_by_capability_count: true
+      # Доля фич idea→release без ручного проектирования конвейера — считается. ЗАКРЫТ scorecard'ом (PR #1040): метрика 1 даёт 5/5.
+      feature_completion_rate_measured: true
+      # Доля утверждений кита с реальным evidence — выражена долей охвата, не pass/fail. ЗАКРЫТ (PR #1040): метрика 2 даёт долю 8/8.
+      evidence_coverage_measured_as_ratio: true
+      # Доля выпущенных фич с ПОЛНОЙ life story — агрегат поверх Knowledge Graph. ЗАКРЫТ (PR #1040): метрика 3 даёт долю (сейчас 0/5, честный ноль).
+      product_memory_coverage_measured: true
+      # Слоты outcome-охвата и learning-to-decision стоят каркасом (честное «не измерено»); наполнение — с петлёй. ЗАКРЫТ (PR #1040): метрики 4/5 стоят честным «не измерено» с причиной.
+      outcome_and_learning_metric_slots_stand_honestly: true
 
 # ─── ТЕКУЩИЙ MILESTONE (первоклассная запись, 2026-09-14) ──────────────────────────────────────
 # Уровень МЕЖДУ направлением (goals/ROADMAP) и работой: какой ИМЕНОВАННЫЙ результат кит доводит
@@ -770,65 +867,55 @@ work:
   # persist-review-verdict-then-link-to-feature (ниже) и наполнение outcome/learning (упирается в
   # реальную аналитику продукта — отдельно).
 
-  # ── Направление audit-remediation — остаток аудита 17.09 (первая волна A1/B3/B2 закрыта в history) ─
-  # Все перепроверены в коде на v4.4.2. A2 и B1 тяжелее и конфликтуют по файлам — вести аккуратно;
-  # B4 и B6 правят README — по очереди, не вместе. B5 отложено как расширение периметра.
-  - id: release-drains-the-changelog-queue
-    title: >-
-      Релиз гасит очередь заявлений: towncrier собирает CHANGELOG.md из newsfragments/, но ~690
-      фрагментов лежат непогашенными — добавить сборку на релизе и проверку «на релизе очередь пуста»
-    type: delivery
-    goal: audit-remediation
-    status: todo
-    owner_role: delivery
-    value: high
-    write_scope: [ai_ops_kit/, tests/, .github/, CHANGELOG.md, newsfragments/]
-    reason: >-
-      pyproject.toml [tool.towncrier] настроен на CHANGELOG.md из newsfragments/, но релиз v4.4.2 (16.09)
-      очередь не съел — сотни фрагментов на диске. Дисциплина заявлений подтекает там, где декларируется.
-      Погасить очередь в CHANGELOG и завести проверку, которая краснит релиз при непустой очереди.
-  - id: one-directory-per-meaning
-    title: >-
-      Один каталог на смысл: свести три context/ (./context, .ai/project/context, ai_ops_kit/context)
-      и дубли research/.research, decisions/.research/decisions к одному источнику + закрепить решением
-    type: architecture
-    goal: audit-remediation
-    status: todo
-    owner_role: architect
-    value: medium
-    write_scope: [ai_ops_kit/, registry/, docs/, standards/, decisions/]
-    reason: >-
-      На диске одновременно ./context, .ai/project/context, ai_ops_kit/context, а также research+.research
-      и decisions+.research/decisions. Смысловой дубль усложняет навигацию и провоцирует дрейф двух правд.
-      Свести к одному каталогу на смысл, остальное — ссылками; правило закрепить решением (ADR).
-  - id: reconcile-zero-touch-claim-with-readme
-    title: >-
-      Сверить заявление zero-touch с README: ROADMAP объявляет цель достигнутой (14.09), а README всё
-      ещё показывает ручной шаг установки — устранить противоречие в одну сторону
-    type: docs
-    goal: audit-remediation
-    status: todo
-    owner_role: docs
-    value: medium
-    write_scope: [README.md, ROADMAP.md]
-    reason: >-
-      ROADMAP.md называет zero-touch направление достигнутым (owner-led прогон 14.09), а README подаёт
-      установку с ручным первым шагом. Либо README отстаёт от факта, либо заявление шире доказанного.
-      Свести к одной правде: поправить README или уточнить формулировку заявления (что именно доказано).
-  - id: sixty-second-human-onboarding
-    title: >-
-      Человеческий вход за 60 секунд: короткое «что это и зачем» для человека отдельно от системной
-      витрины capability-map и истории
-    type: docs
-    goal: audit-remediation
-    status: todo
-    owner_role: docs
-    value: medium
-    write_scope: [README.md, docs/]
-    reason: >-
-      Нетехническому участнику трудно отличить витрину (docs/capability-map) от истории (тяжёлый архив
-      в history/). Добавить короткий человеческий вход «что это и зачем» за минуту, не расширяя периметр —
-      отдельно от машинной витрины.
+  # ── Направление nightly-reviews-show-trends (взято 2026-09-18) ─────────────────────────────────────
+  # ── Направление nightly-reviews-show-trends ДОСТИГНУТО 2026-09-18 (2/2) ────────────────────────────
+  # nightly-review-persists-and-trends-findings ЗАКРЫТА в историю (#1053): сателлит
+  # `intelligence/nightly_trends.py` — журнал находок во времени (.ai/project/nightly-review/history.yaml)
+  # + раздел «Тренд за неделю» в брифе (было N → стало M: лучше/хуже/без изменений); «нет истории»
+  # честно отделено от «без изменений». Оба исхода закрыты. Ротация по всем направлениям, hotspot и
+  # portfolio-intelligence остаются в «Дальше» роадмапа (не входили в 2 исхода этого среза).
+
+  # ── Направление nightly-review-covers-all-dimensions ДОСТИГНУТО 2026-09-18 (2/2) ───────────────────
+  # nightly-review-organizes-and-rotates-dimensions ЗАКРЫТА в историю (#1058): сателлит
+  # `intelligence/nightly_dimensions.py` — 6 осей (имена по каталогу `agents/quality/`, тест сверяет
+  # существование), находки в брифе сгруппированы по осям; ось без сигнала честно «не наблюдается»
+  # (≠«ок»); ротация фокуса round-robin (курсор `.ai/project/nightly-review/focus-cursor.json`, двигает
+  # только реальный прогон); оси питают недельный тренд #1053. Полноценные AI-ревью по осям, hotspot,
+  # findings→validators, portfolio-intelligence остаются в «Дальше» роадмапа.
+
+  # ── Направление nightly-review-detects-hotspots ДОСТИГНУТО 2026-09-18 (2/2) ────────────────────────
+  # nightly-review-aggregates-hotspots-from-history ЗАКРЫТА в историю (#1063): сателлит
+  # `intelligence/nightly_hotspots.py` — агрегат по истории (окно 14): частота покраснения по проверкам
+  # И осям, хроническое выше разового; раздел «Горячие точки» в брифе. Честность: <3 записей → «мало
+  # истории»; «мало данных» НЕ сворачивается в «за окно ничто не краснело». Оба исхода закрыты.
+  # findings→validators (упирается в AI-ревью), полноценные AI-ревью по осям и portfolio-intelligence
+  # остаются в «Дальше» роадмапа.
+
+  # ── Направление delivery-survives-repo-transfer ДОСТИГНУТО 2026-09-18 (1/1) ────────────────────────
+  # delivery-resolves-canonical-repo-slug-before-pr ЗАКРЫТА в историю (#1068): помощник
+  # `delivery/pr_open._canonical_owner_repo` резолвит текущий слаг через GET /repos/{owner}/{name}
+  # (urllib следует 301, `full_name`); по нему идут дефолт-ветка, идемпотентность, POST, сверка.
+  # Резолв — улучшение: 404/сбой → откат к исходному слагу (не новая точка отказа); git push не тронут.
+  # Закрыт объявленный known_gap.
+  # ── Направление kit-measured-as-a-product ДОСТИГНУТО 2026-09-17 (5/5 исходов) ──────────────────────
+  # Мерить кит ПРОДУКТОМ, не числом возможностей. Обе работы — в history/plan-history.yaml:
+  #   • kit-product-scorecard (#1040): команда `scorecard` — единая карта из 5 метрик; 1/2/3 считаются
+  #     (5/5, 8/8, 0/5 честный ноль), 4/5 стоят честным «не измерено» с причиной. Закрыла 4 исхода.
+  #   • scorecard-becomes-headline-product-measure (#1045): самоотчёт кита о себе (витрина capability-map
+  #     / `--json`) ВЕДЁТ картой продукта (`headline.scorecard`), счёт возможностей демотирован до
+  #     «ширины» (`breadth`). Закрыла 5-й исход kit_scored…not_by_capability_count.
+  # НАПОЛНЕНИЕ слотов 4/5 реальными данными (бывш. outcome-and-learning-metrics-populated) НЕ входило в
+  # 5 исходов — отложено как расширение периметра (ср. B5 audit-remediation): та же зависимость от живой
+  # аналитики, что у close-outcome-learning-loop-with-real-analytics (направление product-memory,
+  # ждёт владельца). Слоты наполнятся АВТОМАТИЧЕСКИ, как только та петля даст реальный outcome-сигнал
+  # (scorecard читает граф) — отдельная работа не заводится, чтобы не задваивать. См. history.
+
+  # ── Направление audit-remediation ДОСТИГНУТО 2026-09-17 (2/2 волны, 7/7 исходов) ────────────────
+  # Остаток второй волны закрыт в историю: B1 #1029 (тёзки-каталоги размежёваны — не дубли, слияние было
+  # бы вредным), B4 #1028 (zero-touch↔README сведены к одной правде — установка ручная), B6 #1030
+  # (человеческий вход за 60 сек), A2 #1032 (релиз гасит очередь заявлений + сторож пустоты очереди,
+  # гейт через pytest-маркер release_gate). Все работы — в history/plan-history.yaml. B5 (16 partial +
+  # 5 built≠wired) отложено осознанно как расширение периметра, в исходы цели не входило.
 
   # the-plan-tells-the-truth-about-the-run закрыта в историю 2026-09-11 (PR #838 исходы 1+2, PR #851
   # исход 3): все три расхождения «план врёт про прогон» устранены — план прогона называет РОВНО
