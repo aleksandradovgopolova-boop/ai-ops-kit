@@ -55,12 +55,15 @@ from ai_ops_kit.intelligence.nightly_schedule import (  # noqa: F401
 from ai_ops_kit.intelligence.nightly_trends import (  # noqa: F401
     HISTORY_REL,
     TREND_WINDOW_DAYS,
+    compute_axis_trends,
     compute_trends,
     finding_counts,
     format_trends,
     read_history,
     record_history,
 )
+# Оси обзора и ротация фокуса (сателлит): находки по названным осям, фокус round-robin, тренд выше.
+from ai_ops_kit.intelligence import nightly_dimensions as nd
 
 
 # ТОЧКА ОТСЧЁТА — ПОСЛЕДНИЙ ПОДТВЕРЖДЁННЫЙ ОБЗОР, А НЕ «24 ЧАСА» (v0, 20.08.2026).
@@ -243,10 +246,15 @@ def review_baseline(root: Path) -> dict:
             "reason": f"дельта с последнего подтверждённого обзора ({rec.get('confirmed_at')})"}
 
 
-def collect_delta(root: Path, since: str | None = None) -> dict:
-    """Collect all delta information."""
+def collect_delta(root: Path, since: str | None = None, *, focus: str | None = None) -> dict:
+    """Collect all delta information. `focus` не задан — заглядываем в курсор ротации, НЕ двигая его
+    (показ/подтверждение); реальный прогон (run_nightly) передаёт уже сдвинутый фокус."""
     baseline = review_baseline(root) if since is None else {
         "since": since, "kind": "explicit", "reason": "точка отсчёта задана вызывающим"}
+    findings = run_checks(root)
+    if focus is None:
+        focus = nd.rotate_focus(root, advance=False)
+    axis_counts = nd.axis_finding_counts(findings)
     return {
         "baseline": baseline,
         "commits": _get_recent_commits(root, baseline["since"]),
@@ -254,11 +262,15 @@ def collect_delta(root: Path, since: str | None = None) -> dict:
         "plan": _check_plan_status(root),
         "ci": _check_ci_status(root),
         "prs": _check_open_prs(root),
-        "findings": (findings := run_checks(root)),
+        "findings": findings,
+        "focus": focus,
+        "dimensions": nd.group_findings_by_axis(findings),
+        "axis_counts": axis_counts,
         "false_positive_rate": false_positive_rate(root),
         # Тренд считаем ДО записи текущего прогона: сравниваем сегодняшние находки с историей,
         # которая ещё не включает этот обзор (иначе сравнивали бы прогон сам с собой).
         "trends": compute_trends(read_history(root), findings),
+        "axis_trends": compute_axis_trends(read_history(root), axis_counts),
         "timestamp": datetime.now().isoformat(),
     }
 
@@ -296,32 +308,25 @@ def format_brief(delta: dict, root: Path) -> str:
     else:
         L.append("С тех пор изменений не зафиксировано.")
 
-    # 2. Что система сделала — НАХОДКИ, а не количества.
-    L += ["", "## Что я проверила", ""]
-    if bad:
-        L.append(f"Расхождений: **{len(bad)}**.")
-        for f in bad:
-            L.append(f"- **{f['check']}** ({f['subject']}): {f['detail']}")
-    elif findings:
-        L.append("Расхождений не найдено ни одной из выполненных проверок.")
-    else:
-        L.append("Проверки не выполнялись.")
+    # 2. Что система сделала — НАХОДКИ ПО ОСЯМ (ротация фокуса; ось без сигнала — «не наблюдается»).
+    groups = delta.get("dimensions") or nd.group_findings_by_axis(findings)
+    L += ["", "## Что я проверила — по осям", ""]
+    L += nd.format_dimensions(groups, focus=delta.get("focus"))
     if isinstance(plan.get("by_status"), dict):
         L.append(f"- план: " + ", ".join(f"{k} — {v}" for k, v in sorted(plan["by_status"].items())))
     elif plan.get("error"):
         L.append(f"- план: {plan['error']}")
 
-    # 2.7 ТРЕНД ЗА НЕДЕЛЮ — не только снимок, а направление. Снимок отвечает «что сейчас», тренд —
-    # «лучше или хуже за неделю». Нет истории для сравнения — так и говорим, тренд НЕ выдумываем:
-    # «нет истории» не сворачивается в «без изменений».
+    # 2.7 ТРЕНД ЗА НЕДЕЛЮ — направление, а не только снимок (по проверкам И по осям). Нет истории —
+    # так и говорим, тренд НЕ выдумываем: «нет истории» ≠ «без изменений».
     trend = delta.get("trends") or compute_trends(read_history(root), findings)
     L += ["", "## Тренд за неделю", ""]
     L += format_trends(trend)
+    L += ["", *nd.format_axis_trends(delta.get("axis_trends") or {})]
 
-    # 2.5 НАСКОЛЬКО ДОВЕРЯТЬ ФЛАГАМ — частота ложных срабатываний названа ПЕРВОКЛАССНО.
-    # Обзор, который флагает, но не меряет свою точность, неотличим от гадания. Число берётся из
-    # обратной связи владельца (`--confirm --dismiss`), а нет данных — говорим «не измерено», а не
-    # выдумываем процент.
+    # 2.5 НАСКОЛЬКО ДОВЕРЯТЬ ФЛАГАМ — частота ложных срабатываний ПЕРВОКЛАССНО. Флаг без измеренной
+    # точности неотличим от гадания; число из обратной связи (`--confirm --dismiss`), нет данных —
+    # «не измерено», не выдуманный процент.
     fpr = delta.get("false_positive_rate") or false_positive_rate(root)
     L += ["", "## Насколько можно доверять моим флагам", ""]
     L.append(format_false_positive_rate(fpr))
@@ -574,12 +579,15 @@ def run_nightly(root: Path, *, since: str | None = None, deliver: bool = True,
     -> {"brief", "receipt"|None, "baseline"}. Это ровно то, что зовёт сгенерированный CI-workflow.
     """
     root = Path(root)
-    delta = collect_delta(root, since)
+    # Ротация фокуса СДВИГАЕТСЯ здесь (реальный прогон), а не при показе брифа: за цикл проходят все
+    # оси. Курсор персистится (своё состояние обзора).
+    focus = nd.rotate_focus(root, advance=True)
+    delta = collect_delta(root, since, focus=focus)
     brief = format_brief(delta, root)
-    # Записываем находки этого прогона ПОСЛЕ брифа: бриф сравнивался с прошлой историей, а теперь
-    # текущий обзор становится точкой сравнения для следующего. Это единственная запись обзора в
-    # дочку помимо его собственного состояния — граница v0 (обзор не правит продукт) цела.
-    record_history(root, delta.get("findings", []))
+    # Записываем находки ПОСЛЕ брифа: он сравнивался с прошлой историей, а теперь текущий обзор —
+    # точка сравнения для следующего. Осевые счётчики ложатся в ТУ ЖЕ запись (оси питают недельный
+    # тренд, не второй журнал). Единственная запись помимо состояния обзора — граница v0 цела.
+    record_history(root, delta.get("findings", []), axis_counts=delta.get("axis_counts"))
     receipt = deliver_brief(root, brief, date=date) if deliver else None
     return {"brief": brief, "receipt": receipt, "baseline": delta.get("baseline")}
 
