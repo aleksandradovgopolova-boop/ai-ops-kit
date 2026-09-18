@@ -156,6 +156,18 @@ goals:
       # и «мало данных» НЕ сворачивается в «за окно ничто не краснело» (разные ответы).
       hotspots_surfaced_in_brief_honestly: true
 
+  - id: delivery-survives-repo-transfer
+    # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-18 (из «Дальше» роадмапа). Известный разрыв
+    # (docs/changelog): при переносе/переименовании репо на GitHub старый origin-URL отдаёт 301 на
+    # новый; `git push` редирект следует, но создание PR/API в `delivery/pr_open.py` бьёт по СТАРОМУ
+    # слагу из origin-URL (`_parse_owner_repo`) → PR не туда/не дозавершается (outcome_unknown).
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Доставка резолвит ТЕКУЩИЙ канонический слаг репо (следует 301 переноса) перед PR/API — PR уходит
+      # в актуальный репозиторий, а не в старый; разрыв known_gap закрыт.
+      delivery_follows_repo_transfer_redirect: false
+
   - id: real-product-qualification
     # заморозка: сама петля квалификации: прогон, находки, закрытие
     freeze_relation: run_condition
@@ -875,7 +887,26 @@ work:
   # истории»; «мало данных» НЕ сворачивается в «за окно ничто не краснело». Оба исхода закрыты.
   # findings→validators (упирается в AI-ревью), полноценные AI-ревью по осям и portfolio-intelligence
   # остаются в «Дальше» роадмапа.
-  # ── Направление kit-measured-as-a-product ДОСТИГНУТО 2026-09-17 (5/5 исходов) ──────────────────────
+
+  # ── Направление delivery-survives-repo-transfer (взято 2026-09-18) ─────────────────────────────────
+  - id: delivery-resolves-canonical-repo-slug-before-pr
+    title: >-
+      Доставка следует 301-редиректу переноса репозитория: резолвить ТЕКУЩИЙ канонический слаг
+      (owner/repo) перед созданием PR и API-вызовами — PR уходит в актуальный репо, не в старый
+    type: product
+    goal: delivery-survives-repo-transfer
+    status: todo
+    owner_role: product
+    value: high
+    write_scope: [ai_ops_kit/, tests/, docs/]
+    reason: >-
+      Известный разрыв (docs/changelog): при переносе/переименовании репо на GitHub старый origin-URL
+      отдаёт 301. В `ai_ops_kit/delivery/pr_open.py` слаг берётся из origin-URL (`_cp._parse_owner_repo`)
+      и все API-вызовы (`_default_branch`, `_find_open_pr`, POST `/repos/{owner}/{name}/pulls`) бьют по
+      СТАРОМУ слагу → PR не туда либо outcome_unknown. Фикс: после парса резолвить канонический слаг
+      через GitHub API (`GET /repos/{owner}/{name}` следует 301 и отдаёт актуальный `full_name`) и
+      использовать его для PR/API. Честность: репо не найден/API недоступен → как раньше (unavailable/
+      outcome_unknown), слаг не выдумываем. Тест — на замоканном API с переносом (full_name сменился).
   # Мерить кит ПРОДУКТОМ, не числом возможностей. Обе работы — в history/plan-history.yaml:
   #   • kit-product-scorecard (#1040): команда `scorecard` — единая карта из 5 метрик; 1/2/3 считаются
   #     (5/5, 8/8, 0/5 честный ноль), 4/5 стоят честным «не измерено» с причиной. Закрыла 4 исхода.
