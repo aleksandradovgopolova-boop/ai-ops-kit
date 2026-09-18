@@ -64,6 +64,7 @@ from ai_ops_kit.intelligence.nightly_trends import (  # noqa: F401
 )
 # Оси обзора и ротация фокуса (сателлит): находки по названным осям, фокус round-robin, тренд выше.
 from ai_ops_kit.intelligence import nightly_dimensions as nd
+from ai_ops_kit.intelligence.nightly_hotspots import format_hotspots_section  # noqa: F401
 
 
 # ТОЧКА ОТСЧЁТА — ПОСЛЕДНИЙ ПОДТВЕРЖДЁННЫЙ ОБЗОР, А НЕ «24 ЧАСА» (v0, 20.08.2026).
@@ -298,8 +299,7 @@ def format_brief(delta: dict, root: Path) -> str:
     L = ["# Утренний обзор продукта", ""]
 
     # 1. Что изменилось — и ОТ ЧЕГО считали.
-    L += ["## Что изменилось", ""]
-    L.append(f"Точка отсчёта: {b.get('reason', 'не названа')}.")
+    L += ["## Что изменилось", "", f"Точка отсчёта: {b.get('reason', 'не названа')}."]
     if b.get("kind") in ("fallback", "unreadable"):
         L.append("**Это не подтверждённая точка отсчёта** — часть изменений могла остаться за кадром "
                  "или попасть в обзор второй раз.")
@@ -310,8 +310,7 @@ def format_brief(delta: dict, root: Path) -> str:
 
     # 2. Что система сделала — НАХОДКИ ПО ОСЯМ (ротация фокуса; ось без сигнала — «не наблюдается»).
     groups = delta.get("dimensions") or nd.group_findings_by_axis(findings)
-    L += ["", "## Что я проверила — по осям", ""]
-    L += nd.format_dimensions(groups, focus=delta.get("focus"))
+    L += ["", "## Что я проверила — по осям", "", *nd.format_dimensions(groups, focus=delta.get("focus"))]
     if isinstance(plan.get("by_status"), dict):
         L.append(f"- план: " + ", ".join(f"{k} — {v}" for k, v in sorted(plan["by_status"].items())))
     elif plan.get("error"):
@@ -321,15 +320,16 @@ def format_brief(delta: dict, root: Path) -> str:
     # так и говорим, тренд НЕ выдумываем: «нет истории» ≠ «без изменений».
     trend = delta.get("trends") or compute_trends(read_history(root), findings)
     L += ["", "## Тренд за неделю", ""]
-    L += format_trends(trend)
-    L += ["", *nd.format_axis_trends(delta.get("axis_trends") or {})]
+    L += [*format_trends(trend), "", *nd.format_axis_trends(delta.get("axis_trends") or {})]
+
+    # 2.8 ГОРЯЧИЕ ТОЧКИ — агрегат ПО ИСТОРИИ: что краснеет ЧАЩЕ всего; мало истории — так и говорим.
+    L += format_hotspots_section(root)
 
     # 2.5 НАСКОЛЬКО ДОВЕРЯТЬ ФЛАГАМ — частота ложных срабатываний ПЕРВОКЛАССНО. Флаг без измеренной
     # точности неотличим от гадания; число из обратной связи (`--confirm --dismiss`), нет данных —
     # «не измерено», не выдуманный процент.
     fpr = delta.get("false_positive_rate") or false_positive_rate(root)
-    L += ["", "## Насколько можно доверять моим флагам", ""]
-    L.append(format_false_positive_rate(fpr))
+    L += ["", "## Насколько можно доверять моим флагам", "", format_false_positive_rate(fpr)]
 
     # 3. Чего НЕ стала делать и почему.
     L += ["", "## Чего я не стала делать и почему", ""]
