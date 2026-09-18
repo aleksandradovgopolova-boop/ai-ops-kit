@@ -182,6 +182,135 @@ class TestAmbiguousPost:
 
 
 @pytest.mark.unit
+class TestCanonicalRepoResolve:
+    """Направление delivery-survives-repo-transfer: при переносе/переименовании репо на GitHub
+    старый адрес отдаёт 301. `git push` его следует сам, но API/PR били бы по СТАРОМУ слагу из
+    origin. Теперь перед PR резолвим канонический слаг через `GET /repos/{owner}/{name}` (тело даёт
+    актуальный `full_name`) и все последующие вызовы идут по нему. Мокаем API-слой, не сеть."""
+
+    def test_transferred_repo_creates_pr_on_new_slug(self, git_repo, stash_gh):
+        # origin указывает на СТАРЫЙ слаг; API (следуя 301) отдаёт новый full_name.
+        subprocess.run(["git", "-C", git_repo, "remote", "add", "origin",
+                        "https://github.com/old/repo.git"])
+        real_gh, real_token = pr_open._gh_request, pr_open._cp._github_token
+        seen = {"default_branch": [], "find_pr": [], "post": []}
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+
+            def fake_gh(url, token, data=None, method="GET"):
+                if method == "GET" and url.endswith("/repos/old/repo"):
+                    # канонический резолв: перенесённый репо отдаёт новый адрес
+                    return {"full_name": "new/repo2", "default_branch": "main"}, None
+                if method == "GET" and url.endswith("/repos/new/repo2"):
+                    seen["default_branch"].append(url)
+                    return {"full_name": "new/repo2", "default_branch": "develop"}, None
+                if "pulls?head=" in url:
+                    seen["find_pr"].append(url)
+                    return [], None
+                if method == "POST":
+                    seen["post"].append(url)
+                    return {"html_url": "u", "number": 5, "draft": True}, None
+                return {}, None
+
+            pr_open._gh_request = fake_gh
+            r = open_draft_pr(git_repo, "ai-ops/z", "T", "B", push=False)
+            assert r["status"] == "opened"
+            assert r["repository"] == "new/repo2"          # ответ несёт НОВЫЙ слаг
+            assert r["base"] == "develop"                  # дефолт-ветка резолвлена у нового репо
+            # POST создания PR, поиск открытого PR и запрос дефолт-ветки — все по НОВОМУ слагу
+            assert seen["post"] and all("/repos/new/repo2/pulls" in u for u in seen["post"])
+            assert seen["find_pr"] and all("/repos/new/repo2/pulls" in u for u in seen["find_pr"])
+            assert seen["default_branch"]
+            # НИ ОДИН мутирующий/поисковый вызов не ушёл по старому слагу
+            assert not any("/repos/old/repo/pulls" in u for u in seen["post"] + seen["find_pr"])
+        finally:
+            pr_open._gh_request = real_gh
+            pr_open._cp._github_token = real_token
+
+    def test_not_transferred_repo_behaves_as_before(self, git_repo, stash_gh):
+        subprocess.run(["git", "-C", git_repo, "remote", "add", "origin",
+                        "https://github.com/o/r.git"])
+        real_gh, real_token = pr_open._gh_request, pr_open._cp._github_token
+        seen = {"post": []}
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+
+            def fake_gh(url, token, data=None, method="GET"):
+                if method == "GET" and url.endswith("/repos/o/r"):
+                    # full_name совпадает с исходным слагом — переноса не было
+                    return {"full_name": "o/r", "default_branch": "main"}, None
+                if "pulls?head=" in url:
+                    return [], None
+                if method == "POST":
+                    seen["post"].append(url)
+                    return {"html_url": "u", "number": 7, "draft": True}, None
+                return {}, None
+
+            pr_open._gh_request = fake_gh
+            r = open_draft_pr(git_repo, "ai-ops/z", "T", "B", base="main", push=False)
+            assert r["status"] == "opened"
+            assert r["repository"] == "o/r"                # слаг прежний
+            assert seen["post"] and all("/repos/o/r/pulls" in u for u in seen["post"])
+        finally:
+            pr_open._gh_request = real_gh
+            pr_open._cp._github_token = real_token
+
+    def test_resolve_failure_keeps_original_slug(self, git_repo, stash_gh):
+        # резолв упал (сеть/404): слаг НЕ выдумываем, доставка не роняется жёстче — идём по старому.
+        subprocess.run(["git", "-C", git_repo, "remote", "add", "origin",
+                        "https://github.com/o/r.git"])
+        real_gh, real_token = pr_open._gh_request, pr_open._cp._github_token
+        seen = {"post": []}
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+
+            def fake_gh(url, token, data=None, method="GET"):
+                if method == "GET" and url.endswith("/repos/o/r"):
+                    return None, "URLError"            # резолв канонического слага не удался
+                if "pulls?head=" in url:
+                    return [], None
+                if method == "POST":
+                    seen["post"].append(url)
+                    return {"html_url": "u", "number": 9, "draft": True}, None
+                return {}, None
+
+            pr_open._gh_request = fake_gh
+            r = open_draft_pr(git_repo, "ai-ops/z", "T", "B", base="main", push=False)
+            assert r["status"] == "opened"                # резолв — не новая точка отказа
+            assert r["repository"] == "o/r"               # слаг из origin, ничего не выдумано
+            assert seen["post"] and all("/repos/o/r/pulls" in u for u in seen["post"])
+        finally:
+            pr_open._gh_request = real_gh
+            pr_open._cp._github_token = real_token
+
+    def test_reconcile_uses_canonical_slug(self, git_repo, stash_gh):
+        subprocess.run(["git", "-C", git_repo, "remote", "add", "origin",
+                        "https://github.com/old/repo.git"])
+        real_gh, real_token = pr_open._gh_request, pr_open._cp._github_token
+        seen = {"find_pr": []}
+        try:
+            pr_open._cp._github_token = lambda: "tok"
+
+            def fake_gh(url, token, data=None, method="GET"):
+                if method == "GET" and url.endswith("/repos/old/repo"):
+                    return {"full_name": "new/repo2"}, None
+                if "pulls?head=" in url and "state=all" in url:
+                    seen["find_pr"].append(url)
+                    return [{"html_url": "https://x/pr/9", "number": 9, "state": "open",
+                             "head": {"sha": "abc1234"}, "base": {"ref": "main"}}], None
+                return {}, None
+
+            pr_open._gh_request = fake_gh
+            rc = reconcile_delivery(git_repo, "ai-ops/z")
+            assert rc["status"] == "found"
+            assert rc["repository"] == "new/repo2"        # сверка по КАНОНИЧЕСКОМУ слагу
+            assert seen["find_pr"] and all("/repos/new/repo2/pulls" in u for u in seen["find_pr"])
+        finally:
+            pr_open._gh_request = real_gh
+            pr_open._cp._github_token = real_token
+
+
+@pytest.mark.unit
 class TestReconcileDelivery:
     def test_reconcile_returns_facts(self, git_repo, stash_gh):
         subprocess.run(["git", "-C", git_repo, "remote", "add", "origin", "https://github.com/o/r.git"])
