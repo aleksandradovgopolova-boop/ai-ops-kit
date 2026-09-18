@@ -42,6 +42,11 @@ owner: product-team
   есть по частям (`decisions/`, `registry/entities.yaml`, outcome-аналитика, Knowledge Graph); задача —
   связать их в одну прослеживаемую нить на реальной фиче. Первый шаг — замер, где нить рвётся. Freeze
   снят: вертикальный срез пройден и доказан живым прогоном.
+- `nightly-review-detects-hotspots` — ночной обзор находит **горячие точки**: агрегат по истории —
+  какие проверки/оси краснеют чаще всего за окно (хронические болячки), в порядке частоты. Строится
+  на истории, что копит тренд (`nightly-reviews-show-trends`); честно «мало истории», пока
+  агрегировать нечего. Ещё кусок roadmap-пункта «ночные обзоры по всем направлениям» (ниже, «Дальше»);
+  findings→validators и portfolio-intelligence остаются там.
 (Цель `nightly-review-covers-all-dimensions` — «ночной обзор разбивает находки по осям и ротирует
 фокус» — ДОСТИГНУТА 2026-09-18 (2/2). Сателлит `intelligence/nightly_dimensions.py`: 6 осей по каталогу
 `agents/quality/`, находки сгруппированы по осям, ось без сигнала честно «не наблюдается» (≠«ок»);
@@ -131,8 +136,9 @@ _Пусто осознанно: сейчас вся заведённая раб�
   (документация / тесты / архитектура / продукт-UX / security),
   hotspot detection, находки → валидаторы; `portfolio-intelligence`: обезличенные
   сигналы по всем продуктам поднимаются в материнский кит БЕЗ смешивания их кода и evidence.
-  (Недельные ТРЕНДЫ (`nightly-reviews-show-trends`) и РОТАЦИЯ по осям (`nightly-review-covers-all-dimensions`)
-  уже ДОСТИГНУТЫ (см. достигнутые цели выше); здесь остаются полноценные AI-ревью по осям, hotspot,
+  (Недельные ТРЕНДЫ, РОТАЦИЯ по осям и HOTSPOT взяты отдельными направлениями
+  (`nightly-reviews-show-trends`, `nightly-review-covers-all-dimensions` — достигнуты;
+  `nightly-review-detects-hotspots` — в «Сейчас»); здесь остаются полноценные AI-ревью по осям,
   findings→validators и portfolio-intelligence.)
 
 ## Later
