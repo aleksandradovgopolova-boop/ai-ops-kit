@@ -1,0 +1,1 @@
+Автоматическое обновление pytest-cov >=5.0 -> >=7.1.0 (dependabot). Newsfragment для towncrier-гейта кита.
