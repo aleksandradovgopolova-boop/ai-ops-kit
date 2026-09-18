@@ -146,12 +146,15 @@ goals:
     # НЕ берём: находки = выходы валидаторов (run_checks), новое findings→validators упирается в
     # AI-ревью (в этой среде без ключа молчит — awaiting_reviewer). Hotspot же полностью незаблокирован.
     freeze_relation: extension
-    status: active
+    # ДОСТИГНУТО 2026-09-18 (2/2): горячие точки из истории доставлены (#1063).
+    status: achieved
     outcome:
-      # Ночной обзор АГРЕГИРУЕТ историю в горячие точки: какие проверки/оси краснеют чаще всего за окно.
-      nightly_review_aggregates_history_into_hotspots: false
-      # Горячие точки названы в брифе честно: мало истории для агрегата — так и сказано, не выдуманный hotspot.
-      hotspots_surfaced_in_brief_honestly: false
+      # АГРЕГАТ истории в горячие точки. ЗАКРЫТ (#1063): сателлит `intelligence/nightly_hotspots.py`
+      # (окно 14, частота покраснения по проверкам И осям, хроническое выше разового).
+      nightly_review_aggregates_history_into_hotspots: true
+      # Честный показ. ЗАКРЫТ (#1063): раздел «Горячие точки» в брифе; <3 записей → «мало истории»,
+      # и «мало данных» НЕ сворачивается в «за окно ничто не краснело» (разные ответы).
+      hotspots_surfaced_in_brief_honestly: true
 
   - id: real-product-qualification
     # заморозка: сама петля квалификации: прогон, находки, закрытие
@@ -865,26 +868,13 @@ work:
   # только реальный прогон); оси питают недельный тренд #1053. Полноценные AI-ревью по осям, hotspot,
   # findings→validators, portfolio-intelligence остаются в «Дальше» роадмапа.
 
-  # ── Направление nightly-review-detects-hotspots (взято 2026-09-18) ─────────────────────────────────
-  - id: nightly-review-aggregates-hotspots-from-history
-    title: >-
-      Ночной обзор находит ГОРЯЧИЕ ТОЧКИ: агрегат по истории — какие проверки/оси краснеют чаще всего
-      за окно; в брифе честно «мало истории», пока агрегировать нечего
-    type: product
-    goal: nightly-review-detects-hotspots
-    status: todo
-    owner_role: product
-    value: high
-    write_scope: [ai_ops_kit/, tests/, docs/]
-    reason: >-
-      История ночного обзора (`.ai/project/nightly-review/history.yaml`, #1053) уже хранит счётчики
-      находок по проверкам и осям на каждый прогон, но обзор смотрит только на ПОСЛЕДНИЙ снимок/тренд.
-      Hotspot — агрегат ПОВЕРХ истории: какие проверки/оси краснеют ЧАЩЕ ВСЕГО за окно (хронические
-      болячки), в порядке частоты. Строится на существующих данных (`nightly_trends.read_history`),
-      ничего нового собирать не надо. Честность: мало записей для агрегата → «мало истории», не
-      выдуманный hotspot. Сосед findings→validators НЕ берём: находки = выходы валидаторов, новое
-      findings→validators упирается в AI-ревью (без ключа молчит). AI-ревью, findings→validators и
-      portfolio-intelligence остаются в «Дальше».
+  # ── Направление nightly-review-detects-hotspots ДОСТИГНУТО 2026-09-18 (2/2) ────────────────────────
+  # nightly-review-aggregates-hotspots-from-history ЗАКРЫТА в историю (#1063): сателлит
+  # `intelligence/nightly_hotspots.py` — агрегат по истории (окно 14): частота покраснения по проверкам
+  # И осям, хроническое выше разового; раздел «Горячие точки» в брифе. Честность: <3 записей → «мало
+  # истории»; «мало данных» НЕ сворачивается в «за окно ничто не краснело». Оба исхода закрыты.
+  # findings→validators (упирается в AI-ревью), полноценные AI-ревью по осям и portfolio-intelligence
+  # остаются в «Дальше» роадмапа.
   # ── Направление kit-measured-as-a-product ДОСТИГНУТО 2026-09-17 (5/5 исходов) ──────────────────────
   # Мерить кит ПРОДУКТОМ, не числом возможностей. Обе работы — в history/plan-history.yaml:
   #   • kit-product-scorecard (#1040): команда `scorecard` — единая карта из 5 метрик; 1/2/3 считаются
