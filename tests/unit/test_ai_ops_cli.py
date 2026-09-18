@@ -93,6 +93,10 @@ EXPECTED_INTENTS = {
     # добровольная отметка о подключении и охват БЕЗ телеметрии. Делает достижимым
     # engops/child_registry (opt-in, рукой владельца, без сети).
     "reach",
+    # kit-product-scorecard: `scorecard` — ЕДИНАЯ карта продукта кита из 5 метрик (мерит СЕБЯ как
+    # продукт, а не числом возможностей). Метрики 1/3 из графа знаний, 2 — доля поверх реестра
+    # честности, 4/5 — честный каркас «не измерено». Делает достижимым intelligence/product_scorecard.
+    "scorecard",
 }
 
 
@@ -281,6 +285,20 @@ class TestPreviewClassificationAndData:
             {"task_type": "ENGINEERING", "risk": "medium", "affected_areas": ["core"]})
         assert bool(pv["expected_result"])
 
+    def test_preview_research_expected_speaks_research_not_delivery(self, child_root):
+        """RESEARCH-прогон: превью обещает исследование и доказательства, а не pull request.
+
+        `run` роутит research-вопрос на RESEARCH-workflow (итог — доказательства и пакет для
+        решения, не изменение кода). Общий текст поставки про PR здесь был бы утечкой чужого
+        сценария в самое частое сообщение владельцу — предпусковое превью.
+        """
+        pv = ai_ops_cli.build_preview(
+            "run", "нужен ли офлайн-режим", child_root, {"task_type": "research"})
+        assert pv["understood"]["workflow"] == "RESEARCH"
+        exp = pv["expected_result"].lower()
+        assert "исследован" in exp and "доказательств" in exp
+        assert "pull request" not in exp and "слияни" not in exp and "pr" not in exp.split()
+
     def test_preview_without_task_type_agrees_with_router(self, child_root):
         """v2.107: без task_type preset согласован с роутером (QUICK ИЛИ review&&author включены)."""
         (child_root / "package.json").write_text('{"dependencies":{"react":"^18"}}', encoding="utf-8")
@@ -352,3 +370,23 @@ class TestDegradedContextIsVisible:
         ai_ops_cli._print_preview(pv)
         out = capsys.readouterr().out
         assert "данные: агентов" in out and "КОНТЕКСТ НЕ СОБРАН" not in out
+
+
+def test_readme_and_capability_map_command_count_match_intents():
+    """P1 №11 продуктового ревью: README писал «32 команды», а фактически (INTENTS) и в
+    capability-map — 34. Число команд владельца в README и в витрине обязано совпадать с реальным
+    реестром INTENTS. Маркер `claim:commands-total` делает README-число машинно проверяемым (как
+    gates/agents). Мутация: вернуть «32» -> тест краснеет.
+    """
+    import re
+    from pathlib import Path
+    kit = Path(__file__).resolve().parents[2]
+    n = len(ai_ops_cli.INTENTS)
+    readme = (kit / "README.md").read_text(encoding="utf-8")
+    m = re.search(r"(\d+)\s*<!-- claim:commands-total -->", readme)
+    assert m, "в README нет числа команд с маркером claim:commands-total"
+    assert int(m.group(1)) == n, f"README: {m.group(1)} команд, а INTENTS={n}"
+    capmap = (kit / "docs" / "capability-map.md").read_text(encoding="utf-8")
+    cm = re.search(r"Команды владельца[^|]*\|\s*(\d+)\s*\|", capmap)
+    assert cm and int(cm.group(1)) == n, (
+        f"capability-map: {cm.group(1) if cm else '—'} команд, а INTENTS={n}")

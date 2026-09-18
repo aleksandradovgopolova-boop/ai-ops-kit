@@ -13,9 +13,8 @@
 - `.pre-commit-config.yaml`
 - `AGENTS.md`
 - `APPLY.md`
-- `CHANGELOG.md` — свежие релизы (свежее 3.38.0); детальная история — `DEVELOPMENT-HISTORY.md`
+- `CHANGELOG.md` — свежие релизы (свежее 3.38.0); детальная история — `history/DEVELOPMENT-HISTORY.md`
 - `CLAUDE.md`
-- `DEVELOPMENT-HISTORY.md` — детальная инженерная история релизов (3.37.0 → 3.20.1, архив), вынесена из `CHANGELOG.md`
 - `FILE_INDEX.md` — этот файл
 - `LICENSE`
 - `MIGRATION_GUIDE_4.0.md` — переход на 4.0: снятие плоского слоя `tools/` (warn-минор 3.40 предупреждает заранее)
@@ -34,6 +33,8 @@
 Записи о прошлых состояниях: верны как история, но не описывают поведение текущего main.
 
 - `history/plan-history.yaml` — закрытые работы и цели, уехавшие из активного плана
+- `history/DEVELOPMENT-HISTORY.md` — детальная инженерная история релизов (3.37.0 → 3.20.1, архив),
+  вынесена из `CHANGELOG.md`; перенесена из корня (B2), чтобы вход читался за минуту
 - `history/MIGRATION_GUIDE.md` — миграция со старой структуры агентов и 1.x→2.0; перенесён из корня
   (#569): описывал дореформенную раскладку и ссылался на снятый в 4.0 слой `tools/`
 - `history/RELEASE_NOTES_v1.0.0.md` — заметки первого стабильного релиза v1.0.0 (zip-дистрибуция);
@@ -347,6 +348,8 @@
 
 Карта знаний о продукте/системе/команде; источники истины DesignSystem.md и MetricCatalog.md — заполняются в child-репозитории.
 
+> **Тёзки по имени, разные смыслы** (решение `ep-2026-09-17-one-directory-per-meaning` — НЕ дубли, а размежёванные роли): `context/` (здесь) — прозаический контекст/шаблон; `.ai/project/context/` — фактический managed-слой контекста кита-как-родителя (now-снимок, PRODUCT_PASSPORT); `ai_ops_kit/context/` — КОД context-движка (Python-пакет), не контент.
+
 - `context/README.md`
 - `context/now.md`
 - `context/product/BusinessRules.md`
@@ -381,7 +384,10 @@ Knowledge Integrity (v2.9): claims — утверждения документа
 
 Decision Intelligence (v2.10): реестр решений — принципы (способ мышления), эпизоды, исходы; recommendation-first + one-way-door. В child живёт в `.ai/project/decisions/`.
 
+> **Тёзка:** `decisions/` — решения САМОГО кита (ADR-* + registry: dp-*/ep-*); `.research/decisions/` — это иное: DecisionPackage-ы research (DP-*, `research.decision-package`), отдельный namespace research (см. `ep-2026-09-17-one-directory-per-meaning`).
+
 - `decisions/registry.yaml`
+- `decisions/adr/` — ArchitectureDecision-записи (ADR-*.yaml), проверяются `adr_registry.py`
 
 ## product-learning/
 

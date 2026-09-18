@@ -190,6 +190,45 @@ def _graph_help(js):
         print(msg)
 
 
+def _feature_measured_outcome(child_root, feature):
+    """РЕАЛЬНЫЙ outcome фичи из её контракта+отчёта: сдвиг метрики после релиза (met/failed ИЗ ЧИСЕЛ)
+    + следующий шаг по уроку. -> (measured_outcome_human|None, next_action|None).
+
+    Композиция живёт на слое CLI СОЗНАТЕЛЬНО: `evaluate_outcome` — из `validation`, а граф знаний
+    (`intelligence`) её не импортирует (это была бы зависимость вверх — тот же инвариант, что у
+    `outcome_insight`). Поэтому «посчитать вердикт из чисел» делает entrypoint, а не сам граф.
+
+    Источник — `features/<id>/outcome-contract.yaml` (+ `outcome-readout.yaml`, если снят замер).
+    Нет контракта -> (None, None): исход из воздуха не выдумываем (no evidence → no claim)."""
+    import yaml as _yaml
+    root = Path(child_root)
+    base = root / "features" / str(feature)
+    cpath = base / "outcome-contract.yaml"
+    if not cpath.is_file():
+        return None, None
+
+    def _load(p):
+        if not p.is_file():
+            return None
+        try:
+            doc = _yaml.safe_load(p.read_text(encoding="utf-8"))
+        except (OSError, _yaml.YAMLError):
+            return None
+        return doc if isinstance(doc, dict) else None
+
+    contract = _load(cpath)
+    if contract is None:
+        return None, None
+    readout = _load(base / "outcome-readout.yaml")
+    from ai_ops_kit.validation import validate_product_objects as vpo
+    from ai_ops_kit.intelligence import outcome_insight
+    evaluation = vpo.evaluate_outcome(contract, readout)
+    human = outcome_insight.build_outcome_readout(contract, readout, evaluation)
+    loop = outcome_insight.from_outcome(contract, readout, evaluation)
+    next_action = (loop or {}).get("next_action")
+    return human, next_action
+
+
 def _intent_graph(task, child_root, signals, a):
     """`ai-ops graph build|trace <feature>|gaps` — один граф из трёх источников, вопрос за проход."""
     js = a.json
@@ -239,6 +278,17 @@ def _intent_graph(task, child_root, signals, a):
             _graph_help(js)
             return 2
         result = kg.trace(graph, feature)
+        # РЕАЛЬНЫЙ outcome (сдвиг метрики после релиза) + следующий шаг по уроку — из контракта фичи.
+        # Граф чист от validation; вердикт из чисел считает этот слой (см. _feature_measured_outcome).
+        measured_outcome, next_action = _feature_measured_outcome(root, feature)
+        if measured_outcome is not None:
+            result["measured_outcome"] = measured_outcome
+            if next_action:
+                result["next_action"] = next_action
+            if measured_outcome.get("measured"):
+                # Замер снят: «нет outcome / нечем измерить» больше не пробел — исход есть и измерен.
+                result["gaps"] = [g for g in (result.get("gaps") or [])
+                                  if "targets" not in g and "measured-by" not in g]
         if js:
             print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
         else:
@@ -257,3 +307,38 @@ def _intent_graph(task, child_root, signals, a):
         print(presenter.render(presenter.from_graph_gaps(result), audience=aud))
     total = sum(len(v) for v in result.values())
     return 0 if total == 0 else 1
+
+
+def _kit_claim_results(child_root):
+    """Результаты проверки реестра честности (`knowledge/claims.yaml`) для доли покрытия evidence.
+
+    Композиция ЖИВЁТ на слое CLI СОЗНАТЕЛЬНО: `validate_claims` — из `validation` (entrypoints), а
+    `product_scorecard` (`intelligence`) её не импортирует (это была бы зависимость вверх, тот же
+    инвариант, что у графа знаний). Поэтому «прочитать реестр» делает entrypoint, а долю из него
+    считает карта. Нет файла/сбой чтения -> None (метрика 2 честно «не измерено», не выдумка)."""
+    from ai_ops_kit.validation import validate_claims
+    claims_file = Path(child_root) / "knowledge" / "claims.yaml"
+    if not claims_file.is_file():
+        return None
+    try:
+        return validate_claims.build(claims_file)
+    except Exception:  # noqa: BLE001 — один недоступный источник не роняет всю карту
+        return None
+
+
+def _intent_scorecard(task, child_root, signals, a):
+    """`ai-ops scorecard` — единая карта продукта кита из 5 метрик (мерит СЕБЯ как продукт).
+
+    Метрики 1/3 считаются из графа знаний, 2 — из реестра честности (читает этот слой, долю считает
+    карта), 4/5 стоят честным каркасом «не измерено». Только чтение, ничего не пишет."""
+    from ai_ops_kit.intelligence import product_scorecard as ps
+    from ai_ops_kit.ui import presenter
+    root = Path(child_root)
+    scorecard = ps.build_scorecard(root, claim_results=_kit_claim_results(root))
+    if a.json:
+        print(json.dumps(scorecard, ensure_ascii=False, indent=2, default=str))
+    else:
+        print(presenter.render(presenter.from_scorecard(scorecard),
+                               audience=presenter.audience_from_config(root)))
+    # Код возврата: вся карта измерена -> 0, иначе 1 (честно: часть карты ещё «не измерено»).
+    return 0 if not scorecard.get("unmeasured_count") else 1

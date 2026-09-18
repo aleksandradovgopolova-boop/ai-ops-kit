@@ -26,12 +26,27 @@ kind: test-taxonomy-ratchet
 # ТОЛЬКО когда доля законно падает (напр. удалили поведенческие тесты вместе с их предметом), а НЕ
 # на каждое изменение состава: точное равенство baseline==замер снято (issue #680) — оно форсило
 # ре-снап даже когда доля не падала. Устаревший-вниз пол безвреден; устаревший-вверх ловит валидатор.
-behavioral_count: 431
-structural_count: 71
-total_count: 502
-behavioral_share_pct: 85.86
+behavioral_count: 465
+structural_count: 77
+total_count: 542
+behavioral_share_pct: 85.79
 
 raises:
+  - at: '2026-09-17'
+    what: baseline_lowered
+    from_behavioral: 431
+    from_total: 502
+    to_behavioral: 465
+    to_total: 542
+    to_share_pct: 85.79
+    work: 'Кампания P1 + product-memory (фасад, KG-рёбра нити истории) + фиксы отдельных сессий'
+    why: >-
+      Тестов добавилось +40 (502 -> 542) за кампанию: фасад владельца, рёбра истории в KG
+      (decision→feature/work→feature/learning→outcome), плюс правки отдельных сессий (goal-id,
+      research-превью). Доля поведенческих сместилась 85.86% -> 85.79% (−0.07пп) — маргинальное
+      разбавление структурными assert'ами внутри в основном поведенческих новых файлов, не
+      превращение поведенческих в структурные. Пол зафиксирован к РЕАЛЬНОМУ замеру осознанно; дрейф
+      накопился в main через отдельные сессии и здесь сведён, а не проехал молча.
   - at: '2026-09-11'
     what: rebaseline_after_measurement
     from_behavioral: 426

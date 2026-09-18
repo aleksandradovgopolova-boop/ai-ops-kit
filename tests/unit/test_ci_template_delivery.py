@@ -405,3 +405,57 @@ def test_fingerprints_go_to_the_served_repo_not_the_current_one(tmp_path, monkey
     assert (served / ".ai" / "runtime" / "ci-templates.json").is_file(), \
         "отпечатки не попали в обслуживаемый репозиторий"
     assert not (here / ".ai").exists(), "кит наследил в текущем репозитории, обслуживая чужой"
+
+
+def test_storybook_preview_runs_the_childs_actual_script_name_not_a_hardcoded_one():
+    """Полевая находка ии-среда (2026-09-16): рассинхрон в шаблоне ai-ops-storybook-preview.yml.
+
+    Обнаружение принимает ЛЮБОЙ скрипт, чья команда собирает Storybook (имя произвольное:
+    `build-storybook` / `build:storybook` / `storybook:build`), а сборка звала ЗАШИТЫЙ
+    `npm run build-storybook`. Если у дочки скрипт назван иначе — обнаружение проходит, а запуск
+    падает на несуществующем имени. Фикс: сборка зовёт РЕАЛЬНОЕ имя из detect.
+
+    Мутация: вернуть `npm run build-storybook` -> тест краснеет.
+    """
+    tpl = (KIT / "templates" / "ci" / "ai-ops-storybook-preview.yml").read_text(encoding="utf-8")
+    # Сборка НЕ зашивает имя скрипта…
+    assert "npm run build-storybook" not in tpl, \
+        "сборка Storybook зашивает имя `build-storybook` — упадёт у дочки с иначе названным скриптом"
+    # …а зовёт РЕАЛЬНОЕ имя, зарезолвленное шагом detect.
+    assert 'npm run "${{ steps.detect.outputs.script }}"' in tpl, \
+        "сборка Storybook должна звать реальное имя скрипта из detect"
+    # detect ЭКСПОРТИРУЕТ имя скрипта (script=…), а не только факт наличия.
+    assert "script=" in tpl, "detect должен резолвить и отдавать реальное имя скрипта"
+    # УЖЕ СОБРАННЫЙ Storybook (проект собирает вне этого CI) не пропускается, а выкладывается как есть.
+    assert "prebuilt=" in tpl, "detect должен учитывать уже готовую статику Storybook"
+    assert "storybook-static" in tpl, "готовая статика выкладывается как артефакт storybook-static"
+
+
+def test_all_workflow_templates_cancel_superseded_pr_runs():
+    """Полевая находка ии-среда (2026-09-16): у CI-шаблонов не было ни отмены устаревших прогонов,
+    ни кэша — прогоны копились в очереди. Здесь фиксируем ОТМЕНУ.
+
+    Каждый workflow-шаблон (кроме dependabot.yml — это не workflow) обязан нести `concurrency` с
+    БЕЗОПАСНЫМ выражением отмены: гасить только PR-прогоны, никогда — push в main / schedule /
+    release / record (там потеря прогона = дыра в проверке или записи). Мутация: убрать блок из
+    любого шаблона -> тест краснеет.
+    """
+    import glob
+    safe = "cancel-in-progress: ${{ github.event_name == 'pull_request' }}"
+    for f in sorted(glob.glob(str(KIT / "templates" / "ci" / "*.yml"))):
+        if f.endswith("dependabot.yml"):
+            continue
+        txt = Path(f).read_text(encoding="utf-8")
+        assert "concurrency:" in txt, f"{Path(f).name}: нет concurrency — устаревшие прогоны не отменяются"
+        assert safe in txt, (
+            f"{Path(f).name}: cancel-in-progress должен гасить ТОЛЬКО PR "
+            f"(event_name == 'pull_request'), иначе отмена съест прогон main/record/release")
+
+
+def test_storybook_preview_caches_npm_only_with_lockfile():
+    """Кэш npm ускоряет сборку Storybook, но включается ТОЛЬКО при наличии lock-файла: без него
+    ключ кэша нестабилен, а setup-node cache и вовсе падает. Гейт по hashFiles защищает проекты
+    без lock-файла от поломки (полевая находка ии-среда, часть про кэш)."""
+    tpl = (KIT / "templates" / "ci" / "ai-ops-storybook-preview.yml").read_text(encoding="utf-8")
+    assert "actions/cache@v4" in tpl, "нет кэша npm — установка зависимостей не ускоряется"
+    assert "hashFiles('**/package-lock.json'" in tpl, "кэш npm должен включаться только при lock-файле"

@@ -1,0 +1,1 @@
+Автоматическое обновление actions/checkout 4 -> 7 (dependabot). Newsfragment для towncrier-гейта кита.

@@ -19,6 +19,370 @@ kind: delivery-plan-history
 
 
 work:
+  - id: delivery-resolves-canonical-repo-slug-before-pr
+    title: >-
+      Доставка следует 301-редиректу переноса репозитория: резолвить ТЕКУЩИЙ канонический слаг
+      (owner/repo) перед созданием PR и API-вызовами — PR уходит в актуальный репо, не в старый
+    goal: delivery-survives-repo-transfer
+    status: done
+    closed_at: '2026-09-18'
+    pr: 1068
+    result: >-
+      ЗАКРЫТО 2026-09-18 (PR #1068). Единственная работа направления delivery-survives-repo-transfer:
+      закрыт объявленный known_gap «доставка не следует 301-редиректу перенесённого репо». Помощник
+      `ai_ops_kit/delivery/pr_open._canonical_owner_repo(owner,name,token)` резолвит текущий слаг через
+      `GET /repos/{owner}/{name}` (urllib следует 301, тело даёт актуальный `full_name`); вызван в
+      `open_draft_pr` сразу после разбора origin (до всех API-вызовов) и в `reconcile_delivery`, так что
+      дефолт-ветка, идемпотентность (`_find_open_pr`), POST `/pulls` и сверка идут по КАНОНИЧЕСКОМУ
+      слагу. `git push` не тронут (git сам следует 301). ★ЧЕСТНОСТЬ/безопасность (проверил координатор
+      лично): резолв — УЛУЧШЕНИЕ, не новая точка отказа — при 404/сбое API/битом ответе возврат None →
+      откат к исходному слагу ровно как раньше, слаг не выдумывается; сегменты валидируются fail-closed.
+      Судил координатор (писатель — субагент): 23 теста test_pr_open (в т.ч. перенос→новый слаг, без
+      переноса→прежнее, сбой резолва→откат) зелёные, все проверки кита (fast) зелёные. Живого переноса
+      реального репо не тестировали — только замоканный API (честная граница).
+  - id: nightly-review-aggregates-hotspots-from-history
+    title: >-
+      Ночной обзор находит ГОРЯЧИЕ ТОЧКИ: агрегат по истории — какие проверки/оси краснеют чаще всего
+      за окно; в брифе честно «мало истории», пока агрегировать нечего
+    goal: nightly-review-detects-hotspots
+    status: done
+    closed_at: '2026-09-18'
+    pr: 1063
+    result: >-
+      ЗАКРЫТО 2026-09-18 (PR #1063). Единственная работа направления nightly-review-detects-hotspots:
+      обзор смотрел только на последний снимок и недельный тренд, теперь АГРЕГИРУЕТ историю в горячие
+      точки. Сателлит `ai_ops_kit/intelligence/nightly_hotspots.py` (`compute_hotspots`/
+      `compute_axis_hotspots`/`format_hotspots_section`, окно `HOTSPOT_WINDOW=14`): по последним N
+      записям `history.yaml` считает для каждой проверки/оси, в скольких прогонах она краснела и сколько
+      находок дала, сортирует по частоте (хроническое выше разового); раздел «Горячие точки» в брифе по
+      проверкам И по осям. Read-only агрегат — новых данных/файлов состояния не заводит. ★ЧЕСТНОСТЬ
+      (проверил координатор лично): <`MIN_ENTRIES_FOR_HOTSPOTS=3` записей → «мало истории», агрегат не
+      выдуман; «мало данных» (has_enough=False) НЕ сворачивается в «за окно ничто не краснело»
+      (измеренный факт) — разные ответы. `nightly_review.py` остался 699 строк (проводка тонкая). Судил
+      координатор (писатель — субагент): 11 тестов hotspot зелёные, все проверки кита (fast) зелёные.
+      findings→validators (находки=выходы валидаторов→новое упирается в AI-ревью, без ключа молчит),
+      полноценные AI-ревью по осям и portfolio-intelligence остаются в «Дальше».
+  - id: nightly-review-organizes-and-rotates-dimensions
+    title: >-
+      Ночной обзор разбивает находки по НАЗВАННЫМ осям (тесты/архитектура/безопасность/доки/UX) и
+      РОТИРУЕТ фокус — за цикл каждая ось попадает в фокус, ничего не остаётся молча непросмотренным
+    goal: nightly-review-covers-all-dimensions
+    status: done
+    closed_at: '2026-09-18'
+    pr: 1058
+    result: >-
+      ЗАКРЫТО 2026-09-18 (PR #1058). Единственная работа направления nightly-review-covers-all-dimensions:
+      ночной обзор был ПЛОСКИМ списком, теперь раскладывает находки по 6 НАЗВАННЫМ осям (tests,
+      architecture, security, documentation, product-ux, analytics) и РОТИРУЕТ фокус. Сателлит
+      `ai_ops_kit/intelligence/nightly_dimensions.py`: оси названы по каталогу ревьюеров `agents/quality/`
+      (не выдуманы — `declared_reviewers()` + тест сверяет существование каждого), маппятся на
+      детерминированные проверки `run_checks`; `group_findings_by_axis` даёт статус оси
+      расхождения/чисто/«не наблюдается». Ротация round-robin, курсор
+      `.ai/project/nightly-review/focus-cursor.json` двигает ТОЛЬКО реальный прогон (показ/подтверждение
+      не двигают). Осевые счётчики питают недельный тренд #1053 (`compute_axis_trends`, второго журнала
+      нет). ★ЧЕСТНОСТЬ (проверил координатор лично): ось без наблюдаемого сигнала в этом репо → «не
+      наблюдается здесь», НЕ сворачивается в «ок» (в т.ч. tests/security, где нужен AI-ревью — вне v0).
+      Граница v0 сохранена (обзор не правит продукт, единственная запись — курсор). Судил координатор
+      (писатель — субагент): 63 теста (dimensions+review+validator-anchor) зелёные, `check-full` зелёный
+      включая compatibility-matrix. Полноценные AI-ревью по осям (без ключа молчат — awaiting_reviewer),
+      hotspot, findings→validators, portfolio-intelligence остаются в «Дальше».
+  - id: nightly-review-persists-and-trends-findings
+    title: >-
+      Ночной обзор показывает ТРЕНД за неделю, а не только снимок: находки сохраняются во времени,
+      бриф говорит «было N → стало M, лучше/хуже» (честно «нет истории», пока сравнивать не с чем)
+    goal: nightly-reviews-show-trends
+    status: done
+    closed_at: '2026-09-18'
+    pr: 1053
+    result: >-
+      ЗАКРЫТО 2026-09-18 (PR #1053). Единственная работа направления nightly-reviews-show-trends
+      (первый срез roadmap-пункта «ночные обзоры с трендами»): ночной обзор был ТОЧЕЧНЫМ (delta с
+      последнего подтверждённого обзора), теперь показывает НЕДЕЛЬНЫЙ ТРЕНД. Сателлит
+      `ai_ops_kit/intelligence/nightly_trends.py` (record_history/read_history/compute_trends/
+      format_trends) ведёт журнал находок во времени (`.ai/project/nightly-review/history.yaml`, запись
+      на каждый прогон), а `format_brief` печатает раздел «Тренд за неделю»: по каждой проверке было N
+      (≥7 дней назад) → стало M — лучше/хуже/без изменений. Честность (проверил координатор лично):
+      «нет истории» ЯВНО отделено от «без изменений» (compute_trends гейтит has_baseline; format_trends:
+      «„Нет истории" — это не „без изменений"»), тренд не выдумывается. Граница v0 сохранена — обзор
+      пишет только свой файл истории, продукт не правит. Судил координатор (писатель — субагент): 39
+      тестов nightly_review зелёные (в т.ч. первый прогон без истории не выдумывает тренд, worse/better/
+      unchanged, персистентность, только записи ≥недели якорят тренд), все проверки кита зелёные.
+      Ротация по всем направлениям, hotspot, portfolio-intelligence остаются в «Дальше» (не входили в 2 исхода).
+  - id: scorecard-becomes-headline-product-measure
+    title: >-
+      Возвести scorecard в ГЛАВНУЮ меру продукта кита: самоотчёт о себе ведёт картой из 5 метрик,
+      счёт возможностей — контекст ширины, а не заглавная мера
+    goal: kit-measured-as-a-product
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1045
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1045). Последний, 5-й исход направления kit-measured-as-a-product:
+      самоотчёт кита о СЕБЕ (витрина `devtools/capability_inventory` — `docs/capability-map.md` и
+      `--json`) вёл разделом «Сводка» из счёта команд/гейтов/ролей — та мера ширины, от которой ревью
+      17.09 предложило уйти. Теперь `self_report()` ВЕДЁТ картой продукта из 5 метрик
+      (`headline.scorecard` = build_scorecard), а счёт возможностей демотирован до «ширины» (`breadth`,
+      контекст). Проверено координатором лично: `--json` ведёт `headline.measure=kit-product-scorecard`
+      с 5 метриками (3 измерены, 2 честно «не измерено»), `breadth` ниже. Слои соблюдены (validate_claims
+      инъектится на слое entrypoints, intelligence не тянет validation вверх). Компромисс осознанный:
+      живые числа ведут в ДАННЫХ (`--json`/`./ai-ops scorecard`), committed-страница — составом карты
+      (иначе меняющиеся доли краснили бы freshness-гейт на посторонних PR), синхронность держит
+      контракт-тест. Все проверки кита зелёные (включая совместимость по версиям Python); 6 контракт-
+      тестов + 12 целевых. Дашборд/UI не тронуты (граница — параллельная сессия); заглавная мера в
+      данных, дашборд их прочитает отдельной работой. Направление kit-measured-as-a-product ДОСТИГНУТО 5/5.
+  - id: outcome-and-learning-metrics-populated
+    title: >-
+      Наполнить слоты outcome-coverage и learning-to-decision реальными данными (метрики 4/5 scorecard)
+    goal: kit-measured-as-a-product
+    status: dropped
+    closed_at: '2026-09-17'
+    result: >-
+      ОТЛОЖЕНО как расширение периметра 2026-09-17 (ср. B5 audit-remediation): наполнение слотов 4/5
+      реальными данными НЕ входило в 5 объявленных исходов направления (исход требовал лишь «слоты стоят
+      честным „не измерено“», что закрыто scorecard'ом #1040). Отдельная работа не заводится, чтобы не
+      задваивать: та же зависимость от живой аналитики, что у close-outcome-learning-loop-with-real-
+      analytics (направление product-memory-org-intelligence, ждёт решения владельца — на каком живом
+      продукте замыкать петлю). Слоты 4/5 наполнятся АВТОМАТИЧЕСКИ, как только та петля даст реальный
+      outcome-сигнал: scorecard читает граф знаний, метрики пересчитаются без отдельного механизма.
+  - id: kit-product-scorecard
+    title: >-
+      Единая карта продукта кита: первоклассный scorecard из 5 метрик (feature completion, evidence
+      coverage, product-memory coverage — считаются; outcome/learning — честные слоты «не измерено»)
+    goal: kit-measured-as-a-product
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1040
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1040, merge 381eabe1). Первая работа направления kit-measured-as-a-product:
+      кит получил ЕДИНУЮ первоклассную «карту продукта» — команду `scorecard`, которой мерит СЕБЯ как
+      продукт пятью метриками, а не числом возможностей. Метрики 1/2/3 считаются на существующих данных
+      (на самом ките: feature-completion 5/5, evidence-coverage 8/8, product-memory 0/5 — честный ноль,
+      рёбра review/outcome ещё не населены); метрики 4 (реальный outcome) и 5 (learning-to-decision)
+      стоят честным каркасом «не измерено» с причиной (у кита нет живой аналитики — выдуманное число
+      было бы враньём), а не заглушкой. Инвариант работы: «не измерено» ОБЯЗАНО нести причину (модуль
+      бросает исключение иначе). Слои соблюдены — intelligence не импортит validation: сырые проверки
+      реестра честности читаются на слое CLI и инъектятся (тот же образец, что у graph trace). Проведено
+      в контур интентом `scorecard` (built≠wired соблюдён). Судил кит-координатор (писатель — отдельный
+      субагент): независимое ревью диффа + живой прогон команды + 12 тестов модуля + ВСЕ проверки кита
+      зелёные, включая совместимость по версиям Python (pipeline-e2e 3.12/3.13, clean-install,
+      upgrade-path). Закрыла 4 из 5 исходов направления; 5-й (scorecard стал ГЛАВНОЙ мерой вместо счёта
+      возможностей) — остаток: карта построена, но паспорт/дашборд пока ведут числом возможностей.
+  - id: release-drains-the-changelog-queue
+    title: >-
+      Релиз гасит очередь заявлений + сторож пустоты очереди (A2, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1032
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1032). Находка A2: towncrier собирал CHANGELOG из newsfragments/, но релиз
+      НИКОГДА не звал `build` (release_bump писал раздел вручную) — очередь выросла до ~708 непогашенных
+      фрагментов, гейта пустоты не было. Durable-фикс: release_bump.bump() на бампе версии сливает очередь
+      через `towncrier build` и очищает newsfragments/ (с внутренним гейтом «пусто после сборки»); прежний
+      ручной путь сохранён для офлайн/не-китовых репозиториев. Сторож: validate_changelog_queue_drained
+      (--release краснит непустую очередь), исполняется на релизе ЧЕРЕЗ pytest-маркер `release_gate` ДО
+      создания тега — тег не создаётся при непустой очереди. Существующие ~708 — вариант А (сгребутся на
+      ближайшем релизе, гарантировано сторожем). Судил кит-координатор: поймал нарушение PYTEST-ONLY
+      (гейт звался мимо pytest) — исправлено на штатный образец; перепроверено независимо: PYTEST-ONLY-OK,
+      сторож краснит на очереди 708 в release-режиме и не бежит в обычном CI, 205 тестов контракта зелёные.
+  - id: one-directory-per-meaning
+    title: >-
+      Тёзки-каталоги размежёваны документацией + ADR (B1, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1029
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1029). Находка B1 назвала три `context/` и дубли research/decisions
+      «дублями» — при проверке оказалось ИНАЧЕ: это тёзки по имени при РАЗНЫХ ролях (`./context` = проза-
+      шаблон; `.ai/project/context/` = managed-снимок «как есть»; `ai_ops_kit/context/` = Python-пакет
+      движка; `research`/`.research` = контракт/склад данных по правилу изоляции; `decisions`/
+      `.research/decisions` = ADR кита vs DecisionPackage research). Force-слияние сломало бы managed-
+      контракт/изоляцию/импорты — поэтому размежевание, а не слияние: ADR `ep-2026-09-17-one-directory-
+      per-meaning`, карта тёзок в FILE_INDEX/context-README/decisions-registry, ни одного git mv, читатели
+      не тронуты. Судья независимо подтвердил различие каталогов по факту; validate/decisions/adr зелёные,
+      978 тестов. Урок: аудит ошибся в предпосылке — долг был «ясность», а не «дубль».
+  - id: reconcile-zero-touch-claim-with-readme
+    title: >-
+      Заявление zero-touch и README сведены к одной правде (B4, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1028
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1028). Находка B4: ROADMAP объявлял zero-touch достигнутым, README показывал
+      ручную установку. Проверка артефакта прогона (OWNER-SPEAKS-ZERO-TOUCH-RUN-2026-09-14): кит на старте
+      уже был установлен (v4.3.0) — прогон доказал автономность РАБОТЫ после установки, а НЕ установки в
+      ноль касаний. Сведено к одной правде без сглаживания: в ROADMAP уточнено, что «zero-touch» = работа,
+      не установка; в README добавлена честная граница «установку в ноль касаний кит не заявляет», ручной
+      путь оставлен источником истины. Судья: дифф минимальный и честный; PRODUCT-MODEL-OK, 460 тестов;
+      попутно поправлен невалидный тип newsfragment (docs→chore).
+  - id: sixty-second-human-onboarding
+    title: >-
+      Человеческий вход «что это и зачем» за 60 секунд (B6, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1030
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1030). Находка B6: нетехническому читателю трудно за минуту понять «что это
+      и зачем» — витрина и история мешают входу. В начало README (до Quick Start) добавлен короткий
+      человеческий блок простым языком (без gate/write_scope/PR/intents): что это, какую боль решает, с
+      чего начать. Честно сказано, что полной автоустановки нет, со ссылкой на «Честно о границах» —
+      согласовано с B4, не преувеличивает. Раздел границ не тронут (нет конфликта с B4). Судья: текст не
+      обещает лишнего; PRODUCT-MODEL-OK, 358 док-тестов зелёные.
+  - id: persist-review-verdict-then-link-to-feature
+    title: >-
+      Персистентный review-вердикт + ребро review→feature («кто проверил») — последнее звено нити
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1031
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1031). Разрыв №4 нити («кто/что проверил») замкнут через ПЕРСИСТЕНТНОСТЬ,
+      а не пустое ребро: shared/review_verdict.py (объект features/<id>/review/verdict.yaml — что
+      проверено + кем: машина/независимый ревьюер/человек + ревизия, проекция evidence_verdict #588),
+      путь ревью (engine/review_branch.py, независимый reviewer — writer≠judge) ПЕРСИСТИТ вердикт, тип
+      review + relation reviewed в entities, узел+ребро в KG, «Проверили: …» в presenter. Честно:
+      вердикты 5 существующим фичам НЕ выдуманы (граф чист), населяется по мере будущих ревью; нет
+      записи → нет ребра; битая ссылка → validate_knowledge_graph краснит. Проверено судьёй: 50 тестов
+      + слои + product-model + mypy строгий на shared + ruff зелёные; footprint 644→645 (новый файл).
+      МЕХАНИЗМ НИТИ ИСТОРИИ ПОСТРОЕН ЦЕЛИКОМ (decision/work/review→feature, learning→outcome).
+  - id: kit-represents-its-features-as-blueprints
+    title: >-
+      Кит представляет свои фичи как feature-blueprints — нить истории наполнена реальными фичами
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1025
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1025). Владелец делегировал объём («сделай как лучше, не оставляй пустой
+      механизм»). Выбран КУРАТОРСКИЙ набор из 5 реальных фич кита (не всё подряд — против оргсимуляции)
+      с настоящим провенансом: verified-readout-knowledge-level (#985), outcome-readout (#987),
+      outcome-loop-next (#988), propose-speaks-product (#983/#978), decision-to-feature-in-graph (#1015)
+      — каждая с links.decision (реальный ep-*) и links.built_by (реальный PR). Нить истории перестала
+      быть пустой: `graph trace <фича>` рассказывает правдивую историю «Появилась из решения… Построена
+      работой…». Честно: outcome/learning ни у одной (нет продуктовой аналитики) → «результат не
+      накоплен»; status in-progress (не released — нет SHA-verified receipt); фасад #1012 отброшен (нет
+      в plan-history). .gitignore: features/* + явные 5 каталогов (рантайм прогонов остаётся в игноре).
+  - id: fix-root-dependent-critical-test
+    title: >-
+      Критический тест fs-guard честен при любых правах (A1, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1019
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1019). Находка A1 мультидисциплинарного аудита: критический тест
+      test_failed_revert_is_named_and_file_stays держался на том, что chmod 0o500 ломает unlink через
+      EACCES; под root unlink обходит r-x, откат «удаётся», первый assert падал — тест зеленел ТОЛЬКО
+      не под root, молчаливая зависимость fail-closed от привилегий среды. Добавлен skipif под root
+      (с защитой для систем без geteuid): под root честный skip, под обычным пользователем (как в CI)
+      исполняется по-настоящему, ассерты не ослаблены. Написано писателем-субагентом, судил кит-
+      координатор независимо: дифф ровно по заявке, 21 тест зелёный при euid≠0, PRODUCT-MODEL-OK, CI зелёный.
+  - id: standing-guard-against-swallowed-exceptions
+    title: >-
+      Стоячий ратчет против роста молчаливых глушителей исключений (B3, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1020
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1020). Находка B3: в живом коде 57 конструкций except…: pass глушат ошибку
+      молча, а прежний исход swallowed_exceptions_reviewed был РАЗОВЫМ ревью (#721) без стоячего сторожа.
+      Заведён AST-детектор + ратчет (validate_swallowed_exceptions.py, baseline 57 в
+      packages/swallowed-exceptions-baseline.yaml, объявлен в enforcement-inventory, внесён в STANDALONE-
+      контракт): рост сверх линии краснит, снижение подсказывает опустить линию. Судил кит-координатор
+      независимым прогоном из копии: сторож даёт зелёное (57≤57), проба покраснения настоящая
+      (check(58,57)→ошибка; 2 глушителя при линии 1→ошибка), 16 тестов зелёные, CI зелёный.
+  - id: heavy-history-out-of-the-entry-path
+    title: >-
+      Тяжёлая история вынесена из входного пути в history/ (B2, аудит 17.09)
+    goal: audit-remediation
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1021
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1021). Находка B2: 360-КБ DEVELOPMENT-HISTORY.md — самый тяжёлый файл в
+      корне — делал вход «стеной». Перенесён git mv в history/ (содержимое не тронуто, внутри правились
+      только относительные ссылки), обновлены референсы в README, FILE_INDEX, field-lessons.yaml и
+      CHANGELOG. docs/changelog/* оставлены осознанно (уже не в корне, завязаны на защищённые файлы).
+      Судил кит-координатор: висячих ссылок не осталось, охват докового индекса цел (файл был в корне,
+      не в docs/**), 274 док-теста + OWN-MEDICINE-OK + PRODUCT-MODEL-OK, CI зелёный.
+  - id: complete-life-history-traceability-edges
+    title: >-
+      Рёбра нити истории в KG: work→feature, learning→outcome (review→feature отложено)
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1022
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1022). Разрывы №3/№5 нити закрыты: work/PR→feature (blueprint.links.built_by
+      → узел work из history + relation builds) и learning→outcome (FL derived_from_outcome → ребро
+      derived-from). `graph trace express-checkout` теперь печатает «Появилась из решения… Построена
+      работой…». Разрыв №4 (review-verdict→feature) ЧЕСТНО ОТЛОЖЕН: персистентного узла-вердикта нет
+      (verified эфемерен), привязка к построившей работе нарушила бы writer≠judge — заведена отдельная
+      работа persist-review-verdict-then-link-to-feature. Проверено судьёй: 25 тестов KG + слои +
+      product-model + ruff зелёные, негатив на каждое ребро. Доказано на демо-blueprint (у кита почти
+      нет feature-узлов — заведена waiting_on_owner работа kit-represents-its-features-as-blueprints).
+  - id: link-decision-to-feature-why-it-exists
+    title: >-
+      Решение → фича в Knowledge Graph («зачем эта фича существует» из истории)
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    pr: 1015
+    result: >-
+      ЗАКРЫТО 2026-09-17 (PR #1015). Разрыв №1 нити истории: у фичи не было связи с решением, её
+      породившим. Добавлено: поле links.decision/decisions в feature-blueprint (ссылка на ep-*/dp- из
+      decisions/registry.yaml), тип сущности decision + связь motivates (decision→feature) в
+      registry/entities.yaml, узел+ребро в knowledge_graph.py, «Появилась из решения: «…»» в
+      presenter_graph. Честность: нет ссылки → нет ребра; битая ссылка → validate_knowledge_graph
+      отвергает граф (негатив-тест). Живой смоук `graph trace express-checkout` называет решение
+      ep-2026-08-14-product-os. Проверено судьёй: 15 тестов KG + слои + product-model + ruff зелёные.
+      Поправка замера: visible-writer-queue/voluntary-child-registration — код-модули, не blueprints;
+      единственный живой blueprint кита — демо express-checkout (у кита почти нет feature-узлов).
+  - id: measure-product-life-history-continuity
+    title: >-
+      Замер непрерывности «истории жизни продукта» на реальной фиче
+    goal: product-memory-org-intelligence
+    status: done
+    closed_at: '2026-09-17'
+    evidence: qualification/PRODUCT-LIFE-HISTORY-CONTINUITY-2026-09-17.md
+    result: >-
+      ЗАКРЫТО 2026-09-17. Первый шаг направления product-memory. Замер на реальных фичах
+      (visible-writer-queue, voluntary-child-registration) + Knowledge Graph: нить связана на КОНЦАХ
+      (feature→release delivered-by, feature→outcome targets, feature→metric measured-by, insight→feature
+      feeds, уроки FL-*), но РВЁТСЯ в начале и середине — НЕТ рёбер decision→feature («зачем существует»),
+      work/PR→feature («что построили»), review-verdict→feature («кто проверил»); и фича без объявленного
+      outcome вообще не входит в граф (`graph trace visible-writer-queue` → «функции нет в графе»).
+      Назван контракт прослеживаемости и порядок закрытия разрывов (по одной). Первый — decision→feature.
+  - id: external-clean-run-measured-by-outside-person
+    title: >-
+      Живой прогон всего пути на реальном репозитории (P0 №7 ревью)
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    evidence: qualification/ONE-FEATURE-EXTERNAL-RUN-ii-sreda-2026-09-16.md
+    result: >-
+      ЗАКРЫТО 2026-09-16 живым owner-led прогоном на ии-среде (боевой репо, установленный кит v4.4.2
+      тегом — не PYTHONPATH). Владелец сделал НЕСКОЛЬКО реальных фич через кит; кит НИГДЕ не показал
+      технику (feature id / YAML / агенты / стадии / гейты), владельцу ок. На основании прогона владелец
+      засчитал все 5 исходов направления one-feature-end-to-end (кит себя не судит). Оговорка: прогон
+      owner-led, не «человек совсем со стороны» — планка «незнакомец» остаётся отдельной, флипа не
+      отменяет (как #745/#748/#701). Дал field_evidence минора 4.4 (release-claims). Отчёт — evidence.
+  - id: one-feature-run-on-clean-installed-stable
+    title: >-
+      Прогон на чисто установленном ките (не PYTHONPATH) — P0 №3 ревью
+    goal: one-feature-end-to-end
+    status: done
+    closed_at: '2026-09-16'
+    evidence: qualification/ONE-FEATURE-ZERO-PIPELINE-REHEARSAL-2026-09-16.md
+    result: >-
+      ЗАКРЫТО 2026-09-16. Репетиция чистой установки (setup из main, не PYTHONPATH) подтвердила: продуктовые
+      входные поверхности честны и без утечек на реальном инсталле (отчёт-репетиция). Полный путь до
+      Verified/Outcome закрыт живым прогоном на ии-среде (см. external-clean-run…). Каveat «мерил сам кит
+      новым кодом» снят: обе стороны — чистая установка и боевой репо на теге v4.4.2 — пройдены.
   - id: outcome-loop-after-merge-feeds-next
     title: >-
       Outcome-loop доводит до «что делать дальше», и это появляется в `next`

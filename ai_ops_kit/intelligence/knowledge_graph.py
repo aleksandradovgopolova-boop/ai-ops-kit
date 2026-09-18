@@ -26,6 +26,8 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared import review_verdict
+
 # Пары (from_type, relation, to_type), которые вокабуляр (registry/entities.yaml) разрешает и
 # которыми пользуется сборщик. Не источник истины (им остаётся реестр) — но сборщик обязан выпускать
 # только валидные рёбра, иначе validate_knowledge_graph отвергнет граф целиком.
@@ -90,6 +92,91 @@ class _Builder:
         return self.nodes.get(_slug(nid), {}).get("type", "")
 
 
+def _load_decisions(root: Path) -> dict[str, str]:
+    """id решения -> человекочитаемый текст. Источник — `decisions/registry.yaml`.
+
+    Индексирует и эпизоды (`episodes`, id вида `ep-YYYY-MM-DD-…`, текст — поле `decision`), и
+    принципы (`principles`, id вида `dp-***`, текст — поле `principle`): blueprint вправе сослаться
+    на любой из них. Нет файла/секции -> пустой индекс (решений в проекте просто нет).
+    """
+    reg = _load_yaml(root / "decisions" / "registry.yaml")
+    index: dict[str, str] = {}
+    for ep in reg.get("episodes") or []:
+        if isinstance(ep, dict) and _text(ep.get("id")):
+            index[_slug(ep["id"])] = (_text(ep.get("decision")) or _text(ep.get("question"))
+                                      or _text(ep["id"]))
+    for pr in reg.get("principles") or []:
+        if isinstance(pr, dict) and _text(pr.get("id")):
+            index[_slug(pr["id"])] = _text(pr.get("principle")) or _text(pr["id"])
+    return index
+
+
+def _decision_refs(links: dict) -> list[str]:
+    """Ссылки функции на решения из blueprint: `links.decision` (одна) и `links.decisions` (список).
+
+    Обе формы поддержаны; порядок сохраняется, дубли по slug убираются. Пусто -> [].
+    """
+    raw: list[str] = []
+    single = links.get("decision")
+    if _text(single):
+        raw.append(_text(single))
+    many = links.get("decisions")
+    if isinstance(many, list):
+        raw.extend(_text(r) for r in many if _text(r))
+    seen: set[str] = set()
+    out: list[str] = []
+    for r in raw:
+        s = _slug(r)
+        if s not in seen:
+            seen.add(s)
+            out.append(r)
+    return out
+
+
+def _load_history_works(root: Path) -> tuple[dict[str, dict], dict[str, str]]:
+    """Закрытые работы из `history/plan-history.yaml`. -> (works_by_id, pr_index).
+
+    `works_by_id[slug(id)] = {"title", "pr"}` — что за работа и каким PR закрыта; `pr_index[slug(pr)]
+    = slug(id)` — чтобы ссылка `built_by` могла назвать работу и по номеру PR, и по её id. Нет файла/
+    секции -> пустые индексы (закрытых работ у проекта просто нет). Источник истории — тот же файл,
+    по которому `delivery_plan.validate_history` требует у каждой записи НАЗВАННЫЙ результат.
+    """
+    hist = _load_yaml(root / "history" / "plan-history.yaml")
+    works: dict[str, dict] = {}
+    pr_index: dict[str, str] = {}
+    for w in hist.get("work") or []:
+        if not isinstance(w, dict) or not _text(w.get("id")):
+            continue
+        wid = _slug(w["id"])
+        pr = _text(w.get("pr")) if w.get("pr") is not None else ""
+        works[wid] = {"title": _text(w.get("title")) or _text(w["id"]), "pr": pr}
+        if pr:
+            pr_index[_slug(pr)] = wid
+    return works, pr_index
+
+
+def _built_by_refs(links: dict) -> list[str]:
+    """Ссылки функции на построившую её работу/PR: `links.built_by` (строка или список).
+
+    Обе формы поддержаны (как у `decision`/`decisions`): одиночная строка и список. Порядок
+    сохраняется, дубли по slug убираются. Пусто -> [].
+    """
+    raw: list[str] = []
+    one = links.get("built_by")
+    if isinstance(one, list):
+        raw.extend(_text(r) for r in one if _text(r))
+    elif _text(one):                       # скаляр: id-строка или № PR числом
+        raw.append(_text(one))
+    seen: set[str] = set()
+    out: list[str] = []
+    for r in raw:
+        s = _slug(r)
+        if s not in seen:
+            seen.add(s)
+            out.append(r)
+    return out
+
+
 def _iter_blueprints(root: Path):
     """Пути к blueprint'ам функций: и дочернее `features/<id>/`, и демо-каталог кита."""
     seen = set()
@@ -99,6 +186,23 @@ def _iter_blueprints(root: Path):
             if p.is_file() and p not in seen:
                 seen.add(p)
                 yield p
+
+
+def _iter_review_verdicts(root: Path):
+    """Записи review-вердиктов: `features/<id>/review/verdict.yaml` и демо-каталог кита.
+
+    Источник — тот же, что пишет ПУТЬ РЕВЬЮ (`shared.review_verdict.persist`, судья ≠ писатель); здесь
+    только читаем. Нечитаемое/не тот kind -> запись пропускается (нет источника — нет узла)."""
+    seen: set = set()
+    for pattern in ("features/*/review/verdict.yaml",
+                    "examples/feature-blueprint-demo/*/review/verdict.yaml"):
+        for p in sorted(root.glob(pattern)):
+            if not p.is_file() or p in seen:
+                continue
+            seen.add(p)
+            rec = _load_yaml(p)
+            if isinstance(rec, dict) and rec.get("kind") == review_verdict.RECORD_KIND:
+                yield rec
 
 
 def _outcome_verdict(outcome: dict) -> str:
@@ -124,6 +228,14 @@ def build_graph(child_root) -> dict:
         `outcome -measured-by-> metric`.
       * `product-learning/FL-*.yaml`: узлы `insight`; `insight -feeds-> feature` при совпадении
         `feature`; `insight -derived-from-> outcome`, если эта функция нацелена на outcome.
+      * `decisions/registry.yaml` + blueprint `links.decision`/`links.decisions`: узел `decision`
+        (текст решения) и ребро `decision -motivates-> feature` — «зачем функция появилась».
+      * `history/plan-history.yaml` + blueprint `links.built_by` (id работы или № PR): узел `work`
+        (название + PR) и ребро `work -builds-> feature` — «что построило функцию и где».
+      * `product-learning/FL-*.yaml` `derived_from_outcome`: явное ребро `insight -derived-from->
+        outcome` — «чему научились по этому конкретному результату» (без косвенного вывода).
+      * `features/<id>/review/verdict.yaml`: узел `review` (кем проверено + verified + ревизия) и ребро
+        `review -reviewed-> feature` — «кто/что проверил функцию». Пишет путь ревью (судья), не писатель.
 
     Пути blueprint'а в узлах — ОТНОСИТЕЛЬНО `<child_root>/knowledge` (туда пишется graph.yaml),
     чтобы `validate_knowledge_graph` проверил их существование без ложного срабатывания.
@@ -134,6 +246,10 @@ def build_graph(child_root) -> dict:
 
     # feature -> id outcome-узла, на который она нацелена (для привязки ins‑ов и метрик).
     feature_outcome: dict[str, str] = {}
+    # id решения -> текст (для узла decision, из которого «появилась» функция).
+    decisions = _load_decisions(root)
+    # Закрытые работы (для узла work, который «построил» функцию): по id и по номеру PR.
+    history_works, history_pr_index = _load_history_works(root)
 
     # 1) plan.yaml — цели, их outcome, работы как initiative.
     plan = _load_yaml(root / "planning" / "plan.yaml")
@@ -204,6 +320,40 @@ def build_graph(child_root) -> dict:
             for mid in metric_ids:
                 b.edge(oid, "measured-by", mid)
 
+        # Решение, из которого функция появилась («зачем она вообще есть» — из истории, не из кода).
+        # Ссылку ОБЪЯВЛЯЕТ автор blueprint'а (links.decision / links.decisions) — это НЕ авто-вывод
+        # из данных, как `targets`, а декларация. Поэтому и правило другое: объявленную связь мы
+        # ВЫПУСКАЕМ ребром всегда, а узел решения создаём только если ссылка резолвится в
+        # decisions/registry.yaml. Ссылка на несуществующее решение оставляет ребро с висящим
+        # концом — и validate_knowledge_graph честно отвергает граф целиком: сломанная декларация
+        # обязана быть громкой, а не тихо пропасть. Нет ссылки -> нет ребра (функция без «зачем»
+        # допустима, история просто честно не знает причину — это НЕ пробел).
+        for ref in _decision_refs(links):
+            did = _slug(ref)
+            text = decisions.get(did)
+            if text:
+                b.node(did, "decision", title=text[:160], ref="decisions/registry.yaml")
+            b.edge(did, "motivates", fid)
+
+        # Работа/PR, построившая функцию («что построили и где» — из истории, не из пересказа кода).
+        # Правило то же, что у decision: связь ОБЪЯВЛЯЕТ автор blueprint'а (links.built_by), это
+        # декларация, а не авто-вывод. Ссылку резолвим по id работы ИЛИ по номеру её PR
+        # (history/plan-history.yaml); резолвится -> создаём узел work с названием и PR, всегда
+        # ВЫПУСКАЕМ ребро work -builds-> feature. Ссылка на несуществующую работу оставляет ребро с
+        # висящим концом -> validate_knowledge_graph отвергает граф целиком: сломанная декларация
+        # обязана быть громкой. Нет ссылки -> нет ребра (история просто не записала, кто построил, —
+        # это НЕ пробел).
+        for ref in _built_by_refs(links):
+            wid = _slug(ref)
+            info = history_works.get(wid)
+            if info is None and wid in history_pr_index:
+                wid = history_pr_index[wid]          # ссылка дана номером PR — назовём работу по id
+                info = history_works.get(wid)
+            if info is not None:
+                b.node(wid, "work", title=info["title"][:160], pr=info.get("pr") or None,
+                       ref="history/plan-history.yaml")
+            b.edge(wid, "builds", fid)
+
     # 3) FL-*.yaml — выводы из данных.
     learning_dir = root / "product-learning"
     for fl_path in sorted(learning_dir.glob("FL-*.yaml")) if learning_dir.is_dir() else []:
@@ -220,6 +370,35 @@ def build_graph(child_root) -> dict:
             oid = feature_outcome.get(feat_ref)
             if oid:
                 b.edge(iid, "derived-from", oid)
+
+        # Явная привязка урока к outcome, из которого он извлечён («чему научились по результату»).
+        # До сих пор `insight -derived-from-> outcome` появлялось лишь КОСВЕННО — через совпадение
+        # feature и его нацеленность на исход. Здесь урок ОБЪЯВЛЯЕТ outcome напрямую (`derived_from_
+        # outcome`), и это ДЕКЛАРАЦИЯ (как decision/built_by): нить «outcome -> чему научились»
+        # замыкается на КОНКРЕТНЫЙ исход, а не выводится молча. Ребро выпускаем всегда; ссылка на
+        # несуществующий outcome оставляет висящий конец -> validate_knowledge_graph краснит. Нет
+        # поля -> нет объявленного ребра (косвенная привязка выше остаётся) — это НЕ пробел.
+        oref = fl.get("derived_from_outcome")
+        if _text(oref):
+            b.edge(iid, "derived-from", _slug(oref))
+
+    # 4) review-вердикты — «кто/что проверил функцию» как ПЕРСИСТЕНТНАЯ запись, а не эхо прогона.
+    # Источник — `features/<id>/review/verdict.yaml`, который пишет ПУТЬ РЕВЬЮ (независимый судья), а не
+    # построившая работа: иначе «проверку» приписали бы писателю и нарушили бы writer≠judge. Узел review
+    # создаётся ИЗ САМОЙ ЗАПИСИ (она и есть источник), ребро `review -reviewed-> feature` выпускается
+    # всегда. Запись на несуществующую фичу оставляет висящий конец -> validate_knowledge_graph краснит
+    # (сломанная запись обязана быть громкой). Нет записи -> нет узла (проверки могло не быть — это НЕ
+    # пробел; trace честно молчит «проверка не записана», а не объявляет дыру).
+    for rec in _iter_review_verdicts(root):
+        feat_ref = _slug(rec.get("feature")) if _text(rec.get("feature")) else None
+        if not feat_ref:
+            continue
+        rid = b.node(f"review-{feat_ref}", "review",
+                     title=review_verdict.node_title(rec),
+                     verified=bool(rec.get("verified")),
+                     reviewed_revision=_text(rec.get("reviewed_revision")) or None,
+                     ref=review_verdict.record_rel(feat_ref))
+        b.edge(rid, "reviewed", feat_ref)
 
     return {"schema_version": 1, "kind": "knowledge-graph",
             "nodes": list(b.nodes.values()), "edges": b.edges}
@@ -243,7 +422,13 @@ def trace(graph: dict, feature: str) -> dict:
     цепочка — если данных на полный путь нет, отдаётся лучший фрагмент с НАЗВАННЫМИ `gaps`.
 
     Результат: `{"feature", "chain": [{id,type,title}], "goal": id|None, "outcome": {...}|None,
-    "verdict": str, "gaps": [...]}`.
+    "decision": {id,title}|None, "built_by": [{id,title,pr}], "review": {...}|None, "verdict": str,
+    "gaps": [...]}`.
+
+    `decision` — из какого РЕШЕНИЯ (истории) появилась функция («зачем она есть»); `built_by` — какая
+    РАБОТА/PR её построила («что построили и где»); `review` — КТО/ЧТО её проверил (персистентный
+    вердикт: кем проверено + verified + ревизия). Все — словами человека, а не пересказом кода. Нет
+    объявленной связи -> пусто (не пробел: связь просто не записана, а не потеряна).
     """
     nodes, edges = _index(graph)
     fid = _slug(feature)
@@ -255,8 +440,8 @@ def trace(graph: dict, feature: str) -> dict:
                 "title": _text(n.get("title")) or nid}
 
     if fid not in nodes:
-        return {"feature": fid, "chain": [], "goal": None, "outcome": None,
-                "verdict": "unknown",
+        return {"feature": fid, "chain": [], "goal": None, "outcome": None, "decision": None,
+                "built_by": [], "review": None, "verdict": "unknown",
                 "gaps": [f"узла «{fid}» нет в графе — цепочку строить не от чего"]}
 
     # Вверх по contains до цели.
@@ -291,9 +476,39 @@ def trace(graph: dict, feature: str) -> dict:
         gaps.append(f"у «{fid}» нет outcome (ребро targets) — зачем функция существует, "
                     f"не подтверждается измеримым результатом")
 
+    # Решение, из которого функция появилась («зачем она есть» — из истории). Отсутствие решения
+    # НЕ пробел: причина может быть просто не записана. Но если решение есть, история его называет.
+    decision_ids = [e["from"] for e in edges if e.get("type") == "motivates"
+                    and e.get("to") == fid and e.get("from") in nodes]
+    decision = None
+    if decision_ids:
+        dn = nodes[decision_ids[0]]
+        decision = {"id": decision_ids[0], "title": _text(dn.get("title")) or decision_ids[0]}
+
+    # Работа/PR, построившая функцию («что построили» — из истории). Отсутствие НЕ пробел: история
+    # могла просто не записать, кто построил. Но если работа объявлена, история её называет.
+    built_by = []
+    for wid in [e["from"] for e in edges if e.get("type") == "builds"
+                and e.get("to") == fid and e.get("from") in nodes]:
+        wn = nodes[wid]
+        built_by.append({"id": wid, "title": _text(wn.get("title")) or wid,
+                         "pr": _text(wn.get("pr")) or None})
+
+    # Кто/что проверил функцию («проверено кем» — из ПЕРСИСТЕНТНОЙ записи, не из прогона). Отсутствие
+    # НЕ пробел: проверки могло не быть, а её запись — не потеряна. Есть запись -> называем, кем.
+    review = None
+    review_ids = [e["from"] for e in edges if e.get("type") == "reviewed"
+                  and e.get("to") == fid and e.get("from") in nodes]
+    if review_ids:
+        rn = nodes[review_ids[0]]
+        review = {"id": review_ids[0], "title": _text(rn.get("title")) or review_ids[0],
+                  "verified": bool(rn.get("verified")),
+                  "reviewed_revision": _text(rn.get("reviewed_revision")) or None}
+
     verdict = _verdict(goal, outcome)
     return {"feature": fid, "chain": [summary(i) for i in chain_ids], "goal": goal,
-            "outcome": outcome, "verdict": verdict, "gaps": gaps}
+            "outcome": outcome, "decision": decision, "built_by": built_by, "review": review,
+            "verdict": verdict, "gaps": gaps}
 
 
 def _verdict(goal, outcome) -> str:

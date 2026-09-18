@@ -22,8 +22,8 @@ dependencies = ["pyyaml>=6.0.3"]
 ai-ops = "ai_ops_kit.cli.entry:main"
 
 [project.optional-dependencies]
-test = ["pytest>=8.0", "pytest-cov>=5.0", "hypothesis>=6.168.0"]
-dev = ["pytest>=8.0", "pytest-cov>=5.0", "hypothesis>=6.168.0", "ruff>=0.16.2", "mypy>=1.8", "pre-commit>=3.5"]
+test = ["pytest>=8.0", "pytest-cov>=7.1.0", "hypothesis>=6.168.0"]
+dev = ["pytest>=8.0", "pytest-cov>=7.1.0", "hypothesis>=6.168.0", "ruff>=0.16.7", "mypy>=1.8", "pre-commit>=3.5"]
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}
@@ -194,14 +194,23 @@ module = ["ai_ops_kit.kernel.*", "ai_ops_kit.shared.*"]
 disallow_untyped_defs = true
 
 # towncrier: ЕДИНСТВЕННЫЙ из шести рассмотренных инструментов, у кого есть гейт «в этой ветке
-# добавлена запись для changelog» (EV-1137). Используем ТОЛЬКО `check`, никогда `build`: старый
-# CHANGELOG.md остаётся как есть, ретро-миграция не нужна и не делается.
+# добавлена запись для changelog» (EV-1137). В CI зовём ТОЛЬКО `check` (см. package-quality.yml):
+# старый CHANGELOG.md на 364 КБ он не трогает, ретро-миграции нет. `build` зовёт РЕЛИЗ — из
+# `devtools/release_bump.py` на бампе версии (аудит A2, 17.09.2026): он сгребает накопленную очередь
+# newsfragments/ в раздел новой версии и очищает очередь, чтобы «на релизе очередь заявлений пуста»
+# перестало подтекать. build НЕ вызывается ни в одном workflow (это стережёт
+# test_release_gates.test_towncrier_build_is_never_called_in_ci) — только на осознанном релизе.
 # Модель фрагментов попутно снимает конфликты в файле на 364 КБ — правки идут в разные новые файлы.
+#
+# title_format задаёт шапку собранного раздела В ФОРМАТЕ КИТА (`## [X.Y.Z] — YYYY-MM-DD`), чтобы
+# сборка ложилась в существующий CHANGELOG и её находил извлекатель записок в release.yml (`## [ver]`).
+# Вставка идёт под маркер `<!-- towncrier release notes start -->` (в CHANGELOG.md, сразу под
+# `## [Unreleased]`) — так новый раздел встаёт под Unreleased и над прошлой версией.
 [tool.towncrier]
 directory = "newsfragments"
 filename = "CHANGELOG.md"
 package = "ai_ops_kit"
-title_format = false
+title_format = "## [{version}] — {project_date}"
 issue_format = "{issue}"
 
 [[tool.towncrier.type]]
