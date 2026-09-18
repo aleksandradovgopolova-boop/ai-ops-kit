@@ -10,7 +10,7 @@ pytest-xdist>=3.0     # параллельный прогон (-n auto): пол�
 hypothesis>=6.100
 
 # Linting
-ruff>=0.8.0
+ruff>=0.16.7
 
 # Type checking
 mypy>=1.8
