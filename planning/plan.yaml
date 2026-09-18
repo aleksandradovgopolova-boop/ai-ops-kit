@@ -129,14 +129,15 @@ goals:
     # ночной сбор даёт плоский список (коммиты/CI/PR/валидаторы) без разбивки по направлениям и без
     # ротации фокуса. hotspot detection, findings→validators и portfolio-intelligence остаются в «Дальше».
     freeze_relation: extension
-    status: active
+    # ДОСТИГНУТО 2026-09-18 (2/2): оси + ротация фокуса доставлены (#1058).
+    status: achieved
     outcome:
-      # Находки ночного обзора организованы по НАЗВАННЫМ осям (тесты/архитектура/безопасность/доки/UX),
-      # а не одним плоским списком; ось без наблюдаемого здесь сигнала честно «не наблюдается», не «ок».
-      nightly_review_organizes_findings_by_named_dimension: false
-      # РОТАЦИЯ фокуса: каждый прогон подсвечивает следующую ось, за цикл все оси попадают в фокус —
-      # ничего не остаётся молча непросмотренным. Оси питают уже готовый недельный тренд.
-      dimensions_rotate_so_none_is_silently_unreviewed: false
+      # Находки организованы по НАЗВАННЫМ осям. ЗАКРЫТ (#1058): сателлит `intelligence/nightly_dimensions.py`
+      # (6 осей по каталогу `agents/quality/`); ось без сигнала честно «не наблюдается», не «ок».
+      nightly_review_organizes_findings_by_named_dimension: true
+      # РОТАЦИЯ фокуса. ЗАКРЫТ (#1058): round-robin, курсор `.ai/project/nightly-review/focus-cursor.json`
+      # двигает только реальный прогон; оси питают недельный тренд (#1053).
+      dimensions_rotate_so_none_is_silently_unreviewed: true
 
   - id: real-product-qualification
     # заморозка: сама петля квалификации: прогон, находки, закрытие
@@ -842,25 +843,13 @@ work:
   # честно отделено от «без изменений». Оба исхода закрыты. Ротация по всем направлениям, hotspot и
   # portfolio-intelligence остаются в «Дальше» роадмапа (не входили в 2 исхода этого среза).
 
-  # ── Направление nightly-review-covers-all-dimensions (взято 2026-09-18) ────────────────────────────
-  - id: nightly-review-organizes-and-rotates-dimensions
-    title: >-
-      Ночной обзор разбивает находки по НАЗВАННЫМ осям (тесты/архитектура/безопасность/доки/UX) и
-      РОТИРУЕТ фокус — за цикл каждая ось попадает в фокус, ничего не остаётся молча непросмотренным
-    type: product
-    goal: nightly-review-covers-all-dimensions
-    status: todo
-    owner_role: product
-    value: high
-    write_scope: [ai_ops_kit/, tests/, docs/]
-    reason: >-
-      Ночной сбор (`intelligence/nightly_collectors.py`/`nightly_review.py`) сейчас даёт ПЛОСКИЙ список
-      (коммиты/CI/PR/валидаторы) без разбивки по осям и без ротации фокуса — часть направлений может
-      молча не просматриваться. Организовать находки по осям (переиспользуя детерминированные сигналы:
-      architecture_baseline, доменные валидаторы, охват тестов и т.п.) и ввести ротацию: каждый прогон
-      подсвечивает следующую ось, за цикл проходят все. Оси питают уже готовый недельный тренд (#1053).
-      Честность: ось без наблюдаемого здесь сигнала — «не наблюдается», не «ок». Полноценные AI-ревью по
-      осям (блокируются без API-ключа в этой среде — awaiting_reviewer), hotspot и portfolio — в «Дальше».
+  # ── Направление nightly-review-covers-all-dimensions ДОСТИГНУТО 2026-09-18 (2/2) ───────────────────
+  # nightly-review-organizes-and-rotates-dimensions ЗАКРЫТА в историю (#1058): сателлит
+  # `intelligence/nightly_dimensions.py` — 6 осей (имена по каталогу `agents/quality/`, тест сверяет
+  # существование), находки в брифе сгруппированы по осям; ось без сигнала честно «не наблюдается»
+  # (≠«ок»); ротация фокуса round-robin (курсор `.ai/project/nightly-review/focus-cursor.json`, двигает
+  # только реальный прогон); оси питают недельный тренд #1053. Полноценные AI-ревью по осям, hotspot,
+  # findings→validators, portfolio-intelligence остаются в «Дальше» роадмапа.
   # ── Направление kit-measured-as-a-product ДОСТИГНУТО 2026-09-17 (5/5 исходов) ──────────────────────
   # Мерить кит ПРОДУКТОМ, не числом возможностей. Обе работы — в history/plan-history.yaml:
   #   • kit-product-scorecard (#1040): команда `scorecard` — единая карта из 5 метрик; 1/2/3 считаются

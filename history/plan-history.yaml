@@ -19,6 +19,30 @@ kind: delivery-plan-history
 
 
 work:
+  - id: nightly-review-organizes-and-rotates-dimensions
+    title: >-
+      Ночной обзор разбивает находки по НАЗВАННЫМ осям (тесты/архитектура/безопасность/доки/UX) и
+      РОТИРУЕТ фокус — за цикл каждая ось попадает в фокус, ничего не остаётся молча непросмотренным
+    goal: nightly-review-covers-all-dimensions
+    status: done
+    closed_at: '2026-09-18'
+    pr: 1058
+    result: >-
+      ЗАКРЫТО 2026-09-18 (PR #1058). Единственная работа направления nightly-review-covers-all-dimensions:
+      ночной обзор был ПЛОСКИМ списком, теперь раскладывает находки по 6 НАЗВАННЫМ осям (tests,
+      architecture, security, documentation, product-ux, analytics) и РОТИРУЕТ фокус. Сателлит
+      `ai_ops_kit/intelligence/nightly_dimensions.py`: оси названы по каталогу ревьюеров `agents/quality/`
+      (не выдуманы — `declared_reviewers()` + тест сверяет существование каждого), маппятся на
+      детерминированные проверки `run_checks`; `group_findings_by_axis` даёт статус оси
+      расхождения/чисто/«не наблюдается». Ротация round-robin, курсор
+      `.ai/project/nightly-review/focus-cursor.json` двигает ТОЛЬКО реальный прогон (показ/подтверждение
+      не двигают). Осевые счётчики питают недельный тренд #1053 (`compute_axis_trends`, второго журнала
+      нет). ★ЧЕСТНОСТЬ (проверил координатор лично): ось без наблюдаемого сигнала в этом репо → «не
+      наблюдается здесь», НЕ сворачивается в «ок» (в т.ч. tests/security, где нужен AI-ревью — вне v0).
+      Граница v0 сохранена (обзор не правит продукт, единственная запись — курсор). Судил координатор
+      (писатель — субагент): 63 теста (dimensions+review+validator-anchor) зелёные, `check-full` зелёный
+      включая compatibility-matrix. Полноценные AI-ревью по осям (без ключа молчат — awaiting_reviewer),
+      hotspot, findings→validators, portfolio-intelligence остаются в «Дальше».
   - id: nightly-review-persists-and-trends-findings
     title: >-
       Ночной обзор показывает ТРЕНД за неделю, а не только снимок: находки сохраняются во времени,
