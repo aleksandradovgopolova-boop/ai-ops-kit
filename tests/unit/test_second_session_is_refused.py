@@ -17,6 +17,7 @@
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import pytest
@@ -24,6 +25,11 @@ import pytest
 from ai_ops_kit.lifecycle import active_work as aw
 
 KIT_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _iso_days_ago(days: float) -> str:
+    """ISO-время `days` дней назад в UTC — для заявок известного возраста в тестах."""
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
 
 
 @pytest.fixture()
@@ -152,10 +158,12 @@ class TestDeadHolderDoesNotHold:
         assert aw.register(reg, "wi-1", "ai-ops/wi-1", ["src/"], "session:other") != 0
 
     def test_stale_foreign_machine_session_claim_is_not_aged_out(self):
-        """Чужую машину по возрасту НЕ судим (её сессия может быть жива, опубликованная заявка —
-        авторитет координации, как в pid-пути). Гашение по возрасту — только СВОИ session-заявки."""
+        """Чужую машину по 12-часовому порогу НЕ судим (её сессия может быть жива, опубликованная
+        заявка — авторитет координации, как в pid-пути). Гашение по этому порогу — только СВОИ
+        session-заявки. Оговорка #1048: это верно лишь В ПРЕДЕЛАХ жёсткого потолка возраста (14 дней),
+        поэтому берём чужую заявку возрастом заметно больше 12ч, но моложе потолка — она держится."""
         old_foreign = {"id": "wi-1", "owner_session": "session:stale",
-                       "started_at": "2020-01-01T00:00:00+00:00", "machine": "другая-машина"}
+                       "started_at": _iso_days_ago(3), "machine": "другая-машина"}
         assert aw.holder_is_gone(old_foreign) is False
 
     def test_stale_session_claim_does_not_block_new_work(self, reg, capsys):

@@ -477,6 +477,16 @@
           ],
           "description": "по умолчанию product: кит говорит с владельцем продукта, а не с отладчиком"
         },
+        "mode": {
+          "enum": [
+            "founder",
+            "product",
+            "design",
+            "delivery",
+            "engineering"
+          ],
+          "description": "режим работы — ЛИНЗА поверх audience, не новый продукт и не новый словарь: выбирает уровень по умолчанию из тех же трёх аудиторий (см. operating_modes в registry/communication-policy.yaml). Явно заданный audience всегда сильнее режима."
+        },
         "detail_level": {
           "enum": [
             "concise",

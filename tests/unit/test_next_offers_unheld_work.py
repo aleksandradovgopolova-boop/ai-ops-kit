@@ -134,10 +134,12 @@ class TestClaimFromAnotherMachine:
     """
 
     def _publish_foreign_claim(self, repo, wid, machine="ноутбук-коллеги"):
+        # started_at СВЕЖИЙ (эта проба про видимость ОПУБЛИКОВАННОЙ чужой заявки, не про возраст):
+        # заявка старше жёсткого потолка (#1048) снималась бы reap'ом и переставала прятать работу.
         aw.publish_claim(repo, {"id": wid, "workitem": wid, "branch": f"ai-ops/{wid}",
                                 "status": "in-progress", "affected_areas": ["src/export/"],
                                 "owner_session": "session:zzzz", "machine": machine,
-                                "started_at": "2026-08-18T10:00:00+00:00"})
+                                "started_at": aw._now_iso()})
 
     def test_published_foreign_claim_hides_the_work(self, repo):
         (repo / ".ai-ops.yaml").write_text("team_coordination:\n  publish: true\n", encoding="utf-8")

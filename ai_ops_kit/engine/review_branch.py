@@ -193,4 +193,30 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
         rep["base_note"] = based.get("reason")
     if persist:
         rep["evidence_path"] = _persist_review(child_root, wid, rep)
+        rep["review_verdict_path"] = _persist_review_verdict(child_root, wid, reviews, signals,
+                                                             revision)
     return rep
+
+
+def _persist_review_verdict(child_root, wid, reviews, signals, revision):
+    """Зафиксировать persistent review-вердикт функции — «кто/что проверил» как узел истории.
+
+    ПОЧЕМУ ОТДЕЛЬНО от BranchReview: BranchReview — про готовность ВЕТКИ к merge; review-вердикт — про
+    ЗНАНИЕ о функции (какие измерения приняты и КЕМ), которое читает Knowledge Graph. Содержание берём
+    у `evidence_verdict` (веха 4.2, #588) — новую модель проверки не вводим: гейты-ревью здесь — это
+    независимый судья (`_run_reviews` под read-only reviewer_proposer), поэтому writer≠judge держится.
+    Пишется под `wid` — при ревью паспорта функции (`ai-ops review <feature>`) это её id, и Knowledge
+    Graph резолвит узел review на узел feature. Ничего не проверено -> запись не пишется (persist -> None).
+    Сбой не роняет ревью: вердикт от наличия файла не зависит."""
+    from ai_ops_kit.gates import gate_executor
+    from ai_ops_kit.shared import review_verdict
+    try:
+        gates_map = gate_executor.load_gates()
+        gate_results = [{"gate": r.get("gate"), "status": r.get("status")}
+                        for r in reviews or [] if r.get("valid")]
+        subset = {r["gate"]: gates_map[r["gate"]] for r in gate_results
+                  if r.get("gate") in gates_map}
+        ev = gate_executor.evidence_verdict(gate_results, subset, signals)
+        return review_verdict.persist(child_root, wid, ev, revision=revision)
+    except (OSError, KeyError, TypeError):
+        return None

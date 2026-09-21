@@ -139,6 +139,38 @@ def check(data, pkg=PKG):
     return e
 
 
+def check_foundation(data):
+    """Секция `foundation` (свежесть фундамента). Необязательна; если есть — ссылочно целостна.
+
+    `contours` обязаны быть id существующих контуров: сигнал свежести фундамента иначе смотрел бы на
+    несуществующий контур. Пороги, если заданы, — целые. Enforcement обязан быть `advisory`: сигнал
+    СОВЕТУЕТ, а не валит сборку, и объявить его гейтом здесь значило бы соврать про его природу.
+    """
+    e = []
+    fnd = (data or {}).get("foundation")
+    if fnd is None:
+        return []                                      # секция необязательна
+    if not isinstance(fnd, dict):
+        return ["foundation: секция не mapping"]
+    ids = [c.get("id") for c in (data.get("contours") or [])]
+    cts = fnd.get("contours")
+    if not isinstance(cts, list) or not cts:
+        e.append("foundation: contours пусты — не назван ни один контур фундамента")
+    else:
+        for cid in cts:
+            if cid not in ids:
+                e.append(f"foundation: контур '{cid}' не является id контура")
+    fr = fnd.get("freshness") or {}
+    if fr:
+        if fr.get("enforcement") not in (None, "advisory"):
+            e.append(f"foundation.freshness.enforcement '{fr.get('enforcement')}' — сигнал свежести "
+                     f"фундамента advisory (советует), гейтом объявлять нельзя")
+        for k in ("min_lag_days", "min_newer_features"):
+            if k in fr and not isinstance(fr.get(k), int):
+                e.append(f"foundation.freshness.{k} обязан быть целым числом")
+    return e
+
+
 def check_comms(data):
     """Инварианты политики коммуникации."""
     e = []
@@ -300,6 +332,7 @@ def main(argv):
         model_doc = yaml.safe_load(MODEL.read_text(encoding="utf-8"))
         errs += check(model_doc)
         errs += check_domain_model(model_doc)
+        errs += check_foundation(model_doc)
     except OSError:
         errs.append(f"модель контуров не найдена: {MODEL}")
     except yaml.YAMLError as exc:

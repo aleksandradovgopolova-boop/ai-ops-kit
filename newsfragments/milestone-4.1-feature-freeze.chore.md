@@ -1,1 +1,0 @@
-Веха 4.1 «Work & Outcome OS»: зафиксирован feature-freeze — на веху не заводятся новые роли, агенты, gates, registry, model providers, security checks и слои абстракции; фокус на связывании уже построенного в цикл Work→Decision→Outcome→Insight. Решение записано в реестр (ep-2026-09-07-milestone-4.1-feature-freeze), issue #568.

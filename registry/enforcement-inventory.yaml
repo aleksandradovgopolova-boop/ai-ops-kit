@@ -114,3 +114,5 @@ ratchet_baselines:
     consumed_by: ai_ops_kit/validation/validate_print_discipline.py
   - name: packages/code-duplication-baseline.yaml            # #827: ратчет дублирования (CODE-003)
     consumed_by: ai_ops_kit/devtools/code_duplication.py
+  - name: packages/swallowed-exceptions-baseline.yaml        # B3: стоячий ратчет молчаливых глушителей
+    consumed_by: ai_ops_kit/validation/validate_swallowed_exceptions.py

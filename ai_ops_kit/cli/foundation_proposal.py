@@ -146,6 +146,23 @@ def storybook(child_root) -> dict:
     return ui_readiness.assess(child_root)
 
 
+def foundation_freshness(child_root) -> dict:
+    """СВЕЖЕСТЬ ФУНДАМЕНТА: отстал ли фундамент от нижних доков и потока фич + кандидат на пересмотр.
+
+    Тонкая обёртка над planning.foundation_freshness (единственный вычислитель): часть того же
+    «Ревью фундамента», не второй путь рассуждения. Битая модель контуров -> честное состояние
+    `unknown`, а не выдуманное «свежо»: advisory-часть брифинга не роняет весь брифинг.
+    """
+    from ai_ops_kit.planning import contours as _contours
+    from ai_ops_kit.planning import foundation_freshness as _ff
+    try:
+        return _ff.assess(child_root)
+    except _contours.ModelCorrupt as e:
+        return {"schema_version": 1, "kind": "foundation-freshness", "enforcement": "advisory",
+                "candidate": None, "state": "unknown",
+                "note": f"модель контуров недостоверна — свежесть фундамента не измерена: {e}"}
+
+
 def build_briefing(child_root, *, health=None, risks=None, budget_left=None, me=None,
                    product_advice=None) -> dict:
     """Собрать весь брифинг ОДНИМ объектом. Ничего не пишет.
@@ -164,6 +181,7 @@ def build_briefing(child_root, *, health=None, risks=None, budget_left=None, me=
         "verdict": verdict,
         "recommendations": recommendations(child_root, verdict,
                                            budget_left=budget_left, me=me),
+        "foundation_freshness": foundation_freshness(child_root),
         "storybook": storybook(child_root),
         "product_advice": product_advice,
     }
@@ -192,6 +210,31 @@ def _storybook_line(sb: dict) -> str:
                 + tail)
     return ("Storybook: evidence собирается (verified) — адаптер строит реальный UIEvidenceBundle."
             + tail)
+
+
+def _foundation_freshness_line(ff: dict) -> str | None:
+    """Одна человеческая строка про свежесть фундамента — ТОЛЬКО когда есть измеримый кандидат.
+
+    Инвариант честности: нет кандидата (свежо / не с чем сравнить / нет git-даты) -> строки НЕТ,
+    молчим. Устаревание не выдумываем, «не знаю» за «устарел» не выдаём."""
+    cand = (ff or {}).get("candidate")
+    if not cand:
+        return None
+    return ("возможно, стоит пересмотреть фундамент продукта: " + cand.get("reason", "")
+            + " — это совет, а не обязательство")
+
+
+def _foundation_freshness_technical(ff: dict) -> dict:
+    """Подробности свежести фундамента — в технические детали (по запросу)."""
+    if not ff:
+        return {}
+    cand = ff.get("candidate")
+    out = {"свежесть фундамента": ff.get("state"), "свежесть фундамента · пояснение": ff.get("note")}
+    if cand:
+        out["свежесть фундамента · кандидат"] = (
+            f"{cand.get('path')} — новее: {cand.get('newer_references_count', 0)} нижних доков, "
+            f"{cand.get('newer_features', 0)} фич; отставание ≈ {cand.get('lag_days')} дн.")
+    return out
 
 
 def _whats_new_line(wn: dict) -> str:
@@ -282,8 +325,13 @@ def to_message(briefing: dict):
     if pa.get("note"):
         technical["продукт · примечание"] = pa["note"]
     technical.update(_kit_setup_technical(briefing))
+    ff = briefing.get("foundation_freshness") or {}
+    technical.update(_foundation_freshness_technical(ff))
 
     kit_line = _kit_setup_line(verdict)
+    # Свежесть фундамента — продуктовый совет (пересмотреть Vision), НЕ настройка кита: строку даём
+    # ТОЛЬКО когда есть измеримый кандидат, иначе молчим (честность превыше полноты).
+    fresh_line = _foundation_freshness_line(ff)
 
     # ВЕДЁМ С ПРОДУКТА. Есть продуктовая потребность -> она в заголовке, сводке, «почему» и решении;
     # настройка кита — отдельной строкой в «Дальше».
@@ -293,6 +341,8 @@ def to_message(briefing: dict):
         decision = {"question": "что предлагаю взять по продукту в первую очередь",
                     "recommendation": f"{lead.get('need')} — потому что {lead.get('why')}"}
         next_steps = []
+        if fresh_line:
+            next_steps.append(fresh_line)
         if len(precs) > 1:
             next_steps.append("остальное по продукту покажу списком")
         next_steps.append(kit_line)
@@ -309,13 +359,13 @@ def to_message(briefing: dict):
             summary="Пока не хватает продуктовых данных, чтобы советовать по продукту.",
             why_it_matters="Придумывать продуктовую потребность я не буду — это была бы выдумка, "
                            "а не совет.",
-            next_steps=[kit_line], technical=technical)
+            next_steps=([fresh_line] if fresh_line else []) + [kit_line], technical=technical)
 
     return presenter.message(
         status="ok", headline="По продукту сейчас советовать нечего",
         summary="Продуктовые данные есть, но срочного по продукту сейчас нет.",
         why_it_matters=pa.get("note") or "срочной работы по продукту сейчас нет",
-        next_steps=[kit_line], technical=technical)
+        next_steps=([fresh_line] if fresh_line else []) + [kit_line], technical=technical)
 
 
 def run_intent(task, child_root, signals, a):

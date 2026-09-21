@@ -43,6 +43,7 @@ STANDALONE = [
     "validate_bootstrap_qualification",
     "validate_budget_contract",
     "validate_capability_policy",
+    "validate_changelog_queue_drained",   # A2: standalone; без --release советует (0), с --release краснит непустую очередь
     "validate_claims",
     "validate_container_assets",
     "validate_container_delivery",
@@ -98,6 +99,7 @@ STANDALONE = [
     "validate_standalone_engine",
     "validate_supply_chain",
     "validate_surface_wiring",
+    "validate_swallowed_exceptions",   # B3: standalone, читает свой packages/swallowed-exceptions-baseline.yaml + ai_ops_kit/
     "validate_test_taxonomy",     # 02.09.2026 (#439): standalone, читает свой packages/test-taxonomy-baseline.yaml + tests/
     "validate_work_graph",
     "validate_workflow_gates",

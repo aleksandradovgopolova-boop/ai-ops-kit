@@ -1,0 +1,32 @@
+schema_version: 1
+kind: feature-blueprint
+feature:
+  id: verified-readout-knowledge-level
+  name: «Проверено» как уровень знания, а не счёт гейтов
+  owner: ai-ops-kit
+  status: in-progress            # инженерия выпущена; продуктовый outcome не накоплен (у кита нет продуктовой аналитики)
+  profile: lean
+  current_stage: delivery        # построено и доставлено PR'ом; аналитика/итог не накоплены
+links:
+  # ЗАЧЕМ появилась (из решения, не из пересказа кода): продуктовое ревью владельца 16.09 (P0 №5) —
+  # «Verified-readout как уровень знания (не счёт гейтов)» в context решения.
+  decision: ep-2026-09-16-product-freeze-held-until-external-clean-run
+  # ЧТО построило и где (из истории, не из кода): работа verified-readout-is-knowledge-level-not-gate-count.
+  built_by: 985
+artifacts:
+  discovery:
+  - path: discovery/problem-statement.md
+    status: declined
+    declined_reason: >-
+      Кураторский паспорт-провенанс: продуктовая проблема («Проверено» показывало счёт гейтов, а не
+      уровень знания) зафиксирована решением (links.decision, P0 №5 ревью 16.09); отдельный
+      discovery-артефакт для этой инженерной фичи кита не создавался.
+  definition:
+  - path: prd/feature.md
+    status: declined
+    declined_reason: >-
+      Определение фичи несёт построившая её работа и её PR (links.built_by, PR #985); отдельный PRD
+      не велся — паспорт курирует провенанс, а не полный жизненный цикл.
+  delivery:
+  - path: delivery/shipped.md
+    status: done

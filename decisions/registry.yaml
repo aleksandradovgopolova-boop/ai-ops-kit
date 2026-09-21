@@ -2,6 +2,11 @@
 # (конкретные решения) и исходы. Машинно проверяется validate_decisions.py.
 # В child живёт в .ai/project/decisions/. Примеры ниже — реальные решения по киту
 # (догфудинг): они же показывают, как извлекать принцип из повторяющихся эпизодов.
+#
+# Тёзка по имени, но НЕ то же самое (см. ep-2026-09-17-one-directory-per-meaning):
+# здесь живут решения САМОГО кита — принципы dp-* и эпизоды ep-*. Каталог
+# `.research/decisions/` — это другое: DecisionPackage-ы research (DP-*,
+# kind: research.decision-package), отдельный namespace по правилам изоляции research.
 schema_version: 1
 kind: decisions-registry
 
@@ -1000,6 +1005,69 @@ episodes:
     reversibility: two-way
     date: 2026-09-16
     source: продуктовое ревью владельца 16.09.2026 (чат-сессия); отменяет пивот PR #981
+
+  - id: ep-2026-09-16b-freeze-lifted-by-owner-led-ii-sreda-run
+    question: >
+      Снять ли product-freeze и засчитать one-feature-end-to-end после живого owner-led прогона на
+      ии-среде — или ждать буквального «человека совсем со стороны» из ep-2026-09-16?
+    decision: >
+      СНЯТЬ freeze и ЗАСЧИТАТЬ все пять исходов направления. Условие ep-2026-09-16 (живой внешний
+      прогон на реальном репо на установленном ките) ВЫПОЛНЕНО: владелец сделал несколько реальных
+      фич на боевом ии-среде (кит v4.4.2, тег — не PYTHONPATH), кит нигде не показал технику, владельцу
+      ок. Планка «человек совсем со стороны» (незнакомец) остаётся ОТДЕЛЬНОЙ и может быть взята позже —
+      держать freeze бесконечно в её ожидании смысла нет, результат доказан живой работой. Взято
+      следующее направление product-memory-org-intelligence (ставка ревью «куда повернуть продукт»).
+    reason: >
+      Кит себя не судит — засчёт за владельцем, как #745/#748/#701. Все owner-led прогоны кита
+      засчитывались так же. Оговорка owner-led зафиксирована в артефакте и планом, флипа не отменяет.
+    context: >
+      qualification/ONE-FEATURE-EXTERNAL-RUN-ii-sreda-2026-09-16.md. Смягчает (не отменяет)
+      ep-2026-09-16: условие того решения выполнено owner-led-прогоном.
+    reversibility: two-way
+    date: 2026-09-16
+    source: чат-сессия; живой owner-led прогон на ии-среде (v4.4.2)
+
+  - id: ep-2026-09-17-one-directory-per-meaning
+    question: >
+      Находка аудита B1: на диске одновременно три каталога `context/` (`./context`,
+      `.ai/project/context`, `ai_ops_kit/context`), а также пары-тёзки `research`+`.research` и
+      `decisions`+`.research/decisions`. Свести смысловые дубли к одному каноническому каталогу
+      (git mv) — или это НЕ дубли?
+    decision: >
+      НЕ сводить — это НЕ дубли, а тёзки по имени при РАЗНОМ смысле; правильная правка —
+      РАЗМЕЖЕВАНИЕ (демаркация имён/READMEs), а не слияние. Проверено чтением содержимого и
+      читателей в коде. Канон «один каталог — один смысл» теперь читается однозначно:
+      (1) `context/` — прозаический продуктовый КОНТЕКСТ самого кита (dogfood-заполнение +
+      шаблон, ярусы чтения; у дочки эквивалент — заполненный слой контекста);
+      (2) `.ai/project/context/` — ФАКТИЧЕСКИЙ managed-слой контекста кита-как-родителя
+      (now-снимок, PRODUCT_PASSPORT, ProductStatus), тот самый слой, что у дочки живёт под
+      `.ai/project/`;
+      (3) `ai_ops_kit/context/` — это не контент, а КОД: Python-пакет context-движка
+      (context_engine/retrieval/compiler…), тёзка лишь по basename;
+      (4) `research/` — прозаические КОНТРАКТЫ и правила bounded-context «Research» (README,
+      ACCEPTANCE, writer-preflight), а `.research/` — изолированный СКЛАД ДАННЫХ этого контекста
+      (requests/evidence/decisions/memory) по правилу изоляции №5 research; смешивать их прямо
+      запрещено правилами изоляции;
+      (5) `decisions/` — реестр решений САМОГО кита (ADR-* + registry.yaml: принципы dp-*,
+      эпизоды ep-*), тогда как `.research/decisions/` — это DecisionPackage-ы research (DP-*,
+      `kind: research.decision-package`) — другой namespace по правилу изоляции №2, `DP` там —
+      «пакет решения», не «принцип».
+      Force-слияние любой из этих пар сломало бы либо managed-контракт `.ai/project/`, либо
+      правила изоляции research, либо импорты пакета-движка. Демаркация зафиксирована в
+      `FILE_INDEX.md` (карта тёзок), `context/README.md` и шапке `decisions/registry.yaml`.
+      Переименований на диске не делаем: пути load-bearing у десятков читателей и у инсталлятора.
+    reason: >
+      Слить разные смыслы в один каталог хуже исходной путаницы: потеря смысла необратима, а цена
+      навигации лечится однозначным именованием и картой. Честно: находка B1 назвала это «дублями»,
+      но по факту это коллизия ИМЁН при разных ролях — лечится размежеванием, а не git mv.
+    context: >
+      Находка аудита B1 (направление audit-remediation), работа one-directory-per-meaning.
+      Основания: content vs code (пакет `ai_ops_kit/context/`), правила изоляции research
+      (`research/README.md`, №2 и №5), managed-слой `.ai/project/` (PRODUCT_PASSPORT.md, шапка
+      `decisions/registry.yaml`), читатели путей в `ai_ops_kit/**`.
+    reversibility: two-way
+    date: 2026-09-17
+    source: чат-сессия (писатель-субагент, разбор находки B1)
 
 
 outcomes:

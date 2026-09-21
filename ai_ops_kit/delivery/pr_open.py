@@ -133,6 +133,29 @@ def _default_branch(owner, name, token):
     return (data or {}).get("default_branch") if isinstance(data, dict) else None
 
 
+def _canonical_owner_repo(owner, name, token):
+    """Канонический (текущий) слаг репозитория из GitHub API.
+
+    При переносе/переименовании репо на GitHub старый адрес отдаёт 301-редирект. `git push` его
+    следует сам, но API-вызовы и создание PR били бы по СТАРОМУ owner/repo, распарсенному из
+    origin-URL — PR ушёл бы не туда либо доставка зависала в `outcome_unknown`. Спрашиваем актуальный
+    слаг: `GET /repos/{owner}/{name}` при переносе (следуя редиректу) отдаёт тело с полем `full_name`
+    = актуальный `owner/repo`. Возвращаем канонический (owner, name).
+
+    -> (owner, name) | None. None означает «резолв не удался (репо не найден / API недоступен /
+    битый ответ) — веди себя КАК РАНЬШЕ на исходном слаге». Резолв — УЛУЧШЕНИЕ, а не новая точка
+    отказа: сетевой сбой резолва не роняет доставку жёстче, чем прежде."""
+    data, _err = _gh_request(f"{_api_base()}/repos/{owner}/{name}", token)
+    full = (data or {}).get("full_name") if isinstance(data, dict) else None
+    if not full or "/" not in full:
+        return None
+    new_owner, _, new_name = full.partition("/")
+    # Тот же fail-closed на сегментах, что и при разборе origin (имена уходят в путь GitHub API).
+    if not (_cp._valid_owner_repo_seg(new_owner) and _cp._valid_owner_repo_seg(new_name)):
+        return None
+    return new_owner, new_name
+
+
 def _find_open_pr(owner, name, branch, token):
     """Уже открытый PR для head-ветки (v2.93: идемпотентность — повтор не должен падать
     дублем). -> dict PR | None."""
@@ -160,6 +183,11 @@ def open_draft_pr(root, branch, title, body="", base=None, push=True, delivery_i
     if not owner_repo:
         return {"status": "unavailable", "note": "не удалось определить owner/repo из origin"}
     owner, name = owner_repo
+    # Резолвим ТЕКУЩИЙ канонический слаг ДО любых API-вызовов: при переносе репо (301) старый слаг
+    # из origin увёл бы PR/API не туда. Резолв не удался -> остаёмся на исходном слаге (как раньше).
+    canonical = _canonical_owner_repo(owner, name, token)
+    if canonical:
+        owner, name = canonical
     repository = f"{owner}/{name}"
     if base is None:
         base = _default_branch(owner, name, token)
@@ -287,6 +315,11 @@ def reconcile_delivery(root, branch):
     if not owner_repo:
         return {"status": "unavailable", "note": "не удалось определить owner/repo из origin"}
     owner, name = owner_repo
+    # Тот же резолв канонического слага, что и при создании PR: сверка перенесённого репо (301)
+    # должна идти по актуальному owner/repo, иначе искали бы PR не в том репозитории.
+    canonical = _canonical_owner_repo(owner, name, token)
+    if canonical:
+        owner, name = canonical
     pr = _find_pr_for_branch(owner, name, branch, token, state="all")
     if not pr:
         return {"status": "absent", "repository": f"{owner}/{name}"}

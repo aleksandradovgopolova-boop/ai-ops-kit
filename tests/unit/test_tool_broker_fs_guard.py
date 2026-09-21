@@ -10,6 +10,7 @@
 """
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -201,11 +202,19 @@ class TestRevertReportIsHonest:
     называющий дыру закрытой, опаснее самой дыры: читающий «откачено» не идёт смотреть диск.
     """
 
+    @pytest.mark.skipif(
+        hasattr(os, "geteuid") and os.geteuid() == 0,
+        reason="под root unlink обходит r-x — проба физически не достигает дефекта")
     def test_failed_revert_is_named_and_file_stays(self, git_repo):
         """Откат физически невозможен -> причина говорит это, а не рапортует успех.
 
         Замер, а не вердикт: проверяется и текст причины, и ФАЙЛ НА ДИСКЕ. Каталог делается
         r-x тем же вызовом, что создаёт файл, поэтому unlink даёт EACCES.
+
+        Проба опирается на то, что r-x каталог не даёт unlink (EACCES). Под root это правило
+        обходится, откат «удаётся», и первый assert падал бы не из-за дефекта, а из-за среды —
+        поэтому под root тест честно пропускается, а под обычным пользователем (как в CI)
+        исполняется по-настоящему.
         """
         policy = tool_broker.Policy(level="execution", child_root=str(git_repo))
         try:

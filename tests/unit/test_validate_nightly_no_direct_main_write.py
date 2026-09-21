@@ -95,9 +95,9 @@ def test_push_origin_main_via_subprocess_list_reddens(tmp_path):
     nightly = root / "ai_ops_kit" / V.NIGHTLY_REL
     src = nightly.read_text(encoding="utf-8")
     poisoned = src.replace(
-        "    delta = collect_delta(root, since)",
+        "    delta = collect_delta(root, since, focus=focus)",
         "    subprocess.run([\"git\", \"push\", \"origin\", \"main\"])  # ДЕФЕКТ ТЕСТА\n"
-        "    delta = collect_delta(root, since)", 1)
+        "    delta = collect_delta(root, since, focus=focus)", 1)
     assert poisoned != src, "точка вставки не найдена — тест устарел"
     nightly.write_text(poisoned, encoding="utf-8")
 
@@ -168,9 +168,9 @@ def test_verdict_is_a_function_of_file_content(tmp_path):
     nightly = root / "ai_ops_kit" / V.NIGHTLY_REL
     src = nightly.read_text(encoding="utf-8")
     nightly.write_text(src.replace(
-        "    delta = collect_delta(root, since)",
+        "    delta = collect_delta(root, since, focus=focus)",
         "    _git(root, \"commit\", \"-am\", \"x\")\n"
-        "    delta = collect_delta(root, since)", 1), encoding="utf-8")
+        "    delta = collect_delta(root, since, focus=focus)", 1), encoding="utf-8")
     after = V.find_violations(root)
     assert after and any(f["rule"] == "R1" for f in after), \
         "тот же файл с дефектом обязан краснеть — иначе валидатор не читает содержимое"

@@ -58,6 +58,59 @@ def test_unknown_audience_falls_back_to_product(tmp_path):
     assert PR.audience_from_config(tmp_path) == "product"
 
 
+# ── T6: режим работы — ЛИНЗА поверх аудитории (один kernel, не отдельный продукт) ────────────────
+# Режим отображается в ОДНУ из трёх существующих аудиторий (`operating_modes` в реестре) и обязан
+# РЕАЛЬНО менять разрешённую аудиторию — иначе это ещё одна инертная декларация, как `detail_level`.
+
+def test_mode_engineering_resolves_to_technical(tmp_path):
+    """Режим, отображённый в `technical`, поднимает уровень без явной аудитории."""
+    (tmp_path / ".ai-ops.yaml").write_text("communication:\n  mode: engineering\n", encoding="utf-8")
+    assert PR.audience_from_config(tmp_path) == "technical"
+
+
+def test_mode_design_resolves_to_product(tmp_path):
+    """Режим, отображённый в `product`, даёт продуктовый уровень."""
+    (tmp_path / ".ai-ops.yaml").write_text("communication:\n  mode: design\n", encoding="utf-8")
+    assert PR.audience_from_config(tmp_path) == "product"
+
+
+def test_explicit_audience_overrides_mode(tmp_path):
+    """Явно заданная аудитория ВСЕГДА сильнее режима: линза не перебивает прямой выбор."""
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "communication:\n  mode: engineering\n  audience: product\n", encoding="utf-8")
+    assert PR.audience_from_config(tmp_path) == "product"
+
+
+def test_unknown_mode_falls_back_to_product(tmp_path):
+    """Неизвестный режим — та же дисциплина отката, что и у неизвестной аудитории."""
+    (tmp_path / ".ai-ops.yaml").write_text("communication:\n  mode: astronaut\n", encoding="utf-8")
+    assert PR.audience_from_config(tmp_path) == "product"
+
+
+def test_mode_is_not_inert_it_changes_render_output(tmp_path):
+    """ГЛАВНАЯ ПРОБА T6: `mode` не декоративный флаг (в отличие от `detail_level`/`explain_jargon`,
+    у которых нет ни одного потребителя). Режим `engineering` без явной аудитории обязан РЕАЛЬНО
+    сменить разрешённую аудиторию на `technical` и, как следствие, изменить вывод `render`:
+    технический блок, который `product` прячет за запрос, при `engineering` показывается сразу.
+    """
+    m = PR.message(status="ok", summary="готово", next_steps=["дальше"],
+                   technical={"gate": "spec"})
+
+    (tmp_path / ".ai-ops.yaml").write_text("communication:\n  mode: product\n", encoding="utf-8")
+    product_aud = PR.audience_from_config(tmp_path)
+    product_out = PR.render(m, audience=product_aud)
+
+    (tmp_path / ".ai-ops.yaml").write_text("communication:\n  mode: engineering\n", encoding="utf-8")
+    eng_aud = PR.audience_from_config(tmp_path)
+    eng_out = PR.render(m, audience=eng_aud)
+
+    assert product_aud == "product" and eng_aud == "technical"
+    # product прячет детали за запрос; engineering показывает технический блок сразу — вывод РАЗНЫЙ.
+    assert "Технические детали:" not in product_out and "по запросу" in product_out
+    assert "Технические детали:" in eng_out and "gate: spec" in eng_out
+    assert product_out != eng_out
+
+
 # ── fail-closed ───────────────────────────────────────────────────────────────────────────────
 
 def test_message_without_summary_is_rejected():

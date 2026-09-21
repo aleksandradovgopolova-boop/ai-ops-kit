@@ -55,7 +55,12 @@ confidentiality_policy: {send_code_to_external_provider: allowed}
 # v3.35 Human Communication Layer: как кит разговаривает с ЧЕЛОВЕКОМ в этом репозитории.
 # `product` (по умолчанию) — сначала смысл и результат, техника по запросу. Меняется и обычной
 # фразой: «рассказывай подробнее техническую часть» -> technical, «полный контекст» -> debug.
-communication: {audience: product, detail_level: concise, explain_jargon: true, technical_details: on_request}
+#
+# `mode` (необязательно) — режим работы как ЛИНЗА поверх audience, НЕ отдельный продукт и НЕ новый
+# словарь: founder/product/design/delivery -> уровень product, engineering -> technical. Это один
+# kernel под разные роли: режим лишь выбирает уровень по умолчанию из тех же трёх аудиторий.
+# Явно заданный `audience` ВСЕГДА сильнее режима (см. operating_modes в communication-policy.yaml).
+communication: {mode: product, audience: product, detail_level: concise, explain_jargon: true, technical_details: on_request}
 
 # v3.35 Модель продуктового репозитория: доопределение сигнальных путей под ЭТОТ стек.
 # Кит знает типовые пути; какие пути в этом продукте относятся к контуру, знает владелец.

@@ -15,12 +15,19 @@
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
 from ai_ops_kit.lifecycle import active_work as aw
+from ai_ops_kit.lifecycle import work_reconcile as wr
 
 _FRESH = aw._now_iso()   # молодая заявка: по возрасту НЕ гасится, весь эффект — от признака смерти
+
+
+def _iso_days_ago(days: float) -> str:
+    """ISO-время `days` дней назад в UTC — для заявок известного возраста в тестах."""
+    return (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
 
 
 def _dead_pid() -> int:
@@ -78,3 +85,61 @@ class TestDeadSessionClaimReleasedByProcess:
         out = capsys.readouterr().out
         assert rc == 0, "мёртвая заявка заблокировала работу"
         assert "ЗАЯВКА ОСВОБОЖДЕНА" in out, out
+
+
+_LOCAL = "this-host.local"
+_FOREIGN = "some-other-host.local"
+
+
+class TestHardTtlReleasesForeignDeadClaim:
+    """#1048: жёсткий потолок возраста снимает мёртвую заявку ДАЖЕ с чужой машины, не задевая свежие.
+
+    Реальный случай: session-заявка с чужой машины (session:5e296f8f, MacBook-Air-Sasa.local) провисела
+    24 дня и навсегда блокировала `next` — reap чужую session-личность не трогал, а возрастной порог
+    12ч применялся только к своей машине.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _stub_local_machine(self, monkeypatch):
+        """Зафиксировать имя ЭТОЙ машины, чтобы `_FOREIGN` гарантированно был чужим."""
+        monkeypatch.setattr(wr, "_machine", lambda: _LOCAL)
+
+    def test_foreign_fresh_session_claim_is_respected(self):
+        """(а) ЧУЖАЯ СВЕЖАЯ заявка (моложе потолка) — держится: авторитет координации не ослаблен."""
+        entry = {"id": "wi-1", "owner_session": "session:5e296f8f", "machine": _FOREIGN,
+                 "started_at": _iso_days_ago(3), "owner_pid": 999999}
+        assert aw.holder_is_gone(entry) is False
+
+    def test_foreign_claim_older_than_hard_ttl_is_released(self):
+        """(б) ЧУЖАЯ заявка СТАРШЕ потолка (24 дня, как в поле) — снимается, хоть машина чужая."""
+        entry = {"id": "wi-1", "owner_session": "session:5e296f8f", "machine": _FOREIGN,
+                 "started_at": _iso_days_ago(24), "owner_pid": 999999}
+        assert aw.holder_is_gone(entry) is True
+
+    def test_own_machine_age_over_12h_still_released(self):
+        """(в) СВОЯ заявка возрастом >12ч (но < потолка) — снимается по старому порогу, как раньше."""
+        entry = {"id": "wi-1", "owner_session": "session:5e296f8f", "machine": _LOCAL,
+                 "started_at": _iso_days_ago(1)}
+        assert aw.holder_is_gone(entry) is True
+
+    def test_own_machine_live_pid_is_held(self):
+        """(г) СВОЯ заявка с живым pid — держится: поведение своей машины не тронуто."""
+        entry = {"id": "wi-1", "owner_session": "session:5e296f8f", "machine": _LOCAL,
+                 "started_at": _FRESH, "owner_pid": os.getpid()}
+        assert aw.holder_is_gone(entry) is False
+
+    def test_hard_ttl_is_configurable_via_env(self, monkeypatch):
+        """SIDE-EFFECT: потолок настраивается env — чужая заявка 3 дней снимается при потолке в 1 день,
+        и НЕ снимается при дефолте (14 дней)."""
+        entry = {"id": "wi-1", "owner_session": "session:5e296f8f", "machine": _FOREIGN,
+                 "started_at": _iso_days_ago(3), "owner_pid": 999999}
+        assert aw.holder_is_gone(entry) is False               # дефолт 14д — держится
+        monkeypatch.setenv("AI_OPS_CLAIM_HARD_TTL_DAYS", "1")
+        assert aw.holder_is_gone(entry) is True                # потолок 1д — снимается
+
+    def test_bad_env_falls_back_to_default(self, monkeypatch):
+        """FAIL-CLOSED: битое значение env НЕ отключает защиту — чужая свежая заявка держится по дефолту."""
+        monkeypatch.setenv("AI_OPS_CLAIM_HARD_TTL_DAYS", "not-a-number")
+        entry = {"id": "wi-1", "owner_session": "session:5e296f8f", "machine": _FOREIGN,
+                 "started_at": _iso_days_ago(3), "owner_pid": 999999}
+        assert aw.holder_is_gone(entry) is False

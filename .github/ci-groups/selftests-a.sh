@@ -24,5 +24,5 @@ cd "$(dirname "$0")/../.."
 # джоб, а не по буквам файлов. Партиция полная и непересекающаяся: группа m — ровно
 # `not (то, что здесь)` (с тем же исключением монолита). Имена CI-контекстов НЕ меняются (пути
 # скриптов те же), required-статусы branch protection целы. Границу уточнять по временам прогона.
-python3 -m pytest -n auto --dist loadfile tests/ -q -m "slow and not nightly" \
+python3 -m pytest -n auto --dist loadfile tests/ -q -m "slow and not nightly and not release_gate" \
   -k "(test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h or test_w) and not test_validate_release"

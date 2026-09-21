@@ -23,6 +23,9 @@ entity_types:
   experiment:    {description: "Эксперимент, проверяющий гипотезу"}
   insight:       {description: "Вывод из данных/инцидентов/экспериментов; вход следующего Discovery"}
   outcome:       {description: "Проверяемый результат функции: baseline→target под guardrails и что реально измерено. Проекция OutcomeContract+OutcomeReadout (validate_product_objects).", attributes: [baseline, target, guardrails, measured, verdict]}
+  decision:      {description: "Решение из decisions/registry.yaml (эпизод ep-* или принцип dp-*): ЗАЧЕМ появилась функция. Узел несёт текст решения, а не пересказ кода."}
+  work:          {description: "Закрытая работа из history/plan-history.yaml (id + результат + pr/evidence): ЧТО построило функцию и где. Узел несёт название работы и её PR, а не пересказ кода.", attributes: [pr]}
+  review:        {description: "Персистентный review-вердикт функции (features/<id>/review/verdict.yaml): КТО/ЧТО проверил. Узел несёт, кем проверено (машина/независимый ревьюер/человек), verified и ревизию — проекция evidence_verdict (веха 4.2), а не пересказ кода. Пишет путь ревью (судья), не писатель.", attributes: [verified, reviewed_revision]}
 
 # Допустимые связи: from -> to (валидатор отклоняет рёбра вне этого списка).
 relations:
@@ -50,3 +53,9 @@ relations:
   - {type: targets,      from: feature,    to: outcome}
   - {type: measured-by,  from: outcome,    to: metric}
   - {type: derived-from, from: insight,    to: outcome}
+  # Decision -> feature: из какого решения появилась функция (история «зачем», не пересказ кода).
+  - {type: motivates,    from: decision,   to: feature}
+  # Work -> feature: какая работа/PR построила функцию (история «что построили», не пересказ кода).
+  - {type: builds,       from: work,       to: feature}
+  # Review -> feature: кто/что проверил функцию (персистентный вердикт, не эхо прогона; судья ≠ писатель).
+  - {type: reviewed,     from: review,     to: feature}

@@ -1,0 +1,31 @@
+schema_version: 1
+kind: feature-blueprint
+feature:
+  id: outcome-readout
+  name: 'Outcome-readout: что изменение сделало с продуктом'
+  owner: ai-ops-kit
+  status: in-progress            # инженерия выпущена; продуктовый outcome не накоплен
+  profile: lean
+  current_stage: delivery
+links:
+  # ЗАЧЕМ: продуктовое ревью владельца 16.09 (P0 №6) — «Outcome-readout» в context решения.
+  decision: ep-2026-09-16-product-freeze-held-until-external-clean-run
+  # ЧТО построило: работа outcome-readout-shows-what-happened-to-the-product, PR #987.
+  built_by: 987
+artifacts:
+  discovery:
+  - path: discovery/problem-statement.md
+    status: declined
+    declined_reason: >-
+      Кураторский паспорт-провенанс: продуктовая проблема (после релиза не видно, что изменение
+      сделало с продуктом) зафиксирована решением (links.decision, P0 №6 ревью 16.09); отдельный
+      discovery-артефакт не создавался.
+  definition:
+  - path: prd/feature.md
+    status: declined
+    declined_reason: >-
+      Определение фичи несёт построившая её работа и её PR (links.built_by, PR #987); отдельный PRD
+      не велся — паспорт курирует провенанс, а не полный жизненный цикл.
+  delivery:
+  - path: delivery/shipped.md
+    status: done

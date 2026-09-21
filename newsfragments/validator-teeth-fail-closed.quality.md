@@ -1,1 +1,0 @@
-Четыре валидатора (container_delivery, pipeline_e2e, product_qualification, stack_qualification) получили fail-closed тесты: впрыск дефекта → assert non-zero. Раньше тестировалось только main([])==0 (mutant-survivable).

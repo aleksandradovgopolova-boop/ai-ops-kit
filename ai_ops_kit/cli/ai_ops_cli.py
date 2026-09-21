@@ -141,6 +141,24 @@ INTENTS = {
     # ждёт реального выпуска дочки.
     "readout": ("пост-релизная петля: доставили -> дошли ли события в аналитику -> исход -> один "
                 "вердикт (без выгрузки аналитики — честно «ещё нечем проверить»)", "readout", False),
+    # kit-product-scorecard: ЕДИНАЯ карта продукта кита из 5 метрик — кит мерит СЕБЯ как продукт, а
+    # не числом возможностей. Метрики 1 (доля фич идея->релиз) и 3 (доля фич с полной историей жизни)
+    # считаются из графа знаний; метрика 2 (доля утверждений с evidence) — доля поверх реестра
+    # честности; метрики 4 (результат после релиза) и 5 (уроки->решения) стоят честным каркасом «не
+    # измерено» (у самого кита живой аналитики нет). Только чтение. Форма карты ещё устаканивается.
+    "scorecard": ("карта продукта кита: 5 метрик, которыми кит мерит себя как продукт (а не числом "
+                  "возможностей); нет данных — честно «не измерено»", "scorecard", True),
+    # auto-slice-candidates: кит НАРЕЗАЕТ задачи-кандидаты из двух источников (непокрытые направления
+    # роадмапа + наблюдения дочек), владелец ПРИНИМАЕТ пачкой одной командой. Предохранитель: кит сам
+    # не дописывает активную работу — без глагола `accept` план не меняется. `candidates`/`list` —
+    # только чтение; `accept <id..>`/`accept --all` — пишет plan.yaml (явное действие владельца).
+    "candidates": ("задачи-кандидаты (непокрытые направления роадмапа + наблюдения дочек): без "
+                   "аргумента — список; accept <id..>|--all — принять пачкой в план", "candidates", True),
+    # portfolio-intelligence (T5): ОБЕЗЛИЧЕННЫЙ портфельный вид отказов дочек. Класс отказа + числа +
+    # обезличенный ключ дочки (`proj-…`), и НИЧЕГО идентифицирующего — сторож границы краснеет на
+    # утечке пути/коммита/имени/вывода команд. Только чтение; честные разные пустые состояния.
+    "portfolio": ("портфель отказов дочек обезличенно: какие классы повторяются по всем дочкам "
+                  "(только паттерны и числа, без кода и путей)", "portfolio", False),
 }
 
 
@@ -150,7 +168,26 @@ INTENTS = {
 DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "review", "advise",
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "propose", "products", "team",
-                  "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach")
+                  "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach",
+                  "scorecard", "candidates", "portfolio")
+
+
+# ── Фасад владельца (P1 №8/№9 ревью): 7 действий человеческим языком поверх 34 intents ──────────────
+# Символы фасада (HUMAN_ACTIONS, facade_plan, диспетч, помощники) вынесены в спутник `human_facade`
+# (ратчет module-size: фасад перевёл этот файл за порог монолита). Ре-экспорт именами этого модуля
+# держит резолвинг у вызывающих/тестов (`ai_ops_cli.HUMAN_ACTIONS`, `ai_ops_cli.facade_plan`, …) и
+# у main(). Ребро импорта одностороннее: `human_facade` НЕ импортирует ai_ops_cli на верхнем уровне —
+# обратно в main() он уходит колбэком `run_main`, поэтому цикла нет.
+from ai_ops_kit.cli.human_facade import (  # noqa: E402,F401 — ре-экспорт фасада для вызывающих/тестов
+    HUMAN_ACTIONS,
+    facade_plan,
+    _dispatch_human_action,
+    _review_all,
+    _inject_task_type,
+    _first_nondir,
+    _child_root_from,
+    _is_dir_safe,
+)
 
 
 def resolve_flags(signals):
@@ -175,16 +212,6 @@ def resolve_flags(signals):
     if signals.get("fix") or tt == "QUICK" and signals.get("require_fix"):
         flags["require_fix"] = True
     return flags
-
-
-def _is_dir_safe(p):
-    """#161: Path.is_dir() кидает OSError (ENAMETOOLONG и др.) вместо False, когда первый позиционный
-    аргумент — не путь, а длинный текст задачи (>255 байт). На 3.11/3.12 это роняло main(); на 3.14
-    stdlib глотает сам, и баг маскируется. Не-путь (в т.ч. слишком длинный) = не каталог."""
-    try:
-        return Path(p).is_dir()
-    except OSError:
-        return False
 
 
 # Шаги, которые ПОДХВАТЫВАЮТ сохранённые на specify сигналы (полевой замер cockpit, 06.09.2026):
@@ -283,7 +310,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
     _intent_onboard, _intent_doctor, _copy_affects_from_plan,
     _intent_explain, _intent_inbox, _intent_work, _intent_readout, _intent_graph,
-    _intent_reach,
+    _intent_reach, _intent_scorecard, _WORK_SUBS,
 )
 
 # --- Слой реализации команд (ai_ops_cli_commands): проб-несущие обработчики намерений и путь
@@ -297,6 +324,11 @@ from ai_ops_kit.cli.ai_ops_cli_commands import (  # noqa: E402,F401 — ре-э�
     _session_identity, _announce_start, _session_guard_before_start,
     _process_gate, _main_run_execute,
 )
+
+# auto-slice-candidates: команда `candidates` живёт в собственном спутнике (ратчет module-size).
+from ai_ops_kit.cli.candidates_cli import _intent_candidates  # noqa: E402,F401 — ре-экспорт/регистрация
+# portfolio-intelligence (T5): команда `portfolio` — тоже отдельный спутник.
+from ai_ops_kit.cli.portfolio_cli import _intent_portfolio  # noqa: E402,F401 — ре-экспорт/регистрация
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
 for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery),
@@ -313,10 +345,13 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("explain", _intent_explain), ("inbox", _intent_inbox),
                    ("work", _intent_work), ("readout", _intent_readout),
                    ("graph", _intent_graph), ("reach", _intent_reach),
+                   ("scorecard", _intent_scorecard),
                    # проб-несущие обработчики из ai_ops_cli_commands:
                    ("backlog", _intent_backlog), ("feedback", _intent_feedback),
                    ("status", _intent_status), ("next", _intent_next),
-                   ("review", _intent_review), ("advise", _intent_advise)):
+                   ("review", _intent_review), ("advise", _intent_advise),
+                   ("candidates", _intent_candidates),
+                   ("portfolio", _intent_portfolio)):
     _intent(_name)(_fn)
 del _name, _fn
 
@@ -408,6 +443,11 @@ def _build_cli_arg_parser():
                          "по умолчанию .ai-ops/backlog.yaml")
     ap.add_argument("--milestone", default=None,
                     help="delivery: id milestone, под который строить delivery-план и прогноз")
+    # auto-slice-candidates: `candidates accept <id> --goal <goal-id>` — направление, к которому
+    # отнести кандидата без своего source_goal (у находок его нет). В многоцелевом плане без него
+    # такой кандидат не принимается (иначе work item без goal — ошибка валидатора).
+    ap.add_argument("--goal", default=None,
+                    help="candidates accept: id направления (goal) для кандидата без своего source_goal")
     # #545 readout (пост-релизная петля): PRR-файл и опциональные OutcomeContract/OutcomeReadout.
     ap.add_argument("--prr", default=None,
                     help="readout: путь к PRR-файлу (PostReleaseReadout); без него — поиск в дочке")
@@ -490,9 +530,15 @@ def _parse_task_and_root(intent, rest):
 def main(argv):
     # #675 Human API: пустой вызов и `help` показывают человеческую дверь (короткий набор команд
     # владельца), а не argparse-стену из 36 интентов и 30 флагов. `help --all` — весь список.
-    _door = human_help.handle(argv, INTENTS)
+    _door = human_help.handle(argv, INTENTS, HUMAN_ACTIONS)
     if _door is not None:
         return _door
+    # Фасад владельца (7 действий человеческим языком поверх 34 intents). ДО argparse: research/start/
+    # check/release и `review all` — не intent-имена, argparse их не знает; work/review/feedback имена
+    # разделяют с intents и разрешаются внутри (см. _dispatch_human_action).
+    _facade = _dispatch_human_action(argv, main)
+    if _facade is not None:
+        return _facade
     ap = _build_cli_arg_parser()
     a = ap.parse_args(argv)
 
