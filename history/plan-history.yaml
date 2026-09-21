@@ -19,6 +19,31 @@ kind: delivery-plan-history
 
 
 work:
+  - id: operating-mode-is-a-lens
+    title: >-
+      Режим работы как тонкая линза поверх аудитории: `communication.mode` резолвится в одну из трёх
+      существующих аудиторий и реально меняет вывод (один kernel, не пять продуктов)
+    goal: operating-modes
+    status: done
+    closed_at: '2026-09-21'
+    pr: 1085
+    result: >-
+      ЗАКРЫТО 2026-09-21 (координация #1084 + код #1085 `8795ba54`). T6, ПОСЛЕДНЕЕ из четырёх направлений
+      внешнего продуктового ревью. СВЯЗЫВАНИЕ, не рост вширь: слой аудитории (product/technical/debug) и
+      его централизованное применение в `ui/presenter_core.render` уже были; реестр уже рекламировал пять
+      роль-аудиторий со `status: partial`. Доставлено: `registry/communication-policy.yaml -> operating_modes`
+      (mode→аудитория+обоснование: founder/product/design/delivery→product, engineering→technical);
+      `ui/presenter_core.audience_from_config` читает `communication.mode` и резолвит аудиторию (явная
+      `audience` сильнее режима; неизвестный/отсутствующий режим → product; режим, отображённый в
+      несуществующий уровень, отбрасывается — линза не вводит новых уровней); enum `mode` в схеме
+      child-config; доки в примере и CLAUDE.md-адаптере. Режим РЕАЛЬНО меняет вывод (не косметика, в
+      отличие от мёртвых declared-but-inert `detail_level`/`explain_jargon`) — доказано тестом
+      `test_mode_is_not_inert_it_changes_render_output` (mode=engineering без явной audience → technical →
+      техблок виден там, где product скрыл бы). `render` НЕ форкнут, owner-фасад не тронут; пять ролей
+      честно оставлены `partial` (режимы = «первый работающий шаг», не подмена корпуса). Писатель —
+      отдельный субагент, судил кит (диф-ревью + независимый прогон 315: test_ui_presenter + contracts);
+      CI зелёный. Цель operating-modes достигнута 1/1 решением владельца 2026-09-21 (засчёт за владельцем).
+      ★ВСЕ ЧЕТЫРЕ направления внешнего ревью (T3/T4/T5/T6) закрыты.
   - id: portfolio-patterns-anonymized
     title: >-
       Обезличенный портфельный вид повторяющихся отказов дочек: ключ `proj-<sha256>` + сторож границы
