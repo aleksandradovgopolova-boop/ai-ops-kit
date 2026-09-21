@@ -24,18 +24,73 @@ import json
 from pathlib import Path
 
 
-def gather_candidates(child_root) -> list:
-    """Union кандидатов из обоих источников: находки дочек + непокрытые направления роадмапа.
+def _load_outcome_doc(path: Path):
+    """Прочитать outcome-объект (контракт/отчёт) read-only. Нет файла/битый → None (не бросаем:
+    отсутствие замера — законное состояние фичи, а не сбой источника). Тот же приём, что у
+    `ai_ops_cli_intents._feature_measured_outcome` — второго читателя формы не заводим по существу."""
+    import yaml as _yaml
+    if not path.is_file():
+        return None
+    try:
+        doc = _yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, _yaml.YAMLError):
+        return None
+    return doc if isinstance(doc, dict) else None
 
-    Обе проекции сами fail-safe (не бросают: `child_findings.project_findings` пропускает битые
-    файлы канала, `roadmap_candidates.project_uncovered_directions` ловит PlanCorrupt и возвращает
-    readable:false) — поэтому зовём их напрямую, БЕЗ широкого глушителя. Тихо гасить исключение
-    значило бы «источник упал» выдать за «кандидатов нет» — ровно то, против чего кит. -> list[dict]."""
+
+def _collect_outcome_items(child_root) -> list:
+    """Собрать `(feature, contract, readout, evaluation)` по `features/*/outcome-contract.yaml`.
+
+    Загрузка файлов И вердикт (`evaluate_outcome`) живут ЗДЕСЬ, на слое CLI, СОЗНАТЕЛЬНО: `evaluate_
+    outcome` — из `validation` (entrypoints), а `intelligence.decision_candidates` её не импортирует
+    (это была бы зависимость вверх — тот же инвариант, что у `outcome_insight`/`knowledge_graph`).
+    Поэтому «посчитать вердикт из чисел» делает точка входа, а проектор получает готовые входы."""
+    from ai_ops_kit.validation import validate_product_objects as vpo
+    root = Path(child_root)
+    fdir = root / "features"
+    items: list = []
+    if not fdir.is_dir():
+        return items
+    for cpath in sorted(fdir.glob("*/outcome-contract.yaml")):
+        contract = _load_outcome_doc(cpath)
+        if contract is None:
+            continue
+        feature = cpath.parent.name
+        readout = _load_outcome_doc(cpath.parent / "outcome-readout.yaml")
+        evaluation = vpo.evaluate_outcome(contract, readout)
+        items.append((feature, contract, readout, evaluation))
+    return items
+
+
+def outcome_decision_candidates(child_root) -> list:
+    """Недобравшие фичи (вердикт `failed` по числам ИЛИ неподтверждённая гипотеза) → продуктовые
+    РЕШЕНИЯ-кандидаты (DRAFT). READ-ONLY. Загрузку/вердикт делает `_collect_outcome_items` (CLI),
+    проектор `intelligence.decision_candidates` — чистый. -> list[dict]."""
+    from ai_ops_kit.intelligence import decision_candidates
+    proj = decision_candidates.project_decision_candidates(_collect_outcome_items(child_root))
+    return proj.get("candidates") or []
+
+
+def gather_candidates(child_root) -> list:
+    """Union кандидатов из ТРЁХ источников: находки дочек + непокрытые направления роадмапа +
+    недобравшие фичи как продуктовые решения.
+
+    `child_findings.project_findings` и `roadmap_candidates.project_uncovered_directions` fail-safe по
+    построению (пропускают битые файлы / ловят PlanCorrupt) — зовём их напрямую. Третий источник,
+    `outcome_decision_candidates`, делает диск-I/O по `features/*/` перед чистым проектором: его
+    ОБОРАЧИВАЕМ симметрично инбоксу, чтобы сбой сбора исходов не ронял команду `candidates`. Глушителя
+    `except: pass` тут нет — на сбое честно берём пустой список этого источника (это НЕ «кандидатов
+    нет», а «источник не собрался»; остальные два всё равно отработают). -> list[dict]."""
     from ai_ops_kit.intelligence import child_findings, roadmap_candidates
     root = Path(child_root)
     out: list = []
     out.extend(child_findings.project_findings(root).get("candidates") or [])
     out.extend(roadmap_candidates.project_uncovered_directions(root).get("candidates") or [])
+    try:
+        decision = outcome_decision_candidates(root)
+    except Exception:  # noqa: BLE001 — сбой источника исходов не роняет команду candidates
+        decision = []
+    out.extend(decision)
     return out
 
 
@@ -61,6 +116,7 @@ def _positionals(a) -> list:
 _SOURCE_LABEL = {
     "roadmap-direction": "направление роадмапа без работ",
     "child-finding": "наблюдение из прогона дочки",
+    "outcome-decision": "недобравшая фича — решить следующий шаг",
 }
 
 
