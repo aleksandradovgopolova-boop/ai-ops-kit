@@ -37,8 +37,8 @@ class TestSevenActionsDeclared:
                 assert tgt in INTENTS, f"{verb} -> {tgt}: такого intent нет в реестре"
 
     def test_intents_count_untouched_by_the_facade(self):
-        """Фасад — слой ПОВЕРХ: число intents остаётся 35 (замок числа команд не сломан)."""
-        assert len(INTENTS) == 35
+        """Фасад — слой ПОВЕРХ: число intents остаётся 36 (замок числа команд не сломан)."""
+        assert len(INTENTS) == 36
 
 
 class TestRoutingIsToWorkingPaths:
