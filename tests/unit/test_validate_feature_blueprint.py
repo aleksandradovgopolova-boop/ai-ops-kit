@@ -108,6 +108,52 @@ class TestFeatureBlueprintValidation:
             errs = [e for e in validate_dir(rel) if "released" in e]
             assert not errs
 
+    def test_released_with_outbox_receipt_ok(self, tmp_path):
+        """Регрессия: расписка в РЕАЛЬНОМ приёмнике features/<id>/delivery-outbox/*.receipt.yaml
+        (куда пишут все продюсеры) удовлетворяет проверку. До фикса читались только запасные
+        пути, куда никто не пишет, — честно доставленная функция всё равно валилась."""
+        with tempfile.TemporaryDirectory() as td:
+            rel = make_demo(Path(td) / "ob")
+            bpr = yaml.safe_load((rel / "blueprint.yaml").read_text(encoding="utf-8"))
+            bpr["feature"]["status"] = "released"
+            for entries in bpr["artifacts"].values():
+                for e in entries:
+                    e["status"] = "draft"
+            bpr["artifacts"]["discovery"][0]["status"] = "done"
+            (rel / "blueprint.yaml").write_text(yaml.safe_dump(bpr, allow_unicode=True),
+                                                 encoding="utf-8")
+            outbox = rel / "delivery-outbox"
+            outbox.mkdir()
+            receipt = {"schema_version": 1, "kind": "DeliveryReceipt",
+                        "delivery_id": "d1", "workitem_id": "demo-feature",
+                        "sha_verified": True, "remote_sha": "abc123"}
+            (outbox / "d1.receipt.yaml").write_text(
+                yaml.safe_dump(receipt, allow_unicode=True), encoding="utf-8")
+            errs = [e for e in validate_dir(rel) if "released" in e]
+            assert not errs
+
+    def test_released_with_outbox_receipt_sha_false_fails(self, tmp_path):
+        """Расписка в приёмнике, но sha_verified=false -> проверка НЕ удовлетворена."""
+        with tempfile.TemporaryDirectory() as td:
+            rel = make_demo(Path(td) / "obf")
+            bpr = yaml.safe_load((rel / "blueprint.yaml").read_text(encoding="utf-8"))
+            bpr["feature"]["status"] = "released"
+            for entries in bpr["artifacts"].values():
+                for e in entries:
+                    e["status"] = "draft"
+            bpr["artifacts"]["discovery"][0]["status"] = "done"
+            (rel / "blueprint.yaml").write_text(yaml.safe_dump(bpr, allow_unicode=True),
+                                                 encoding="utf-8")
+            outbox = rel / "delivery-outbox"
+            outbox.mkdir()
+            receipt = {"schema_version": 1, "kind": "DeliveryReceipt",
+                        "delivery_id": "d1", "workitem_id": "demo-feature",
+                        "sha_verified": False, "remote_sha": "abc123"}
+            (outbox / "d1.receipt.yaml").write_text(
+                yaml.safe_dump(receipt, allow_unicode=True), encoding="utf-8")
+            errs = [e for e in validate_dir(rel) if "released" in e]
+            assert errs
+
     def test_released_with_receipt_but_sha_verified_false_fails(self, tmp_path):
         """WP5: released с DeliveryReceipt, но sha_verified=false -> fail."""
         with tempfile.TemporaryDirectory() as td:
