@@ -786,8 +786,10 @@ goals:
   - id: risk-based-ceremony
     # T4. «Сложность растёт с риском, а не с полнотой»: связка риск → церемония видима, есть сторож
     # против расползания церемонии, метрика Time-to-Next-Decision. Частично уже есть (уровни L0…L3).
+    # Взято в работу владельцем (accept кандидата 21.09) — цель ЖИВА; freeze_relation обязателен, но
+    # на живость активной цели не влияет (freeze этапа снят 2026-09-16).
     freeze_relation: extension
-    status: paused
+    status: active
     outcome:
       # Объём процесса подбирается по названному/подразумеваемому риску, а не по «заполни всё».
       ceremony_scales_with_risk_not_completeness: false
@@ -1120,3 +1122,17 @@ work:
     - ai_ops_kit/intelligence/
     - ai_ops_kit/cli/
     rationale: "направление «product-next-as-decision-engine» (достигнуто 0 из 2 результатов) объявлено в роадмапе, но под него нет ни одной заведённой работы — оно рискует потеряться"
+  # ── Принято приёмкой кандидатов (candidate_intake) ─────────────────────────────
+  - id: risk-based-ceremony
+    title: "Декомпозировать направление: risk-based-ceremony"
+    type: product
+    goal: risk-based-ceremony
+    status: in_progress
+    owner_role: product
+    source: "roadmap-direction"
+    branch: claude/rbc-decision-engine-code
+    write_scope:
+    - ai_ops_kit/gates/
+    - ai_ops_kit/ui/
+    - ai_ops_kit/cli/
+    rationale: "направление «risk-based-ceremony» (достигнуто 0 из 2 результатов) объявлено в роадмапе, но под него нет ни одной заведённой работы — оно рискует потеряться"
