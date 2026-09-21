@@ -1,14 +1,17 @@
-# Ночной показ задач-кандидатов: непокрытые направления роадмапа + открытые находки из прогонов
-# дочек. ТОЛЬКО ПОКАЗ в сводку прогона — план НЕ трогается (предохранитель: кит сам активную работу
-# не дописывает, принимает владелец через `candidates accept`). Права строго на чтение.
-# Команда: `candidates` (ядро — ai_ops_kit/cli/candidates_cli.py, проекции intelligence/*).
+# Ночная материализация задач-кандидатов в трекер: непокрытые направления роадмапа + открытые
+# находки из прогонов дочек заводятся ISSUE-ПРЕДЛОЖЕНИЯМИ (метка `task-candidate`). Устаревшие
+# закрываются. Предохранитель ЦЕЛ: план НЕ трогается — issue лишь предложение, приём в plan.yaml
+# остаётся явным действием владельца `candidates accept`. Дедуп с nightly-roadmap-sync: по умолчанию
+# заводятся только находки дочек (направления уже получают эпик от roadmap-sync).
+# Команда: `candidates sync-issues --apply` (ядро — ai_ops_kit/planning/candidate_issue_sync.py).
 name: nightly-candidates
 on:
   schedule:
     - cron: "45 3 * * *"   # после nightly-roadmap-sync (30 3), чтобы не пересекаться
   workflow_dispatch: {}
 permissions:
-  contents: read           # только читаем — кандидаты не пишутся ни в план, ни в issue
+  contents: read
+  issues: write            # заводит/обновляет/закрывает issue-предложения через gh (план не пишется)
 jobs:
   candidates:
     runs-on: ubuntu-latest
@@ -21,9 +24,10 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install pyyaml
-      - name: Показать задачи-кандидаты (без записи в план)
+      - name: Завести задачи-кандидаты в трекер (issue — предложение, план не пишется)
         env:
           PYTHONPATH: "."
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}   # gh авторизуется этим токеном
         run: |
-          python -m ai_ops_kit.cli.ai_ops_cli candidates . \
+          python -m ai_ops_kit.cli.ai_ops_cli candidates sync-issues --apply \
             | tee -a "$GITHUB_STEP_SUMMARY"
