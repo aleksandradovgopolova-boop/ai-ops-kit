@@ -1,1 +1,0 @@
-Автоматическое обновление ruff (>=0.16.2 → >=0.16.7) (dependabot). Newsfragment для towncrier-гейта.

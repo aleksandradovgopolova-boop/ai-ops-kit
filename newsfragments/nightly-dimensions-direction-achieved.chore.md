@@ -1,1 +1,0 @@
-Направление `nightly-review-covers-all-dimensions` ДОСТИГНУТО (2/2): ночной обзор раскладывает находки по названным осям и ротирует фокус (#1058). Работа закрыта в историю; ROADMAP сведён. Полноценные AI-ревью по осям, hotspot, findings→validators и portfolio-intelligence остаются в «Дальше».
