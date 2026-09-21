@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from ai_ops_kit.shared import gate_dimensions  # карта gate -> продуктовая фраза (общий нижний слой)
 from ai_ops_kit.ui.presenter import _q, message
+from ai_ops_kit.ui.presenter_ceremony import risk_ceremony_line  # связь риск->церемония (спутник)
 
 # Вторая, более крупная группа переводчиков (ход и решения работы) вынесена в модуль-сосед
 # `presenter_report_formatters.py`, чтобы этот файл держался под потолком размера. Реэкспорт
@@ -214,7 +215,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
                        added=None, add_error=None, spec_provisional=False,
                        sections_if_escalated=None, level_if_escalated=None,
                        answer_command=None, applied=None, unmatched=None,
-                       answer_error=None, task=None) -> dict:
+                       answer_error=None, task=None, level_reason=None) -> dict:
     """Спецификация задачи -> UserMessage. Незаполненные разделы — работа человека, и она названа.
 
     F-029: `added` — разделы, ДОПИСАННЫЕ в уже существующий файл под поднявшийся уровень. Без него
@@ -269,6 +270,10 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
     # продуктовым языком, БЕЗ feature id и БЕЗ CLI-флагов. Так текст задачи виден человеку в самом
     # выводе (а путь репозитория и id остаются в технических деталях), и подтверждение задачи —
     # лучший UX, чем эхо CLI-команды, которое эту роль раньше нечаянно выполняло.
+    # risk-based-ceremony: человек ВИДИТ, что объём процесса выбран РИСКОМ, а не полнотой, и ПОЧЕМУ.
+    # Провизорность честно проговариваем прямо здесь (в _disclosure — вопрос к человеку; тут — причина).
+    _ceremony = risk_ceremony_line(level_name, level_reason, provisional=spec_provisional)
+    tech["процесс подобран по риску"] = _ceremony
     _echo = f"Поняла: «{task.strip()}». " if (task or "").strip() else ""
     if created:
         _origin = "начата"
@@ -298,7 +303,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
         tech["следующий шаг"] = next_command
         return message(
             status="needs_input",
-            summary=(_echo + "Описание задачи " + _origin
+            summary=(_ceremony + " " + _echo + "Описание задачи " + _origin
                      + f"; осталось ответить на {n_missing} "
                        f"{_q(n_missing, 'вопрос', 'вопроса', 'вопросов')}."
                      + (f" Записано в этом ответе: {n_applied}." if n_applied else "")
@@ -312,7 +317,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             technical=tech)
     tech["следующий шаг"] = next_command
     return message(status="ok", headline="Описание задачи готово",
-                   summary=_echo + "Всё, что нужно было описать, описано." + _disclosure,
+                   summary=_ceremony + " " + _echo + "Всё, что нужно было описать, описано." + _disclosure,
                    next_steps=["скажи, что переходим к плану — дальше я работаю сама"],
                    technical=tech)
 
