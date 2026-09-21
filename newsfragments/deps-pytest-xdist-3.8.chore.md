@@ -1,1 +1,0 @@
-Автоматическое обновление pytest-xdist >=3.0 -> >=3.8.0 (dependabot). Newsfragment для towncrier-гейта кита.

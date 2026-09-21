@@ -1,1 +1,0 @@
-Автоматическое обновление hypothesis >=6.100 -> >=6.168.0 (dependabot). Newsfragment для towncrier-гейта кита.

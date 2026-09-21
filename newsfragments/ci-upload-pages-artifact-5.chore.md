@@ -1,1 +1,0 @@
-Автоматическое обновление actions/upload-pages-artifact 3 -> 5 (dependabot). Newsfragment для towncrier-гейта кита.

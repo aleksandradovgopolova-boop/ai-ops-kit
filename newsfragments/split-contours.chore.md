@@ -1,1 +1,0 @@
-Монолит `planning/contours` разрезан на фасад + сателлит `contours_signals` (матчинг путей и детект сигналов в репозитории: `_matches`, `unquote_git_path`, `_product_dirs`, `_repo_has_signal`, `signals_present`, `_under_excluded`) — чистый рефактор без изменения поведения и публичной поверхности, снимает модуль с потолка гейта размера.
