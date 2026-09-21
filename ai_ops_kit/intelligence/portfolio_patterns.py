@@ -89,6 +89,27 @@ def _class_label(cls: str) -> str:
     return precedent_ledger._PATTERN_LABEL_RU.get(cls, cls)
 
 
+# ГРАНИЦА ПО КЛАССУ НАБЛЮДЕНИЯ. `observation_class` в наблюдении дочки НИЧЕМ не ограничен на пути
+# `child_findings.load_findings` (он намеренно обходит `kit_feedback.check`), поэтому дочка может
+# положить в класс СВОБОДНЫЙ ТЕКСT — имя/хост/почту/секрет, — и он утёк бы в портфельный вид дословно
+# (класс и его метка печатаются как есть). Поэтому классы сведены к КОНЕЧНОМУ НЕидентифицирующему
+# набору: всё вне enum kit_feedback.OBSERVATION_CLASSES схлопывается в обобщённый `_FALLBACK_CLASS`
+# ещё на входе (нормализация у источника), а сторож дополнительно краснеет на классе/метке вне набора
+# (зубы: даже если нормализацию обойдут). Источник истины по enum — kit_feedback, второго не заводим.
+_FALLBACK_CLASS = "наблюдение"
+
+
+def _allowed_classes() -> frozenset:
+    """Допустимые (НЕидентифицирующие) классы: enum наблюдений + обобщённый fallback."""
+    from ai_ops_kit.engops import kit_feedback
+    return frozenset(kit_feedback.OBSERVATION_CLASSES) | {_FALLBACK_CLASS}
+
+
+def _allowed_labels() -> frozenset:
+    """Допустимые метки классов — ровно метки допустимых классов, и ничего кроме."""
+    return frozenset(_class_label(c) for c in _allowed_classes())
+
+
 def portfolio_patterns(kit_root) -> dict:
     """READ-ONLY обезличенный портфельный вид отказов дочек из канала `findings/from-children`.
 
@@ -109,6 +130,7 @@ def portfolio_patterns(kit_root) -> dict:
     regs, _errs = child_registry.load_registrations(kit_root)
     registered = len(regs)
 
+    allowed = _allowed_classes()
     groups: dict[str, list[str]] = {}      # класс -> список обезличенных ключей (по наблюдению)
     basis_counts: dict[str, int] = {}
     all_children: set[str] = set()
@@ -118,7 +140,10 @@ def portfolio_patterns(kit_root) -> dict:
         key, basis = anon_key(obs)
         basis_counts[basis] = basis_counts.get(basis, 0) + 1
         all_children.add(key)
-        cls = _text(obs.get("observation_class")) or "наблюдение"
+        # НОРМАЛИЗАЦИЯ У ИСТОЧНИКА: класс вне enum (мог нести идентификацию) → обобщённый fallback.
+        # Так свободный текст дочки не может всплыть в портфельный вид ни классом, ни его меткой.
+        raw_cls = _text(obs.get("observation_class"))
+        cls = raw_cls if raw_cls in allowed else _FALLBACK_CLASS
         groups.setdefault(cls, []).append(key)
 
     patterns: list[dict] = []
@@ -212,21 +237,37 @@ def check_anonymized(view_or_patterns) -> list[str]:
       3. ПО ФОРМЕ — любое прочее строковое значение не должно быть путём, git-sha или многострочным
          выводом.
     Пусто → границу не нарушили. Это и есть DoD направления в исполняемом виде."""
-    patterns = view_or_patterns.get("patterns") if isinstance(view_or_patterns, dict) \
-        else view_or_patterns
+    is_view = isinstance(view_or_patterns, dict)
+    patterns = view_or_patterns.get("patterns") if is_view else view_or_patterns
+    allowed_cls = _allowed_classes()
+    allowed_lbl = _allowed_labels()
     out: list[str] = []
     for i, rec in enumerate(patterns or []):
         where = f"pattern[{i}]"
         if not isinstance(rec, dict):
             out.append(f"{where}: запись не объект")
             continue
-        # 2. Позитивная проверка ключей дочек — до общего скана (сырое имя иначе проскочит).
+        # 2a. Позитивная проверка ключей дочек — до общего скана (сырое имя иначе проскочит).
         for j, key in enumerate(rec.get("children") or []):
             if not (isinstance(key, str) and _ANON_KEY_RE.match(key.strip())):
                 out.append(f"{where}.children[{j}]: не обезличенный ключ ({str(key)[:40]!r}) — "
                            "имя/путь/идентификатор дочки не должен попадать в портфель")
+        # 2b. Позитивная проверка класса и метки: только из конечного НЕидентифицирующего набора.
+        # Голый низкоэнтропийный токен (имя/хост/почта) в классе форму-детекторы не ловят — ловим тут.
+        oc = rec.get("observation_class")
+        if oc is not None and oc not in allowed_cls:
+            out.append(f"{where}.observation_class: класс вне допустимого набора ({str(oc)[:40]!r}) — "
+                       "мог протащить идентификацию свободным текстом")
+        cl = rec.get("class_label")
+        if cl is not None and cl not in allowed_lbl:
+            out.append(f"{where}.class_label: метка вне допустимого набора ({str(cl)[:40]!r})")
         # 1 + 3. Структурные имена и форма значений — по всей записи.
         _scan_value(where, rec, out)
+    # Скан полей верхнего уровня вида (не patterns — их проверили пореестрово выше): docstring обещает
+    # покрытие всего вида, а не только записей.
+    if is_view:
+        top = {k: v for k, v in view_or_patterns.items() if k != "patterns"}
+        _scan_value("view", top, out)
     return out
 
 

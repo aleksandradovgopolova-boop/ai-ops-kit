@@ -144,6 +144,46 @@ def test_guard_bites_on_raw_child_name_in_children(tmp_path):
     assert any("не обезличенный ключ" in v for v in violations), violations
 
 
+# ── УТЕЧКА ЧЕРЕЗ observation_class — свободный текст дочки в поле класса ────────────────────────────
+
+def test_identifying_observation_class_is_normalized_at_source(tmp_path):
+    """Дочка кладёт в класс СВОБОДНЫЙ ТЕКСТ (имя/почта) — он НЕ всплывает: класс схлопнут в обобщённый.
+
+    Канал load_findings не проверяет enum, поэтому класс мог протащить идентификацию дословно. После
+    нормализации у источника в виде остаётся только обобщённый класс, ни одной сырой строки, сторож молчит."""
+    _write_obs(tmp_path, "o1", cls="reported-by-sasha@rox.one", path="/m/a", name="a", commit="aaaaaaa")
+    _write_obs(tmp_path, "o2", cls="bnbm-prod-secret", path="/m/b", name="b", commit="bbbbbbb")
+    view = pp.portfolio_patterns(tmp_path)
+    blob = json.dumps(view, ensure_ascii=False)
+    for raw in ("reported-by-sasha@rox.one", "bnbm-prod-secret", "sasha@rox.one"):
+        assert raw not in blob, f"свободный текст класса протёк в вид: {raw!r}"
+    # Оба схлопнулись в обобщённый класс.
+    assert all(p["observation_class"] == pp._FALLBACK_CLASS for p in view["patterns"])
+    assert pp.check_anonymized(view) == []            # сторож чист на нормализованном виде
+
+
+def test_guard_bites_on_injected_identifying_class(tmp_path):
+    """Впрыснут идентифицирующий класс/метка в запись (мимо нормализации) → сторож краснеет (зубы)."""
+    view = _clean_view(tmp_path)
+    assert pp.check_anonymized(view) == []
+    view["patterns"][0]["observation_class"] = "child-bnbm@host"      # вне enum
+    v1 = pp.check_anonymized(view)
+    assert any("класс вне допустимого набора" in v for v in v1), v1
+    view2 = _clean_view(tmp_path)
+    view2["patterns"][0]["class_label"] = "проект sasha/private-repo"  # метка вне набора
+    v2 = pp.check_anonymized(view2)
+    assert any("метка вне допустимого набора" in v for v in v2), v2
+
+
+def test_known_classes_and_labels_pass_guard(tmp_path):
+    """Легальные enum-классы и их метки НЕ ложно-срабатывают (иначе сторож бесполезен)."""
+    for c in ("defect", "friction", "question", "idea"):
+        _write_obs(tmp_path, f"o-{c}", cls=c, path=f"/m/{c}", name=c, commit="c" * 7)
+    view = pp.portfolio_patterns(tmp_path)
+    assert pp.check_anonymized(view) == []
+    assert {p["observation_class"] for p in view["patterns"]} == {"defect", "friction", "question", "idea"}
+
+
 # ── Обезличенный ключ и его честное основание ─────────────────────────────────────────────────────
 
 def test_anon_key_is_stable_and_one_way(tmp_path):
