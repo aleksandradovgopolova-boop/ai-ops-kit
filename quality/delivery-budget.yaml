@@ -324,7 +324,11 @@ ceilings:
   # 2026-09-21: 650 -> 653 под автонарезку кандидатов (auto-slice-candidates): три новых доставляемых
   #   модуля (intelligence/roadmap_candidates.py, planning/candidate_intake.py, cli/candidates_cli.py)
   #   перевели поставку 649 -> 652 файла, пробив строгий `<` 650. См. `raises`.
-  substantive_files: 653
+  # 2026-09-21: 653 -> 654 под завод кандидатов задачами в трекере (candidates sync-issues): один новый
+  #   доставляемый модуль planning/candidate_issue_sync.py (чистое ядро сверки; gh-адаптер
+  #   переиспользован из roadmap_sync_cli, нового файла не заводит). Реальная установка 652 -> 653
+  #   файла (+1), пробила строгий `<` 653, поднят до 654. См. запись в `raises`.
+  substantive_files: 654
 
 # Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
 # `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
@@ -3279,6 +3283,29 @@ raises:
       вверх, поэтому union держит CLI). Без этих трёх файлов в поставке команда `candidates` в дочке
       звала бы отсутствующие модули (класс F-033). Реальная установка 649 -> 652 файла (+3), пробила
       строгий `<` 650, потолок поднят до 653.
+  - at: '2026-09-21'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    to_count: 654
+    measured_before: 652
+    measured_after: 653
+    work: candidates-sync-issues (autonomous-product-loop)
+    files:
+      - ai_ops_kit/planning/candidate_issue_sync.py
+    why_it_works_in_the_child: >-
+      Завод задач-кандидатов в трекер РАБОТАЕТ в дочке и потому едет в поставке: у продуктового
+      репозитория те же открытые находки дочек, что кит уже нарезает в кандидатов, но жили они только
+      в выводе команды — в трекер их приходилось заводить руками. Команда `ai-ops candidates
+      sync-issues` В дочке сводит открытых кандидатов с её GitHub Issues: заводит issue-ПРЕДЛОЖЕНИЕ на
+      каждую находку (метка task-candidate), обновляет дрейфнувшие и закрывает те, чей кандидат ушёл.
+      planning/candidate_issue_sync — чистое ядро сверки на инъектируемом порте (переиспользует
+      dataclasses и gh-адаптер GhIssueClient из уже доставляемых roadmap_issue_sync/roadmap_sync_cli,
+      второго файла адаптера не заводит), а cli/candidates_cli несёт новый глагол sync-issues. Без
+      этого файла в поставке команда `candidates sync-issues` в дочке звала бы отсутствующий модуль
+      (класс F-033). Предохранитель цел: issue — только предложение, план дочки пишет по-прежнему
+      лишь явный `candidates accept`. Реальная установка 652 -> 653 файла (+1), пробила строгий `<`
+      653, потолок поднят до 654.
   # ПОСЛЕДНЯЯ volume-запись — ведёт к действующему потолку volume_bytes (инвариант vol[-1]).
   - at: '2026-09-13'
     what: volume

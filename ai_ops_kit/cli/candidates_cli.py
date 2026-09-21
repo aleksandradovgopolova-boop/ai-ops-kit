@@ -13,7 +13,9 @@
   candidates            — показать всех кандидатов с источником и причиной (только чтение, dry);
   candidates list       — то же;
   candidates accept <id> [<id>...]  — принять выбранных (пишет plan.yaml);
-  candidates accept --all           — принять всех.
+  candidates accept --all           — принять всех;
+  candidates sync-issues [--apply]  — завести открытых кандидатов задачами в трекере (issue —
+                                      ПРЕДЛОЖЕНИЕ; план не пишется, приём — по-прежнему `accept`).
 Без глагола приёмки план НЕ меняется.
 """
 from __future__ import annotations
@@ -140,8 +142,54 @@ def _accept_candidates(child_root, cands, ids, take_all: bool, js: bool, goal=No
     return 0
 
 
+def _sync_issues(child_root, cands, apply: bool, js: bool) -> int:
+    """`candidates sync-issues`: завести открытых кандидатов задачами в трекере через `gh`.
+
+    Дефолт — СУХОЙ прогон (показать план); `--apply` выполняет. Зеркалит `run_roadmap_sync`:
+    issue — только ПРЕДЛОЖЕНИЕ, план не пишется. Нет доступа к GitHub — честное третье состояние
+    (код 2, «не проверено»), а НЕ пустой план с кодом 0. Адаптер `GhIssueClient` переиспользуем из
+    roadmap_sync_cli — второго адаптера к `gh` не заводим."""
+    import subprocess
+    from ai_ops_kit.cli.roadmap_sync_cli import GhIssueClient
+    from ai_ops_kit.planning import candidate_issue_sync as sync_mod
+    client = GhIssueClient(child_root)
+    try:
+        result = sync_mod.sync(cands, client, apply=apply)
+    except FileNotFoundError:
+        print("  · не проверено: не найден `gh` — установите GitHub CLI и `gh auth login`")
+        return 2
+    except subprocess.CalledProcessError as e:
+        reason = (e.stderr or e.stdout or str(e)).strip().splitlines()[-1:] or [str(e)]
+        print(f"  · не проверено: GitHub недоступен — {reason[0]}")
+        return 2
+    if js:
+        print(json.dumps({
+            "apply": apply, "in_sync": result.in_sync,
+            "create": [{"key": x.key, "title": x.title, "number": x.number} for x in result.creates],
+            "update": [{"key": x.key, "number": x.number} for x in result.updates],
+            "close": [{"key": x.key, "number": x.number} for x in result.closes],
+        }, ensure_ascii=False, indent=2))
+        return 0
+    if result.in_sync:
+        print("Трекер уже сведён с кандидатами — заводить и закрывать нечего.")
+        return 0
+    verb = "Выполнено" if apply else "План (сухой прогон)"
+    print(f"{verb}: завести {len(result.creates)}, обновить {len(result.updates)}, "
+          f"закрыть {len(result.closes)}. Issue — предложение; план не пишется.")
+    for x in result.creates:
+        tag = f"#{x.number}" if x.number else "(new)"
+        print(f"  + завести {tag}: {x.title}")
+    for x in result.updates:
+        print(f"  ~ обновить #{x.number}: {x.title}")
+    for x in result.closes:
+        print(f"  − закрыть #{x.number}: {x.title} (кандидат больше не открыт)")
+    if not apply:
+        print("\nЭто предпросмотр. Применить: `candidates sync-issues --apply`.")
+    return 0
+
+
 def run_candidates(child_root, a) -> int:
-    """Точка входа команды `candidates`. Диспетч: list (dry) / accept (пишет)."""
+    """Точка входа команды `candidates`. Диспетч: list (dry) / accept (пишет) / sync-issues (трекер)."""
     js = bool(getattr(a, "json", False))
     root = Path(child_root)
     args = _positionals(a)
@@ -153,12 +201,15 @@ def run_candidates(child_root, a) -> int:
         take_all = bool(getattr(a, "all", False))
         ids = args[1:]
         return _accept_candidates(root, cands, ids, take_all, js, goal=getattr(a, "goal", None))
+    if verb == "sync-issues":
+        return _sync_issues(root, cands, bool(getattr(a, "apply", False)), js)
     # Неизвестный глагол — назвать, что умеет, а не молча вернуть успех.
     if js:
         print(json.dumps({"ok": False, "reason": f"неизвестная подкоманда: {verb}",
-                          "subcommands": ["list", "accept"]}, ensure_ascii=False))
+                          "subcommands": ["list", "accept", "sync-issues"]}, ensure_ascii=False))
     else:
-        print(f"candidates: неизвестная подкоманда «{verb}». Доступно: list, accept <id..>|--all.")
+        print(f"candidates: неизвестная подкоманда «{verb}». "
+              f"Доступно: list, accept <id..>|--all, sync-issues [--apply].")
     return 2
 
 
