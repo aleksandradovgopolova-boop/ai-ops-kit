@@ -772,29 +772,50 @@ goals:
     # Прямое продолжение уже слитых `candidates` (кандидаты из роадмапа и находок аудита): там кит
     # готовит задачи-кандидаты, здесь — из накопленных улик поднимает продуктовое решение, которое
     # стоит принять следующим.
-    # Взято в работу владельцем (accept кандидата 21.09) — цель ЖИВА (status active), под ней идёт
-    # работа product-next-as-decision-engine. Freeze этапа снят 2026-09-16; freeze_relation объявлен
-    # (обязателен для каждой цели), но на живость активной цели не влияет.
+    # Взято в работу владельцем (accept кандидата 21.09); freeze_relation объявлен (обязателен для
+    # каждой цели), но на живость активной цели не влияет (freeze этапа снят 2026-09-16).
+    # ДОСТИГНУТА 2026-09-21 РЕШЕНИЕМ ВЛАДЕЛЬЦА (протокол: засчёт за владельцем, кит себя не судит —
+    # как #745/#748/#701). Код влит: `next` из накопленных исходов поднимает НЕДОБРАВШИЕ фичи
+    # (вердикт failed по числам / неподтверждённая гипотеза) продуктовым РЕШЕНИЕМ, а не техзадачей;
+    # met+цель-взята+гипотеза-подтверждена — молчит; контракт без замера — честное «ещё не измерено».
+    # Координация #1076 (`4c6487a7`) + код #1077 (`73a9084b`). Владелец по-прежнему принимает решение
+    # сам (`candidates accept`). СВЯЗЫВАНИЕ уже слитого `candidates`, а не рост вширь.
     freeze_relation: extension
-    status: active
+    status: achieved
     outcome:
       # `next` называет следующее продуктовое решение из улик (неподтверждённые гипотезы,
       # недоработавшие фичи, устаревшие допущения, повторяющиеся находки), а не только тех-задачу.
-      next_proposes_the_next_product_decision_from_evidence: false
+      # ФЛИПНУТ в true 2026-09-21 решением владельца (см. комментарий цели): недобравший измеренный
+      # итог поднимается продуктовым решением; покрыто тестами, независимое ревью — pass. #1077.
+      next_proposes_the_next_product_decision_from_evidence: true
       # Поднимает провалившиеся гипотезы и недоработавшие фичи, а не только зелёный бэклог.
-      next_surfaces_failed_hypotheses_and_underperforming_features: false
+      # ФЛИПНУТ в true 2026-09-21 решением владельца: failed-по-числам и неподтверждённые гипотезы
+      # всплывают в `candidates`/`inbox`, зелёный бэклог не шумит. #1077.
+      next_surfaces_failed_hypotheses_and_underperforming_features: true
   - id: risk-based-ceremony
     # T4. «Сложность растёт с риском, а не с полнотой»: связка риск → церемония видима, есть сторож
     # против расползания церемонии, метрика Time-to-Next-Decision. Частично уже есть (уровни L0…L3).
-    # Взято в работу владельцем (accept кандидата 21.09) — цель ЖИВА; freeze_relation обязателен, но
-    # на живость активной цели не влияет (freeze этапа снят 2026-09-16).
+    # Взято в работу владельцем (accept кандидата 21.09); freeze_relation обязателен, но на живость
+    # цели не влияет (freeze этапа снят 2026-09-16).
+    # ДОСТИГНУТА 2026-09-21 РЕШЕНИЕМ ВЛАДЕЛЬЦА (протокол: засчёт за владельцем, кит себя не судит).
+    # СВЯЗЫВАНИЕ, не рост вширь: движок «риск→уровень процесса» (`gates/spec_levels.classify`, L0…L3)
+    # уже был. Код влит: (1) ВИДИМАЯ строка `ui/presenter_ceremony.py` — «объём процесса подобран под
+    # РИСК, а не под полноту: <сколько>, потому что <почему>»; честная приписка, когда тяжесть не
+    # заявлена; (2) сторож `gates/spec_levels.ceremony_budget_errors` — бюджет разделов/уровень +
+    # монотонность на накопленном множестве + без дублей. Независимое ревью поймало блокер (базовый
+    # L3 падал в «по максимуму, потому что задача мелкая») — починено до слияния. Координация #1078
+    # (`b71ae641`) + код #1079 (`b4a6bb1a`).
     freeze_relation: extension
-    status: active
+    status: achieved
     outcome:
       # Объём процесса подбирается по названному/подразумеваемому риску, а не по «заполни всё».
-      ceremony_scales_with_risk_not_completeness: false
+      # ФЛИПНУТ в true 2026-09-21 решением владельца: связка риск→церемония ВИДИМА человеку строкой
+      # presenter_ceremony; покрыто тестами (включая базовый L3 после фикса блокера). #1079.
+      ceremony_scales_with_risk_not_completeness: true
       # Есть сторож против расползания церемонии (процесс не тяжелеет впустую).
-      ceremony_creep_is_guarded: false
+      # ФЛИПНУТ в true 2026-09-21 решением владельца: `ceremony_budget_errors` краснит превышение
+      # бюджета разделов, немонотонность по уровням и дубли; покрыто тестами. #1079.
+      ceremony_creep_is_guarded: true
   - id: portfolio-intelligence
     # T5. Кит учится на ОБЕЗЛИЧЕННЫХ паттернах отказов дочек — без кода и данных пользователей, только
     # паттерны. Граница анонимизации — часть DoD. Держим ПОСЛЕ вертикального среза product-memory.
@@ -1109,30 +1130,7 @@ work:
   # #723). Это была ПОСЛЕДНЯЯ живая работа внешнего аудит-бэклога checks-that-run → исход
   # external_audit_backlog_is_closed флипнут в true, цель achieved. См. history/plan-history.yaml.
 
-  # ── Принято приёмкой кандидатов (candidate_intake) ─────────────────────────────
-  - id: product-next-as-decision-engine
-    title: "Декомпозировать направление: product-next-as-decision-engine"
-    type: product
-    goal: product-next-as-decision-engine
-    status: in_progress
-    owner_role: product
-    source: "roadmap-direction"
-    branch: claude/t3-product-next-decision-engine
-    write_scope:
-    - ai_ops_kit/intelligence/
-    - ai_ops_kit/cli/
-    rationale: "направление «product-next-as-decision-engine» (достигнуто 0 из 2 результатов) объявлено в роадмапе, но под него нет ни одной заведённой работы — оно рискует потеряться"
-  # ── Принято приёмкой кандидатов (candidate_intake) ─────────────────────────────
-  - id: risk-based-ceremony
-    title: "Декомпозировать направление: risk-based-ceremony"
-    type: product
-    goal: risk-based-ceremony
-    status: in_progress
-    owner_role: product
-    source: "roadmap-direction"
-    branch: claude/rbc-decision-engine-code
-    write_scope:
-    - ai_ops_kit/gates/
-    - ai_ops_kit/ui/
-    - ai_ops_kit/cli/
-    rationale: "направление «risk-based-ceremony» (достигнуто 0 из 2 результатов) объявлено в роадмапе, но под него нет ни одной заведённой работы — оно рискует потеряться"
+  # T3 product-next-as-decision-engine и T4 risk-based-ceremony ЗАКРЫТЫ в history/plan-history.yaml
+  # 2026-09-21 (код влит #1077/#1079, цели достигнуты решением владельца) — под целями открытой работы
+  # не осталось. Следующие направления внешнего ревью (portfolio-intelligence, operating-modes) стоят
+  # в «Дальше» и берутся по одному.
