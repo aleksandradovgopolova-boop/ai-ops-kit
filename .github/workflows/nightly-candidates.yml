@@ -1,0 +1,29 @@
+# Ночной показ задач-кандидатов: непокрытые направления роадмапа + открытые находки из прогонов
+# дочек. ТОЛЬКО ПОКАЗ в сводку прогона — план НЕ трогается (предохранитель: кит сам активную работу
+# не дописывает, принимает владелец через `candidates accept`). Права строго на чтение.
+# Команда: `candidates` (ядро — ai_ops_kit/cli/candidates_cli.py, проекции intelligence/*).
+name: nightly-candidates
+on:
+  schedule:
+    - cron: "45 3 * * *"   # после nightly-roadmap-sync (30 3), чтобы не пересекаться
+  workflow_dispatch: {}
+permissions:
+  contents: read           # только читаем — кандидаты не пишутся ни в план, ни в issue
+jobs:
+  candidates:
+    runs-on: ubuntu-latest
+    if: github.repository == 'aleksandradovgopolova-boop/ai-ops-kit'   # не на форках
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0    # роадмап читает историю плана
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install pyyaml
+      - name: Показать задачи-кандидаты (без записи в план)
+        env:
+          PYTHONPATH: "."
+        run: |
+          python -m ai_ops_kit.cli.ai_ops_cli candidates . \
+            | tee -a "$GITHUB_STEP_SUMMARY"
