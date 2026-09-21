@@ -305,7 +305,7 @@ from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-эк
     build_preview, _print_preview,
     _run_backlog, _BACKLOG_SUBS,
     _product_health_report, _product_risks,
-    _intent_products, _intent_delivery, _intent_model, _intent_contract, _intent_propose,
+    _intent_products, _intent_model, _intent_contract, _intent_propose,
     _intent_inspect, _intent_plan, _intent_session,
     _intent_roadmap, _intent_replan, _intent_new, _intent_governance,
     _intent_bootstrap, _intent_discuss, _intent_health, _intent_team,
@@ -328,6 +328,8 @@ from ai_ops_kit.cli.ai_ops_cli_commands import (  # noqa: E402,F401 — ре-э�
 
 # auto-slice-candidates: команда `candidates` живёт в собственном спутнике (ратчет module-size).
 from ai_ops_kit.cli.candidates_cli import _intent_candidates  # noqa: E402,F401 — ре-экспорт/регистрация
+# delivery-record: интент `delivery` вынесен спутником из product-хаба (ратчет размера модуля).
+from ai_ops_kit.cli.ai_ops_cli_delivery import _intent_delivery  # noqa: E402,F401 — ре-экспорт/регистрация
 # portfolio-intelligence (T5): команда `portfolio` — тоже отдельный спутник.
 from ai_ops_kit.cli.portfolio_cli import _intent_portfolio  # noqa: E402,F401 — ре-экспорт/регистрация
 
