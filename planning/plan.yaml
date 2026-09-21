@@ -835,14 +835,24 @@ goals:
     # `proj-<sha256>` (`engops/child_registry.project_anon_id`), несёт ТОЛЬКО класс отказа + счётчики +
     # обезличенный контекст, и сторож краснит утечку любого опознающего поля (путь/коммит/имя/сырой
     # вывод/код) в портфельный вид.
+    #
+    # ДОСТИГНУТА 2026-09-21 РЕШЕНИЕМ ВЛАДЕЛЬЦА (протокол: засчёт за владельцем, кит себя не судит).
+    # Код влит: команда `portfolio` + `intelligence/portfolio_patterns.py` (обезличенный вид на
+    # `proj-<sha256>`) + сторож `check_anonymized`. Независимое ревью НАШЛО и мы ЗАКРЫЛИ блокер до
+    # слияния: канал `load_findings` не проверяет enum, поэтому свободный текст в `observation_class`
+    # мог протащить идентификацию — починено нормализацией у источника + белым списком классов в
+    # стороже. Координация #1081 (`16eeb1b0`) + код #1082 (`992c873d`). СВЯЗЫВАНИЕ, не рост вширь.
     freeze_relation: extension
-    status: active
+    status: achieved
     outcome:
       # Повторяющиеся классы отказов дочек поднимаются в материнский кит обезличенно (без кода/evidence).
       # ПРИЁМКА: портфельный вид отказов ключуется на анон-id `proj-<sha256>` и несёт только класс +
       # счётчики + обезличенный контекст; опознающие поля (путь/коммит/имя дочки/сырой вывод/код) в него
       # НЕ попадают, и это стережёт проверяемый сторож (тест краснеет на подсунутом опознающем поле).
-      kit_learns_failure_patterns_across_child_portfolio_anonymously: false
+      # ФЛИПНУТ в true 2026-09-21 решением владельца: граница анонимизации построена, стережётся
+      # `check_anonymized` (структурно/по ключам/по форме + белый список классов), покрыта адверсариальными
+      # тестами (включая утечку через класс, найденную независимым ревью). #1082.
+      kit_learns_failure_patterns_across_child_portfolio_anonymously: true
   - id: operating-modes
     # T6. Один kernel, разные режимы (Product/Design/Engineering/Delivery/Founder) как тонкая ЛИНЗА
     # поверх существующего слоя аудитории (audience: product|technical|debug), НЕ отдельные продукты.
@@ -1149,20 +1159,7 @@ work:
   # #723). Это была ПОСЛЕДНЯЯ живая работа внешнего аудит-бэклога checks-that-run → исход
   # external_audit_backlog_is_closed флипнут в true, цель achieved. См. history/plan-history.yaml.
 
-  # T3 product-next-as-decision-engine и T4 risk-based-ceremony ЗАКРЫТЫ в history/plan-history.yaml
-  # 2026-09-21 (код влит #1077/#1079, цели достигнуты решением владельца) — под целями открытой работы
-  # не осталось. Последнее направление внешнего ревью (operating-modes) стоит в «Дальше».
-
-  # ── T5: взято в работу 2026-09-21 (см. цель portfolio-intelligence) ──────────────
-  - id: portfolio-patterns-anonymized
-    title: "Обезличенный портфельный вид отказов дочек: анон-id + сторож границы анонимизации"
-    type: product
-    goal: portfolio-intelligence
-    status: in_progress
-    owner_role: product
-    source: "roadmap-direction"
-    branch: claude/t5-portfolio-patterns-anonymized
-    write_scope:
-    - ai_ops_kit/intelligence/
-    - ai_ops_kit/cli/
-    rationale: "агрегация классов отказов дочек уже есть (precedent_ledger), но портфельный вид ключует контекст по пути/имени дочки и канал тащит путь/коммит/сырой вывод — DoD направления (граница анонимизации) не выполнен; срез обезличивает вид на анон-id proj-<sha256> и ставит сторож против утечки опознающих полей"
+  # T3 product-next-as-decision-engine, T4 risk-based-ceremony и T5 portfolio-intelligence ЗАКРЫТЫ в
+  # history/plan-history.yaml 2026-09-21 (код влит #1077/#1079/#1082, цели достигнуты решением
+  # владельца) — под целями открытой работы не осталось. Последнее направление внешнего ревью
+  # (operating-modes) стоит в «Дальше».
