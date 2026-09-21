@@ -157,9 +157,17 @@ def validate_dir_full(feature_dir: Path):
                  "поставки (reality/blueprint дрейф; пометьте реальные артефакты done или снимите released)")
 
         # v3.27.4 WP5: проверяем наличие SHA-verified DeliveryReceipt
-        # DeliveryReceipt находится в features/<feature_id>/delivery-receipt.yaml
-        # или в .ai/runtime/delivery/<workitem_id>/receipt.yaml
+        # РЕАЛЬНЫЙ приёмник, куда пишут ВСЕ продюсеры (engine/_deliver, _reconcile_pending_delivery):
+        # features/<id>/delivery-outbox/<delivery_id>.receipt.yaml. Раньше проверка читала только
+        # исторические запасные пути (delivery-receipt.yaml, .ai/runtime/delivery/<id>/receipt.yaml),
+        # куда никто не пишет, — и честно доставленная функция всё равно валилась. Читаем outbox
+        # ПЕРВЫМ (тот же порядок, что и канонический reader lifecycle.work_view), потом запасные.
+        # Слой checks зависит только от stdlib+pyyaml и не импортирует вверх — glob делаем на месте.
+        outbox_dir = feature_dir / "delivery-outbox"
+        outbox_receipts = (sorted(outbox_dir.glob("*.receipt.yaml"))
+                           if outbox_dir.is_dir() else [])
         receipt_paths = [
+            *outbox_receipts,
             feature_dir / "delivery-receipt.yaml",
             feature_dir.parent.parent / ".ai" / "runtime" / "delivery" / feature.get("id", "") / "receipt.yaml",
         ]
