@@ -51,8 +51,8 @@ AI-агент собирает маленький greenfield за вечер. Н
 написанная руками: **[docs/capability-map.md](docs/capability-map.md)**. Там у каждой возможности
 состояние built / built≠wired / partial / planned и способ проверки.
 
-Коротко: 36 <!-- claim:commands-total --> команды владельца (`status`, `inbox`, `next`, `explain`,
-`do`, `run`, `review`, `contract`, `model` …), 36 <!-- claim:gates-total --> quality-gate
+Коротко: 37 <!-- claim:commands-total --> команды владельца (`status`, `inbox`, `next`, `explain`,
+`do`, `run`, `review`, `contract`, `model`, `portfolio` …), 36 <!-- claim:gates-total --> quality-gate
 (23 блокирующих, 13 advisory), 42 <!-- claim:agents-total --> роли в реестре, детерминированный
 security-scan.
 
