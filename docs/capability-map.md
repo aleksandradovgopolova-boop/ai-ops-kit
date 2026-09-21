@@ -76,7 +76,7 @@ README ссылаются на неё, а не дублируют список �
 | `./ai-ops bootstrap` | создать первое направление и план из фактов репозитория (--apply — записать) | direct | built |
 | `./ai-ops candidates` | задачи-кандидаты (непокрытые направления роадмапа + наблюдения дочек): без аргумента — список; accept <id..>|--all — принять пачкой в план | direct | built |
 | `./ai-ops contract` | единый контракт продукта: идентичность/стандарт/артефакты/контуры/здоровье + вердикт | direct | built |
-| `./ai-ops delivery` | delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры | direct | built |
+| `./ai-ops delivery` | delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры; record <feature-id> --pr <n> — подтверждённая расписка для вручную влитого PR | direct | built |
 | `./ai-ops discuss` | обсудить идею до спецификации (discovery) | direct | built |
 | `./ai-ops do` | автономный прогон: run --execute + авторазрешение блокировщиков | engine | built |
 | `./ai-ops doctor` | проверить установку изнутри репозитория (полная проверка — у кита) | direct | built |

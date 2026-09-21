@@ -20,7 +20,7 @@ from pathlib import Path
 # как `ai_ops_cli` (диспетч/регистрация), так и тесты. Соседи не импортируют этот модуль
 # на верхнем уровне, поэтому цикла нет.
 from ai_ops_kit.cli.ai_ops_cli_product import (  # noqa: F401 — ре-экспорт для вызывающих/тестов
-    build_preview, _print_preview, _BACKLOG_SUBS, _run_backlog, _intent_model, _product_health_report, _product_risks, _intent_contract, _intent_products, _intent_inspect, _intent_delivery, _intent_plan, _intent_session,
+    build_preview, _print_preview, _BACKLOG_SUBS, _run_backlog, _intent_model, _product_health_report, _product_risks, _intent_contract, _intent_products, _intent_inspect, _intent_plan, _intent_session,
 )
 from ai_ops_kit.cli.foundation_proposal import run_intent as _intent_propose  # noqa: F401 — оркестратор `propose`
 from ai_ops_kit.cli.ai_ops_cli_lifecycle import (  # noqa: F401 — ре-экспорт для вызывающих/тестов
