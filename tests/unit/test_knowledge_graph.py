@@ -738,3 +738,79 @@ def test_trace_presenter_prints_real_shift_and_next_step():
     assert "Гипотеза не подтвердилась" in text
     assert "Дальше по этому уроку" in text
     assert msg["technical_details"]["payload"]["measured_verdict"] == "failed"
+
+
+# ── Гейт графа при рассинхроне СЛОВАРЯ ТИПОВ называет причину и советует обновить кит ───────────────
+# Если установленный registry/entities.yaml отстал от сборщика, граф ссылается на типы/связи, которых
+# реестр ещё не знает, и гейт целостности краснит. Раньше он отдавал сырую ошибку валидатора без
+# диагноза; теперь ДОБАВЛЯЕТ подсказку про `ai-ops update` — но только для ошибок словаря типов, не
+# для порчи данных проекта (висящих ссылок), и НЕ подавляя сам отказ.
+import json  # noqa: E402
+import io  # noqa: E402
+import contextlib  # noqa: E402
+import types as _types  # noqa: E402
+
+from ai_ops_kit.cli import ai_ops_cli_intents as _intents  # noqa: E402
+
+
+def _run_graph_gate(monkeypatch, tmp_path, graph, *, as_json):
+    """Прогнать гейт `graph build` на ПОДСТАВЛЕННОМ графе -> (exit_code, stdout).
+
+    Сборщик мокаем: невозможно заставить настоящий build_graph породить тип вне реестра, когда
+    сборщик и реестр в синхроне (ровно поэтому дефект бьёт только по установкам со старым реестром).
+    """
+    monkeypatch.setattr(kg, "build_graph", lambda root: graph)
+    a = _types.SimpleNamespace(json=as_json, rest=["build"], feature=None, apply=False)
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        code = _intents._intent_graph("", tmp_path, {}, a)
+    return code, buf.getvalue()
+
+
+def test_graph_gate_names_stale_type_registry_on_unknown_node_type(monkeypatch, tmp_path):
+    """Тип узла вне реестра (устаревший установленный registry/entities.yaml) -> гейт называет причину
+    и советует `ai-ops update`, при этом всё равно краснит (сырую ошибку не прячет)."""
+    graph = {
+        "schema_version": 1, "kind": "knowledge-graph",
+        "nodes": [
+            {"id": "grow-repeat", "type": "goal", "title": "Рост повторных покупок"},
+            # Сборщик новее реестра: породил тип, которого установленный словарь ещё не знает.
+            {"id": "mystery", "type": "quantum-widget", "title": "Узел неизвестного реестру типа"},
+        ],
+        "edges": [],
+    }
+    code, out = _run_graph_gate(monkeypatch, tmp_path, graph, as_json=True)
+    assert code == 1, "гейт обязан продолжать краснить: диагноз добавлен, отказ не подавлен"
+    payload = json.loads(out)
+    assert payload["ok"] is False
+    assert any("quantum-widget" in e for e in payload["errors"]), \
+        f"сырая ошибка валидатора обязана остаться: {payload}"
+    assert "ai-ops update" in payload["remediation"]
+    assert "устарел" in payload["remediation"]
+
+    # Тот же диагноз виден и в продуктовом (человеческом) выводе, не только в JSON.
+    _, human = _run_graph_gate(monkeypatch, tmp_path, graph, as_json=False)
+    assert "ai-ops update" in human and "устарел" in human
+
+
+def test_graph_gate_does_not_blame_registry_on_dangling_reference(monkeypatch, tmp_path):
+    """Только висящая ссылка (порча данных проекта, а не рассинхрон словаря) -> подсказки «обнови кит»
+    НЕТ; гейт по-прежнему краснит с ошибкой ссылочной целостности."""
+    graph = {
+        "schema_version": 1, "kind": "knowledge-graph",
+        "nodes": [
+            {"id": "grow-repeat", "type": "goal", "title": "Рост повторных покупок"},
+            {"id": "express-checkout", "type": "feature", "title": "Экспресс-чекаут"},
+        ],
+        # Ребро в несуществующий узел: реальная порча данных, типы/связи при этом реестру известны.
+        "edges": [{"from": "express-checkout", "type": "delivered-by", "to": "no-such-release"}],
+    }
+    code, out = _run_graph_gate(monkeypatch, tmp_path, graph, as_json=True)
+    assert code == 1
+    payload = json.loads(out)
+    assert any("no-such-release" in e for e in payload["errors"])
+    assert "remediation" not in payload, \
+        "для висящей ссылки подсказка про устаревший реестр — ложный диагноз"
+
+    _, human = _run_graph_gate(monkeypatch, tmp_path, graph, as_json=False)
+    assert "ai-ops update" not in human and "устарел" not in human

@@ -244,15 +244,31 @@ def _intent_graph(task, child_root, signals, a):
     integrity = _validate_graph_integrity(graph, root)
     if integrity:
         # Целостность важнее ответа: строить вывод на битом графе — врать. Называем ПОСЛЕДСТВИЕ.
+        # НЕ подавляем отказ: сырые ошибки валидатора остаются на месте, exit 1 остаётся — мы лишь
+        # ДОБАВЛЯЕМ диагноз. Если среди ошибок есть рассинхрон СЛОВАРЯ ТИПОВ (узел с неизвестным
+        # типом / запрещённая связь), самая вероятная причина — установленный реестр типов отстал
+        # от сборщика. Для одних лишь висящих ссылок (порча данных проекта) подсказку «обнови кит»
+        # НЕ даём: это был бы ложный диагноз.
+        from ai_ops_kit.validation import validate_knowledge_graph as vkg
+        skew = vkg.classify_errors(integrity).get("has_type_vocab_error", False)
+        remediation = (
+            "Похоже, установленный реестр типов (registry/entities.yaml) устарел относительно "
+            "сборщика графа — типы/связи, которые кит порождает, реестр ещё не знает. Обнови кит: "
+            "`ai-ops update`. Если граф правил вручную — приведи типы в соответствие с реестром."
+        ) if skew else None
         if js:
-            print(json.dumps({"ok": False, "reason": "граф не прошёл проверку целостности",
-                              "errors": integrity}, ensure_ascii=False, indent=2))
+            payload = {"ok": False, "reason": "граф не прошёл проверку целостности",
+                       "errors": integrity}
+            if remediation:
+                payload["remediation"] = remediation
+            print(json.dumps(payload, ensure_ascii=False, indent=2))
         else:
             print(presenter.render(presenter.message(
                 status="blocked",
                 summary="Собрал граф из плана, обучения и паспортов функций, но он не сошёлся сам с "
                         "собой — отвечать по нему не буду.",
                 why_it_matters="Ответ на битом графе хуже отсутствия ответа: он выглядит как факт.",
+                next_steps=[remediation] if remediation else None,
                 technical={"errors": integrity}), audience=presenter.audience_from_config(root)))
         return 1
 
