@@ -1109,7 +1109,11 @@ work:
     title: "Декомпозировать направление: product-next-as-decision-engine"
     type: product
     goal: product-next-as-decision-engine
-    status: todo
+    status: in_progress
     owner_role: product
     source: "roadmap-direction"
+    branch: claude/t3-product-next-decision-engine
+    write_scope:
+    - ai_ops_kit/intelligence/
+    - ai_ops_kit/cli/
     rationale: "направление «product-next-as-decision-engine» (достигнуто 0 из 2 результатов) объявлено в роадмапе, но под него нет ни одной заведённой работы — оно рискует потеряться"
