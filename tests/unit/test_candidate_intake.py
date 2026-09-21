@@ -174,3 +174,147 @@ def test_reaccept_is_idempotent(tmp_path):
     plan = dp.load(repo)
     ids = [w["id"] for w in dp.items(plan)]
     assert ids.count("uncovered-direction") == 1            # ровно одна, не две
+
+
+# ── F1: кандидат-находка без source_goal в МНОГОЦЕЛЕВОМ плане ─────────────────────────────────────
+
+_FINDING_CAND = {
+    "id": "cand-obs-x", "title": "Разобрать наблюдение из прогона", "type": "investigation",
+    "owner_role": "product-manager", "status": "draft", "active": False,
+    "requires_human_decision": True, "source": "child-finding",
+    "source_observation": "obs-x", "rationale": "наблюдение из прогона дочки",
+}
+
+
+def test_finding_without_goal_in_multigoal_plan_is_skipped_not_written(tmp_path):
+    """Кандидат-находка без направления в многоцелевом плане НЕ пишется молча (иначе work item без
+    goal — ошибка валидатора): уходит в skipped_no_goal, план не тронут, валидатор проходит."""
+    repo = _fixture_repo(tmp_path)                 # фикстура многоцелевая (2 цели)
+    p = repo / "planning" / "plan.yaml"
+    before = p.read_bytes()
+    rep = ci.accept_candidates(repo, ["cand-obs-x"], [_FINDING_CAND], apply=True)
+    assert rep["to_add"] == []
+    assert rep["applied"] is False
+    assert any(s["id"] == "cand-obs-x" for s in rep["skipped_no_goal"])
+    assert p.read_bytes() == before                # байт-в-байт: ничего не записано
+    assert dp.validate(dp.load(repo), root=repo)["errors"] == []
+
+
+def test_finding_accepted_with_explicit_goal_is_valid(tmp_path):
+    """С явным --goal кандидат-находка становится валидным work item с проставленным направлением."""
+    repo = _fixture_repo(tmp_path)
+    rep = ci.accept_candidates(repo, ["cand-obs-x"], [_FINDING_CAND],
+                               goal="uncovered-direction", apply=True)
+    assert rep["applied"] is True
+    assert [it["id"] for it in rep["to_add"]] == ["obs-x"]
+    plan = dp.load(repo)
+    w = next(w for w in dp.items(plan) if w["id"] == "obs-x")
+    assert w["goal"] == "uncovered-direction"
+    assert dp.validate(plan, root=repo)["errors"] == []
+
+
+def test_explicit_goal_that_does_not_resolve_is_refused(tmp_path):
+    """--goal с несуществующей целью не пишет невалидный план: пропуск с внятной причиной."""
+    repo = _fixture_repo(tmp_path)
+    p = repo / "planning" / "plan.yaml"
+    before = p.read_bytes()
+    rep = ci.accept_candidates(repo, ["cand-obs-x"], [_FINDING_CAND],
+                               goal="no-such-goal", apply=True)
+    assert rep["to_add"] == [] and rep["applied"] is False
+    assert any(s["id"] == "cand-obs-x" for s in rep["skipped_no_goal"])
+    assert p.read_bytes() == before
+
+
+# ── F2: коллизия slug между источниками ──────────────────────────────────────────────────────────
+
+def test_slug_collision_reported_honestly_not_as_existing(tmp_path):
+    """`cand-dir-foo` и `cand-foo` дают один slug `foo`: второй — НЕ «уже в плане», а честная коллизия
+    источников (skipped_collision с указанием, с кем схлопнулся). Дубль не пишется, план валиден."""
+    repo = _fixture_repo(tmp_path)
+    cands = [
+        {"id": "cand-dir-foo", "title": "Из направления", "type": "improvement",
+         "owner_role": "product-manager", "source": "roadmap-direction",
+         "source_goal": "uncovered-direction", "rationale": "a"},
+        {"id": "cand-foo", "title": "Из находки", "type": "investigation",
+         "owner_role": "product-manager", "source": "child-finding", "rationale": "b"},
+    ]
+    rep = ci.accept_candidates(repo, ["cand-dir-foo", "cand-foo"], cands, apply=True)
+    assert [it["id"] for it in rep["to_add"]] == ["foo"]
+    assert rep["skipped_existing"] == []                    # НЕ «уже есть»
+    assert len(rep["skipped_collision"]) == 1
+    assert rep["skipped_collision"][0]["id"] == "cand-foo"
+    assert rep["skipped_collision"][0]["clashes_with"] == "cand-dir-foo"
+    plan = dp.load(repo)
+    assert [w["id"] for w in dp.items(plan)].count("foo") == 1
+    assert dp.validate(plan, root=repo)["errors"] == []
+
+
+# ── F3/F4: непокрытые ветки дописывания текста ──────────────────────────────────────────────────
+
+_SINGLE_GOAL_HEAD = """schema_version: 1
+kind: delivery-plan
+goals:
+  - id: only-goal
+    title: Одно направление
+    outcome:
+      x: false
+"""
+
+_WORK_BLOCK = """work:
+  # KEEP-TRAILING-CANARY
+  - id: existing
+    title: Есть работа
+    type: engineering
+    goal: only-goal
+    status: todo
+    owner_role: engineer
+    write_scope: [src/]
+"""
+
+_NEW_CAND = {"id": "cand-dir-added", "title": "Новая работа", "type": "improvement",
+             "owner_role": "product-manager", "source": "roadmap-direction",
+             "source_goal": "only-goal", "rationale": "r"}
+
+
+def _write_plan(tmp_path, text):
+    (tmp_path / "planning").mkdir(parents=True, exist_ok=True)
+    p = tmp_path / "planning" / "plan.yaml"
+    p.write_text(text, encoding="utf-8")
+    return p
+
+
+def test_append_when_work_is_not_the_last_block(tmp_path):
+    """`work:` не последний top-level блок: вставка ПЕРЕД следующим ключом, план остаётся валиден."""
+    text = _SINGLE_GOAL_HEAD + _WORK_BLOCK + "notes: хвостовой верхнеуровневый блок после work\n"
+    p = _write_plan(tmp_path, text)
+    rep = ci.accept_candidates(tmp_path, ["cand-dir-added"], [_NEW_CAND], apply=True)
+    assert rep["applied"] is True
+    out = p.read_text(encoding="utf-8")
+    assert "notes: хвостовой" in out                        # хвостовой блок уцелел
+    assert out.index("id: added") < out.index("notes:")     # вставлено ВНУТРЬ work, до notes
+    plan = dp.load(tmp_path)                                 # парсится
+    assert "added" in {w["id"] for w in dp.items(plan)}
+    assert dp.validate(plan, root=tmp_path)["errors"] == []
+
+
+def test_append_when_file_has_no_trailing_newline(tmp_path):
+    """Файл без финального перевода строки — дописывание всё равно даёт валидный YAML."""
+    text = (_SINGLE_GOAL_HEAD + _WORK_BLOCK).rstrip("\n")    # без финального \n
+    p = _write_plan(tmp_path, text)
+    assert not p.read_text(encoding="utf-8").endswith("\n")
+    rep = ci.accept_candidates(tmp_path, ["cand-dir-added"], [_NEW_CAND], apply=True)
+    assert rep["applied"] is True
+    plan = dp.load(tmp_path)
+    assert "added" in {w["id"] for w in dp.items(plan)}
+    assert dp.validate(plan, root=tmp_path)["errors"] == []
+
+
+def test_flow_style_work_block_is_refused_without_writing(tmp_path):
+    """work: во flow-стиле (`[]`) — дописывать вслепую нельзя: ошибка, и на диск ничего не легло."""
+    text = _SINGLE_GOAL_HEAD + "work: []\n"
+    p = _write_plan(tmp_path, text)
+    before = p.read_bytes()
+    rep = ci.accept_candidates(tmp_path, ["cand-dir-added"], [_NEW_CAND], apply=True)
+    assert rep["applied"] is False
+    assert rep.get("error") and "work" in rep["error"]
+    assert p.read_bytes() == before                         # F4: не записано ничего

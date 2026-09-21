@@ -25,32 +25,24 @@ from pathlib import Path
 def gather_candidates(child_root) -> list:
     """Union кандидатов из обоих источников: находки дочек + непокрытые направления роадмапа.
 
-    Обратный канал обогащает очередь, а не является её предусловием: сбой одного источника не роняет
-    другой (каждый под своим try). -> list[dict] кандидатов."""
+    Обе проекции сами fail-safe (не бросают: `child_findings.project_findings` пропускает битые
+    файлы канала, `roadmap_candidates.project_uncovered_directions` ловит PlanCorrupt и возвращает
+    readable:false) — поэтому зовём их напрямую, БЕЗ широкого глушителя. Тихо гасить исключение
+    значило бы «источник упал» выдать за «кандидатов нет» — ровно то, против чего кит. -> list[dict]."""
     from ai_ops_kit.intelligence import child_findings, roadmap_candidates
     root = Path(child_root)
     out: list = []
-    try:
-        proj = child_findings.project_findings(root)
-        out.extend(proj.get("candidates") or [])
-    except Exception:  # noqa: BLE001 — канал находок опционален, не предусловие
-        pass
-    try:
-        dproj = roadmap_candidates.project_uncovered_directions(root)
-        out.extend(dproj.get("candidates") or [])
-    except Exception:  # noqa: BLE001 — проекция направлений опциональна, не предусловие
-        pass
+    out.extend(child_findings.project_findings(root).get("candidates") or [])
+    out.extend(roadmap_candidates.project_uncovered_directions(root).get("candidates") or [])
     return out
 
 
 def inbox_direction_candidates(child_root):
-    """Непокрытые направления роадмапа как кандидаты (DRAFT) для входящих владельца. Плана нет/не
-    читается или сбор упал -> None (честное «не знаю», не «покрыто всё»). READ-ONLY. -> list|None."""
-    try:
-        from ai_ops_kit.intelligence import roadmap_candidates
-        proj = roadmap_candidates.project_uncovered_directions(Path(child_root))
-    except Exception:  # noqa: BLE001 — обратный канал обогащает очередь, не является её предусловием
-        return None
+    """Непокрытые направления роадмапа как кандидаты (DRAFT) для входящих владельца. `project_uncovered
+    _directions` сама fail-safe: план не читается -> readable:false (честное «не знаю», не «покрыто
+    всё»). READ-ONLY. -> list|None (None = состояние покрытия неизвестно, во входящих молчим)."""
+    from ai_ops_kit.intelligence import roadmap_candidates
+    proj = roadmap_candidates.project_uncovered_directions(Path(child_root))
     return (proj.get("candidates") or []) if proj.get("readable") else None
 
 
@@ -96,8 +88,9 @@ def _list_candidates(child_root, cands, js: bool) -> int:
     return 0
 
 
-def _accept_candidates(child_root, cands, ids, take_all: bool, js: bool) -> int:
-    """Принять выбранных/всех кандидатов пачкой (пишет plan.yaml)."""
+def _accept_candidates(child_root, cands, ids, take_all: bool, js: bool, goal=None) -> int:
+    """Принять выбранных/всех кандидатов пачкой (пишет plan.yaml). `goal` — явное направление
+    владельца (`--goal`) для кандидатов без своего source_goal."""
     from ai_ops_kit.planning import candidate_intake
     if take_all:
         chosen = [c.get("id") for c in cands if c.get("id")]
@@ -120,7 +113,7 @@ def _accept_candidates(child_root, cands, ids, take_all: bool, js: bool) -> int:
             else:
                 print(msg)
             return 2
-    rep = candidate_intake.accept_candidates(child_root, chosen, cands, apply=True)
+    rep = candidate_intake.accept_candidates(child_root, chosen, cands, goal=goal, apply=True)
     if js:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
         return 1 if rep.get("error") else 0
@@ -129,13 +122,20 @@ def _accept_candidates(child_root, cands, ids, take_all: bool, js: bool) -> int:
         return 1
     added = rep.get("to_add") or []
     skipped = rep.get("skipped_existing") or []
+    no_goal = rep.get("skipped_no_goal") or []
+    collision = rep.get("skipped_collision") or []
     if added:
         print(f"Добавлено в план работ ({len(added)}):")
         for it in added:
             print(f"  • {it['id']} — {it['title']}")
     if skipped:
         print(f"Пропущено (уже есть в плане) — {len(skipped)}: {', '.join(skipped)}")
-    if not added and not skipped:
+    for ng in no_goal:
+        print(f"Пропущено (нет направления) — {ng['id']}: {ng['reason']}")
+    for cl in collision:
+        print(f"Пропущено (совпал slug «{cl['slug']}» с кандидатом {cl['clashes_with']}) — "
+              f"{cl['id']}: разные кандидаты дают одно имя работы, прими их по одному")
+    if not (added or skipped or no_goal or collision):
         print("Ничего не добавлено: названные кандидаты не найдены среди актуальных.")
     return 0
 
@@ -152,7 +152,7 @@ def run_candidates(child_root, a) -> int:
     if verb == "accept":
         take_all = bool(getattr(a, "all", False))
         ids = args[1:]
-        return _accept_candidates(root, cands, ids, take_all, js)
+        return _accept_candidates(root, cands, ids, take_all, js, goal=getattr(a, "goal", None))
     # Неизвестный глагол — назвать, что умеет, а не молча вернуть успех.
     if js:
         print(json.dumps({"ok": False, "reason": f"неизвестная подкоманда: {verb}",

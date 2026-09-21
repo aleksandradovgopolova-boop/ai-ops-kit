@@ -30,6 +30,8 @@ import json
 import re
 from pathlib import Path
 
+import yaml
+
 from ai_ops_kit.planning import delivery_plan as _plan
 from ai_ops_kit.planning import contours as _contours
 
@@ -92,9 +94,14 @@ def _type_for(cand_type, model: dict) -> str:
     return sorted(types)[0] if types else _DEFAULT_TYPE
 
 
-def _plan_item_from_candidate(cand: dict, model: dict) -> dict:
-    """Кандидат → work item плана. Роль/тип переводятся в словарь модели; `goal` — только если у
-    кандидата есть `source_goal` (у находок его нет). `source` метит происхождение для обратной связи."""
+def _text(v) -> str:
+    return str(v or "").strip()
+
+
+def _plan_item_from_candidate(cand: dict, model: dict, goal: str | None = None) -> dict:
+    """Кандидат → work item плана. Роль/тип переводятся в словарь модели; `goal` — УЖЕ разрешённое
+    направление (source_goal кандидата или явный --goal владельца), проставляется только если задано.
+    `source` метит происхождение для обратной связи."""
     slug = _slug(cand.get("id"))
     item = {
         "id": slug,
@@ -105,29 +112,37 @@ def _plan_item_from_candidate(cand: dict, model: dict) -> dict:
         "source": _text(cand.get("source")) or "candidate",
         "rationale": _text(cand.get("rationale")),
     }
-    goal = _text(cand.get("source_goal"))
     if goal:
         item["goal"] = goal
     return item
 
 
-def _text(v) -> str:
-    return str(v or "").strip()
-
-
-def accept_candidates(child_root, candidate_ids, candidates, *, apply: bool = False) -> dict:
-    """Принять выбранных кандидатов пачкой. -> {"to_add", "skipped_existing", "applied", ["error"]}.
+def accept_candidates(child_root, candidate_ids, candidates, *, goal: str | None = None,
+                      apply: bool = False) -> dict:
+    """Принять выбранных кандидатов пачкой. -> {"to_add", "skipped_existing", "skipped_no_goal",
+    "skipped_collision", "applied", ["error"]}.
 
     `candidate_ids` — id кандидатов к приёмке (в порядке владельца). `candidates` — уже собранный
-    список кандидатов (union источников делает вызыватель, см. докстринг модуля). `apply=True` —
+    список кандидатов (union источников делает вызыватель, см. докстринг модуля). `goal` — явное
+    направление владельца (`--goal <id>`) для кандидатов без своего `source_goal`. `apply=True` —
     ЕДИНСТВЕННЫЙ режим, что пишет plan.yaml.
 
-    ИДЕМПОТЕНТНО: кандидат, чей целевой slug уже есть в `plan["work"]` (или встретился в этой же
-    пачке), уходит в `skipped_existing`, а не дублируется. Пустого плана здесь не бывает: без плана
-    дописывать не во что — возвращаем `error`, ничего не трогаем.
+    ПРИЁМКА НИКОГДА НЕ ПИШЕТ НЕВАЛИДНЫЙ ПЛАН:
+      * НАПРАВЛЕНИЕ. Кандидат без направления в МНОГОЦЕЛЕВОМ плане дал бы work item без `goal` — а это
+        ошибка delivery_plan.validate. Такой кандидат НЕ пишется молча: он уходит в `skipped_no_goal`
+        с внятной причиной («укажи --goal <id>»). В одноцелевом плане goal можно опустить — валидатор
+        выводит единственную цель сам. Явный `--goal`, не существующий в плане, тоже отклоняется.
+      * ИДЕМПОТЕНТНОСТЬ. Кандидат, чей целевой slug уже есть в `plan["work"]`, уходит в
+        `skipped_existing` — повтор дубля не создаёт.
+      * КОЛЛИЗИЯ ИСТОЧНИКОВ. `cand-dir-foo` и `cand-foo` дают ОДИН slug `foo`. Это не «уже в плане»:
+        второй уходит в `skipped_collision` (с кем схлопнулся), чтобы владелец видел настоящую причину.
+
+    Пустого/битого плана здесь не бывает молча: дописывать не во что — возвращаем `error`, ничего не
+    трогаем. Запись атомарна и застрахована (см. `_apply_to_plan_file`): не разобралось — не пишем.
     """
     root = Path(child_root)
-    result = {"to_add": [], "skipped_existing": [], "applied": False}
+    result = {"to_add": [], "skipped_existing": [], "skipped_no_goal": [],
+              "skipped_collision": [], "applied": False}
     try:
         plan = _plan.load(root)
     except _plan.PlanCorrupt as e:
@@ -137,25 +152,44 @@ def accept_candidates(child_root, candidate_ids, candidates, *, apply: bool = Fa
 
     model = _contours.load_model()
     existing = {w.get("id") for w in _plan.items(plan) if w.get("id")}
+    goal_ids = {g["id"] for g in _plan.goals(plan)}
+    multi_goal = len(goal_ids) > 1
+    explicit_goal = _text(goal)
     by_id = {c.get("id"): c for c in (candidates or []) if isinstance(c, dict) and c.get("id")}
 
-    to_add, skipped, seen = [], [], set()
+    seen: dict = {}                        # slug -> id кандидата, уже принятого в этой пачке
     for cid in (candidate_ids or []):
         cand = by_id.get(cid)
         if cand is None:
             continue                       # id, которого нет среди кандидатов — молча мимо
         slug = _slug(cid)
-        if slug in existing or slug in seen:
-            skipped.append(slug)
+        if slug in existing:
+            result["skipped_existing"].append(slug)
             continue
-        seen.add(slug)
-        to_add.append(_plan_item_from_candidate(cand, model))
+        if slug in seen:
+            result["skipped_collision"].append(
+                {"id": cid, "slug": slug, "clashes_with": seen[slug]})
+            continue
+        wgoal = _text(cand.get("source_goal")) or explicit_goal
+        if wgoal and wgoal not in goal_ids:
+            result["skipped_no_goal"].append(
+                {"id": cid, "reason": f"направление «{wgoal}» не найдено в плане — "
+                                      f"укажи существующую цель: --goal <id>"})
+            continue
+        if not wgoal and multi_goal:
+            result["skipped_no_goal"].append(
+                {"id": cid, "reason": "у кандидата нет направления, а целей в плане несколько — "
+                                      "укажи, к какой относится: --goal <id>"})
+            continue
+        seen[slug] = cid
+        result["to_add"].append(_plan_item_from_candidate(cand, model, goal=wgoal or None))
 
-    result["to_add"] = to_add
-    result["skipped_existing"] = skipped
-    if apply and to_add:
-        _apply_to_plan_file(root, to_add)
-        result["applied"] = True
+    if apply and result["to_add"]:
+        err = _apply_to_plan_file(root, result["to_add"])
+        if err:
+            result["error"] = err          # applied остаётся False — на диск ничего не легло
+        else:
+            result["applied"] = True
     return result
 
 
@@ -190,11 +224,21 @@ def _append_work_items_text(text: str, items_yaml: str) -> str:
 
     Находим верхнеуровневый ключ `work:` и конец его блока — следующий верхнеуровневый ключ (строка,
     начинающаяся не с пробела и не с `#`), либо конец файла. Вставляем новые записи перед ним.
+
+    ГАРАНТИЯ ФОРМЫ. Дописывание рассчитано на БЛОК-СПИСОК с отступом 2 пробела (`  - id: …`) — как в
+    plan.yaml кита. Если блок оформлен иначе (flow `work: []`/значение в той же строке; mapping или
+    список с другим отступом), дописывание вслепую дало бы битый YAML. Такой случай не угадываем —
+    поднимаем ValueError (вызыватель вернёт error и НЕ запишет).
     """
     lines = text.splitlines(keepends=True)
     work_idx = next((i for i, ln in enumerate(lines) if re.match(r"^work\s*:", ln)), None)
     if work_idx is None:
         raise ValueError("в plan.yaml нет верхнеуровневого блока work: — дописывать некуда")
+    # Flow/скаляр: непустое значение в той же строке, что и `work:` — не блок-список.
+    after = lines[work_idx].split(":", 1)[1] if ":" in lines[work_idx] else ""
+    if after.split("#", 1)[0].strip():
+        raise ValueError("блок work: не блок-список (значение в той же строке — flow-стиль) — "
+                         "дописывать вслепую нельзя")
     end = len(lines)
     for i in range(work_idx + 1, len(lines)):
         ln = lines[i]
@@ -202,6 +246,13 @@ def _append_work_items_text(text: str, items_yaml: str) -> str:
         if ln and not ln[0].isspace() and stripped and not stripped.startswith("#"):
             end = i
             break
+    # Первая содержательная строка блока (не пустая, не комментарий) обязана быть item'ом `  - `
+    # с отступом 2 пробела. Пустой блок (нет ни одного item) — законен: мы начинаем список.
+    first_content = next((lines[i] for i in range(work_idx + 1, end)
+                          if lines[i].strip() and not lines[i].lstrip().startswith("#")), None)
+    if first_content is not None and not re.match(r"^  -\s", first_content):
+        raise ValueError("блок work: не 2-space блок-список (item без `- ` или иной отступ) — "
+                         "дописывать вслепую нельзя")
     head = "".join(lines[:end])
     if head and not head.endswith("\n"):
         head += "\n"
@@ -209,9 +260,30 @@ def _append_work_items_text(text: str, items_yaml: str) -> str:
     return head + items_yaml + tail
 
 
-def _apply_to_plan_file(root: Path, items: list) -> None:
-    """Дописать work items в plan.yaml ТЕКСТОМ. Не round-trip'ит YAML — комментарии остаются."""
+def _apply_to_plan_file(root: Path, items: list) -> str | None:
+    """Дописать work items в plan.yaml ТЕКСТОМ. -> строка ошибки или None (успех). НЕ round-trip'ит
+    YAML — комментарии остаются.
+
+    СТРАХОВКА ПЕРЕД ЗАПИСЬЮ (F4). Итоговый текст СНАЧАЛА собирается и разбирается в памяти
+    (`yaml.safe_load`), и только если он парсится И все новые id в нём присутствуют — пишется на диск.
+    Не собралось/не распарсилось/id не появились → возвращаем ошибку и НИЧЕГО не пишем: половинчатый
+    или битый план хуже ненаписанного.
+    """
     p = _plan.plan_path(root)
     text = p.read_text(encoding="utf-8")
-    new_text = _append_work_items_text(text, _render_items_yaml(items))
+    try:
+        new_text = _append_work_items_text(text, _render_items_yaml(items))
+    except ValueError as e:
+        return str(e)
+    try:
+        parsed = yaml.safe_load(new_text)
+    except yaml.YAMLError as e:
+        return f"итоговый план не разбирается ({e}) — не записываю"
+    if not isinstance(parsed, dict):
+        return "итоговый план после дописывания — не mapping — не записываю"
+    got = {w.get("id") for w in _plan.items(parsed) if w.get("id")}
+    missing = [it["id"] for it in items if it["id"] not in got]
+    if missing:
+        return f"новые работы не появились в разобранном плане ({missing}) — не записываю"
     p.write_text(new_text, encoding="utf-8")
+    return None

@@ -435,6 +435,11 @@ def _build_cli_arg_parser():
                          "по умолчанию .ai-ops/backlog.yaml")
     ap.add_argument("--milestone", default=None,
                     help="delivery: id milestone, под который строить delivery-план и прогноз")
+    # auto-slice-candidates: `candidates accept <id> --goal <goal-id>` — направление, к которому
+    # отнести кандидата без своего source_goal (у находок его нет). В многоцелевом плане без него
+    # такой кандидат не принимается (иначе work item без goal — ошибка валидатора).
+    ap.add_argument("--goal", default=None,
+                    help="candidates accept: id направления (goal) для кандидата без своего source_goal")
     # #545 readout (пост-релизная петля): PRR-файл и опциональные OutcomeContract/OutcomeReadout.
     ap.add_argument("--prr", default=None,
                     help="readout: путь к PRR-файлу (PostReleaseReadout); без него — поиск в дочке")
