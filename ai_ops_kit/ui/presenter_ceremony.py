@@ -39,6 +39,11 @@ def risk_ceremony_line(level_name, level_reason=None, provisional=False) -> str:
         why = "риск изменения высокий (критичность, необратимость или секреты)"
     elif "измеримое пользовательское изменение" in reason:
         why = "изменение видит пользователь и его надо измерить"
+    elif (level_name or "").startswith("L3"):
+        # Базовый CRITICAL (task_type=CRITICAL / requested_level=3): уровень уже 3, маркера
+        # «эскалация до L3» classify не добавляет (level < 3 не выполнено). Без этой ветки строка
+        # падала в else и ЛГАЛА «мелкая и обратимая — риск низкий» на самой рискованной задаче.
+        why = "изменение критическое или необратимое — риск максимальный"
     elif (level_name or "").startswith("L2"):
         why = "изменение продуктовое — его надо описать и измерить"
     elif (level_name or "").startswith("L1"):

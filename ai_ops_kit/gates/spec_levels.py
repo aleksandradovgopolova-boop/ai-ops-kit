@@ -78,25 +78,30 @@ LEVEL_SECTION_BUDGET_RAISES = [
 ]
 
 
-def ceremony_budget_errors(level_sections=None, budget=None):
+def ceremony_budget_errors(level_sections=None, budget=None, required_fn=None):
     """Сторож против расползания церемонии. -> список ошибок ПРОДУКТОВЫМ языком (пусто = чисто).
 
     Три инварианта «сложность от риска, а не от полноты»:
       1. БЮДЖЕТ: число разделов на уровне не выше объявленного потолка (рост требует подъёма
          потолка + записи, что риск это оправдывает). Усыхание разрешено.
-      2. МОНОТОННОСТЬ: каждый уровень выше ДОБАВЛЯЕТ разделы к нижнему и ни одного не теряет
-         (required_sections(N) ⊇ required_sections(N-1)) — церемония только прирастает с риском.
+      2. МОНОТОННОСТЬ: обязательные разделы уровня N включают все разделы уровня N-1
+         (required_fn(N) ⊇ required_fn(N-1)) — церемония только ПРИРАСТАЕТ с риском, ни один
+         раздел нижнего уровня не пропадает. Проверяется НА САМОЙ функции сборки разделов
+         (`required_fn`, по умолчанию `required_sections`): сегодня она кумулятивна структурно, но
+         guard стережёт, чтобы будущая правка её такой и оставила — не декларация, а проверка.
       3. БЕЗ ДУБЛЕЙ: раздел объявлен ровно на одном уровне (иначе церемония «дублирует», а не
          добавляет — рост объёма без роста смысла).
 
-    Чистая функция: level_sections/budget можно передать искусственные (для пробы покраснения);
-    по умолчанию берёт объявленные в модуле.
+    Чистая функция: level_sections/budget/required_fn можно передать искусственные (для пробы
+    покраснения); по умолчанию берёт объявленные в модуле.
     """
     level_sections = LEVEL_SECTIONS if level_sections is None else level_sections
     budget = LEVEL_SECTION_BUDGET if budget is None else budget
+    required_fn = required_sections if required_fn is None else required_fn
     errors = []
+    levels = sorted(level_sections)
     # 1) бюджет на уровень
-    for lv in sorted(level_sections):
+    for lv in levels:
         n = len(level_sections[lv])
         cap = budget.get(lv)
         if cap is None:
@@ -107,9 +112,16 @@ def ceremony_budget_errors(level_sections=None, budget=None):
             errors.append(f"уровень L{lv}: разделов {n} > потолок {cap} — церемония выросла без "
                           f"обоснования риском; подними потолок в LEVEL_SECTION_BUDGET и запиши в "
                           f"LEVEL_SECTION_BUDGET_RAISES, ПОЧЕМУ риск требует лишнего раздела")
-    # 2) монотонность + 3) без дублей: идём снизу вверх, накапливая разделы
+    # 2) монотонность накопленного набора: N ⊇ N-1 (проверяем РЕАЛЬНО, на required_fn)
+    for prev, lv in zip(levels, levels[1:]):
+        lost = set(required_fn(prev)) - set(required_fn(lv))
+        if lost:
+            errors.append(f"уровень L{lv}: потерял разделы нижнего уровня {sorted(lost)} — "
+                          f"церемония обязана ПРИРАСТАТЬ с риском, а не терять разделы (нарушена "
+                          f"монотонность required_sections)")
+    # 3) без дублей: идём снизу вверх, накапливая разделы
     seen = set()
-    for lv in sorted(level_sections):
+    for lv in levels:
         secs = set(level_sections[lv])
         dup = seen & secs
         if dup:

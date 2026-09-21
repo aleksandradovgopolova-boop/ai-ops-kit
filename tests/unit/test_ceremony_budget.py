@@ -67,12 +67,24 @@ class TestCreepIsRefused:
 class TestMonotonicityAndNoDuplicates:
     """Церемония ПРИРАСТАЕТ с риском: каждый уровень выше ⊇ нижнего и не дублирует его разделы."""
 
-    def test_required_sections_are_cumulative(self):
-        for lv in range(1, 4):
-            lower = set(spec_levels.required_sections(lv - 1))
-            higher = set(spec_levels.required_sections(lv))
-            assert lower <= higher, f"L{lv} потерял разделы нижнего уровня — церемония разошлась"
-            assert higher > lower, f"L{lv} не добавил ни одного раздела — уровень пустой"
+    def test_real_kit_is_monotonic(self):
+        """Позитив: настоящий required_sections кумулятивен — guard молчит по оси монотонности."""
+        errors = spec_levels.ceremony_budget_errors()
+        assert not any("монотонность" in e for e in errors), errors
+
+    def test_non_monotonic_required_fn_reddens(self):
+        """ПРОБА ПОКРАСНЕНИЯ (не тавтология): подаём НЕ-кумулятивную функцию сборки разделов —
+        guard обязан поймать пропажу разделов нижнего уровня. Так проверяется, что заявка из
+        докстринга — настоящая проверка, а не структурная данность."""
+        # required_fn отдаёт РОВНО дельту уровня (без нижних) — L1 теряет разделы L0.
+        broken = lambda lv: list(spec_levels.LEVEL_SECTIONS.get(lv, []))  # noqa: E731
+        errors = spec_levels.ceremony_budget_errors(required_fn=broken)
+        assert any("монотонность" in e or "потерял разделы" in e for e in errors), errors
+
+    def test_monotonic_required_fn_stays_green(self):
+        """Кумулятивная функция (как настоящая) — ось монотонности молчит: нет ложного покраснения."""
+        errors = spec_levels.ceremony_budget_errors(required_fn=spec_levels.required_sections)
+        assert not any("монотонность" in e for e in errors), errors
 
     def test_duplicate_section_across_levels_reddens(self):
         """Раздел объявлен на двух уровнях — объём растёт без смысла, сторож ловит дубль."""

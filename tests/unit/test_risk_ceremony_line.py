@@ -65,6 +65,25 @@ class TestHighRiskMeansMoreCeremony:
         assert "по максимуму" in high
 
 
+class TestBaseCriticalDoesNotLie:
+    """Регрессия на БЛОКЕР: базовый L3 (без маркера эскалации) не должен падать в else и лгать
+    «мелкая и обратимая — риск низкий». classify для task_type=CRITICAL даёт base=3 и НЕ добавляет
+    маркер «эскалация до L3» (level уже 3), так что строке достаётся один reason без маркеров."""
+
+    def test_task_type_critical_names_high_risk_not_low(self):
+        cls, line = _line_for({"task_type": "CRITICAL"})
+        assert cls["level"] == 3
+        assert "мелкая" not in line and "риск низкий" not in line, f"строка лжёт на L3: {line}"
+        assert "максимальный" in line
+        assert "по максимуму" in line
+
+    def test_requested_level_3_on_quick_names_high_risk(self):
+        cls, line = _line_for({"task_type": "QUICK", "requested_level": 3})
+        assert cls["level"] == 3
+        assert "мелкая" not in line and "риск низкий" not in line, f"строка лжёт на L3: {line}"
+        assert "максимальный" in line
+
+
 class TestProvisionalIsHonest:
     """Тяжесть не заявлена -> честно сказано, что процесса может стать больше (не выдаём L0 за итог)."""
 
