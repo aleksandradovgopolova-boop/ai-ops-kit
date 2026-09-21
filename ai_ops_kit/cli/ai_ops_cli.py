@@ -99,7 +99,8 @@ INTENTS = {
                    "governance", False),
     # Фаза 3 (лента 4): roadmap Now/Next/Later и delivery-план из backlog.
     "roadmap": ("roadmap Now/Next/Later из плана + отклонение от авторского ROADMAP.md", "roadmap", False),
-    "delivery": ("delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры",
+    "delivery": ("delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры; "
+                 "record <feature-id> --pr <n> — подтверждённая расписка для вручную влитого PR",
                  "delivery", False),
     # v3.35.2 (тир 4): BOOTSTRAP существовал СТРОКОЙ в реестре — кит не создавал ни направления, ни
     # плана, и владелец после онбординга оставался с пониманием и без работы. Сухой прогон по
@@ -443,6 +444,9 @@ def _build_cli_arg_parser():
                          "по умолчанию .ai-ops/backlog.yaml")
     ap.add_argument("--milestone", default=None,
                     help="delivery: id milestone, под который строить delivery-план и прогноз")
+    ap.add_argument("--pr", default=None,
+                    help="delivery record: номер вручную влитого PR (или его URL) — по нему кит "
+                         "сверяет слияние с GitHub и записывает подтверждённую расписку о поставке")
     # auto-slice-candidates: `candidates accept <id> --goal <goal-id>` — направление, к которому
     # отнести кандидата без своего source_goal (у находок его нет). В многоцелевом плане без него
     # такой кандидат не принимается (иначе work item без goal — ошибка валидатора).

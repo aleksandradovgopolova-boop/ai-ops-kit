@@ -557,9 +557,56 @@ def _intent_inspect(task, child_root, signals, a):
     return 0
 
 
+def _delivery_record(child_root, a):
+    """`ai-ops delivery record <feature-id> --pr <номер|url>` — записать ПОДТВЕРЖДЁННУЮ расписку о
+    поставке для вручную влитого PR. Логика (сверка с GitHub по НОМЕРУ + запись) — в
+    delivery/record_delivery; здесь тонкая проводка: разобрать feature-id и номер PR, позвать,
+    перевести исход на продуктовый язык. sha_verified=true никогда не пишется отсюда — только из
+    delivery-слоя и только при GitHub-подтверждённом слиянии."""
+    from ai_ops_kit.delivery import record_delivery as _rd
+    js = a.json
+    # feature-id: второй позиционный (a.rest[1] — сырой список argparse, разбор child_root его не
+    # мутирует) либо --feature. `--pr` принимает номер ИЛИ полный URL PR (парсер извлечёт число).
+    rest = list(getattr(a, "rest", []) or [])
+    feature_id = (rest[1] if len(rest) >= 2 else None) or getattr(a, "feature", None)
+    pr_number = _rd.parse_pr_number(getattr(a, "pr", None))
+    if not feature_id or pr_number is None:
+        print("нужно: ai-ops delivery record <feature-id> --pr <номер|url PR> — по какому PR и для "
+              "какой фичи записать подтверждённую поставку")
+        return 1
+    res = _rd.record_delivery_for_pr(child_root, feature_id, pr_number)
+    if js:
+        print(json.dumps(res, ensure_ascii=False, indent=2, default=str))
+    st = res.get("status")
+    if st == "recorded":
+        if not js:
+            print(f"  · записал подтверждённую поставку фичи {feature_id} из PR #{pr_number} "
+                  f"(влит в {(res.get('commit_sha') or '')[:12]})")
+        return 0
+    if st in ("not-delivered", "mismatch"):
+        if not js:
+            print(f"  · PR #{pr_number} НЕ влит по данным GitHub — расписку не записываю "
+                  "(иначе это ложное доказательство поставки)")
+        return 1
+    if st == "receipt-write-failed":
+        if not js:
+            print(f"  · сверка прошла, но сохранить расписку не удалось ({res.get('note')}) — повтори")
+        return 1
+    # unavailable (нет токена/доступа/PR не найден)
+    if not js:
+        print("  · не смог спросить GitHub (нет токена/доступа) — попробуй позже; "
+              "расписку без подтверждения не пишу")
+    return 1
+
+
 def _intent_delivery(task, child_root, signals, a):
     import yaml
     js = a.json
+    # Подкоманда — первым словом (как у `products`/`backlog`):
+    #   delivery record <feature-id> --pr <n> — подтверждённая расписка для вручную влитого PR;
+    #   delivery (без подкоманды)              — delivery-план из backlog под milestone (ниже).
+    if (task or "").strip().lower() == "record":
+        return _delivery_record(child_root, a)
     # PR-10/PR-15 (лента 4): backlog под milestone -> исполнимый delivery-план (порядок, прогноз-
     # ОЦЕНКА, риски) + ранние блокеры. Backlog берётся ПО КОНТРАКТУ ленты 3 из файла
     # (--backlog или .ai-ops/backlog.yaml); источника нет -> третье состояние, а не пустой план.
