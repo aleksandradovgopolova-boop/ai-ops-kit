@@ -868,15 +868,25 @@ goals:
     # существующих аудиторий и переиспользует существующий `render`. Работа `operating-mode-is-a-lens`.
     # ГРАНИЦА ЧЕСТНОСТИ (в DoD): режим ОБЯЗАН реально менять аудиторию (не косметика — как мёртвые
     # `detail_level`/`explain_jargon`); НЕ форкать пресентер на пять режимов и НЕ трогать owner-фасад.
+    #
+    # ДОСТИГНУТА 2026-09-21 РЕШЕНИЕМ ВЛАДЕЛЬЦА (протокол: засчёт за владельцем, кит себя не судит).
+    # Код влит: `registry/communication-policy.yaml -> operating_modes` (mode→аудитория) +
+    # `ui/presenter_core.audience_from_config` (режим резолвит аудиторию, явная audience сильнее) + enum
+    # схемы. Режим РЕАЛЬНО меняет вывод (тест `test_mode_is_not_inert_it_changes_render_output`), линза
+    # не вводит новых уровней, `render` не форкнут, owner-фасад цел; пять ролей честно оставлены
+    # `partial`. Координация #1084 + код #1085 (`8795ba54`). СВЯЗЫВАНИЕ, не рост вширь. ПОСЛЕДНЕЕ из
+    # четырёх направлений внешнего ревью — все закрыты.
     freeze_relation: extension
-    status: active
+    status: achieved
     outcome:
       # Один kernel обслуживает роль-специфичные режимы линзой поверх audience, без второго продукта.
       # ПРИЁМКА: режим из `.ai-ops.yaml` (`communication.mode`) резолвится в существующую аудиторию по
       # таблице реестра и РЕАЛЬНО меняет вывод `render` (mode=engineering → technical → техблок виден там,
       # где product скрыл бы); явная `audience` перекрывает режим; неизвестный режим → product. Режимы НЕ
       # заводят новых аудиторий/пресентеров/продуктов — проверяемо тестом.
-      one_kernel_serves_role_specific_modes: false
+      # ФЛИПНУТ в true 2026-09-21 решением владельца: линза-режим построена, реально меняет аудиторию
+      # (не косметика), покрыта тестами; независимо прогнано (315). #1085.
+      one_kernel_serves_role_specific_modes: true
 
 # ─── ТЕКУЩИЙ MILESTONE (первоклассная запись, 2026-09-14) ──────────────────────────────────────
 # Уровень МЕЖДУ направлением (goals/ROADMAP) и работой: какой ИМЕНОВАННЫЙ результат кит доводит
@@ -1174,21 +1184,7 @@ work:
   # #723). Это была ПОСЛЕДНЯЯ живая работа внешнего аудит-бэклога checks-that-run → исход
   # external_audit_backlog_is_closed флипнут в true, цель achieved. См. history/plan-history.yaml.
 
-  # T3 product-next-as-decision-engine, T4 risk-based-ceremony и T5 portfolio-intelligence ЗАКРЫТЫ в
-  # history/plan-history.yaml 2026-09-21 (код влит #1077/#1079/#1082, цели достигнуты решением
-  # владельца) — под целями открытой работы не осталось.
-
-  # ── T6: взято в работу 2026-09-21 (см. цель operating-modes) ──────────────
-  - id: operating-mode-is-a-lens
-    title: "Режим работы как линза поверх аудитории: communication.mode → существующая аудитория"
-    type: product
-    goal: operating-modes
-    status: in_progress
-    owner_role: product
-    source: "roadmap-direction"
-    branch: claude/t6-operating-modes-lens
-    write_scope:
-    - ai_ops_kit/ui/
-    - registry/
-    - schemas/
-    rationale: "слой аудитории (product|technical|debug) есть и применяется централизованно в presenter_core.render; реестр уже рекламирует пять роль-аудиторий со status: partial — режимы это их продолжение. Срез: communication.mode резолвится в существующую аудиторию (таблица в реестре), реально меняет вывод, без новых пресентеров/продуктов и без форка фасада"
+  # T3 product-next-as-decision-engine, T4 risk-based-ceremony, T5 portfolio-intelligence и
+  # T6 operating-modes ЗАКРЫТЫ в history/plan-history.yaml 2026-09-21 (код влит #1077/#1079/#1082/#1085,
+  # цели достигнуты решением владельца) — ВСЕ ЧЕТЫРЕ направления внешнего продуктового ревью закрыты,
+  # открытой работы под ними не осталось.
