@@ -26,7 +26,12 @@ _FALLBACK_AUDIENCES = ("product", "technical", "debug")
 _FALLBACK_STATUS_LABEL = {"ok": "Готово", "needs_input": "Нужно твоё решение",
                           "blocked": "Пока не могу продолжить", "done": "Готово",
                           "degraded": "Готово, но проверено не всё"}
-_CONTRACT = {}          # кэш разобранного контракта: {audiences, labels, default, config_key}
+# Режимы работы — ЛИНЗА поверх аудитории (источник истины — `operating_modes` в реестре). Аварийная
+# копия РОВНО на случай недоступного реестра: каждый режим отображается в одну из трёх существующих
+# аудиторий, новых уровней здесь нет.
+_FALLBACK_MODES = {"founder": "product", "product": "product", "design": "product",
+                   "delivery": "product", "engineering": "technical"}
+_CONTRACT = {}          # кэш разобранного контракта: {audiences, labels, default, config_key, modes}
 
 # Глоссарий продуктового языка — аварийная копия РОВНО на случай недоступного реестра (источник
 # истины — `registry/communication-policy.yaml -> product_glossary`). Держать здесь основную копию
@@ -89,11 +94,17 @@ def _contract(policy=None) -> dict:
             "product")
         if not labels or not auds:
             raise PolicyMissing("в политике коммуникации нет statuses/audiences")
-        out = {"labels": labels, "audiences": auds, "default": default,
+        # Режимы — линза: mode -> аудитория по умолчанию. Берём только те, что отображаются в
+        # СУЩЕСТВУЮЩУЮ аудиторию; режим с чужим уровнем игнорируется (линза не вводит новый уровень).
+        modes = {str(k): (v or {}).get("audience")
+                 for k, v in (data.get("operating_modes") or {}).items()}
+        modes = {k: a for k, a in modes.items() if a in auds}
+        out = {"labels": labels, "audiences": auds, "default": default, "modes": modes,
                "config_key": data.get("config_key", "communication"), "source": "registry"}
     except PolicyMissing:
         out = {"labels": dict(_FALLBACK_STATUS_LABEL), "audiences": _FALLBACK_AUDIENCES,
-               "default": "product", "config_key": "communication", "source": "fallback"}
+               "default": "product", "modes": dict(_FALLBACK_MODES),
+               "config_key": "communication", "source": "fallback"}
     if policy is None:
         _CONTRACT.clear()
         _CONTRACT.update(out)
@@ -111,10 +122,16 @@ def audiences() -> tuple:
 
 
 def audience_from_config(child_root, policy=None) -> str:
-    """Аудитория из `.ai-ops.yaml -> communication.audience`. По умолчанию — `product`.
+    """Аудитория из `.ai-ops.yaml -> communication.audience`, с режимом-линзой. По умолчанию — `product`.
 
     Default именно `product`: система по умолчанию разговаривает с владельцем продукта, а не с
     отладчиком. Обратный default — то, как внутренний язык и просачивался наружу.
+
+    Режим работы (`communication.mode`: founder/product/design/delivery/engineering) — тонкая ЛИНЗА
+    поверх этих трёх аудиторий, не новый уровень (источник истины — `operating_modes` в реестре).
+    Разрешение: явно заданная `audience` ВСЕГДА побеждает; если аудитория не задана, но задан
+    известный режим — берётся его аудитория по умолчанию; неизвестный/отсутствующий режим -> тот же
+    `default`, что и у неизвестной аудитории. Так режим МЕНЯЕТ вывод, а не остаётся декларацией.
     """
     con = _contract(policy)
     default = con["default"]
@@ -125,8 +142,15 @@ def audience_from_config(child_root, policy=None) -> str:
         data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError:
         return default
-    aud = ((data.get(con["config_key"]) or {}).get("audience"))
-    return aud if aud in con["audiences"] else default
+    comm = data.get(con["config_key"]) or {}
+    aud = comm.get("audience")
+    if aud in con["audiences"]:      # явная аудитория сильнее режима
+        return aud
+    if aud is None:                  # аудитория не задана — режим может выбрать уровень
+        mode_aud = (con.get("modes") or {}).get(comm.get("mode"))
+        if mode_aud in con["audiences"]:
+            return mode_aud
+    return default
 
 
 def _glossary(policy=None) -> dict:
