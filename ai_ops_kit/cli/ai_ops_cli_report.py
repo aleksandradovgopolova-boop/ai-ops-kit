@@ -526,17 +526,19 @@ def _inbox_collect(child_root):
     insight = _inbox_insight(root)
     candidate = _inbox_outcome_candidate(root)   # #567: кандидат-работа из обратной петли
     findings = _inbox_findings(root)             # #585: наблюдения дочек §28 -> кандидаты + уроки
+    from ai_ops_kit.cli.candidates_cli import inbox_direction_candidates
+    dir_candidates = inbox_direction_candidates(root)   # auto-slice: непокрытые направления роадмапа
     warnings = _inbox_release_warnings(root)
     attention = _inbox_attention(root)           # #633: шина внимания — вызовы человека из прогона
     findings_items = len((findings or {}).get("candidates") or []) + (
         1 if (findings or {}).get("precedents") else 0)
     total = (len(decisions) + len(blocked or []) + len(reviews or [])
              + (1 if insight else 0) + (1 if candidate else 0) + findings_items + len(warnings)
-             + len(attention))
+             + len(attention) + len(dir_candidates or []))
     return {"registry_ok": registry_ok, "total": total, "decisions": decisions,
             "blocked": blocked or [], "reviews": reviews or [], "insight": insight,
             "candidate": candidate, "findings": findings, "warnings": warnings,
-            "attention": attention}
+            "attention": attention, "direction_candidates": dir_candidates or []}
 
 
 def _inbox_status(queue):
@@ -550,7 +552,7 @@ def _inbox_status(queue):
     att_decision = any(a.get("kind") == "decision" for a in attention)
     att_blocked = any(a.get("kind") != "decision" for a in attention)
     if (queue["decisions"] or queue["reviews"] or queue.get("candidate")
-            or findings.get("candidates") or att_decision):
+            or findings.get("candidates") or queue.get("direction_candidates") or att_decision):
         return "needs_input"
     if queue["blocked"] or queue["warnings"] or att_blocked:
         return "blocked"
@@ -573,6 +575,8 @@ def _inbox_counts(queue):
         parts.append(f"наблюдений дочек к разбору — {len(findings['candidates'])}")
     if findings.get("precedents"):
         parts.append("уроки из прогонов")
+    if queue.get("direction_candidates"):
+        parts.append(f"направлений роадмапа без работ — {len(queue['direction_candidates'])}")
     if queue["insight"]:
         parts.append("свежий обзор")
     if queue["warnings"]:
@@ -634,6 +638,11 @@ def _inbox_render(queue, aud):
         if cand.get("source_context"):
             lines.append("    " + h(f"контекст: {cand['source_context']}"))
         lines.append("    " + h("это черновик — активной работой станет только по твоему решению"))
+    # auto-slice: непокрытые направления роадмапа как кандидаты к декомпозиции (DRAFT).
+    for dcand in queue.get("direction_candidates") or []:
+        lines.append("")
+        lines.append(h(f"• Направление роадмапа без работ: {dcand.get('title')}"))
+        lines.append("    " + h("черновик — станет работой по твоему решению (./ai-ops candidates accept)"))
     precedents = findings.get("precedents") or []
     if precedents:
         # Урок = ПРЕЦЕДЕНТ: факт + В СКОЛЬКИХ случаях + контексты, БЕЗ утверждения причинности (#586).

@@ -78,6 +78,7 @@ def _candidate_from_observation(obs: dict) -> dict:
         "status": "draft",                 # предложение, а не работа
         "active": False,                   # не занимает область записи
         "requires_human_decision": True,   # не станет активной без решения человека
+        "source": "child-finding",         # источник кандидата (для ярлыка во входящих/приёмке)
         "source_observation": oid,
         "source_context": context,
         "severity": _text(obs.get("severity")) or None,

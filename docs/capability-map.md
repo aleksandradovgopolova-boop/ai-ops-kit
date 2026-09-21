@@ -44,7 +44,7 @@ README ссылаются на неё, а не дублируют список �
 
 | Категория | Сколько |
 |---|---|
-| Команды владельца (`./ai-ops …`) | 35 |
+| Команды владельца (`./ai-ops …`) | 36 |
 | Quality gates — всего | 36 |
 | — из них enforced (blocking) | 23 |
 | — из них advisory (partial) | 13 |
@@ -74,6 +74,7 @@ README ссылаются на неё, а не дублируют список �
 | `./ai-ops advise` | инженерный совет: окружения, delivery plan, альтернативы (без исполнения) | direct | built |
 | `./ai-ops backlog` | backlog из GitHub Issues: classify | dedup | prioritize | graph | direct | built |
 | `./ai-ops bootstrap` | создать первое направление и план из фактов репозитория (--apply — записать) | direct | built |
+| `./ai-ops candidates` | задачи-кандидаты (непокрытые направления роадмапа + наблюдения дочек): без аргумента — список; accept <id..>|--all — принять пачкой в план | direct | built |
 | `./ai-ops contract` | единый контракт продукта: идентичность/стандарт/артефакты/контуры/здоровье + вердикт | direct | built |
 | `./ai-ops delivery` | delivery-план из backlog под milestone: порядок, прогноз-оценка, риски, блокеры | direct | built |
 | `./ai-ops discuss` | обсудить идею до спецификации (discovery) | direct | built |

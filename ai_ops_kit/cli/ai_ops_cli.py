@@ -148,6 +148,12 @@ INTENTS = {
     # измерено» (у самого кита живой аналитики нет). Только чтение. Форма карты ещё устаканивается.
     "scorecard": ("карта продукта кита: 5 метрик, которыми кит мерит себя как продукт (а не числом "
                   "возможностей); нет данных — честно «не измерено»", "scorecard", True),
+    # auto-slice-candidates: кит НАРЕЗАЕТ задачи-кандидаты из двух источников (непокрытые направления
+    # роадмапа + наблюдения дочек), владелец ПРИНИМАЕТ пачкой одной командой. Предохранитель: кит сам
+    # не дописывает активную работу — без глагола `accept` план не меняется. `candidates`/`list` —
+    # только чтение; `accept <id..>`/`accept --all` — пишет plan.yaml (явное действие владельца).
+    "candidates": ("задачи-кандидаты (непокрытые направления роадмапа + наблюдения дочек): без "
+                   "аргумента — список; accept <id..>|--all — принять пачкой в план", "candidates", True),
 }
 
 
@@ -158,7 +164,7 @@ DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "revi
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "propose", "products", "team",
                   "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach",
-                  "scorecard")
+                  "scorecard", "candidates")
 
 
 # ── Фасад владельца (P1 №8/№9 ревью): 7 действий человеческим языком поверх 34 intents ──────────────
@@ -314,6 +320,9 @@ from ai_ops_kit.cli.ai_ops_cli_commands import (  # noqa: E402,F401 — ре-э�
     _process_gate, _main_run_execute,
 )
 
+# auto-slice-candidates: команда `candidates` живёт в собственном спутнике (ратчет module-size).
+from ai_ops_kit.cli.candidates_cli import _intent_candidates  # noqa: E402,F401 — ре-экспорт/регистрация
+
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
 for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery),
                    ("model", _intent_model), ("contract", _intent_contract),
@@ -333,7 +342,8 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    # проб-несущие обработчики из ai_ops_cli_commands:
                    ("backlog", _intent_backlog), ("feedback", _intent_feedback),
                    ("status", _intent_status), ("next", _intent_next),
-                   ("review", _intent_review), ("advise", _intent_advise)):
+                   ("review", _intent_review), ("advise", _intent_advise),
+                   ("candidates", _intent_candidates)):
     _intent(_name)(_fn)
 del _name, _fn
 
@@ -425,6 +435,11 @@ def _build_cli_arg_parser():
                          "по умолчанию .ai-ops/backlog.yaml")
     ap.add_argument("--milestone", default=None,
                     help="delivery: id milestone, под который строить delivery-план и прогноз")
+    # auto-slice-candidates: `candidates accept <id> --goal <goal-id>` — направление, к которому
+    # отнести кандидата без своего source_goal (у находок его нет). В многоцелевом плане без него
+    # такой кандидат не принимается (иначе work item без goal — ошибка валидатора).
+    ap.add_argument("--goal", default=None,
+                    help="candidates accept: id направления (goal) для кандидата без своего source_goal")
     # #545 readout (пост-релизная петля): PRR-файл и опциональные OutcomeContract/OutcomeReadout.
     ap.add_argument("--prr", default=None,
                     help="readout: путь к PRR-файлу (PostReleaseReadout); без него — поиск в дочке")
