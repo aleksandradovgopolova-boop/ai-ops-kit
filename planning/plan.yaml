@@ -856,11 +856,26 @@ goals:
   - id: operating-modes
     # T6. Один kernel, разные режимы (Product/Design/Engineering/Delivery/Founder) как тонкая ЛИНЗА
     # поверх существующего слоя аудитории (audience: product|technical|debug), НЕ отдельные продукты.
-    # Самый низкий приоритет (P2).
+    #
+    # ВЗЯТО В РАБОТУ 2026-09-21 (T6, ПОСЛЕДНЕЕ из четырёх направлений внешнего ревью). Разведка 2026-09-21:
+    # субстрат аудитории есть (`registry/communication-policy.yaml` → `ui/presenter_core.audience_from_config`
+    # → централизованный `render`), режимов в рантайме нет. ВАЖНО: реестр уже рекламирует пять
+    # роль-аудиторий в `evaluation.audiences` со `status: partial` — это направление и есть их обещанное
+    # ПРОДОЛЖЕНИЕ, а не новая поверхность.
+    #
+    # СРЕЗ ПО ПРАВИЛУ «связать и доказать, не расти вширь»: режим → аудитория по умолчанию (таблица в
+    # реестре, чтение в `audience_from_config`, ключ `communication.mode`), режим ложится на ОДНУ из трёх
+    # существующих аудиторий и переиспользует существующий `render`. Работа `operating-mode-is-a-lens`.
+    # ГРАНИЦА ЧЕСТНОСТИ (в DoD): режим ОБЯЗАН реально менять аудиторию (не косметика — как мёртвые
+    # `detail_level`/`explain_jargon`); НЕ форкать пресентер на пять режимов и НЕ трогать owner-фасад.
     freeze_relation: extension
-    status: paused
+    status: active
     outcome:
       # Один kernel обслуживает роль-специфичные режимы линзой поверх audience, без второго продукта.
+      # ПРИЁМКА: режим из `.ai-ops.yaml` (`communication.mode`) резолвится в существующую аудиторию по
+      # таблице реестра и РЕАЛЬНО меняет вывод `render` (mode=engineering → technical → техблок виден там,
+      # где product скрыл бы); явная `audience` перекрывает режим; неизвестный режим → product. Режимы НЕ
+      # заводят новых аудиторий/пресентеров/продуктов — проверяемо тестом.
       one_kernel_serves_role_specific_modes: false
 
 # ─── ТЕКУЩИЙ MILESTONE (первоклассная запись, 2026-09-14) ──────────────────────────────────────
@@ -1161,5 +1176,19 @@ work:
 
   # T3 product-next-as-decision-engine, T4 risk-based-ceremony и T5 portfolio-intelligence ЗАКРЫТЫ в
   # history/plan-history.yaml 2026-09-21 (код влит #1077/#1079/#1082, цели достигнуты решением
-  # владельца) — под целями открытой работы не осталось. Последнее направление внешнего ревью
-  # (operating-modes) стоит в «Дальше».
+  # владельца) — под целями открытой работы не осталось.
+
+  # ── T6: взято в работу 2026-09-21 (см. цель operating-modes) ──────────────
+  - id: operating-mode-is-a-lens
+    title: "Режим работы как линза поверх аудитории: communication.mode → существующая аудитория"
+    type: product
+    goal: operating-modes
+    status: in_progress
+    owner_role: product
+    source: "roadmap-direction"
+    branch: claude/t6-operating-modes-lens
+    write_scope:
+    - ai_ops_kit/ui/
+    - registry/
+    - schemas/
+    rationale: "слой аудитории (product|technical|debug) есть и применяется централизованно в presenter_core.render; реестр уже рекламирует пять роль-аудиторий со status: partial — режимы это их продолжение. Срез: communication.mode резолвится в существующую аудиторию (таблица в реестре), реально меняет вывод, без новых пресентеров/продуктов и без форка фасада"
