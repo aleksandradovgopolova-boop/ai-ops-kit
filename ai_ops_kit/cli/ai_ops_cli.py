@@ -154,6 +154,11 @@ INTENTS = {
     # только чтение; `accept <id..>`/`accept --all` — пишет plan.yaml (явное действие владельца).
     "candidates": ("задачи-кандидаты (непокрытые направления роадмапа + наблюдения дочек): без "
                    "аргумента — список; accept <id..>|--all — принять пачкой в план", "candidates", True),
+    # portfolio-intelligence (T5): ОБЕЗЛИЧЕННЫЙ портфельный вид отказов дочек. Класс отказа + числа +
+    # обезличенный ключ дочки (`proj-…`), и НИЧЕГО идентифицирующего — сторож границы краснеет на
+    # утечке пути/коммита/имени/вывода команд. Только чтение; честные разные пустые состояния.
+    "portfolio": ("портфель отказов дочек обезличенно: какие классы повторяются по всем дочкам "
+                  "(только паттерны и числа, без кода и путей)", "portfolio", False),
 }
 
 
@@ -164,7 +169,7 @@ DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "revi
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "propose", "products", "team",
                   "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach",
-                  "scorecard", "candidates")
+                  "scorecard", "candidates", "portfolio")
 
 
 # ── Фасад владельца (P1 №8/№9 ревью): 7 действий человеческим языком поверх 34 intents ──────────────
@@ -322,6 +327,8 @@ from ai_ops_kit.cli.ai_ops_cli_commands import (  # noqa: E402,F401 — ре-э�
 
 # auto-slice-candidates: команда `candidates` живёт в собственном спутнике (ратчет module-size).
 from ai_ops_kit.cli.candidates_cli import _intent_candidates  # noqa: E402,F401 — ре-экспорт/регистрация
+# portfolio-intelligence (T5): команда `portfolio` — тоже отдельный спутник.
+from ai_ops_kit.cli.portfolio_cli import _intent_portfolio  # noqa: E402,F401 — ре-экспорт/регистрация
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
 for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery),
@@ -343,7 +350,8 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("backlog", _intent_backlog), ("feedback", _intent_feedback),
                    ("status", _intent_status), ("next", _intent_next),
                    ("review", _intent_review), ("advise", _intent_advise),
-                   ("candidates", _intent_candidates)):
+                   ("candidates", _intent_candidates),
+                   ("portfolio", _intent_portfolio)):
     _intent(_name)(_fn)
 del _name, _fn
 

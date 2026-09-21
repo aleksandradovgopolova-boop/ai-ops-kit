@@ -102,6 +102,8 @@ EXPECTED_INTENTS = {
     # дописывает активную работу). Делает достижимыми intelligence/roadmap_candidates и
     # planning/candidate_intake.
     "candidates",
+    # portfolio-intelligence (T5): обезличенный портфельный вид повторяющихся отказов дочек.
+    "portfolio",
 }
 
 

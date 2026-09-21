@@ -203,6 +203,10 @@ experimental:
     # роадмапа + наблюдения дочек) + приёмка пачкой. Без глагола `accept` план не меняется (кит сам
     # активную работу не дописывает). Форма списка и приёмки ещё устаканивается — потому experimental.
     - candidates
+    # portfolio-intelligence (T5): `portfolio` — обезличенный портфельный вид повторяющихся классов
+    # отказов дочек (только паттерны + числа + ключ `proj-…`). Форма среза ещё устаканивается — потому
+    # experimental, а не stable.
+    - portfolio
   # Advisory-гейты: не блокируют, форма улик и applicability ещё уточняются.
   # Проверяется числом и списком — quality/gates.yaml -> blocking: false.
   advisory_gates:
@@ -305,6 +309,7 @@ audience:
     - reach
     - scorecard
     - candidates
+    - portfolio
 ```
 
 ## Пояснения к решениям
