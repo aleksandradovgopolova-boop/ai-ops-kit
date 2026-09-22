@@ -6,8 +6,9 @@
 модуль даёт ДЕТЕРМИНИРОВАННУЮ часть:
   * no_secrets        — сканер секретов по изменённым файлам (regex известных форматов);
   * deps_approved     — аудит зависимостей: НОВЫЕ зависимости в манифестах против базы;
-  * injection-surface — ФЛАГИ рискованных мест (eval/exec, shell=True, pickle, yaml.load, SQL f-string,
-                        dangerouslySetInnerHTML, child_process). Это ВХОД для судьи, не автоприёмка.
+  * injection-surface — ФЛАГИ рискованных мест (eval/exec, shell=True, pickle, yaml.load, SQL f-string
+                        и SQL через шаблонный литерал JS, new Function/vm.runIn*Context, XSS-стоки DOM,
+                        child_process). Это ВХОД для судьи, не автоприёмка.
 
 Честная граница: сканер может ДОКАЗАТЬ отсутствие известных секретов и отсутствие НОВЫХ зависимостей
 (детерминированные факты) и закрыть no_secrets/deps_approved, когда чисто. no_injection_surface —
@@ -44,6 +45,36 @@ SECRET_PATTERNS = [
     ("generic_secret_assignment",
      re.compile(r"(?i)\b(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\b\s*[:=]\s*"
                 r"['\"]([A-Za-z0-9/+_\-]{16,})['\"]")),
+    # ── #1094: форматы профиля «Node/TS + БД». До них ни один из семи шаблонов выше не ловил
+    # самый вероятный утёк такого продукта — строку подключения с паролем внутри.
+    #
+    # Пароль вынесен в ГРУППУ намеренно: отсев плейсхолдеров (`_PLACEHOLDER`) работает по
+    # НАЙДЕННОМУ значению, и поэтому строка, где на месте пароля стоит `${…}` или `changeme`,
+    # молчит, а строка с настоящим паролем — нет.
+    #
+    # Пароль короче трёх символов не считаем утечкой: в собственных фикстурах кита стоит
+    # односимвольный пароль в URL, и флаг на нём был бы шумом, а не находкой (замер на дереве
+    # кита 22.09.2026).
+    #
+    # ОБРАЗЕЦ ЗДЕСЬ НЕ ПИШЕТСЯ ДОСЛОВНО — и это не стиль, а тот же инвариант, что действует
+    # для секретов с v3.0.4: фикстуры собираются в рантайме, потому что собственный материал
+    # детектора секретов НЕ прощается списком (в отличие от injection). Первая версия этого
+    # комментария содержала пример строки подключения, и сканер тут же нашёл «утечку» в самом
+    # себе. Образцы — в tests/unit/test_security_scan.py, собранные из фрагментов.
+    ("db_connection_string_password",
+     re.compile(r"\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis(?:s)?|amqps?|mssql)"
+                r"://[^\s:/@'\"<>]+:([^\s:/@'\"<>]{3,})@")),
+    ("npm_token", re.compile(r"\bnpm_[A-Za-z0-9]{36}\b")),
+    # JWT известен ложными срабатываниями, поэтому привязан строго: заголовок начинается с `eyJ`
+    # (это base64url от `{"`), три сегмента base64url реалистичной длины. `a.b.c` и любой путь
+    # с точками сюда не попадают.
+    ("jwt_token",
+     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])")),
+    # Ключи LLM-провайдеров. Anthropic: `sk-ant-…` (реальный ~100 символов). OpenAI-подобные:
+    # `sk-`/`sk-proj-` + длинный АЛФАВИТНО-ЦИФРОВОЙ хвост без дефисов — дефис в хвосте разрешать
+    # нельзя, иначе шаблон начинает ловить длинные kebab-case имена вида `sk-loading-spinner-…`.
+    ("anthropic_api_key", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{32,}")),
+    ("openai_api_key", re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9]{32,}\b")),
 ]
 # Плейсхолдеры/ссылки на env — НЕ секрет (снижаем ложные срабатывания generic-паттерна).
 _PLACEHOLDER = re.compile(r"(?i)(x{6,}|\$\{?[a-z_]+\}?|<[a-z_ -]+>|your[_-]?|example|changeme|placeholder|env\[)")
@@ -79,6 +110,17 @@ INJECTION_PATTERNS = [
     ("node_child_process",
      re.compile(r"require\(\s*['\"](?:node:)?child_process['\"]\s*\)|from\s+['\"](?:node:)?child_process['\"]")),
     ("dom_innerhtml_assign", re.compile(r"\.innerHTML\s*=")),
+    # ── #1094: динамическое исполнение в Node/браузере мимо `eval(`. Оба места — вход для судьи,
+    # а не приговор: `new Function` встречается и в шаблонизаторах. `(?!=)` тут не нужен —
+    # это вызовы, а не присваивания.
+    ("js_new_function", re.compile(r"\bnew\s+Function\s*\(")),
+    ("node_vm_run_in_context", re.compile(r"\bvm\s*\.\s*runIn(?:New|This)Context\s*\(")),
+    # ── #1094: XSS-стоки помимо `.innerHTML =` и `dangerouslySetInnerHTML`. `(?!=)` отсекает
+    # СРАВНЕНИЕ (`if (el.outerHTML === s)`) — оно ничего не записывает в DOM.
+    ("dom_outerhtml_assign", re.compile(r"\.outerHTML\s*=(?!=)")),
+    ("dom_insert_adjacent_html", re.compile(r"\.insertAdjacentHTML\s*\(")),
+    ("dom_document_write", re.compile(r"\bdocument\s*\.\s*write(?:ln)?\s*\(")),
+    ("vue_v_html", re.compile(r"\bv-html\s*=")),
 ]
 
 
@@ -136,6 +178,47 @@ _CHILD_PROCESS_IMPORT = re.compile(
 _NODE_EXEC_CALL = re.compile(r"\b(?:exec|execSync|execFile|execFileSync)\s*\(")
 
 
+# #1094: SQL через ШАБЛОННЫЙ ЛИТЕРАЛ в JS/TS — `db.query(`select … ${id}`)`. У Python аналог
+# (`sql_fstring_execute`) есть с самого начала, у JS не было вовсе, а это профиль живой дочки.
+#
+# ПОЧЕМУ НЕ ПРОСТО ЕЩЁ ОДИН ШАБЛОН В INJECTION_PATTERNS — две причины, и обе принудительные:
+#   1. Отсев плейсхолдеров в `_scan` смотрит на НАЙДЕННЫЙ текст, а `${…}` — это ровно то, что
+#      `_PLACEHOLDER` считает плейсхолдером. Построчный шаблон, который обязан содержать `${`,
+#      гасился бы этим отсевом всегда, то есть молчал бы 100% времени.
+#   2. Запрос в реальном коде часто занимает несколько строк: `query(`` на одной, `${id}` на
+#      следующей. Построчный скан такой запрос не видит.
+#
+# ШУМ ОГРАНИЧЕН ТРЕМЯ УСЛОВИЯМИ (R-40 — про цену обратного):
+#   * литерал привязан к вызову, ПОХОЖЕМУ НА ЗАПРОС (query/execute/raw/prepare/…), а не к любому
+#     шаблонному литералу: `` const msg = `привет, ${name}` `` — не SQL;
+#   * внутри литерала обязана быть интерполяция `${…}`: `` db.query(`select 1`) `` безопасен;
+#   * литерал обязан ЗАКРЫТЬСЯ обратной кавычкой в пределах окна. Незакрытый (или длиннее окна)
+#     не флагится: иначе одна кавычка в файле утащила бы в «запрос» весь остаток текста.
+# Тегированную форму (`` sql`select … ${id}` ``, `` prisma.$queryRaw`…` ``) шаблон НЕ трогает
+# осознанно: в постгрес-клиентах и Prisma она как раз ПАРАМЕТРИЗОВАННАЯ, и флаг на ней был бы
+# ложным по существу. Опасные близнецы с явными скобками (`$queryRawUnsafe(`) попадают сюда.
+_SQL_TEMPLATE_CALL = re.compile(
+    r"\b(?:query|queryRaw|queryRawUnsafe|execute|executeRaw|executeRawUnsafe|executemany|"
+    r"prepare|raw)\s*\(\s*`")
+_TEMPLATE_INTERPOLATION = re.compile(r"\$\{")
+# Окно поиска закрывающей кавычки. Запросы длиннее 2000 символов встречаются, но окно нужно
+# конечное: без него незакрытая кавычка сделала бы «телом запроса» весь хвост файла.
+_TEMPLATE_LITERAL_WINDOW = 2000
+
+
+def _sql_template_literal_lines(text: str) -> list:
+    """Номера строк, где запрос собирается конкатенацией через `${…}` в шаблонном литерале."""
+    out = []
+    for m in _SQL_TEMPLATE_CALL.finditer(text):
+        window = text[m.end():m.end() + _TEMPLATE_LITERAL_WINDOW]
+        end = window.find("`")
+        if end == -1:
+            continue                                   # литерал не закрылся в окне — не гадаем
+        if _TEMPLATE_INTERPOLATION.search(window[:end]):
+            out.append(text.count("\n", 0, m.start()) + 1)
+    return out
+
+
 # ─── что НЕ является injection-поверхностью ───────────────────────────────────────────────────
 #
 # Проза — не исполняемый код. `dangerouslySetInnerHTML`, упомянутый в CHANGELOG, ничего не
@@ -180,6 +263,8 @@ def scan_injection(files):
             for lineno, line in enumerate(text.splitlines(), 1):
                 if _NODE_EXEC_CALL.search(line):
                     res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
+        for lineno in _sql_template_literal_lines(text):
+            res.append({"path": path, "id": "sql_template_literal", "line": lineno})
     return res
 
 
