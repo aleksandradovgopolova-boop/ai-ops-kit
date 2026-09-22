@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1176
+request_id: RR-020
+statement: >
+  Контракт запроса раннера (схема печатается самим бинарником в `-h`, неизвестные поля
+  ОТВЕРГАЮТСЯ): messages/prompt, model, max_attempts, system_prompt (полная замена системного
+  промпта), thinking_level (low|medium|high|xhigh|max, по умолчанию high), session_id (создать или
+  ВОЗОБНОВИТЬ персистентную сессию), disallowed_tools (исключение инструментов из контекста и
+  исполнения). Поля extra_allowed_tools и include_partial_messages принимаются и игнорируются —
+  то есть схема намеренно повторяет форму запроса Claude Agent SDK, что делает замену исполнителя
+  дешёвой по интерфейсу.
+evidence_type: documented_fact
+source:
+  title: "unreal-agent — cmd/internal/agentrunner/usage.go (requestHelp)"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/cmd/internal/agentrunner/usage.go"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "usage.go, константа requestHelp (текст `-h`); коммит b7c9bf1"
+  quote: "Creates or resumes a persisted session."
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: >
+    Схема снята из кода, который её и печатает, — не из документации. Утверждение о «намеренном
+    повторении формы Claude Agent SDK» — чтение намерения по совпадению имён полей и пометке
+    «accepted but ignored»; это вывод, а не заявление авторов.
+status: active
+superseded_by: null
