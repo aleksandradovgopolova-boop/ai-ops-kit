@@ -35,47 +35,35 @@ from pathlib import Path
 # вечно» держится таймаутом, а не импортом gitio. Ратчет test_no_unbounded_git это допускает.
 
 # Секреты: известные форматы + generic key-in-quotes. Плейсхолдеры (xxxx/${...}/env) отсеиваем.
-SECRET_PATTERNS = [
-    ("aws_access_key_id", re.compile(r"\bAKIA[0-9A-Z]{16}\b")),
-    ("private_key_block", re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH |DSA |PGP )?PRIVATE KEY-----")),
-    ("github_pat", re.compile(r"\bghp_[A-Za-z0-9]{36}\b")),
-    ("slack_token", re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b")),
-    ("google_api_key", re.compile(r"\bAIza[0-9A-Za-z_\-]{35}\b")),
-    ("aws_secret_access_key", re.compile(r"(?i)aws_secret_access_key\s*[:=]\s*['\"]?[A-Za-z0-9/+]{40}\b")),
-    ("generic_secret_assignment",
-     re.compile(r"(?i)\b(?:api[_-]?key|secret|token|password|passwd|access[_-]?key)\b\s*[:=]\s*"
-                r"['\"]([A-Za-z0-9/+_\-]{16,})['\"]")),
-    # ── #1094: форматы профиля «Node/TS + БД». До них ни один из семи шаблонов выше не ловил
-    # самый вероятный утёк такого продукта — строку подключения с паролем внутри.
-    #
-    # Пароль вынесен в ГРУППУ намеренно: отсев плейсхолдеров (`_PLACEHOLDER`) работает по
-    # НАЙДЕННОМУ значению, и поэтому строка, где на месте пароля стоит `${…}` или `changeme`,
-    # молчит, а строка с настоящим паролем — нет.
-    #
-    # Пароль короче трёх символов не считаем утечкой: в собственных фикстурах кита стоит
-    # односимвольный пароль в URL, и флаг на нём был бы шумом, а не находкой (замер на дереве
-    # кита 22.09.2026).
-    #
-    # ОБРАЗЕЦ ЗДЕСЬ НЕ ПИШЕТСЯ ДОСЛОВНО — и это не стиль, а тот же инвариант, что действует
-    # для секретов с v3.0.4: фикстуры собираются в рантайме, потому что собственный материал
-    # детектора секретов НЕ прощается списком (в отличие от injection). Первая версия этого
-    # комментария содержала пример строки подключения, и сканер тут же нашёл «утечку» в самом
-    # себе. Образцы — в tests/unit/test_security_scan.py, собранные из фрагментов.
-    ("db_connection_string_password",
-     re.compile(r"\b(?:postgres(?:ql)?|mysql|mariadb|mongodb(?:\+srv)?|redis(?:s)?|amqps?|mssql)"
-                r"://[^\s:/@'\"<>]+:([^\s:/@'\"<>]{3,})@")),
-    ("npm_token", re.compile(r"\bnpm_[A-Za-z0-9]{36}\b")),
-    # JWT известен ложными срабатываниями, поэтому привязан строго: заголовок начинается с `eyJ`
-    # (это base64url от `{"`), три сегмента base64url реалистичной длины. `a.b.c` и любой путь
-    # с точками сюда не попадают.
-    ("jwt_token",
-     re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}(?![A-Za-z0-9_-])")),
-    # Ключи LLM-провайдеров. Anthropic: `sk-ant-…` (реальный ~100 символов). OpenAI-подобные:
-    # `sk-`/`sk-proj-` + длинный АЛФАВИТНО-ЦИФРОВОЙ хвост без дефисов — дефис в хвосте разрешать
-    # нельзя, иначе шаблон начинает ловить длинные kebab-case имена вида `sk-loading-spinner-…`.
-    ("anthropic_api_key", re.compile(r"\bsk-ant-[A-Za-z0-9_-]{32,}")),
-    ("openai_api_key", re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9]{32,}\b")),
-]
+#
+# СПИСОК ФОРМАТОВ ЗДЕСЬ БОЛЬШЕ НЕ ОБЪЯВЛЯЕТСЯ (#1097). Он живёт в `ai_ops_kit/shared/secret_formats.py`
+# и оттуда же его читают скрабы вывода (`engine.tool_broker`) и тела PR (`delivery.pr_open`). Пока
+# копий было две, они разошлись: детектор знал строку подключения с паролем, JWT, npm- и LLM-ключи,
+# а скраб тела PR — нет, и кит печатал наружу формат, который сам умеет опознавать.
+#
+# ГРУЗИМ ДВУМЯ ПУТЯМИ, И ЭТО НЕ ПЕРЕСТРАХОВКА. Этот файл работает в двух режимах:
+#   * как МОДУЛЬ ПАКЕТА (`from ai_ops_kit.security import security_scan`) — обычный импорт;
+#   * как СКРИПТ (`python3 ai_ops_kit/security/security_scan.py --base …` в CI) — пакета в
+#     sys.path нет (sys.path[0] — каталог скрипта), обычный импорт дал бы ModuleNotFoundError.
+# Во втором режиме источник истины грузится ПО ПУТИ от `__file__`. Именно поэтому в
+# `shared/secret_formats.py` нет ни одного импорта из `ai_ops_kit` — иначе загрузка по пути
+# развалилась бы, и сканер перестал бы запускаться в CI.
+try:
+    from ai_ops_kit.shared.secret_formats import SECRET_FORMATS as _SECRET_FORMATS
+except ImportError:                                    # запуск КАК СКРИПТ: пакета в sys.path нет
+    import importlib.util as _ilu
+
+    _formats_path = Path(__file__).resolve().parents[1] / "shared" / "secret_formats.py"
+    _spec = _ilu.spec_from_file_location("ai_ops_secret_formats", _formats_path)
+    if _spec is None or _spec.loader is None:          # fail-closed: без форматов сканер не сканер
+        raise RuntimeError(f"не удалось загрузить форматы секретов из {_formats_path}") from None
+    _formats_mod = _ilu.module_from_spec(_spec)
+    _spec.loader.exec_module(_formats_mod)
+    _SECRET_FORMATS = _formats_mod.SECRET_FORMATS
+
+# Имя сохранено: под ним список читают `engine.tool_broker._scrub_output`, `pipeline_readiness` и
+# тесты. Это ТОТ ЖЕ объект, что и `shared.secret_formats.SECRET_FORMATS`, а не его копия.
+SECRET_PATTERNS = _SECRET_FORMATS
 # Плейсхолдеры/ссылки на env — НЕ секрет (снижаем ложные срабатывания generic-паттерна).
 _PLACEHOLDER = re.compile(r"(?i)(x{6,}|\$\{?[a-z_]+\}?|<[a-z_ -]+>|your[_-]?|example|changeme|placeholder|env\[)")
 # Материал ключа после заголовка PEM: base64-тело. Его отсутствие означает, что назван ФОРМАТ,
