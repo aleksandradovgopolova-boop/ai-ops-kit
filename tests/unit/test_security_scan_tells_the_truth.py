@@ -177,6 +177,36 @@ def test_the_forgiven_list_only_shrinks():
     assert len(ss.DETECTOR_OWN_MATERIAL) <= 4, sorted(ss.DETECTOR_OWN_MATERIAL)
 
 
+def test_the_node_rules_added_no_noise_to_this_repository():
+    """#1094: правила профиля Node/TS приехали с ЗАМЕРОМ, а не с обещанием.
+
+    Замер 22.09.2026 на дереве кита: injection-флагов 39 до правил и 39 после, секретов 0 и 0.
+    Здесь сторожится ровно то, что можно сторожить на собственном репозитории: ни одно из новых
+    правил не поднимает флаг на коде и фикстурах кита. Это НЕ утверждение, что правила молчат
+    вообще (обратная половина — парные тесты в test_security_scan.py) и НЕ замер шума на дочке:
+    доля флагов, признанных судьёй нерелевантными на реальном диффе Node/TS-продукта, здесь
+    измерена быть не может и остаётся открытой частью приёмки.
+    """
+    new_rule_ids = {"sql_template_literal", "js_new_function", "node_vm_run_in_context",
+                    "dom_outerhtml_assign", "dom_insert_adjacent_html", "dom_document_write",
+                    "vue_v_html"}
+    rep = ss.scan_repo(PKG)
+    noisy = [f for f in rep["injection_flags"] if f["id"] in new_rule_ids]
+    assert noisy == [], (
+        "новое правило шумит на собственном репозитории — разбирать надо шаблон, а не привыкать "
+        f"пролистывать список: {noisy}")
+
+
+def test_the_detector_declares_no_secret_of_its_own():
+    """Для секретов прощёного списка НЕТ — значит образцы не живут в исходниках детектора.
+
+    Правило #1094 про строку подключения родилось с примером прямо в комментарии, и сканер тут же
+    нашёл «утечку» в самом себе. Сторож дешевле, чем повторный разбор.
+    """
+    src = (PKG / "ai_ops_kit" / "security" / "security_scan.py").read_text(encoding="utf-8")
+    assert ss.scan_secrets({"ai_ops_kit/security/security_scan.py": src}) == []
+
+
 def test_prose_is_not_an_injection_surface():
     """`dangerouslySetInnerHTML`, упомянутый в CHANGELOG, ничего не исполняет."""
     assert ss.scan_injection({"CHANGELOG.md": "исправлен dangerouslySetInnerHTML\n"}) == []

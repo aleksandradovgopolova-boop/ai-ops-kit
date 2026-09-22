@@ -125,6 +125,196 @@ class TestScanInjection:
 
 
 @pytest.mark.unit
+@pytest.mark.critical_path
+class TestNodeInjectionSurface:
+    """#1094: Node/TS-профиль — каждое правило проверяется ПАРОЙ.
+
+    Пара обязательна: правило, которое срабатывает на образце, но не молчит на безобидном
+    двойнике, поставляет судье не адреса, а шум. Цена шума в этом модуле замерена в поле (R-40):
+    два срабатывания на штатном `RegExp.exec` подняли три домена сразу и заблокировали гейт.
+    """
+
+    # ─── SQL через шаблонный литерал ───────────────────────────────────────────────────────
+
+    def test_sql_template_literal_is_flagged(self):
+        """`db.query(`… ${id}`)` — JS-аналог `sql_fstring_execute`, которого до #1094 не было."""
+        files = {"repo.ts": "const rows = await db.query(`select * from users where id = ${id}`);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [(f["id"], f["line"]) for f in flags] == [("sql_template_literal", 1)], flags
+
+    def test_sql_template_literal_across_several_lines_is_flagged(self):
+        """Запрос в реальном коде часто занимает несколько строк — построчный скан его не видит."""
+        files = {"repo.ts": "const rows = await db.query(`\n  select * from users\n"
+                            "  where id = ${id}\n`);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["sql_template_literal"], flags
+        assert flags[0]["line"] == 1, flags
+
+    def test_a_query_without_interpolation_is_not_flagged(self):
+        """Безобидный двойник №1: шаблонный литерал БЕЗ `${…}` — обычная константа запроса."""
+        files = {"repo.ts": "const rows = await db.query(`select id, name from users`);\n"}
+        assert security_scan.scan_injection(files) == []
+
+    def test_an_ordinary_template_literal_is_not_flagged(self):
+        """Безобидный двойник №2: интерполяция есть, но вызов не похож на запрос."""
+        files = {"greet.ts": "const msg = `привет, ${name}`;\nlog(`took ${ms}ms`);\n"}
+        assert security_scan.scan_injection(files) == []
+
+    def test_a_tagged_sql_template_is_not_flagged(self):
+        """Безобидный двойник №3: тегированная форма в postgres.js/Prisma ПАРАМЕТРИЗОВАНА."""
+        files = {"repo.ts": "const rows = await sql`select * from users where id = ${id}`;\n"}
+        assert security_scan.scan_injection(files) == []
+
+    def test_an_unterminated_template_literal_is_not_flagged(self):
+        """Незакрытая кавычка не превращает остаток файла в «тело запроса»."""
+        files = {"repo.ts": "const rows = await db.query(`select * from users\n"
+                            "const other = compute(${x});\n"}
+        assert security_scan.scan_injection(files) == []
+
+    # ─── динамическое исполнение мимо eval ────────────────────────────────────────────────
+
+    def test_new_function_is_flagged(self):
+        files = {"tpl.js": 'const fn = new Function("a", "return a + 1");\n'}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["js_new_function"], flags
+
+    def test_a_class_whose_name_starts_with_function_is_not_flagged(self):
+        """Безобидный двойник: `new FunctionRegistry()` — не динамическое исполнение."""
+        files = {"tpl.js": "const reg = new FunctionRegistry();\n"}
+        assert security_scan.scan_injection(files) == []
+
+    def test_vm_run_in_context_is_flagged(self):
+        files = {"sandbox.js": "vm.runInNewContext(code, sandbox);\nvm.runInThisContext(src);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["node_vm_run_in_context"] * 2, flags
+
+    def test_creating_a_vm_context_is_not_flagged(self):
+        """Безобидный двойник: подготовка песочницы ничего не исполняет."""
+        files = {"sandbox.js": "const ctx = vm.createContext(sandbox);\n"}
+        assert security_scan.scan_injection(files) == []
+
+    # ─── XSS-стоки помимо innerHTML/dangerouslySetInnerHTML ───────────────────────────────
+
+    def test_outer_html_assignment_is_flagged(self):
+        files = {"view.js": "el.outerHTML = userInput;\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["dom_outerhtml_assign"], flags
+
+    def test_comparing_outer_html_is_not_flagged(self):
+        """Безобидный двойник: сравнение ничего не записывает в DOM."""
+        files = {"view.js": "if (el.outerHTML === snapshot) { return; }\n"}
+        assert security_scan.scan_injection(files) == []
+
+    def test_insert_adjacent_html_is_flagged(self):
+        files = {"view.js": 'el.insertAdjacentHTML("beforeend", userInput);\n'}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["dom_insert_adjacent_html"], flags
+
+    def test_insert_adjacent_text_is_not_flagged(self):
+        """Безобидный двойник: текстовый сток экранирует разметку сам."""
+        files = {"view.js": 'el.insertAdjacentText("beforeend", userInput);\n'}
+        assert security_scan.scan_injection(files) == []
+
+    def test_document_write_is_flagged(self):
+        files = {"legacy.js": "document.write(userInput);\ndocument.writeln(more);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["dom_document_write"] * 2, flags
+
+    def test_writing_to_a_stream_is_not_flagged(self):
+        """Безобидный двойник: `.write(` у потока — не DOM-сток."""
+        files = {"legacy.js": "process.stdout.write(line);\nres.write(chunk);\n"}
+        assert security_scan.scan_injection(files) == []
+
+    def test_v_html_is_flagged(self):
+        files = {"Comment.vue": '<div v-html="rawComment"></div>\n'}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["vue_v_html"], flags
+
+    def test_v_text_is_not_flagged(self):
+        """Безобидный двойник: `v-text` подставляет текст, а не разметку."""
+        files = {"Comment.vue": '<div v-text="rawComment"></div>\n'}
+        assert security_scan.scan_injection(files) == []
+
+
+@pytest.mark.unit
+@pytest.mark.critical_path
+class TestNodeProfileSecrets:
+    """#1094: форматы секретов профиля «Node/TS + БД», тоже парами.
+
+    Образцы собираются ИЗ ФРАГМЕНТОВ (решение v3.0.4): для секретов собственного материала
+    детектора не прощают списком, поэтому дословный литерал в исходнике теста означал бы
+    настоящую находку сканера на самом ките.
+    """
+
+    def test_a_connection_string_with_a_password_is_flagged(self):
+        dsn = "postgres" + "://app:" + "hunter2pass" + "@db.internal:5432/app"
+        files = {"config.ts": f'export const DSN = "{dsn}";\n'}
+        flags = security_scan.scan_secrets(files)
+        assert any(f["id"] == "db_connection_string_password" for f in flags), flags
+
+    def test_other_connection_schemes_are_flagged_too(self):
+        for scheme in ("postgresql", "mysql", "mongodb", "mongodb+srv", "redis", "amqp"):
+            dsn = scheme + "://app:" + "hunter2pass" + "@host/db"
+            flags = security_scan.scan_secrets({"config.ts": f'const u = "{dsn}";\n'})
+            assert any(f["id"] == "db_connection_string_password" for f in flags), scheme
+
+    def test_a_connection_string_without_a_password_is_not_flagged(self):
+        """Безобидный двойник №1: пароля в строке нет."""
+        dsn = "postgres" + "://db.internal:5432/app"
+        assert security_scan.scan_secrets({"config.ts": f'const u = "{dsn}";\n'}) == []
+
+    def test_a_connection_string_with_a_placeholder_password_is_not_flagged(self):
+        """Безобидный двойник №2: пароль берётся из окружения — это документация, не утечка."""
+        assert security_scan.scan_secrets(
+            {"README.ts": 'const u = "postgres://app:${DB_PASSWORD}@db/app";\n'}) == []
+        assert security_scan.scan_secrets(
+            {"README.ts": 'const u = "postgres://app:changeme@db/app";\n'}) == []
+
+    def test_an_npm_token_is_flagged(self):
+        token = "npm" + "_" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"
+        files = {".npmrc": f"//registry.npmjs.org/:_authToken={token}\n"}
+        flags = security_scan.scan_secrets(files)
+        assert any(f["id"] == "npm_token" for f in flags), flags
+
+    def test_an_npm_setting_name_is_not_flagged(self):
+        """Безобидный двойник: `npm_config_*` — имя настройки, а не токен."""
+        files = {"env.sh": "npm_config_registry=https://registry.npmjs.org\n"}
+        assert security_scan.scan_secrets(files) == []
+
+    def test_a_jwt_is_flagged(self):
+        jwt = ("eyJ" + "hbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9" + "."
+               + "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ" + "."
+               + "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c")
+        flags = security_scan.scan_secrets({"auth.ts": f'const t = "{jwt}";\n'})
+        assert any(f["id"] == "jwt_token" for f in flags), flags
+
+    def test_a_dotted_name_is_not_a_jwt(self):
+        """Безобидный двойник: JWT печально известен ложными срабатываниями на путях с точками."""
+        files = {"auth.ts": 'const t = "header.payload.signature";\nimport a from "x.y.z";\n'}
+        assert security_scan.scan_secrets(files) == []
+
+    def test_an_anthropic_key_is_flagged(self):
+        key = "sk-" + "ant-api03-" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0"
+        flags = security_scan.scan_secrets({"env.ts": f'const k = "{key}";\n'})
+        assert any(f["id"] == "anthropic_api_key" for f in flags), flags
+
+    def test_an_openai_key_is_flagged(self):
+        for key in ("sk-" + "T" * 48, "sk-" + "proj-" + "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8"):
+            flags = security_scan.scan_secrets({"env.ts": f'const k = "{key}";\n'})
+            assert any(f["id"] == "openai_api_key" for f in flags), key
+
+    def test_a_long_kebab_case_name_starting_with_sk_is_not_a_key(self):
+        """Безобидный двойник: длинное kebab-case имя — ровно тот класс, на котором «`sk-` плюс
+        что угодно подлиннее» и даёт шум."""
+        files = {"styles.css": ".sk-loading-spinner-overlay-container-wrapper { top: 0 }\n"}
+        assert security_scan.scan_secrets(files) == []
+
+    def test_a_short_sk_ant_mention_is_not_a_key(self):
+        """Безобидный двойник: упоминание префикса без материала ключа."""
+        assert security_scan.scan_secrets({"doc.ts": 'const prefix = "sk-ant-";\n'}) == []
+
+
+@pytest.mark.unit
 class TestNewDependencies:
     """Tests for new_dependencies(): detecting new deps in manifests."""
 
