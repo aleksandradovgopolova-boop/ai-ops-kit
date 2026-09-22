@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1190
+request_id: RR-021
+statement: >
+  Три режима глубины с разной ценой по времени: quick — минуты, для CI и проверки pull request;
+  standard — 30-60 минут, для регулярных обзоров; deep — 1-4 часа в зависимости от сложности цели,
+  и именно deep является режимом ПО УМОЛЧАНИЮ. В белоящичном варианте standard использует
+  source-aware разметку и статическую триагу для приоритизации динамической валидации, а deep
+  дополнительно гоняет широкую статическую триагу (semgrep, структурный поиск по AST, секреты,
+  проверки цепочки поставок) и затем систематически проверяет кандидатов динамически. Рекомендация
+  самих авторов по частоте: quick на каждый PR, standard еженедельно, deep перед крупным релизом.
+evidence_type: documented_fact
+source:
+  title: "Strix — docs/usage/scan-modes.mdx"
+  url: "https://github.com/usestrix/strix/blob/main/docs/usage/scan-modes.mdx"
+  type: official_documentation
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "scan-modes.mdx целиком, включая таблицу «Choosing a Mode»; прочитан 22.09.2026"
+  quote: "Deep mode is the default."
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Официальная документация продукта о его же режимах. Длительности — ориентиры вендора, не наши
+    замеры: «минуты» и «1-4 часа» проверке не подвергались и в расчёты стоимости входят как оценка.
+status: active
+superseded_by: null

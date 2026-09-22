@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1180
+request_id: RR-020
+statement: >
+  В харнесе штатно заложено ИСПОЛНЕНИЕ ОПЕРАЦИЙ СНАРУЖИ процесса: тип операции remote_job (версия 2)
+  с интерфейсом RemoteJobHandler (план, дескриптор, подписка, отложенная инспекция, терминальный
+  результат/ошибка с отметками усечения) — то есть модель контракта «работа описана сериализуемо,
+  где она исполняется — деталь реализации». Инструментов при этом ровно три: Bash, ViewImage,
+  SkillUse; MCP из открытого раннера намеренно вынесен отдельным коммитом («Isolate MCP and add a
+  slim unreal-agent runner»).
+evidence_type: documented_fact
+source:
+  title: "unreal-agent — harness/operation/remote_job.go"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/harness/operation/remote_job.go"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "remote_job.go (TypeRemoteJob/RemoteJobHandler/RemoteJobState); набор инструментов — harness/tool/registry.go (BashName, ViewImageName, SkillUseName); про MCP — сообщение коммита 1816a62; коммит b7c9bf1"
+  quote: "type RemoteJobHandler interface"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: >
+    Интерфейс и тип операции прочитаны в коде. Оговорка охвата: ГОТОВОЙ реализации удалённой
+    песочницы в открытой части нет — есть контракт и локальный менеджер; «можно исполнять в
+    песочнице» здесь означает «предусмотрено», а не «поставляется».
+status: active
+superseded_by: null

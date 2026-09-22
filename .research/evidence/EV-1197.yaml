@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1197
+request_id: RR-021
+statement: >
+  НАША сторона, пробел: динамической проверки — запуска продукта и попытки его эксплуатировать — в
+  ките нет вовсе. Квалификатор охвата: проверено grep по всему репозиторию кита на «DAST», «pentest»
+  и «пентест» во всех .md, .yaml и .py — совпадения нашлись ровно в двух местах, и ни одно не
+  является механизмом: тест диагностики конвейера и research-пакет DP-110 (сверка кита с OWASP
+  Agentic AI Top 10). Ни в quality/gates.yaml, ни в ai_ops_kit/security/ нет ни одного
+  производителя улик, который исполняет код продукта и подтверждает уязвимость эксплуатацией.
+  Значит ось «доказано эксплуатацией» у кита пустая, а не слабая.
+evidence_type: documented_fact
+source:
+  title: "AI Ops Kit — механическая проверка охвата security-контура"
+  url: null
+  type: internal_data
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "`grep -rln 'DAST|pentest|пентест' --include=*.md --include=*.yaml --include=*.py .` на рабочем дереве 22.09.2026 -> tests/unit/test_pipeline_diagnostics.py и .research/decisions/DP-110.yaml; перечисление ai_ops_kit/security/ (7 модулей) и чтение gates.security"
+  quote: "tests/unit/test_pipeline_diagnostics.py"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: medium
+  rationale: >
+    SELF-EVIDENCE (наш репозиторий), помечено для спот-чека. Негативное утверждение об отсутствии
+    возможности: охват назван (три термина, три типа файлов, одно рабочее дерево), но механизм мог
+    существовать под другим именем — поэтому не выше medium, как требует правило центра.
+status: active
+superseded_by: null

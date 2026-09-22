@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1179
+request_id: RR-020
+statement: >
+  Замер зрелости кодовой базы на коммите b7c9bf1: ~61.8 тыс. строк Go, из них ~30.9 тыс. — тесты
+  (половина). CI гоняет на ubuntu-24.04 и macos-15 связку `make test check build` (go test -race,
+  go vet, проверка gofmt), отдельной матрицей — четыре fuzz-цели (отказы координатора, соответствие
+  журнала исполнению у координатора и у раннера, подготовка ViewImage) и отдельной джобой — сборку
+  бенчмарк-бандла Harbor, smoke-тест на локальной тест-модели и сборку Docker-образа. История в
+  клоне (глубина 50) уходит минимум в 10.09.2026 с ежедневными коммитами шести авторов
+  @unreallabs.ai — значит публикация 21.09 не равна началу разработки.
+evidence_type: measured_result
+source:
+  title: "unreal-agent — локальный клон на коммите b7c9bf1 (.github/workflows/ci.yml, Makefile, git log)"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/.github/workflows/ci.yml"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "Замер 22.09.2026: `find -name '*.go' | xargs wc -l` (61771) и по '*_test.go' (30888); ci.yml и Makefile прочитаны целиком; `git log --format=%ad --date=short` по клону глубиной 50"
+  quote: "go test -race ./..."
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Числа получены механически на конкретном коммите и воспроизводимы теми же командами. Оговорка:
+    доля тестов и состав CI — признаки дисциплины, а не доказательство качества; ни один тест
+    чужого проекта нами не запускался. Глубина клона 50 обрезает историю — «минимум с 10.09»
+    означает не ранее, а не точную дату начала.
+status: active
+superseded_by: null
