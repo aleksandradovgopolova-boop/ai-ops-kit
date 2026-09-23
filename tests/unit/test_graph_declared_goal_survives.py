@@ -317,6 +317,84 @@ class TestAmbiguityAndLostLevelsAreNamed:
         assert vkg.validate_graph(graph_path, types, rels) == []
 
 
+class TestNameConflictCascadeIsNamedInFull:
+    """#1109: спор имён уносит поддерево — сказать надо про всё, что ушло, и про кого именно."""
+
+    def _child_with_goal_namesake(self, root: Path) -> Path:
+        """Продукт, где цель плана — тёзка функции, а под целью есть исход и две работы."""
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "onboarding", "outcome": {"first_run_succeeds": False}},
+                      {"id": "answer-from-our-documents",
+                       "outcome": {"answer_shows_its_basis": True}}],
+            "work": [{"id": "onboarding-step-one", "goal": "onboarding", "title": "Шаг 1"},
+                     {"id": "onboarding-step-two", "goal": "onboarding", "title": "Шаг 2"}]})
+        for fid in ("onboarding", "library-view"):
+            _write(root / "features" / fid / "blueprint.yaml", {
+                "schema_version": 1, "kind": "feature-blueprint",
+                "feature": {"id": fid, "name": fid, "status": "in-progress",
+                            "current_stage": "delivery"},
+                "links": {"goal": "answer-from-our-documents"}})
+        return root
+
+    def test_cascade_size_is_named(self, tmp_path):
+        """Названо, СКОЛЬКО ещё записей плана ушло за графом вместе с тёзкой, а не «одна строка»."""
+        root = self._child_with_goal_namesake(tmp_path / "child")
+        gaps = kg.trace(kg.build_graph(root), "onboarding")["gaps"]
+        about = [g for g in gaps if "за графом" in g]
+        assert about and "3" in about[0], about   # исход цели + две работы под ней
+
+    def test_conflict_says_which_record_it_is(self, tmp_path):
+        """Сказано, ЧТО искать в плане: цель, работу или обе — кит это различает."""
+        root = self._child_with_goal_namesake(tmp_path / "child")
+        gaps = kg.trace(kg.build_graph(root), "onboarding")["gaps"]
+        assert any("имя носит цель в плане" in g for g in gaps), gaps
+
+    def test_both_kinds_are_named_together(self, tmp_path):
+        """Если имя носят и цель, и работа — сказано про обе, а не про одну из них."""
+        root = tmp_path / "child"
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "onboarding", "outcome": {"ok": True}},
+                      {"id": "answer-from-our-documents", "outcome": {"a": True}}],
+            "work": [{"id": "onboarding", "goal": "answer-from-our-documents", "title": "Работа"}]})
+        _write(root / "features" / "onboarding" / "blueprint.yaml", {
+            "schema_version": 1, "kind": "feature-blueprint",
+            "feature": {"id": "onboarding", "name": "Онбординг", "status": "in-progress",
+                        "current_stage": "delivery"}, "links": {}})
+        gaps = kg.trace(kg.build_graph(root), "onboarding")["gaps"]
+        assert any("цель и работа" in g for g in gaps), gaps
+
+    def test_second_conflict_under_a_namesake_goal_is_not_silent(self, tmp_path):
+        """Двойной спор: работа-тёзка под целью-тёзкой тоже названа, а не теряется молча."""
+        root = tmp_path / "child"
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "onboarding", "outcome": {"ok": True}}],
+            "work": [{"id": "library-view", "goal": "onboarding", "title": "Работа"}]})
+        for fid in ("onboarding", "library-view"):
+            _write(root / "features" / fid / "blueprint.yaml", {
+                "schema_version": 1, "kind": "feature-blueprint",
+                "feature": {"id": fid, "name": fid, "status": "in-progress",
+                            "current_stage": "delivery"}, "links": {}})
+        gaps = kg.trace(kg.build_graph(root), "library-view")["gaps"]
+        assert any("имя носит работа в плане" in g for g in gaps), gaps
+
+    def test_work_under_a_namesake_goal_is_not_hung_on_nothing(self, tmp_path):
+        """И при этом обычная работа под целью-тёзкой не висит в графе без родителя."""
+        root = tmp_path / "child"
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "onboarding", "outcome": {"ok": True}}],
+            "work": [{"id": "ordinary-work", "goal": "onboarding", "title": "Работа"}]})
+        _write(root / "features" / "onboarding" / "blueprint.yaml", {
+            "schema_version": 1, "kind": "feature-blueprint",
+            "feature": {"id": "onboarding", "name": "Онбординг", "status": "in-progress",
+                        "current_stage": "delivery"}, "links": {}})
+        ids = {n["id"] for n in kg.build_graph(root)["nodes"]}
+        assert "ordinary-work" not in ids
+
+
 class TestNameConflictsInventNothing:
     """#1106: спор имён не рождает связь, которой никто не объявлял, и решается в пользу функции."""
 
