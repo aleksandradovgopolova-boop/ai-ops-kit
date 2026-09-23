@@ -270,9 +270,28 @@ def _sql_template_literal_lines(text: str) -> list:
 
 # ─── что НЕ является injection-поверхностью ───────────────────────────────────────────────────
 #
-# Проза — не исполняемый код. `dangerouslySetInnerHTML`, упомянутый в CHANGELOG, ничего не
-# исполняет; флаг на нём — не осторожность, а шум.
-_PROSE_SUFFIXES = (".md", ".rst", ".txt")
+# Разбор «код или проза» вынесен в сателлит `scan_prose`: после того как комментарии перестали
+# считаться кодом (#1112), модуль перешагнул порог монолита в 700 строк, и ратчет размера сказал об
+# этом раньше, чем это заметил бы человек. Здесь — фасад: имена те же, поведение то же.
+#
+# ГРУЗИТСЯ ДВУМЯ ПУТЯМИ — по той же причине и тем же способом, что и форматы секретов выше: этот
+# файл запускается и как модуль пакета, и КАК СКРИПТ (`python3 ai_ops_kit/security/security_scan.py`
+# в CI), где пакета в sys.path нет. Поэтому в `scan_prose.py` нет ни одного импорта из `ai_ops_kit`:
+# иначе загрузка по пути развалилась бы, и сканер перестал бы запускаться.
+try:
+    from ai_ops_kit.security.scan_prose import PROSE_SUFFIXES as _PROSE_SUFFIXES
+    from ai_ops_kit.security.scan_prose import blank_comments as _blank_comments
+except ImportError:                                    # запуск КАК СКРИПТ: пакета в sys.path нет
+    import importlib.util as _ilu2
+
+    _prose_path = Path(__file__).resolve().parent / "scan_prose.py"
+    _spec2 = _ilu2.spec_from_file_location("ai_ops_scan_prose", _prose_path)
+    if _spec2 is None or _spec2.loader is None:        # fail-closed: без разбора прозы сканер шумит
+        raise RuntimeError(f"не удалось загрузить разбор прозы из {_prose_path}") from None
+    _prose_mod = _ilu2.module_from_spec(_spec2)
+    _spec2.loader.exec_module(_prose_mod)
+    _PROSE_SUFFIXES = _prose_mod.PROSE_SUFFIXES
+    _blank_comments = _prose_mod.blank_comments
 
 # СОБСТВЕННЫЙ МАТЕРИАЛ ДЕТЕКТОРА. Файл, который ОБЪЯВЛЯЕТ образцы, и тесты, которые их ПОДСОВЫВАЮТ,
 # по построению содержат всё, что детектор ищет. Замер 19.08.2026: 55 флагов из 72 приходились
@@ -321,7 +340,14 @@ def scan_injection(files):
     for path, text in files.items():
         if path.lower().endswith(_PROSE_SUFFIXES) or _is_detector_own(path):
             continue
-        for f in _scan(text, INJECTION_PATTERNS):
+        найдено = _scan(text, INJECTION_PATTERNS)
+        if найдено:
+            # Разбор комментариев стоит дорого, поэтому включается ТОЛЬКО когда есть что проверять:
+            # на файле без единого совпадения он ничего не изменит, а времени возьмёт столько же.
+            без_комментариев = _blank_comments(text, path)
+            if без_комментариев != text:
+                найдено = _scan(без_комментариев, INJECTION_PATTERNS)
+        for f in найдено:
             res.append({"path": path, **f})
         # Файл тянет child_process -> любой exec-вызов в нём считаем исполнением команды.
         # Пере-срабатывание здесь безопасно (лишний needs_review), под-срабатывание — нет.
