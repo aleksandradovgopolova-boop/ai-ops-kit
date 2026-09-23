@@ -350,9 +350,16 @@ class TestNameConflictsInventNothing:
         assert types["library-view"] == "feature"
 
     def test_graph_with_goal_namesake_still_validates(self, tmp_path):
-        """И граф остаётся валидным: раньше сборка отвечала про «устаревший реестр типов»."""
-        root = _child_many(tmp_path / "child", {"library-view": {}}, [
-            {"id": "library-view", "outcome": {"works": True}}])
+        """И граф остаётся валидным: раньше сборка отвечала про «устаревший реестр типов».
+
+        Функция объявляет НАСТОЯЩУЮ цель — иначе спорных рёбер не рождается вовсе и проверка
+        зеленела бы на любом коде: прежний выпускал `goal -contains-> goal` и `goal -targets->
+        outcome`, и валидатор отвергал граф целиком.
+        """
+        root = _child_many(tmp_path / "child",
+                           {"library-view": {"goal": "answer-from-our-documents"}}, [
+            {"id": "library-view", "outcome": {"works": True}},
+            {"id": "answer-from-our-documents", "outcome": {"answer_shows_its_basis": True}}])
         graph_path = root / "knowledge" / "graph.yaml"
         _write(graph_path, kg.build_graph(root))
         types, rels = vkg.load_dictionary()
