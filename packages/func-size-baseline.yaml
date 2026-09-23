@@ -64,6 +64,91 @@ scopes:
     max_function: run_scenarios
     max_function_file: validate_product_qualification.py
     max_function_lineno: 63
+  # #1119: intelligence/ оставался вне ратчета — и там выросла САМАЯ ДЛИННАЯ функция репозитория
+  # (build_graph, 275 строк: больше любого другого потолка, включая installer 264). Для модулей
+  # сторож уже есть — `module-size` поймал knowledge_graph.py на 708 строках и заставил разрезать
+  # его по смыслу; для функций этого каталога сторожа не было, и каждая работа по графу истории
+  # удлиняла build_graph на десяток строк, не встречая сопротивления.
+  # Потолок = ТЕКУЩИЙ максимум, а не идеальное число: цель записи — остановить рост немедленно, а
+  # не заставить рефакторить в чужом PR. Разрез build_graph по источникам — отдельной работой,
+  # после которой потолок опускается (ратчет ходит только вниз).
+  - path: ai_ops_kit/intelligence/
+    max_function_lines: 275
+    max_function: build_graph
+    max_function_file: knowledge_graph.py
+    max_function_lineno: 220
+
+  # #1119, ВТОРОЙ ШАГ: остальные каталоги пакета. Сторож охвата (tests/unit/test_validate_func_size)
+  # показал, что вне ратчета росла не только `intelligence/`: ещё в семи каталогах жили функции
+  # крупнее самого низкого объявленного потолка. Список каталогов пополнялся РУКАМИ и отставал от
+  # кода — поэтому теперь покрыт ВЕСЬ пакет, а не «дома известных god-функций». Потолки = текущие
+  # максимумы: цель — остановить рост, а не заставить рефакторить в чужом PR.
+  - path: ai_ops_kit/checks/
+    max_function_lines: 163
+    max_function: validate_dir_full
+    max_function_file: feature_blueprint.py
+    max_function_lineno: 64
+  - path: ai_ops_kit/context/
+    max_function_lines: 167
+    max_function: build_context
+    max_function_file: context_engine.py
+    max_function_lineno: 166
+  - path: ai_ops_kit/delivery/
+    max_function_lines: 85
+    max_function: record_delivery_for_pr
+    max_function_file: record_delivery.py
+    max_function_lineno: 65
+  - path: ai_ops_kit/devtools/
+    max_function_lines: 193
+    max_function: _cases
+    max_function_file: bench_lite.py
+    max_function_lineno: 230
+  - path: ai_ops_kit/engops/
+    max_function_lines: 104
+    max_function: parse_session_metadata
+    max_function_file: session_telemetry_provider.py
+    max_function_lineno: 165
+  - path: ai_ops_kit/gates/
+    max_function_lines: 171
+    max_function: collect
+    max_function_file: evidence_collector.py
+    max_function_lineno: 55
+  - path: ai_ops_kit/governance/
+    max_function_lines: 52
+    max_function: adjust_priority
+    max_function_file: override_learning.py
+    max_function_lineno: 50
+  - path: ai_ops_kit/integrations/
+    max_function_lines: 36
+    max_function: _rest_get
+    max_function_file: github.py
+    max_function_lineno: 174
+  - path: ai_ops_kit/kernel/
+    max_function_lines: 4
+    max_function: deliver
+    max_function_file: ports.py
+    max_function_lineno: 234
+  - path: ai_ops_kit/lifecycle/
+    max_function_lines: 139
+    max_function: register
+    max_function_file: active_work.py
+    max_function_lineno: 333
+  - path: ai_ops_kit/security/
+    max_function_lines: 90
+    max_function: run_pack
+    max_function_file: security_pack.py
+    max_function_lineno: 179
+  - path: ai_ops_kit/shared/
+    max_function_lines: 177
+    max_function: route
+    max_function_file: ai_route.py
+    max_function_lineno: 44
+  - path: ai_ops_kit/ui/
+    max_function_lines: 163
+    max_function: from_next_work
+    max_function_file: presenter_work.py
+    max_function_lineno: 17
+
   # F-06 внешнего аудита: installer/ — крупнейший файл репозитория, первое, что запускает пользователь,
   # оставался вне func-size. Потолок = текущий максимум (cmd_doctor 264); расщепление — отдельной работой.
   - path: installer/
