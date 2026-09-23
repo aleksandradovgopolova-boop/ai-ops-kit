@@ -254,6 +254,12 @@ def build_graph(child_root) -> dict:
     for g in plan.get("goals") or []:
         if not isinstance(g, dict) or not _text(g.get("id")):
             continue
+        if _slug(g["id"]) in feature_ids:
+            # Цель плана — тёзка функции. Узел-цель не заводим по той же причине, что и работу:
+            # иначе функция навсегда становится целью, получает чужие для этого типа атрибуты, и
+            # сборка отвечает про «устаревший реестр типов» — мимо настоящей причины.
+            name_taken_in_plan.add(_slug(g["id"]))
+            continue
         gid = b.node(g["id"], "goal", title=_text(g.get("id")), ref="planning/plan.yaml")
         outcome = g.get("outcome")
         if isinstance(outcome, dict) and outcome:
@@ -265,17 +271,20 @@ def build_graph(child_root) -> dict:
     for w in plan.get("work") or []:
         if not isinstance(w, dict) or not _text(w.get("id")):
             continue
+        goal_ref = _slug(w.get("goal")) if _text(w.get("goal")) else None
+        if not (goal_ref and b.type_of(goal_ref) == "goal"):
+            continue                      # работа без резолвимой цели узлом не была и раньше
         if _slug(w["id"]) in feature_ids:
             # Работа плана — тёзка функции. Узел-инициативу не заводим (иначе функция им и
             # останется), потерю называем на самой функции: молчать о ней значило бы спрятать
-            # конфликт данных, который человек может исправить одним переименованием.
+            # конфликт данных, который человек может исправить одним переименованием. Говорим об
+            # этом только когда работа ДЕЙСТВИТЕЛЬНО стала бы узлом: иначе пробел сообщал бы о
+            # потере там, где терять было нечего.
             name_taken_in_plan.add(_slug(w["id"]))
             continue
-        goal_ref = _slug(w.get("goal")) if _text(w.get("goal")) else None
-        if goal_ref and b.type_of(goal_ref) == "goal":
-            iid = b.node(w["id"], "initiative", title=_text(w.get("title")) or _text(w["id"]),
-                         ref="planning/plan.yaml")
-            b.edge(goal_ref, "contains", iid)
+        iid = b.node(w["id"], "initiative", title=_text(w.get("title")) or _text(w["id"]),
+                     ref="planning/plan.yaml")
+        b.edge(goal_ref, "contains", iid)
 
     # 2) feature blueprints — функции, метрики, цепочка вверх к цели, нацеленность на outcome.
     for bp_path, bp in blueprints:

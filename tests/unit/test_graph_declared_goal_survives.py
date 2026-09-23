@@ -26,6 +26,7 @@ if str(PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(PKG_ROOT))
 
 from ai_ops_kit.intelligence import knowledge_graph as kg  # noqa: E402
+from ai_ops_kit.shared import review_verdict  # noqa: E402
 from ai_ops_kit.ui import presenter_graph  # noqa: E402
 from ai_ops_kit.validation import validate_knowledge_graph as vkg  # noqa: E402
 
@@ -339,6 +340,24 @@ class TestNameConflictsInventNothing:
         assert result["goal"] is None
         assert result["verdict"] == "unmoored"
 
+    def test_goal_in_plan_named_after_a_feature_leaves_the_feature_intact(self, tmp_path):
+        """Цель плана — тёзка функции: в граф входит ФУНКЦИЯ, а не цель с чужими атрибутами."""
+        root = _child_many(tmp_path / "child", {"library-view": {}}, [
+            {"id": "library-view", "outcome": {"works": True}},
+            {"id": "answer-from-our-documents", "outcome": {"answer_shows_its_basis": True}}])
+        graph = kg.build_graph(root)
+        types = {n["id"]: n["type"] for n in graph["nodes"]}
+        assert types["library-view"] == "feature"
+
+    def test_graph_with_goal_namesake_still_validates(self, tmp_path):
+        """И граф остаётся валидным: раньше сборка отвечала про «устаревший реестр типов»."""
+        root = _child_many(tmp_path / "child", {"library-view": {}}, [
+            {"id": "library-view", "outcome": {"works": True}}])
+        graph_path = root / "knowledge" / "graph.yaml"
+        _write(graph_path, kg.build_graph(root))
+        types, rels = vkg.load_dictionary()
+        assert vkg.validate_graph(graph_path, types, rels) == []
+
     def test_work_named_after_a_feature_leaves_the_feature_intact(self, tmp_path):
         """Работа плана — тёзка функции: в граф входит ФУНКЦИЯ, а не инициатива."""
         root = _child_many(tmp_path / "child",
@@ -363,6 +382,17 @@ class TestNameConflictsInventNothing:
         gaps = kg.trace(kg.build_graph(root), "library-view")["gaps"]
         assert any("работа в плане" in g for g in gaps), gaps
 
+    def test_work_without_a_resolvable_goal_reports_no_loss(self, tmp_path):
+        """Работа-тёзка, которая узлом и не стала бы: терять нечего — и пробела быть не должно."""
+        root = _child_many(tmp_path / "child",
+                           {"library-view": {"goal": "answer-from-our-documents"}}, PLAN_GOAL)
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan", "goals": PLAN_GOAL,
+            "work": [{"id": "library-view", "goal": "goal-that-does-not-exist",
+                      "title": "Сделать библиотеку"}]})
+        gaps = kg.trace(kg.build_graph(root), "library-view")["gaps"]
+        assert not any("работа в плане" in g for g in gaps), gaps
+
     def test_graph_with_work_namesake_still_validates(self, tmp_path):
         """Раньше такой граф валидатор отвергал, указывая не на причину. Теперь он валиден."""
         root = _child_many(tmp_path / "child",
@@ -376,6 +406,17 @@ class TestNameConflictsInventNothing:
         _write(graph_path, kg.build_graph(root))
         types, rels = vkg.load_dictionary()
         assert vkg.validate_graph(graph_path, types, rels) == []
+
+    def test_goal_named_after_a_feature_is_explained_once_and_precisely(self, tmp_path):
+        """Цель — имя другой функции: причина названа ОДИН раз и та самая, а не «нет в плане»."""
+        root = _child_many(tmp_path / "child", {
+            "library-view": {"goal": "zzz-other"},
+            "zzz-other": {"goal": "answer-from-our-documents"},
+        }, PLAN_GOAL)
+        gaps = kg.trace(kg.build_graph(root), "library-view")["gaps"]
+        about = [g for g in gaps if "zzz-other" in g]
+        assert len(about) == 1, about
+        assert "имя другой сущности графа" in about[0], about
 
     def test_placeholder_goal_does_not_moor_a_silent_feature(self, tmp_path):
         """Функция без своей цели не швартуется к ЗАГЛУШКЕ — цели, которой нет в плане."""
@@ -397,21 +438,58 @@ class TestNameConflictsInventNothing:
         assert any("goal-nonexistent" in g and "нет в плане" in g for g in gaps), gaps
 
     def test_dead_end_names_a_node_without_parents(self):
-        """Тупик — узел БЕЗ родителей, а не «тот, чьих родителей уже видели»: ответ не зависит
-        от порядка рёбер, то есть от того, чей паспорт прочитался первым."""
+        """Тупиком назван узел, у которого родителей НЕТ, а не тот, чьих родителей уже видели.
+
+        Форма — «ромб с общим верхом»: у `feat` два родителя, короткая ветка `s` (сам верх) и
+        длинная `a → b → s`. Прежний код отдавал победу самому длинному пути и называл тупиком `b`,
+        у которого родитель есть; верный ответ — `s`.
+        """
         nodes = [{"id": n, "type": t} for n, t in
-                 [("feat", "feature"), ("epic-a", "epic"), ("epic-b", "epic"), ("mid", "epic")]]
-        edges = [{"from": "epic-a", "type": "contains", "to": "feat"},
-                 {"from": "epic-b", "type": "contains", "to": "feat"},
-                 {"from": "mid", "type": "contains", "to": "epic-a"},
-                 {"from": "mid", "type": "contains", "to": "epic-b"}]
+                 [("feat", "feature"), ("s", "epic"), ("a", "epic"), ("b", "epic")]]
+        edges = [{"from": "s", "type": "contains", "to": "feat"},
+                 {"from": "a", "type": "contains", "to": "feat"},
+                 {"from": "b", "type": "contains", "to": "a"},
+                 {"from": "s", "type": "contains", "to": "b"}]
         graph = {"schema_version": 1, "kind": "knowledge-graph", "nodes": nodes, "edges": edges}
         reversed_graph = {**graph, "edges": list(reversed(edges))}
-        assert (kg.trace(graph, "feat")["gaps"] == kg.trace(reversed_graph, "feat")["gaps"])
-        assert any("«mid»" in g for g in kg.trace(graph, "feat")["gaps"])
+        gaps = kg.trace(graph, "feat")["gaps"]
+        assert any("«s»" in g for g in gaps), gaps
+        assert not any("«b»" in g for g in gaps), gaps
+        assert gaps == kg.trace(reversed_graph, "feat")["gaps"]
 
 
-def test_every_node_attribute_is_declared_in_the_registry():
+def _graph_with_every_branch(root: Path) -> dict:
+    """Синтетический child, где срабатывают ВСЕ ветки сборщика, пишущие атрибуты на узлы.
+
+    Данных самого кита для сторожа мало: в них не рождаются ни `broken_links`, ни
+    `name_taken_in_plan`, ни узел `review` — то есть ровно те атрибуты, ради которых он заведён.
+    """
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan", "goals": PLAN_GOAL,
+        "work": [{"id": "library-view", "goal": "answer-from-our-documents", "title": "Работа"},
+                 {"id": "real-work", "goal": "answer-from-our-documents", "title": "Инициатива"}]})
+    _write(root / "features" / "library-view" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "library-view", "name": "Библиотека", "status": "in-progress",
+                    "current_stage": "delivery"},
+        "links": {"goal": "answer-from-our-documents", "epic": "zzz-other",
+                  "decision": "ep-2026-01-01-some", "built_by": 42},
+        "metrics": [{"name": "Открытий в неделю"}]})
+    _write(root / "features" / "zzz-other" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "zzz-other", "name": "Тёзка", "status": "in-progress",
+                    "current_stage": "delivery"},
+        "links": {"goal": "goal-that-does-not-exist"}})
+    _write(root / "features" / "library-view" / "review" / "verdict.yaml", {
+        "kind": review_verdict.RECORD_KIND, "feature": "library-view", "verified": True,
+        "reviewed_by": "машина", "reviewed_revision": "abc1234"})
+    _write(root / "product-learning" / "FL-001.yaml", {
+        "id": "FL-001", "feature": "library-view", "learnings": ["Урок"],
+        "derived_from_outcome": "answer-from-our-documents-outcome"})
+    return kg.build_graph(root)
+
+
+def test_every_node_attribute_is_declared_in_the_registry(tmp_path):
     """Сторож: атрибут, который сборщик пишет на узле, объявлен в словаре сущностей.
 
     Реестр — источник истины; до сих пор совпадение держалось на договорённости, и ревью дважды
@@ -421,11 +499,16 @@ def test_every_node_attribute_is_declared_in_the_registry():
     allowed = {t: set((spec or {}).get("attributes") or [])
                for t, spec in (declared.get("entity_types") or {}).items()}
     common = {"id", "type", "title", "ref"}
-    unknown = set()
-    for node in kg.build_graph(PKG_ROOT)["nodes"]:
+    graphs = [kg.build_graph(PKG_ROOT), _graph_with_every_branch(tmp_path / "child")]
+    seen_attrs, unknown = set(), set()
+    for node in [n for g in graphs for n in g["nodes"]]:
         extra = set(node) - common - allowed.get(node["type"], set())
+        seen_attrs |= {a for a in set(node) - common}
         unknown |= {f"{node['type']}.{a}" for a in extra}
     assert not unknown, f"атрибуты узлов вне registry/entities.yaml: {sorted(unknown)}"
+    # Сторож обязан ВИДЕТЬ спорные атрибуты, иначе он зелёный просто потому, что их не встретил.
+    assert {"broken_links", "name_taken_in_plan", "declared_goal", "unresolved",
+            "verified"} <= seen_attrs, sorted(seen_attrs)
 
 
 @pytest.mark.parametrize("blueprint", sorted(
