@@ -223,8 +223,10 @@ def build_graph(child_root) -> dict:
       * `planning/plan.yaml`: goals -> узлы `goal` (+ узел `outcome` на цель с непустым `outcome`);
         work -> узлы `initiative` с ребром `goal -contains-> initiative`.
       * feature blueprints: узлы `feature` (+ `metric` из `metrics`), рёбра `feature -measured-by->
-        metric`; цепочка `goal/initiative/epic -contains-> feature` из `links` (только валидные
-        пары лестницы); `feature -targets-> <goal>-outcome`, и если у функции есть метрика —
+        metric`; цепочка `goal/initiative/epic -contains-> feature` из `links` — связываются
+        СОСЕДНИЕ ОБЪЯВЛЕННЫЕ уровни, пропущенный (не заведённый у продукта) уровень нить не рвёт;
+        ссылка на цель, которой нет в плане, даёт узел с `unresolved` — разрыв называется, а не
+        прячется; `feature -targets-> <goal>-outcome`, и если у функции есть метрика —
         `outcome -measured-by-> metric`.
       * `product-learning/FL-*.yaml`: узлы `insight`; `insight -feeds-> feature` при совпадении
         `feature`; `insight -derived-from-> outcome`, если эта функция нацелена на outcome.
@@ -281,22 +283,43 @@ def build_graph(child_root) -> dict:
         if not _text(feat.get("id")):
             continue
         rel = os.path.relpath(bp_path, graph_dir)
+        links = bp.get("links") or {}
+        # ЧЬЯ ЦЕЛЬ. Принадлежность функции цели объявляет ЕЁ ПАСПОРТ, и это записывается на самой
+        # функции. Выводить её подъёмом по графу нельзя: эпик — общий узел без собственного
+        # источника, его родителя-цель объявляют паспорта СОСЕДНИХ функций. Две функции одного
+        # эпика с разными целями дали бы эпику двух родителей, и обход приписал бы функции цель
+        # соседа — тем увереннее, чем случайнее порядок чтения каталогов.
         fid = b.node(feat["id"], "feature",
                      title=_text(feat.get("name")) or _text(feat["id"]),
-                     blueprint=rel)
+                     blueprint=rel,
+                     declared_goal=_slug(links.get("goal")) if _text(links.get("goal")) else None)
 
-        # Цепочка вверх: goal -> initiative -> epic -> feature. Только смежные валидные пары
-        # лестницы: пропущенный средний уровень честно оставляет разрыв (пробел ловит trace).
-        links = bp.get("links") or {}
+        # Цепочка вверх: goal -> initiative -> epic -> feature. Связываются СОСЕДНИЕ ОБЪЯВЛЕННЫЕ
+        # уровни, даже если между ними пропущен уровень, которого у продукта просто нет
+        # (`registry/entities.yaml` объявляет такие пары явно). Раньше требовалась смежность, и
+        # объявленная автором цель ПРОПАДАЛА: паспорт с goal+epic без initiative давал только
+        # `epic contains feature`, а функция оказывалась «ни к какой цели не привязана» — при том
+        # что цель названа. Ничего не додумывается: связь идёт сверху вниз и только между уровнями,
+        # которые автор назвал сам.
         chain = [("goal", links.get("goal")), ("initiative", links.get("initiative")),
                  ("epic", links.get("epic")), ("feature", feat["id"])]
         present = [(t, _slug(v)) for t, v in chain if _text(v)]
         for (ptype, pid), (ctype, cid) in zip(present, present[1:]):
-            gap_idx = CONTAINS_LADDER.index(ctype) - CONTAINS_LADDER.index(ptype)
-            if gap_idx != 1:
-                continue   # уровни не смежны в лестнице — валидного ребра contains нет
-            if ptype != "feature" and not b.has(pid):
-                b.node(pid, ptype, title=pid)
+            if CONTAINS_LADDER.index(ctype) <= CONTAINS_LADDER.index(ptype):
+                continue   # не сверху вниз по лестнице — валидного ребра contains нет
+            if not b.has(pid):
+                # Уровень объявлен ссылкой, а своего источника у него нет. Для эпика и инициативы
+                # это норма (их нигде и не объявляют отдельно). Для ЦЕЛИ — нет: цели живут в
+                # `planning/plan.yaml`, и ссылка на отсутствующую там цель означает, что нить
+                # оборвана в данных. Помечаем узел `unresolved`, чтобы обход назвал разрыв вслух, а
+                # не выдавал заглушку за настоящую цель (см. trace: вердикт остаётся `unmoored`).
+                extra = {"unresolved": True} if ptype == "goal" else {}
+                b.node(pid, ptype, title=pid, **extra)
+            elif b.type_of(pid) != ptype:
+                # Имя занято узлом ДРУГОГО типа (например, работа плана зовётся так же, как
+                # объявленная цель). Связать разнотипное значило бы выдать тёзку за родителя:
+                # ребра нет, а обход увидит по `declared_goal`, что названная цель не разрешилась.
+                continue
             b.edge(pid, "contains", cid)
 
         # Метрики функции.
@@ -414,6 +437,57 @@ def _index(graph: dict):
     return nodes, edges
 
 
+def _parents(edges, nodes, nid) -> list:
+    """Родители узла по `contains` (только существующие узлы). Порядок рёбер сохраняется."""
+    return [e["from"] for e in edges if e.get("type") == "contains"
+            and e.get("to") == nid and e.get("from") in nodes]
+
+
+def _path_down(nodes, edges, goal: str, fid: str) -> list:
+    """Путь `goal -> … -> feature` по `contains`, если он есть в графе; иначе — прямая пара.
+
+    Нужен только для ПОКАЗА цепочки: принадлежность функции цели уже установлена её паспортом.
+    Промежуточные уровни (инициатива, эпик) попадут в цепочку, если объявлены; не объявлены —
+    честная пара «цель → функция», а не выдуманное звено.
+    """
+    queue: list = [[goal]]
+    seen = {goal}
+    while queue:
+        path = queue.pop(0)
+        if path[-1] == fid:
+            return path
+        for child in [e["to"] for e in edges if e.get("type") == "contains"
+                      and e.get("from") == path[-1] and e.get("to") in nodes]:
+            if child not in seen:
+                seen.add(child)
+                queue.append(path + [child])
+    return [goal, fid]
+
+
+def _climb_to_goal(nodes, edges, fid: str):
+    """Подъём по `contains` до цели для функции, которая цель НЕ объявила. -> (goal, chain, gap).
+
+    Принадлежность здесь УНАСЛЕДОВАНА от эпика/инициативы, а их отнесение к цели объявили паспорта
+    соседних функций. Пока такое отнесение одно — это иерархия продукта. Если их несколько,
+    молчаливый выбор первого был бы выдумкой: возвращаем НАЗВАННУЮ неоднозначность и никакой цели.
+    """
+    chain_ids, current, seen = [fid], fid, {fid}
+    while nodes.get(current, {}).get("type") != "goal":
+        parents = _parents(edges, nodes, current)
+        goals = [p for p in parents if nodes.get(p, {}).get("type") == "goal"]
+        if len(goals) > 1:
+            return None, chain_ids, (f"«{current}» отнесён сразу к нескольким целям "
+                                     f"({', '.join(sorted(goals))}) — какая из них, по данным не "
+                                     f"решить; цель функции нигде не объявлена")
+        parent = next((p for p in parents if p not in seen), None)
+        if parent is None:
+            return None, chain_ids, f"выше «{current}» нет родителя — путь до цели (goal) неполон"
+        seen.add(parent)
+        chain_ids.insert(0, parent)
+        current = parent
+    return current, chain_ids, None
+
+
 def trace(graph: dict, feature: str) -> dict:
     """«Зачем существует функция»: цепочка goal -> … -> feature -> outcome + вердикт + пробелы.
 
@@ -440,24 +514,33 @@ def trace(graph: dict, feature: str) -> dict:
                 "title": _text(n.get("title")) or nid}
 
     if fid not in nodes:
-        return {"feature": fid, "chain": [], "goal": None, "outcome": None, "decision": None,
+        return {"feature": fid, "chain": [], "goal": None, "unresolved_goal": None,
+                "outcome": None, "decision": None,
                 "built_by": [], "review": None, "verdict": "unknown",
                 "gaps": [f"узла «{fid}» нет в графе — цепочку строить не от чего"]}
 
-    # Вверх по contains до цели.
-    chain_ids = [fid]
-    current, seen = fid, {fid}
-    while nodes.get(current, {}).get("type") != "goal":
-        parents = [e["from"] for e in edges if e.get("type") == "contains"
-                   and e.get("to") == current and e.get("from") in nodes]
-        parent = next((p for p in parents if p not in seen), None)
-        if parent is None:
-            gaps.append(f"выше «{current}» нет родителя — путь до цели (goal) неполон")
-            break
-        seen.add(parent)
-        chain_ids.insert(0, parent)
-        current = parent
-    goal = chain_ids[0] if nodes.get(chain_ids[0], {}).get("type") == "goal" else None
+    # Чья цель. Если паспорт функции цель ОБЪЯВИЛ, берём её с самой функции (`declared_goal`), а не
+    # подъёмом по графу: эпик — общий узел, его родителя-цель объявляют паспорта соседних функций, и
+    # подъём приписал бы функции чужую цель. Не объявил — поднимаемся по иерархии, как раньше.
+    goal, unresolved_goal = None, None
+    declared = _text(nodes[fid].get("declared_goal")) or None
+    if declared:
+        gnode = nodes.get(declared) or {}
+        if gnode.get("type") == "goal" and not gnode.get("unresolved"):
+            goal = declared
+            chain_ids = _path_down(nodes, edges, declared, fid)
+        else:
+            # Цель ОБЪЯВЛЕНА, но в плане её нет (или имя занято узлом другого типа). Считать такую
+            # цель швартовкой значило бы выдать заглушку за историю: нить оборвана именно здесь, и
+            # сказать это надо вслух. «Не сказал» и «не знаю» — разные состояния: автор сказал, а
+            # названного не существует.
+            unresolved_goal, chain_ids = declared, [fid]
+            gaps.append(f"функция объявила цель «{declared}», которой нет в плане "
+                        f"(planning/plan.yaml) — путь до цели оборван в данных")
+    else:
+        goal, chain_ids, climb_gap = _climb_to_goal(nodes, edges, fid)
+        if climb_gap:
+            gaps.append(climb_gap)
 
     # Вперёд к outcome.
     outcome_ids = [e["to"] for e in edges if e.get("type") == "targets"
@@ -507,6 +590,7 @@ def trace(graph: dict, feature: str) -> dict:
 
     verdict = _verdict(goal, outcome)
     return {"feature": fid, "chain": [summary(i) for i in chain_ids], "goal": goal,
+            "unresolved_goal": unresolved_goal,
             "outcome": outcome, "decision": decision, "built_by": built_by, "review": review,
             "verdict": verdict, "gaps": gaps}
 

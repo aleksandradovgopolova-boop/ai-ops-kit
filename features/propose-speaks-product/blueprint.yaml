@@ -8,6 +8,9 @@ feature:
   profile: lean
   current_stage: delivery
 links:
+  # РАДИ ЧЕГО: цель из planning/plan.yaml — без неё история функции обрывается на
+  # «построили», а зачем она продукту, сказать нечем.
+  goal: one-feature-end-to-end
   # ЗАЧЕМ: продуктовое ревью владельца 16.09 (P0 №1, «закрыть/проверить propose») — в context решения.
   decision: ep-2026-09-16-product-freeze-held-until-external-clean-run
   # ЧТО построило: две работы одной нити — propose-speaks-product-not-kit-foundation (PR #978,
