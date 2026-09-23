@@ -53,14 +53,19 @@ def test_capability_count_is_still_present_but_only_as_breadth():
 
 @pytest.mark.contract
 def test_unmeasured_metrics_carry_an_honest_reason():
-    """«Не измерено» честно пробрасывается: метрики 4/5 — каркас с причиной, а не выдуманное число."""
+    """«Не измерено» без причины — немой отказ, поэтому причина обязательна у КАЖДОЙ неизмеренной.
+
+    ПЕРЕСМОТРЕНО 23.09: здесь стояла проверка, что метрики 4 и 5 — каркас «не измерено» с причиной
+    «у кита нет живой аналитики». С тех пор обе считаются из данных проекта, и у самого кита
+    четвёртая честно показывает НОЛЬ (ни у одной фичи результат не замерен — это знание, а не его
+    отсутствие). Фиксировать здесь конкретные id значило бы опять привязывать контракт к сегодняшнему
+    положению дел; контракт в другом — неизмеренное обязано назвать причину, каким бы оно ни было.
+    """
     sc = ci.kit_scorecard()
-    by_id = {m["id"]: m for m in sc["metrics"]}
-    for mid in ("outcome_coverage", "learning_to_decision_rate"):
-        m = by_id[mid]
-        assert m["measured"] is False, f"{mid} у самого кита пока не измеряется (нет живой аналитики)"
-        assert m["value"] is None
-        assert (m.get("reason") or "").strip(), f"{mid}: «не измерено» без причины — немой отказ"
+    unmeasured = [m for m in sc["metrics"] if not m.get("measured")]
+    for m in unmeasured:
+        assert m["value"] is None, f"{m['id']}: «не измерено» и при этом несёт число"
+        assert (m.get("reason") or "").strip(), f"{m['id']}: «не измерено» без причины — немой отказ"
 
 
 @pytest.mark.contract

@@ -149,42 +149,95 @@ def test_product_memory_coverage_unmeasured_without_features(tmp_path: Path):
     assert m["measured"] is False and m["reason"]
 
 
-# ── Метрики 4 и 5: КАРКАС — честно «не измерено» ──────────────────────────────────────────────────
+def _graph(root: Path) -> dict:
+    return kg.build_graph(root)
 
 
-def test_outcome_coverage_is_an_honest_unmeasured_scaffold():
-    """Результат после релиза упирается в живую аналитику -> честное «не измерено», не число."""
-    m = ps.outcome_coverage()
-    assert m["measured"] is False
-    assert m["value"] is None
-    assert "аналитик" in m["reason"].lower()
+# ── Метрики 4 и 5: считаются из реальных данных проекта (с 23.09) ────────────────────────────────
+#
+# РАНЬШЕ ЗДЕСЬ СТОЯЛО ОБРАТНОЕ: обе метрики проверялись как КАРКАС — «не измерено» с причиной «у
+# самого кита нет живой аналитики». Причина была верна про кит и НЕВЕРНА про подключённый
+# репозиторий, а ехала в каждый: на ии-среде, где петля замкнута на реальных числах, карта продукта
+# всё равно рассказывала про кит. Обе функции не принимали аргументов и ни во что не смотрели.
 
 
-def test_learning_to_decision_rate_is_an_honest_unmeasured_scaffold():
-    """Замкнутой петли обучения нет -> честное «не измерено», не выдуманная доля."""
-    m = ps.learning_to_decision_rate()
+def _readout(root: Path, feature: str, **fields) -> None:
+    payload = {"schema_version": 1, "kind": "OutcomeReadout",
+               "measured": {"metric": "m", "value": 19, "measured_at": "2026-09-21"},
+               "target_met": "no", **fields}
+    _write(root / "features" / feature / "outcome-readout.yaml", payload)
+
+
+def test_outcome_coverage_counts_features_with_a_measured_result(child: Path):
+    """Замер есть -> доля считается, а не объявляется неизмеримой."""
+    _readout(child, "f-full")
+    m = ps.outcome_coverage(_graph(child), child)
+    assert m["measured"] is True
+    assert (m["numerator"], m["denominator"]) == (1, 2)
+
+
+def test_outcome_coverage_is_an_honest_zero_not_an_unmeasured_slot(child: Path):
+    """Фичи есть, замеров нет -> ЧЕСТНЫЙ НОЛЬ: «ни у одной результат не замерен» это знание."""
+    m = ps.outcome_coverage(_graph(child), child)
+    assert m["measured"] is True and m["value"] == 0.0
+
+
+def test_outcome_coverage_does_not_count_unknown_as_a_measurement(child: Path):
+    """`target_met: unknown` — это «мерили, но не узнали»: выдавать его за результат нельзя."""
+    _readout(child, "f-full", target_met="unknown", unknown_reason="аналитика не подключена")
+    m = ps.outcome_coverage(_graph(child), child)
+    assert m["numerator"] == 0, "незнание засчитано как измеренный результат"
+
+
+def test_outcome_coverage_is_unmeasured_without_any_feature(tmp_path: Path):
+    """Ни одной фичи -> долю считать не от чего, и это «не измерено», а не ноль."""
+    m = ps.outcome_coverage({"nodes": [], "edges": []}, tmp_path)
     assert m["measured"] is False and m["value"] is None and m["reason"]
+
+
+def test_learning_to_decision_rate_is_unmeasured_until_something_is_measured(child: Path):
+    """Причина называет РЕАЛЬНОЕ положение дел, а не рассказывает про кит и его аналитику."""
+    m = ps.learning_to_decision_rate(_graph(child), child)
+    assert m["measured"] is False and m["value"] is None
+    assert "результат" in m["reason"].lower()
+    assert "кит" not in m["reason"].lower(), "причина снова говорит о ките там, где спрашивают о продукте"
+
+
+def test_learning_to_decision_rate_counts_the_loop_that_actually_closed(child: Path):
+    """Засчитывается урок, выведенный ИЗ результата и подшитый к следующему шагу, а не просто запись."""
+    _readout(child, "f-full")
+    before = ps.learning_to_decision_rate(_graph(child), child)
+    assert (before["numerator"], before["denominator"]) == (0, 1), "петля засчитана без урока"
+    _write(child / "product-learning" / "FL-001.yaml", {
+        "schema_version": 1, "kind": "FeatureLearning", "id": "fl-f-full",
+        "feature": "f-full", "derived_from_outcome": "make-kit-a-product-outcome",
+        "learning": "цель не взята — продлить окно наблюдения"})
+    after = ps.learning_to_decision_rate(_graph(child), child)
+    assert (after["numerator"], after["denominator"]) == (1, 1)
 
 
 # ── Карта как целое ──────────────────────────────────────────────────────────────────────────────
 
 
-def test_scorecard_assembles_five_metrics_three_measured_two_scaffold(child: Path):
-    """Карта собирается из 5 метрик: 3 считаемые дают значение, 2 каркасные — «не измерено»."""
+def test_scorecard_assembles_five_metrics_and_only_the_unmeasurable_stays_unmeasured(child: Path):
+    """Карта из 5 метрик. Без единого замера результата неизмеренной остаётся ОДНА — пятая:
+    четвёртая честно показывает ноль («ни у одной фичи результат не замерен» — это знание),
+    а пятой считать не от чего (нет знаменателя)."""
     results = [{"status": "ok"}, {"status": "drift"}]
     card = ps.build_scorecard(child, claim_results=results)
     assert card["kind"] == "kit-product-scorecard"
     ids = [m["id"] for m in card["metrics"]]
     assert ids == ["feature_completion_rate", "evidence_coverage", "product_memory_coverage",
                    "outcome_coverage", "learning_to_decision_rate"]
-    assert card["measured_count"] == 3
-    assert card["unmeasured_count"] == 2
-    # Каждая считаемая несёт число; каждая каркасная — причину, а не значение.
+    assert card["measured_count"] == 4
+    assert card["unmeasured_count"] == 1
+    # Каждая считаемая несёт число; неизмеренная — причину, а не значение.
     by_id = {m["id"]: m for m in card["metrics"]}
-    for mid in ("feature_completion_rate", "evidence_coverage", "product_memory_coverage"):
+    for mid in ("feature_completion_rate", "evidence_coverage", "product_memory_coverage",
+                "outcome_coverage"):
         assert by_id[mid]["value"] is not None
-    for mid in ("outcome_coverage", "learning_to_decision_rate"):
-        assert by_id[mid]["value"] is None and by_id[mid]["reason"]
+    assert by_id["learning_to_decision_rate"]["value"] is None
+    assert by_id["learning_to_decision_rate"]["reason"]
 
 
 def test_scorecard_metric_2_is_unmeasured_when_registry_missing(child: Path):
@@ -192,7 +245,7 @@ def test_scorecard_metric_2_is_unmeasured_when_registry_missing(child: Path):
     card = ps.build_scorecard(child, claim_results=None)
     by_id = {m["id"]: m for m in card["metrics"]}
     assert by_id["evidence_coverage"]["measured"] is False
-    assert card["measured_count"] == 2
+    assert card["measured_count"] == 3
 
 
 def test_scorecard_renders_measured_and_unmeasured_to_the_human(child: Path):
