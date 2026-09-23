@@ -217,64 +217,20 @@ def _outcome_verdict(outcome: dict) -> str:
     return "met" if all(values) else "unmet"
 
 
-def build_graph(child_root) -> dict:
-    """Собрать Knowledge Graph из plan.yaml + FL-*.yaml + feature blueprints.
+def _plan_pass(b, plan: dict, feature_ids: set) -> tuple:
+    """Проход 1: план продукта — цели, их исходы, работы как инициативы.
 
-    Возвращает dict формата `schemas/knowledge-graph.schema.json`
-    (`{schema_version, kind, nodes, edges}`). Read-only: ничего не пишет.
-
-    Источники (нет источника — нет узла):
-      * `planning/plan.yaml`: goals -> узлы `goal` (+ узел `outcome` на цель с непустым `outcome`);
-        work -> узлы `initiative` с ребром `goal -contains-> initiative`.
-      * feature blueprints: узлы `feature` (+ `metric` из `metrics`), рёбра `feature -measured-by->
-        metric`; цепочка `goal/initiative/epic -contains-> feature` из `links` — связываются
-        СОСЕДНИЕ ОБЪЯВЛЕННЫЕ уровни, пропущенный (не заведённый у продукта) уровень нить не рвёт;
-        ссылка на цель, которой нет в плане, даёт узел с `unresolved` — разрыв называется, а не
-        прячется; `feature -targets-> <goal>-outcome`, и если у функции есть метрика —
-        `outcome -measured-by-> metric`.
-      * `product-learning/FL-*.yaml`: узлы `insight`; `insight -feeds-> feature` при совпадении
-        `feature`; `insight -derived-from-> outcome`, если эта функция нацелена на outcome.
-      * `decisions/registry.yaml` + blueprint `links.decision`/`links.decisions`: узел `decision`
-        (текст решения) и ребро `decision -motivates-> feature` — «зачем функция появилась».
-      * `history/plan-history.yaml` + blueprint `links.built_by` (id работы или № PR): узел `work`
-        (название + PR) и ребро `work -builds-> feature` — «что построило функцию и где».
-      * `product-learning/FL-*.yaml` `derived_from_outcome`: явное ребро `insight -derived-from->
-        outcome` — «чему научились по этому конкретному результату» (без косвенного вывода).
-      * `features/<id>/review/verdict.yaml`: узел `review` (кем проверено + verified + ревизия) и ребро
-        `review -reviewed-> feature` — «кто/что проверил функцию». Пишет путь ревью (судья), не писатель.
-
-    Пути blueprint'а в узлах — ОТНОСИТЕЛЬНО `<child_root>/knowledge` (туда пишется graph.yaml),
-    чтобы `validate_knowledge_graph` проверил их существование без ложного срабатывания.
+    -> (goal_outcome, name_taken_in_plan, name_conflict_dropped): куда нацеливать функции и что
+    осталось за графом из-за спора имён. Вынесен из `build_graph` (#1127): сборка читается как
+    четыре независимых прохода по источникам, и каждый теперь называет себя сам.
     """
-    root = Path(child_root)
-    graph_dir = root / "knowledge"
-    b = _Builder()
-
-    # feature -> id outcome-узла, на который она нацелена (для привязки ins‑ов и метрик).
-    feature_outcome: dict[str, str] = {}
-    # id решения -> текст (для узла decision, из которого «появилась» функция).
-    decisions = _load_decisions(root)
-    # Закрытые работы (для узла work, который «построил» функцию): по id и по номеру PR.
-    history_works, history_pr_index = _load_history_works(root)
-
-    # Паспорта читаются ПЕРВЫМИ — до плана и до всех узлов. Имя функции принадлежит функции: если
-    # его же носит работа плана (а работу обычно называют именем функции, которую она строит), узел
-    # заводился раньше и функция навсегда оставалась инициативой — валидатор ронял граф, указывая
-    # не на причину. Теперь id функций известны до первого узла, и спор имён решается в её пользу.
-    blueprints = [(bp_path, _load_yaml(bp_path)) for bp_path in _iter_blueprints(root)]
-    feature_ids = {_slug((bp.get("feature") or {}).get("id"))
-                   for _, bp in blueprints if _text((bp.get("feature") or {}).get("id"))}
+    goal_outcome: dict[str, str] = {}   # goal id -> outcome node id
     # id функции -> что в плане носит то же имя: {"цель"} / {"работа"} / обе. Кит РАЗЛИЧАЕТ источник
     # спора, поэтому и человеку говорит, что именно искать в плане, а не «цель или работа».
     name_taken_in_plan: dict = {}
     # id функции -> сколько ЕЩЁ записей плана не вошло в граф вместе с тёзкой (исход цели и работы
-    # под ней). Без этого числа пробел занижал бы масштаб: терялась не одна строка, а поддерево, и
-    # вместе с ним из `gaps` пропадал честный негатив (исход, который нечем измерить).
+    # под ней). Без этого числа пробел занижал бы масштаб: терялась не одна строка, а поддерево.
     name_conflict_dropped: dict = {}
-
-    # 1) plan.yaml — цели, их outcome, работы как initiative.
-    plan = _load_yaml(root / "planning" / "plan.yaml")
-    goal_outcome: dict[str, str] = {}   # goal id -> outcome node id
     for g in plan.get("goals") or []:
         if not isinstance(g, dict) or not _text(g.get("id")):
             continue
@@ -325,6 +281,18 @@ def build_graph(child_root) -> dict:
                      ref="planning/plan.yaml")
         b.edge(goal_ref, "contains", iid)
 
+    return goal_outcome, name_taken_in_plan, name_conflict_dropped
+
+
+def _feature_pass(b, blueprints: list, graph_dir, plan_ctx: tuple, sources: tuple) -> dict:
+    """Проход 2: паспорта функций — узлы, метрики, лестница до цели, решение, работа.
+
+    `plan_ctx` — то, что дал проход плана; `sources` — индексы решений и истории работ.
+    -> feature_outcome: на какой исход нацелена каждая функция (нужно проходу обучения).
+    """
+    goal_outcome, feature_ids, name_taken_in_plan, name_conflict_dropped = plan_ctx
+    decisions, history_works, history_pr_index = sources
+    feature_outcome: dict = {}
     # 2) feature blueprints — функции, метрики, цепочка вверх к цели, нацеленность на outcome.
     for bp_path, bp in blueprints:
         feat = bp.get("feature") or {}
@@ -444,6 +412,11 @@ def build_graph(child_root) -> dict:
                        ref="history/plan-history.yaml")
             b.edge(wid, "builds", fid)
 
+    return feature_outcome
+
+
+def _learning_pass(b, root, graph_dir, feature_outcome: dict) -> None:
+    """Проход 3: выводы из данных (`product-learning/FL-*.yaml`) — чему научились и по какому исходу."""
     # 3) FL-*.yaml — выводы из данных.
     learning_dir = root / "product-learning"
     for fl_path in sorted(learning_dir.glob("FL-*.yaml")) if learning_dir.is_dir() else []:
@@ -472,6 +445,9 @@ def build_graph(child_root) -> dict:
         if _text(oref):
             b.edge(iid, "derived-from", _slug(oref))
 
+
+def _review_pass(b, root) -> None:
+    """Проход 4: персистентные вердикты ревью — кто и что проверил у функции."""
     # 4) review-вердикты — «кто/что проверил функцию» как ПЕРСИСТЕНТНАЯ запись, а не эхо прогона.
     # Источник — `features/<id>/review/verdict.yaml`, который пишет ПУТЬ РЕВЬЮ (независимый судья), а не
     # построившая работа: иначе «проверку» приписали бы писателю и нарушили бы writer≠judge. Узел review
@@ -489,6 +465,62 @@ def build_graph(child_root) -> dict:
                      reviewed_revision=_text(rec.get("reviewed_revision")) or None,
                      ref=review_verdict.record_rel(feat_ref))
         b.edge(rid, "reviewed", feat_ref)
+
+
+def build_graph(child_root) -> dict:
+    """Собрать Knowledge Graph из plan.yaml + FL-*.yaml + feature blueprints.
+
+    Возвращает dict формата `schemas/knowledge-graph.schema.json`
+    (`{schema_version, kind, nodes, edges}`). Read-only: ничего не пишет.
+
+    Источники (нет источника — нет узла):
+      * `planning/plan.yaml`: goals -> узлы `goal` (+ узел `outcome` на цель с непустым `outcome`);
+        work -> узлы `initiative` с ребром `goal -contains-> initiative`.
+      * feature blueprints: узлы `feature` (+ `metric` из `metrics`), рёбра `feature -measured-by->
+        metric`; цепочка `goal/initiative/epic -contains-> feature` из `links` — связываются
+        СОСЕДНИЕ ОБЪЯВЛЕННЫЕ уровни, пропущенный (не заведённый у продукта) уровень нить не рвёт;
+        ссылка на цель, которой нет в плане, даёт узел с `unresolved` — разрыв называется, а не
+        прячется; `feature -targets-> <goal>-outcome`, и если у функции есть метрика —
+        `outcome -measured-by-> metric`.
+      * `product-learning/FL-*.yaml`: узлы `insight`; `insight -feeds-> feature` при совпадении
+        `feature`; `insight -derived-from-> outcome`, если эта функция нацелена на outcome.
+      * `decisions/registry.yaml` + blueprint `links.decision`/`links.decisions`: узел `decision`
+        (текст решения) и ребро `decision -motivates-> feature` — «зачем функция появилась».
+      * `history/plan-history.yaml` + blueprint `links.built_by` (id работы или № PR): узел `work`
+        (название + PR) и ребро `work -builds-> feature` — «что построило функцию и где».
+      * `product-learning/FL-*.yaml` `derived_from_outcome`: явное ребро `insight -derived-from->
+        outcome` — «чему научились по этому конкретному результату» (без косвенного вывода).
+      * `features/<id>/review/verdict.yaml`: узел `review` (кем проверено + verified + ревизия) и ребро
+        `review -reviewed-> feature` — «кто/что проверил функцию». Пишет путь ревью (судья), не писатель.
+
+    Пути blueprint'а в узлах — ОТНОСИТЕЛЬНО `<child_root>/knowledge` (туда пишется graph.yaml),
+    чтобы `validate_knowledge_graph` проверил их существование без ложного срабатывания.
+    """
+    root = Path(child_root)
+    graph_dir = root / "knowledge"
+    b = _Builder()
+
+    # Источники читаются ЗАРАНЕЕ: паспорта — первыми, до плана и до всех узлов. Имя функции
+    # принадлежит функции: если его же носит запись плана (а работу обычно называют именем функции,
+    # которую она строит), узел заводился раньше и функция навсегда оставалась инициативой или целью.
+    decisions = _load_decisions(root)
+    history_works, history_pr_index = _load_history_works(root)
+    blueprints = [(bp_path, _load_yaml(bp_path)) for bp_path in _iter_blueprints(root)]
+    feature_ids = {_slug((bp.get("feature") or {}).get("id"))
+                   for _, bp in blueprints if _text((bp.get("feature") or {}).get("id"))}
+
+    # Четыре прохода по источникам. Раньше все четыре жили одним телом на 275 строк — самой длинной
+    # функцией репозитория; ратчет размера (#1119) остановил её рост, а этот разрез (#1127) вернул
+    # ей читаемость. Порядок проходов — часть контракта: план даёт цели, паспорта на них ссылаются,
+    # обучение и ревью цепляются к уже созданным функциям.
+    plan = _load_yaml(root / "planning" / "plan.yaml")
+    goal_outcome, name_taken_in_plan, name_conflict_dropped = _plan_pass(b, plan, feature_ids)
+    feature_outcome = _feature_pass(
+        b, blueprints, graph_dir,
+        (goal_outcome, feature_ids, name_taken_in_plan, name_conflict_dropped),
+        (decisions, history_works, history_pr_index))
+    _learning_pass(b, root, graph_dir, feature_outcome)
+    _review_pass(b, root)
 
     return {"schema_version": 1, "kind": "knowledge-graph",
             "nodes": list(b.nodes.values()), "edges": b.edges}

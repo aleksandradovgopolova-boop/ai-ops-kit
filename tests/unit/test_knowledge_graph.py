@@ -26,6 +26,7 @@ if str(PKG_ROOT) not in sys.path:
     sys.path.insert(0, str(PKG_ROOT))
 
 from ai_ops_kit.intelligence import knowledge_graph as kg  # noqa: E402
+from ai_ops_kit.shared import review_verdict  # noqa: E402
 from ai_ops_kit.validation import validate_knowledge_graph as vkg  # noqa: E402
 
 
@@ -814,3 +815,30 @@ def test_graph_gate_does_not_blame_registry_on_dangling_reference(monkeypatch, t
 
     _, human = _run_graph_gate(monkeypatch, tmp_path, graph, as_json=False)
     assert "ai-ops update" not in human and "устарел" not in human
+
+
+def test_review_nodes_come_after_the_features_they_review(tmp_path: Path):
+    """Порядок проходов сборки — контракт, а не случайность: ревью идёт ПОСЛЕ паспортов функций.
+
+    #1127: разрез `build_graph` на четыре прохода объявил порядок контрактом («план даёт цели,
+    паспорта на них ссылаются, обучение и ревью цепляются к уже созданным функциям»), но проверено
+    было не всё. Независимое ревью прогнало восемь мутаций порядка — семь упали на тестах, а эта
+    выжила: перестановка `_review_pass` перед `_feature_pass` оставляла набор зелёным, хотя вывод
+    менялся. `knowledge/graph.yaml` коммитится, так что это был бы шумный диф без причины.
+    """
+    root = tmp_path / "child"
+    _write(root / "planning" / "plan.yaml", {
+        "schema_version": 1, "kind": "delivery-plan",
+        "goals": [{"id": "grow-repeat-purchases", "outcome": {"repeat_rate_up": True}}]})
+    _write(root / "features" / "express-checkout" / "blueprint.yaml", {
+        "schema_version": 1, "kind": "feature-blueprint",
+        "feature": {"id": "express-checkout", "name": "Экспресс-чекаут", "status": "in-progress",
+                    "current_stage": "delivery"},
+        "links": {"goal": "grow-repeat-purchases"}})
+    _write(root / "features" / "express-checkout" / "review" / "verdict.yaml", {
+        "kind": review_verdict.RECORD_KIND, "feature": "express-checkout", "verified": True,
+        "reviewed_by": "независимый ревьюер", "reviewed_revision": "abc1234"})
+
+    order = [n["id"] for n in kg.build_graph(root)["nodes"]]
+    assert "express-checkout" in order and "review-express-checkout" in order, order
+    assert order.index("express-checkout") < order.index("review-express-checkout"), order
