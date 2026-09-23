@@ -155,6 +155,43 @@ class TestNodeInjectionSurface:
         assert [f["id"] for f in flags] == ["sql_template_literal"], flags
         assert flags[0]["line"] == 1, flags
 
+    def test_a_constant_declared_next_to_the_query_is_not_flagged(self):
+        """Безобидный двойник: подставляется строковая константа, объявленная в этом же файле.
+
+        Замер на реальном продукте (23.09.2026) дал 20 флагов этого правила — все до одного такие:
+        `DROP SCHEMA IF EXISTS ${SCHEMA}` в тестовых наборах. Подставляется написанное рядом в коде.
+        """
+        files = {"repo.ts": 'const SCHEMA = "domain_test";\n'
+                            "await admin.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);\n"}
+        assert security_scan.scan_injection(files) == []
+
+    def test_a_name_that_is_not_a_declared_constant_is_still_flagged(self):
+        """Граница: имя, про которое в файле НЕ видно, что это литерал, остаётся подозрительным."""
+        files = {"repo.ts": "await db.query(`select * from users where id = ${userId}`);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["sql_template_literal"], flags
+
+    def test_a_constant_from_an_expression_is_still_flagged(self):
+        """Граница: объявление через ВЫЗОВ — не литерал, значение может прийти откуда угодно."""
+        files = {"repo.ts": "const SCHEMA = readEnv();\n"
+                            "await db.query(`DROP SCHEMA ${SCHEMA}`);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["sql_template_literal"], flags
+
+    def test_one_outside_value_flags_the_whole_query(self):
+        """Граница: одной подстановки снаружи достаточно — константы рядом её не оправдывают."""
+        files = {"repo.ts": 'const SCHEMA = "public";\n'
+                            "await db.query(`select * from ${SCHEMA}.users where id = ${userId}`);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["sql_template_literal"], flags
+
+    def test_an_interpolated_constant_is_not_treated_as_a_literal(self):
+        """Граница: константа, собранная из другой интерполяции, литералом не считается."""
+        files = {"repo.ts": "const SCHEMA = `s_${suffix}`;\n"
+                            "await db.query(`DROP SCHEMA ${SCHEMA}`);\n"}
+        flags = security_scan.scan_injection(files)
+        assert [f["id"] for f in flags] == ["sql_template_literal"], flags
+
     def test_a_query_without_interpolation_is_not_flagged(self):
         """Безобидный двойник №1: шаблонный литерал БЕЗ `${…}` — обычная константа запроса."""
         files = {"repo.ts": "const rows = await db.query(`select id, name from users`);\n"}

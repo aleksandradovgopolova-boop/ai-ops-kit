@@ -230,15 +230,42 @@ _TEMPLATE_INTERPOLATION = re.compile(r"\$\{")
 _TEMPLATE_LITERAL_WINDOW = 2000
 
 
+# Имя, которому в этом же файле присвоен СТРОКОВЫЙ ЛИТЕРАЛ без интерполяции: `const SCHEMA = "…"`.
+# Подставить такое имя в запрос — значит подставить то, что написано рядом в коде, а не то, что
+# пришло снаружи. Шаблон нарочно узок: только объявление с литералом, никаких выражений и вызовов.
+_STRING_CONSTANT_BINDING = re.compile(
+    r"""(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:'[^'\n]*'|"[^"\n]*"|`[^`$\n]*`)\s*[;\n]""")
+# Что стоит внутри `${…}`: берём содержимое до закрывающей скобки на той же строке.
+_INTERPOLATION_BODY = re.compile(r"\$\{([^}\n]*)\}")
+_PLAIN_NAME = re.compile(r"^[A-Za-z_$][\w$]*$")
+
+
 def _sql_template_literal_lines(text: str) -> list:
-    """Номера строк, где запрос собирается конкатенацией через `${…}` в шаблонном литерале."""
+    """Номера строк, где запрос собирается конкатенацией через `${…}` в шаблонном литерале.
+
+    ПОДСТАНОВКА ОБЪЯВЛЕННОЙ РЯДОМ КОНСТАНТЫ НЕ ФЛАГАЕТСЯ (#1112). Замер 23.09.2026: все 20 флагов
+    этого правила на реальном продукте — один шаблон `DROP SCHEMA IF EXISTS ${SCHEMA}`, где `SCHEMA`
+    объявлена строковым литералом в том же файле. 100% шума: подставляется написанное рядом в коде,
+    а не пришедшее снаружи, и судье там решать нечего.
+
+    Правило НЕ выброшено и НЕ сужено вообще: пропуск здесь дороже шума. Снимается ровно один класс —
+    тот же приём, что для получателя `.exec(`: не «похоже на безопасное», а «в этом же файле ВИДНО,
+    что это литерал». Достаточно ОДНОЙ подстановки, про которую так не видно, — и строка флагается:
+    выражение, вызов, поле объекта, имя из параметра или импорта остаются подозрительными.
+    """
+    constants = frozenset(_STRING_CONSTANT_BINDING.findall(text))
     out = []
     for m in _SQL_TEMPLATE_CALL.finditer(text):
         window = text[m.end():m.end() + _TEMPLATE_LITERAL_WINDOW]
         end = window.find("`")
         if end == -1:
             continue                                   # литерал не закрылся в окне — не гадаем
-        if _TEMPLATE_INTERPOLATION.search(window[:end]):
+        bodies = _INTERPOLATION_BODY.findall(window[:end])
+        if not bodies:
+            continue
+        outside = [b for b in bodies
+                   if not (_PLAIN_NAME.match(b.strip()) and b.strip() in constants)]
+        if outside:
             out.append(text.count("\n", 0, m.start()) + 1)
     return out
 
