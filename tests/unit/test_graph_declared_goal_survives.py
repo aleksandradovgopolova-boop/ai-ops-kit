@@ -337,6 +337,37 @@ class TestNameConflictCascadeIsNamedInFull:
                 "links": {"goal": "answer-from-our-documents"}})
         return root
 
+    def test_cascade_counts_only_what_would_become_nodes(self, tmp_path):
+        """Счёт каскада живёт по правилам сборщика: запись без id и тёзка по id узлом не стали бы."""
+        root = tmp_path / "child"
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "onboarding", "outcome": {"ok": False}}],
+            "work": [{"goal": "onboarding", "title": "Без id"},
+                     {"id": "step", "goal": "onboarding", "title": "Шаг"},
+                     {"id": "step", "goal": "onboarding", "title": "Он же"}]})
+        _write(root / "features" / "onboarding" / "blueprint.yaml", {
+            "schema_version": 1, "kind": "feature-blueprint",
+            "feature": {"id": "onboarding", "name": "Онбординг", "status": "in-progress",
+                        "current_stage": "delivery"}, "links": {}})
+        node = next(n for n in kg.build_graph(root)["nodes"] if n["id"] == "onboarding")
+        assert node["name_conflict_dropped"] == 2      # исход цели + один узел работы
+
+    def test_duplicate_namesake_goal_does_not_reset_the_count(self, tmp_path):
+        """Дубликат цели по id не затирает уже посчитанный каскад в ноль."""
+        root = tmp_path / "child"
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan",
+            "goals": [{"id": "onboarding", "outcome": {"ok": False}},
+                      {"id": "onboarding"}],
+            "work": [{"id": "step", "goal": "onboarding", "title": "Шаг"}]})
+        _write(root / "features" / "onboarding" / "blueprint.yaml", {
+            "schema_version": 1, "kind": "feature-blueprint",
+            "feature": {"id": "onboarding", "name": "Онбординг", "status": "in-progress",
+                        "current_stage": "delivery"}, "links": {}})
+        node = next(n for n in kg.build_graph(root)["nodes"] if n["id"] == "onboarding")
+        assert node["name_conflict_dropped"] == 2
+
     def test_cascade_size_is_named(self, tmp_path):
         """Названо, СКОЛЬКО ещё записей плана ушло за графом вместе с тёзкой, а не «одна строка»."""
         root = self._child_with_goal_namesake(tmp_path / "child")
@@ -365,9 +396,8 @@ class TestNameConflictCascadeIsNamedInFull:
         gaps = kg.trace(kg.build_graph(root), "onboarding")["gaps"]
         assert any("цель и работа" in g for g in gaps), gaps
 
-    def test_second_conflict_under_a_namesake_goal_is_not_silent(self, tmp_path):
-        """Двойной спор: работа-тёзка под целью-тёзкой тоже названа, а не теряется молча."""
-        root = tmp_path / "child"
+    def _double_namesake(self, root: Path) -> Path:
+        """Двойной спор: цель-тёзка функции, а под ней работа-тёзка ДРУГОЙ функции."""
         _write(root / "planning" / "plan.yaml", {
             "schema_version": 1, "kind": "delivery-plan",
             "goals": [{"id": "onboarding", "outcome": {"ok": True}}],
@@ -377,8 +407,20 @@ class TestNameConflictCascadeIsNamedInFull:
                 "schema_version": 1, "kind": "feature-blueprint",
                 "feature": {"id": fid, "name": fid, "status": "in-progress",
                             "current_stage": "delivery"}, "links": {}})
-        gaps = kg.trace(kg.build_graph(root), "library-view")["gaps"]
-        assert any("имя носит работа в плане" in g for g in gaps), gaps
+        return root
+
+    def test_second_conflict_under_a_namesake_goal_is_not_silent(self, tmp_path):
+        """Двойной спор: работа-тёзка под целью-тёзкой тоже названа, а не теряется молча."""
+        gaps = kg.trace(kg.build_graph(self._double_namesake(tmp_path / "child")),
+                        "library-view")["gaps"]
+        assert any("имя носит работа" in g for g in gaps), gaps
+
+    def test_second_conflict_points_at_the_root_cause(self, tmp_path):
+        """И совет ведёт к лечению: переименовать работу мало — её цель тоже за графом."""
+        gaps = kg.trace(kg.build_graph(self._double_namesake(tmp_path / "child")),
+                        "library-view")["gaps"]
+        about = [g for g in gaps if "имя носит" in g]
+        assert about and "первым разведи имена у её цели" in about[0], about
 
     def test_work_under_a_namesake_goal_is_not_hung_on_nothing(self, tmp_path):
         """И при этом обычная работа под целью-тёзкой не висит в графе без родителя."""
@@ -541,6 +583,17 @@ class TestNameConflictsInventNothing:
         assert any("«s»" in g for g in gaps), gaps
         assert not any("«b»" in g for g in gaps), gaps
         assert gaps == kg.trace(reversed_graph, "feat")["gaps"]
+
+
+def test_old_boolean_flag_is_not_printed_as_a_word():
+    """Граф прежней версии нёс булев флаг: читателю не должно достаться «носит True в плане»."""
+    graph = {"schema_version": 1, "kind": "knowledge-graph", "nodes": [
+        {"id": "library-view", "type": "feature", "title": "Библиотека",
+         "name_taken_in_plan": True},
+    ], "edges": []}
+    gaps = kg.trace(graph, "library-view")["gaps"]
+    assert any("имя носит запись в плане" in g for g in gaps), gaps
+    assert not any("True" in g for g in gaps), gaps
 
 
 def _graph_with_every_branch(root: Path) -> dict:

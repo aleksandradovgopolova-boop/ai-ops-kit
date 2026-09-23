@@ -191,6 +191,24 @@ def _iter_review_verdicts(root: Path):
                 yield rec
 
 
+def _plan_records_lost_with(goal_id: str, plan: dict) -> int:
+    """Сколько ЕЩЁ записей плана остаётся за графом вместе с целью-тёзкой. -> число.
+
+    Считает ровно то, что стало бы узлами: исход цели (если объявлен) и работы под ней — по тем же
+    правилам, что применяет сборщик. Запись без `id` он пропускает, тёзок по `id` схлопывает в один
+    узел, поэтому и здесь они не считаются: иначе названное число было бы больше настоящей потери.
+    """
+    lost = 0
+    for g in plan.get("goals") or []:
+        if isinstance(g, dict) and _slug(g.get("id")) == goal_id:
+            if isinstance(g.get("outcome"), dict) and g.get("outcome"):
+                lost += 1
+            break                         # исход у цели один: дубликат id цели узла не добавит
+    works = {_slug(w.get("id")) for w in (plan.get("work") or [])
+             if isinstance(w, dict) and _text(w.get("id")) and _slug(w.get("goal")) == goal_id}
+    return lost + len(works)
+
+
 def _outcome_verdict(outcome: dict) -> str:
     """Свод булевых исходов цели в вердикт узла outcome. Пусто/не булево -> `pending`."""
     values = [v for v in outcome.values() if isinstance(v, bool)]
@@ -268,10 +286,7 @@ def build_graph(child_root) -> dict:
             # пробел назвал масштаб потери, а не одну строку.
             gid_conflict = _slug(g["id"])
             name_taken_in_plan.setdefault(gid_conflict, set()).add("цель")
-            dropped = 1 if isinstance(g.get("outcome"), dict) and g.get("outcome") else 0
-            dropped += sum(1 for w in (plan.get("work") or [])
-                           if isinstance(w, dict) and _slug(w.get("goal")) == gid_conflict)
-            name_conflict_dropped[gid_conflict] = dropped
+            name_conflict_dropped[gid_conflict] = _plan_records_lost_with(gid_conflict, plan)
             continue
         gid = b.node(g["id"], "goal", title=_text(g.get("id")), ref="planning/plan.yaml")
         outcome = g.get("outcome")
@@ -295,10 +310,14 @@ def build_graph(child_root) -> dict:
         if _slug(w["id"]) in feature_ids:
             # Работа плана — тёзка функции. Узел-инициативу не заводим (иначе функция им и
             # останется), потерю называем на самой функции: молчать о ней значило бы спрятать
-            # конфликт данных, который человек может исправить одним переименованием. Говорим об
-            # этом только когда работа ДЕЙСТВИТЕЛЬНО стала бы узлом: иначе пробел сообщал бы о
-            # потере там, где терять было нечего.
-            name_taken_in_plan.setdefault(_slug(w["id"]), set()).add("работа")
+            # конфликт данных. Говорим об этом только когда работа ДЕЙСТВИТЕЛЬНО стала бы узлом:
+            # иначе пробел сообщал бы о потере там, где терять было нечего. Если цель работы сама
+            # за графом из-за спора имён, называем ПЕРВОПРИЧИНУ: переименовать работу мало —
+            # родителя всё равно нет, и совет «переименуй одну из них» обещал бы лечение, которого
+            # не будет.
+            kind = ("работа" if b.type_of(goal_ref) == "goal"
+                    else "работа, но первым разведи имена у её цели")
+            name_taken_in_plan.setdefault(_slug(w["id"]), set()).add(kind)
             continue
         if b.type_of(goal_ref) != "goal":
             continue                      # цель за графом из-за спора имён — вешать работу не на что
@@ -364,7 +383,8 @@ def build_graph(child_root) -> dict:
             # функцию), и сколько ещё записей ушло за графом вместе с ней.
             # Порядок фиксирован смыслом, а не алфавитом: цель выше работы в лестнице плана.
             taken = name_taken_in_plan.get(fid, ())
-            kinds = [k for k in ("цель", "работа") if k in taken]
+            order = ("цель", "работа", "работа, но первым разведи имена у её цели")
+            kinds = [k for k in order if k in taken]
             b.node(feat["id"], "feature", broken_links=broken_links or None,
                    name_taken_in_plan=" и ".join(kinds) or None,
                    name_conflict_dropped=name_conflict_dropped.get(fid) or None)
