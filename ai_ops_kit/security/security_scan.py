@@ -225,21 +225,46 @@ _SQL_TEMPLATE_CALL = re.compile(
     r"\b(?:query|queryRaw|queryRawUnsafe|execute|executeRaw|executeRawUnsafe|executemany|"
     r"prepare|raw)\s*\(\s*`")
 _TEMPLATE_INTERPOLATION = re.compile(r"\$\{")
+
+# #1112: ЧТО ИМЕННО ПОДСТАВЛЯЕТСЯ. Замер 23.09.2026 на ии-среде: все 20 флагов этого правила — один
+# и тот же шаблон `DROP SCHEMA IF EXISTS ${SCHEMA}` / `CREATE SCHEMA ${SCHEMA}` в восьми тестовых
+# наборах и в `e2e/prepare-database.mjs`; мест, где в SQL-шаблон попадают пользовательские данные,
+# во всём продукте нет. 100% шума.
+#
+# Правило НЕ выбрасывается: пропуск здесь дороже шума. Добавляется ровно то различие, которого не
+# хватало судье, — КОНСТАНТА РЯДОМ против значения снаружи. Константой считается только имя,
+# связанное в этом же файле через `const` со строковым литералом: `const SCHEMA = "e2e_app"`.
+# `let`/`var` не годятся (их можно переприсвоить), параметр функции со значением по умолчанию — тоже
+# (`function prepare(base, schema = E2E_SCHEMA)`: вызывающий волен передать что угодно, и такой
+# шаблон честно остаётся флагом).
+#
+# FAIL-CLOSED: если хотя бы одна подстановка не разобрана или не опознана как константа — флаг
+# поднимается. Молчание требует доказательства, шум его не требует.
+_CONST_STRING_BINDING = re.compile(
+    r"""\bconst\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]*)?=\s*(?:'[^'\n]*'|"[^"\n]*"|`[^`\n$]*`)""")
+_INTERPOLATION_BODY = re.compile(r"\$\{([^{}]*)\}")
 # Окно поиска закрывающей кавычки. Запросы длиннее 2000 символов встречаются, но окно нужно
 # конечное: без него незакрытая кавычка сделала бы «телом запроса» весь хвост файла.
 _TEMPLATE_LITERAL_WINDOW = 2000
 
 
 def _sql_template_literal_lines(text: str) -> list:
-    """Номера строк, где запрос собирается конкатенацией через `${…}` в шаблонном литерале."""
+    """Номера строк, где в запрос через `${…}` подставляется НЕ объявленная рядом константа."""
     out = []
+    consts = frozenset(_CONST_STRING_BINDING.findall(text))
     for m in _SQL_TEMPLATE_CALL.finditer(text):
         window = text[m.end():m.end() + _TEMPLATE_LITERAL_WINDOW]
         end = window.find("`")
         if end == -1:
             continue                                   # литерал не закрылся в окне — не гадаем
-        if _TEMPLATE_INTERPOLATION.search(window[:end]):
-            out.append(text.count("\n", 0, m.start()) + 1)
+        body = window[:end]
+        if not _TEMPLATE_INTERPOLATION.search(body):
+            continue                                   # подстановок нет — запрос статичен
+        spots = _INTERPOLATION_BODY.findall(body)
+        # Разобраны ВСЕ подстановки и каждая — константа этого файла: подставлять нечему.
+        if len(spots) == body.count("${") and all(e.strip() in consts for e in spots):
+            continue
+        out.append(text.count("\n", 0, m.start()) + 1)
     return out
 
 
