@@ -172,6 +172,40 @@ def test_forgiven_files_are_really_the_detectors_own_material():
             f"прощение пережило свою причину")
 
 
+def test_detector_own_material_is_recognized_where_the_kit_is_installed():
+    """#1112: в дочке кит лежит под `.ai/managed/` — и читал там САМ СЕБЯ как код продукта.
+
+    Прощение сверялось по ТОЧНОМУ относительному имени, а в подключённом репозитории установленная
+    копия приходит как `.ai/managed/ai_ops_kit/security/security_scan.py`. Замер 23.09.2026 на
+    ии-среде: 20 флагов из 61 (33%) — про кит, из них 15 — его же `security_scan.py`. Дефект был
+    объявлен закрытым, но проверялся только там, где кит лежит в корне.
+    """
+    own = (PKG / "ai_ops_kit/security/security_scan.py").read_text(encoding="utf-8")
+    в_дочке = ".ai/managed/ai_ops_kit/security/security_scan.py"
+    assert ss.scan_injection({в_дочке: own}) == [], (
+        "установленная копия кита в дочке флагается как код продукта — "
+        "замер в дочке на треть меряет кит, а не продукт"
+    )
+    # Тот же файл в корне материнского репозитория прощался и раньше — это не должно сломаться.
+    assert ss.scan_injection({"ai_ops_kit/security/security_scan.py": own}) == []
+
+
+def test_forgiveness_does_not_leak_to_a_product_file_with_the_same_tail():
+    """Обратный край: прощается ИЗВЕСТНОЕ МЕСТО УСТАНОВКИ, а не любой похожий хвост.
+
+    Снять префикс `.ai/managed/` — узкое исключение. Сравнивать суффикс было бы той самой
+    «складской» лазейкой, против которой список объявлен поимённо: продуктовый файл с совпадающим
+    хвостом прощался бы молча, и сканер перестал бы смотреть вместо того, чтобы научиться отличать.
+    """
+    own = (PKG / "ai_ops_kit/security/security_scan.py").read_text(encoding="utf-8")
+    for чужой in (
+        "vendor/ai_ops_kit/security/security_scan.py",
+        "packages/app/ai_ops_kit/security/security_scan.py",
+        ".ai/managed-fork/ai_ops_kit/security/security_scan.py",
+    ):
+        assert ss.scan_injection({чужой: own}), f"{чужой} прощён — прощение стало складом"
+
+
 def test_the_forgiven_list_only_shrinks():
     """Ратчет: новый прощённый файл — решение, а не побочный эффект отладки."""
     assert len(ss.DETECTOR_OWN_MATERIAL) <= 4, sorted(ss.DETECTOR_OWN_MATERIAL)
