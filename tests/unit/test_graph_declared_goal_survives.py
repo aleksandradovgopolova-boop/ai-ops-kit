@@ -235,6 +235,71 @@ class TestSharedEpicDoesNotLendSomeoneElsesGoal:
             assert ladder.index(types[e["from"]]) < ladder.index(types[e["to"]]), e
 
 
+class TestAmbiguityAndLostLevelsAreNamed:
+    """Разбор остатка ревью (#1103): молчаливого выбора и молчаливой потери звена быть не должно."""
+
+    def test_goal_reachable_through_different_depths_is_ambiguous(self, tmp_path):
+        """Цель напрямую и цель через инициативу — это ДВЕ цели, а не «одна прямая и неважно»."""
+        root = _child_many(tmp_path / "child", {
+            "aaa-direct": {"goal": "answer-from-our-documents", "epic": "epic-shared"},
+            "bbb-deep": {"goal": "predictable-operation", "initiative": "init-x",
+                         "epic": "epic-shared"},
+            "mmm-silent": {"epic": "epic-shared"},
+        }, TWO_GOALS)
+        result = kg.trace(kg.build_graph(root), "mmm-silent")
+        assert result["goal"] is None
+        assert any("нескольким целям" in g for g in result["gaps"]), result["gaps"]
+
+    def test_single_goal_through_initiative_still_found(self, tmp_path):
+        """Обратная сторона: одна цель через инициативу по-прежнему находится (не регрессия)."""
+        root = _child_many(tmp_path / "child", {
+            "bbb-deep": {"goal": "answer-from-our-documents", "initiative": "init-x",
+                         "epic": "epic-shared"},
+            "mmm-silent": {"epic": "epic-shared"},
+        }, PLAN_GOAL)
+        result = kg.trace(kg.build_graph(root), "mmm-silent")
+        assert result["goal"] == "answer-from-our-documents", result["gaps"]
+
+    def test_level_named_after_a_feature_is_not_a_parent(self, tmp_path):
+        """Эпик-тёзка настоящей функции не делает её эпиком: функция остаётся функцией."""
+        root = _child_many(tmp_path / "child", {
+            "library-view": {"goal": "answer-from-our-documents", "epic": "zzz-other"},
+            "zzz-other": {"goal": "answer-from-our-documents"},
+        }, PLAN_GOAL)
+        types = {n["id"]: n["type"] for n in kg.build_graph(root)["nodes"]}
+        assert types["zzz-other"] == "feature"
+
+    def test_lost_level_is_named_in_gaps(self, tmp_path):
+        """Потерянное звено НАЗВАНО: молча пропасть объявленный уровень не имеет права."""
+        root = _child_many(tmp_path / "child", {
+            "library-view": {"goal": "answer-from-our-documents", "epic": "zzz-other"},
+            "zzz-other": {"goal": "answer-from-our-documents"},
+        }, PLAN_GOAL)
+        gaps = kg.trace(kg.build_graph(root), "library-view")["gaps"]
+        assert any("zzz-other" in g and "связью не стал" in g for g in gaps), gaps
+
+    def test_chain_without_a_real_path_is_disclosed(self, tmp_path):
+        """Прямая пара «цель → функция» вместо пути по данным тоже названа, а не выдана за путь."""
+        root = _child_many(tmp_path / "child", {
+            "library-view": {"goal": "answer-from-our-documents", "epic": "zzz-other"},
+            "zzz-other": {"goal": "answer-from-our-documents"},
+        }, PLAN_GOAL)
+        result = kg.trace(kg.build_graph(root), "library-view")
+        assert result["goal"] == "answer-from-our-documents"
+        assert any("пути нет" in g for g in result["gaps"]), result["gaps"]
+
+    def test_graph_with_lost_level_still_validates(self, tmp_path):
+        """Потеря звена не ломает граф: он остаётся валидным, разрыв назван, а не выброшен наружу."""
+        root = _child_many(tmp_path / "child", {
+            "library-view": {"goal": "answer-from-our-documents", "epic": "zzz-other"},
+            "zzz-other": {"goal": "answer-from-our-documents"},
+        }, PLAN_GOAL)
+        graph_path = root / "knowledge" / "graph.yaml"
+        _write(graph_path, kg.build_graph(root))
+        types, rels = vkg.load_dictionary()
+        assert vkg.validate_graph(graph_path, types, rels) == []
+
+
 @pytest.mark.parametrize("blueprint", sorted(
     (PKG_ROOT / "features").glob("*/blueprint.yaml")), ids=lambda p: p.parent.name)
 def test_kit_own_features_declare_their_goal(blueprint):
