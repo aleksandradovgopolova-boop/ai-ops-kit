@@ -1301,117 +1301,69 @@ work:
       ии-среды ни одна из находок не стреляет — поэтому работа взята как ДОДЕЛКА, а не расширение графа:
       ревью прямо просит графа не расширять.
 
-  # ══ Направление security-signal-is-actionable — взято 2026-09-23 (замер #1112) ═══════════════════
-  # Порядок работ = порядок приоритета из замера: сперва то, что искажает САМ ЗАМЕР (кит меряет себя),
-  # потом ложные классы по доле флагов, последним — перезамер, который единственный может сказать
-  # «шум упал». Перезамер стоит ПОСЛЕ починок осознанно: до них треть чисел будет про кит, а не про продукт.
+  # ══ Направление security-signal-is-actionable ── пять работ ЗАКРЫТЫ в историю 2026-09-23 ═══════
+  # detector-skips-its-own-copy-in-child (#1118), regexp-exec-is-not-command-execution (#1120),
+  # sql-template-distinguishes-constant-from-data (#1122), prose-is-not-code-for-the-scanner (#1124),
+  # rescan-proves-noise-dropped (#1126) — все в history/plan-history.yaml.
+  #
+  # НАПРАВЛЕНИЕ ОСТАЁТСЯ АКТИВНЫМ: перезамер дал 61 -> 24 флага, но НИ ОДИН из двух исходов не закрыт.
+  #   * `scanner_measures_the_product_not_itself` — 4 флага на установленной копии кита остались;
+  #   * `noise_share_drops_below_one_fifth` — долю шума числом кит назвать не может: исходные 80% были
+  #     вердиктом НЕЗАВИСИМОГО судьи по каждому флагу, а эти починки писал тот же автор. Счёт есть,
+  #     вердикта нет; закрыть исход может только разбор судьёй.
+  # Обе оставшиеся работы — ниже, и обе упираются в человека, а не в код.
 
-  - id: detector-skips-its-own-copy-in-child
+  - id: does-the-scanner-judge-the-installed-kit-at-all
     title: >-
-      В дочке сканер не флагает установленную копию кита: свой материал узнаётся по МЕСТУ в дереве,
-      а не по точному имени файла
+      Должен ли сканер вообще судить установленную копию кита в дочке (`.ai/managed/`)
     type: security
     goal: security-signal-is-actionable
-    status: todo
-    owner_role: security
-    value: high
-    source: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    finding: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    write_scope:
-    - ai_ops_kit/security/
-    - tests/
-    rationale: >-
-      `_is_detector_own` сверяет ТОЧНОЕ относительное имя (`ai_ops_kit/security/security_scan.py`), а в
-      дочке установленная копия лежит по `.ai/managed/ai_ops_kit/security/security_scan.py` — совпадения
-      нет, и кит читает собственные образцы как код продукта. На контрольной выборке это 20 флагов из 61
-      (33%), из них 15 — его же `security_scan.py`. Дефект объявлен в коде ЗАКРЫТЫМ (замер 19.08: было
-      76%): в материнском репозитории закрыт, в дочернем жив — то есть закрытие проверялось не там, где
-      сканер работает у пользователя. Первая работа направления, потому что до неё любой замер в дочке
-      на треть меряет кит, а не продукт.
-
-  - id: regexp-exec-is-not-command-execution
-    title: >-
-      `.exec(` регулярного выражения перестаёт читаться как запуск внешней команды (класс R-40, второй заход)
-    type: security
-    goal: security-signal-is-actionable
-    status: todo
-    owner_role: security
-    value: high
-    source: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    finding: "docs/audit-report.md"
-    write_scope:
-    - ai_ops_kit/security/
-    - tests/
-    rationale: >-
-      `_NODE_EXEC_CALL = \b(?:exec|execSync|execFile|execFileSync)\s*\(` — граница слова стоит между
-      точкой и `e`, поэтому матчится `.exec(` у регулярного выражения; условие «файл импортирует
-      `child_process`» выполняется из-за постороннего хелпера в том же файле. 20% всех флагов замера
-      (`vite.config.ts:262`). R-40 уже чинили в построчном `eval_or_exec` — новое файловое правило внесло
-      ту же ложную находку через другую дверь, и это главный урок: чинить надо класс, а не одно место.
-      Комментарий в сканере обещает «не факт опасности, а её АДРЕС» — на замере адрес неверен в 2 случаях
-      из 4, так что обещание тоже правится по факту.
-
-  - id: sql-template-distinguishes-constant-from-data
-    title: >-
-      Правило SQL-шаблона различает подстановку объявленной рядом константы и подстановку данных
-    type: security
-    goal: security-signal-is-actionable
-    status: todo
-    owner_role: security
-    value: high
-    source: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    finding: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    write_scope:
-    - ai_ops_kit/security/
-    - tests/
-    rationale: >-
-      Все 20 флагов `sql_template_literal` контрольной выборки — один шаблон `DROP SCHEMA IF EXISTS
-      ${SCHEMA}` / `CREATE SCHEMA ${SCHEMA}` в восьми тестовых наборах и в `e2e/prepare-database.mjs`;
-      подставляется объявленная рядом строковая константа. Мест, где в SQL-шаблон попадают пользовательские
-      данные, во всём продукте нет — 100% шума. Правило НЕ выбрасывается: пропуск здесь дороже шума.
-      Меняется ровно то, чего не хватает судье, — различие «константа рядом» против «значение снаружи».
-
-  - id: prose-is-not-code-for-the-scanner
-    title: >-
-      Комментарии, YAML и текст перестают флагаться как код: проза исключается не по расширению файла
-    type: security
-    goal: security-signal-is-actionable
-    status: todo
-    owner_role: security
-    value: medium
-    source: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    finding: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    write_scope:
-    - ai_ops_kit/security/
-    - tests/
-    rationale: >-
-      6 из 8 флагов `react_dangerous_html` контрольной выборки стоят не на коде: в комментариях `.ts`,
-      в YAML со списком правил, в исходнике самого сканера. Один — на комментарии, который утверждает
-      ОБРАТНОЕ («рендер React-элементами без dangerouslySetInnerHTML»), то есть сканер флагает текст о
-      том, что опасности нет. Сегодня проза отсекается только по расширению файла, а .ts с комментарием
-      расширением не отличается от .ts с кодом.
-
-  - id: rescan-proves-noise-dropped
-    title: >-
-      Перезамер на том же диффе ии-среды доказывает, что шум упал; правила, которые ни разу не стреляли,
-      проверяются на коде, где нужные конструкции есть
-    type: research
-    goal: security-signal-is-actionable
-    status: todo
+    status: waiting_on_owner
+    waiting_on: >-
+      это не техника, а граница ответственности. Установленную копию кита дочка не писала и починить
+      не может — флаги на ней ей ничего не говорят. Но прощать каталог целиком запрещено осознанно
+      (исключение стало бы складом), а прощать поимённо — список вырастет с трёх файлов до всего кита.
+      Выбор между «сканер не судит то, чем владелец дочки не управляет» и «сканер смотрит на всё, что
+      лежит в репозитории» делает владелец.
     owner_role: product
     value: high
-    source: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
-    finding: "qualification/SECURITY-SCAN-NOISE-MEASURE-2026-09-23.md"
+    human_decision: >-
+      #1118 снял 16 флагов из 20, остались 4 другой природы: реестр кита со СПИСКОМ ИМЁН правил
+      (`.ai/managed/security/security-domains.yaml` — имя в значении yaml, не в комментарии, поэтому
+      #1124 его не убрал) и `shell=True` в трёх местах кода самого кита. Рекомендация автора —
+      прощать `.ai/managed/` целиком: всё, что там лежит, дочка получает готовым, её решения на это
+      не влияют, а целостность слоя держится контрольными суммами кита, а не его же сканером.
+      Возражение, которое надо услышать раньше решения: PR обновления кита в дочке тоже проходит
+      сканер, и после прощения он перестанет смотреть на то, что обновление привозит.
+    write_scope:
+    - ai_ops_kit/security/
+    - tests/
+    rationale: >-
+      Перезамер (`qualification/SECURITY-SCAN-NOISE-RESCAN-2026-09-23.md`) показал: из 24 оставшихся
+      флагов 4 — про кит, а не про продукт. Пока решения нет, они честно считаются и держат исход
+      `scanner_measures_the_product_not_itself` закрытым не до конца.
+
+  - id: independent-judge-rules-on-the-remaining-flags
+    title: >-
+      Независимый судья выносит вердикт по 24 оставшимся флагам — только он может назвать долю шума
+    type: research
+    goal: security-signal-is-actionable
+    status: waiting_on_owner
+    waiting_on: >-
+      нужен судья, не писавший этих починок (writer != judge). Исходные 80% получены именно так, и
+      сравнивать с ними число, посчитанное автором починок, нельзя — это было бы само-аттестацией.
+      Кого сажать судьёй, решает владелец.
+    owner_role: reviewer
+    value: high
+    human_decision: >-
+      Счёт флагов объективен и уже снят: 61 -> 24. Вердикт «шум / пограничное / релевантное» по
+      каждому из 24 — нет, и без него исход `noise_share_drops_below_one_fifth` (не выше 20%) закрыть
+      нечем. Это последняя работа направления.
     write_scope:
     - qualification/
     rationale: >-
-      Замер — единственное, что может сказать «шум упал»: без него четыре починки останутся намерением.
-      Идёт ПОСЛЕ них, иначе треть чисел снова будет про кит. Вторая половина работы закрывает пятую
-      находку замера: `js_new_function`, `node_vm_run_in_context`, `dom_outerhtml_assign`,
-      `dom_insert_adjacent_html`, `vue_v_html` не сработали НИ РАЗУ — «правило молчит» и «правило
-      работает» это разные состояния, и сегодняшний замер их не различает. Нужен прогон на коде с
-      `child_process` в боевом пути (не в конфиге сборки), с реальным `new Function`/`vm.runInNewContext`
-      и с параметризованным SQL рядом с непараметризованным.
+      `qualification/SECURITY-SCAN-NOISE-RESCAN-2026-09-23.md` называет эту границу первой из трёх:
+      выше в артефакте — счёт, а не вердикт.
 
   # ══ Направление first-hour-for-a-stranger — взято 2026-09-23 (ревью: acquisition + installation) ══
 
