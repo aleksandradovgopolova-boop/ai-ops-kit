@@ -1,9 +1,14 @@
 """Unit tests for tools/security_scan.py — secret detection, injection flags, dependency audit."""
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from ai_ops_kit.security import security_scan
+
+PKG = Path(__file__).resolve().parents[2]
 
 
 @pytest.mark.unit
@@ -419,3 +424,221 @@ class TestExecDetectorDistinguishesRegexFromCommand:
         findings = security_scan.scan_injection({"a.py": 'cursor.execute(f"SELECT {x}")\n'})
         assert any(f["id"] == "sql_fstring_execute" for f in findings)
         assert not any(f["id"] == "eval_or_exec" for f in findings)
+
+
+# ─── КОРПУС: у каждого правила есть образец и безобидный двойник ───────────────────────────────
+#
+# ПОВОД (#1096). Докстрока модуля обещала `security_scan.py --selftest` — способ проверить детектор
+# одной командой. Флага не было ни дня: argparse знал только `root`, `--base` и `--json`. Обещание
+# из докстроки снято (AGENTS.md: selftest не живёт в продакшн-модуле — модули `ai_ops_kit/` едут в
+# child-репозиторий), а сама проверка живёт ЗДЕСЬ и усилена.
+#
+# ЧТО ЗАКРЫВАЕТ ИСХОДНЫЙ ДЕФЕКТ — не флаг, а ОХВАТ. Корпус объявляет для КАЖДОГО правила детектора
+# образец и безобидного двойника; правило без образца или без двойника КРАСНИТ набор
+# (`test_every_rule_has_a_sample` / `test_every_rule_has_a_harmless_twin`). Детектор больше не
+# может тихо обрасти правилом, которого никто не проверял: в #1094 он вырос на десять правил
+# сразу, и заметить непроверенное было нечем.
+#
+# ОБЕ ПОЛОВИНЫ ОБЯЗАТЕЛЬНЫ. Ноль ложных находок получается двумя способами, и честный из них
+# один — R-40 (штатный `RegExp.exec`, принятый за исполнение команды) стоил трёх ложных доменов и
+# блока security-гейта на живом продукте. Поэтому «молчит там, где должен» проверяется наравне с
+# «находит то, что должен», а три пробы покраснения внизу доказывают, что сторож не резиновый.
+#
+# ОБРАЗЦЫ СЕКРЕТОВ СОБИРАЮТСЯ ИЗ ФРАГМЕНТОВ (решение v3.0.4): дословный литерал означал бы, что
+# сканер находит «утечку» в собственных тестах. Образцы injection пишутся дословно — этот файл уже
+# прощён поимённо в `DETECTOR_OWN_MATERIAL`, и новых флагов на дереве кита он не даёт.
+
+JS = "проба.js"            # обычный исходник
+MD = "CHANGELOG.md"        # проза: injection-правила в ней не работают намеренно (_PROSE_SUFFIXES)
+
+_MODULE_SRC = (PKG / "ai_ops_kit" / "security" / "security_scan.py").read_text(encoding="utf-8")
+# Правила уровня ФАЙЛА в списках паттернов не лежат — они дописываются в находки прямо в
+# `scan_injection`. Достаём их из исходника МЕХАНИЧЕСКИ: список, вписанный сюда руками, устарел бы
+# молча, и новое такое правило обошло бы сторожа охвата.
+FILE_LEVEL_RULES = frozenset(re.findall(r'"id":\s*"([a-z0-9_]+)"', _MODULE_SRC))
+
+
+def _flags(text, path=JS):
+    """Идентификаторы ВСЕХ находок (секреты + injection) на одном файле."""
+    files = {path: text}
+    return ({f["id"] for f in security_scan.scan_secrets(files)}
+            | {f["id"] for f in security_scan.scan_injection(files)})
+
+
+def _declared_rules():
+    return ({pid for pid, _ in security_scan.SECRET_PATTERNS}
+            | {pid for pid, _ in security_scan.INJECTION_PATTERNS}
+            | set(FILE_LEVEL_RULES))
+
+
+# (правило, id случая, текст, путь). id уходит в имя теста, поэтому латиницей.
+SAMPLES = [
+    # ── секреты (собраны из фрагментов) ────────────────────────────────────────────────────
+    ("aws_access_key_id", "aws_access_key_id", "k = '" + "AKIA" + "QRSTUVWX9012YZAB'", JS),
+    ("private_key_block", "private_key_block",
+     "-----BEGIN RSA " + "PRIVATE KEY-----\nMIIEpAIB" + "q" * 40, JS),
+    ("github_pat", "github_pat", "t = '" + "ghp_" + "A" * 36 + "'", JS),
+    ("slack_token", "slack_token", "t = '" + "xox" + "b-0123456789abcdef'", JS),
+    ("google_api_key", "google_api_key", "k = '" + "AIza" + "B" * 35 + "'", JS),
+    ("aws_secret_access_key", "aws_secret_access_key",
+     "aws_secret" + "_access_key = '" + "b" * 40 + "'", JS),
+    ("generic_secret_assignment", "generic_secret_assignment",
+     "api" + "_key = 'abcdef0123456789ABCDEF'", JS),
+    ("db_connection_string_password", "db_connection_string_password",
+     "D = '" + "postgres" + "://u:r3alpass@h/a'", JS),
+    ("npm_token", "npm_token", "t = '" + "npm_" + "c" * 36 + "'", JS),
+    ("jwt_token", "jwt_token",
+     "t = '" + "eyJ" + "abcdefghij." + "k" * 20 + "." + "m" * 20 + "'", JS),
+    ("anthropic_api_key", "anthropic_api_key", "k = '" + "sk-" + "ant-" + "d" * 32 + "'", JS),
+    ("openai_api_key", "openai_api_key", "k = '" + "sk-" + "e" * 40 + "'", JS),
+    # ── injection ──────────────────────────────────────────────────────────────────────────
+    ("eval_or_exec", "eval_or_exec", "r = eval(user_input)", JS),
+    ("subprocess_shell_true", "subprocess_shell_true", "subprocess.run(cmd, shell=True)", JS),
+    ("os_system", "os_system", "os.system(cmd)", JS),
+    ("pickle_loads", "pickle_loads", "data = pickle.loads(raw)", JS),
+    ("yaml_unsafe_load", "yaml_unsafe_load", "cfg = yaml.load(raw)", JS),
+    ("sql_fstring_execute", "sql_fstring_execute", 'cur.execute(f"select {x}")', JS),
+    ("react_dangerous_html", "react_dangerous_html",
+     "<div dangerouslySetInnerHTML={{__html: x}} />", JS),
+    ("node_child_process", "node_child_process", 'const cp = require("node:child_process")', JS),
+    ("node_child_process_exec", "node_child_process_exec",
+     'require("child_process")\ncp.exec(cmd)', JS),
+    ("dom_innerhtml_assign", "dom_innerhtml_assign", "el.innerHTML = x", JS),
+    ("js_new_function", "js_new_function", "const f = new Function(src)", JS),
+    ("node_vm_run_in_context", "node_vm_run_in_context", "vm.runInNewContext(src)", JS),
+    ("dom_outerhtml_assign", "dom_outerhtml_assign", "el.outerHTML = x", JS),
+    ("dom_insert_adjacent_html", "dom_insert_adjacent_html",
+     'el.insertAdjacentHTML("beforeend", x)', JS),
+    ("dom_document_write", "dom_document_write", "document.write(x)", JS),
+    ("vue_v_html", "vue_v_html", '<p v-html="x"></p>', JS),
+    ("sql_template_literal", "sql_template_literal",
+     "db.query(`select * from t where id = ${id}`)", JS),
+]
+
+# Безобидные двойники: детектор ОБЯЗАН молчать. Двойник подобран к КОНКРЕТНОМУ правилу — это его
+# граница, а не произвольный чистый код.
+TWINS = [
+    # ── секреты ────────────────────────────────────────────────────────────────────────────
+    ("aws_access_key_id", "documented_aws_example", "k = '" + "AKIA" + "IOSFODNN7EXAMPLE'", JS),
+    ("private_key_block", "pem_header_without_body",
+     "# формат: -----BEGIN RSA " + "PRIVATE KEY-----", JS),
+    ("github_pat", "github_pat_placeholder", "t = '" + "ghp_" + "x" * 36 + "'", JS),
+    ("slack_token", "slack_token_placeholder", "t = '" + "xox" + "b-" + "x" * 12 + "'", JS),
+    ("google_api_key", "google_api_key_placeholder", "k = '" + "AIza" + "x" * 35 + "'", JS),
+    ("aws_secret_access_key", "aws_secret_placeholder",
+     "aws_secret" + "_access_key = '" + "x" * 40 + "'", JS),
+    ("generic_secret_assignment", "changeme_stub", "password = 'changeme_changeme_1'", JS),
+    ("db_connection_string_password", "connection_string_with_placeholder",
+     "D = '" + "postgres" + "://u:${DB_PASS}@h/a'", JS),
+    ("npm_token", "npm_token_placeholder", "t = '" + "npm_" + "x" * 36 + "'", JS),
+    # base64 от JSON без трёх сегментов — не токен: такая строка в конфиге не утечка.
+    ("jwt_token", "base64_json_is_not_a_token", "cfg = '" + "eyJ" + "hbGciOiJIUzI1NiJ9'", JS),
+    ("anthropic_api_key", "anthropic_key_placeholder",
+     "k = '" + "sk-" + "ant-" + "x" * 32 + "'", JS),
+    # Ровно та ловушка, из-за которой хвост ключа OpenAI запрещено писать с дефисами.
+    ("openai_api_key", "long_kebab_case_name",
+     'const cls = "sk-loading-spinner-container-large"', JS),
+    # ── injection ──────────────────────────────────────────────────────────────────────────
+    ("eval_or_exec", "regexp_exec_is_not_execution", "const m = /ab+c/.exec(s)", JS),
+    ("subprocess_shell_true", "shell_false", "subprocess.run(cmd, shell=False)", JS),
+    ("os_system", "local_function_named_system", "result = system(cmd)", JS),
+    ("pickle_loads", "json_loads", "data = json.loads(raw)", JS),
+    ("yaml_unsafe_load", "yaml_load_with_safe_loader",
+     "cfg = yaml.load(raw, Loader=yaml.SafeLoader)", JS),
+    ("sql_fstring_execute", "parameterized_execute", 'cur.execute("select %s", (x,))', JS),
+    # Проза ничего не исполняет: то же слово в CHANGELOG — не поверхность атаки.
+    ("react_dangerous_html", "prose_mentions_it", "исправлен dangerouslySetInnerHTML", MD),
+    ("node_child_process", "another_node_module", 'const c = require("node:crypto")', JS),
+    ("node_child_process_exec", "exec_without_the_import", "const m = /ab+c/.exec(s)", JS),
+    ("dom_innerhtml_assign", "reading_inner_html", "const html = el.innerHTML", JS),
+    ("js_new_function", "class_name_starting_with_function", "const r = new FunctionRegistry()", JS),
+    ("node_vm_run_in_context", "creating_a_vm_context", "const ctx = vm.createContext(sandbox)", JS),
+    ("dom_outerhtml_assign", "comparing_outer_html", "if (el.outerHTML === s) return", JS),
+    ("dom_insert_adjacent_html", "insert_adjacent_text",
+     'el.insertAdjacentText("beforeend", x)', JS),
+    ("dom_document_write", "writing_to_a_stream", "stream.write(chunk)", JS),
+    ("vue_v_html", "v_text", '<p v-text="x"></p>', JS),
+    ("sql_template_literal", "parameterized_query",
+     'db.query("select * from t where id = $1", [id])', JS),
+    ("sql_template_literal", "query_without_interpolation", "db.query(`select 1`)", JS),
+    ("sql_template_literal", "template_literal_that_is_not_sql",
+     "const msg = `привет, ${name}`", JS),
+]
+
+
+@pytest.mark.unit
+@pytest.mark.critical_path
+@pytest.mark.parametrize(("rule", "text", "path"), [(r, t, p) for r, _, t, p in SAMPLES],
+                         ids=[cid for _, cid, _, _ in SAMPLES])
+def test_a_real_sample_is_caught_by_its_rule(rule, text, path):
+    """Одно правило — один именованный тест с настоящим assert: падение называет ИМЕННО правило."""
+    found = _flags(text, path)
+    assert rule in found, f"правило {rule} не поймало свой образец (найдено: {sorted(found)})"
+
+
+@pytest.mark.unit
+@pytest.mark.critical_path
+@pytest.mark.parametrize(("rule", "text", "path"), [(r, t, p) for r, _, t, p in TWINS],
+                         ids=[cid for _, cid, _, _ in TWINS])
+def test_a_harmless_twin_stays_silent(rule, text, path):
+    """Ложная тревога дороже молчания: она учит пролистывать раздел находок целиком."""
+    found = _flags(text, path)
+    assert found == set(), f"двойник правила {rule} поднял флаги {sorted(found)}"
+
+
+# ─── сторож охвата: правило без проверки краснит набор ─────────────────────────────────────────
+
+@pytest.mark.unit
+def test_every_rule_has_a_sample():
+    missing = sorted(_declared_rules() - {r for r, _, _, _ in SAMPLES})
+    assert missing == [], (
+        f"правила без образца: {missing}. Новое правило детектора обязано приехать со своим "
+        f"случаем — иначе оно объявлено, но ничем не проверено")
+
+
+@pytest.mark.unit
+def test_every_rule_has_a_harmless_twin():
+    missing = sorted(_declared_rules() - {r for r, _, _, _ in TWINS})
+    assert missing == [], (
+        f"правила без безобидного двойника: {missing}. Без двойника «правило работает» неотличимо "
+        f"от «правило флагит всё подряд» — ровно дефект R-40")
+
+
+@pytest.mark.unit
+def test_the_corpus_names_no_rule_the_detector_does_not_have():
+    """Обратная половина: случай на снятое правило зеленел бы вечно, ничего не проверяя."""
+    stray = sorted({r for r, _, _, _ in SAMPLES + TWINS} - _declared_rules())
+    assert stray == [], f"в корпусе есть случаи на несуществующие правила: {stray}"
+
+
+@pytest.mark.unit
+def test_the_file_level_rules_are_still_found_in_the_source():
+    """Извлечение правил уровня файла механическое — пустой результат сделал бы охват фикцией."""
+    assert {"node_child_process_exec", "sql_template_literal"} <= FILE_LEVEL_RULES, sorted(
+        FILE_LEVEL_RULES)
+
+
+# ─── пробы покраснения: сторож не резиновый ────────────────────────────────────────────────────
+
+@pytest.mark.unit
+def test_a_lost_rule_would_turn_the_corpus_red(monkeypatch):
+    """Правило пропало -> его образец перестаёт ловиться, то есть его тест краснеет."""
+    monkeypatch.setattr(security_scan, "INJECTION_PATTERNS",
+                        [p for p in security_scan.INJECTION_PATTERNS if p[0] != "vue_v_html"])
+    assert "vue_v_html" not in _flags('<p v-html="x"></p>')
+
+
+@pytest.mark.unit
+def test_the_r40_regression_would_turn_the_corpus_red(monkeypatch):
+    """Возврат дефекта R-40 -> двойник со штатным `RegExp.exec` поднимает флаг."""
+    monkeypatch.setattr(security_scan, "INJECTION_PATTERNS",
+                        [(pid, re.compile(r"\b(?:eval|exec)\s*\(") if pid == "eval_or_exec" else rx)
+                         for pid, rx in security_scan.INJECTION_PATTERNS])
+    assert _flags("const m = /ab+c/.exec(s)") == {"eval_or_exec"}
+
+
+@pytest.mark.unit
+def test_a_broken_placeholder_filter_would_turn_the_corpus_red(monkeypatch):
+    """Сломан отсев плейсхолдеров -> заглушка `changeme` снова считается утечкой."""
+    monkeypatch.setattr(security_scan, "_PLACEHOLDER", re.compile(r"(?!x)x"))
+    assert _flags("password = 'changeme_changeme_1'") == {"generic_secret_assignment"}
