@@ -35,9 +35,16 @@ BASELINE_FILE = PKG / "packages" / "func-size-baseline.yaml"
 
 
 def measure_functions(directory: Path = ENGINE_DIR) -> list[dict]:
-    """AST-обход: для каждой function/async function возвращает имя, файл, строки, размер."""
+    """AST-обход: для каждой function/async function возвращает имя, файл, строки, размер.
+
+    Обход РЕКУРСИВНЫЙ (#1119). Прежде мерился только верхний уровень каталога, и подпакет-сателлит
+    оказывался зоной свободного роста: `checks/surface_extractors/` — 18 файлов и 102 функции — не
+    стерёг никто, хотя сам `checks/` объявлен. Репозиторий активно плодит сателлиты, так что дыра
+    росла бы сама. Переход на рекурсию не сдвинул ни один потолок: у всех двадцати каталогов
+    максимум остался прежним — значит это чистое расширение охвата, а не ослабление ратчета.
+    """
     results = []
-    for f in sorted(directory.glob("*.py")):
+    for f in sorted(directory.rglob("*.py")):
         try:
             tree = ast.parse(f.read_text(encoding="utf-8"), filename=str(f))
         except SyntaxError:
@@ -47,7 +54,7 @@ def measure_functions(directory: Path = ENGINE_DIR) -> list[dict]:
                 size = node.end_lineno - node.lineno + 1
                 results.append({
                     "name": node.name,
-                    "file": f.name,
+                    "file": f.name if f.parent == directory else str(f.relative_to(directory)),
                     "lineno": node.lineno,
                     "size": size,
                 })

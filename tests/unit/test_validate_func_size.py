@@ -226,8 +226,31 @@ class TestRealBaselineConsistency:
         # engine/ — исторический scope; четыре дома god-функций — новое покрытие.
         assert "ai_ops_kit/engine/" in paths
         for expected in ("ai_ops_kit/cli/", "ai_ops_kit/planning/",
-                         "ai_ops_kit/providers/", "ai_ops_kit/validation/"):
+                         "ai_ops_kit/providers/", "ai_ops_kit/validation/",
+                         "ai_ops_kit/intelligence/"):
             assert expected in paths, f"{expected} не покрыт ратчетом"
+
+    def test_every_package_directory_is_covered(self):
+        """КАЖДЫЙ каталог пакета объявлен в ратчете, иначе функция в нём растёт свободно.
+
+        #1119: `intelligence/` не был покрыт, и там выросла САМАЯ ДЛИННАЯ функция репозитория
+        (`build_graph`, 275 строк: больше любого объявленного потолка). Список каталогов в baseline
+        пополнялся вручную и отставал от кода; эта проверка ловит отставание сама, не дожидаясь
+        следующего замера.
+        """
+        baseline = load_baseline(BASELINE_FILE)
+        covered = {sc["path"].rstrip("/") for sc in iter_scopes(baseline)}
+        uncovered = {}
+        for directory in sorted((BASELINE_FILE.parents[1] / "ai_ops_kit").iterdir()):
+            rel = f"ai_ops_kit/{directory.name}"
+            if not directory.is_dir() or rel in covered:
+                continue
+            biggest = max((f["size"] for f in measure_functions(directory)), default=0)
+            if biggest:
+                uncovered[rel] = biggest
+        assert not uncovered, (
+            f"каталоги пакета вне ратчета: {uncovered}. Потолок заводится ПО ФАКТУ "
+            f"(текущий максимум каталога) — он останавливает рост, а не требует рефакторинга")
 
     def test_all_scopes_within_ceiling(self):
         """Ни один объявленный scope НЕ превышает свой потолок (весь пакет, не только engine/).
@@ -266,6 +289,7 @@ class TestWiderScopeCatchesGodFunctions:
         "ai_ops_kit/planning",
         "ai_ops_kit/providers",
         "ai_ops_kit/validation",
+        "ai_ops_kit/intelligence",
     ])
     def test_new_god_function_outside_engine_is_flagged(self, tmp_path, scope_rel):
         """Функция сверх потолка в НЕ-engine каталоге краснеет (раньше росла свободно)."""
@@ -274,6 +298,32 @@ class TestWiderScopeCatchesGodFunctions:
         assert len(errors) == 1
         assert scope_rel in errors[0]
         assert "превышает потолок" in errors[0]
+
+    def test_god_function_in_a_nested_package_is_flagged(self, tmp_path):
+        """Подпакет-сателлит внутри покрытого каталога тоже под присмотром.
+
+        #1119: сторож охвата видел только верхний уровень, а измерение брало `glob("*.py")` без
+        рекурсии — `checks/surface_extractors/` (18 файлов, 102 функции) не стерёг никто. Репозиторий
+        активно плодит сателлиты, так что дыра росла бы сама.
+        """
+        scope_dir = tmp_path / "ai_ops_kit/checks"
+        nested = scope_dir / "surface_extractors"
+        nested.mkdir(parents=True)
+        body = "\n".join(f"    x{i} = {i}" for i in range(249))
+        (nested / "mod.py").write_text(f"def god():\n{body}\n", encoding="utf-8")
+        baseline = {"scopes": [{"path": "ai_ops_kit/checks", "max_function_lines": 200}]}
+        errors = check_all(baseline, pkg_root=tmp_path)
+        assert len(errors) == 1, errors
+        assert "превышает потолок" in errors[0]
+
+    def test_nested_file_is_named_with_its_path(self, tmp_path):
+        """И место названо так, чтобы его нашли: имя файла с путём внутри каталога."""
+        scope_dir = tmp_path / "ai_ops_kit/checks"
+        nested = scope_dir / "surface_extractors"
+        nested.mkdir(parents=True)
+        (nested / "ktor.py").write_text("def small():\n    return 1\n", encoding="utf-8")
+        measured = measure_functions(scope_dir)
+        assert [f["file"] for f in measured] == ["surface_extractors/ktor.py"], measured
 
     def test_within_ceiling_stays_green(self, tmp_path):
         """Функция ровно на потолке — зелено (ратчет не ложно-краснит)."""
