@@ -51,6 +51,11 @@ def from_graph_trace(result: dict) -> dict:
     if result.get("goal"):
         summary = (f"Функция «{titles[-1]}» служит цели «{titles[0]}»: {chain_line}. "
                    f"{phrase.capitalize()}.")
+    elif result.get("unresolved_goal"):
+        # Автор цель НАЗВАЛ, но такой цели в плане нет. Это не то же самое, что «цель не указана»:
+        # молчание тут соврало бы дважды — и про наличие цели, и про причину обрыва.
+        summary = (f"Функция «{feature}» ссылается на цель «{result['unresolved_goal']}», которой "
+                   f"нет в плане продукта, — до цели нить не доходит.")
     else:
         summary = f"Функция «{feature}»: {chain_line}. {phrase.capitalize()}."
     # «Зачем функция появилась» — из РЕШЕНИЯ (истории), а не из пересказа кода. Если решение

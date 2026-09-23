@@ -7,7 +7,7 @@ schema_version: 1
 registry_type: entities
 
 entity_types:
-  goal:          {description: "Бизнес/продуктовая цель"}
+  goal:          {description: "Бизнес/продуктовая цель. Объявлена планом продукта; атрибут unresolved=true означает, что на цель сослался паспорт функции, а в плане её нет — разрыв нити, который обход называет вслух, а не заглушка вместо цели.", attributes: [unresolved]}
   initiative:    {description: "Инициатива, реализующая цель"}
   epic:          {description: "Крупный кусок ценности внутри инициативы"}
   feature:       {description: "Функция; узел связывается с Feature Blueprint", attributes: [blueprint]}
@@ -28,9 +28,22 @@ entity_types:
   review:        {description: "Персистентный review-вердикт функции (features/<id>/review/verdict.yaml): КТО/ЧТО проверил. Узел несёт, кем проверено (машина/независимый ревьюер/человек), verified и ревизию — проекция evidence_verdict (веха 4.2), а не пересказ кода. Пишет путь ревью (судья), не писатель.", attributes: [verified, reviewed_revision]}
 
 # Допустимые связи: from -> to (валидатор отклоняет рёбра вне этого списка).
+#
+# ЛЕСТНИЦА contains (goal -> initiative -> epic -> feature -> story) допускает ПРОПУСК среднего
+# уровня, и это объявлено парами, а не догадкой кода. Повод — замер на реальной дочке (ии-среда,
+# 21.09): все её функции объявляют цель И эпик, но не инициативу, потому что инициатива у продукта
+# просто не заведена. Пока разрешены были только смежные пары, объявленная автором цель не
+# становилась связью — функция оказывалась «ни к какой цели не привязана», хотя цель названа.
+# Требовать промежуточный уровень ради формы значило бы вводить ту самую бюрократию, которую
+# инварианты запрещают явно («восемь документов на каждую задачу»).
+# ГРАНИЦА: пропускается только уровень, которого В ОБЪЯВЛЕНИИ НЕТ. Связь по-прежнему идёт СВЕРХУ
+# ВНИЗ и только между уровнями, которые автор назвал сам; ничего не додумывается.
 relations:
   - {type: contains,     from: goal,       to: initiative}
+  - {type: contains,     from: goal,       to: epic}        # инициатива не заведена
+  - {type: contains,     from: goal,       to: feature}     # ни инициативы, ни эпика
   - {type: contains,     from: initiative, to: epic}
+  - {type: contains,     from: initiative, to: feature}     # эпик не заведён
   - {type: contains,     from: epic,       to: feature}
   - {type: contains,     from: feature,    to: story}
   - {type: specified-by, from: feature,    to: design}

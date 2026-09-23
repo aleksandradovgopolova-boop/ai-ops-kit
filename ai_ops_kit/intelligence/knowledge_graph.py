@@ -223,8 +223,10 @@ def build_graph(child_root) -> dict:
       * `planning/plan.yaml`: goals -> узлы `goal` (+ узел `outcome` на цель с непустым `outcome`);
         work -> узлы `initiative` с ребром `goal -contains-> initiative`.
       * feature blueprints: узлы `feature` (+ `metric` из `metrics`), рёбра `feature -measured-by->
-        metric`; цепочка `goal/initiative/epic -contains-> feature` из `links` (только валидные
-        пары лестницы); `feature -targets-> <goal>-outcome`, и если у функции есть метрика —
+        metric`; цепочка `goal/initiative/epic -contains-> feature` из `links` — связываются
+        СОСЕДНИЕ ОБЪЯВЛЕННЫЕ уровни, пропущенный (не заведённый у продукта) уровень нить не рвёт;
+        ссылка на цель, которой нет в плане, даёт узел с `unresolved` — разрыв называется, а не
+        прячется; `feature -targets-> <goal>-outcome`, и если у функции есть метрика —
         `outcome -measured-by-> metric`.
       * `product-learning/FL-*.yaml`: узлы `insight`; `insight -feeds-> feature` при совпадении
         `feature`; `insight -derived-from-> outcome`, если эта функция нацелена на outcome.
@@ -285,18 +287,28 @@ def build_graph(child_root) -> dict:
                      title=_text(feat.get("name")) or _text(feat["id"]),
                      blueprint=rel)
 
-        # Цепочка вверх: goal -> initiative -> epic -> feature. Только смежные валидные пары
-        # лестницы: пропущенный средний уровень честно оставляет разрыв (пробел ловит trace).
+        # Цепочка вверх: goal -> initiative -> epic -> feature. Связываются СОСЕДНИЕ ОБЪЯВЛЕННЫЕ
+        # уровни, даже если между ними пропущен уровень, которого у продукта просто нет
+        # (`registry/entities.yaml` объявляет такие пары явно). Раньше требовалась смежность, и
+        # объявленная автором цель ПРОПАДАЛА: паспорт с goal+epic без initiative давал только
+        # `epic contains feature`, а функция оказывалась «ни к какой цели не привязана» — при том
+        # что цель названа. Ничего не додумывается: связь идёт сверху вниз и только между уровнями,
+        # которые автор назвал сам.
         links = bp.get("links") or {}
         chain = [("goal", links.get("goal")), ("initiative", links.get("initiative")),
                  ("epic", links.get("epic")), ("feature", feat["id"])]
         present = [(t, _slug(v)) for t, v in chain if _text(v)]
         for (ptype, pid), (ctype, cid) in zip(present, present[1:]):
-            gap_idx = CONTAINS_LADDER.index(ctype) - CONTAINS_LADDER.index(ptype)
-            if gap_idx != 1:
-                continue   # уровни не смежны в лестнице — валидного ребра contains нет
+            if CONTAINS_LADDER.index(ctype) <= CONTAINS_LADDER.index(ptype):
+                continue   # не сверху вниз по лестнице — валидного ребра contains нет
             if ptype != "feature" and not b.has(pid):
-                b.node(pid, ptype, title=pid)
+                # Уровень объявлен ссылкой, а своего источника у него нет. Для эпика и инициативы
+                # это норма (их нигде и не объявляют отдельно). Для ЦЕЛИ — нет: цели живут в
+                # `planning/plan.yaml`, и ссылка на отсутствующую там цель означает, что нить
+                # оборвана в данных. Помечаем узел `unresolved`, чтобы обход назвал разрыв вслух, а
+                # не выдавал заглушку за настоящую цель (см. trace: вердикт остаётся `unmoored`).
+                extra = {"unresolved": True} if ptype == "goal" else {}
+                b.node(pid, ptype, title=pid, **extra)
             b.edge(pid, "contains", cid)
 
         # Метрики функции.
@@ -440,7 +452,8 @@ def trace(graph: dict, feature: str) -> dict:
                 "title": _text(n.get("title")) or nid}
 
     if fid not in nodes:
-        return {"feature": fid, "chain": [], "goal": None, "outcome": None, "decision": None,
+        return {"feature": fid, "chain": [], "goal": None, "unresolved_goal": None,
+                "outcome": None, "decision": None,
                 "built_by": [], "review": None, "verdict": "unknown",
                 "gaps": [f"узла «{fid}» нет в графе — цепочку строить не от чего"]}
 
@@ -458,6 +471,15 @@ def trace(graph: dict, feature: str) -> dict:
         chain_ids.insert(0, parent)
         current = parent
     goal = chain_ids[0] if nodes.get(chain_ids[0], {}).get("type") == "goal" else None
+    # Цель ОБЪЯВЛЕНА паспортом, но её нет в плане (`unresolved`). Считать такую цель швартовкой
+    # значило бы выдать заглушку за историю: нить оборвана именно здесь, и сказать это надо вслух.
+    # «Не сказал» и «не знаю» — разные состояния: автор сказал, а названного не существует.
+    unresolved_goal = None
+    if goal is not None and nodes.get(goal, {}).get("unresolved"):
+        unresolved_goal = goal
+        gaps.append(f"функция объявила цель «{goal}», которой нет в плане "
+                    f"(planning/plan.yaml) — путь до цели оборван в данных")
+        goal = None
 
     # Вперёд к outcome.
     outcome_ids = [e["to"] for e in edges if e.get("type") == "targets"
@@ -507,6 +529,7 @@ def trace(graph: dict, feature: str) -> dict:
 
     verdict = _verdict(goal, outcome)
     return {"feature": fid, "chain": [summary(i) for i in chain_ids], "goal": goal,
+            "unresolved_goal": unresolved_goal,
             "outcome": outcome, "decision": decision, "built_by": built_by, "review": review,
             "verdict": verdict, "gaps": gaps}
 
