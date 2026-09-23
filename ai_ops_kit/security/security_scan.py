@@ -274,6 +274,81 @@ def _sql_template_literal_lines(text: str) -> list:
 # исполняет; флаг на нём — не осторожность, а шум.
 _PROSE_SUFFIXES = (".md", ".rst", ".txt")
 
+# КОММЕНТАРИЙ — ТОЖЕ ПРОЗА, а отличается от прозы только тем, что лежит внутри файла с кодом.
+# Замер 23.09.2026 (#1112): 6 флагов `react_dangerous_html` из 8 стояли НЕ НА КОДЕ, и один — на
+# комментарии, утверждавшем ОБРАТНОЕ («рендер React-элементами без dangerouslySetInnerHTML»).
+# Отсечение по расширению файла этого не ловит: `.ts` с комментарием расширением не отличается от
+# `.ts` с кодом.
+#
+# СОДЕРЖИМОЕ КОММЕНТАРИЕВ ЗАМЕНЯЕТСЯ ПРОБЕЛАМИ, а не вырезается: номера строк в находках обязаны
+# остаться прежними, иначе судья пойдёт по неверному адресу.
+#
+# РАЗБОР ОШИБАЕТСЯ В БЕЗОПАСНУЮ СТОРОНУ. Кавычки отслеживаются, чтобы `"https://x"` не был принят за
+# комментарий; на регулярке вида `/['"]/` разбор может решить, что строка открыта, и тогда он просто
+# НЕ вычистит комментарий — то есть ошибётся в сторону лишнего флага, а не пропуска.
+_LINE_COMMENT_BY_SUFFIX = {
+    ".py": ("#",), ".pyi": ("#",), ".sh": ("#",), ".bash": ("#",), ".zsh": ("#",),
+    ".yaml": ("#",), ".yml": ("#",), ".toml": ("#",), ".rb": ("#",), ".pl": ("#",),
+    ".js": ("//",), ".mjs": ("//",), ".cjs": ("//",), ".jsx": ("//",),
+    ".ts": ("//",), ".mts": ("//",), ".cts": ("//",), ".tsx": ("//",),
+    ".java": ("//",), ".go": ("//",), ".rs": ("//",), ".c": ("//",), ".cc": ("//",),
+    ".cpp": ("//",), ".h": ("//",), ".hpp": ("//",), ".cs": ("//",), ".kt": ("//",),
+    ".swift": ("//",), ".scala": ("//",), ".vue": ("//",), ".svelte": ("//",),
+    ".php": ("//", "#"),
+}
+_BLOCK_COMMENT_SUFFIXES = frozenset({
+    ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".java", ".go", ".rs",
+    ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".kt", ".swift", ".scala", ".php",
+    ".vue", ".svelte", ".css", ".scss", ".less",
+})
+
+
+def _suffix_of(path: str) -> str:
+    tail = path.replace("\\", "/").rsplit("/", 1)[-1]
+    return "." + tail.rsplit(".", 1)[-1].lower() if "." in tail else ""
+
+
+def _blank_comments(text: str, path: str) -> str:
+    """Содержимое комментариев -> пробелы. Длина и переводы строк сохраняются."""
+    suffix = _suffix_of(path)
+    line_markers = _LINE_COMMENT_BY_SUFFIX.get(suffix)
+    block = suffix in _BLOCK_COMMENT_SUFFIXES
+    if not line_markers and not block:
+        return text
+    out = list(text)
+    i, n, quote = 0, len(text), None
+    while i < n:
+        ch = text[i]
+        if quote:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == quote or (ch == "\n" and quote != "`"):
+                quote = None          # строка не переживает перевод строки (кроме шаблонной)
+            i += 1
+            continue
+        if ch in "'\"`":
+            quote = ch
+            i += 1
+            continue
+        if block and text.startswith("/*", i):
+            end = text.find("*/", i + 2)
+            end = n if end == -1 else end + 2
+            for k in range(i, end):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = end
+            continue
+        if line_markers and any(text.startswith(mark, i) for mark in line_markers):
+            end = text.find("\n", i)
+            end = n if end == -1 else end
+            for k in range(i, end):
+                out[k] = " "
+            i = end
+            continue
+        i += 1
+    return "".join(out)
+
 # СОБСТВЕННЫЙ МАТЕРИАЛ ДЕТЕКТОРА. Файл, который ОБЪЯВЛЯЕТ образцы, и тесты, которые их ПОДСОВЫВАЮТ,
 # по построению содержат всё, что детектор ищет. Замер 19.08.2026: 55 флагов из 72 приходились
 # ровно на них — то есть на 76% сканер читал сам себя. Список объявлен ПОИМЁННО и вправе только
@@ -321,7 +396,14 @@ def scan_injection(files):
     for path, text in files.items():
         if path.lower().endswith(_PROSE_SUFFIXES) or _is_detector_own(path):
             continue
-        for f in _scan(text, INJECTION_PATTERNS):
+        найдено = _scan(text, INJECTION_PATTERNS)
+        if найдено:
+            # Разбор комментариев стоит дорого, поэтому включается ТОЛЬКО когда есть что проверять:
+            # на файле без единого совпадения он ничего не изменит, а времени возьмёт столько же.
+            без_комментариев = _blank_comments(text, path)
+            if без_комментариев != text:
+                найдено = _scan(без_комментариев, INJECTION_PATTERNS)
+        for f in найдено:
             res.append({"path": path, **f})
         # Файл тянет child_process -> любой exec-вызов в нём считаем исполнением команды.
         # Пере-срабатывание здесь безопасно (лишний needs_review), под-срабатывание — нет.

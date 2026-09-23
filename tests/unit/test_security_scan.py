@@ -509,6 +509,67 @@ class TestSqlTemplateDistinguishesConstantFromData:
                 if f["id"] == "sql_template_literal"], "неразобранная подстановка проглочена молча"
 
 
+
+class TestCommentsAreProseNotCode:
+    """#1112: комментарий — тоже проза, просто лежит внутри файла с кодом.
+
+    Замер 23.09.2026: 6 флагов `react_dangerous_html` из 8 стояли НЕ НА КОДЕ, и один — на
+    комментарии, утверждавшем ОБРАТНОЕ: «рендер React-элементами без dangerouslySetInnerHTML».
+    Отсечение по расширению файла этого не ловило: `.ts` с комментарием расширением не отличается
+    от `.ts` с кодом.
+    """
+
+    def test_the_comment_that_says_the_opposite_is_not_a_finding(self):
+        """Тот самый случай из замера: комментарий отрицает сток, а флаг вставал на нём."""
+        src = ("// рендерим React-элементами, без dangerouslySetInnerHTML\n"
+               "export function View() { return <div>{text}</div>; }\n")
+        assert security_scan.scan_injection({"View.tsx": src}) == []
+
+    @pytest.mark.parametrize("path,src", [
+        pytest.param("a.ts", "/* legacy: тут был el.innerHTML = html */\nexport const x = 1;\n",
+                     id="js-block-comment"),
+        pytest.param("m.py", "# eval( в комментарии\nx = 1\n", id="python-line-comment"),
+        pytest.param("w.yml", "# список правил: dangerouslySetInnerHTML\nsteps: []\n",
+                     id="yaml-line-comment"),
+    ])
+    def test_comments_in_every_supported_language_are_silent(self, path, src):
+        assert security_scan.scan_injection({path: src}) == []
+
+    def test_code_next_to_a_comment_is_still_flagged(self):
+        """Обратный край: вычищается комментарий, а не строка вместе с ним."""
+        assert any(f["id"] == "dom_innerhtml_assign" for f in
+                   security_scan.scan_injection({"b.ts": "el.innerHTML = userInput; // так нельзя\n"}))
+
+    def test_a_url_in_a_string_is_not_mistaken_for_a_comment(self):
+        """`https://` внутри строки содержит `//` — но это не комментарий.
+
+        Если бы разбор принял его за комментарий, он затёр бы остаток строки вместе с настоящим
+        стоком. Ошибаться разбор обязан в сторону лишнего флага, а не пропуска.
+        """
+        src = 'const u = "https://example.com/x"; el.innerHTML = z;\n'
+        assert any(f["id"] == "dom_innerhtml_assign"
+                   for f in security_scan.scan_injection({"c.ts": src}))
+
+    def test_line_numbers_survive_the_blanking(self):
+        """Содержимое комментариев заменяется пробелами, а не вырезается: адрес находки прежний."""
+        src = ("// заметка\n"
+               "/* ещё\n   заметка */\n"
+               "el.innerHTML = x;\n")
+        findings = security_scan.scan_injection({"d.ts": src})
+        assert [f["line"] for f in findings] == [4], findings
+
+    def test_yaml_value_listing_a_rule_name_is_still_flagged(self):
+        """ГРАНИЦА ЧЕСТНОСТИ: закрыты комментарии, а не данные.
+
+        Имя правила в ЗНАЧЕНИИ yaml по-прежнему поднимает флаг. Замолчать его — значит решить, что
+        YAML никогда не содержит шаблонов, которые где-то рендерятся; этого мы не доказали, а
+        молчание требует доказательства. Остаток назван в перезамере, а не спрятан.
+        """
+        src = "rules:\n  - dangerouslySetInnerHTML\n"
+        assert any(f["id"] == "react_dangerous_html"
+                   for f in security_scan.scan_injection({"r.yaml": src}))
+
+
 # ─── КОРПУС: у каждого правила есть образец и безобидный двойник ───────────────────────────────
 #
 # ПОВОД (#1096). Докстрока модуля обещала `security_scan.py --selftest` — способ проверить детектор
