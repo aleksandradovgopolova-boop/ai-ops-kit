@@ -446,7 +446,6 @@ def _learning_pass(b, root, graph_dir, feature_outcome: dict) -> None:
             b.edge(iid, "derived-from", _slug(oref))
 
 
-
 def _review_pass(b, root) -> None:
     """Проход 4: персистентные вердикты ревью — кто и что проверил у функции."""
     # 4) review-вердикты — «кто/что проверил функцию» как ПЕРСИСТЕНТНАЯ запись, а не эхо прогона.
@@ -466,7 +465,6 @@ def _review_pass(b, root) -> None:
                      reviewed_revision=_text(rec.get("reviewed_revision")) or None,
                      ref=review_verdict.record_rel(feat_ref))
         b.edge(rid, "reviewed", feat_ref)
-
 
 
 def build_graph(child_root) -> dict:
@@ -526,7 +524,6 @@ def build_graph(child_root) -> dict:
 
     return {"schema_version": 1, "kind": "knowledge-graph",
             "nodes": list(b.nodes.values()), "edges": b.edges}
-
 
 
 # ── Вопросы к собранному графу — в сателлите `knowledge_graph_query` ─────────────────────────────
