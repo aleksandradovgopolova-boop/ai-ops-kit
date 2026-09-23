@@ -1,0 +1,270 @@
+#!/usr/bin/env python3
+"""Вопросы к СОБРАННОМУ графу знаний: «зачем существует функция» и «что не покрыто результатом».
+
+Сателлит фасада `knowledge_graph.py`. Там — СБОРКА графа из реальных источников (план, обучение,
+паспорта функций, решения, история работ, вердикты ревью); здесь — чистые функции обхода над уже
+собранным графом, без единого обращения к диску.
+
+Разрез сделан по этой границе, когда фасад перерос потолок размера: сборка отвечает на вопрос «что
+в графе есть», обход — «что из этого следует», и смешивать их в одном файле незачем.
+
+ЧЕСТНОСТЬ здесь та же, что в сборке: чего в данных нет, то НАЗЫВАЕТСЯ пробелом, а не заменяется
+догадкой. Цель, которой нет в плане, не швартует функцию; несколько целей над функцией не
+разрешаются выбором первой; потерянное звено не пропадает молча.
+
+Слой: `intelligence`. Наверх (`validation`) не импортирует, диска не касается.
+"""
+from __future__ import annotations
+
+from ai_ops_kit.intelligence.knowledge_graph_util import _slug, _text
+
+
+def _index(graph: dict):
+    nodes = {n.get("id"): n for n in (graph.get("nodes") or [])
+             if isinstance(n, dict) and n.get("id")}
+    edges = [e for e in (graph.get("edges") or []) if isinstance(e, dict)]
+    return nodes, edges
+
+
+def _parents(edges, nodes, nid) -> list:
+    """Родители узла по `contains` (только существующие узлы). Порядок рёбер сохраняется."""
+    return [e["from"] for e in edges if e.get("type") == "contains"
+            and e.get("to") == nid and e.get("from") in nodes]
+
+
+def _path_down(nodes, edges, goal: str, fid: str):
+    """Путь `goal -> … -> feature` по `contains`. -> (цепочка, найден ли путь на самом деле).
+
+    Нужен только для ПОКАЗА цепочки: принадлежность функции цели уже установлена её паспортом.
+    Пути в графе может не быть (объявленный эпик не стал связью — например, его имя занято другой
+    сущностью). Тогда отдаётся прямая пара «цель → функция», и флаг говорит обходу, что промежуток
+    показан НЕ по данным: молча выдавать домысел за путь нельзя.
+    """
+    queue: list = [[goal]]
+    seen = {goal}
+    while queue:
+        path = queue.pop(0)
+        if path[-1] == fid:
+            return path, True
+        for child in [e["to"] for e in edges if e.get("type") == "contains"
+                      and e.get("from") == path[-1] and e.get("to") in nodes]:
+            if child not in seen:
+                seen.add(child)
+                queue.append(path + [child])
+    return [goal, fid], False
+
+
+def _reachable_goals(nodes, edges, fid: str):
+    """Цели, достижимые вверх по `contains`. -> ({цель: путь}, {заглушка: путь}, тупик).
+
+    Считать неоднозначностью только НЕСКОЛЬКО ПРЯМЫХ родителей-целей было мало: эпик может
+    принадлежать одной цели напрямую, а другой — через инициативу, и тогда прямых целей ровно одна,
+    а целей над функцией всё равно две. Поэтому смотрим на всю достижимость вверх, а не на один
+    уровень. `seen` по узлам достаточно: достижимость цели от пути не зависит, а циклы обрываются.
+
+    Цель-ЗАГЛУШКА (`unresolved` — на неё сослались, а в плане её нет) идёт отдельным списком: считать
+    её настоящей значило бы пришвартовать функцию к тому, чего не существует, и молча. Тупик —
+    узел, у которого родителей НЕТ ВООБЩЕ (а не «все уже посещены»): иначе ответ зависел бы от
+    порядка рёбер, то есть от того, чей паспорт прочитался первым.
+    """
+    found: dict = {}
+    unresolved: dict = {}
+    dead_end = [fid]
+    queue: list = [[fid]]
+    seen = {fid}
+    while queue:
+        path = queue.pop(0)
+        head = path[0]
+        if nodes.get(head, {}).get("type") == "goal":
+            (unresolved if nodes[head].get("unresolved") else found)[head] = path
+            continue                      # выше цели лестница не идёт
+        if not _parents(edges, nodes, head) and len(path) > len(dead_end):
+            dead_end = path               # самый длинный путь до узла, у которого родителей нет
+        for p in [p for p in _parents(edges, nodes, head) if p not in seen]:
+            seen.add(p)
+            queue.append([p] + path)
+    return found, unresolved, dead_end
+
+
+def _climb_to_goal(nodes, edges, fid: str):
+    """Подъём по `contains` до цели для функции, которая цель НЕ объявила. -> (goal, chain, gap).
+
+    Принадлежность здесь УНАСЛЕДОВАНА от эпика/инициативы, а их отнесение к цели объявили паспорта
+    соседних функций. Пока такая цель одна — это иерархия продукта. Если их несколько, молчаливый
+    выбор был бы выдумкой (и зависел бы от порядка чтения каталогов): возвращаем НАЗВАННУЮ
+    неоднозначность и никакой цели.
+    """
+    found, unresolved, dead_end = _reachable_goals(nodes, edges, fid)
+    if len(found) > 1:
+        return None, [fid], (f"функция отнесена сразу к нескольким целям "
+                             f"({', '.join(sorted(found))}) — какая из них, по данным не решить; "
+                             f"своей цели функция не объявила")
+    if found:
+        goal, path = next(iter(found.items()))
+        return goal, path, None
+    if unresolved:
+        return None, [fid], (f"выше функции только цель «{sorted(unresolved)[0]}», которой нет в "
+                             f"плане (planning/plan.yaml) — швартовать функцию не к чему")
+    return None, dead_end, (f"выше «{dead_end[0]}» нет родителя — путь до цели (goal) неполон")
+
+
+def trace(graph: dict, feature: str) -> dict:
+    """«Зачем существует функция»: цепочка goal -> … -> feature -> outcome + вердикт + пробелы.
+
+    Обобщение `validate_product_objects.trace_feature_rationale` до вопроса, задаваемого над
+    СОБРАННЫМ графом: идёт вверх по `contains` до цели и вперёд по `targets` к outcome. Честная
+    цепочка — если данных на полный путь нет, отдаётся лучший фрагмент с НАЗВАННЫМИ `gaps`.
+
+    Результат: `{"feature", "chain": [{id,type,title}], "goal": id|None, "outcome": {...}|None,
+    "decision": {id,title}|None, "built_by": [{id,title,pr}], "review": {...}|None, "verdict": str,
+    "gaps": [...]}`.
+
+    `decision` — из какого РЕШЕНИЯ (истории) появилась функция («зачем она есть»); `built_by` — какая
+    РАБОТА/PR её построила («что построили и где»); `review` — КТО/ЧТО её проверил (персистентный
+    вердикт: кем проверено + verified + ревизия). Все — словами человека, а не пересказом кода. Нет
+    объявленной связи -> пусто (не пробел: связь просто не записана, а не потеряна).
+    """
+    nodes, edges = _index(graph)
+    fid = _slug(feature)
+    gaps: list[str] = []
+
+    def summary(nid: str) -> dict:
+        n = nodes.get(nid, {})
+        return {"id": nid, "type": _text(n.get("type")) or "?",
+                "title": _text(n.get("title")) or nid}
+
+    if fid not in nodes:
+        return {"feature": fid, "chain": [], "goal": None, "unresolved_goal": None,
+                "outcome": None, "decision": None,
+                "built_by": [], "review": None, "verdict": "unknown",
+                "gaps": [f"узла «{fid}» нет в графе — цепочку строить не от чего"]}
+
+    # Чья цель. Если паспорт функции цель ОБЪЯВИЛ, берём её с самой функции (`declared_goal`), а не
+    # подъёмом по графу: эпик — общий узел, его родителя-цель объявляют паспорта соседних функций, и
+    # подъём приписал бы функции чужую цель. Не объявил — поднимаемся по иерархии, как раньше.
+    goal, unresolved_goal = None, None
+    declared = _text(nodes[fid].get("declared_goal")) or None
+    if declared:
+        gnode = nodes.get(declared) or {}
+        if gnode.get("type") == "goal" and not gnode.get("unresolved"):
+            goal = declared
+            chain_ids, path_found = _path_down(nodes, edges, declared, fid)
+            if not path_found and not nodes[fid].get("broken_links"):
+                # Причину «пути нет» называем ровно один раз: если уровень потерян из-за тёзки,
+                # об этом скажет пробел ниже — два пункта про одно и то же человеку не помогают.
+                gaps.append(f"между целью «{declared}» и функцией в графе пути нет — показана "
+                            f"прямая связь, промежуточные уровни связью не стали")
+        else:
+            # Цель ОБЪЯВЛЕНА, но в плане её нет (или имя занято узлом другого типа). Считать такую
+            # цель швартовкой значило бы выдать заглушку за историю: нить оборвана именно здесь, и
+            # сказать это надо вслух. «Не сказал» и «не знаю» — разные состояния: автор сказал, а
+            # названного не существует.
+            unresolved_goal, chain_ids = declared, [fid]
+            gaps.append(f"функция объявила цель «{declared}», которой нет в плане "
+                        f"(planning/plan.yaml) — путь до цели оборван в данных")
+    else:
+        goal, chain_ids, climb_gap = _climb_to_goal(nodes, edges, fid)
+        if climb_gap:
+            gaps.append(climb_gap)
+    # Уровень объявлен паспортом, но связью не стал: его имя занято другой сущностью графа. Для
+    # ЦЕЛИ такой случай уже называется вслух (`unresolved`); молчать про эпик и инициативу значило
+    # бы применять правило честности через раз — объявленное звено пропадало бы бесследно.
+    for broken in (nodes[fid].get("broken_links") or []):
+        gaps.append(f"объявленный уровень «{broken}» связью не стал: это имя в графе занято другой "
+                    f"сущностью — звено истории потеряно")
+    # Имя функции носит и работа плана. Работу в граф не заводим (иначе функция стала бы ею), но
+    # человеку говорим: конфликт исправляется одним переименованием, если о нём знать.
+    if nodes[fid].get("name_taken_in_plan"):
+        gaps.append(f"это же имя носит работа в плане (planning/plan.yaml) — в нить вошла функция, "
+                    f"работа осталась за графом; переименуй одну из них")
+
+    # Вперёд к outcome.
+    outcome_ids = [e["to"] for e in edges if e.get("type") == "targets"
+                   and e.get("from") == fid and e.get("to") in nodes]
+    outcome = None
+    if outcome_ids:
+        onode = nodes[outcome_ids[0]]
+        outcome = {"id": outcome_ids[0], "verdict": _text(onode.get("verdict")) or "pending",
+                   "title": _text(onode.get("title")) or outcome_ids[0],
+                   "measured_by": [e["to"] for e in edges if e.get("type") == "measured-by"
+                                   and e.get("from") == outcome_ids[0]]}
+        if not outcome["measured_by"]:
+            gaps.append(f"у исхода «{outcome_ids[0]}» нет метрики (ребро measured-by) — "
+                        f"измерить его нечем")
+    else:
+        gaps.append(f"у «{fid}» нет outcome (ребро targets) — зачем функция существует, "
+                    f"не подтверждается измеримым результатом")
+
+    # Решение, из которого функция появилась («зачем она есть» — из истории). Отсутствие решения
+    # НЕ пробел: причина может быть просто не записана. Но если решение есть, история его называет.
+    decision_ids = [e["from"] for e in edges if e.get("type") == "motivates"
+                    and e.get("to") == fid and e.get("from") in nodes]
+    decision = None
+    if decision_ids:
+        dn = nodes[decision_ids[0]]
+        decision = {"id": decision_ids[0], "title": _text(dn.get("title")) or decision_ids[0]}
+
+    # Работа/PR, построившая функцию («что построили» — из истории). Отсутствие НЕ пробел: история
+    # могла просто не записать, кто построил. Но если работа объявлена, история её называет.
+    built_by = []
+    for wid in [e["from"] for e in edges if e.get("type") == "builds"
+                and e.get("to") == fid and e.get("from") in nodes]:
+        wn = nodes[wid]
+        built_by.append({"id": wid, "title": _text(wn.get("title")) or wid,
+                         "pr": _text(wn.get("pr")) or None})
+
+    # Кто/что проверил функцию («проверено кем» — из ПЕРСИСТЕНТНОЙ записи, не из прогона). Отсутствие
+    # НЕ пробел: проверки могло не быть, а её запись — не потеряна. Есть запись -> называем, кем.
+    review = None
+    review_ids = [e["from"] for e in edges if e.get("type") == "reviewed"
+                  and e.get("to") == fid and e.get("from") in nodes]
+    if review_ids:
+        rn = nodes[review_ids[0]]
+        review = {"id": review_ids[0], "title": _text(rn.get("title")) or review_ids[0],
+                  "verified": bool(rn.get("verified")),
+                  "reviewed_revision": _text(rn.get("reviewed_revision")) or None}
+
+    verdict = _verdict(goal, outcome)
+    return {"feature": fid, "chain": [summary(i) for i in chain_ids], "goal": goal,
+            "unresolved_goal": unresolved_goal,
+            "outcome": outcome, "decision": decision, "built_by": built_by, "review": review,
+            "verdict": verdict, "gaps": gaps}
+
+
+def _verdict(goal, outcome) -> str:
+    """Короткий машиночитаемый вердикт цепочки функции."""
+    if goal is None:
+        return "unmoored"          # функция ни к какой цели не привязана
+    if outcome is None:
+        return "no-outcome"        # цель есть, измеримого результата — нет
+    if not outcome.get("measured_by"):
+        return "outcome-unmeasured"
+    return {"met": "confirmed", "unmet": "refuted"}.get(outcome.get("verdict"), "pending")
+
+
+def gaps(graph: dict) -> dict:
+    """Что в графе НЕ покрыто измеримым результатом — три честных списка.
+
+    * `outcomes_without_metric` — исходы, которые ничем не измеряются (нет `outcome -measured-by->
+      metric`): цель объявлена, а сигнала нет;
+    * `metrics_without_release` — метрики, которых не наблюдает ни один релиз (нет `release
+      -observed-by-> metric`): считать вроде есть чем, а откуда придут данные — не сказано;
+    * `features_without_outcome` — функции без ребра `targets`: строим, а зачем — не подтверждено.
+    """
+    nodes, edges = _index(graph)
+    measured = {e["from"] for e in edges if e.get("type") == "measured-by"}
+    observed = {e["to"] for e in edges if e.get("type") == "observed-by"}
+    targeted = {e["from"] for e in edges if e.get("type") == "targets"}
+
+    def title(nid):
+        return _text(nodes.get(nid, {}).get("title")) or nid
+
+    outcomes = [{"id": n["id"], "title": title(n["id"])} for n in nodes.values()
+                if n.get("type") == "outcome" and n["id"] not in measured]
+    metrics = [{"id": n["id"], "title": title(n["id"])} for n in nodes.values()
+               if n.get("type") == "metric" and n["id"] not in observed]
+    features = [{"id": n["id"], "title": title(n["id"])} for n in nodes.values()
+                if n.get("type") == "feature" and n["id"] not in targeted]
+    return {"outcomes_without_metric": outcomes,
+            "metrics_without_release": metrics,
+            "features_without_outcome": features}
