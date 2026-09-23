@@ -229,7 +229,9 @@ class TestSharedEpicDoesNotLendSomeoneElsesGoal:
         graph = kg.build_graph(root)
         types = {n["id"]: n["type"] for n in graph["nodes"]}
         ladder = kg.CONTAINS_LADDER
-        for e in [e for e in graph["edges"] if e["type"] == "contains"]:
+        contains = [e for e in graph["edges"] if e["type"] == "contains"]
+        assert contains, "рёбер contains нет вовсе — сторож проверял бы пустоту"
+        for e in contains:
             assert ladder.index(types[e["from"]]) < ladder.index(types[e["to"]]), e
 
 

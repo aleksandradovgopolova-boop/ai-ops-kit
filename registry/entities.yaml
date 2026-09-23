@@ -10,7 +10,7 @@ entity_types:
   goal:          {description: "Бизнес/продуктовая цель. Объявлена планом продукта; атрибут unresolved=true означает, что на цель сослался паспорт функции, а в плане её нет — разрыв нити, который обход называет вслух, а не заглушка вместо цели.", attributes: [unresolved]}
   initiative:    {description: "Инициатива, реализующая цель"}
   epic:          {description: "Крупный кусок ценности внутри инициативы"}
-  feature:       {description: "Функция; узел связывается с Feature Blueprint", attributes: [blueprint]}
+  feature:       {description: "Функция; узел связывается с Feature Blueprint. Атрибут declared_goal — цель, которую ОБЪЯВИЛ паспорт самой функции: принадлежность цели читается отсюда, а не выводится подъёмом по графу (эпик — общий узел, его родителя-цель объявляют паспорта соседних функций).", attributes: [blueprint, declared_goal]}
   story:         {description: "User story внутри функции"}
   design:        {description: "UX/дизайн-артефакт"}
   api:           {description: "API-контракт"}
