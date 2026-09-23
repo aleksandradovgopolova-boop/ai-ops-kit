@@ -445,6 +445,70 @@ class TestExecDetectorDistinguishesRegexFromCommand:
         assert not any(f["id"] == "eval_or_exec" for f in findings)
 
 
+
+class TestSqlTemplateDistinguishesConstantFromData:
+    """#1112: подстановка объявленной рядом константы — не то же, что подстановка данных.
+
+    Замер 23.09.2026 на ии-среде дал по этому правилу 20 флагов и 100% шума: один и тот же
+    шаблон `DROP SCHEMA IF EXISTS ${SCHEMA}` в восьми тестовых наборах. Правило не выброшено —
+    пропуск здесь дороже шума; добавлено ровно то различие, которого не хватало судье.
+    """
+
+    def test_sql_template_distinguishes_a_constant_from_data(self):
+        """#1112: правило давало 100% шума, потому что не различало, ЧТО подставляется.
+
+        Замер 23.09.2026 на ии-среде: все 20 флагов — один и тот же шаблон
+        `DROP SCHEMA IF EXISTS ${SCHEMA}` в восьми тестовых наборах; мест, где в SQL-шаблон попадают
+        пользовательские данные, во всём продукте нет. Формы взяты из реального кода дочки.
+        """
+        из_дочки = (
+            'const SCHEMA = "access_control_test";\n'
+            "await admin0.query(`DROP SCHEMA IF EXISTS ${SCHEMA} CASCADE`);\n"
+            "await admin0.query(`CREATE SCHEMA ${SCHEMA}`);\n"
+        )
+        assert [f for f in security_scan.scan_injection({"access-control.test.ts": из_дочки})
+                if f["id"] == "sql_template_literal"] == [], "константа рядом принята за данные"
+
+    def test_sql_template_still_flags_real_data_and_anything_unproven(self):
+        """Обратный край: молчание требует доказательства, шум его не требует.
+
+        Правило не выбрасывается — пропуск здесь дороже шума. Молчит оно ровно там, где подставляется
+        имя, связанное в этом же файле через `const` со строковым литералом. Всё остальное — флаг.
+        """
+        данные = 'db.query(`select * from users where id = ${req.query.id}`);\n'
+        assert [f for f in security_scan.scan_injection({"srv.ts": данные})
+                if f["id"] == "sql_template_literal"], "пользовательские данные перестали ловиться"
+
+        # Параметр со значением по умолчанию НЕ константа: вызывающий волен передать что угодно.
+        # Это форма из `e2e/prepare-database.mjs` ии-среды — она честно остаётся флагом.
+        параметр = (
+            'export const E2E_SCHEMA = "e2e_app";\n'
+            "export async function prepareDatabase(base, schema = E2E_SCHEMA) {\n"
+            "  await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);\n"
+            "}\n"
+        )
+        assert [f for f in security_scan.scan_injection({"e2e/prepare-database.mjs": параметр})
+                if f["id"] == "sql_template_literal"], "параметр принят за константу"
+
+        # Одна константа не выкупает соседнюю подстановку данных в том же литерале.
+        смесь = (
+            'const SCHEMA = "t";\n'
+            "db.query(`select * from ${SCHEMA}.users where id = ${req.params.id}`);\n"
+        )
+        assert [f for f in security_scan.scan_injection({"m.ts": смесь})
+                if f["id"] == "sql_template_literal"], "данные рядом с константой не пойманы"
+
+        # `let` можно переприсвоить — не константа.
+        переприсваиваемое = 'let SCHEMA = "t";\ndb.query(`CREATE SCHEMA ${SCHEMA}`);\n'
+        assert [f for f in security_scan.scan_injection({"l.ts": переприсваиваемое})
+                if f["id"] == "sql_template_literal"], "let принят за константу"
+
+        # Неразобранная подстановка (вложенные скобки) — флаг, а не молчание.
+        неразобранное = 'db.query(`select * from ${ {a: t}.a }`);\n'
+        assert [f for f in security_scan.scan_injection({"n.ts": неразобранное})
+                if f["id"] == "sql_template_literal"], "неразобранная подстановка проглочена молча"
+
+
 # ─── КОРПУС: у каждого правила есть образец и безобидный двойник ───────────────────────────────
 #
 # ПОВОД (#1096). Докстрока модуля обещала `security_scan.py --selftest` — способ проверить детектор
