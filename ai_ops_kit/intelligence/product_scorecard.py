@@ -14,10 +14,17 @@
      бы зависимость вверх, тот же инвариант, что у `outcome_insight`). Нет результатов -> «не измерено».
   3. product_memory_coverage  — доля выпущенных фич с ПОЛНОЙ life story (рёбра decision/work/review/
      outcome в графе). СЧИТАЕТСЯ.
-  4. outcome_coverage         — доля фич с РЕАЛЬНЫМ результатом после релиза. Каркас: у самого кита
-     живой аналитики нет -> честное «не измерено», а не выдуманное число.
-  5. learning_to_decision_rate — доля решений, опирающихся на прошлые результаты. Каркас: замкнутой
-     петли обучения пока нет -> честное «не измерено».
+  4. outcome_coverage         — доля фич с РЕАЛЬНЫМ результатом после релиза. СЧИТАЕТСЯ (с 23.09):
+     из отчётов о результате (`features/<id>/outcome-readout.yaml`) подключённого репозитория.
+  5. learning_to_decision_rate — доля решений, опирающихся на прошлые результаты. СЧИТАЕТСЯ (с 23.09):
+     из узлов обучения графа (`product-learning/FL-*.yaml`), выведенных ИЗ измеренного результата.
+
+ПОЧЕМУ 4 И 5 ПЕРЕСТАЛИ БЫТЬ КАРКАСОМ (23.09.2026). Они стояли «не измерено» с причиной «у самого
+кита нет живой аналитики» — и эта причина ездила в КАЖДЫЙ подключённый репозиторий. На ии-среде, где
+петля замкнута на реальных числах (фича `analytics-visit-tracking`: было 0 -> стало 19 при цели 20,
+вердикт из чисел, урок выведен и подшит к следующему шагу), карта продукта всё равно печатала «у
+самого кита нет аналитики» — то есть говорила о ките там, где спрашивали о продукте. Обе функции не
+принимали аргументов и ни во что не смотрели. Теперь смотрят.
 
 ИНВАРИАНТ (ядро работы, не деталь). ЧЕСТНОСТЬ ПРЕВЫШЕ ПОЛНОТЫ: нет данных -> метрика в состоянии
 `measured=False` с причиной по-русски, НИКОГДА выдуманное число. «Не знаю» и «в порядке» — разные
@@ -27,6 +34,8 @@
 импортирует). Read-only: ничего не пишет.
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 # Паспорта-демо из `examples/feature-blueprint-demo/` — учебные, не реальные фичи кита: в карте
 # продукта КИТА они бы искажали доли, поэтому исключаются по маркеру в пути blueprint'а.
@@ -167,40 +176,114 @@ def product_memory_coverage(graph: dict) -> dict:
         detail="фича засчитана, если в графе замкнуты все четыре звена: решение, работа, ревью, результат")
 
 
-def outcome_coverage() -> dict:
-    """Метрика 4 (КАРКАС): доля фич с РЕАЛЬНЫМ результатом после релиза — честно «не измерено».
+def _measured_readouts(child_root) -> dict:
+    """{id фичи: отчёт} для фич, у которых результат ДЕЙСТВИТЕЛЬНО замерен.
 
-    Упирается в живую продуктовую аналитику, которой у самого кита нет: без реальных событий/метрик
-    исход честно «не накоплен», выдумывать его значило бы врать. Слот стоит каркасом и наполняется
-    ВМЕСТЕ с петлёй outcome->learning (общий фронтир, не задваивать параллельную работу)."""
+    Замерен = есть `features/<id>/outcome-readout.yaml` (kind OutcomeReadout) со снятым значением и
+    названным `target_met`. `target_met: unknown` НЕ считается замером: это и есть честное «мерили,
+    но не узнали», и подмешивать его в долю «результат есть» значило бы выдать незнание за знание.
+
+    Читается напрямую с диска, а не через `validation`: тот слой выше (инвариант модуля).
+    """
+    import yaml
+
+    out: dict = {}
+    root = Path(child_root)
+    for path in sorted(root.glob("features/*/outcome-readout.yaml")):
+        # Нечитаемый или битый отчёт — НЕ замер: карта продукта не падает из-за одного файла, но и
+        # не засчитывает его как результат. Ловим ровно две причины (файл и YAML), а не всё подряд.
+        try:
+            doc = yaml.safe_load(path.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError):
+            doc = None
+        if not isinstance(doc, dict) or doc.get("kind") != "OutcomeReadout":
+            continue
+        measured = doc.get("measured")
+        if not isinstance(measured, dict) or measured.get("value") in (None, ""):
+            continue
+        if doc.get("target_met") in (None, "", "unknown"):
+            continue
+        out[path.parent.name] = doc
+    return out
+
+
+def outcome_coverage(graph: dict, child_root) -> dict:
+    """Метрика 4: доля фич с РЕАЛЬНЫМ результатом после релиза.
+
+    Числитель — фичи, у которых снят отчёт о результате с числом и названным `target_met`.
+    Знаменатель — реальные фичи проекта. Нет ни одной фичи -> «не измерено» (доли не от чего
+    считать). Фичи есть, замеров нет -> ЧЕСТНЫЙ НОЛЬ, а не «не измерено»: «ни у одной фичи результат
+    не замерен» — это знание, а не его отсутствие (тот же разбор, что у метрики 3).
+
+    ОГОВОРКА: «результат замерен» не равно «цель взята». Недобравшая цель (`target_met: no`) входит
+    в долю наравне со взятой — метрика про НАЛИЧИЕ измеренного итога, не про его знак.
+    """
+    feats = _real_features(graph)
+    if not feats:
+        return _metric(
+            "outcome_coverage", "Доля фич с реальным результатом после релиза",
+            measured=False,
+            reason="в проекте нет паспортов фич (features/<id>/blueprint.yaml) — долю считать не от чего")
+    have = [f for f in feats if f in _measured_readouts(child_root)]
     return _metric(
         "outcome_coverage", "Доля фич с реальным результатом после релиза",
-        measured=False,
-        reason="у самого кита нет живой продуктовой аналитики — реальный результат после релиза "
-               "не накоплен, а выдуманное число было бы враньём",
-        detail="каркас-слот: наполняется вместе с петлёй outcome->learning, когда петля замкнётся "
-               "на продукте с живой аналитикой")
+        measured=True, value=len(have) / len(feats),
+        numerator=len(have), denominator=len(feats),
+        detail="фича засчитана, если снят отчёт о результате (features/<id>/outcome-readout.yaml) "
+               "со снятым числом и названным target_met; unknown замером не считается",
+        caveat="«результат замерен» не равно «цель взята»: недобравшая цель входит в долю наравне "
+               "со взятой — метрика про наличие измеренного итога, не про его знак")
 
 
-def learning_to_decision_rate() -> dict:
-    """Метрика 5 (КАРКАС): доля решений, опирающихся на прошлые результаты — честно «не измерено».
+def learning_to_decision_rate(graph: dict, child_root) -> dict:
+    """Метрика 5: доля решений, опирающихся на прошлые результаты — замкнута ли петля обучения.
 
-    Фронтир: требует замкнутой петли обучения (результат -> следующее решение). Без реальных исходов
-    нельзя честно сказать, какое решение на них опирается, поэтому слот стоит каркасом."""
+    Знаменатель — фичи с ИЗМЕРЕННЫМ результатом (метрика 4): пока результата нет, «решение на него
+    опирается» не про что спрашивать. Числитель — те из них, у кого в графе есть узел обучения,
+    выведенный ИЗ этого результата (`insight -derived-from-> outcome`) И подшитый к следующему шагу
+    (`insight -feeds-> ...`). Замеров нет -> «не измерено» с ЭТОЙ причиной, а не с рассказом про кит.
+
+    ОГОВОРКА: считается «результат -> следующий шаг», а не каждое решение проекта. Решение, принятое
+    человеком по прочитанному результату и нигде не записанное, сюда не попадёт — кит меряет то, что
+    записано, и не выдаёт молчание за отсутствие.
+    """
+    readouts = _measured_readouts(child_root)
+    measured_feats = [f for f in _real_features(graph) if f in readouts]
+    if not measured_feats:
+        return _metric(
+            "learning_to_decision_rate", "Доля решений, опирающихся на прошлые результаты",
+            measured=False,
+            reason="ни у одной фичи результат после релиза не замерен — пока нет результата, "
+                   "«решение опирается на него» считать не от чего")
+    edges = [e for e in (graph.get("edges") or []) if isinstance(e, dict)]
+    targets = {e.get("from"): e.get("to") for e in edges if e.get("type") == "targets"}
+    derived = {e.get("from"): e.get("to") for e in edges if e.get("type") == "derived-from"}
+    feeds_from = {e.get("from") for e in edges if e.get("type") == "feeds"}
+    closed = []
+    for f in measured_feats:
+        outcome = targets.get(f)
+        if outcome is None:
+            continue                                   # результат снят, но к исходу не подшит
+        if any(src in feeds_from and dst == outcome for src, dst in derived.items()):
+            closed.append(f)
     return _metric(
         "learning_to_decision_rate", "Доля решений, опирающихся на прошлые результаты",
-        measured=False,
-        reason="замкнутой петли «результат -> следующее решение» пока нет — без реальных исходов "
-               "нельзя честно сказать, какое решение на них опирается",
-        detail="каркас-слот: наполняется вместе с петлёй outcome->learning")
+        measured=True, value=len(closed) / len(measured_feats),
+        numerator=len(closed), denominator=len(measured_feats),
+        detail="из фич с измеренным результатом засчитаны те, у кого урок выведен ИЗ этого "
+               "результата (derived-from) и подшит к следующему шагу (feeds)",
+        caveat="считается «результат -> следующий шаг» по записанному в product-learning/, а не "
+               "каждое решение проекта: решение, принятое в голове, сюда не попадёт")
 
 
 def build_scorecard(child_root, *, claim_results=None) -> dict:
     """Собрать единую карту продукта кита из 5 метрик. Read-only: ничего не пишет.
 
-    Метрики 1 и 3 считаются из графа знаний (`knowledge_graph.build_graph`), метрика 2 — из
-    переданных снаружи результатов проверки реестра честности (`claim_results`; см. docstring
-    модуля о слоях), метрики 4 и 5 стоят честным каркасом «не измерено».
+    Метрики 1, 3, 4 и 5 считаются из данных подключённого репозитория (граф знаний
+    `knowledge_graph.build_graph` плюс отчёты о результате `features/<id>/outcome-readout.yaml`),
+    метрика 2 — из переданных снаружи результатов проверки реестра честности (`claim_results`;
+    см. docstring модуля о слоях). Любая из пяти честно встаёт в «не измерено» с причиной, когда
+    данных нет.
 
     -> `{schema_version, kind, metrics: [...5...], measured_count, unmeasured_count}`.
     """
@@ -210,8 +293,8 @@ def build_scorecard(child_root, *, claim_results=None) -> dict:
         feature_completion_rate(graph),
         evidence_coverage(claim_results),
         product_memory_coverage(graph),
-        outcome_coverage(),
-        learning_to_decision_rate(),
+        outcome_coverage(graph, child_root),
+        learning_to_decision_rate(graph, child_root),
     ]
     measured = sum(1 for m in metrics if m["measured"])
     return {"schema_version": 1, "kind": "kit-product-scorecard",
