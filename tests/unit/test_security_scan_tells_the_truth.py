@@ -204,6 +204,61 @@ def test_forgiveness_does_not_leak_to_a_product_file_with_the_same_tail():
         ".ai/managed-fork/ai_ops_kit/security/security_scan.py",
     ):
         assert ss.scan_injection({чужой: own}), f"{чужой} прощён — прощение стало складом"
+def test_regexp_exec_is_not_read_as_command_execution():
+    """#1112, класс R-40 второй раз: `/re/.exec(s)` — метод регулярного выражения, не команда.
+
+    `\b` в `_NODE_EXEC_CALL` стоит между точкой и `e`, поэтому правило матчило `.exec(`, а условие
+    «файл импортирует child_process» в `vite.config.ts` выполнялось из-за постороннего хелпера,
+    считавшего хэш сборки. Замер 23.09.2026: 4 флага правила, 100% шума.
+
+    Строка взята из замера дословно — с косой чертой ВНУТРИ класса символов (`[^/]`), на которой
+    ломается наивный разбор литерала.
+    """
+    из_замера = (
+        'import { createHash } from "crypto";\n'
+        'import { execSync } from "child_process";\n'
+        'const m = /^\\/api\\/files\\/([^/]+)\\/content$/.exec(pathname);\n'
+    )
+    флаги = [f for f in ss.scan_injection({"vite.config.ts": из_замера})
+             if f["id"] == "node_child_process_exec"]
+    assert флаги == [], "метод регулярного выражения объявлен исполнением команды — R-40 жив"
+
+    именованное = (
+        'const cp = require("child_process");\n'
+        'const ROUTE = /^\\/api\\/(\\w+)$/;\n'
+        'const m = ROUTE.exec(pathname);\n'
+    )
+    флаги = [f for f in ss.scan_injection({"router.js": именованное})
+             if f["id"] == "node_child_process_exec"]
+    assert флаги == [], "имя, которому присвоено регулярное выражение, тоже не команда"
+
+
+def test_real_command_execution_is_still_flagged_after_the_r40_fix():
+    """Обратный край: чинится ПОЛУЧАТЕЛЬ, а не правило.
+
+    Стойка «пере-срабатывание безопасно, под-срабатывание — нет» остаётся: снимается ровно класс
+    «получатель — регулярное выражение», а `.exec(` с неизвестным получателем по-прежнему флагается,
+    потому что получатель может оказаться обёрткой над child_process.
+    """
+    случаи = {
+        "прямой вызов": 'const cp = require("child_process");\ncp.exec("rm -rf " + userInput);\n',
+        "деструктуризация": 'const { exec } = require("child_process");\nexec(cmd);\n',
+        "инлайн-require": 'require("child_process").exec(userInput);\n',
+        "execSync": 'import { execSync } from "child_process";\nexecSync(`git ${arg}`);\n',
+        "неизвестный получатель": 'import cp from "child_process";\nrunner.exec(cmd);\n',
+    }
+    for имя, код in случаи.items():
+        флаги = [f for f in ss.scan_injection({"srv.js": код})
+                 if f["id"] == "node_child_process_exec"]
+        assert флаги, f"{имя}: настоящее исполнение команды перестало ловиться"
+
+    # Регулярка в одной строке с настоящим вызовом не прячет его.
+    смесь = (
+        'const cp = require("child_process");\n'
+        'if (/^\\w+$/.exec(arg)) cp.exec("ls " + arg);\n'
+    )
+    assert [f for f in ss.scan_injection({"srv.js": смесь})
+            if f["id"] == "node_child_process_exec"], "снятие регулярки спрятало реальный вызов"
 
 
 def test_the_forgiven_list_only_shrinks():

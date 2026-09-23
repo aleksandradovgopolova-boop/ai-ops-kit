@@ -412,10 +412,29 @@ class TestExecDetectorDistinguishesRegexFromCommand:
         assert calls, f"исполнение команд не помечено ({ident}): {findings}"
         assert calls[0]["line"] == 2, f"находка указывает не на строку вызова: {calls}"
 
-    def test_regex_exec_in_file_with_child_process_is_flagged_deliberately(self):
-        """Пере-срабатывание здесь ОСОЗНАННОЕ: получателя вызова текстом не различить, а лишний
-        needs_review безопасен, тогда как пропуск исполнения команды — нет."""
+    def test_regex_exec_in_file_with_child_process_is_no_longer_flagged(self):
+        """ПЕРЕСМОТРЕНО 2026-09-23 замером, а не вкусом (#1112).
+
+        Здесь стояло обратное утверждение с обоснованием «получателя вызова текстом не различить,
+        а лишний needs_review безопасен». Первая половина оказалась неверна: косая черта вплотную
+        перед `.exec(` в JavaScript может быть только концом литерала регулярного выражения —
+        деление `.exec(` за собой не ведёт. Вторая половина оказалась дороже, чем считалось: замер
+        на реальном диффе ии-среды дал по этому правилу 4 флага и 100% шума, а список, который
+        судья пролистывает целиком, не безопаснее молчания — он учит игнорировать проверку.
+
+        Снят ровно один класс. Обратный край — в следующем тесте.
+        """
         src = 'const cp = require("child_process");\nconst m = /x/.exec(v);\n'
+        assert not any(f["id"] == "node_child_process_exec"
+                       for f in security_scan.scan_injection({"a.mjs": src}))
+
+    def test_exec_on_an_unknown_receiver_is_still_flagged(self):
+        """Стойка «пере-срабатывание безопаснее под-срабатывания» СОХРАНЕНА для всего остального.
+
+        Получатель, про которого в файле не видно, что он регулярное выражение, может оказаться
+        обёрткой над child_process — такой вызов по-прежнему поднимает флаг.
+        """
+        src = 'const cp = require("child_process");\nconst m = runner.exec(v);\n'
         assert any(f["id"] == "node_child_process_exec"
                    for f in security_scan.scan_injection({"a.mjs": src}))
 
