@@ -183,9 +183,16 @@ def trace(graph: dict, feature: str) -> dict:
                     f"сущностью — звено истории потеряно")
     # Имя функции носит и работа плана. Работу в граф не заводим (иначе функция стала бы ею), но
     # человеку говорим: конфликт исправляется одним переименованием, если о нём знать.
-    if nodes[fid].get("name_taken_in_plan"):
-        gaps.append(f"это же имя носит цель или работа в плане (planning/plan.yaml) — в нить вошла "
-                    f"функция, запись плана осталась за графом; переименуй одну из них")
+    taken = nodes[fid].get("name_taken_in_plan")
+    # Граф прежней версии нёс здесь булев флаг: печатать его как слово («носит True в плане») —
+    # врать читателю опубликованного артефакта, у которого пересобрать граф может быть нечем.
+    kind = "запись" if taken is True else _text(taken)
+    if kind:
+        dropped = nodes[fid].get("name_conflict_dropped") or 0
+        cascade = (f", и вместе с ней за графом осталось ещё записей плана: {dropped}"
+                   if dropped else "")
+        gaps.append(f"это же имя носит {kind} в плане (planning/plan.yaml) — в нить вошла функция, "
+                    f"запись плана осталась за графом{cascade}; переименуй одну из них")
 
     # Вперёд к outcome.
     outcome_ids = [e["to"] for e in edges if e.get("type") == "targets"

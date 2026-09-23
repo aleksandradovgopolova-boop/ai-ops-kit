@@ -191,6 +191,24 @@ def _iter_review_verdicts(root: Path):
                 yield rec
 
 
+def _plan_records_lost_with(goal_id: str, plan: dict) -> int:
+    """Сколько ЕЩЁ записей плана остаётся за графом вместе с целью-тёзкой. -> число.
+
+    Считает ровно то, что стало бы узлами: исход цели (если объявлен) и работы под ней — по тем же
+    правилам, что применяет сборщик. Запись без `id` он пропускает, тёзок по `id` схлопывает в один
+    узел, поэтому и здесь они не считаются: иначе названное число было бы больше настоящей потери.
+    """
+    lost = 0
+    for g in plan.get("goals") or []:
+        if isinstance(g, dict) and _slug(g.get("id")) == goal_id:
+            if isinstance(g.get("outcome"), dict) and g.get("outcome"):
+                lost += 1
+            break                         # исход у цели один: дубликат id цели узла не добавит
+    works = {_slug(w.get("id")) for w in (plan.get("work") or [])
+             if isinstance(w, dict) and _text(w.get("id")) and _slug(w.get("goal")) == goal_id}
+    return lost + len(works)
+
+
 def _outcome_verdict(outcome: dict) -> str:
     """Свод булевых исходов цели в вердикт узла outcome. Пусто/не булево -> `pending`."""
     values = [v for v in outcome.values() if isinstance(v, bool)]
@@ -246,7 +264,13 @@ def build_graph(child_root) -> dict:
     blueprints = [(bp_path, _load_yaml(bp_path)) for bp_path in _iter_blueprints(root)]
     feature_ids = {_slug((bp.get("feature") or {}).get("id"))
                    for _, bp in blueprints if _text((bp.get("feature") or {}).get("id"))}
-    name_taken_in_plan: set = set()
+    # id функции -> что в плане носит то же имя: {"цель"} / {"работа"} / обе. Кит РАЗЛИЧАЕТ источник
+    # спора, поэтому и человеку говорит, что именно искать в плане, а не «цель или работа».
+    name_taken_in_plan: dict = {}
+    # id функции -> сколько ЕЩЁ записей плана не вошло в граф вместе с тёзкой (исход цели и работы
+    # под ней). Без этого числа пробел занижал бы масштаб: терялась не одна строка, а поддерево, и
+    # вместе с ним из `gaps` пропадал честный негатив (исход, который нечем измерить).
+    name_conflict_dropped: dict = {}
 
     # 1) plan.yaml — цели, их outcome, работы как initiative.
     plan = _load_yaml(root / "planning" / "plan.yaml")
@@ -257,8 +281,12 @@ def build_graph(child_root) -> dict:
         if _slug(g["id"]) in feature_ids:
             # Цель плана — тёзка функции. Узел-цель не заводим по той же причине, что и работу:
             # иначе функция навсегда становится целью, получает чужие для этого типа атрибуты, и
-            # сборка отвечает про «устаревший реестр типов» — мимо настоящей причины.
-            name_taken_in_plan.add(_slug(g["id"]))
+            # сборка отвечает про «устаревший реестр типов» — мимо настоящей причины. Вместе с
+            # целью за графом остаётся её поддерево: исход и работы под ней — считаем их, чтобы
+            # пробел назвал масштаб потери, а не одну строку.
+            gid_conflict = _slug(g["id"])
+            name_taken_in_plan.setdefault(gid_conflict, set()).add("цель")
+            name_conflict_dropped[gid_conflict] = _plan_records_lost_with(gid_conflict, plan)
             continue
         gid = b.node(g["id"], "goal", title=_text(g.get("id")), ref="planning/plan.yaml")
         outcome = g.get("outcome")
@@ -272,16 +300,27 @@ def build_graph(child_root) -> dict:
         if not isinstance(w, dict) or not _text(w.get("id")):
             continue
         goal_ref = _slug(w.get("goal")) if _text(w.get("goal")) else None
-        if not (goal_ref and b.type_of(goal_ref) == "goal"):
+        # Цель работы «есть», если она стала узлом ИЛИ не стала ровно из-за спора имён: во втором
+        # случае работа тоже осталась за графом по вине конфликта, и молчать о ней нельзя. Прежде
+        # выход происходил раньше проверки на тёзку, и при двойном споре второй конфликт пропадал.
+        goal_exists = bool(goal_ref) and (b.type_of(goal_ref) == "goal"
+                                          or "цель" in name_taken_in_plan.get(goal_ref, set()))
+        if not goal_exists:
             continue                      # работа без резолвимой цели узлом не была и раньше
         if _slug(w["id"]) in feature_ids:
             # Работа плана — тёзка функции. Узел-инициативу не заводим (иначе функция им и
             # останется), потерю называем на самой функции: молчать о ней значило бы спрятать
-            # конфликт данных, который человек может исправить одним переименованием. Говорим об
-            # этом только когда работа ДЕЙСТВИТЕЛЬНО стала бы узлом: иначе пробел сообщал бы о
-            # потере там, где терять было нечего.
-            name_taken_in_plan.add(_slug(w["id"]))
+            # конфликт данных. Говорим об этом только когда работа ДЕЙСТВИТЕЛЬНО стала бы узлом:
+            # иначе пробел сообщал бы о потере там, где терять было нечего. Если цель работы сама
+            # за графом из-за спора имён, называем ПЕРВОПРИЧИНУ: переименовать работу мало —
+            # родителя всё равно нет, и совет «переименуй одну из них» обещал бы лечение, которого
+            # не будет.
+            kind = ("работа" if b.type_of(goal_ref) == "goal"
+                    else "работа, но первым разведи имена у её цели")
+            name_taken_in_plan.setdefault(_slug(w["id"]), set()).add(kind)
             continue
+        if b.type_of(goal_ref) != "goal":
+            continue                      # цель за графом из-за спора имён — вешать работу не на что
         iid = b.node(w["id"], "initiative", title=_text(w.get("title")) or _text(w["id"]),
                      ref="planning/plan.yaml")
         b.edge(goal_ref, "contains", iid)
@@ -340,9 +379,15 @@ def build_graph(child_root) -> dict:
             b.edge(pid, "contains", cid)
         if broken_links or fid in name_taken_in_plan:
             # Дозапись на узле функции: потеря не молчит — `trace` назовёт и потерянный уровень, и
-            # работу плана, которая носит то же имя (её узла в графе нет, чтобы не подменить функцию).
+            # запись плана, которая носит то же имя (её узла в графе нет, чтобы не подменить
+            # функцию), и сколько ещё записей ушло за графом вместе с ней.
+            # Порядок фиксирован смыслом, а не алфавитом: цель выше работы в лестнице плана.
+            taken = name_taken_in_plan.get(fid, ())
+            order = ("цель", "работа", "работа, но первым разведи имена у её цели")
+            kinds = [k for k in order if k in taken]
             b.node(feat["id"], "feature", broken_links=broken_links or None,
-                   name_taken_in_plan=True if fid in name_taken_in_plan else None)
+                   name_taken_in_plan=" и ".join(kinds) or None,
+                   name_conflict_dropped=name_conflict_dropped.get(fid) or None)
 
         # Метрики функции.
         metric_ids: list[str] = []
