@@ -299,6 +299,32 @@ class TestWiderScopeCatchesGodFunctions:
         assert scope_rel in errors[0]
         assert "превышает потолок" in errors[0]
 
+    def test_god_function_in_a_nested_package_is_flagged(self, tmp_path):
+        """Подпакет-сателлит внутри покрытого каталога тоже под присмотром.
+
+        #1119: сторож охвата видел только верхний уровень, а измерение брало `glob("*.py")` без
+        рекурсии — `checks/surface_extractors/` (18 файлов, 102 функции) не стерёг никто. Репозиторий
+        активно плодит сателлиты, так что дыра росла бы сама.
+        """
+        scope_dir = tmp_path / "ai_ops_kit/checks"
+        nested = scope_dir / "surface_extractors"
+        nested.mkdir(parents=True)
+        body = "\n".join(f"    x{i} = {i}" for i in range(249))
+        (nested / "mod.py").write_text(f"def god():\n{body}\n", encoding="utf-8")
+        baseline = {"scopes": [{"path": "ai_ops_kit/checks", "max_function_lines": 200}]}
+        errors = check_all(baseline, pkg_root=tmp_path)
+        assert len(errors) == 1, errors
+        assert "превышает потолок" in errors[0]
+
+    def test_nested_file_is_named_with_its_path(self, tmp_path):
+        """И место названо так, чтобы его нашли: имя файла с путём внутри каталога."""
+        scope_dir = tmp_path / "ai_ops_kit/checks"
+        nested = scope_dir / "surface_extractors"
+        nested.mkdir(parents=True)
+        (nested / "ktor.py").write_text("def small():\n    return 1\n", encoding="utf-8")
+        measured = measure_functions(scope_dir)
+        assert [f["file"] for f in measured] == ["surface_extractors/ktor.py"], measured
+
     def test_within_ceiling_stays_green(self, tmp_path):
         """Функция ровно на потолке — зелено (ратчет не ложно-краснит)."""
         baseline = self._make_pkg(tmp_path, "ai_ops_kit/cli", func_lines=200, ceiling=200)
