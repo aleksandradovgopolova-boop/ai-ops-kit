@@ -171,6 +171,36 @@ _CHILD_PROCESS_IMPORT = re.compile(
     r"""import\s+[^\n;]*['"](?:node:)?child_process['"])""")
 _NODE_EXEC_CALL = re.compile(r"\b(?:exec|execSync|execFile|execFileSync)\s*\(")
 
+# R-40, ВТОРОЙ ЗАХОД (#1112). `\b` выше стоит между точкой и `e`, поэтому правило матчит и `.exec(`
+# РЕГУЛЯРНОГО ВЫРАЖЕНИЯ; условие «файл импортирует child_process» в `vite.config.ts` выполнилось
+# из-за постороннего хелпера, считающего хэш сборки. Замер 23.09.2026: 4 флага этого правила, 100%
+# шума. Из построчного `eval_or_exec` конструкцию `.exec(` когда-то убрали — и новое файловое
+# правило внесло ту же находку через другую дверь. Урок: чинить надо класс, а не одно место.
+#
+# ЧИНИТСЯ ПОЛУЧАТЕЛЕМ, А НЕ СУЖЕНИЕМ ПРАВИЛА. Стойка «пере-срабатывание безопасно, под-срабатывание —
+# нет» остаётся в силе: `.exec(` с НЕИЗВЕСТНЫМ получателем по-прежнему флагается, потому что получатель
+# может оказаться обёрткой над child_process. Снимается ровно один класс — получатель, про которого
+# в этом же файле ВИДНО, что он регулярное выражение.
+#
+# ПОЧЕМУ `/` ПЕРЕД `.exec(` ОДНОЗНАЧЕН: в JavaScript косая черта вплотную перед `.exec(` может быть
+# только концом литерала регулярного выражения — деление `.exec(` за собой не ведёт. Поэтому здесь
+# не нужен разбор литерала целиком (а он хрупок: `/^\/api\/([^/]+)$/` содержит косую внутри класса
+# символов и ломает наивную регулярку).
+_REGEXP_RECEIVER_EXEC = re.compile(r"(?:/|\bnew\s+RegExp\s*\([^\n]*\))\s*\.\s*exec\s*\(")
+
+# Имя, которому в этом же файле присвоено регулярное выражение: `const RE = /.../` или
+# `const re = new RegExp(...)`. Дальше `RE.exec(s)` — тоже метод регулярного выражения, а не команда.
+_REGEXP_BINDING = re.compile(
+    r"""(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:/|new\s+RegExp\s*\()""")
+
+
+def _without_regexp_exec(line: str, regexp_names: frozenset) -> str:
+    """Убрать из строки вызовы `.exec(` у регулярных выражений — остальное трогать нельзя."""
+    out = _REGEXP_RECEIVER_EXEC.sub("", line)
+    for name in regexp_names:
+        out = re.sub(r"\b" + re.escape(name) + r"\s*\.\s*exec\s*\(", "", out)
+    return out
+
 
 # #1094: SQL через ШАБЛОННЫЙ ЛИТЕРАЛ в JS/TS — `db.query(`select … ${id}`)`. У Python аналог
 # (`sql_fstring_execute`) есть с самого начала, у JS не было вовсе, а это профиль живой дочки.
@@ -271,8 +301,9 @@ def scan_injection(files):
         # Файл тянет child_process -> любой exec-вызов в нём считаем исполнением команды.
         # Пере-срабатывание здесь безопасно (лишний needs_review), под-срабатывание — нет.
         if _CHILD_PROCESS_IMPORT.search(text):
+            regexp_names = frozenset(_REGEXP_BINDING.findall(text))
             for lineno, line in enumerate(text.splitlines(), 1):
-                if _NODE_EXEC_CALL.search(line):
+                if _NODE_EXEC_CALL.search(_without_regexp_exec(line, regexp_names)):
                     res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
         for lineno in _sql_template_literal_lines(text):
             res.append({"path": path, "id": "sql_template_literal", "line": lineno})
