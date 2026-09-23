@@ -49,6 +49,26 @@ def _child(root: Path, *, feature_links: dict, goals: list) -> Path:
 
 PLAN_GOAL = [{"id": "answer-from-our-documents", "outcome": {"answer_shows_its_basis": True}}]
 
+TWO_GOALS = [{"id": "answer-from-our-documents", "outcome": {"answer_shows_its_basis": True}},
+             {"id": "predictable-operation", "outcome": {"service_survives_reboot": False}}]
+
+
+def _child_many(root: Path, features: dict, goals: list) -> Path:
+    """Синтетический child с НЕСКОЛЬКИМИ паспортами: `{id функции: links}`.
+
+    Общий эпик у функций с разными целями — не выдуманный случай: именно так выглядит продукт, где
+    эпик объявляют паспорта соседних функций, а собственного источника у эпика нет.
+    """
+    _write(root / "planning" / "plan.yaml",
+           {"schema_version": 1, "kind": "delivery-plan", "goals": goals})
+    for fid, links in features.items():
+        _write(root / "features" / fid / "blueprint.yaml",
+               {"schema_version": 1, "kind": "feature-blueprint",
+                "feature": {"id": fid, "name": fid, "status": "in-progress",
+                            "current_stage": "delivery"},
+                "links": links})
+    return root
+
 
 class TestDeclaredGoalReachesTheFeature:
     """positive: пропущенный уровень лестницы нить до цели не рвёт."""
@@ -141,14 +161,76 @@ class TestTheLinkIsReallyInTheGraph:
         types, rels = vkg.load_dictionary()
         assert vkg.validate_graph(graph_path, types, rels) == []
 
-    def test_upward_reference_makes_no_edge(self, tmp_path):
-        """Граница: связь идёт только сверху вниз — эпик «содержащий» цель ребром не становится."""
-        root = _child(tmp_path / "child",
-                      feature_links={"goal": "answer-from-our-documents", "epic": "epic-library"},
-                      goals=PLAN_GOAL)
-        edges = kg.build_graph(root)["edges"]
-        assert not [e for e in edges
-                    if e["from"] == "epic-library" and e["to"] == "answer-from-our-documents"]
+
+class TestSharedEpicDoesNotLendSomeoneElsesGoal:
+    """Общий эпик не делает чужую цель своей — разбор находок независимого ревью PR #1102."""
+
+    def test_each_feature_keeps_its_own_declared_goal(self, tmp_path):
+        """Две функции одного эпика с РАЗНЫМИ целями: каждая служит своей, а не соседской."""
+        root = _child_many(tmp_path / "child", {
+            "aaa-first": {"goal": "answer-from-our-documents", "epic": "epic-shared"},
+            "zzz-second": {"goal": "predictable-operation", "epic": "epic-shared"},
+        }, TWO_GOALS)
+        graph = kg.build_graph(root)
+        assert kg.trace(graph, "aaa-first")["goal"] == "answer-from-our-documents"
+        assert kg.trace(graph, "zzz-second")["goal"] == "predictable-operation"
+
+    def test_outcome_belongs_to_the_same_goal_as_the_chain(self, tmp_path):
+        """Один ответ не смешивает две цели: обещанный результат — от той же цели, что названа."""
+        root = _child_many(tmp_path / "child", {
+            "aaa-first": {"goal": "answer-from-our-documents", "epic": "epic-shared"},
+            "zzz-second": {"goal": "predictable-operation", "epic": "epic-shared"},
+        }, TWO_GOALS)
+        result = kg.trace(kg.build_graph(root), "zzz-second")
+        assert result["outcome"]["id"] == "predictable-operation-outcome"
+        assert result["chain"][0]["id"] == "predictable-operation"
+
+    def test_broken_reference_is_not_rescued_by_a_neighbour(self, tmp_path):
+        """Сломанная ссылка на цель не «чинится» подъёмом через общий эпик к цели соседа."""
+        root = _child_many(tmp_path / "child", {
+            "aaa-real": {"goal": "answer-from-our-documents", "epic": "epic-shared"},
+            "zzz-broken": {"goal": "goal-nonexistent", "epic": "epic-shared"},
+        }, PLAN_GOAL)
+        result = kg.trace(kg.build_graph(root), "zzz-broken")
+        assert result["goal"] is None
+        assert result["verdict"] == "unmoored"
+        assert result["unresolved_goal"] == "goal-nonexistent"
+
+    def test_ambiguous_inheritance_is_named_not_guessed(self, tmp_path):
+        """Функция без объявленной цели в эпике двух целей: неоднозначность названа, выбора нет."""
+        root = _child_many(tmp_path / "child", {
+            "aaa-first": {"goal": "answer-from-our-documents", "epic": "epic-shared"},
+            "mmm-silent": {"epic": "epic-shared"},
+            "zzz-second": {"goal": "predictable-operation", "epic": "epic-shared"},
+        }, TWO_GOALS)
+        result = kg.trace(kg.build_graph(root), "mmm-silent")
+        assert result["goal"] is None
+        assert any("нескольким целям" in g for g in result["gaps"]), result["gaps"]
+
+    def test_namesake_of_another_node_is_not_a_goal(self, tmp_path):
+        """Цель-тёзка работы плана (узел типа initiative) целью не считается и связью не станет."""
+        root = _child_many(tmp_path / "child", {"library-view": {"goal": "checkout-speedup"}},
+                           PLAN_GOAL)
+        _write(root / "planning" / "plan.yaml", {
+            "schema_version": 1, "kind": "delivery-plan", "goals": PLAN_GOAL,
+            "work": [{"id": "checkout-speedup", "goal": "answer-from-our-documents",
+                      "title": "Ускорить чекаут"}]})
+        result = kg.trace(kg.build_graph(root), "library-view")
+        assert result["goal"] is None
+        assert result["unresolved_goal"] == "checkout-speedup"
+
+    def test_no_contains_edge_points_up_the_ladder(self, tmp_path):
+        """Граница лестницы на РЕАЛЬНОМ графе: ни одно ребро contains не идёт снизу вверх."""
+        root = _child_many(tmp_path / "child", {
+            "aaa-first": {"goal": "answer-from-our-documents", "epic": "epic-shared"},
+            "zzz-second": {"goal": "predictable-operation", "initiative": "init-x",
+                           "epic": "epic-shared"},
+        }, TWO_GOALS)
+        graph = kg.build_graph(root)
+        types = {n["id"]: n["type"] for n in graph["nodes"]}
+        ladder = kg.CONTAINS_LADDER
+        for e in [e for e in graph["edges"] if e["type"] == "contains"]:
+            assert ladder.index(types[e["from"]]) < ladder.index(types[e["to"]]), e
 
 
 @pytest.mark.parametrize("blueprint", sorted(
