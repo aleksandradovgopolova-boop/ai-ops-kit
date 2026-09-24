@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from ai_ops_kit.security import security_scan as ss
+from ai_ops_kit.security import scan_deps as sd
 
 pytestmark = pytest.mark.unit
 
@@ -55,7 +56,7 @@ def test_no_false_dependencies_on_this_repository():
 
 def test_toml_yields_packages_not_configuration_keys():
     """Корень дефекта: имена искались по всему файлу, без оглядки на секцию."""
-    names = ss._dep_names("pyproject.toml", (PKG / "pyproject.toml").read_text(encoding="utf-8"))
+    names = sd._dep_names("pyproject.toml", (PKG / "pyproject.toml").read_text(encoding="utf-8"))
     assert "pyyaml" in names, "настоящая зависимость потерялась вместе с ложными"
     for key in ("name", "version", "license", "requires-python", "addopts", "target-version",
                 "description", "build-backend", "tag_format"):
@@ -74,7 +75,7 @@ def test_the_parser_does_not_depend_on_the_python_version():
     assert "import tomllib" not in src, "вернулась зависимость от Python 3.11 при объявленном поле 3.9"
 
     text = (PKG / "pyproject.toml").read_text(encoding="utf-8")
-    names = ss._toml_dep_names(text, "pyproject.toml")
+    names = sd._toml_dep_names(text, "pyproject.toml")
     assert names == {"pyyaml", "setuptools", "wheel", "pytest", "pytest-cov",
                      "hypothesis", "ruff", "mypy", "pre-commit"}, sorted(names)
 
@@ -84,7 +85,7 @@ def test_an_optional_dependency_group_name_is_not_a_package():
     лежат в массиве-значении. Спутать одно с другим значило бы заменить одни ложные находки другими."""
     toml = ('[project]\nname = "p"\ndependencies = ["pyyaml"]\n\n'
             '[project.optional-dependencies]\ndev = ["ruff", "pytest"]\ntest = ["hypothesis"]\n')
-    assert ss._dep_names("pyproject.toml", toml) == {"pyyaml", "ruff", "pytest", "hypothesis"}
+    assert sd._dep_names("pyproject.toml", toml) == {"pyyaml", "ruff", "pytest", "hypothesis"}
 
 
 def test_cargo_dependencies_are_read_from_their_sections():
@@ -92,7 +93,7 @@ def test_cargo_dependencies_are_read_from_their_sections():
              'license = "MIT"\n\n[dependencies]\nserde = { version = "1.0" }\ntokio = "1"\n'
              '\n[dev-dependencies]\ncriterion = "0.5"\n'
              "\n[target.'cfg(unix)'.dependencies]\nnix = \"0.27\"\n")
-    names = ss._dep_names("Cargo.toml", cargo)
+    names = sd._dep_names("Cargo.toml", cargo)
     assert names == {"serde", "tokio", "criterion", "nix"}, names
 
 
