@@ -138,7 +138,7 @@ scopes:
     max_function_file: active_work.py
     max_function_lineno: 333
   - path: ai_ops_kit/security/
-    max_function_lines: 90
+    max_function_lines: 79
     max_function: run_pack
     max_function_file: security_pack.py
     max_function_lineno: 179

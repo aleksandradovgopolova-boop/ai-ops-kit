@@ -259,6 +259,9 @@ try:
     from ai_ops_kit.security.scan_prose import PROSE_SUFFIXES as _PROSE_SUFFIXES
     from ai_ops_kit.security.scan_prose import area_of as _area_of
     from ai_ops_kit.security.scan_prose import blank_comments as _blank_comments
+    from ai_ops_kit.security.scan_vendor import VERSION_FILE as _VENDOR_VERSION_FILE
+    from ai_ops_kit.security.scan_vendor import arrivals_note as _arrivals_note
+    from ai_ops_kit.security.scan_vendor import mark_arrivals as _mark_arrivals
 except ImportError:                                    # запуск КАК СКРИПТ: пакета в sys.path нет
     import importlib.util as _ilu2
 
@@ -271,6 +274,16 @@ except ImportError:                                    # запуск КАК С�
     _PROSE_SUFFIXES = _prose_mod.PROSE_SUFFIXES
     _blank_comments = _prose_mod.blank_comments
     _area_of = _prose_mod.area_of
+
+    _vendor_path = Path(__file__).resolve().parent / "scan_vendor.py"
+    _spec6 = _ilu2.spec_from_file_location("ai_ops_scan_vendor", _vendor_path)
+    if _spec6 is None or _spec6.loader is None:        # fail-closed: без сверки версий раздел слеп
+        raise RuntimeError(f"не удалось загрузить сверку поставки из {_vendor_path}") from None
+    _vendor_mod = _ilu2.module_from_spec(_spec6)
+    _spec6.loader.exec_module(_vendor_mod)
+    _mark_arrivals = _vendor_mod.mark_arrivals
+    _arrivals_note = _vendor_mod.arrivals_note
+    _VENDOR_VERSION_FILE = _vendor_mod.VERSION_FILE
 
 # СОБСТВЕННЫЙ МАТЕРИАЛ ДЕТЕКТОРА. Файл, который ОБЪЯВЛЯЕТ образцы, и тесты, которые их ПОДСОВЫВАЮТ,
 # по построению содержат всё, что детектор ищет. Замер 19.08.2026: 55 флагов из 72 приходились
@@ -474,6 +487,38 @@ def _git_show(root, ref, rel):
     return r.stdout if r.returncode == 0 else ""
 
 
+def _vendor_split(injections):
+    """Отделить поставленную копию кита от кода продукта. Ярлык уже проставлен `_area_of`."""
+    vendor = [f for f in injections if f.get("area") == "vendor"]
+    return [f for f in injections if f.get("area") != "vendor"], vendor
+
+
+def _vendor_arrivals(root, base, vendor, files):
+    """Пометить каждый адрес поставки: приехал с этим обновлением кита или был и в прежней версии.
+
+    Прежний текст берётся ПОФАЙЛОВО и только для файлов, где флаги есть: на обновлении кита в дифф
+    попадают сотни файлов, а адресов среди них единицы — читать базу целиком незачем."""
+    out = []
+    for path in sorted({f["path"] for f in vendor}):
+        прежний = _git_show(root, base, path)
+        было = scan_injection({path: прежний}) if прежний else []
+        out += _mark_arrivals([f for f in vendor if f["path"] == path],
+                              files.get(path, ""), было, прежний)
+    return out
+
+
+def _vendor_version(root, base, files):
+    """Версия установленного кита до и после. None — прочитать не удалось, и это не «не менялась»."""
+    текущая = files.get(_VENDOR_VERSION_FILE)
+    if текущая is None:
+        try:
+            текущая = (Path(root) / _VENDOR_VERSION_FILE).read_text(encoding="utf-8")
+        except OSError:
+            текущая = ""
+    прежняя = _git_show(root, base, _VENDOR_VERSION_FILE) if base else ""
+    return (прежняя.strip() or None), (текущая.strip() or None)
+
+
 def scan_repo(root, base=None):
     """Скан изменений против базы (или всего дерева, если base=None/не git). -> отчёт + evidence."""
     root = Path(root)
@@ -489,7 +534,19 @@ def scan_repo(root, base=None):
             changed = []
     files = _read_files(root, changed)
     secrets = scan_secrets(files)
-    injections = scan_injection(files)
+    # ПОСТАВЛЕННАЯ КОПИЯ КИТА — ОТДЕЛЬНЫЙ РАЗДЕЛ, НЕ ПРОЩЕНИЕ (#1147). `.ai/managed/` дочка не
+    # писала и починить в своём PR не может: правка делается обновлением кита. Адреса оттуда видны
+    # все до одного, но в вердикт гейта ПРОДУКТА не входят — иначе команда вечно отвечает за чужой
+    # код. Обратная сторона названа тем же механизмом: новый `shell=True`, приехавший с
+    # обновлением, помечается `arrived` и потому виден, а не тонет в общем списке.
+    injections, vendor = _vendor_split(scan_injection(files))
+    # СРАВНЕНИЕ БЫЛО ИЛИ НЕ БЫЛО — РАЗНЫЕ СОСТОЯНИЯ. Без базы «какие адреса новые» неизвестно, и
+    # выдать это за «все были раньше» значило бы напечатать незнание фактом (тот же инвариант, что
+    # у `dependencies_compared` ниже).
+    vendor_compared = bool(base)
+    if vendor_compared and vendor:
+        vendor = _vendor_arrivals(root, base, vendor, files)
+    vendor_before, vendor_after = _vendor_version(root, base, files)
     # зависимости: сравниваем манифесты после (рабочее дерево) против базы (git show base:)
     after_mani = {p: c for p, c in files.items() if Path(p).name in DEP_MANIFESTS}
     if not after_mani:  # манифесты могли не измениться — прочитаем текущие для полноты
@@ -502,11 +559,42 @@ def scan_repo(root, base=None):
     before_mani = {p: (_git_show(root, base, p) if base else "") for p in after_mani}
     new_deps = new_dependencies(before_mani, after_mani) if deps_compared else []
     ev = security_evidence(secrets, injections, new_deps, deps_compared=deps_compared)
+    приехало = sum(1 for f in vendor if f.get("arrived"))
     return {"schema_version": 1, "kind": "security-scan",
             "scanned_files": len(files), "secrets": secrets,
             "injection_flags": injections, "new_dependencies": new_deps,
             "dependencies_compared": deps_compared,
+            "vendor_flags": vendor,
+            "vendor_compared": vendor_compared,
+            "vendor_kit_version": {"before": vendor_before, "after": vendor_after},
+            "vendor_note": _arrivals_note(vendor_before, vendor_after, приехало, len(vendor),
+                                         vendor_compared),
             "evidence": ev}
+
+
+def _vendor_lines(rep):
+    """Раздел поставленной зависимости — ОТДЕЛЬНЫЙ, НЕ СНОСКА (#1147).
+
+    Поставленная копия кита — чужой код с чужим адресатом, и смешивать его с продуктовым списком
+    значит спрашивать команду за то, чего она не писала. Приехавшие с обновлением адреса печатаются
+    ПОИМЁННО: ради них раздел и заведён — иначе о новой поверхности, привезённой китом, дочка не
+    узнаёт вовсе. Бывшие раньше свёрнуты числом: их адресат тот же, а новостью они не являются."""
+    vendor = rep.get("vendor_flags") or []
+    if not vendor:
+        return []
+    out = [f"  ── поставленная зависимость .ai/managed/ ({len(vendor)}) ──",
+           f"     {rep['vendor_note']}"]
+    if not rep.get("vendor_compared"):
+        # Сравнения не было: назвать адреса ПОИМЁННО — единственное честное поведение. Свернуть их
+        # числом «было раньше» значило бы утверждать то, чего никто не проверял.
+        out += [f"     {f['id']} — {f['path']}:{f['line']}" for f in vendor]
+        return out
+    out += [f"     ПРИЕХАЛО С ОБНОВЛЕНИЕМ {f['id']} — {f['path']}:{f['line']}"
+            for f in vendor if f.get("arrived")]
+    было = sum(1 for f in vendor if not f.get("arrived"))
+    if было:
+        out.append(f"     было и в прежней версии кита: {было}; полный список в --json")
+    return out
 
 
 def main(argv):
@@ -519,24 +607,27 @@ def main(argv):
     if a.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
-        print(f"SECURITY-SCAN: файлов {rep['scanned_files']} · секретов {len(rep['secrets'])} · "
-              f"injection-флагов {len(rep['injection_flags'])} · новых зависимостей {len(rep['new_dependencies'])}")
-        for s in rep["secrets"]:
-            print(f"  СЕКРЕТ {s['id']} — {s['path']}:{s['line']}")
-        # Боевые адреса печатаются поимённо, обвязка — одним числом: список, где на один боевой
-        # адрес приходится дюжина тестовых, судья пролистывает целиком (#1146).
+        # ОТЧЁТ СОБИРАЕТСЯ СТРОКАМИ И ПЕЧАТАЕТСЯ ОДИН РАЗ. Раньше здесь было шесть `print` подряд, и
+        # каждый новый раздел отчёта стоил ещё одного — ратчет print-discipline упирался в это
+        # раньше, чем человек. Текст не изменился ни на символ: каждый прежний `print` печатал ровно
+        # одну строку.
+        s = [f"SECURITY-SCAN: файлов {rep['scanned_files']} · секретов {len(rep['secrets'])} · "
+             f"injection-флагов {len(rep['injection_flags'])} · новых зависимостей {len(rep['new_dependencies'])}"]
+        s += [f"  СЕКРЕТ {x['id']} — {x['path']}:{x['line']}" for x in rep["secrets"]]
+        # Боевые адреса — поимённо, обвязка — одним числом: список, где на один боевой адрес
+        # приходится дюжина тестовых, судья пролистывает целиком (#1146).
         боевые = [f for f in rep["injection_flags"] if f.get("area") != "harness"]
         обвязка = [f for f in rep["injection_flags"] if f.get("area") == "harness"]
-        for f in боевые:
-            print(f"  ПОДОЗРИТЕЛЬНОЕ МЕСТО {f['id']} — {f['path']}:{f['line']}")
+        s += [f"  ПОДОЗРИТЕЛЬНОЕ МЕСТО {f['id']} — {f['path']}:{f['line']}" for f in боевые]
         if обвязка:
-            print(f"  в обвязке (тесты, e2e, конфиги инструментов) ещё {len(обвязка)} — "
-                  f"адресат тот же, срочность другая; полный список в --json")
+            s.append(f"  в обвязке (тесты, e2e, конфиги инструментов) ещё {len(обвязка)} — "
+                     f"адресат тот же, срочность другая; полный список в --json")
+        s += _vendor_lines(rep)
         if not rep["dependencies_compared"]:
-            print("  зависимости: сравнивать не с чем — база не задана (--base <ревизия>); "
-                  "это НЕ «новых нет»")
-        for d in rep["new_dependencies"]:
-            print(f"  НОВАЯ ЗАВИСИМОСТЬ {d} (нужно одобрение)")
+            s.append("  зависимости: сравнивать не с чем — база не задана (--base <ревизия>); "
+                     "это НЕ «новых нет»")
+        s += [f"  НОВАЯ ЗАВИСИМОСТЬ {d} (нужно одобрение)" for d in rep["new_dependencies"]]
+        print("\n".join(s))
     # ненулевой код при находках секретов/новых зависимостей (injection-флаги — не фейл сами по себе)
     return 1 if (rep["secrets"] or rep["new_dependencies"]) else 0
 
