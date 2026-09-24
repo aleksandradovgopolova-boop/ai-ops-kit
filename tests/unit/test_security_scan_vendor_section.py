@@ -96,17 +96,38 @@ class TestTheSectionForgivesNothing:
         assert ev["no_secrets"]["status"] == "fail", ev["no_secrets"]
 
     def test_a_product_domain_still_blocks_on_product_injection(self):
+        """Сигнал взят ТОТ, что поднимает домен с `injection_scan` в `deterministic_checks`.
+
+        Первая версия этого сторожа брала `touches_shell` и была зелёной впустую: поднимался
+        `deployment_config` — по ИМЕНИ файла, без единой находки, — и «не clear» означало не то,
+        что проверяется. Здесь домен обязан УПАСТЬ, и упасть именно на находке."""
         res = security_pack.run_pack(files_content={"server/deploy.py": ОПАСНЫЙ_ВЫЗОВ},
-                                     signals={"touches_shell": True})
-        assert res["overall"] != "clear", res["overall"]
+                                     signals={"handles_user_input": True})
+        assert res["blocking"] == ["input_validation"], res["blocking"]
+        упал = next(r for r in res["results"] if r["domain"] == "input_validation")
+        assert [f["path"] for f in упал["findings"]] == ["server/deploy.py"], упал["findings"]
 
     def test_the_vendor_copy_alone_does_not_block_the_product_gate(self):
+        """Тот же домен, тот же сигнал, та же конструкция — но код чужой, и гейт не падает."""
         res = security_pack.run_pack(
             files_content={".ai/managed/ai_ops_kit/engine/tool_broker.py": ОПАСНЫЙ_ВЫЗОВ},
-            signals={"touches_shell": True})
-        assert not res["blocking"], res["blocking"]
+            signals={"handles_user_input": True})
+        assert "input_validation" not in res["blocking"], res["blocking"]
+        домен = next(r for r in res["results"] if r["domain"] == "input_validation")
+        assert домен["findings"] == [], домен["findings"]
         # и при этом адреса НЕ исчезли — «не судим» не превратилось в «не показываем»
         assert res["vendor_flags"], "адреса поставки пропали из результата — это уже прощение"
+
+    def test_the_vendor_section_reaches_the_report_the_gate_points_at(self):
+        """Гейт отправляет человека в `run-report.json`. Раздел, не дошедший до отчёта, неотличим
+        от прощёного — это ровно класс заявки #139, описанный в самом `security_pack`."""
+        res = security_pack.run_pack(
+            files_content={".ai/managed/ai_ops_kit/engine/tool_broker.py": ОПАСНЫЙ_ВЫЗОВ},
+            signals={"handles_user_input": True})
+        отчёт = security_pack.for_report(res)
+        assert [f["path"] for f in отчёт["vendor_flags"]] == [
+            ".ai/managed/ai_ops_kit/engine/tool_broker.py"], отчёт["vendor_flags"]
+        assert отчёт["vendor_flags"][0]["area"] == "vendor"
 
 
 # ─── side-effect: приехавшее с обновлением отличено от бывшего раньше ──────────────────────────

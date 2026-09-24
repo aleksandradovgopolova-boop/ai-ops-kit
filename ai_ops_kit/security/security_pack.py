@@ -302,7 +302,12 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
 # значение: отчёт лежит в репозитории и уезжает в PR, поэтому секрет в нём был бы вынесенным секретом.
 # Список полей — БЕЛЫЙ (не «удалим лишнее»): новое поле находки, если оно однажды принесёт значение,
 # в отчёт не попадёт само по себе — его придётся внести здесь осознанно.
-FINDING_REPORT_FIELDS = ("type", "path", "line", "id", "name", "version", "manifest", "operation")
+FINDING_REPORT_FIELDS = ("type", "path", "line", "id", "name", "version", "manifest", "operation",
+                         # область и «приехало с обновлением» (#1147) — внесены в белый список
+                         # ОСОЗНАННО: ни то, ни другое не несёт значения, только адресата и
+                         # происхождение адреса. Без них раздел поставки дошёл бы до отчёта
+                         # безымянным, а именно в отчёт гейт отправляет человека.
+                         "area", "arrived")
 
 
 def for_report(result):
@@ -321,6 +326,11 @@ def for_report(result):
         # охват рядом с вердиктом (`absent-base-is-resolved-or-refused`): вердикт без охвата
         # непроверяем — «clear» по пустому дифу и «clear» по проверенному дифу выглядят одинаково
         "scan_scope": result.get("scan_scope"),
+        # РАЗДЕЛ ПОСТАВКИ ДОХОДИТ ДО ОТЧЁТА (#1147). Он не влияет на `overall` — и именно поэтому
+        # обязан быть виден: невидимое и непроверяемое «не судим» неотличимо от «прощаем». Тот же
+        # класс, что заявка #139: гейт отправляет человека в отчёт, а находок в отчёте нет.
+        "vendor_flags": [{k: f[k] for k in FINDING_REPORT_FIELDS if k in f}
+                         for f in (result.get("vendor_flags") or [])],
         "domain_results": [{
             "domain": r["domain"],
             "status": r["status"],
