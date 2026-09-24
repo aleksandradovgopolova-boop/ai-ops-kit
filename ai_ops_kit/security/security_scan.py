@@ -116,26 +116,33 @@ def _scan(text, patterns):
     lines = text.splitlines()
     for lineno, line in enumerate(lines, 1):
         for pid, rx in patterns:
-            m = rx.search(line)
-            if not m:
-                continue
-            # ПЛЕЙСХОЛДЕР — НЕ СЕКРЕТ, И ЭТО ВЕРНО ДЛЯ ВСЕХ ПАТТЕРНОВ, а не только для generic.
-            # Прежде отсев применялся к одному правилу, и `AKIAIOSFODNN7EXAMPLE` — документированный
-            # ПРИМЕР самой AWS, буквально оканчивающийся на EXAMPLE, — считался утечкой ключа в
-            # четырёх местах репозитория. Сканер, который на каждом прогоне находит десять «утечек»
-            # и ни одна не утечка, обучает пролистывать раздел «СЕКРЕТ» целиком.
-            #
-            # Отсев идёт по НАЙДЕННОМУ значению, а не по строке: комментарий «# example» рядом с
-            # настоящим ключом не должен его прятать.
-            value = m.group(1) if m.groups() else m.group(0)
-            if _looks_like_placeholder(value):
-                continue
-            if pid == "db_connection_string_password" and _is_loopback_dsn(line[m.end():]):
-                continue                       # адрес на своей машине — отзывать нечего
-            if pid == "private_key_block" and not _pem_header_has_body(
-                    line[m.end():], lines[lineno:lineno + _PEM_LOOKAHEAD]):
-                continue                   # заголовок без байтов ключа — упоминание формата
-            out.append({"id": pid, "line": lineno})
+            # ВСЕ СОВПАДЕНИЯ НА СТРОКЕ, А НЕ ПЕРВОЕ (#1138). Прежде бралось первое, и погашенное
+            # первое прятало всё остальное: `dev=…@localhost/d prod=…@db.prod.io/a` молчал целиком —
+            # отсев снимал петлевой dev, а до боевого prod дело не доходило. Пока гасить было почти
+            # нечем, дефект оставался недостижимым; четыре новых класса отсева сделали его
+            # достижимым — нашло независимое ревью. Адрес на строку по-прежнему один на правило.
+            найдено_на_строке = False
+            for m in rx.finditer(line):
+                # ПЛЕЙСХОЛДЕР — НЕ СЕКРЕТ, И ЭТО ВЕРНО ДЛЯ ВСЕХ ПАТТЕРНОВ, а не только для generic.
+                # Прежде отсев применялся к одному правилу, и `AKIAIOSFODNN7EXAMPLE` — документированный
+                # ПРИМЕР самой AWS, буквально оканчивающийся на EXAMPLE, — считался утечкой ключа в
+                # четырёх местах репозитория. Сканер, который на каждом прогоне находит десять «утечек»
+                # и ни одна не утечка, обучает пролистывать раздел «СЕКРЕТ» целиком.
+                #
+                # Отсев идёт по НАЙДЕННОМУ значению, а не по строке: комментарий «# example» рядом с
+                # настоящим ключом не должен его прятать.
+                value = m.group(1) if m.groups() else m.group(0)
+                if _looks_like_placeholder(value):
+                    continue
+                if pid == "db_connection_string_password" and _is_loopback_dsn(line[m.end():]):
+                    continue                       # адрес на своей машине — отзывать нечего
+                if pid == "private_key_block" and not _pem_header_has_body(
+                        line[m.end():], lines[lineno:lineno + _PEM_LOOKAHEAD]):
+                    continue                   # заголовок без байтов ключа — упоминание формата
+                if найдено_на_строке:
+                    continue
+                найдено_на_строке = True
+                out.append({"id": pid, "line": lineno})
     return out
 
 

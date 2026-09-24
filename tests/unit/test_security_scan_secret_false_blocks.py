@@ -90,6 +90,25 @@ class TestTheFlagStaysWhereItShould:
             found = security_scan.scan_secrets({"x.env": боевой + хвост})
             assert [f["id"] for f in found] == ["db_connection_string_password"], хвост
 
+    def test_a_hushed_first_match_does_not_hide_the_rest_of_the_line(self):
+        """Погашенное первое совпадение не прячет боевую строку подключения на той же строке.
+
+        Детектор брал только первое совпадение правила. Пока гасить было почти нечем, дефект был
+        недостижим; четыре новых класса отсева сделали его достижимым — нашло независимое ревью.
+        """
+        боевой = "postgresql://adm:" + _ПАРОЛЬ + "@db.prod.io/a"
+        for гашёное in ("dev=postgresql://a:x1y@localhost/d ",
+                        "| dev | postgresql://a:x1y@localhost:5432/d | prod | ",
+                        "# postgres://user:pass@example-db/x  real: "):
+            found = security_scan.scan_secrets({"x.env": гашёное + боевой})
+            assert [f["id"] for f in found] == ["db_connection_string_password"], гашёное
+
+    def test_one_address_per_rule_per_line(self):
+        """И при этом адрес на строку остаётся один: судья не читает одну строку дважды."""
+        два = ("postgresql://adm:" + _ПАРОЛЬ + "@db.prod.io/a "
+               "postgresql://adm:" + _ПАРОЛЬ + "@db.other.io/b")
+        assert len(security_scan.scan_secrets({"x.env": два})) == 1
+
     def test_a_cyrillic_password_is_not_a_placeholder(self):
         """Двойник кириллического класса: заглушка — только КАПС, а не любое русское слово.
 
