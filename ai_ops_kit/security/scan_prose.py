@@ -1,4 +1,4 @@
-"""Что в файле НЕ является кодом: проза и комментарии.
+"""Что в файле НЕ является кодом продукта: проза, комментарии и обвязка.
 
 Сателлит `security_scan` (фасад импортирует отсюда `PROSE_SUFFIXES` и `blank_comments`). Появился
 не из вкуса к дроблению: после того как комментарии перестали считаться кодом (#1112), сам сканер
@@ -86,3 +86,36 @@ def blank_comments(text: str, path: str) -> str:
             continue
         i += 1
     return "".join(out)
+
+
+# ─── ОБВЯЗКА: тесты, e2e и конфиги инструментов ───────────────────────────────────────────────
+#
+# Вердикт независимого судьи 24.09.2026 (#1146): из 19 шумных флагов на реальном продукте 12 —
+# тесты, e2e и dev-скрипты, ещё 2 — конфиг сборки. «Сейчас судья читает 12 тестовых адресов, чтобы
+# найти один боевой». `child_process` в тесте — не injection-поверхность ПРОДУКТА.
+#
+# ОБВЯЗКА НЕ ИСКЛЮЧАЕТСЯ ИЗ СКАНА — она помечается. CI тоже поверхность: команда в тесте может
+# исполниться на раннере с секретами. Разница в адресате и в срочности, а не в существовании флага,
+# поэтому область — ЯРЛЫК, а не фильтр: ошибка классификации перекладывает адрес в другой раздел,
+# но не прячет его.
+#
+# ПРИЗНАКИ ВЫБРАНЫ ТРУДНО ПУТАЕМЫЕ. `scripts/` сюда НЕ входит осознанно: там живут и эксплуатационные
+# скрипты (бэкап базы, деплой), и ошибиться в их пользу дороже, чем прочитать лишний адрес.
+_TEST_DIRS = ("tests/", "test/", "__tests__/", "e2e/", "__mocks__/", "fixtures/", "spec/")
+_TEST_MARKERS = (".test.", ".spec.")
+_TOOL_CONFIGS = ("vite.config.", "vitest.config.", "jest.config.", "webpack.config.",
+                 "rollup.config.", "playwright.config.", "eslint.config.", "babel.config.",
+                 "tsup.config.", "esbuild.config.")
+
+
+def area_of(path: str) -> str:
+    """`product` — боевой путь, `harness` — тесты, e2e и конфиги инструментов."""
+    rel = path.replace("\\", "/")
+    name = rel.rsplit("/", 1)[-1]
+    if any(name.startswith(cfg) for cfg in _TOOL_CONFIGS):
+        return "harness"
+    if any(marker in name for marker in _TEST_MARKERS):
+        return "harness"
+    if any(rel.startswith(d) or f"/{d}" in rel for d in _TEST_DIRS):
+        return "harness"
+    return "product"

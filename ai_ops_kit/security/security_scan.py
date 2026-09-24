@@ -177,7 +177,12 @@ _CHILD_PROCESS_IMPORT = re.compile(
     r"""(?:require\s*\(\s*['"](?:node:)?child_process['"]|"""
     r"""from\s+['"](?:node:)?child_process['"]|"""
     r"""import\s+[^\n;]*['"](?:node:)?child_process['"])""")
-_NODE_EXEC_CALL = re.compile(r"\b(?:exec|execSync|execFile|execFileSync)\s*\(")
+# `spawn`/`fork` добавлены по разбору 24.09 (#1146): в ЕДИНСТВЕННОМ боевом месте исполнения
+# команд на реальном продукте (`server/files/scanner.mjs`, запуск антивируса, байты пользователя
+# в stdin) правило знало только `exec*` — и сканер назвал строку `import`, а не строку вызова.
+# Правило, существующее ради АДРЕСА, на боевом адресе адреса не давало.
+_NODE_EXEC_CALL = re.compile(
+    r"\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork)\s*\(")
 
 # R-40, ВТОРОЙ ЗАХОД (#1112). `\b` выше стоит между точкой и `e`, поэтому правило матчит и `.exec(`
 # РЕГУЛЯРНОГО ВЫРАЖЕНИЯ; условие «файл импортирует child_process» в `vite.config.ts` выполнилось
@@ -252,6 +257,7 @@ except ImportError:                                    # запуск КАК С�
 
 try:
     from ai_ops_kit.security.scan_prose import PROSE_SUFFIXES as _PROSE_SUFFIXES
+    from ai_ops_kit.security.scan_prose import area_of as _area_of
     from ai_ops_kit.security.scan_prose import blank_comments as _blank_comments
 except ImportError:                                    # запуск КАК СКРИПТ: пакета в sys.path нет
     import importlib.util as _ilu2
@@ -264,6 +270,7 @@ except ImportError:                                    # запуск КАК С�
     _spec2.loader.exec_module(_prose_mod)
     _PROSE_SUFFIXES = _prose_mod.PROSE_SUFFIXES
     _blank_comments = _prose_mod.blank_comments
+    _area_of = _prose_mod.area_of
 
 # СОБСТВЕННЫЙ МАТЕРИАЛ ДЕТЕКТОРА. Файл, который ОБЪЯВЛЯЕТ образцы, и тесты, которые их ПОДСОВЫВАЮТ,
 # по построению содержат всё, что детектор ищет. Замер 19.08.2026: 55 флагов из 72 приходились
@@ -325,11 +332,22 @@ def scan_injection(files):
         # Пере-срабатывание здесь безопасно (лишний needs_review), под-срабатывание — нет.
         if _CHILD_PROCESS_IMPORT.search(text):
             regexp_names = frozenset(_REGEXP_BINDING.findall(text))
-            for lineno, line in enumerate(text.splitlines(), 1):
-                if _NODE_EXEC_CALL.search(_without_regexp_exec(line, regexp_names)):
-                    res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
+            вызовы = [lineno for lineno, line in enumerate(text.splitlines(), 1)
+                      if _NODE_EXEC_CALL.search(_without_regexp_exec(line, regexp_names))]
+            for lineno in вызовы:
+                res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
+            if вызовы:
+                # Строка `import` найдена правилом `node_child_process` выше и теперь не нужна:
+                # адрес ВЫЗОВА точнее, а два флага на один файл судья читает как два места.
+                res = [f for f in res
+                       if not (f["path"] == path and f["id"] == "node_child_process")]
         for lineno in _sql_template_literal_lines(text):
             res.append({"path": path, "id": "sql_template_literal", "line": lineno})
+    # ОБЛАСТЬ — ЯРЛЫК, А НЕ ФИЛЬТР (#1146). Ни один флаг не исчезает: `harness` (тесты, e2e, конфиги
+    # инструментов) отделён от `product`, чтобы судья не читал дюжину тестовых адресов ради одного
+    # боевого. Ошибка классификации перекладывает адрес в другой раздел, но не прячет его.
+    for f in res:
+        f["area"] = _area_of(f["path"])
     return res
 
 
@@ -651,6 +669,15 @@ def main(argv):
               f"injection-флагов {len(rep['injection_flags'])} · новых зависимостей {len(rep['new_dependencies'])}")
         for s in rep["secrets"]:
             print(f"  СЕКРЕТ {s['id']} — {s['path']}:{s['line']}")
+        # Боевые адреса печатаются поимённо, обвязка — одним числом: список, где на один боевой
+        # адрес приходится дюжина тестовых, судья пролистывает целиком (#1146).
+        боевые = [f for f in rep["injection_flags"] if f.get("area") != "harness"]
+        обвязка = [f for f in rep["injection_flags"] if f.get("area") == "harness"]
+        for f in боевые:
+            print(f"  ПОДОЗРИТЕЛЬНОЕ МЕСТО {f['id']} — {f['path']}:{f['line']}")
+        if обвязка:
+            print(f"  в обвязке (тесты, e2e, конфиги инструментов) ещё {len(обвязка)} — "
+                  f"адресат тот же, срочность другая; полный список в --json")
         if not rep["dependencies_compared"]:
             print("  зависимости: сравнивать не с чем — база не задана (--base <ревизия>); "
                   "это НЕ «новых нет»")
