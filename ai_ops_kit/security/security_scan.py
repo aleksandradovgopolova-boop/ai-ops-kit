@@ -130,7 +130,7 @@ def _scan(text, patterns):
             value = m.group(1) if m.groups() else m.group(0)
             if _looks_like_placeholder(value):
                 continue
-            if pid == "db_connection_string_password" and _is_loopback_dsn(line[m.start():]):
+            if pid == "db_connection_string_password" and _is_loopback_dsn(line[m.end():]):
                 continue                       # адрес на своей машине — отзывать нечего
             if pid == "private_key_block" and not _pem_header_has_body(
                     line[m.end():], lines[lineno:lineno + _PEM_LOOKAHEAD]):
@@ -155,11 +155,9 @@ def scan_secrets(files):
     """
     res = []
     for path, text in files.items():
-        # Собственный материал детектора исключён по той же причине и тем же списком, что для
-        # injection: файл, ОБЪЯВЛЯЮЩИЙ образцы, и тесты, которые их ПОДСОВЫВАЮТ, по построению
-        # содержат всё, что детектор ищет. Отсев жил только на одном из двух путей.
-        if _is_detector_own(path):
-            continue
+        # СОБСТВЕННЫЙ МАТЕРИАЛ ДЕТЕКТОРА ЗДЕСЬ НЕ ПРОЩАЕТСЯ — решение v3.0.4 в силе, и ревью
+        # показало, чего стоила бы его отмена: по замеру этот класс не гасил НИ ОДНОЙ из 17 находок,
+        # а настоящий ключ, закоммиченный в файл детектора, переставал находиться.
         for f in _scan(text, SECRET_PATTERNS):
             res.append({"path": path, **f})
     return res

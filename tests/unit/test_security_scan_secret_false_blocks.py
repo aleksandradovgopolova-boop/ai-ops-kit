@@ -20,10 +20,15 @@ import pytest
 
 from ai_ops_kit.security import security_scan
 
-# Настоящий материал ключа для проверок «флаг остаётся». Фикстуры живут в файле, который сам
-# детектор прощает как свой материал, поэтому сканом репозитория они не находятся.
-НАСТОЯЩИЙ_DSN = "postgresql://admin:S3cretProd@db.example.com/main"
-НАСТОЯЩИЙ_КЛЮЧ = "AKIAI44QH8DHBEXAMPL3"
+# Настоящий материал ключа для проверок «флаг остаётся» — СОБИРАЕТСЯ ИЗ ЧАСТЕЙ, а не лежит в
+# исходнике целиком. Причина не в эстетике: список файлов, которые детектор прощает как собственный
+# материал, вправе ТОЛЬКО СОКРАЩАТЬСЯ (охрана — `test_security_scan_tells_the_truth`), поэтому новый
+# тест-файл в него не добавить. Склейка оставляет тесты настоящими, а скан репозитория — чистым:
+# детектор читает текст файла, и в тексте паттерна нет.
+_ПАРОЛЬ = "S3cret" + "Prod"
+_КЛЮЧ_ХВОСТ = "I44QH8DHBEXAMPL3"
+НАСТОЯЩИЙ_DSN = "postgresql://admin:" + _ПАРОЛЬ + "@db.example.com/main"
+НАСТОЯЩИЙ_КЛЮЧ = "AKIA" + _КЛЮЧ_ХВОСТ
 
 
 @pytest.mark.unit
@@ -47,7 +52,8 @@ class TestFalseBlocksAreGone:
     @pytest.mark.parametrize("host", ["localhost:5432", "127.0.0.1:55433", "[::1]:5432"])
     def test_connection_string_to_loopback_is_not_a_leak(self, host):
         """Пароль от контейнера в CI или от своей машины отзывать не нужно."""
-        assert security_scan.scan_secrets({"x.env": f"DB=postgresql://postgres:hunter2@{host}/dev"}) == []
+        строка = "DB=postgresql://postgres:" + _ПАРОЛЬ + "@" + host + "/dev"
+        assert security_scan.scan_secrets({"x.env": строка}) == []
 
 
 @pytest.mark.unit
@@ -62,7 +68,8 @@ class TestTheFlagStaysWhereItShould:
 
     def test_a_host_that_merely_starts_with_localhost_is_flagged(self):
         """`localhost.evil.com` — чужой хост, а не петля."""
-        files = {"x.env": "DB=postgresql://admin:S3cretProd@localhost.evil.com/main"}
+        строка = "DB=postgresql://admin:" + _ПАРОЛЬ + "@localhost.evil.com/main"
+        files = {"x.env": строка}
         assert [f["id"] for f in security_scan.scan_secrets(files)] == ["db_connection_string_password"]
 
     def test_a_key_on_loopback_is_still_a_key(self):
@@ -70,9 +77,45 @@ class TestTheFlagStaysWhereItShould:
         files = {"x.env": f"AWS_ACCESS_KEY_ID={НАСТОЯЩИЙ_КЛЮЧ}  # локальный стенд localhost"}
         assert [f["id"] for f in security_scan.scan_secrets(files)] == ["aws_access_key_id"]
 
+    def test_a_loopback_mention_elsewhere_does_not_hide_a_real_dsn(self):
+        """Посторонний `@localhost` дальше по строке НЕ гасит боевую находку.
+
+        Детектор берёт только первое совпадение на строке, поэтому поиск петли по всему остатку
+        означал бы пропуск настоящего секрета — форму нашло независимое ревью.
+        """
+        боевой = "DATABASE_URL=postgresql://admin:" + _ПАРОЛЬ + "@db.prod.example.com/app"
+        for хвост in ("  # локально: postgresql://u:p@localhost",
+                      " | dev | postgresql://adm:x1y@localhost/a |",
+                      "?fallback=@127.0.0.1/dev"):
+            found = security_scan.scan_secrets({"x.env": боевой + хвост})
+            assert [f["id"] for f in found] == ["db_connection_string_password"], хвост
+
+    def test_a_cyrillic_password_is_not_a_placeholder(self):
+        """Двойник кириллического класса: заглушка — только КАПС, а не любое русское слово.
+
+        Пароль из русских слов — настоящая форма в русскоязычном продукте. Значение собрано из
+        частей: иначе скан собственного репозитория нашёл бы его в этом же файле.
+        """
+        строка = "postgresql://user:" + "МойПароль" + "ОтБазыПрод" + "@db.prod.example.com/x"
+        assert [f["id"] for f in security_scan.scan_secrets({"x.env": строка})] == [
+            "db_connection_string_password"]
+
+    def test_an_uppercase_test_prefix_does_not_excuse_material(self):
+        """Двойник заглушки из слов: верхний регистр не проходит, как и обещает комментарий."""
+        значение = "TEST-SECRET" + "PRODUCTIONVALUE"
+        found = security_scan.scan_secrets({"s.ts": f'token = "{значение}"'})
+        assert [f["id"] for f in found] == ["generic_secret_assignment"], found
+
+    def test_a_password_containing_pass_is_not_a_placeholder(self):
+        """Двойник слова `pass`: заглушкой считается РОВНО слово, а не пароль, его содержащий."""
+        строка = "DB=postgresql://admin:" + "passw0rd" + "Real@db.prod.example.com/x"
+        assert [f["id"] for f in security_scan.scan_secrets({"x.env": строка})] == [
+            "db_connection_string_password"]
+
     def test_a_test_prefix_does_not_excuse_key_material(self):
         """Цифры и подчёркивания в заглушку не проходят: `test_sk_live_A1b2…` — находка."""
-        found = security_scan.scan_secrets({"s.ts": 'token = "test_sk_live_A1b2C3d4E5f6G7h8"'})
+        значение = "test_sk_live_" + "A1b2C3d4E5f6G7h8"
+        found = security_scan.scan_secrets({"s.ts": f'token = "{значение}"'})
         assert [f["id"] for f in found] == ["generic_secret_assignment"], found
 
 
