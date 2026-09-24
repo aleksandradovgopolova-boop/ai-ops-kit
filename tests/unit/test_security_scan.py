@@ -783,6 +783,10 @@ def test_the_r40_regression_would_turn_the_corpus_red(monkeypatch):
 
 @pytest.mark.unit
 def test_a_broken_placeholder_filter_would_turn_the_corpus_red(monkeypatch):
-    """Сломан отсев плейсхолдеров -> заглушка `changeme` снова считается утечкой."""
-    monkeypatch.setattr(security_scan, "_PLACEHOLDER", re.compile(r"(?!x)x"))
+    """Сломан отсев плейсхолдеров -> заглушка `changeme` снова считается утечкой.
+
+    Отсев переехал в сателлит `scan_secret_noise` (#1138, разрез по порогу монолита), но подменяется
+    там же, где используется: имя в фасаде — то, что зовёт `_scan`.
+    """
+    monkeypatch.setattr(security_scan, "_looks_like_placeholder", lambda value: False)
     assert _flags("password = 'changeme_changeme_1'") == {"generic_secret_assignment"}
