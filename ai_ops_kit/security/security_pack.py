@@ -188,6 +188,25 @@ def _scan_scope(child_root, base):
 # в «не показываем», и кит молча привозил бы в чужой репозиторий injection-поверхность, за которую
 # отвечает сам. Секретов это НЕ касается: пароль, приехавший в поставке, лежит в репозитории дочки
 # и утёк из него — там гейт обязан падать по-прежнему.
+def _vendor_section(child_root, base, vendor, files_content):
+    """Раздел поставки для доменного вердикта: разметка прибытий, версии кита и подпись адресата.
+
+    ДО ЭТОГО РАЗМЕТКИ ЗДЕСЬ НЕ БЫЛО ВОВСЕ (нашло независимое ревью): поле `arrived` числилось в
+    белом списке проекции отчёта, но `run_pack` его не проставлял — то есть в `run-report.json`,
+    куда гейт отправляет человека, адреса приходили без ответа на главный вопрос «это привёз кит
+    своим обновлением или было и раньше». Возможность жила только в текстовом выводе CLI.
+    """
+    compared = bool(child_root and base)
+    if compared and vendor:
+        vendor = security_scan._vendor_arrivals(child_root, base, vendor, files_content)
+    before, after = (security_scan._vendor_version(child_root, base, files_content)
+                     if child_root else (None, None))
+    приехало = sum(1 for f in vendor if f.get("arrived"))
+    return {"vendor_flags": vendor, "vendor_compared": compared,
+            "vendor_note": security_scan._arrivals_note(before, after, приехало, len(vendor),
+                                                        compared)}
+
+
 def _domain_findings(domain, secrets, injections, new_deps_detailed):
     """Находки домена по его `deterministic_checks`. Домен берёт только то, что объявил.
 
@@ -285,7 +304,7 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         # ОХВАТ РЯДОМ С ВЕРДИКТОМ: что сравнивалось. Вердикт без охвата непроверяем — заявка #139
         # читалась как «блокирует без находок» именно потому, что охват был не назван нигде.
         "scan_scope": scan_scope,
-        "vendor_flags": vendor_injections,          # рядом с вердиктом, но НЕ в нём — см. выше
+        **_vendor_section(child_root, base, vendor_injections, files_content),
         "allowed_evidence_sources": allowed,
     }
 
@@ -331,6 +350,10 @@ def for_report(result):
         # класс, что заявка #139: гейт отправляет человека в отчёт, а находок в отчёте нет.
         "vendor_flags": [{k: f[k] for k in FINDING_REPORT_FIELDS if k in f}
                          for f in (result.get("vendor_flags") or [])],
+        # ПОДПИСЬ ЕДЕТ ВМЕСТЕ С АДРЕСАМИ. Без неё раздел доходил до отчёта безымянным: человек
+        # видел пути, но не видел ни адресата, ни того, сравнивали ли вообще с прежней версией.
+        "vendor_note": result.get("vendor_note"),
+        "vendor_compared": result.get("vendor_compared"),
         "domain_results": [{
             "domain": r["domain"],
             "status": r["status"],

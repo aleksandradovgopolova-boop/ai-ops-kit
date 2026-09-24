@@ -41,6 +41,9 @@ def mark_arrivals(flags, text_after: str, before_flags, text_before: str) -> lis
     сторону лишнего внимания, а не пропуска, — и это единственная безопасная сторона для раздела,
     который ничего не блокирует.
     """
+    # СЧЁТЧИК, А НЕ МНОЖЕСТВО: если в прежней версии такой вызов был ОДИН, а стало ДВА дословно
+    # одинаковых, второй — новый адрес. Множество объявило бы его старым (сторож — тест
+    # `test_a_second_identical_call_is_a_new_address`).
     было = Counter(_fingerprint(f, text_before.splitlines()) for f in before_flags)
     строки = text_after.splitlines()
     out = []
@@ -60,12 +63,19 @@ def arrivals_note(version_before, version_after, arrived: int, total: int, compa
     различает их везде (тот же инвариант, что у `dependencies_compared`), и здесь обязан различать
     тоже: иначе прогон по всему дереву выдавал бы «всё это было и раньше» бесплатно."""
     чей = "адресат — сопровождающий кита, не эта команда; в вердикт гейта продукта не входит"
-    if version_before and version_after and version_before != version_after:
+    # «ВЕРСИЯ НЕ МЕНЯЛАСЬ» — ТОЖЕ ВЫВОД ИЗ СРАВНЕНИЯ, и без базы его делать нельзя. Прежде эта
+    # фраза печаталась рядом с «с прежней версией НЕ СРАВНИВАЛИСЬ» — одно предложение утверждало
+    # и то, и другое (нашло независимое ревью).
+    if not version_after:
+        чем = "версия кита не прочиталась"
+    elif not compared:
+        чем = f"кит {version_after}"
+    elif version_before and version_before != version_after:
         чем = f"обновление кита {version_before} -> {version_after}"
-    elif version_after:
+    elif version_before:
         чем = f"кит {version_after}, версия не менялась"
     else:
-        чем = "версия кита не прочиталась"
+        чем = f"кит {version_after}, прежняя версия не записана"
     if not compared:
         сколько = (f"{total} адресов; с прежней версией НЕ СРАВНИВАЛИСЬ — база не задана "
                    f"(--base <ревизия>), какие из них приехали с обновлением, неизвестно")

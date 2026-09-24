@@ -83,8 +83,22 @@ class TestTheSectionForgivesNothing:
 
     def test_a_path_that_merely_looks_similar_is_not_forgiven(self):
         """Складская лазейка закрыта: прощается ровно `.ai/managed/`, а не всё со словом managed."""
-        for path in ("src/managed/a.py", "ai/managed/a.py", "managed/a.py", "src/.ai/a.py"):
+        for path in ("src/managed/a.py", "ai/managed/a.py", "managed/a.py", "src/.ai/a.py",
+                     "xai/managed/a.py", "a.ai/managed/b.py"):
             assert area_of(path) == "product", path
+
+    def test_a_nested_install_is_recognised_because_monorepo_paths_look_like_that(self):
+        """В монорепозитории `git diff --name-only` печатает пути от корня РЕПОЗИТОРИЯ, поэтому
+        кит, поставленный в `packages/api/`, приходит как `packages/api/.ai/managed/...`. Без
+        вложенной ветки его код судился бы как продуктовый. Цена ветки названа в `scan_prose`."""
+        assert area_of("packages/api/.ai/managed/ai_ops_kit/engine/tool_broker.py") == "vendor"
+
+    def test_a_path_written_with_a_leading_dot_slash_is_the_same_path(self):
+        """`./.ai/managed/...` — тот же файл. Иначе форма записи пути решала бы адресата.
+
+        Это покрывает ветка вложенного пути: `/.ai/managed/` встречается и в `./.ai/managed/...`.
+        Отдельная нормализация `./` была бы непроверяемым кодом — её и нет."""
+        assert area_of("./.ai/managed/ai_ops_kit/engine/tool_broker.py") == "vendor"
 
     def test_a_real_secret_in_the_vendor_copy_still_blocks(self):
         """ГЛАВНЫЙ СТОРОЖ ФАЙЛА. Пароль в поставленной копии лежит в репозитории ДОЧКИ и утёк из
@@ -94,6 +108,29 @@ class TestTheSectionForgivesNothing:
         assert находки, "секрет в поставленной копии перестал находиться — это утечка, а не чужой код"
         ev = security_scan.security_evidence(находки, [], [])
         assert ev["no_secrets"]["status"] == "fail", ev["no_secrets"]
+
+    def test_a_secret_in_the_vendor_copy_blocks_through_the_real_gate_path(self, дочка_с_секретом):
+        """ТОТ ЖЕ СТОРОЖ, НО НА БОЕВОМ ПУТИ. Независимое ревью показало, что проверка выше стоит
+        не там, где работает механизм: она зовёт `scan_secrets` напрямую, а областями заведуют
+        `scan_repo` и `run_pack`. Прощение секрета, внесённое в любой из них, эту проверку не
+        красит. Здесь гейт проходится целиком — ровно так, как он идёт в CI дочки."""
+        root = дочка_с_секретом
+        rep = security_scan.scan_repo(root)
+        пути = [s["path"] for s in rep["secrets"]]
+        assert ".ai/managed/ai_ops_kit/config/db.py" in пути, rep["secrets"]
+        assert rep["evidence"]["no_secrets"]["status"] == "fail"
+
+    def test_the_scanner_exits_nonzero_on_a_secret_in_the_vendor_copy(self, дочка_с_секретом):
+        """Гейт дочки читает КОД ВОЗВРАТА скрипта. Ноль здесь означал бы «чисто»."""
+        код = security_scan.main([str(дочка_с_секретом)])
+        assert код == 1, "сканер вернул 0 при секрете в поставленной копии — гейт пропустит утечку"
+
+    def test_a_secret_in_the_vendor_copy_blocks_the_domain_verdict(self):
+        """Третий боевой путь — доменный вердикт `security_pack`, он и есть гейт дочки."""
+        res = security_pack.run_pack(
+            files_content={".ai/managed/ai_ops_kit/config/db.py": f'DSN = "{НАСТОЯЩИЙ_DSN}"'})
+        assert "secrets" in res["blocking"], res
+        assert res["overall"] == "blocked", res["overall"]
 
     def test_a_product_domain_still_blocks_on_product_injection(self):
         """Сигнал взят ТОТ, что поднимает домен с `injection_scan` в `deterministic_checks`.
@@ -163,6 +200,20 @@ class TestArrivalsAreToldApartFromWhatWasAlreadyThere:
         note = scan_vendor.arrivals_note(None, "4.6.0", arrived=1, total=1, compared=True)
         assert "приехало с этим обновлением 1" in note, note
 
+    def test_a_second_identical_call_is_a_new_address(self):
+        """ПОЧЕМУ СЧЁТЧИК, А НЕ МНОЖЕСТВО. Если в прежней версии такой вызов был ОДИН, а стало ДВА
+        дословно одинаковых — второй приехал с обновлением. Множество объявило бы его старым, и
+        новая поверхность в уже знакомом файле прошла бы молча."""
+        # ДВА одинаковых вызова в прежней версии и ТРИ в текущей. На паре 1->2 счётчик и множество
+        # дают ОДИН И ТОТ ЖЕ ответ, и такая фикстура мутацию не ловит — проверено прогоном.
+        прежний = "import subprocess\n" + ОПАСНЫЙ_ВЫЗОВ * 2
+        текущий = "import subprocess\n" + ОПАСНЫЙ_ВЫЗОВ * 3
+        было = security_scan.scan_injection({"x.py": прежний})
+        стало = security_scan.scan_injection({"x.py": текущий})
+        assert len(было) == 2 and len(стало) == 3, (было, стало)
+        размечено = scan_vendor.mark_arrivals(стало, текущий, было, прежний)
+        assert [f["arrived"] for f in размечено] == [False, False, True], размечено
+
     def test_without_a_base_nothing_is_called_old_or_new(self, дочка):
         """«Сравнивать не с чем» — НЕ «всё это было и раньше». Прогон по всему дереву не знает,
         какие адреса новые, и обязан сказать это, а не свернуть их числом «было раньше»."""
@@ -181,6 +232,21 @@ class TestArrivalsAreToldApartFromWhatWasAlreadyThere:
 
 def _git(root, *args):
     subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, timeout=60)
+
+
+@pytest.fixture
+def дочка_с_секретом(tmp_path):
+    """Репозиторий-дочка, где настоящий пароль лежит В ПОСТАВЛЕННОЙ КОПИИ КИТА."""
+    root = tmp_path / "leaky"
+    (root / ".ai" / "managed" / "ai_ops_kit" / "config").mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True, timeout=60)
+    _git(root, "config", "user.email", "t@example.com")
+    _git(root, "config", "user.name", "t")
+    (root / ".ai" / "managed" / "ai_ops_kit" / "config" / "db.py").write_text(
+        f'DSN = "{НАСТОЯЩИЙ_DSN}"\n', encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "утечка в поставке")
+    return root
 
 
 @pytest.fixture
@@ -220,6 +286,32 @@ class TestOnARealKitUpdate:
         было = [f for f in rep["vendor_flags"] if not f["arrived"]]
         assert len(приехали) == 1 and len(было) == 1, rep["vendor_flags"]
         assert "4.5.0 -> 4.6.0" in rep["vendor_note"], rep["vendor_note"]
+
+    def test_the_arrived_addresses_are_printed_by_name(self, дочка):
+        """РАДИ ЭТОГО РАЗДЕЛ И ЗАВЕДЁН. Свернуть приехавшие адреса числом значит вернуть ровно ту
+        картину, которую работа убирает: дочка узнаёт, что «что-то приехало», но не что именно."""
+        root, база = дочка
+        rep = security_scan.scan_repo(root, база)
+        строки = security_scan._vendor_lines(rep)
+        приехавший = next(f for f in rep["vendor_flags"] if f["arrived"])
+        assert any(f"{приехавший['path']}:{приехавший['line']}" in s and "ПРИЕХАЛО" in s
+                   for s in строки), строки
+        # а бывший раньше — свёрнут числом: он не новость
+        бывший = next(f for f in rep["vendor_flags"] if not f["arrived"])
+        assert not any(f"ПРИЕХАЛО С ОБНОВЛЕНИЕМ {бывший['id']} — {бывший['path']}:{бывший['line']}"
+                       in s for s in строки), строки
+
+    def test_the_gate_report_says_what_arrived_with_the_update(self, дочка):
+        """Разметка прибытий обязана быть НА БОЕВОМ ПУТИ, а не только в выводе CLI: гейт отправляет
+        человека в `run-report.json`, и поле `arrived` числилось в белом списке проекции, не
+        проставляясь никогда (нашло независимое ревью)."""
+        root, база = дочка
+        res = security_pack.run_pack(child_root=root, base=база, signals={"handles_user_input": True})
+        отчёт = security_pack.for_report(res)
+        assert отчёт["vendor_compared"] is True, отчёт["vendor_compared"]
+        assert "сопровождающий кита" in (отчёт["vendor_note"] or ""), отчёт["vendor_note"]
+        разметка = sorted(f.get("arrived") for f in отчёт["vendor_flags"])
+        assert разметка == [False, True], отчёт["vendor_flags"]
 
     def test_the_product_verdict_is_not_touched_by_the_vendor_copy(self, дочка):
         root, база = дочка
