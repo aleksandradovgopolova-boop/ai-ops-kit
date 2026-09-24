@@ -176,6 +176,39 @@ def _scan_scope(child_root, base):
         f"коммит — файлы для security-скана определить нечем — fail-closed")
 
 
+# ─── ПОСТАВЛЕННАЯ КОПИЯ КИТА НЕ СУДИТСЯ ГЕЙТОМ ПРОДУКТА (#1147) ──────────────────────────────────
+#
+# `.ai/managed/` дочка не писала, не ревьюит и починить в своём PR не может: правка делается
+# ОБНОВЛЕНИЕМ КИТА. Домен, упавший на чужом `shell=True`, блокирует команду работой, которой у неё
+# нет — а гейт `security` один из восьми блокирующих. Поэтому флаги оттуда не доходят до
+# `_domain_findings` и не участвуют в `overall`.
+#
+# ЭТО СНЯТИЕ ЛОЖНОЙ ОТВЕТСТВЕННОСТИ, А НЕ ПРОЩЕНИЕ. Адреса не исчезают: они лежат в результате
+# (`vendor_flags`) и печатаются отдельным разделом `security_scan`. Иначе «не судим» превратилось бы
+# в «не показываем», и кит молча привозил бы в чужой репозиторий injection-поверхность, за которую
+# отвечает сам. Секретов это НЕ касается: пароль, приехавший в поставке, лежит в репозитории дочки
+# и утёк из него — там гейт обязан падать по-прежнему.
+def _domain_findings(domain, secrets, injections, new_deps_detailed):
+    """Находки домена по его `deterministic_checks`. Домен берёт только то, что объявил.
+
+    Вынесено из `run_pack` разрезом, а не подъёмом потолка: функция стояла РОВНО на потолке
+    func-size, а ратчет ходит только вниз. Поведение не менялось — тот же порядок, те же поля."""
+    checks = set(domain.get("deterministic_checks", []) or [])
+    findings = []
+    if "secret_scan" in checks:
+        findings += [{"type": "secret", "path": s["path"], "line": s["line"], "id": s["id"]} for s in secrets]
+    if "injection_scan" in checks:
+        findings += [{"type": "injection", "path": i["path"], "line": i["line"], "id": i["id"]} for i in injections]
+    if "dependency_diff" in checks:
+        # v3.0-rc5 (P1.2): finding несёт fingerprint (manifest/package/version/operation) — approval
+        # supply-chain привязывается к нему, а не к пути файла (иначе одобрение одной зависимости
+        # покрыло бы любую другую в том же requirements.txt/package.json).
+        findings += [{"type": "new_dependency", "name": dd["name"], "version": dd.get("version"),
+                      "manifest": dd.get("manifest"), "operation": dd.get("operation", "add")}
+                     for dd in new_deps_detailed]
+    return findings
+
+
 def run_pack(child_root=None, base=None, signals=None, files_content=None):
     """Доменный security-вердикт. files_content: {path: text} для offline-теста; иначе — из git diff.
 
@@ -195,7 +228,8 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
 
     # детерминированные находки (один раз)
     secrets = security_scan.scan_secrets(files_content)
-    injections = security_scan.scan_injection(files_content)
+    injections, vendor_injections = security_scan._vendor_split(   # см. комментарий над _domain_findings
+        security_scan.scan_injection(files_content))
     mani = {p: c for p, c in files_content.items() if Path(p).name in security_scan.DEP_MANIFESTS}
     before = {p: (security_scan._git_show(child_root, base, p) if (child_root and base) else "") for p in mani}
     # `new_deps` (недетальный вариант) снят ревизией 2026-08-11: результат не использовался с
@@ -207,20 +241,7 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         reasons = _applies(d, signals, files_content)
         if not reasons:
             continue
-        checks = set(d.get("deterministic_checks", []) or [])
-        findings = []
-        if "secret_scan" in checks:
-            findings += [{"type": "secret", "path": s["path"], "line": s["line"], "id": s["id"]} for s in secrets]
-        if "injection_scan" in checks:
-            findings += [{"type": "injection", "path": i["path"], "line": i["line"], "id": i["id"]} for i in injections]
-        if "dependency_diff" in checks:
-            # v3.0-rc5 (P1.2): finding несёт fingerprint (manifest/package/version/operation) — approval
-            # supply-chain привязывается к нему, а не к пути файла (иначе одобрение одной зависимости
-            # покрыло бы любую другую в том же requirements.txt/package.json).
-            findings += [{"type": "new_dependency", "name": dd["name"], "version": dd.get("version"),
-                          "manifest": dd.get("manifest"), "operation": dd.get("operation", "add")}
-                         for dd in new_deps_detailed]
-
+        findings = _domain_findings(d, secrets, injections, new_deps_detailed)
         req = set(d.get("required_evidence", []) or [])
         severity = (d.get("severity_policy", {}) or {}).get("default", "medium")
         # статус домена. ИНВАРИАНТ (finding аудита v2.104->исправлен): status=fail НИКОГДА не даёт
@@ -264,6 +285,7 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         # ОХВАТ РЯДОМ С ВЕРДИКТОМ: что сравнивалось. Вердикт без охвата непроверяем — заявка #139
         # читалась как «блокирует без находок» именно потому, что охват был не назван нигде.
         "scan_scope": scan_scope,
+        "vendor_flags": vendor_injections,          # рядом с вердиктом, но НЕ в нём — см. выше
         "allowed_evidence_sources": allowed,
     }
 
