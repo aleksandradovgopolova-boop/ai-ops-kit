@@ -101,7 +101,12 @@ def blank_comments(text: str, path: str) -> str:
 #
 # ПРИЗНАКИ ВЫБРАНЫ ТРУДНО ПУТАЕМЫЕ. `scripts/` сюда НЕ входит осознанно: там живут и эксплуатационные
 # скрипты (бэкап базы, деплой), и ошибиться в их пользу дороже, чем прочитать лишний адрес.
-_TEST_DIRS = ("tests/", "test/", "__tests__/", "e2e/", "__mocks__/", "fixtures/", "spec/")
+# `spec/` и `fixtures/` В СПИСОК НЕ ВХОДЯТ, хотя напрашивались: каталог `spec/` сплошь и рядом
+# держит OpenAPI/GraphQL-описания боевого API, а `fixtures/` — сиды, в том числе продовые.
+# Это единственные признаки, способные СПРЯТАТЬ боевой код из именного раздела, — нашло
+# независимое ревью. Правило отбора: признак остаётся, только если спутать его с боевым кодом
+# трудно.
+_TEST_DIRS = ("tests/", "test/", "__tests__/", "e2e/", "__mocks__/")
 _TEST_MARKERS = (".test.", ".spec.")
 _TOOL_CONFIGS = ("vite.config.", "vitest.config.", "jest.config.", "webpack.config.",
                  "rollup.config.", "playwright.config.", "eslint.config.", "babel.config.",

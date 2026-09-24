@@ -332,7 +332,15 @@ def scan_injection(files):
         # Пере-срабатывание здесь безопасно (лишний needs_review), под-срабатывание — нет.
         if _CHILD_PROCESS_IMPORT.search(text):
             regexp_names = frozenset(_REGEXP_BINDING.findall(text))
-            вызовы = [lineno for lineno, line in enumerate(text.splitlines(), 1)
+            # Вызовы ищутся по тексту БЕЗ КОММЕНТАРИЕВ (#1146). Закомментированный `// cp.exec(x)`
+            # не исполняется, а раз найденный вызов теперь снимает флаг с импорта, такой «вызов»
+            # уводил бы судью с настоящей строки — и этим можно было бы управлять снаружи, дописав
+            # комментарий. Разбор комментариев уже есть у прозы, здесь он просто применяется.
+            # ГРАНИЦА: строковые литералы НЕ гасятся. Текст «call execSync(cmd)» внутри строки тоже
+            # уведёт адрес, но гасить содержимое строк нельзя — аргументы настоящего вызова живут
+            # именно там, и правило перестало бы видеть `exec("rm -rf " + x)`.
+            код = _blank_comments(text, path)
+            вызовы = [lineno for lineno, line in enumerate(код.splitlines(), 1)
                       if _NODE_EXEC_CALL.search(_without_regexp_exec(line, regexp_names))]
             for lineno in вызовы:
                 res.append({"path": path, "id": "node_child_process_exec", "line": lineno})

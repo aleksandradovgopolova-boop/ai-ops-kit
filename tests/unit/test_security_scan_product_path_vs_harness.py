@@ -29,6 +29,8 @@ class TestAreaTellsProductFromHarness:
         "e2e/run-app.mjs",
         "tests/unit/test_x.py",
         "packages/app/__tests__/helper.ts",
+        "src/test/legacy.ts",
+        "src/__mocks__/fs.ts",
         "vite.config.ts",
         "playwright.config.ts",
     ])
@@ -42,6 +44,8 @@ class TestAreaTellsProductFromHarness:
         "scripts/backup-db.sh",
         "scripts/deploy.sh",
         "src/shared/api/contest.ts",
+        "server/spec/openapi-router.ts",
+        "src/fixtures/seed-prod.ts",
     ])
     def test_product_paths_stay_product(self, path):
         """Боевой код остаётся боевым. `scripts/` — намеренно: там живёт и эксплуатация."""
@@ -95,6 +99,16 @@ class TestTheAddressPointsAtTheCall:
         flags = security_scan.scan_injection({"server/run.mjs": код})
         assert [f["id"] for f in flags] == ["node_child_process_exec"], flags
         assert [f["line"] for f in flags] == [2], flags
+
+    def test_a_commented_out_call_does_not_steal_the_address(self):
+        """Закомментированный «вызов» не уводит адрес с настоящей строки импорта.
+
+        Раз найденный вызов снимает флаг с импорта, поиск по сырому тексту позволял бы управлять
+        адресом снаружи: дописал комментарий — увёл ревьюера. Нашло независимое ревью.
+        """
+        код = "import cp from 'child_process'\n// cp.execSync(userInput)\n"
+        flags = security_scan.scan_injection({"srv.mjs": код})
+        assert [(f["id"], f["line"]) for f in flags] == [("node_child_process", 1)], flags
 
     def test_an_import_without_a_call_is_still_flagged(self):
         """Граница: импорт БЕЗ вызова остаётся флагом — иначе поверхность пропала бы молча."""
