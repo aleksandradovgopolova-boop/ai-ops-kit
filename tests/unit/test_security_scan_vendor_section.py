@@ -59,7 +59,7 @@ class TestTheVendorCopyGetsItsOwnSection:
         assert [f["path"] for f in поставка] == [".ai/managed/ai_ops_kit/engine/tool_broker.py"]
 
     def test_the_note_names_the_addressee_and_the_kit_versions(self):
-        note = scan_vendor.arrivals_note("4.5.0", "4.6.0", arrived=1, total=3)
+        note = scan_vendor.arrivals_note("4.5.0", "4.6.0", arrived=1, total=3, compared=True)
         assert "сопровождающий кита" in note, note
         assert "не входит" in note, "подпись не говорит, что раздел не участвует в вердикте гейта"
         assert "4.5.0 -> 4.6.0" in note, note
@@ -160,8 +160,21 @@ class TestArrivalsAreToldApartFromWhatWasAlreadyThere:
         стало = security_scan.scan_injection({"x.py": текущий})
         размечено = scan_vendor.mark_arrivals(стало, текущий, [], "")
         assert all(f["arrived"] for f in размечено), размечено
-        note = scan_vendor.arrivals_note(None, "4.6.0", arrived=1, total=1)
-        assert "не проверено" in note, note
+        note = scan_vendor.arrivals_note(None, "4.6.0", arrived=1, total=1, compared=True)
+        assert "приехало с этим обновлением 1" in note, note
+
+    def test_without_a_base_nothing_is_called_old_or_new(self, дочка):
+        """«Сравнивать не с чем» — НЕ «всё это было и раньше». Прогон по всему дереву не знает,
+        какие адреса новые, и обязан сказать это, а не свернуть их числом «было раньше»."""
+        root, _ = дочка
+        rep = security_scan.scan_repo(root)
+        assert rep["vendor_compared"] is False
+        assert "НЕ СРАВНИВАЛИСЬ" in rep["vendor_note"], rep["vendor_note"]
+        assert all("arrived" not in f for f in rep["vendor_flags"]), rep["vendor_flags"]
+        # и адреса названы поимённо, а не свёрнуты в число
+        строки = security_scan._vendor_lines(rep)
+        assert any(".ai/managed/ai_ops_kit/engine/tool_broker.py" in s for s in строки), строки
+        assert not any("было и в прежней версии" in s for s in строки), строки
 
 
 # ─── сквозной прогон по настоящему git-дереву ──────────────────────────────────────────────────

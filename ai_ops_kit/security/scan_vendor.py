@@ -53,8 +53,12 @@ def mark_arrivals(flags, text_after: str, before_flags, text_before: str) -> lis
     return out
 
 
-def arrivals_note(version_before, version_after, arrived: int, total: int) -> str:
-    """Подпись раздела: чей это код, с какой версией приехало и сколько адресов новых."""
+def arrivals_note(version_before, version_after, arrived: int, total: int, compared: bool) -> str:
+    """Подпись раздела: чей это код, с какой версией приехало и сколько адресов новых.
+
+    `compared=False` — базы для сравнения не было, и «новых нет» тогда не факт, а НЕЗНАНИЕ. Кит
+    различает их везде (тот же инвариант, что у `dependencies_compared`), и здесь обязан различать
+    тоже: иначе прогон по всему дереву выдавал бы «всё это было и раньше» бесплатно."""
     чей = "адресат — сопровождающий кита, не эта команда; в вердикт гейта продукта не входит"
     if version_before and version_after and version_before != version_after:
         чем = f"обновление кита {version_before} -> {version_after}"
@@ -62,8 +66,9 @@ def arrivals_note(version_before, version_after, arrived: int, total: int) -> st
         чем = f"кит {version_after}, версия не менялась"
     else:
         чем = "версия кита не прочиталась"
-    if total and arrived == total and not version_before:
-        сколько = f"{total} адресов; сравнивать не с чем — прежней версии файлов нет, «новые» здесь означает «не проверено»"
+    if not compared:
+        сколько = (f"{total} адресов; с прежней версией НЕ СРАВНИВАЛИСЬ — база не задана "
+                   f"(--base <ревизия>), какие из них приехали с обновлением, неизвестно")
     else:
         сколько = f"{total} адресов, из них приехало с этим обновлением {arrived}"
     return f"{чей}. {чем}; {сколько}"

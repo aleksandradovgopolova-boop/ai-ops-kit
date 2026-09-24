@@ -540,7 +540,11 @@ def scan_repo(root, base=None):
     # код. Обратная сторона названа тем же механизмом: новый `shell=True`, приехавший с
     # обновлением, помечается `arrived` и потому виден, а не тонет в общем списке.
     injections, vendor = _vendor_split(scan_injection(files))
-    if base and vendor:
+    # СРАВНЕНИЕ БЫЛО ИЛИ НЕ БЫЛО — РАЗНЫЕ СОСТОЯНИЯ. Без базы «какие адреса новые» неизвестно, и
+    # выдать это за «все были раньше» значило бы напечатать незнание фактом (тот же инвариант, что
+    # у `dependencies_compared` ниже).
+    vendor_compared = bool(base)
+    if vendor_compared and vendor:
         vendor = _vendor_arrivals(root, base, vendor, files)
     vendor_before, vendor_after = _vendor_version(root, base, files)
     # зависимости: сравниваем манифесты после (рабочее дерево) против базы (git show base:)
@@ -561,9 +565,36 @@ def scan_repo(root, base=None):
             "injection_flags": injections, "new_dependencies": new_deps,
             "dependencies_compared": deps_compared,
             "vendor_flags": vendor,
+            "vendor_compared": vendor_compared,
             "vendor_kit_version": {"before": vendor_before, "after": vendor_after},
-            "vendor_note": _arrivals_note(vendor_before, vendor_after, приехало, len(vendor)),
+            "vendor_note": _arrivals_note(vendor_before, vendor_after, приехало, len(vendor),
+                                         vendor_compared),
             "evidence": ev}
+
+
+def _vendor_lines(rep):
+    """Раздел поставленной зависимости — ОТДЕЛЬНЫЙ, НЕ СНОСКА (#1147).
+
+    Поставленная копия кита — чужой код с чужим адресатом, и смешивать его с продуктовым списком
+    значит спрашивать команду за то, чего она не писала. Приехавшие с обновлением адреса печатаются
+    ПОИМЁННО: ради них раздел и заведён — иначе о новой поверхности, привезённой китом, дочка не
+    узнаёт вовсе. Бывшие раньше свёрнуты числом: их адресат тот же, а новостью они не являются."""
+    vendor = rep.get("vendor_flags") or []
+    if not vendor:
+        return []
+    out = [f"  ── поставленная зависимость .ai/managed/ ({len(vendor)}) ──",
+           f"     {rep['vendor_note']}"]
+    if not rep.get("vendor_compared"):
+        # Сравнения не было: назвать адреса ПОИМЁННО — единственное честное поведение. Свернуть их
+        # числом «было раньше» значило бы утверждать то, чего никто не проверял.
+        out += [f"     {f['id']} — {f['path']}:{f['line']}" for f in vendor]
+        return out
+    out += [f"     ПРИЕХАЛО С ОБНОВЛЕНИЕМ {f['id']} — {f['path']}:{f['line']}"
+            for f in vendor if f.get("arrived")]
+    было = sum(1 for f in vendor if not f.get("arrived"))
+    if было:
+        out.append(f"     было и в прежней версии кита: {было}; полный список в --json")
+    return out
 
 
 def main(argv):
@@ -576,37 +607,27 @@ def main(argv):
     if a.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:
-        print(f"SECURITY-SCAN: файлов {rep['scanned_files']} · секретов {len(rep['secrets'])} · "
-              f"injection-флагов {len(rep['injection_flags'])} · новых зависимостей {len(rep['new_dependencies'])}")
-        for s in rep["secrets"]:
-            print(f"  СЕКРЕТ {s['id']} — {s['path']}:{s['line']}")
-        # Боевые адреса печатаются поимённо, обвязка — одним числом: список, где на один боевой
-        # адрес приходится дюжина тестовых, судья пролистывает целиком (#1146).
+        # ОТЧЁТ СОБИРАЕТСЯ СТРОКАМИ И ПЕЧАТАЕТСЯ ОДИН РАЗ. Раньше здесь было шесть `print` подряд, и
+        # каждый новый раздел отчёта стоил ещё одного — ратчет print-discipline упирался в это
+        # раньше, чем человек. Текст не изменился ни на символ: каждый прежний `print` печатал ровно
+        # одну строку.
+        s = [f"SECURITY-SCAN: файлов {rep['scanned_files']} · секретов {len(rep['secrets'])} · "
+             f"injection-флагов {len(rep['injection_flags'])} · новых зависимостей {len(rep['new_dependencies'])}"]
+        s += [f"  СЕКРЕТ {x['id']} — {x['path']}:{x['line']}" for x in rep["secrets"]]
+        # Боевые адреса — поимённо, обвязка — одним числом: список, где на один боевой адрес
+        # приходится дюжина тестовых, судья пролистывает целиком (#1146).
         боевые = [f for f in rep["injection_flags"] if f.get("area") != "harness"]
         обвязка = [f for f in rep["injection_flags"] if f.get("area") == "harness"]
-        for f in боевые:
-            print(f"  ПОДОЗРИТЕЛЬНОЕ МЕСТО {f['id']} — {f['path']}:{f['line']}")
+        s += [f"  ПОДОЗРИТЕЛЬНОЕ МЕСТО {f['id']} — {f['path']}:{f['line']}" for f in боевые]
         if обвязка:
-            print(f"  в обвязке (тесты, e2e, конфиги инструментов) ещё {len(обвязка)} — "
-                  f"адресат тот же, срочность другая; полный список в --json")
-        # ОТДЕЛЬНЫЙ РАЗДЕЛ, НЕ СНОСКА (#1147). Поставленная копия кита — чужой код с чужим
-        # адресатом, и смешивать его с продуктовым списком значит спрашивать команду за то, чего
-        # она не писала. Приехавшие с обновлением адреса печатаются ПОИМЁННО: ради них раздел и
-        # заведён — иначе о новой поверхности, привезённой китом, дочка не узнаёт вовсе.
-        if rep["vendor_flags"]:
-            print(f"  ── поставленная зависимость .ai/managed/ ({len(rep['vendor_flags'])}) ──")
-            print(f"     {rep['vendor_note']}")
-            for f in rep["vendor_flags"]:
-                if f.get("arrived"):
-                    print(f"     ПРИЕХАЛО С ОБНОВЛЕНИЕМ {f['id']} — {f['path']}:{f['line']}")
-            было = sum(1 for f in rep["vendor_flags"] if not f.get("arrived"))
-            if было:
-                print(f"     было и в прежней версии кита: {было}; полный список в --json")
+            s.append(f"  в обвязке (тесты, e2e, конфиги инструментов) ещё {len(обвязка)} — "
+                     f"адресат тот же, срочность другая; полный список в --json")
+        s += _vendor_lines(rep)
         if not rep["dependencies_compared"]:
-            print("  зависимости: сравнивать не с чем — база не задана (--base <ревизия>); "
-                  "это НЕ «новых нет»")
-        for d in rep["new_dependencies"]:
-            print(f"  НОВАЯ ЗАВИСИМОСТЬ {d} (нужно одобрение)")
+            s.append("  зависимости: сравнивать не с чем — база не задана (--base <ревизия>); "
+                     "это НЕ «новых нет»")
+        s += [f"  НОВАЯ ЗАВИСИМОСТЬ {d} (нужно одобрение)" for d in rep["new_dependencies"]]
+        print("\n".join(s))
     # ненулевой код при находках секретов/новых зависимостей (injection-флаги — не фейл сами по себе)
     return 1 if (rep["secrets"] or rep["new_dependencies"]) else 0
 
