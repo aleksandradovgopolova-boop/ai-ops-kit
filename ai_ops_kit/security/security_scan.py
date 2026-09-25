@@ -218,6 +218,7 @@ try:
     from ai_ops_kit.security.scan_exec_call import surface_lines as _exec_surface_lines
     from ai_ops_kit.security.scan_prose import PROSE_SUFFIXES as _PROSE_SUFFIXES
     from ai_ops_kit.security.scan_prose import area_of as _area_of
+    from ai_ops_kit.security.scan_prose import blank_string_contents as _blank_strings
     from ai_ops_kit.security.scan_prose import blank_comments as _blank_comments
     from ai_ops_kit.security.scan_vendor import VERSION_FILE as _VENDOR_VERSION_FILE
     from ai_ops_kit.security.scan_vendor import arrivals_note as _arrivals_note
@@ -234,6 +235,7 @@ except ImportError:                                    # запуск КАК С�
     _PROSE_SUFFIXES = _prose_mod.PROSE_SUFFIXES
     _blank_comments = _prose_mod.blank_comments
     _area_of = _prose_mod.area_of
+    _blank_strings = _prose_mod.blank_string_contents
 
     _exec_path = Path(__file__).resolve().parent / "scan_exec_call.py"
     _spec7 = _ilu2.spec_from_file_location("ai_ops_scan_exec_call", _exec_path)
@@ -323,7 +325,8 @@ def scan_injection(files):
             # уведёт адрес, но гасить содержимое строк нельзя — аргументы настоящего вызова живут
             # именно там, и правило перестало бы видеть `exec("rm -rf " + x)`.
             код = _blank_comments(text, path)
-            были_вызовы, вызовы = _exec_surface_lines(код)
+            скелет, разбор_состоялся = _blank_strings(код)
+            были_вызовы, вызовы = _exec_surface_lines(код, скелет, разбор_состоялся)
             for lineno in вызовы:
                 res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
             if были_вызовы:

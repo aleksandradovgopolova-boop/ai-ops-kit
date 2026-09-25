@@ -221,6 +221,37 @@ class TestNothingDangerousBecameSilent:
         правила = [id_ for id_, _ in _флаги(код)]
         assert "node_child_process_exec" in правила, правила
 
+    @pytest.mark.parametrize("код", [
+        'execFileSync("git", ["log"]);\nconst v = <p>a ` b</p>;\nspawn(bin, argv);'
+        '\nconst w = <p>c ` d</p>;',
+        'execFileSync("git", ["log"]);\nconst v = <p>a ` b</p>;\nspawn(bin, argv);',
+    ])
+    def test_a_stray_backtick_in_jsx_text_does_not_blind_the_parse(self, код):
+        """ПЯТЫЙ КРУГ РЕВЬЮ. Гашение регулярок закрыло чётность только ВНУТРИ `/…/`, а обратные
+        кавычки живут и в тексте JSX: пара таких закрывала друг друга, и код между ними исчезал.
+
+        Закрыто той же эвристикой «здесь ожидается значение», которая уже написана для литерала
+        регулярного выражения, — одна копия на модуль, а не две."""
+        assert "node_child_process_exec" in [id_ for id_, _ in _флаги(код, путь="server/ui.tsx")]
+
+    def test_an_unterminated_template_keeps_the_import_flagged(self):
+        """СТОРОЖ НА САМУ ПОДСТРАХОВКУ. Ревью трижды подряд ловило одно и то же: новая починка
+        закрывает случай, и сторож ПРЕДЫДУЩЕЙ остаётся без красноты. Здесь проверяется именно
+        `разбор_состоялся`: шаблон открыт законно (после `=`) и не закрылся, значит код ниже в
+        разбор не попал — и флаг с импорта снимать нельзя."""
+        правила = [id_ for id_, _ in _флаги('execFileSync("git", a);\nconst s = `abc;\nspawn(bin, argv);')]
+        assert "node_child_process" in правила, правила
+
+    def test_a_style_sheet_is_not_read_as_regexps(self):
+        """Языки стилей регулярных литералов не имеют, и эвристика там не может быть права никогда:
+        `calc(100% / 3)` читался бы как начало литерала и съедал настоящий код до следующей косой."""
+        from ai_ops_kit.security.scan_prose import blank_comments
+        код = ".a { width: calc(100% / 3); height: calc(50% / 2); }"
+        assert blank_comments(код, "a.css") == код
+        assert blank_comments("$x: 100% / 3; $y: 50% / 2;", "a.scss") == "$x: 100% / 3; $y: 50% / 2;"
+        # а комментарии в них по-прежнему гасятся
+        assert "x" not in blank_comments(".a { /* x */ color: red; }", "a.css")
+
     def test_a_real_comment_is_still_not_code(self):
         """Обратный край починки регулярных литералов: настоящие комментарии по-прежнему гасятся
         (#1146), а деление по-прежнему не считается регуляркой."""
