@@ -325,8 +325,10 @@ def scan_injection(files):
             # уведёт адрес, но гасить содержимое строк нельзя — аргументы настоящего вызова живут
             # именно там, и правило перестало бы видеть `exec("rm -rf " + x)`.
             код = _blank_comments(text, path)
-            скелет, разбор_состоялся = _blank_strings(код)
-            были_вызовы, вызовы = _exec_surface_lines(код, скелет, разбор_состоялся)
+            # ДВА ПРОЧТЕНИЯ: обратная кавычка как начало шаблонной строки и как обычный символ
+            # разметки. Различить их без разбора языка нельзя — см. `scan_exec_call.surface_lines`.
+            прочтения = (_blank_strings(код), _blank_strings(код, шаблоны=False))
+            были_вызовы, вызовы = _exec_surface_lines(код, прочтения)
             for lineno in вызовы:
                 res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
             if были_вызовы:
