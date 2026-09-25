@@ -422,6 +422,67 @@ class TestNothingDangerousBecameSilent:
         и остаток строки читался как код."""
         assert _флаги("const r = /[/]/; spawn(bin, argv);")
 
+    @pytest.mark.parametrize("код,почему", [
+        ('import { exec, execFileSync } from "child_process";\nexecFileSync("git", ["log"]);\n'
+         'export const Row = ({t}) => <tr><td>{t}</td><td>{exec(userCmd)}</td></tr>;',
+         "косая ЗАКРЫВАЮЩЕГО ТЕГА читалась как начало регулярки, и код между тегами гас"),
+    ])
+    def test_a_closing_tag_slash_is_not_a_regexp(self, код, почему):
+        """ДЕСЯТЫЙ КРУГ РЕВЬЮ. `</td><td>` выглядит ровно как литерал регулярного выражения: слева
+        `<` — позиция, где ожидается значение. Разбор гасил всё между двумя тегами и следа не
+        оставлял. На реальном продукте это 29 мест."""
+        assert _флаги(код, путь="src/Row.tsx"), почему
+
+    @pytest.mark.parametrize("код,правило", [
+        ('<p>{a}</p><div dangerouslySetInnerHTML={{__html: html}} />;', "react_dangerous_html"),
+        ("<p>{a}</p><span>{eval(userCode)}</span>;", "eval_or_exec"),
+        ("<p>{a}</p><span>{document." + "write(x)}</span>;", "dom_document_write"),
+    ])
+    def test_the_same_blindness_did_not_silence_other_rules(self, код, правило):
+        """ТА ЖЕ СЛЕПОТА БЫЛА ШИРЕ ЭТОГО ПРАВИЛА. Скелет с погашенными комментариями идёт во ВСЕ
+        шаблоны, а второй ответ разбора для них выбрасывался — и молчали `eval`, `document.write`,
+        `dangerouslySetInnerHTML`. Не разобрали — остаёмся на исходном тексте."""
+        из_сканера = [f["id"] for f in security_scan.scan_injection({"src/V.tsx": код})]
+        assert правило in из_сканера, из_сканера
+
+    @pytest.mark.parametrize("код,почему", [
+        ('const m = new RegExp(esc(spawn(bin, argv))).exec(line);',
+         "жадный разбор съедал выражение вместе с настоящим вызовом внутри"),
+        ("new RegExp(a).test(s); spawn(bin, argv); new RegExp(b).exec(t);",
+         "то же на одной строке между двумя регулярками"),
+    ])
+    def test_a_regexp_receiver_does_not_swallow_a_real_call(self, код, почему):
+        """Снимается только `.exec(`, а не весь получатель: метод регулярки не читается как
+        команда, а всё, что внутри, по-прежнему разбирается."""
+        assert "node_child_process_exec" in [id_ for id_, _ in _флаги(код)], почему
+
+    @pytest.mark.parametrize("код,почему", [
+        ('import { exec as run, execFileSync } from "child_process";\n'
+         'execFileSync("git", ["log"]);\nrun(userCmd);', "переименование при импорте"),
+        ('const { exec: sh, execFileSync } = require("child_process");\n'
+         'execFileSync("git", ["log"]);\nsh(userCmd);', "переименование при деструктуризации"),
+        ('import { exec, execFileSync } from "child_process";\nexecFileSync("git", ["log"]);\n'
+         'const run = promisify(exec);\nawait run(userCmd);', "обёртка promisify — идиома из документации Node"),
+        ('import cp from "child_process";\ncp.execFileSync("git", ["log"]);\n'
+         'cp["exec"](userCmd);', "обращение через строковый ключ"),
+    ])
+    def test_an_unrecognised_use_keeps_the_import_flagged(self, код, почему):
+        """«ВЫЗОВЫ РАЗОБРАНЫ» ОБЯЗАНО ЗНАЧИТЬ «ВСЕ», А НЕ «ВСЕ, ЧТО НАШЛА РЕГУЛЯРКА». Прежде рядом
+        с безопасным литеральным запуском молчали все четыре формы ниже — каждая идиома, а не
+        экзотика. Теперь снятие флага с импорта требует, чтобы КАЖДОЕ упоминание имени, под которым
+        `child_process` вошёл в файл, стояло на разобранном вызове."""
+        правила = [f["id"] for f in security_scan.scan_injection({"srv.mjs": код})]
+        assert "node_child_process" in правила, f"{почему}: {правила}"
+
+    def test_a_type_only_import_is_not_a_runtime_name(self):
+        """Обратный край: `import { spawn, type ChildProcess }` — типовой импорт имени во время
+        работы не создаёт. Без отсева именем считалось слово `type`, и любое поле `"type":` в файле
+        выглядело неразобранным обращением — два файла реального продукта получили лишний флаг."""
+        код = ('import { spawn, type ChildProcess } from "node:child_process";\n'
+               'const c: ChildProcess = spawn("node", ["server.mjs"]);\n'
+               'const h = { "type": "application/json" };')
+        assert security_scan.scan_injection({"srv.test.ts": код}) == []
+
     def test_a_renamed_call_keeps_the_import_flagged(self):
         """ГРАНИЦА ЧЕСТНОСТИ. Если вызовов не нашлось вовсе — например, функцию переименовали, —
         строка импорта остаётся флагом: мы не разобрали НИЧЕГО, и молчание здесь означало бы
