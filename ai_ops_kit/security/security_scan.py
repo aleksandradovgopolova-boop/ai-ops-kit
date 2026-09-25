@@ -173,48 +173,6 @@ def scan_secrets(files):
 # R-40: исполнение команд в Node. Отличить `/re/.exec(s)` от `child_process.exec("rm -rf /")` одной
 # построчной регуляркой нельзя — обе строки выглядят как `.exec(`. Различает ПОЛУЧАТЕЛЬ вызова, а он
 # объявлен в другом месте файла (import/require), поэтому правило работает на уровне файла, а не строки.
-_CHILD_PROCESS_IMPORT = re.compile(
-    r"""(?:require\s*\(\s*['"](?:node:)?child_process['"]|"""
-    r"""from\s+['"](?:node:)?child_process['"]|"""
-    r"""import\s+[^\n;]*['"](?:node:)?child_process['"])""")
-# `spawn`/`fork` добавлены по разбору 24.09 (#1146): в ЕДИНСТВЕННОМ боевом месте исполнения
-# команд на реальном продукте (`server/files/scanner.mjs`, запуск антивируса, байты пользователя
-# в stdin) правило знало только `exec*` — и сканер назвал строку `import`, а не строку вызова.
-# Правило, существующее ради АДРЕСА, на боевом адресе адреса не давало.
-_NODE_EXEC_CALL = re.compile(
-    r"\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork)\s*\(")
-
-# R-40, ВТОРОЙ ЗАХОД (#1112). `\b` выше стоит между точкой и `e`, поэтому правило матчит и `.exec(`
-# РЕГУЛЯРНОГО ВЫРАЖЕНИЯ; условие «файл импортирует child_process» в `vite.config.ts` выполнилось
-# из-за постороннего хелпера, считающего хэш сборки. Замер 23.09.2026: 4 флага этого правила, 100%
-# шума. Из построчного `eval_or_exec` конструкцию `.exec(` когда-то убрали — и новое файловое
-# правило внесло ту же находку через другую дверь. Урок: чинить надо класс, а не одно место.
-#
-# ЧИНИТСЯ ПОЛУЧАТЕЛЕМ, А НЕ СУЖЕНИЕМ ПРАВИЛА. Стойка «пере-срабатывание безопасно, под-срабатывание —
-# нет» остаётся в силе: `.exec(` с НЕИЗВЕСТНЫМ получателем по-прежнему флагается, потому что получатель
-# может оказаться обёрткой над child_process. Снимается ровно один класс — получатель, про которого
-# в этом же файле ВИДНО, что он регулярное выражение.
-#
-# ПОЧЕМУ `/` ПЕРЕД `.exec(` ОДНОЗНАЧЕН: в JavaScript косая черта вплотную перед `.exec(` может быть
-# только концом литерала регулярного выражения — деление `.exec(` за собой не ведёт. Поэтому здесь
-# не нужен разбор литерала целиком (а он хрупок: `/^\/api\/([^/]+)$/` содержит косую внутри класса
-# символов и ломает наивную регулярку).
-_REGEXP_RECEIVER_EXEC = re.compile(r"(?:/|\bnew\s+RegExp\s*\([^\n]*\))\s*\.\s*exec\s*\(")
-
-# Имя, которому в этом же файле присвоено регулярное выражение: `const RE = /.../` или
-# `const re = new RegExp(...)`. Дальше `RE.exec(s)` — тоже метод регулярного выражения, а не команда.
-_REGEXP_BINDING = re.compile(
-    r"""(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:/|new\s+RegExp\s*\()""")
-
-
-def _without_regexp_exec(line: str, regexp_names: frozenset) -> str:
-    """Убрать из строки вызовы `.exec(` у регулярных выражений — остальное трогать нельзя."""
-    out = _REGEXP_RECEIVER_EXEC.sub("", line)
-    for name in regexp_names:
-        out = re.sub(r"\b" + re.escape(name) + r"\s*\.\s*exec\s*\(", "", out)
-    return out
-
-
 # ─── что НЕ является injection-поверхностью ───────────────────────────────────────────────────
 #
 # Разбор «код или проза» вынесен в сателлит `scan_prose`: после того как комментарии перестали
@@ -256,8 +214,11 @@ except ImportError:                                    # запуск КАК С�
     _sql_template_literal_lines = _sql_mod.sql_template_literal_lines
 
 try:
+    from ai_ops_kit.security.scan_exec_call import child_process_imported as _child_process_imported
+    from ai_ops_kit.security.scan_exec_call import surface_lines as _exec_surface_lines
     from ai_ops_kit.security.scan_prose import PROSE_SUFFIXES as _PROSE_SUFFIXES
     from ai_ops_kit.security.scan_prose import area_of as _area_of
+    from ai_ops_kit.security.scan_prose import blank_string_contents as _blank_strings
     from ai_ops_kit.security.scan_prose import blank_comments as _blank_comments
     from ai_ops_kit.security.scan_vendor import VERSION_FILE as _VENDOR_VERSION_FILE
     from ai_ops_kit.security.scan_vendor import arrivals_note as _arrivals_note
@@ -274,6 +235,16 @@ except ImportError:                                    # запуск КАК С�
     _PROSE_SUFFIXES = _prose_mod.PROSE_SUFFIXES
     _blank_comments = _prose_mod.blank_comments
     _area_of = _prose_mod.area_of
+    _blank_strings = _prose_mod.blank_string_contents
+
+    _exec_path = Path(__file__).resolve().parent / "scan_exec_call.py"
+    _spec7 = _ilu2.spec_from_file_location("ai_ops_scan_exec_call", _exec_path)
+    if _spec7 is None or _spec7.loader is None:        # fail-closed: без разбора сканер слепнет
+        raise RuntimeError(f"не удалось загрузить разбор запуска команд из {_exec_path}") from None
+    _exec_mod = _ilu2.module_from_spec(_spec7)
+    _spec7.loader.exec_module(_exec_mod)
+    _child_process_imported = _exec_mod.child_process_imported
+    _exec_surface_lines = _exec_mod.surface_lines
 
     _vendor_path = Path(__file__).resolve().parent / "scan_vendor.py"
     _spec6 = _ilu2.spec_from_file_location("ai_ops_scan_vendor", _vendor_path)
@@ -336,30 +307,44 @@ def scan_injection(files):
         if найдено:
             # Разбор комментариев стоит дорого, поэтому включается ТОЛЬКО когда есть что проверять:
             # на файле без единого совпадения он ничего не изменит, а времени возьмёт столько же.
-            без_комментариев = _blank_comments(text, path)
+            # ОСТАЛЬНЫЕ ПРАВИЛА ПО-ПРЕЖНЕМУ ДОВЕРЯЮТ ГАШЕНИЮ КОММЕНТАРИЕВ (#1112): комментарий,
+            # утверждающий ОБРАТНОЕ («рендер без dangerouslySetInnerHTML»), не должен становиться
+            # находкой. Признак «разобрано» нужен не здесь, а там, где снимается флаг со строки
+            # импорта: только это решение опирается на полноту разбора.
+            без_комментариев, _ = _blank_comments(text, path)
             if без_комментариев != text:
                 найдено = _scan(без_комментариев, INJECTION_PATTERNS)
         for f in найдено:
             res.append({"path": path, **f})
-        # Файл тянет child_process -> любой exec-вызов в нём считаем исполнением команды.
-        # Пере-срабатывание здесь безопасно (лишний needs_review), под-срабатывание — нет.
-        if _CHILD_PROCESS_IMPORT.search(text):
-            regexp_names = frozenset(_REGEXP_BINDING.findall(text))
+        # Файл тянет child_process -> его exec-вызовы разбираются как исполнение команд. ЧТО ИМЕННО
+        # считается поверхностью, решает сателлит `scan_exec_call`: запуск с литеральным именем
+        # бинаря, без оболочки и без встроенного кода безопасен ПО КОНСТРУКЦИИ — исполнится ровно
+        # то, что написано в файле (#1161). Стойка «пере-срабатывание безопаснее под-срабатывания»
+        # в силе: снимается ровно тот класс, где безопасность видна в самой строке вызова.
+        if _child_process_imported(text):
             # Вызовы ищутся по тексту БЕЗ КОММЕНТАРИЕВ (#1146). Закомментированный `// cp.exec(x)`
-            # не исполняется, а раз найденный вызов теперь снимает флаг с импорта, такой «вызов»
-            # уводил бы судью с настоящей строки — и этим можно было бы управлять снаружи, дописав
-            # комментарий. Разбор комментариев уже есть у прозы, здесь он просто применяется.
+            # не исполняется, а раз найденный вызов снимает флаг с импорта, такой «вызов» уводил бы
+            # судью с настоящей строки — и этим можно было бы управлять снаружи, дописав комментарий.
             # ГРАНИЦА: строковые литералы НЕ гасятся. Текст «call execSync(cmd)» внутри строки тоже
             # уведёт адрес, но гасить содержимое строк нельзя — аргументы настоящего вызова живут
             # именно там, и правило перестало бы видеть `exec("rm -rf " + x)`.
-            код = _blank_comments(text, path)
-            вызовы = [lineno for lineno, line in enumerate(код.splitlines(), 1)
-                      if _NODE_EXEC_CALL.search(_without_regexp_exec(line, regexp_names))]
+            код, комментарии_разобраны = _blank_comments(text, path)
+            # ДВА ПРОЧТЕНИЯ: обратная кавычка как начало шаблонной строки и как обычный символ
+            # разметки. Различить их без разбора языка нельзя — см. `scan_exec_call.surface_lines`.
+            # «Разобрано» собирается из ВСЕХ мест, где мог быть сделан выбор: и из гашения
+            # комментариев, и из гашения строк. Одно место без этого признака сводит защиту на нет.
+            прочтения = tuple((скелет, ок and комментарии_разобраны)
+                              for скелет, ок in (_blank_strings(код),
+                                                 _blank_strings(код, шаблоны=False)))
+            были_вызовы, вызовы = _exec_surface_lines(код, прочтения)
             for lineno in вызовы:
                 res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
-            if вызовы:
+            if были_вызовы:
                 # Строка `import` найдена правилом `node_child_process` выше и теперь не нужна:
-                # адрес ВЫЗОВА точнее, а два флага на один файл судья читает как два места.
+                # вызовы РАЗОБРАНЫ, и про каждый известно, поверхность он или нет. Если все они
+                # безопасны по конструкции, файл уходит из флагов целиком — это и есть починка.
+                # А вот когда вызовов не нашлось вовсе (переименование), импорт остаётся флагом:
+                # там мы не разобрали ничего, и молчание означало бы «не проверено» вместо «чисто».
                 res = [f for f in res
                        if not (f["path"] == path and f["id"] == "node_child_process")]
         for lineno in _sql_template_literal_lines(text):
