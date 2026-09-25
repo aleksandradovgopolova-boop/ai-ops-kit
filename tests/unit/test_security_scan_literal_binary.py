@@ -196,13 +196,58 @@ class TestNothingDangerousBecameSilent:
         больше не принимается за комментарий."""
         assert _флаги(код, путь="server/run.tsx"), почему
 
+    @pytest.mark.parametrize("код", [
+        'execFileSync("git", ["log"]);\nconst a = /`/;\nspawn(bin, argv);\nconst b = /`/;',
+        'execFileSync("git", a);\nconst a = /"/; spawn(bin, argv); const b = /"/;',
+        "execFileSync('git', a);\nconst a = /'/; spawn(bin, argv); const b = /'/;",
+    ])
+    def test_a_pair_of_stray_quotes_does_not_blind_the_parse(self, код):
+        """ЧЕТВЁРТЫЙ КРУГ РЕВЬЮ. Проверка «кавычка закрылась» смотрела на КОНЕЧНОЕ состояние, а не
+        на верность разбора: ДВЕ бродячие кавычки закрывали друг друга, разбор считал себя
+        состоявшимся, и код между ними исчезал. Чётность обходила защиту.
+
+        Закрыто у источника: содержимое литерала регулярного выражения гасится, поэтому кавычка
+        внутри образца кавычкой вообще не считается."""
+        assert _флаги(код), "код между бродячими кавычками пропал из разбора"
+
+    @pytest.mark.parametrize("код", [
+        'execFileSync("git", ["log"]);\nconst t = s.replace(/`/g, "");\nspawn(bin, argv);',
+        'execFileSync("git", ["log"]);\nconst r = /[//]/; spawn(bin, argv);',
+    ])
+    def test_the_address_is_the_call_not_the_import(self, код):
+        """СТОРОЖ ПРОВЕРЯЕТ АДРЕС, А НЕ ФАКТ ФЛАГА. Иначе он маскируется откатом: подстраховка
+        «разбор не состоялся» отвечает флагом на строке ИМПОРТА, и мутация, вернувшая слепоту,
+        остаётся незамеченной — адрес деградирует, а тест зелен (назвало независимое ревью)."""
+        правила = [id_ for id_, _ in _флаги(код)]
+        assert "node_child_process_exec" in правила, правила
+
     def test_a_real_comment_is_still_not_code(self):
         """Обратный край починки регулярных литералов: настоящие комментарии по-прежнему гасятся
         (#1146), а деление по-прежнему не считается регуляркой."""
         assert _флаги("// spawn(bin, args);\nexecFileSync('git', a);") == []
         assert _флаги("/* spawn(bin, args); */\nexecFileSync('git', a);") == []
-        assert _флаги("const k = a / b; execFileSync('git', a); const m = c / d;") == []
         assert _флаги("const r = /ab+/gi; execFileSync('git', a);") == []
+
+    @pytest.mark.parametrize("код,почему", [
+        ("const k = a / b; execFileSync('git', a); const m = c / d;", "деление после имени"),
+        ("const k = f() / 2; execFileSync('git', a); const m = x[0] / 3;", "деление после `)` и `]`"),
+        ("const k = 10 / 2; execFileSync('git', a);", "деление после числа"),
+    ])
+    def test_division_is_not_a_regexp(self, код, почему):
+        """СЕРЕДИНА ЭВРИСТИКИ, А НЕ ЕЁ КРАЯ. Признак «регулярка стоит там, где ожидается значение»
+        охранялся только с концов («регулярка везде» / «регулярка нигде»); если принять деление за
+        регулярку, разбор проглотит код до следующей косой. Назвало независимое ревью."""
+        assert _флаги(код) == [], почему
+
+    def test_a_regexp_does_not_survive_a_line_break(self):
+        """Незакрывшаяся на своей строке косая — это НЕ регулярка: иначе одна косая ослепила бы
+        разбор до конца файла."""
+        assert _флаги("const k = a  / b;\nspawn(bin, argv);")
+
+    def test_a_character_class_hides_the_closing_slash(self):
+        """Внутри `[...]` косая не закрывает литерал — без этого `/[/]/` обрывался бы на середине,
+        и остаток строки читался как код."""
+        assert _флаги("const r = /[/]/; spawn(bin, argv);")
 
     def test_a_renamed_call_keeps_the_import_flagged(self):
         """ГРАНИЦА ЧЕСТНОСТИ. Если вызовов не нашлось вовсе — например, функцию переименовали, —
