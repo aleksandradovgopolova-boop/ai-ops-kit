@@ -263,9 +263,13 @@ class TestNothingDangerousBecameSilent:
         assert _флаги(код, путь="server/ui.tsx"), "шаблон ослепил разбор"
 
     @pytest.mark.parametrize("код", [
-        'execFileSync("git", ["log"]);\nfunction q(s){ return /"/.test(s); spawn(bin, argv); }',
-        "execFileSync('git', ['log']);\nfunction q(s){ return /'/.test(s); spawn(bin, argv); }",
-        "execFileSync('git', ['log']);\nconst v = <p>don't</p>; spawn(bin, argv);",
+        # ФИКСТУРЫ ПРОДОЛЖАЮТСЯ ПОСЛЕ ВЫЗОВА НАМЕРЕННО. Оборванные на вызове, они срабатывали на
+        # СТАРОМ признаке («кавычка не закрылась к концу файла»), а новый — «закрыта переводом
+        # строки» — не проверяли вовсе: его снятие не краснило ничего и открывало обе двери
+        # заново (нашло независимое ревью, восьмой круг).
+        'execFileSync("git", ["log"]);\nfunction q(s){ return /"/.test(s); spawn(bin, argv); }\nconst z = 1;',
+        "execFileSync('git', ['log']);\nfunction q(s){ return /'/.test(s); spawn(bin, argv); }\nconst z = 1;",
+        "execFileSync('git', ['log']);\nconst v = <p>don't</p>; spawn(bin, argv);\nconst z = 1;",
     ])
     def test_a_quote_closed_by_a_line_break_is_an_ambiguity_not_a_parse(self, код):
         """СЕДЬМОЙ КРУГ РЕВЬЮ. Два прочтения завели только для обратной кавычки, а та же
@@ -276,6 +280,27 @@ class TestNothingDangerousBecameSilent:
         В валидном JavaScript строка всегда закрывается на своей строке, поэтому закрытие переводом
         означает, что кавычка строкой не была. Теперь это признанная неоднозначность, а не разбор."""
         assert _флаги(код, путь="server/ui.tsx"), "остаток строки пропал из разбора"
+
+    @pytest.mark.parametrize("код", [
+        'execFileSync("git", ["log"]);\nconst v = <p>см. http://x.ru</p>; spawn(bin, argv);\nconst z = 1;',
+        'execFileSync("git", ["log"]);\nconst v = <p>формула 5/*3</p>;\nspawn(bin, argv);\nconst z = 1;',
+    ])
+    def test_markup_text_taken_for_a_comment_does_not_blind_the_parse(self, код):
+        """ВОСЬМОЙ КРУГ РЕВЬЮ. Признак «ни разу не угадывали» жил только в разборе строк, а решение
+        «это комментарий» принимается таким же угадыванием — и следа не оставляло: `//` из адреса в
+        тексте разметки съедал остаток строки, `/*` из формулы — остаток файла, вместе с настоящим
+        вызовом.
+
+        Закрыто двумя признаками: `://` — это адрес, а не комментарий (точно, ценой ноль), и в
+        разметке разбор честно признаёт, что комментарий от текста не отличить."""
+        assert _флаги(код, путь="server/ui.tsx"), "текст разметки съел код"
+
+    def test_a_comment_in_ordinary_code_is_still_blanked(self):
+        """ЦЕНА НАЗВАНА И ОГРАНИЧЕНА РАЗМЕТКОЙ. В обычном `.mjs` закомментированный вызов
+        по-прежнему не считается вызовом (#1146) — осторожность включается только там, где на месте
+        кода может стоять текст."""
+        assert _флаги("// spawn(bin, args);\nexecFileSync('git', a);") == []
+        assert _флаги("/* spawn(bin, args); */\nexecFileSync('git', a);") == []
 
     def test_an_address_seen_only_by_the_second_reading_is_kept(self):
         """РАДИ ЧЕГО ВВЕДЕНО ОБЪЕДИНЕНИЕ АДРЕСОВ. Вызов внутри настоящего шаблона видит только
@@ -299,10 +324,10 @@ class TestNothingDangerousBecameSilent:
         `calc(100% / 3)` читался бы как начало литерала и съедал настоящий код до следующей косой."""
         from ai_ops_kit.security.scan_prose import blank_comments
         код = ".a { width: calc(100% / 3); height: calc(50% / 2); }"
-        assert blank_comments(код, "a.css") == код
-        assert blank_comments("$x: 100% / 3; $y: 50% / 2;", "a.scss") == "$x: 100% / 3; $y: 50% / 2;"
+        assert blank_comments(код, "a.css")[0] == код
+        assert blank_comments("$x: 100% / 3; $y: 50% / 2;", "a.scss")[0] == "$x: 100% / 3; $y: 50% / 2;"
         # а комментарии в них по-прежнему гасятся
-        assert "x" not in blank_comments(".a { /* x */ color: red; }", "a.css")
+        assert "x" not in blank_comments(".a { /* x */ color: red; }", "a.css")[0]
 
     def test_a_real_comment_is_still_not_code(self):
         """Обратный край починки регулярных литералов: настоящие комментарии по-прежнему гасятся
