@@ -284,3 +284,238 @@ def gaps(graph: dict) -> dict:
     return {"outcomes_without_metric": outcomes,
             "metrics_without_release": metrics,
             "features_without_outcome": features}
+
+
+# ── Десять вопросов жизни фичи ──────────────────────────────────────────────────────────────────────
+# Приёмка направления `product-memory-org-intelligence` дословно: на ОДНОЙ реальной фиче кит отвечает
+# на десять вопросов её жизни ИЗ СВЯЗАННЫХ УЛИК, а не генерацией. `trace` уже даёт цепочку/решение/
+# работу/ревью/исход; здесь — ОДИН связный ответ «почему мы вообще сделали эту функцию и что с ней
+# стало» как явные десять вопросов, у каждого — ответ с уликой ИЛИ честное «неизвестно» с указанием,
+# какого звена истории не хватает. Часть ответов несёт граф (решение/цель/работа/ревью/исход); часть
+# живёт в ПЕРВОИСТОЧНИКЕ (гипотеза, обоснование решения, аудитория, выводы, следующий шаг) — граф их
+# намеренно НЕ несёт (ревью просило «не расти вширь»). Их читает из связанного артефакта фасад
+# (`knowledge_graph.feature_life_source`, у него и так есть диск) и передаёт сюда как `source`; связь
+# при этом всё равно доказана графом. Нет `source` -> эти пять честно «неизвестно»: обход диска не
+# касается, и выдумывать поле из воздуха не будет.
+
+# Порядок — часть контракта: дословный порядок десяти вопросов приёмки направления.
+TEN_QUESTIONS: list[tuple[str, str]] = [
+    ("why_arose", "Зачем эта функция возникла?"),
+    ("problem", "Какую проблему она решает?"),
+    ("audience", "Для кого она?"),
+    ("hypothesis", "Какая была гипотеза?"),
+    ("solution_rationale", "Почему выбрали именно такое решение?"),
+    ("built", "Что построили и где?"),
+    ("proven", "Что доказано и кто проверял?"),
+    ("after_release", "Что произошло после релиза?"),
+    ("learnings", "Чему научились?"),
+    ("next", "Что делать дальше?"),
+]
+
+
+def _insight_for(nodes: dict, edges: list, fid: str) -> dict | None:
+    """Узел урока, который ПИТАЕТ функцию (`insight -feeds-> feature`). Нет ребра -> None.
+
+    Урок цепляется к функции только объявленной связью: совпадение имени в догадку не превращается.
+    Несколько уроков -> первый по порядку рёбер (порядок фиксирован чтением каталога).
+    """
+    for e in edges:
+        if e.get("type") == "feeds" and _slug(e.get("to")) == fid:
+            n = nodes.get(_slug(e.get("from")))
+            if isinstance(n, dict):
+                return n
+    return None
+
+
+def _qa(qid: str, question: str, *, answer=None, evidence=None, unknown_reason=None) -> dict:
+    """Один пункт из десяти. Ответ ЕСТЬ только если есть и текст ответа, и хотя бы одна улика."""
+    answered = bool(answer) and bool(evidence)
+    return {"id": qid, "question": question, "answered": answered,
+            "answer": answer if answered else None,
+            "evidence": list(evidence or []) if answered else [],
+            "unknown_reason": None if answered
+            else (unknown_reason or "в связанной истории нет улики")}
+
+
+def _source_gap(insight: dict | None, source, what: str) -> str:
+    """Причина «неизвестно» для вопроса, чей ответ живёт в первоисточнике (паспорт/FL).
+
+    Три РАЗНЫЕ причины, потому что чинить их по-разному: урока/паспорта нет вовсе; связь есть, но
+    первоисточник не прочитан (`source` не дан — граф один поле не несёт); прочитан, но поле пустое.
+    """
+    if what in ("гипотеза", "выводы", "обоснование решения", "следующий шаг") and insight is None:
+        return f"к функции не привязан урок (ребро feeds) — {what} в связанной истории нет"
+    if source is None:
+        return (f"{what} несёт первоисточник (паспорт функции / FL-*), а не граф — дай корень "
+                f"репозитория (child_root), чтобы прочитать {what} из связанной улики")
+    return f"связь есть, но {what} в первоисточнике не заполнен(ы)"
+
+
+_Q = dict(TEN_QUESTIONS)   # id -> текст вопроса, чтобы помощники не индексировали список по номеру
+
+
+def _graph_bound(tr: dict, fid: str) -> dict:
+    """Пять вопросов, ответ на которые несёт САМ ГРАФ: зачем возникла, проблема, построили, проверено.
+
+    (Вопрос «что после релиза» дополняется числами в `_after_release` — тому нужен measured_outcome.)
+    """
+    out: dict = {}
+    decision = tr.get("decision")
+    out["why_arose"] = (_qa("why_arose", _Q["why_arose"],
+                            answer=f"из решения «{decision.get('title')}»",
+                            evidence=[decision.get("id"), f"{decision.get('id')} -motivates-> {fid}"])
+                        if decision else
+                        _qa("why_arose", _Q["why_arose"],
+                            unknown_reason="нет решения (ребро motivates) — причина появления не "
+                                           "записана; объяви её в blueprint links.decision"))
+    goal, chain = tr.get("goal"), tr.get("chain") or []
+    if goal:
+        gtitle = next((c.get("title") for c in chain if c.get("id") == goal), goal)
+        out["problem"] = _qa("problem", _Q["problem"], answer=f"служит цели «{gtitle}»",
+                             evidence=[goal] + [c.get("id") for c in chain])
+    else:
+        out["problem"] = _qa("problem", _Q["problem"],
+                             unknown_reason=(tr.get("gaps") or ["функция не привязана к цели"])[0])
+    built_by = tr.get("built_by") or []
+    if built_by:
+        first = built_by[0]
+        pr = f" (PR #{first['pr']})" if first.get("pr") else ""
+        more = f" и ещё {len(built_by) - 1}" if len(built_by) > 1 else ""
+        out["built"] = _qa("built", _Q["built"], answer=f"работой «{first.get('title')}»{pr}{more}",
+                          evidence=[w.get("id") for w in built_by] + [f"{first.get('id')} -builds-> {fid}"])
+    else:
+        out["built"] = _qa("built", _Q["built"],
+                          unknown_reason="нет работы (ребро builds) — кто и где построил функцию, "
+                                         "история не записала; объяви в links.built_by")
+    review = tr.get("review")
+    if review:
+        note = "" if review.get("verified") else " (держится на суждении, без машинной опоры)"
+        rev = f", ревизия {review.get('reviewed_revision')}" if review.get("reviewed_revision") else ""
+        out["proven"] = _qa("proven", _Q["proven"], answer=f"{review.get('title')}{note}{rev}",
+                           evidence=[review.get("id"), f"{review.get('id')} -reviewed-> {fid}"])
+    else:
+        out["proven"] = _qa("proven", _Q["proven"],
+                           unknown_reason="нет вердикта ревью (ребро reviewed) — проверка функции "
+                                          "не записана как персистентная улика")
+    return out
+
+
+def _after_release(tr: dict, fid: str, measured_outcome: dict) -> dict:
+    """Вопрос 8: реальный сдвиг метрики (measured_outcome) либо объявленный исход (targets)."""
+    mo, outcome = measured_outcome or {}, tr.get("outcome")
+    if mo.get("measured"):
+        took = "цель взята" if mo.get("verdict") == "met" else "цель пока не взята"
+        return _qa("after_release", _Q["after_release"],
+                   answer=f"было {mo.get('baseline')} → стало {mo.get('value')} при цели "
+                          f"{mo.get('target')} — {took}",
+                   evidence=[outcome.get("id") if outcome else fid, "measured_outcome"])
+    if outcome:
+        return _qa("after_release", _Q["after_release"],
+                   answer=f"исход «{outcome.get('title')}» объявлен, вердикт {outcome.get('verdict')} "
+                          f"(реальный замер ещё не накоплен)",
+                   evidence=[outcome.get("id"), f"{fid} -targets-> {outcome.get('id')}"])
+    return _qa("after_release", _Q["after_release"],
+               unknown_reason="нет исхода (ребро targets) — что дал релиз, измеримым результатом "
+                              "не подтверждено")
+
+
+def _source_bound(c: dict, next_action: dict) -> dict:
+    """Пять вопросов, чей ответ живёт в ПЕРВОИСТОЧНИКЕ: аудитория, гипотеза, решение, выводы, дальше.
+
+    `c` — контекст (`fid/nodes/src/source/insight/iid/fl_edge/fl_ref`). Нет поля -> честный пробел с
+    указанием, какого звена/поля не хватает, а не выдуманный ответ.
+    """
+    fid, src, source = c["fid"], c["src"], c["source"]
+    insight, ev = c["insight"], [c["iid"], c["fl_edge"], c["fl_ref"]]
+    out: dict = {}
+    audience = _text(src.get("audience"))
+    out["audience"] = (_qa("audience", _Q["audience"], answer=audience,
+                           evidence=[fid, _text(c["nodes"][fid].get("blueprint"))])
+                       if audience else
+                       _qa("audience", _Q["audience"],
+                           unknown_reason=(_source_gap(insight, source, "аудитория") if source is None
+                                           else "аудитория не объявлена в blueprint "
+                                                "(feature.audience) — для кого функция, история не знает")))
+    hypothesis = _text(src.get("hypothesis"))
+    out["hypothesis"] = (_qa("hypothesis", _Q["hypothesis"], answer=hypothesis, evidence=ev)
+                         if hypothesis else
+                         _qa("hypothesis", _Q["hypothesis"],
+                             unknown_reason=_source_gap(insight, source, "гипотеза")))
+    rationale = _text(src.get("solution_rationale"))
+    if rationale:
+        opt = _text(src.get("solution_chosen"))
+        out["solution_rationale"] = _qa("solution_rationale", _Q["solution_rationale"],
+                                        answer=(f"выбрано «{opt}»: {rationale}" if opt else rationale),
+                                        evidence=ev)
+    else:
+        out["solution_rationale"] = _qa("solution_rationale", _Q["solution_rationale"],
+                                        unknown_reason=_source_gap(insight, source, "обоснование решения"))
+    learnings = [x for x in (src.get("learnings") or []) if _text(x)]
+    if learnings:
+        more = f" и ещё {len(learnings) - 1}" if len(learnings) > 1 else ""
+        out["learnings"] = _qa("learnings", _Q["learnings"], answer=f"{_text(learnings[0])}{more}",
+                              evidence=ev)
+    else:
+        out["learnings"] = _qa("learnings", _Q["learnings"],
+                              unknown_reason=_source_gap(insight, source, "выводы"))
+    out["next"] = _next_step(c, next_action)
+    return out
+
+
+def _next_step(c: dict, next_action: dict) -> dict:
+    """Вопрос 10: следующий шаг по уроку (next_action из петли) либо follow_up из связанного урока."""
+    na, src = next_action or {}, c["src"]
+    follow_up = [x for x in (src.get("follow_up") or []) if _text(x)]
+    if na.get("action"):
+        because = f" — потому что {na.get('because')}" if na.get("because") else ""
+        return _qa("next", _Q["next"], answer=f"{na.get('action')}{because}",
+                   evidence=[c["iid"] or c["fid"], "next_action"])
+    if follow_up:
+        more = f" и ещё {len(follow_up) - 1}" if len(follow_up) > 1 else ""
+        return _qa("next", _Q["next"], answer=f"{_text(follow_up[0])}{more}",
+                   evidence=[c["iid"], c["fl_edge"], c["fl_ref"]])
+    return _qa("next", _Q["next"], unknown_reason=_source_gap(c["insight"], c["source"], "следующий шаг"))
+
+
+def answer_ten_questions(graph: dict, feature: str, *,
+                         source: dict | None = None,
+                         trace_result: dict | None = None,
+                         measured_outcome: dict | None = None,
+                         next_action: dict | None = None) -> dict:
+    """Ответить на десять вопросов жизни фичи из связанной истории.
+
+    `graph` — собранный Knowledge Graph. `source` — поля из СВЯЗАННЫХ первоисточников (аудитория,
+    гипотеза, обоснование решения, выводы, следующий шаг), прочитанные фасадом
+    (`knowledge_graph.feature_life_source`); без него эти вопросы честно «неизвестно». `trace_result`
+    при наличии берётся готовым. `measured_outcome` / `next_action` — реальный сдвиг метрики и шаг по
+    уроку (считает слой CLI из контракта фичи); переданы -> обогащают вопросы 8 и 10.
+
+    -> `{"feature", "questions": [<десять В ПОРЯДКЕ приёмки>], "answered_count", "total", "complete",
+    "verdict"}`.
+    """
+    fid = _slug(feature)
+    nodes, edges = _index(graph)
+    tr = trace_result if trace_result is not None else trace(graph, feature)
+
+    if tr.get("verdict") == "unknown" or fid not in nodes:
+        reason = (f"узла «{fid}» нет в графе — историю фичи строить не из чего "
+                  f"(собери граф: ./ai-ops graph build)")
+        qs = [_qa(qid, text, unknown_reason=reason) for qid, text in TEN_QUESTIONS]
+        return {"feature": fid, "questions": qs, "answered_count": 0, "total": len(TEN_QUESTIONS),
+                "complete": False, "verdict": "unknown"}
+
+    insight = _insight_for(nodes, edges, fid)
+    iid = insight.get("id") if insight else None
+    c = {"fid": fid, "nodes": nodes, "src": source or {}, "source": source, "insight": insight,
+         "iid": iid, "fl_edge": f"{iid} -feeds-> {fid}" if iid else None,
+         "fl_ref": _text(insight.get("ref")) if insight else None}
+
+    merged = {**_graph_bound(tr, fid), **_source_bound(c, next_action)}
+    merged["after_release"] = _after_release(tr, fid, measured_outcome)
+
+    # Порядок ответов — дословный порядок приёмки (TEN_QUESTIONS), не порядок сборки помощников.
+    a = [merged[qid] for qid, _ in TEN_QUESTIONS]
+    answered = sum(1 for q in a if q["answered"])
+    return {"feature": fid, "questions": a, "answered_count": answered,
+            "total": len(TEN_QUESTIONS), "complete": answered == len(TEN_QUESTIONS),
+            "verdict": tr.get("verdict")}
