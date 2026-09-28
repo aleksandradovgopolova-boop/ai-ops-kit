@@ -129,13 +129,15 @@ def cmd_diff():
     return 0
 
 
-def security_surface_section(root, changed, scan=None):
-    """Раздел тела PR обновления кита: что этот выпуск привозит по безопасности (#1157). -> str.
+def security_surface(root, changed, scan=None):
+    """Что этот выпуск привозит по безопасности (#1157) — ДАННЫЕ и готовый текст раздела. -> dict.
 
-    Сканер кита прогоняется по ИЗМЕНЁННЫМ файлам поставки против прежней версии (HEAD ветки
-    обновления — ещё старый кит). Поимённо — только ПРИЕХАВШЕЕ: ради него раздел и заведён, иначе
-    о новой поверхности дочка узнаёт прогоном после слияния. Пустой список печатается явным
-    «ничего», а сбой скана — «проверить не удалось»: незнание не выдаётся за «чисто».
+    Сканер кита прогоняется по ИЗМЕНЁННЫМ файлам поставки против прежней версии (HEAD — ещё старый
+    кит: и в ветке обновления, и в CI-джобе `update --in-place`). Поимённо — только ПРИЕХАВШЕЕ:
+    ради него раздел и заведён, иначе о новой поверхности дочка узнаёт прогоном после слияния.
+    Бывшее раньше — числом. `status`: `new` / `nothing` (явное «ничего») / `scan_failed` — незнание
+    не выдаётся за «чисто». Словарь кладётся в last-update-report.json: оттуда раздел берёт тело PR
+    CI-шаблона `templates/ci/ai-ops-update.yml`, у которого коммита из `_deferred_update` нет.
     `scan(root, changed)` — инъекция для тестов."""
     head = "\nЧто этот выпуск привозит по безопасности (сканер кита по файлам .ai/managed/):\n"
     try:
@@ -146,14 +148,35 @@ def security_surface_section(root, changed, scan=None):
             flags = security_scan.delivered_surface(root, changed, base="HEAD")
         else:
             flags = scan(root, changed)
+        # разбор отметок — тоже внутри: отметка без ключа не роняет уже применённое обновление
+        new = [{"id": f["id"], "path": f["path"], "line": f["line"]} for f in flags if f.get("arrived")]
     except Exception as e:                             # noqa: BLE001 — отчёт о поверхности не
-        return head + f"  проверить НЕ УДАЛОСЬ ({type(e).__name__}) — это не «ничего».\n"  # роняет PR
-    new = [f for f in flags if f.get("arrived")]
+        return {"status": "scan_failed", "new": [], "preexisting": None,  # роняет обновление
+                "error": type(e).__name__,
+                "text": head + f"  проверить НЕ УДАЛОСЬ ({type(e).__name__}) — это не «ничего».\n"}
     lines = [f"  НОВОЕ {f['id']} — {f['path']}:{f['line']}" for f in new] or [
         "  ничего: новых мест, которые сканер отмечает, выпуск не привозит."]
     if len(flags) > len(new):
         lines.append(f"  в изменённых файлах были и в прежней версии: {len(flags) - len(new)}")
-    return head + "\n".join(lines) + "\n"
+    return {"status": "new" if new else "nothing", "new": new, "preexisting": len(flags) - len(new),
+            "text": head + "\n".join(lines) + "\n"}
+
+
+def security_surface_section(root, changed, scan=None):
+    """Текст раздела безопасности для тела коммита/PR обновления кита. -> str."""
+    return security_surface(root, changed, scan=scan)["text"]
+
+
+def _deferred_security_text(wt, staged):
+    """Раздел для коммита ветки: из отчёта вложенного прогона (одна правда, без второго скана). -> str.
+
+    Отчёта или раздела в нём нет -> скан по staged: коммит без раздела был бы молчанием."""
+    try:
+        rep = json.loads((wt / ".ai" / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
+        text = (rep.get("security_surface") or {}).get("text")
+    except (OSError, ValueError, AttributeError):
+        text = None
+    return text if isinstance(text, str) and text else security_surface_section(wt, staged)
 
 
 def _deferred_update(inst, target, force=False, refresh_ci=False):
@@ -237,7 +260,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
                f"Подготовлено `ai-ops update` при `parent.update_policy: pr`: применено в отдельной "
                f"ветке, рабочее дерево не тронуто (кроме .ai/runtime/last-update-report.json — "
                f"отчёт об обновлении, в gitignore). Отчёт — .ai/runtime/last-update-report.json.\n"
-               + security_surface_section(wt, staged))
+               + _deferred_security_text(wt, staged))
         c = subprocess.run(["git", "-C", str(wt),
                             "-c", "user.name=ai-ops-updater",
                             "-c", "user.email=ai-ops-updater@users.noreply.github.com",
@@ -445,6 +468,8 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # заголовков CHANGELOG между from->to называет фактические изменения. Пусто -> `propose` честно
     # откатится на «версия + число файлов». CHANGELOG кита в дочку не едет — отчёт единственный носитель.
     report["changelog_slice"] = _changelog_slice(inst, target)
+    # РАЗДЕЛ БЕЗОПАСНОСТИ — В ОТЧЁТ (#1157): его читает тело PR CI-шаблона и коммит отложенного пути.
+    report["security_surface"] = security_surface(_ao().REPO_ROOT, [c["path"] for c in changes])
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
                         f"{n} файлов под контролем."
                         # v3.35.1: back-fill МОДЕЛИ назывался в отчёте, но не в сообщении — человек

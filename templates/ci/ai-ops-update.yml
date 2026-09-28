@@ -149,6 +149,18 @@ jobs:
             echo "Автообновление AI Ops Kit: **$FROM → $TO**."
             echo
             echo "Локальные слои (\`.ai/project/\`, \`.ai/custom/\`) не тронуты."
+            # Раздел безопасности (#1157) — из ФАЙЛА отчёта, python читает его сам: текст с адресами
+            # не проходит ни через `${{ }}`, ни через переменную shell, поэтому кавычки и `$()`
+            # в нём остаются текстом. Нет отчёта или раздела — так и сказано, а не пропущено молча.
+            echo '```text'
+            # Не строка / пусто / нет файла -> «НЕ УДАЛОСЬ»: шаг идёт ПОСЛЕ push, падать ему нельзя.
+            python3 -c 'import json,sys
+          t=None
+          try: t=json.load(open(sys.argv[1],encoding="utf-8"))["security_surface"]["text"]
+          except Exception: pass
+          if not isinstance(t,str) or not t.strip(): t="Что этот выпуск привозит по безопасности: проверить НЕ УДАЛОСЬ (раздела нет в отчёте обновления или он пуст) — это не «ничего»."
+          print(t.replace("```","`​``").strip())' "${REPORT:-/nonexistent}"
+            echo '```'
             if [ -n "$REPORT" ]; then
               echo; echo '<details><summary>update-report</summary>'; echo
               echo '```json'; cat "$REPORT"; echo '```'; echo '</details>'
