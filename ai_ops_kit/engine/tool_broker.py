@@ -252,6 +252,8 @@ GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
 
 # подстановка команд / process substitution — статически не проверить -> в allowlist-режиме денай.
 _SUBST_RE = re.compile(r"\$\(|`|<\(|>\(")
+# `\r` перед переводом строки или в конце команды — CRLF, а не часть слова (см. execute).
+_CR_AT_EOL_RE = re.compile(r"\r+(?=\n)|\r+\Z")
 
 
 class Policy:
@@ -387,11 +389,12 @@ class Policy:
                             "reason": "подстановка команд ($()/`…`/<()) запрещена в allowlist-режиме "
                                       "(нельзя статически проверить вложенные бинарники)"}
                 # ПОСЕГМЕНТНО: каждый бинарь после ; && || | должен быть в allowlist (v2.85 —
-                # иначе `pytest && curl` обходил проверку по первому токену)
-                bad = [b for b in _command_binaries(norm) if b not in self.shell_allowlist]
-                if bad:
-                    return {"allow": False,
-                            "reason": f"{bad} не в shell_allowlist {sorted(self.shell_allowlist)}"}
+                # иначе `pytest && curl` обходил проверку по первому токену). Слова — по СЫРОЙ
+                # команде тем же разбором, что у запуска (кавычки, escape, только пробел/таб):
+                # проверяется ровно то, что исполнится; неоднозначное — отказ.
+                why = _allowlist_denial(cmd, self.shell_allowlist)
+                if why:
+                    return {"allow": False, "reason": why}
         return {"allow": True, "reason": f"{op} в пределах уровня {self.level}"}
 
 
@@ -436,6 +439,12 @@ def execute(action: dict, root, policy: Policy) -> dict:
         if _relp:
             _normalized_from = action.get("path")
             action = dict(action, path=_relp)
+    # CRLF (команда из файла с Windows-переводами строк): `\r` в конце строки срезаем ДО решения
+    # политики — и решение, и запуск видят одну и ту же команду. Срезать только в проверке было
+    # бы обходом: `./gradlew\r` оболочка исполняет как другой файл. `\r` в середине строки
+    # остаётся и allowlist-режимом отклоняется.
+    if action.get("op") in ("shell", "git") and "\r" in (action.get("command") or ""):
+        action = dict(action, command=_CR_AT_EOL_RE.sub("", action["command"]))
     d = policy.decide(action)
     ev = {"op": action.get("op"), "target": action.get("path") or action.get("command"),
           "allowed": d["allow"], "reason": d["reason"], "revision": _revision(root)}
@@ -587,6 +596,7 @@ def execute(action: dict, root, policy: Policy) -> dict:
 # модульные глобали (импортированы здесь на уровне модуля). Сателлит фасад НЕ импортирует — ни
 # одного обратного ребра (все вынесенные функции берут root/policy/pre параметрами).
 from ai_ops_kit.engine.tool_broker_fs import (  # noqa: E402  — ре-экспорт в конце модуля
+    _allowlist_denial,
     _command_binaries,
     _escapes_root,
     _first_binary,

@@ -49,6 +49,16 @@ SHELL_RESERVED = frozenset({
 })
 _ASSIGNMENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]*=")
 
+
+def is_assignment(word: str) -> bool:
+    """Ведущее слово — присваивание окружения (`NAME=value`), а не команда.
+
+    Имя по POSIX: `[A-Za-z_][A-Za-z0-9_]*`. `a/b=c` и `1A=b` — НЕ присваивания: и оболочка, и
+    `split` исполняют их как команду. Одно определение на кит: allowlist брокера
+    (`tool_broker_fs._allowlist_scan`) судит по нему же — иначе проверялся бы один бинарь,
+    а исполнялся другой."""
+    return bool(_ASSIGNMENT.match(word))
+
 NOT_FOUND_RC = 127       # соглашение POSIX-оболочки: команда не найдена
 NOT_EXECUTABLE_RC = 126  # найдена, но не исполняема
 
@@ -153,7 +163,7 @@ def split(command: str | Sequence[object]) -> tuple[list[str], dict[str, str]]:
         return [str(a) for a in command], {}
     words = _words(str(command))
     env: dict[str, str] = {}
-    while words and _ASSIGNMENT.match(words[0][1]):
+    while words and is_assignment(words[0][1]):
         value, raw = words.pop(0)
         name = raw.split("=", 1)[0]
         if _value_has_tilde_expansion(raw[len(name) + 1:]):
@@ -167,6 +177,152 @@ def split(command: str | Sequence[object]) -> tuple[list[str], dict[str, str]]:
     if argv[0] in SHELL_BUILTINS:
         raise NeedsShell(f"«{argv[0]}» — встроенная команда оболочки")
     return argv, env
+
+
+Word = tuple[str, str]                  # (значение слова, сырой текст) — как у `_words`
+_DUP_TARGET = re.compile(r"[0-9]+-?|-")
+
+
+class _Commands:
+    """Накопитель `simple_commands`: слова текущей команды и готовые команды."""
+
+    def __init__(self) -> None:
+        self.commands: list[list[Word]] = []
+        self.words: list[Word] = []
+        self.cur: list[str] = []
+        self.raw: list[str] = []
+        self.redirect_target = False       # следующее слово — цель перенаправления, не аргумент
+        self.dup_target = False            # цель `<&`/`>&`: только номер потока и/или `-`
+
+    def end_word(self) -> None:
+        if not self.raw:
+            return
+        if self.redirect_target:
+            # bash режет `>&-marker` на `>&-` и КОМАНДУ `marker`; dash — синтаксическая ошибка.
+            # Разборщики расходятся -> только однозначная цель, остальное — отказ.
+            if self.dup_target and not _DUP_TARGET.fullmatch("".join(self.raw)):
+                raise NeedsShell("цель `<&`/`>&` — не номер потока и не `-`")
+            self.redirect_target = self.dup_target = False
+        else:
+            self.words.append(("".join(self.cur), "".join(self.raw)))
+        self.cur, self.raw = [], []
+
+    def end_command(self) -> None:
+        self.end_word()
+        if self.redirect_target:
+            raise NeedsShell("перенаправление без цели")
+        if self.words:
+            self.commands.append(self.words)
+        self.words = []
+
+
+def _double_quoted_lenient(s: str, i: int) -> tuple[str, int]:
+    """Как `_double_quoted`, но `$ИМЯ` внутри кавычек допускает (на бинарь он не влияет);
+    отказ — только на подстановку КОМАНДЫ (`$(`, обратная кавычка)."""
+    buf: list[str] = []
+    j, n = i + 1, len(s)
+    while True:
+        if j >= n:
+            raise NeedsShell('незакрытая кавычка "')
+        d = s[j]
+        if d == '"':
+            return "".join(buf), j + 1
+        if d == "`" or (d == "$" and s[j + 1:j + 2] == "("):
+            raise NeedsShell("подстановка команды внутри кавычек")
+        if d == "\\" and j + 1 < n and s[j + 1] in '$`"\\\n':
+            if s[j + 1] != "\n":
+                buf.append(s[j + 1])
+            j += 2
+            continue
+        buf.append(d)
+        j += 1
+
+
+def _reject_control_chars(s: str) -> None:
+    for c in s:
+        if (c < " " and c not in "\t\n") or c == "\x7f":
+            raise NeedsShell(f"управляющий символ {ord(c):#04x} — разделяет ли он слова, "
+                             "зависит от разборщика")
+
+
+def simple_commands(command: str) -> list[list[Word]]:
+    """Строка оболочки -> простые команды, каждая — список слов `(значение, сырой текст)`.
+
+    Для allowlist брокера: он обязан сверять ТЕ ЖЕ слова, что исполнит оболочка (и `split`).
+    Делит как оболочка: слова — только по пробелу и табу, кавычки и escape — по правилам POSIX
+    (как `_words`), команды — по `;`, `&`, `|` (`&&`, `||` — те же символы) и переводу строки
+    вне кавычек; комментарий `#` в начале слова — до конца строки; перенаправление вместе с его
+    целью (`> out`, `2>&1`) словом команды не считается.
+
+    Всё, что нельзя разобрать однозначно, — `NeedsShell`, а не «примерно»: незакрытая кавычка,
+    подстановка команды (`$(`, обратная кавычка, `<(`), скобки подоболочки, here-document,
+    управляющие символы (`\\x00`–`\\x1f`, кроме таба и перевода строки, и `\\x7f`) где угодно и
+    не-ASCII пробелы вне кавычек: `str.split()` делит по ним, а оболочка — нет."""
+    _reject_control_chars(command)
+    acc = _Commands()
+    s, i = command, 0
+    n = len(s)
+    while i < n:
+        c = s[i]
+        if c in " \t":
+            acc.end_word()
+            i += 1
+        elif c in ";&|\n":
+            acc.end_command()
+            i += 1
+        elif c == "#" and not acc.raw:
+            j = s.find("\n", i)
+            i = n if j < 0 else j
+        elif c == "\\":
+            if i + 1 >= n:
+                raise NeedsShell("обратная косая черта в конце команды")
+            if s[i + 1] != "\n":           # `\`+перевод строки — продолжение, а не символ
+                acc.cur.append(s[i + 1])
+                acc.raw.append(s[i:i + 2])
+            i += 2
+        elif c == "'":
+            j = s.find("'", i + 1)
+            if j < 0:
+                raise NeedsShell("незакрытая кавычка '")
+            acc.cur.append(s[i + 1:j])
+            acc.raw.append(s[i:j + 1])
+            i = j + 1
+        elif c == '"':
+            value, j = _double_quoted_lenient(s, i)
+            acc.cur.append(value)
+            acc.raw.append(s[i:j])
+            i = j
+        elif c == "`" or (c == "$" and s[i + 1:i + 2] == "("):
+            raise NeedsShell("подстановка команды")
+        elif c in "()":
+            raise NeedsShell("скобки подоболочки")
+        elif c in "<>":
+            if acc.raw and "".join(acc.raw).isdigit():
+                acc.cur, acc.raw = [], []  # `2>`: цифры перед оператором — номер потока
+            else:
+                acc.end_word()
+            if acc.redirect_target:
+                raise NeedsShell("перенаправление без цели")
+            # Оператор — только POSIX-токен: `<` `>` `>>` `<&` `>&` `<>` `>|` (`<<`/`<<-` — отказ).
+            # Дальше — слово-цель (для `<&`/`>&` это цифра или `-`, но разбирается как любое
+            # слово). `|`, `&`, `;` сразу за оператором — НЕ часть оператора: это разделитель,
+            # и до цели он даёт отказ «перенаправление без цели». Прежний жадный цикл вбирал
+            # `|`/`&`/`-` в оператор, и `pytest >-|marker` прятал команду marker в «цель».
+            nxt = s[i + 1:i + 2]
+            if c == "<" and nxt == "<":
+                raise NeedsShell("here-document")
+            two = (c == ">" and nxt in (">", "&", "|")) or (c == "<" and nxt in ("&", ">"))
+            acc.redirect_target = True
+            acc.dup_target = two and nxt == "&"
+            i += 2 if two else 1
+        elif c.isspace():
+            raise NeedsShell(f"нестандартный пробел U+{ord(c):04X} вне кавычек")
+        else:
+            acc.cur.append(c)
+            acc.raw.append(c)
+            i += 1
+    acc.end_command()
+    return acc.commands
 
 
 def run(argv: Sequence[str], *, cwd: str | os.PathLike[str] | None = None,
