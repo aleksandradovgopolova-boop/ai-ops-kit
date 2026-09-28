@@ -128,6 +128,17 @@ def from_graph_trace(result: dict) -> dict:
                    "built_by": built_by, "review": review})
 
 
+def _scorecard_line(m: dict) -> str:
+    """Одна строка карты для человека: измеренная — долей в процентах, неизмеренная — причиной.
+
+    Инвариант карты «честность превыше полноты»: неизмеренное печатается «не измерено — причина», а не
+    нулём и не выдуманным числом. Един для пяти метрик и для показателя «ценность для дочки»."""
+    if m.get("measured"):
+        pct = round((m.get("value") or 0) * 100)
+        return f"• {m.get('title')}: {pct}% ({m.get('numerator')}/{m.get('denominator')})"
+    return f"• {m.get('title')}: не измерено — {m.get('reason')}"
+
+
 def from_scorecard(scorecard: dict) -> dict:
     """`product_scorecard.build_scorecard()` -> UserMessage. Карта продукта кита из 5 метрик.
 
@@ -137,15 +148,15 @@ def from_scorecard(scorecard: dict) -> dict:
     metrics = scorecard.get("metrics") or []
     measured = scorecard.get("measured_count") or 0
     total = len(metrics)
-    lines = []
-    for m in metrics:
-        if m.get("measured"):
-            pct = round((m.get("value") or 0) * 100)
-            lines.append(f"• {m.get('title')}: {pct}% ({m.get('numerator')}/{m.get('denominator')})")
-        else:
-            lines.append(f"• {m.get('title')}: не измерено — {m.get('reason')}")
+    lines = [_scorecard_line(m) for m in metrics]
     summary = ("Мерю себя как продукт, а не числом возможностей — карта из 5 метрик:\n"
                + "\n".join(lines))
+    # Стрелка «работа кита -> исход дочки» — ОТДЕЛЬНОЙ строкой рядом с картой (направление
+    # prove-the-loop): доказана ли ценность построенного для ДОЧЕК, а не самолюбование кита.
+    cv = scorecard.get("child_value")
+    if isinstance(cv, dict) and cv.get("title"):
+        summary += ("\nСтрелка «работа кита → исход дочки» (доказана ли ценность для дочек):\n"
+                    + _scorecard_line(cv))
     if scorecard.get("unmeasured_count"):
         status = "degraded"
         headline = f"Карта продукта: измерено честно {measured} из {total} метрик"
