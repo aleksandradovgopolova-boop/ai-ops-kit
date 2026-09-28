@@ -12,8 +12,23 @@
 # validation/run_scenarios) росли свободно — ратчет давал ложное чувство защиты. Теперь у
 # каждого каталога свой потолок, замороженный на ТЕКУЩЕМ максимуме: это не заставляет
 # рефакторить существующий код прямо сейчас, а останавливает НОВЫЙ рост везде.
-# Каждый scope сверяется точно (max == потолок): превышение краснеет как новая god-функция,
-# снижение — как «опусти потолок» (ратчет ходит только вниз).
+# Каждый scope сверяется с потолком: превышение краснеет как новая god-функция.
+#
+# 2026-09-28 (#1128): три поправки после ревью PR #1125.
+#   * Снижение максимума ниже потолка — ПРЕДУПРЕЖДЕНИЕ «опусти потолок», а не отказ: сокращение
+#     функции в постороннем PR не должно его ронять (тот же выбор, что у module-size — «усыхание не
+#     краснит прогон»). Устаревший-вниз потолок безвреден; рост по-прежнему краснеет.
+#   * Координаты максимума (max_function / _file / _lineno) — СПРАВОЧНЫЕ: расхождение с фактом —
+#     предупреждение, не отказ. Их, как и потолки, обновляет `validate_func_size.py --baseline`.
+#   * `--baseline` правит только значения полей ТЕКСТОМ (подход #1071): этот файл с комментариями
+#     переживает прогон байт-в-байт вне чисел. Прежде он переписывался через yaml.dump, и все
+#     пояснения ниже исчезали за один запуск. По умолчанию `--baseline` только ОПУСКАЕТ потолки;
+#     подъём — отказ, пока не дан `--allow-raise "<обоснование>"`, и тогда он записывается в ленту
+#     `raises` (заводится в конце файла при первом подъёме). Потолок, выросший относительно
+#     origin/main без такой записи, краснит тест (tests/unit/test_validate_func_size.py). Несколько
+#     подъёмов подряд засчитываются цепочкой записей (4 -> 11 -> 21); пути сравниваются
+#     нормализованными (`kernel/` = `kernel`). НОВЫЙ каталог, которого нет в origin/main, подъёмом
+#     не считается, но заводится по факту: потолок выше текущего максимума краснит тот же тест.
 schema_version: 2
 kind: func-size-ratchet
 
@@ -26,7 +41,7 @@ scopes:
     max_function_lines: 184
     max_function: _evaluate_security
     max_function_file: pipeline_readiness.py
-    max_function_lineno: 71
+    max_function_lineno: 68
 
   # cli/ — точка входа CLI. main() аккумулировала разбор аргументов и диспетч; разбор и путь
   # run --execute/do вынесены в _build_cli_arg_parser/_main_run_execute (ратчет опущен 348 -> 154).
@@ -39,7 +54,7 @@ scopes:
     max_function_lines: 150
     max_function: _main_run_execute
     max_function_file: ai_ops_cli_commands.py
-    max_function_lineno: 476
+    max_function_lineno: 522
 
   # planning/ — контур Planning & Execution.
   # Опущено 157 -> 138 (2026-09-14): проверку milestone вынесли из `validate` в помощники
@@ -49,7 +64,7 @@ scopes:
     max_function_lines: 138
     max_function: compute
     max_function_file: next_work.py
-    max_function_lineno: 306
+    max_function_lineno: 307
 
   # providers/ — адаптеры исполнителей и оркестрация workflow.
   - path: ai_ops_kit/providers/
@@ -141,7 +156,7 @@ scopes:
     max_function_lines: 79
     max_function: run_pack
     max_function_file: security_pack.py
-    max_function_lineno: 179
+    max_function_lineno: 231
   - path: ai_ops_kit/shared/
     max_function_lines: 177
     max_function: route
@@ -155,8 +170,10 @@ scopes:
 
   # F-06 внешнего аудита: installer/ — крупнейший файл репозитория, первое, что запускает пользователь,
   # оставался вне func-size. Потолок = текущий максимум (cmd_doctor 264); расщепление — отдельной работой.
+  # #1128: cmd_doctor с тех пор переехал из ai_ops.py в doctor.py (тело без изменений, 264) —
+  # координаты обновлены `--baseline`, потолок тот же.
   - path: installer/
     max_function_lines: 264
     max_function: cmd_doctor
-    max_function_file: ai_ops.py
-    max_function_lineno: 3030
+    max_function_file: doctor.py
+    max_function_lineno: 149
