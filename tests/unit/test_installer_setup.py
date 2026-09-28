@@ -171,6 +171,62 @@ def test_first_hour_done_lines_names_first_work_at_ready():
     assert not any("Дальше имеет смысл взять" in x for x in setup_ops._first_hour_done_lines(needs))
 
 
+def test_first_result_lead_leads_with_result_per_stage(tmp_path):
+    """`_first_result_lead` ВЕДЁТ первым результатом, а не строкой «установлено» (issue #1140).
+
+    Прямой вызов: ready называет первую работу; needs_answers зовёт ответить без правки YAML;
+    blocked честно говорит, что результата пока нет; неразобранный первый час не выдаёт
+    «установлено» за результат. Строку про файл показывает, только если файл реально есть."""
+    setup_ops = _load_installer()._setup_ops()
+
+    ready = {"kind": "first-hour", "stage": "ready",
+             "next": {"next_best": {"id": "W1", "title": "нарезать монолит"}}}
+    lead_ready = "\n".join(setup_ops._first_result_lead(tmp_path, ready))
+    assert "Первый результат" in lead_ready
+    assert "нарезать монолит" in lead_ready
+    # Результат назван ПРОТИВОПОСТАВЛЕНИЕМ «установлено», а не выдан за него.
+    assert "не «кит установлен»" in lead_ready
+    assert "AI Ops установлен одной командой" not in lead_ready
+    # Файла ещё нет — ссылку на него не показываем (не обещаем несуществующее).
+    assert "first-result.md" not in lead_ready
+
+    # Создаём файл результата — тогда ссылка на него появляется.
+    (tmp_path / ".ai" / "generated").mkdir(parents=True, exist_ok=True)
+    (tmp_path / ".ai" / "generated" / "first-result.md").write_text("x\n", encoding="utf-8")
+    lead_with_file = "\n".join(setup_ops._first_result_lead(tmp_path, ready))
+    assert ".ai/generated/first-result.md" in lead_with_file
+
+    needs = {"kind": "first-hour", "stage": "needs_answers", "blocking_questions": []}
+    lead_needs = "\n".join(setup_ops._first_result_lead(tmp_path, needs))
+    assert "Первый результат" in lead_needs
+    assert "--answer" in lead_needs and "YAML" in lead_needs
+
+    blocked = {"kind": "first-hour", "stage": "blocked_understanding"}
+    lead_blocked = "\n".join(setup_ops._first_result_lead(tmp_path, blocked))
+    assert "первого результата пока нет" in lead_blocked.lower()
+
+    # Первый час не разобрался (None / старый managed) — «установлено» за результат не выдаём.
+    lead_none = "\n".join(setup_ops._first_result_lead(tmp_path, None))
+    assert "вручную" in lead_none and "model --flow --apply" in lead_none
+
+
+def test_setup_leaves_first_result_artifact_and_leads_with_it(child):
+    """(issue #1140) Конец установки — первый РЕЗУЛЬТАТ: setup оставляет открываемый файл
+    `.ai/generated/first-result.md` и ведёт им экран, а не строкой «AI Ops установлен»."""
+    r = _run_cli(child, "setup", ".")
+    assert r.returncode == 0, f"setup упал: {r.stdout}\n{r.stderr}"
+    out = r.stdout
+    # Файл первого результата создан и его можно открыть.
+    artifact = child / ".ai" / "generated" / "first-result.md"
+    assert artifact.is_file(), "setup не оставил файл первого результата .ai/generated/first-result.md"
+    assert "Первый результат" in artifact.read_text(encoding="utf-8")
+    # Экран ВЕДЁТ первым результатом и ссылается на файл — а не старой строкой «установлен одной…».
+    assert "Первый результат" in out, "финальный экран не ведёт первым результатом"
+    assert ".ai/generated/first-result.md" in out, "экран не показывает, где лежит первый результат"
+    assert "AI Ops установлен одной командой" not in out, \
+        "экран всё ещё ведёт строкой «установлено», а не результатом"
+
+
 def test_setup_names_blocking_questions_at_needs_answers(child):
     """(needs_answers, подпроцесс) минимальный репозиторий даёт вопросы: экран просит ответить и
     перечисляет блокирующие с их id — человек видит, чего именно не хватает."""
