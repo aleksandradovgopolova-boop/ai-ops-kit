@@ -216,6 +216,7 @@ except ImportError:                                    # запуск КАК С�
 try:
     from ai_ops_kit.security.scan_exec_call import child_process_imported as _child_process_imported
     from ai_ops_kit.security.scan_exec_call import launch_findings as _launch_findings
+    from ai_ops_kit.security.scan_inline_code import inline_code_lines as _inline_code_lines
     from ai_ops_kit.security.scan_prose import PROSE_SUFFIXES as _PROSE_SUFFIXES
     from ai_ops_kit.security.scan_prose import area_of as _area_of
     from ai_ops_kit.security.scan_prose import blank_string_contents as _blank_strings
@@ -245,6 +246,14 @@ except ImportError:                                    # запуск КАК С�
     _spec7.loader.exec_module(_exec_mod)
     _child_process_imported = _exec_mod.child_process_imported
     _launch_findings = _exec_mod.launch_findings
+
+    _inline_path = Path(__file__).resolve().parent / "scan_inline_code.py"
+    _spec8 = _ilu2.spec_from_file_location("ai_ops_scan_inline_code", _inline_path)
+    if _spec8 is None or _spec8.loader is None:        # fail-closed: без разбора сканер слепнет
+        raise RuntimeError(f"не удалось загрузить разбор inline-кода из {_inline_path}") from None
+    _inline_mod = _ilu2.module_from_spec(_spec8)
+    _spec8.loader.exec_module(_inline_mod)
+    _inline_code_lines = _inline_mod.inline_code_lines
 
     _vendor_path = Path(__file__).resolve().parent / "scan_vendor.py"
     _spec6 = _ilu2.spec_from_file_location("ai_ops_scan_vendor", _vendor_path)
@@ -343,6 +352,10 @@ def scan_injection(files):
                        if not (f["path"] == path and f["id"] == "node_child_process")]
         for lineno in _sql_template_literal_lines(text):
             res.append({"path": path, "id": "sql_template_literal", "line": lineno})
+        # #1161: интерпретатору в .py/.sh передан код, собранный подстановкой. Литеральный код флагом
+        # не считается: исполнится ровно написанное (решение и цена — в `scan_inline_code`).
+        for lineno in _inline_code_lines(text, path):
+            res.append({"path": path, "id": "inline_code_interpolated", "line": lineno})
     # ОБЛАСТЬ — ЯРЛЫК, А НЕ ФИЛЬТР (#1146). Ни один флаг не исчезает: `harness` (тесты, e2e, конфиги
     # инструментов) отделён от `product`, чтобы судья не читал дюжину тестовых адресов ради одного
     # боевого. Ошибка классификации перекладывает адрес в другой раздел, но не прячет его.

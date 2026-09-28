@@ -594,6 +594,8 @@ class TestCommentsAreProseNotCode:
 
 JS = "проба.js"            # обычный исходник
 MD = "CHANGELOG.md"        # проза: injection-правила в ней не работают намеренно (_PROSE_SUFFIXES)
+PY = "проба.py"            # правило inline-кода читает .py через ast (#1161)
+SH = "проба.sh"            # и .sh — лексером оболочки
 
 _MODULE_SRC = (PKG / "ai_ops_kit" / "security" / "security_scan.py").read_text(encoding="utf-8")
 # Правила уровня ФАЙЛА в списках паттернов не лежат — они дописываются в находки прямо в
@@ -657,6 +659,9 @@ SAMPLES = [
     ("vue_v_html", "vue_v_html", '<p v-html="x"></p>', JS),
     ("sql_template_literal", "sql_template_literal",
      "db.query(`select * from t where id = ${id}`)", JS),
+    ("inline_code_interpolated", "inline_code_interpolated_sh", 'node -e "console.log($X)"', SH),
+    ("inline_code_interpolated", "inline_code_interpolated_py",
+     'subprocess.run(["python3", "-c", f"import {name}"])', PY),
 ]
 
 # Безобидные двойники: детектор ОБЯЗАН молчать. Двойник подобран к КОНКРЕТНОМУ правилу — это его
@@ -707,6 +712,11 @@ TWINS = [
     ("sql_template_literal", "query_without_interpolation", "db.query(`select 1`)", JS),
     ("sql_template_literal", "template_literal_that_is_not_sql",
      "const msg = `привет, ${name}`", JS),
+    # Литеральный код — исполнится ровно написанное; `grep -e` — не интерпретатор (#1161).
+    ("inline_code_interpolated", "inline_code_literal_sh", "node -e 'console.log(process.env.X)'", SH),
+    ("inline_code_interpolated", "inline_code_literal_py",
+     'subprocess.run(["python3", "-c", "import yaml"])', PY),
+    ("inline_code_interpolated", "not_an_interpreter", 'grep -e "$X" file', SH),
 ]
 
 
@@ -758,7 +768,8 @@ def test_the_corpus_names_no_rule_the_detector_does_not_have():
 @pytest.mark.unit
 def test_the_file_level_rules_are_still_found_in_the_source():
     """Извлечение правил уровня файла механическое — пустой результат сделал бы охват фикцией."""
-    assert {"node_child_process_exec", "sql_template_literal"} <= FILE_LEVEL_RULES, sorted(
+    assert {"node_child_process_exec", "sql_template_literal",
+            "inline_code_interpolated"} <= FILE_LEVEL_RULES, sorted(
         FILE_LEVEL_RULES)
 
 
