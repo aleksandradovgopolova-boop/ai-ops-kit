@@ -215,7 +215,7 @@ except ImportError:                                    # запуск КАК С�
 
 try:
     from ai_ops_kit.security.scan_exec_call import child_process_imported as _child_process_imported
-    from ai_ops_kit.security.scan_exec_call import surface_lines as _exec_surface_lines
+    from ai_ops_kit.security.scan_exec_call import launch_findings as _launch_findings
     from ai_ops_kit.security.scan_prose import PROSE_SUFFIXES as _PROSE_SUFFIXES
     from ai_ops_kit.security.scan_prose import area_of as _area_of
     from ai_ops_kit.security.scan_prose import blank_string_contents as _blank_strings
@@ -244,7 +244,7 @@ except ImportError:                                    # запуск КАК С�
     _exec_mod = _ilu2.module_from_spec(_spec7)
     _spec7.loader.exec_module(_exec_mod)
     _child_process_imported = _exec_mod.child_process_imported
-    _exec_surface_lines = _exec_mod.surface_lines
+    _launch_findings = _exec_mod.launch_findings
 
     _vendor_path = Path(__file__).resolve().parent / "scan_vendor.py"
     _spec6 = _ilu2.spec_from_file_location("ai_ops_scan_vendor", _vendor_path)
@@ -321,22 +321,10 @@ def scan_injection(files):
         # бинаря, без оболочки и без встроенного кода безопасен ПО КОНСТРУКЦИИ — исполнится ровно
         # то, что написано в файле (#1161). Стойка «пере-срабатывание безопаснее под-срабатывания»
         # в силе: снимается ровно тот класс, где безопасность видна в самой строке вызова.
+        # Вход читает СЫРОЙ текст, вызовы — очищенный, осознанно (#1153): импорт, съеденный
+        # ошибочно угаданным комментарием, не должен выключать разбор. Границы — в `launch_findings`.
         if _child_process_imported(text):
-            # Вызовы ищутся по тексту БЕЗ КОММЕНТАРИЕВ (#1146). Закомментированный `// cp.exec(x)`
-            # не исполняется, а раз найденный вызов снимает флаг с импорта, такой «вызов» уводил бы
-            # судью с настоящей строки — и этим можно было бы управлять снаружи, дописав комментарий.
-            # ГРАНИЦА: строковые литералы НЕ гасятся. Текст «call execSync(cmd)» внутри строки тоже
-            # уведёт адрес, но гасить содержимое строк нельзя — аргументы настоящего вызова живут
-            # именно там, и правило перестало бы видеть `exec("rm -rf " + x)`.
-            код, комментарии_разобраны = _blank_comments(text, path)
-            # ДВА ПРОЧТЕНИЯ: обратная кавычка как начало шаблонной строки и как обычный символ
-            # разметки. Различить их без разбора языка нельзя — см. `scan_exec_call.surface_lines`.
-            # «Разобрано» собирается из ВСЕХ мест, где мог быть сделан выбор: и из гашения
-            # комментариев, и из гашения строк. Одно место без этого признака сводит защиту на нет.
-            прочтения = tuple((скелет, ок and комментарии_разобраны)
-                              for скелет, ок in (_blank_strings(код),
-                                                 _blank_strings(код, шаблоны=False)))
-            были_вызовы, вызовы = _exec_surface_lines(код, прочтения)
+            были_вызовы, вызовы = _launch_findings(text, path, _blank_comments, _blank_strings)
             for lineno in вызовы:
                 res.append({"path": path, "id": "node_child_process_exec", "line": lineno})
             if были_вызовы:

@@ -8,6 +8,8 @@
 """
 from __future__ import annotations
 
+import re
+
 # Проза — не исполняемый код. `dangerouslySetInnerHTML`, упомянутый в CHANGELOG, ничего не
 # исполняет; флаг на нём — не осторожность, а шум.
 PROSE_SUFFIXES = (".md", ".rst", ".txt")
@@ -39,6 +41,12 @@ BLOCK_COMMENT_SUFFIXES = frozenset({
     ".c", ".cc", ".cpp", ".h", ".hpp", ".cs", ".kt", ".swift", ".scala", ".php",
     ".vue", ".svelte", ".css", ".scss", ".less",
 })
+
+
+# Интерпретатор `#!` — имя ПЕРВОГО слова (или слова после `env`), а не слово где угодно в строке:
+# `#!/bin/bash node-helper` — оболочка. Версия в имени допустима: `node20`.
+_JS_SHEBANG = re.compile(
+    r"#![ \t]*(?:\S*/)?(?:env[ \t]+(?:-\S+[ \t]+)*(?:\S*/)?)?(?:node|nodejs|deno|bun)[\d.]*(?=\s|$)")
 
 
 def _suffix_of(path: str) -> str:
@@ -116,7 +124,17 @@ def _погасить(out: list, начало: int, конец: int, береч�
             out[k] = " "
 
 
-def blank_comments(text: str, path: str) -> tuple:
+def _язык(text: str, path: str, неизвестный_как: str = None) -> tuple:
+    """-> (суффикс, по правилам которого читать файл; угадан ли он). `неизвестный_как` — суффикс
+    для файла с неизвестным (`Jenkinsfile`): язык выбран, значит угадан, если его не называет `#!`."""
+    suffix = _suffix_of(path)
+    if неизвестный_как and suffix not in LINE_COMMENT_BY_SUFFIX \
+            and suffix not in BLOCK_COMMENT_SUFFIXES:
+        return неизвестный_как, not _JS_SHEBANG.match(text)
+    return suffix, False
+
+
+def blank_comments(text: str, path: str, неизвестный_как: str = None) -> tuple:
     """-> (скелет, состоялся ли разбор). Содержимое комментариев -> пробелы; длина и переводы
     строк сохраняются.
 
@@ -124,9 +142,9 @@ def blank_comments(text: str, path: str) -> tuple:
     тоже принимается УГАДЫВАНИЕМ, и раньше оно не оставляло следа: в разметке `//` или `/*` из
     текста съедали строку или остаток файла вместе с настоящим вызовом, оба прочтения совпадали,
     и разбор считался состоявшимся. «Разобрано» должно значить «ни разу не угадывали» — во всех
-    местах, а не в одном.
+    местах, а не в одном. `неизвестный_как` — см. `_язык`.
     """
-    suffix = _suffix_of(path)
+    suffix, язык_угадан = _язык(text, path, неизвестный_как)
     line_markers = LINE_COMMENT_BY_SUFFIX.get(suffix)
     block = suffix in BLOCK_COMMENT_SUFFIXES
     # РЕГУЛЯРНЫХ ЛИТЕРАЛОВ НЕТ В ЯЗЫКАХ СТИЛЕЙ, и эвристика «косая после `%` открывает регулярку»
@@ -145,7 +163,7 @@ def blank_comments(text: str, path: str) -> tuple:
     out = list(text)
     i, n, quote = 0, len(text), None
     предыдущий = ""                           # последний значимый символ вне строк и комментариев
-    угадывали = False
+    угадывали = язык_угадан
     while i < n:
         ch = text[i]
         if quote:
@@ -172,9 +190,11 @@ def blank_comments(text: str, path: str) -> tuple:
         if block and text.startswith("/*", i):
             end = text.find("*/", i + 2)
             угадывали = угадывали or end == -1 or разметка
-            end = n if end == -1 else end + 2
-            _погасить(out, i, end)
-            i = end
+            if end == -1:           # незакрытый `/*` — не комментарий: `/[/*]/` в разметке (#1153)
+                i += 2
+                continue
+            _погасить(out, i, end + 2)
+            i = end + 2
             continue
         if text.startswith("//", i) and предыдущий == ":":
             предыдущий, i = "/", i + 2         # `://` — это адрес, а не начало комментария
@@ -259,7 +279,9 @@ def area_of(path: str) -> str:
     # нормализации `./` здесь нет: она была бы кодом, который ничего не решает и ничем не сторожится.
     if rel.startswith(VENDOR_PREFIX) or f"/{VENDOR_PREFIX}" in rel:
         return "vendor"
-    name = rel.rsplit("/", 1)[-1]
+    # Без регистра — только ИМЯ ФАЙЛА (#1153): `Payment.Test.ts`, `Payment.Spec.ts` — тесты (API
+    # описывают в КАТАЛОГЕ `spec/`). Каталоги — с регистром: `src/pages/Test/` — боевая страница.
+    name = rel.rsplit("/", 1)[-1].lower()
     if any(name.startswith(cfg) for cfg in _TOOL_CONFIGS):
         return "harness"
     if any(marker in name for marker in _TEST_MARKERS):
