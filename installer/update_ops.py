@@ -129,6 +129,33 @@ def cmd_diff():
     return 0
 
 
+def security_surface_section(root, changed, scan=None):
+    """Раздел тела PR обновления кита: что этот выпуск привозит по безопасности (#1157). -> str.
+
+    Сканер кита прогоняется по ИЗМЕНЁННЫМ файлам поставки против прежней версии (HEAD ветки
+    обновления — ещё старый кит). Поимённо — только ПРИЕХАВШЕЕ: ради него раздел и заведён, иначе
+    о новой поверхности дочка узнаёт прогоном после слияния. Пустой список печатается явным
+    «ничего», а сбой скана — «проверить не удалось»: незнание не выдаётся за «чисто».
+    `scan(root, changed)` — инъекция для тестов."""
+    head = "\nЧто этот выпуск привозит по безопасности (сканер кита по файлам .ai/managed/):\n"
+    try:
+        if scan is None:
+            if str(_ao().PKG) not in sys.path:     # сканер НОВОЙ версии — из пакета, а не из дочки
+                sys.path.insert(0, str(_ao().PKG))
+            from ai_ops_kit.security import security_scan
+            flags = security_scan.delivered_surface(root, changed, base="HEAD")
+        else:
+            flags = scan(root, changed)
+    except Exception as e:                             # noqa: BLE001 — отчёт о поверхности не
+        return head + f"  проверить НЕ УДАЛОСЬ ({type(e).__name__}) — это не «ничего».\n"  # роняет PR
+    new = [f for f in flags if f.get("arrived")]
+    lines = [f"  НОВОЕ {f['id']} — {f['path']}:{f['line']}" for f in new] or [
+        "  ничего: новых мест, которые сканер отмечает, выпуск не привозит."]
+    if len(flags) > len(new):
+        lines.append(f"  в изменённых файлах были и в прежней версии: {len(flags) - len(new)}")
+    return head + "\n".join(lines) + "\n"
+
+
 def _deferred_update(inst, target, force=False, refresh_ci=False):
     """F-022: применить обновление в ОТДЕЛЬНОЙ ветке, не трогая рабочее дерево владельца. -> rc.
 
@@ -209,7 +236,8 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
         msg = (f"chore(ai-ops): обновление кита {inst or '—'} -> {target}\n\n"
                f"Подготовлено `ai-ops update` при `parent.update_policy: pr`: применено в отдельной "
                f"ветке, рабочее дерево не тронуто (кроме .ai/runtime/last-update-report.json — "
-               f"отчёт об обновлении, в gitignore). Отчёт — .ai/runtime/last-update-report.json.\n")
+               f"отчёт об обновлении, в gitignore). Отчёт — .ai/runtime/last-update-report.json.\n"
+               + security_surface_section(wt, staged))
         c = subprocess.run(["git", "-C", str(wt),
                             "-c", "user.name=ai-ops-updater",
                             "-c", "user.email=ai-ops-updater@users.noreply.github.com",

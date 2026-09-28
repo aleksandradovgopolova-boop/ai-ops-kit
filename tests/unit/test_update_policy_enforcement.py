@@ -127,6 +127,20 @@ def test_policy_pr_prepares_a_branch_with_the_change(child):
 
 
 @pytest.mark.slow
+def test_prepared_branch_message_names_the_security_surface(child):
+    """#1157: тело PR обновления говорит, что выпуск привозит по безопасности — и пустое тоже.
+
+    Поставка в этой дочке уже совпадает с пакетом, новых адресов нет — и это сказано словом
+    «ничего», а не отсутствием раздела (молчание читалось бы как «не проверяли»)."""
+    _policy(child, "pr")
+    r = _run(child, "update")
+    assert r.returncode == 0, r.stdout[-500:]
+    body = _git(child, "log", "-1", "--format=%B", _branches(child)[0]).stdout
+    assert "Что этот выпуск привозит по безопасности" in body, body
+    assert "ничего:" in body, body
+
+
+@pytest.mark.slow
 def test_prepared_branch_does_not_carry_the_backup(child):
     """Дифф обязан быть ОТСМАТРИВАЕМЫМ: бэкап managed-слоя в PR не едет.
 

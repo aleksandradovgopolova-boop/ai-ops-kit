@@ -263,8 +263,21 @@ def test_real_command_execution_is_still_flagged_after_the_r40_fix():
 
 
 def test_the_forgiven_list_only_shrinks():
-    """Ратчет: новый прощённый файл — решение, а не побочный эффект отладки."""
-    assert len(ss.DETECTOR_OWN_MATERIAL) <= 4, sorted(ss.DETECTOR_OWN_MATERIAL)
+    """Ратчет: новый прощённый файл — решение, а не побочный эффект отладки.
+
+    Список сверяется ПОИМЁННО, а не числом: потолок `<= 4` оставлял свободное место, и занять его
+    можно было молча. Четвёртое место занято решением #1157 — `security/security-domains.yaml`:
+    это реестр правил детектора, а флаг стоял на ТЕКСТЕ условия блокировки
+    («innerHTML/dangerouslySetInnerHTML без санитизации»), не на вызове. Файл едет в дочку и был
+    одним из четырёх адресов раздела поставки на свежей установке. Свободных мест больше нет:
+    добавить — значит поменять этот список осознанно; убрать — можно и нужно, когда причина уйдёт.
+    """
+    assert set(ss.DETECTOR_OWN_MATERIAL) <= {
+        "ai_ops_kit/security/security_scan.py",
+        "tests/unit/test_security_scan.py",
+        "tests/unit/test_property_based.py",
+        "security/security-domains.yaml",          # #1157: реестр правил, флаг — текст условия
+    }, sorted(ss.DETECTOR_OWN_MATERIAL)
 
 
 def test_the_node_rules_added_no_noise_to_this_repository():
