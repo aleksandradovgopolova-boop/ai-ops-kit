@@ -322,15 +322,25 @@ def _intent_model(task, child_root, signals, a):
         from ai_ops_kit.planning import first_hour
         res = first_hour.run(child_root, apply=bool(getattr(a, "apply", False)),
                              budget_left=getattr(a, "budget", None), understanding=rep)
+        # Конец первого часа — не строка на экране, которая улетит вверх, а ФАЙЛ с результатом,
+        # который человек может открыть. Пишем только при apply (та же дисциплина, что у bootstrap:
+        # сухой прогон в чужой репозиторий ничего не пишет). None — стадия без результата (дерево
+        # не прочиталось): файла-обманки не создаём.
+        result_file = first_hour.write_result(child_root, res) \
+            if bool(getattr(a, "apply", False)) else None
         if js:
             out = dict(res)
             if answers_file:
                 out["answers_file"] = str(answers_file)
+            if result_file:
+                out["first_result_file"] = str(result_file)
             print(json.dumps(out, ensure_ascii=False, indent=2, default=str))
         else:
             from ai_ops_kit.ui import presenter
             aud = presenter.audience_from_config(child_root)
             print(presenter.render(presenter.from_first_hour(res), audience=aud))
+            if result_file:
+                print(f"\nПервый результат сохранён: {result_file}")
         return 0
     if js:
         out = dict(rep)

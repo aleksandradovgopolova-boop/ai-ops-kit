@@ -102,3 +102,59 @@ def test_narrative_ready_preview_offers_apply():
 def test_narrative_blocked_understanding_degraded():
     msg = PF.from_first_hour({"stage": FH.BLOCKED_UNDERSTANDING, "classification": "UNKNOWN"})
     assert msg["status"] == "degraded"
+
+
+# ── первый результат файлом (issue #1140: конец установки = результат, не «установлено») ──────────
+
+def test_render_result_blocked_returns_none():
+    # Дерево не прочиталось — результата НЕТ. Файла-обманки быть не должно: «установлено» за
+    # «сделано» не выдаём.
+    assert FH.render_result_markdown({"stage": FH.BLOCKED_UNDERSTANDING,
+                                      "classification": "UNKNOWN"}) is None
+
+
+def test_render_result_needs_answers_names_questions_without_yaml():
+    md = FH.render_result_markdown({
+        "stage": FH.NEEDS_ANSWERS, "classification": {"class": "EARLY_PRODUCT"},
+        "blocking_questions": [{"id": "goal", "ask": "какова цель продукта?"}], "conflicts": []})
+    assert md is not None
+    assert "Первый результат" in md
+    assert "goal" in md and "какова цель" in md
+    # Ответы даются командой, а не ручной правкой YAML — иначе приёмка направления не выполнена.
+    assert "--answer" in md and "--flow --apply" in md
+    assert "YAML" in md
+
+
+def test_render_result_ready_names_plan_and_first_work():
+    md = FH.render_result_markdown({
+        "stage": FH.READY, "classification": {"class": "EARLY_PRODUCT"},
+        "bootstrap_applied": True,
+        "bootstrap": {"work_items": 3, "written": [{"path": "planning/plan.yaml", "what": "план"}]},
+        "next": {"next_best": {"id": "w1", "title": "навести порядок в тестах",
+                               "why": ["самый дешёвый первый шаг"]}}})
+    assert md is not None
+    assert "навести порядок в тестах" in md
+    assert "Работ в плане: 3" in md
+    assert "planning/plan.yaml" in md
+    assert "самый дешёвый первый шаг" in md
+    assert "ai-ops next" in md
+
+
+def test_write_result_writes_generated_file_and_returns_rel(tmp_path):
+    rel = FH.write_result(tmp_path, {
+        "stage": FH.READY, "classification": {"class": "EARLY_PRODUCT"},
+        "bootstrap_applied": True, "bootstrap": {"work_items": 1, "written": []},
+        "next": {"next_best": {"id": "w1", "title": "работа"}}})
+    assert rel == FH.RESULT_REL
+    written = (tmp_path / FH.RESULT_REL)
+    assert written.is_file()
+    body = written.read_text(encoding="utf-8")
+    assert body.endswith("\n")
+    assert "работа" in body
+
+
+def test_write_result_skips_when_no_result(tmp_path):
+    # blocked_understanding — файла быть не должно (fail-closed: нет результата — нет обещания).
+    rel = FH.write_result(tmp_path, {"stage": FH.BLOCKED_UNDERSTANDING, "classification": "UNKNOWN"})
+    assert rel is None
+    assert not (tmp_path / FH.RESULT_REL).exists()
