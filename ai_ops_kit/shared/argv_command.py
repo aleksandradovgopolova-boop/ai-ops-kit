@@ -28,6 +28,7 @@ import errno
 import os
 import re
 import subprocess
+from collections.abc import Mapping, Sequence
 
 # Символы, которые оболочка ВЫЧИСЛЯЕТ, когда они стоят вне кавычек. `~` и `#` особые только в
 # начале слова — внутри (`a#b`, `x~y`) это обычные буквы, и так же их читает оболочка.
@@ -58,7 +59,8 @@ class NeedsShell(ValueError):
 
 def _double_quoted(s: str, i: int) -> tuple[str, int]:
     """Содержимое двойных кавычек, начиная с `s[i] == '"'` -> (значение, индекс за кавычкой)."""
-    buf, j, n = [], i + 1, len(s)
+    buf: list[str] = []
+    j, n = i + 1, len(s)
     while True:
         if j >= n:
             raise NeedsShell('незакрытая кавычка "')
@@ -141,7 +143,7 @@ def _value_has_tilde_expansion(raw_value: str) -> bool:
     return False
 
 
-def split(command) -> tuple[list[str], dict[str, str]]:
+def split(command: str | Sequence[object]) -> tuple[list[str], dict[str, str]]:
     """Команда -> (argv, env из ведущих присваиваний). Список принимается как уже разобранный.
 
     Поднимает `NeedsShell`, если без оболочки команду исполнить так же нельзя."""
@@ -167,7 +169,9 @@ def split(command) -> tuple[list[str], dict[str, str]]:
     return argv, env
 
 
-def run(argv, *, cwd=None, env=None, timeout=None, text=True) -> subprocess.CompletedProcess:
+def run(argv: Sequence[str], *, cwd: str | os.PathLike[str] | None = None,
+        env: Mapping[str, str] | None = None, timeout: float | None = None,
+        text: bool = True) -> subprocess.CompletedProcess:
     """Запуск списком, без оболочки. Нет бинаря -> код 127, не исполняем (в т.ч. файл без `#!`) -> 126.
 
     `subprocess.TimeoutExpired` пробрасывается: у каждого вызывающего своя реакция на таймаут."""
