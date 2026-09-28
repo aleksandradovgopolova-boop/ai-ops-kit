@@ -604,6 +604,67 @@ def build_graph(child_root: str | os.PathLike) -> dict:
             "nodes": list(b.nodes.values()), "edges": b.edges}
 
 
+def feature_life_source(graph: dict, feature: str, child_root: str | os.PathLike) -> dict:
+    """Поля жизни фичи из СВЯЗАННЫХ первоисточников — для десяти вопросов (`answer_ten_questions`).
+
+    Часть ответов на десять вопросов живёт не в графе, а в первоисточнике (аудитория — в паспорте
+    функции; гипотеза / выбранный вариант решения / выводы / следующий шаг — в `product-learning/
+    FL-*.yaml`). Граф их намеренно НЕ несёт (ревью просило «не расти вширь»), но СВЯЗЬ доказывает
+    именно он: узел функции указывает на свой blueprint, а ребро `insight -feeds-> feature` — на урок
+    и его файл (`ref`). Здесь по этим ССЫЛКАМ ГРАФА читаются конкретные значения — это по-прежнему
+    ответ «из связанных улик», а не генерация. Обход графа (`knowledge_graph_query`) остаётся без
+    диска: диск — только у этого фасада. Нет узла/файла/поля -> ключа в результате нет (вопрос честно
+    останется пробелом).
+
+    -> `{audience, hypothesis, solution_rationale, solution_chosen, learnings, follow_up}` (только
+    найденные ключи).
+    """
+    root = Path(child_root)
+    graph_dir = root / "knowledge"
+    nodes = {n.get("id"): n for n in (graph.get("nodes") or [])
+             if isinstance(n, dict) and n.get("id")}
+    fid = _slug(feature)
+    out: dict = {}
+    fnode = nodes.get(fid)
+    if not isinstance(fnode, dict):
+        return out
+
+    def _read(ref: str) -> dict:
+        if not _text(ref):
+            return {}
+        data = _load_yaml((graph_dir / ref).resolve())
+        return data if isinstance(data, dict) else {}
+
+    # Аудитория — из связанного паспорта функции.
+    bp_feat = (_read(_text(fnode.get("blueprint"))).get("feature") or {})
+    if isinstance(bp_feat, dict) and _text(bp_feat.get("audience")):
+        out["audience"] = _text(bp_feat["audience"])
+
+    # Гипотеза / решение / выводы / следующий шаг — из связанного урока (первое ребро feeds).
+    fl_ref = None
+    for e in graph.get("edges") or []:
+        if isinstance(e, dict) and e.get("type") == "feeds" and _slug(e.get("to")) == fid:
+            fl_ref = _text((nodes.get(_slug(e.get("from"))) or {}).get("ref"))
+            if fl_ref:
+                break
+    fl = _read(fl_ref)
+    if _text(fl.get("hypothesis")):
+        out["hypothesis"] = _text(fl["hypothesis"])
+    learnings = [_text(x) for x in (fl.get("learnings") or []) if _text(x)]
+    if learnings:
+        out["learnings"] = learnings
+    follow_up = [_text(x) for x in (fl.get("follow_up") or []) if _text(x)]
+    if follow_up:
+        out["follow_up"] = follow_up
+    chosen = next((o for o in (fl.get("solution_options") or [])
+                   if isinstance(o, dict) and o.get("chosen")), None)
+    if chosen and _text(chosen.get("reason")):
+        out["solution_rationale"] = _text(chosen["reason"])
+        if _text(chosen.get("option")):
+            out["solution_chosen"] = _text(chosen["option"])
+    return out
+
+
 # ── Вопросы к собранному графу — в сателлите `knowledge_graph_query` ─────────────────────────────
 # Реэкспорт намеренный: зовущий код (CLI, презентер, scorecard) знает один вход `knowledge_graph`,
 # и разрез файла по размеру не должен становиться переездом публичной поверхности.
@@ -614,6 +675,7 @@ from ai_ops_kit.intelligence.knowledge_graph_query import (  # noqa: E402,F401
     _path_down,
     _reachable_goals,
     _verdict,
+    answer_ten_questions,
     gaps,
     trace,
 )

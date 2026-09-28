@@ -205,6 +205,50 @@ def from_graph_gaps(result: dict) -> dict:
         technical=result)
 
 
+def from_graph_questions(result: dict) -> dict:
+    """`feature_life_history.answer_ten_questions()` -> UserMessage. Десять вопросов жизни фичи.
+
+    Каждый вопрос — с ответом из связанной улики ИЛИ честным «неизвестно: <чего не хватает>». Итог —
+    сколько из десяти отвечено; полная история (10/10) читается как один связный ответ «почему мы
+    вообще сделали эту функцию и что с ней стало».
+    """
+    feature = result.get("feature")
+    if result.get("verdict") == "unknown":
+        return message(
+            status="blocked",
+            summary=f"Функции «{feature}» в графе нет — историю её жизни строить не из чего.",
+            why_it_matters="Отвечаю только из объявленного в плане, обучении и паспортах; выдумывать "
+                           "историю не буду.",
+            next_steps=["проверь id функции", "или собери граф: ./ai-ops graph build"])
+    qs = result.get("questions") or []
+    answered = result.get("answered_count") or 0
+    total = result.get("total") or len(qs)
+    lines = []
+    for q in qs:
+        if q.get("answered"):
+            lines.append(f"✓ {q['question']} {q['answer']}")
+        else:
+            lines.append(f"✗ {q['question']} неизвестно: {q.get('unknown_reason')}")
+    complete = result.get("complete")
+    if complete:
+        summary = (f"На все десять вопросов жизни функции «{feature}» есть ответ из связанной "
+                   f"истории — почему возникла, для кого, какая гипотеза, что построили, что "
+                   f"доказано и что дальше.")
+    else:
+        summary = (f"Из десяти вопросов жизни функции «{feature}» из связанной истории отвечено "
+                   f"{answered} — остальные честно «неизвестно» с указанием, какого звена не хватает.")
+    return message(
+        status="ok" if complete else "degraded",
+        headline=None if complete else "История фичи собрана не целиком",
+        summary=summary,
+        why_it_matters="Раньше «зачем мы вообще сделали эту функцию и что с ней стало» собиралось "
+                       "вручную из плана, решений, обучения, паспорта и истории работ; теперь это "
+                       "один связный ответ, и у каждого пункта видно, чем он подтверждён.",
+        next_steps=lines,
+        technical={"answered": answered, "total": total, "complete": complete,
+                   "questions": qs, "verdict": result.get("verdict")})
+
+
 def from_kit_feedback_status(rep: dict) -> dict:
     """Судьба наблюдений этой дочки -> UserMessage. Ответ обязан быть виден, иначе канал умрёт."""
     total = rep.get("total") or 0
