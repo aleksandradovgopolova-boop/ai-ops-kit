@@ -1064,7 +1064,12 @@ work:
       а не генерацией
     type: product
     goal: product-memory-org-intelligence
-    status: todo
+    status: waiting_on_owner
+    waiting_on: >-
+      МЕХАНИЗМ ДОСТАВЛЕН 2026-09-28 (PR #1174): кит отвечает на десять вопросов жизни фичи из связанной
+      истории, с уликой или честным «неизвестно». Осталась зачётная планка — доказать это на ОДНОЙ
+      РЕАЛЬНОЙ фиче ии-среды (Proektnyy-ofis/ii-sreda): фикстура за поле не выдаётся. Полевой прогон
+      берёт владелец; условия и критерий — в qualification/TEN-QUESTIONS-MECHANISM-2026-09-28.md.
     owner_role: product
     value: high
     source: "roadmap-direction"
@@ -1127,25 +1132,9 @@ work:
 
   # ══ Направление first-hour-for-a-stranger — взято 2026-09-23 (ревью: acquisition + installation) ══
 
-  - id: install-leads-to-first-result
-    title: >-
-      Установка ведёт к ПЕРВОМУ РЕЗУЛЬТАТУ, а не к состоянию «кит установлен»: путь до пяти минут
-    type: product
-    goal: first-hour-for-a-stranger
-    status: todo
-    owner_role: product
-    value: high
-    source: "roadmap-direction"
-    write_scope:
-    - installer/
-    - ai_ops_kit/
-    - README.md
-    rationale: >-
-      README честно говорит: полностью автоматической установки нет, «установку в ноль касаний кит не
-      заявляет» (сведено работой #1028). Это правда, но правда о состоянии кита, а не о человеке:
-      обещание «говоришь что нужно — кит делает» начинается не с первой фичи, а с того, что кит появился
-      в проекте. Цель работы — чтобы конец установки был не строкой «установлено», а первым полезным
-      результатом, за который человек может взяться.
+  # install-leads-to-first-result ДОСТАВЛЕНА 2026-09-28 (PR #1172) и живёт в history/plan-history.yaml:
+  # конец установки — первый результат (файл .ai/generated/first-result.md), а не строка «установлено».
+  # Планка «человек со стороны за пять минут» — отдельная работа measure-first-hour-with-a-stranger ниже.
 
   - id: measure-first-hour-with-a-stranger
     title: >-
@@ -1173,24 +1162,11 @@ work:
 
   # ══ Направление prove-the-loop-not-add-capabilities — взято 2026-09-23 (мандат ревью) ════════════
 
-  - id: child-value-share-in-product-scorecard
-    title: >-
-      В карте продукта видно, какая доля работ кита имеет доказательство улучшения хотя бы одной дочки
-    type: product
-    goal: prove-the-loop-not-add-capabilities
-    status: todo
-    owner_role: product
-    value: high
-    source: "roadmap-direction"
-    write_scope:
-    - ai_ops_kit/
-    - tests/
-    rationale: >-
-      Риск, названный ревью: кит измеряет себя, анализирует себя, ревьюит себя, строит граф себя — и
-      начинает быть продуктом для развития самого себя. Проверяемое противоядие — стрелка «работа кита →
-      исход дочки», видимая числом. СТРОКОЙ В КАРТЕ, не гейтом: блокирующая проверка была бы ростом вширь,
-      то есть ровно тем, что ревью запрещает двумя разделами выше (ревью само себе тут противоречит).
-      Честный ноль и честное «не измерено» обязательны — как в метриках 4/5 сегодня.
+  # child-value-share-in-product-scorecard ДОСТАВЛЕНА 2026-09-28 (PR #1171) и живёт в
+  # history/plan-history.yaml: в карте продукта видна доля работ кита с доказательством улучшения дочки
+  # (сегодня честно 0/267 — «нет доказательства → доля честно низкая», ровно как просил мандат).
+  # Исход направления `kit_work_is_measured_by_child_value` — мера теперь ЕСТЬ и видна; объявлять сам
+  # исход достигнутым оставлено владельцу (мера читает 0%, и «направление достигнуто» — его слово).
 
   - id: north-star-becomes-evidence-backed-outcome
     title: >-
