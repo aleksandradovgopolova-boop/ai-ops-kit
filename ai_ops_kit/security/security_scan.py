@@ -268,6 +268,12 @@ DETECTOR_OWN_MATERIAL = {
     "ai_ops_kit/security/security_scan.py": "объявляет сами образцы injection и секретов",
     "tests/unit/test_security_scan.py": "подсовывает детектору образцы, чтобы проверить детекцию",
     "tests/unit/test_property_based.py": "property-based фикстуры того же детектора",
+    # #1157: реестр доменов безопасности НАЗЫВАЕТ опасные конструкции как условия блокировки
+    # («innerHTML/dangerouslySetInnerHTML без санитизации») — имя правила стоит там значением, а не
+    # вызовом. Файл едет в дочку, и на свежей установке это был один из четырёх адресов раздела
+    # поставки: сканер читал собственный реестр правил как код.
+    "security/security-domains.yaml": "реестр правил детектора: имена опасных конструкций — "
+                                      "значения условий блокировки, а не исполняемый код",
 }
 
 
@@ -478,6 +484,18 @@ def _vendor_arrivals(root, base, vendor, files):
         out += _mark_arrivals([f for f in vendor if f["path"] == path],
                               files.get(path, ""), было, прежний)
     return out
+
+
+def delivered_surface(root, rels, base=None):
+    """Флаги сканера по файлам поставленной копии кита (`.ai/managed/`) из `rels` -> [флаг].
+
+    Для тела PR обновления кита (#1157): дочка узнаёт, какую поверхность привозит выпуск, ДО
+    слияния, а не прогоном после. С `base` каждый флаг помечен `arrived` — приехал ли он с этим
+    обновлением (сравнение то же, что в разделе поставки `scan_repo`)."""
+    files = _read_files(root, [r for r in rels
+                               if r.replace("\\", "/").startswith(_MANAGED_INSTALL_PREFIX)])
+    vendor = _vendor_split(scan_injection(files))[1]
+    return _vendor_arrivals(root, base, vendor, files) if (base and vendor) else vendor
 
 
 def _vendor_version(root, base, files):
