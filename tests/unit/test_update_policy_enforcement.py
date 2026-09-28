@@ -176,6 +176,7 @@ def test_report_survives_and_names_the_deferral(child):
     assert rep["pull_request"], "поле pull_request снова пустое — это и была улика F-022"
     assert rep["pull_request"] == rep["deferred_to_branch"] == _branches(child)[0]
     assert rep["update_policy"] == "pr"
+    assert "Что этот выпуск привозит по безопасности" in rep["security_surface"]["text"]
 
 
 @pytest.mark.slow
@@ -217,6 +218,9 @@ def test_in_place_flag_applies_in_place(child):
     assert "installed_version: 3.0.0" not in (child / ".ai-ops.yaml").read_text(encoding="utf-8"), (
         "с --in-place обновление не применилось — CI-путь сломан")
     assert not _branches(child), "с --in-place кит всё равно создал ветку"
+    # #1157: CI-шаблон собирает тело PR из отчёта — раздел безопасности обязан лежать в нём.
+    sec = _report(child)["security_surface"]
+    assert sec["status"] == "nothing" and "ничего:" in sec["text"], sec
 
 
 @pytest.mark.slow
