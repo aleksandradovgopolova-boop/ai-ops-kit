@@ -114,15 +114,70 @@ def _backup_skill(child_root: Path, sid: str, dst_dir: Path) -> Path:
     return backup.relative_to(child_root)
 
 
-def _guard_skill_copy(child_root: Path, sid: str, dst_dir: Path, src_sig: dict, delivered):
+# У СТАРЫХ УСТАНОВОК ЗАПИСИ НЕТ, а прежний текст навыка — есть: это выпуск кита, который стоит в
+# дочке (`installed_version`), и в клоне кита он лежит под тегом `v<версия>`. Сверка идёт по
+# идентификаторам объектов git (`ls-tree`), поэтому годится и частичный клон `--filter=blob:none`
+# из ai-ops-update.yml. В `.ai/managed/` навыков нет (их нет в `update_policy.managed_set`), так что
+# другого источника прежнего текста в дочке не существует. Совпадение с выпуском — доказательство
+# «не трогали»; НЕсовпадение правкой НЕ называется: переводы строк при checkout, другой формат
+# объектов git — и честная формулировка «не могу отличить» надёжнее ложного «вы правили».
+def _release_ref(version):
+    """Тег прежнего выпуска в клоне кита (`PKG`) или None, если сверить не с чем."""
+    if not version:
+        return None
+    pkg = Path(_ao().PKG).resolve()
+    try:
+        top = subprocess.run(["git", "-C", str(pkg), "rev-parse", "--show-toplevel"],
+                             capture_output=True, text=True, timeout=30)
+        if top.returncode != 0 or Path(top.stdout.strip()).resolve() != pkg:
+            return None                             # PKG — не корень клона кита (напр. чужой репозиторий)
+        tag = f"v{version}"
+        ok = subprocess.run(["git", "-C", str(pkg), "rev-parse", "--verify", "-q", f"{tag}^{{tree}}"],
+                            capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return tag if ok.returncode == 0 else None
+
+
+def _git_blob_id(p: Path) -> str:
+    data = p.read_bytes()
+    return hashlib.sha1(b"blob %d\0" % len(data) + data, usedforsecurity=False).hexdigest()
+
+
+def _matches_release(dst_dir: Path, rel_dir: str, ref) -> bool:
+    """Копия в дочке побайтно совпадает с каталогом навыка в выпуске `ref`."""
+    if not ref:
+        return False
+    try:
+        r = subprocess.run(["git", "-C", str(_ao().PKG), "ls-tree", "-r", "-z", ref, "--", rel_dir + "/"],
+                           capture_output=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return False
+    released = {}
+    for rec in r.stdout.decode("utf-8", "replace").split("\0") if r.returncode == 0 else []:
+        meta, _, path = rec.partition("\t")
+        parts = meta.split()
+        if len(parts) == 3 and parts[1] == "blob" and len(parts[2]) == 40:
+            released[path[len(rel_dir) + 1:]] = parts[2]
+    if not released:
+        return False
+    here = {k: _git_blob_id(dst_dir / k) for k in _dir_signature(dst_dir)}
+    return here == released
+
+
+def _guard_skill_copy(child_root: Path, sid: str, dst_dir: Path, src_sig: dict, delivered,
+                      rel_dir: str = "", release_ref=None):
     """Перед перезаписью: сохранить копию в дочке, если её нельзя считать своей нетронутой.
 
     Совпадает с новой версией или с тем, что кит поставил в прошлый раз, — перезаписываем молча:
     терять нечего. Разошлась с поставленным — это правка в репозитории: копия + предупреждение.
-    Записи о поставке нет (установка старше неё) — отличить правку от прежнего текста кита нельзя:
-    копию сохраняем, но правкой это не называем."""
+    Записи о поставке нет (установка старше неё) — сверяем с прежним выпуском кита; совпала —
+    молча, иначе отличить правку от прежнего текста кита нельзя: копию сохраняем, но правкой это
+    не называем."""
     cur = _dir_signature(dst_dir)
     if cur == src_sig or (delivered is not None and _signature_print(cur) == delivered):
+        return
+    if delivered is None and _matches_release(dst_dir, rel_dir, release_ref):
         return
     backup = _backup_skill(child_root, sid, dst_dir)
     if delivered is None:
@@ -135,17 +190,19 @@ def _guard_skill_copy(child_root: Path, sid: str, dst_dir: Path, src_sig: dict, 
               f"— туда кит не пишет.")
 
 
-def sync_skills(child_root: Path):
+def sync_skills(child_root: Path, previous_version=None):
     """Скопировать поставляемые китом скиллы в <child>/.claude/skills/<id>/.
     Скиллы грузятся раннером из .claude/skills/ (registry/runtimes.yaml).
     shipped-скиллы — managed assets: перезаписываются из пакета. Локальную правку НЕ теряем
     молча: копию, разошедшуюся с тем, что кит ПОСТАВИЛ в прошлый раз (`SKILL_PRINTS_REL`),
     сохраняем в .ai/runtime/backups/skills/<id>/ и предупреждаем (кастомные скиллы — в .ai/custom/).
-    Возвращает список синхронизированных id."""
+    `previous_version` — выпуск кита, стоявший ДО этого обновления: по нему сверяются навыки старых
+    установок, у которых записи ещё нет. Возвращает список синхронизированных id."""
     child_root = Path(child_root)
     synced = []
     prints = _skill_prints(child_root)
     new_prints = dict(prints)
+    release_ref = None                              # тег ищем лениво — только если он понадобится
     skills_filter = _core()._surface_filter("skills")   # v3.14.0: репозиторий выбирает, что экспортировать
     for sk in (_core().manifest().get("skills", {}) or {}).get("shipped", []) or []:
         sid = sk.get("id")
@@ -158,7 +215,11 @@ def sync_skills(child_root: Path):
         dst_dir = child_root / ".claude" / "skills" / sid
         src_sig = _dir_signature(src_dir)
         if dst_dir.exists():
-            _guard_skill_copy(child_root, sid, dst_dir, src_sig, prints.get(sid))
+            if sid not in prints and release_ref is None and previous_version:
+                release_ref = _release_ref(previous_version) or ""
+            _guard_skill_copy(child_root, sid, dst_dir, src_sig, prints.get(sid),
+                              rel_dir=src_dir.relative_to(_ao().PKG).as_posix(),
+                              release_ref=release_ref or None)
             shutil.rmtree(dst_dir)
         shutil.copytree(src_dir, dst_dir)
         new_prints[sid] = _signature_print(src_sig)

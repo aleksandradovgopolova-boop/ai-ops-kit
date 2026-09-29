@@ -180,3 +180,64 @@ def test_print_record_is_rolled_back_with_skills(env):
     child, _pkg, inst = env
     paths = [p.relative_to(child).as_posix() for p in inst._core()._footprint_paths()]
     assert PRINTS in paths
+
+
+# ── старые установки: записи нет, но прежний выпуск кита есть в его клоне под тегом ──────────────
+
+def _tag_release(pkg: Path, version: str) -> None:
+    """Сделать из подменённого пакета клон кита с тегом выпуска `v<version>`."""
+    import subprocess
+    for args in (["init", "-q"], ["config", "user.email", "t@t"], ["config", "user.name", "t"],
+                 ["config", "core.autocrlf", "false"], ["add", "-A"], ["commit", "-qm", version],
+                 ["tag", f"v{version}"]):
+        subprocess.run(["git", "-C", str(pkg), *args], check=True, capture_output=True)
+
+
+def test_without_print_copy_equal_to_previous_release_is_silent(env, capsys):
+    """Главный случай для УЖЕ подключённых дочек: записи нет, копия = прежний выпуск -> молча."""
+    child, pkg, inst = env
+    _tag_release(pkg, "1.0.0")
+    _sync(inst, child)
+    (child / PRINTS).unlink()                 # установка старше записи
+    capsys.readouterr()
+    _release(pkg, "версия 2 от кита\n")
+
+    inst._core().sync_skills(child, previous_version="1.0.0")
+
+    out = capsys.readouterr().out
+    assert _skill(child).read_text(encoding="utf-8") == "версия 2 от кита\n"
+    assert SID not in out, f"ложное сообщение: {out!r}"
+    assert not _backup(child).exists()
+    assert SID in json.loads((child / PRINTS).read_text(encoding="utf-8")), "запись не появилась"
+
+
+def test_without_print_edit_against_previous_release_is_saved_honestly(env, capsys):
+    """Копия разошлась с прежним выпуском, записи нет: копия сохраняется, правкой не называется."""
+    child, pkg, inst = env
+    _tag_release(pkg, "1.0.0")
+    _sync(inst, child)
+    (child / PRINTS).unlink()
+    _skill(child).write_text("моя правка\n", encoding="utf-8")
+    capsys.readouterr()
+    _release(pkg, "версия 2 от кита\n")
+
+    inst._core().sync_skills(child, previous_version="1.0.0")
+
+    out = capsys.readouterr().out
+    assert (_backup(child) / "SKILL.md").read_text(encoding="utf-8") == "моя правка\n"
+    assert "не могу отличить вашу правку" in out
+
+
+def test_without_print_unknown_previous_release_falls_back_to_honest_message(env, capsys):
+    """Тега прежнего выпуска в клоне нет — сверять не с чем: копия и честная формулировка."""
+    child, pkg, inst = env
+    _tag_release(pkg, "1.0.0")
+    _sync(inst, child)
+    (child / PRINTS).unlink()
+    capsys.readouterr()
+    _release(pkg, "версия 2 от кита\n")
+
+    inst._core().sync_skills(child, previous_version="0.9.0")
+
+    assert _backup(child).exists()
+    assert "не могу отличить вашу правку" in capsys.readouterr().out
