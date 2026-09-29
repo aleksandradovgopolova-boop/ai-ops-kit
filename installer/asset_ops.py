@@ -185,6 +185,9 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         "plan_merge_driver": _ao()._plan_merge_setup().ensure_plan_merge_driver(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
+        # #1183: линт дочки в момент правки агента — своя запись в `.claude/settings.json`
+        # (чужие ключи не трогаются; опт-аут `standard.lint_hook: off`).
+        "lint_hook": _ao()._lint_hook_setup().ensure_lint_hook(root),
         # ДО посева планирования (SR-2): перенести заполненный уходящий `.ai-ops/ROADMAP.md` в
         # канонический корень, иначе посев дал бы пустой корневой поверх заполненного уходящего.
         "roadmap_migrated": _ao()._child_scaffolding()._migrate_legacy_roadmap(root),
@@ -228,6 +231,7 @@ def _assets_report_line(assets: dict) -> str:
     if (assets.get("communication_adapter") or {}).get("action") in ("created", "updated"):
         out += ("\nПолитика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
+    out += _ao()._lint_hook_setup().lint_hook_report_line(assets.get("lint_hook"))
     migrated = [x["artifact"] for x in (assets.get("roadmap_migrated") or [])
                 if x.get("action") == "migrated-from-legacy"]
     if migrated:
@@ -295,6 +299,10 @@ CI_TEMPLATES = ("ai-ops-update.yml", "ai-ops-record.yml", "ai-ops-validate.yml",
                 # без реестра workflow честно скипает (не падает). Новых доставляемых Python-файлов
                 # не добавляет — генерация зовётся из клона, как child-валидаторы в ai-ops-validate.yml.
                 "ai-ops-feature-catalog.yml",
+                # Линт ДОЧКИ её же командами (#1183): прежде child-CI гонял только валидаторы кита, и
+                # написанное мимо `ai-ops run` не линтовалось нигде. Безусловный: линтера нет — шаг
+                # говорит об этом предупреждением, а не молчаливым зелёным.
+                "ai-ops-lint.yml",
                 # УСЛОВНЫЙ (см. CONDITIONAL_CI_TEMPLATES): едет ТОЛЬКО UI-продукту. Превью Storybook в
                 # PR как CI-артефакт статической сборки — без внешних сервисов/секретов. Бэкенд-репо
                 # его не получает (нечего собирать), поэтому доставка гейтится по корню дочки.

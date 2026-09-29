@@ -429,6 +429,11 @@ def is_runtime_asset(rel):
     """Едет ли файл managed_set в child-репозиторий? False — ассет разработки кита."""
     if rel.startswith(DEV_ONLY_PREFIXES) or rel in DEV_ONLY_FILES:
         return False
+    # Байткод — след локального запуска, а не поставка. `templates/**/*` берёт ВСЁ подряд, и с
+    # появлением исполняемого `templates/runtime/lint_hook.py` (#1183) импорт его в тестах клал
+    # `__pycache__/*.pyc` в поставку: чужой файл в дочке и дрейф контрольных сумм managed-слоя.
+    if "/__pycache__/" in f"/{rel}" or rel.endswith((".pyc", ".pyo")):
+        return False
     if rel in UNWIRED_MODULES:          # построено, но в дочке недостижимо — см. UNWIRED_MODULES
         return False
     stem = rel.rsplit("/", 1)[-1][:-3] if rel.endswith(".py") else None

@@ -88,6 +88,14 @@ def _plan_merge_setup():
     return plan_merge_setup
 
 
+def _lint_hook_setup():
+    """Сателлит регистрации хука линта в .claude/settings.json (installer/lint_hook_setup.py)."""
+    if str(HERE.parent) not in sys.path:
+        sys.path.insert(0, str(HERE.parent))
+    import lint_hook_setup
+    return lint_hook_setup
+
+
 # Сателлиты `ci_setup`/`child_scaffolding` читают глобалы установщика (PKG, AI_DIR, manifest,
 # _delivery_source, CI_TEMPLATES, …). При загрузке из копии дочки/тестом установщик живёт под своим
 # именем, а не `ai_ops`, поэтому свежий `import ai_ops` в сателлите дал бы ДРУГОЙ экземпляр —

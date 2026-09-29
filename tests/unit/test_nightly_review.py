@@ -128,7 +128,7 @@ def test_a_real_discrepancy_is_reported_as_one(tmp_path):
 @pytest.mark.unit
 def test_the_brief_answers_the_five_questions(repo):
     brief = nr.format_brief(nr.collect_delta(repo), repo)
-    for head in ("Что изменилось", "Что я проверила", "Чего я не стала делать и почему",
+    for head in ("Что изменилось", "Что я проверил", "Чего я не стал делать и почему",
                  "Где нужно твоё решение", "Что важнее всего сегодня"):
         assert head in brief, f"в брифе нет раздела «{head}»:\n{brief[:500]}"
 

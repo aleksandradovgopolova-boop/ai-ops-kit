@@ -321,6 +321,10 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
             continue
         g = gates.get(gid) or {}
         req = g.get("required_evidence", []) or []
+        # Критерии ревьюера (#1183): для code_review — статьи конституции + находки конформанса по
+        # ДОСТАВЛЕННЫМ файлам проверяемого дерева. Один текст на живой промпт и на handoff-запрос.
+        # Состав правки неизвестен (нет ревизии) -> находок не просим: «нет находок» было бы ложью.
+        checklist = _gate_checklist(g, root=work_root, changed_files=delivered or None)
         # ARTIFACT-FIRST (#160 handoff): валидный вердикт оркестратора на ТЕКУЩЕМ SHA -> берём его БЕЗ
         # вызова провайдера. Валидность (форма + gate + reviewed_revision==revision + writer≠judge)
         # проверяет load_verdict; ЗАЗЕМЛЕНИЕ pass идёт в _gate_ev_from_verdict тем же путём, что
@@ -331,7 +335,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
                   "source": "handoff-artifact"}
         else:
             reviewer = tool_loop.make_reviewer_proposer(
-                reviewer_proposer, gid, checklist=_gate_checklist(g),
+                reviewer_proposer, gid, checklist=checklist,
                 required_evidence=req, reviewed_revision=revision)
             rv = tool_loop.run_review(reviewer, work_root, ro_policy, gid, budget=budget,
                                       max_reads=max_reads, base_context=change_ctx,
@@ -351,7 +355,7 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
                          else (rv.get("refusal") or {}).get("reason_text")
                          or "провайдер ревьюера вернул пустой ответ (вердикта нет)")
                 aw = reviewer_handoff.open_request(
-                    handoff_root, gid, checklist=_gate_checklist(g), reviewed_revision=revision,
+                    handoff_root, gid, checklist=checklist, reviewed_revision=revision,
                     changed_files=delivered, blocking=True, required_evidence=req, cause=cause)
                 gate_ev[gid] = aw
                 # entry.status="awaiting_reviewer" (НЕ "fail"): гейт-evidence блокирует (fail), но

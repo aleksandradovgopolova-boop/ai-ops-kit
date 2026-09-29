@@ -104,6 +104,8 @@ EXPECTED_INTENTS = {
     "candidates",
     # portfolio-intelligence (T5): обезличенный портфельный вид повторяющихся отказов дочек.
     "portfolio",
+    # #1183: `lint-profile` — профиль линтеров поверх конфигов дочки + заморозка существующего.
+    "lint-profile",
 }
 
 

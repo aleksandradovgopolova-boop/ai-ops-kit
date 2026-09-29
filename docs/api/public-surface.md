@@ -207,6 +207,12 @@ experimental:
     # отказов дочек (только паттерны + числа + ключ `proj-…`). Форма среза ещё устаканивается — потому
     # experimental, а не stable.
     - portfolio
+    # #1183 (стиль кода держит машина): `lint-profile` — профиль линтеров ПОВЕРХ конфигов дочки
+    # (ESLint/Ruff+import-linter/golangci-lint/ast-grep): имена латиницей по умолчанию и границы слоёв
+    # из объявленной архитектуры. Без флага — сухой прогон; `--apply` пишет профиль и замораживает
+    # существующие расхождения; `check` — рост краснеет (1), проверить нечем — 2. Форма профиля и
+    # набор правил ещё уточняются — потому experimental.
+    - lint-profile
   # Advisory-гейты: не блокируют, форма улик и applicability ещё уточняются.
   # Проверяется числом и списком — quality/gates.yaml -> blocking: false.
   advisory_gates:
@@ -226,6 +232,17 @@ experimental:
   # Ключи `.ai-ops.yaml`, объявленные, но ещё не устоявшиеся.
   config_keys:
     - product_operating_model
+    # #1183: `standard.identifiers: latin | any` — имена в коде латиницей (умолчание, ключа нет) или
+    # явный отказ. Незнакомое значение не выключает правило, а остаётся latin с пометкой.
+    - standard.identifiers
+    # #1183 (PR #1196): `standard.lint_hook: on | off` — хук линта в `.claude/settings.json` дочки
+    # (агент получает замечания линтера сразу после записи файла). Ключа нет -> включён; `off`
+    # (и YAML-ложь) снимает запись кита при следующем update, чужие ключи файла не трогаются.
+    - standard.lint_hook
+    # #1183 (PR #1197): `standard.lint: advisory | required` — что значит «в дочке нет линтера».
+    # Ключа нет -> advisory (находка владельцу, гейт не блокирует); `required` — отсутствие линтера
+    # блокирует. Незнакомое значение читается строже (как required), а не мягче.
+    - standard.lint
   contracts:
     - Experience Contract
     - watch-контракты
@@ -310,6 +327,7 @@ audience:
     - scorecard
     - candidates
     - portfolio
+    - lint-profile
 ```
 
 ## Пояснения к решениям

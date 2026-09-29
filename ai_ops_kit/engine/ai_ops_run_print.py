@@ -14,6 +14,11 @@ from __future__ import annotations
 from ai_ops_kit.engine.pipeline_helpers import work_produced, _stacks_human   # noqa: E402
 
 
+def _style_finding_text(r):
+    """Находка «стиль кода никто не проверяет» из отчёта прогона (checks.lint.finding) -> str|None."""
+    return (((r.get("checks") or {}).get("lint") or {}).get("finding") or {}).get("text")
+
+
 def _print_pipeline_product(r):
     """СВОДКА прогона для человека (аудитория product): что произошло → честные оговорки → шаг.
 
@@ -42,12 +47,16 @@ def _print_pipeline_product(r):
         print("  ⚠ критерии приёмки не сверялись с результатом.")
     elif _ac.get("declared") and not _ac.get("met_all"):
         print(f"  ⚠ критерии приёмки: не выполнено {len(_ac.get('unmet') or [])} из {_ac.get('count')}.")
-    if r.get("tests_warn"):
-        print("  ⚠ тестов в стеке нет — проверка тестами пропущена.")
-    if (r.get("isolation") or {}).get("sandboxed") is False and work_produced(r):
-        print("  ⚠ прогон шёл без песочницы — изоляция условна (управляемость, не защита).")
-    if (r.get("work_package") or {}).get("should_decompose"):
-        print("  ⚠ задача крупновата — стоит разбить на части.")
+    # #1183: стиль кода без линтера — находка владельцу; текст написан слоем речи (ui), здесь
+    # только показывается. Без этой строки находка жила бы лишь в предупреждениях гейта.
+    _caveats = [r.get("tests_warn") and "тестов в стеке нет — проверка тестами пропущена.",
+                (r.get("isolation") or {}).get("sandboxed") is False and work_produced(r)
+                and "прогон шёл без песочницы — изоляция условна (управляемость, не защита).",
+                (r.get("work_package") or {}).get("should_decompose")
+                and "задача крупновата — стоит разбить на части.",
+                _style_finding_text(r)]
+    for _c in (c for c in _caveats if c):
+        print(f"  ⚠ {_c}")
 
     # Следующий шаг.
     pr = r.get("draft_pr") or {}
@@ -151,8 +160,8 @@ def _print_pipeline(r, audience="technical"):
               f"дерево чистое: {commit.get('tree_clean_before_checks')}")
     if r.get("exemptions"):
         print(f"  освобождены (не применимо): {', '.join(r['exemptions'])}")
-    if r.get("tests_warn"):
-        print(f"  ⚠ {r['tests_warn']}")
+    for _w in (w for w in (r.get("tests_warn"), _style_finding_text(r)) if w):
+        print(f"  ⚠ {_w}")
     # B2-14: «доставлено» не должно читаться как «критерии выполнены». Прогон на живом продукте отдал
     # PR со `sha_verified: True`, а критерий приёмки остался невыполненным — и в отчёте об этом не
     # было ни строки. Непроверенное называется непроверенным ЗДЕСЬ, в том же выводе, где стоит

@@ -87,10 +87,10 @@ def test_the_brief_groups_findings_by_axis_and_marks_the_focus(repo):
     """Бриф раскладывает находки по осям своим разделом и помечает ось в фокусе."""
     delta = nr.collect_delta(repo, focus="security")
     brief = nr.format_brief(delta, repo)
-    assert "## Что я проверила — по осям" in brief
+    assert "## Что я проверил — по осям" in brief
     for dim in nd.DIMENSIONS:
         assert f"### {dim['title']}" in brief, f"ось «{dim['title']}» не названа в брифе"
-    section = brief.split("## Что я проверила — по осям", 1)[1]
+    section = brief.split("## Что я проверил — по осям", 1)[1]
     assert "### безопасность — **в фокусе сегодня**" in section
 
 

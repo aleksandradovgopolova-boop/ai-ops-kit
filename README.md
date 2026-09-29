@@ -56,7 +56,7 @@ AI-агент собирает маленький greenfield за вечер. Н
 написанная руками: **[docs/capability-map.md](docs/capability-map.md)**. Там у каждой возможности
 состояние built / built≠wired / partial / planned и способ проверки.
 
-Коротко: 37 <!-- claim:commands-total --> команды владельца (`status`, `inbox`, `next`, `explain`,
+Коротко: 38 <!-- claim:commands-total --> команд владельца (`status`, `inbox`, `next`, `explain`,
 `do`, `run`, `review`, `contract`, `model`, `portfolio` …), 36 <!-- claim:gates-total --> quality-gate
 (23 блокирующих, 13 advisory), 42 <!-- claim:agents-total --> роли в реестре, детерминированный
 security-scan.
@@ -80,7 +80,7 @@ cd /path/to/project
 
 ## Честно о границах
 
-- **Канал заработан, а не объявлен.** Свежий тег — **v4.7.0 qualification**; заработанный `stable` — на
+- **Канал заработан, а не объявлен.** Свежий тег — **v4.8.0 qualification**; заработанный `stable` — на
   миноре 4.3. `stable` требует полевых доказательств на двух живых дочках и проверяется машиной
   (`validate_release_claims`). Минор 4.3 их имеет (cockpit + live-587) и остаётся stable; свежий минор
   4.4 в поле ещё не обкатан, поэтому его честный канал — `qualification`, а не `stable` авансом. Дочки на
