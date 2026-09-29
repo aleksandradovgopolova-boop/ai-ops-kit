@@ -181,3 +181,63 @@ def test_release_manager_uses_template_and_policy():
     text = AGENT.read_text(encoding="utf-8")
     assert "templates/release/ReleaseNotes.md" in text
     assert "release_notes" in text
+
+
+# ─── русский жаргон кита: ловит строгая проверка, а не только глоссарий ─────────────────────────
+
+VALIDATOR = KIT / "ai_ops_kit" / "validation" / "validate_release_notes.py"
+
+CLEAN_LAYER_A = """### Что меняется для вас
+
+Клиенты сами переносят запись, без звонка администратору.
+
+### Что вошло
+
+- Перенос записи самим клиентом. Сделайте: откройте запись → «Перенести». Увидите: свободные окна. (self-reschedule.feat)
+
+### Известные ограничения
+
+- нет
+
+### Что сделать после выпуска
+
+- Через 2 недели посмотрите долю переносов без звонка: цель — 30%. (self-reschedule.feat)
+
+### Подробнее
+
+Полный список изменений — в журнале ниже.
+"""
+
+
+def _strict(tmp_path, text):
+    import subprocess
+    import sys
+
+    notes = tmp_path / "notes.md"
+    notes.write_text(text, encoding="utf-8")
+    return subprocess.run([sys.executable, str(VALIDATOR), "--layer-a", str(notes), "--strict",
+                           "--policy", str(POLICY)], capture_output=True, text=True, cwd=KIT)
+
+
+def test_jargon_patterns_keep_builtin_ones(rn):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("_vr_probe", VALIDATOR)
+    vr = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(vr)
+    pats = rn["layer_a"]["jargon_patterns"]
+    assert set(vr.DEFAULT_JARGON_PATTERNS) <= set(pats), "ключ заменяет встроенные шаблоны"
+
+
+def test_clean_layer_a_passes_strict(tmp_path):
+    r = _strict(tmp_path, CLEAN_LAYER_A)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+
+@pytest.mark.parametrize("word", ["гейт", "Гейты", "ратчет", "towncrier", "allowlist"])
+def test_russian_kit_jargon_fails_strict(tmp_path, word):
+    text = CLEAN_LAYER_A.replace("Перенос записи самим клиентом.",
+                                 f"Перенос записи самим клиентом, {word} пройден.")
+    r = _strict(tmp_path, text)
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert word in r.stdout + r.stderr
