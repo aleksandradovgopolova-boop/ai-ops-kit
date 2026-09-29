@@ -134,7 +134,7 @@ def _intent_readout(task, child_root, signals, a):
 # целостность — validation/validate_knowledge_graph (тот же слой entrypoints, звать вправе только
 # cli). Обработчик проб-свободен: строит граф из plan.yaml+FL+blueprint и печатает продуктовым
 # языком; в дочку пишет ТОЛЬКО `build --apply` (knowledge/graph.yaml).
-_GRAPH_SUBS = ("build", "trace", "gaps")
+_GRAPH_SUBS = ("build", "trace", "gaps", "questions")
 
 
 def _graph_positionals(a):
@@ -181,6 +181,7 @@ def _graph_help(js):
            "Подкоманды:\n"
            "  build             — собрать граф и показать (--apply — записать knowledge/graph.yaml)\n"
            "  trace <feature>   — зачем функция существует: цепочка цель→…→функция→исход + вердикт\n"
+           "  questions <feat>  — десять вопросов жизни фичи из связанной истории (ответ или пробел)\n"
            "  gaps              — что не покрыто измеримым результатом (исходы/метрики/функции)\n"
            "Пример: ./ai-ops graph trace express-checkout .")
     if js:
@@ -314,6 +315,27 @@ def _intent_graph(task, child_root, signals, a):
         if result.get("verdict") == "unknown":
             return 2
         return 0 if not result.get("gaps") else 1
+
+    if sub == "questions":
+        if not feature:
+            _graph_help(js)
+            return 2
+        # Тот же связанный граф; поля из связанных первоисточников (аудитория/гипотеза/…) читает
+        # фасад (у него диск), обход графа остаётся без диска. Реальный исход и следующий шаг — из
+        # контракта фичи (числа считает этот слой), чтобы вопросы 8 и 10 отвечались измеренным.
+        source = kg.feature_life_source(graph, feature, root)
+        measured_outcome, next_action = _feature_measured_outcome(root, feature)
+        result = kg.answer_ten_questions(graph, feature, source=source,
+                                         measured_outcome=measured_outcome,
+                                         next_action=next_action)
+        if js:
+            print(json.dumps(result, ensure_ascii=False, indent=2, default=str))
+        else:
+            print(presenter.render(presenter.from_graph_questions(result), audience=aud))
+        # Код возврата: нет узла -> 2; все десять отвечены -> 0; иначе 1 (история собрана не целиком).
+        if result.get("verdict") == "unknown":
+            return 2
+        return 0 if result.get("complete") else 1
 
     # gaps
     result = kg.gaps(graph)

@@ -29,6 +29,7 @@ from pathlib import Path
 import pytest
 
 from ai_ops_kit.security import security_scan as ss
+from ai_ops_kit.security import scan_deps as sd
 
 pytestmark = pytest.mark.unit
 
@@ -55,7 +56,7 @@ def test_no_false_dependencies_on_this_repository():
 
 def test_toml_yields_packages_not_configuration_keys():
     """Корень дефекта: имена искались по всему файлу, без оглядки на секцию."""
-    names = ss._dep_names("pyproject.toml", (PKG / "pyproject.toml").read_text(encoding="utf-8"))
+    names = sd._dep_names("pyproject.toml", (PKG / "pyproject.toml").read_text(encoding="utf-8"))
     assert "pyyaml" in names, "настоящая зависимость потерялась вместе с ложными"
     for key in ("name", "version", "license", "requires-python", "addopts", "target-version",
                 "description", "build-backend", "tag_format"):
@@ -74,7 +75,7 @@ def test_the_parser_does_not_depend_on_the_python_version():
     assert "import tomllib" not in src, "вернулась зависимость от Python 3.11 при объявленном поле 3.9"
 
     text = (PKG / "pyproject.toml").read_text(encoding="utf-8")
-    names = ss._toml_dep_names(text, "pyproject.toml")
+    names = sd._toml_dep_names(text, "pyproject.toml")
     assert names == {"pyyaml", "setuptools", "wheel", "pytest", "pytest-cov",
                      "hypothesis", "ruff", "mypy", "pre-commit"}, sorted(names)
 
@@ -84,7 +85,7 @@ def test_an_optional_dependency_group_name_is_not_a_package():
     лежат в массиве-значении. Спутать одно с другим значило бы заменить одни ложные находки другими."""
     toml = ('[project]\nname = "p"\ndependencies = ["pyyaml"]\n\n'
             '[project.optional-dependencies]\ndev = ["ruff", "pytest"]\ntest = ["hypothesis"]\n')
-    assert ss._dep_names("pyproject.toml", toml) == {"pyyaml", "ruff", "pytest", "hypothesis"}
+    assert sd._dep_names("pyproject.toml", toml) == {"pyyaml", "ruff", "pytest", "hypothesis"}
 
 
 def test_cargo_dependencies_are_read_from_their_sections():
@@ -92,7 +93,7 @@ def test_cargo_dependencies_are_read_from_their_sections():
              'license = "MIT"\n\n[dependencies]\nserde = { version = "1.0" }\ntokio = "1"\n'
              '\n[dev-dependencies]\ncriterion = "0.5"\n'
              "\n[target.'cfg(unix)'.dependencies]\nnix = \"0.27\"\n")
-    names = ss._dep_names("Cargo.toml", cargo)
+    names = sd._dep_names("Cargo.toml", cargo)
     assert names == {"serde", "tokio", "criterion", "nix"}, names
 
 
@@ -172,9 +173,141 @@ def test_forgiven_files_are_really_the_detectors_own_material():
             f"прощение пережило свою причину")
 
 
+def test_detector_own_material_is_recognized_where_the_kit_is_installed():
+    """#1112: в дочке кит лежит под `.ai/managed/` — и читал там САМ СЕБЯ как код продукта.
+
+    Прощение сверялось по ТОЧНОМУ относительному имени, а в подключённом репозитории установленная
+    копия приходит как `.ai/managed/ai_ops_kit/security/security_scan.py`. Замер 23.09.2026 на
+    ии-среде: 20 флагов из 61 (33%) — про кит, из них 15 — его же `security_scan.py`. Дефект был
+    объявлен закрытым, но проверялся только там, где кит лежит в корне.
+    """
+    own = (PKG / "ai_ops_kit/security/security_scan.py").read_text(encoding="utf-8")
+    в_дочке = ".ai/managed/ai_ops_kit/security/security_scan.py"
+    assert ss.scan_injection({в_дочке: own}) == [], (
+        "установленная копия кита в дочке флагается как код продукта — "
+        "замер в дочке на треть меряет кит, а не продукт"
+    )
+    # Тот же файл в корне материнского репозитория прощался и раньше — это не должно сломаться.
+    assert ss.scan_injection({"ai_ops_kit/security/security_scan.py": own}) == []
+
+
+def test_forgiveness_does_not_leak_to_a_product_file_with_the_same_tail():
+    """Обратный край: прощается ИЗВЕСТНОЕ МЕСТО УСТАНОВКИ, а не любой похожий хвост.
+
+    Снять префикс `.ai/managed/` — узкое исключение. Сравнивать суффикс было бы той самой
+    «складской» лазейкой, против которой список объявлен поимённо: продуктовый файл с совпадающим
+    хвостом прощался бы молча, и сканер перестал бы смотреть вместо того, чтобы научиться отличать.
+    """
+    own = (PKG / "ai_ops_kit/security/security_scan.py").read_text(encoding="utf-8")
+    for чужой in (
+        "vendor/ai_ops_kit/security/security_scan.py",
+        "packages/app/ai_ops_kit/security/security_scan.py",
+        ".ai/managed-fork/ai_ops_kit/security/security_scan.py",
+    ):
+        assert ss.scan_injection({чужой: own}), f"{чужой} прощён — прощение стало складом"
+def test_regexp_exec_is_not_read_as_command_execution():
+    """#1112, класс R-40 второй раз: `/re/.exec(s)` — метод регулярного выражения, не команда.
+
+    `\b` в `_NODE_EXEC_CALL` стоит между точкой и `e`, поэтому правило матчило `.exec(`, а условие
+    «файл импортирует child_process» в `vite.config.ts` выполнялось из-за постороннего хелпера,
+    считавшего хэш сборки. Замер 23.09.2026: 4 флага правила, 100% шума.
+
+    Строка взята из замера дословно — с косой чертой ВНУТРИ класса символов (`[^/]`), на которой
+    ломается наивный разбор литерала.
+    """
+    из_замера = (
+        'import { createHash } from "crypto";\n'
+        'import { execSync } from "child_process";\n'
+        'const m = /^\\/api\\/files\\/([^/]+)\\/content$/.exec(pathname);\n'
+    )
+    флаги = [f for f in ss.scan_injection({"vite.config.ts": из_замера})
+             if f["id"] == "node_child_process_exec"]
+    assert флаги == [], "метод регулярного выражения объявлен исполнением команды — R-40 жив"
+
+    именованное = (
+        'const cp = require("child_process");\n'
+        'const ROUTE = /^\\/api\\/(\\w+)$/;\n'
+        'const m = ROUTE.exec(pathname);\n'
+    )
+    флаги = [f for f in ss.scan_injection({"router.js": именованное})
+             if f["id"] == "node_child_process_exec"]
+    assert флаги == [], "имя, которому присвоено регулярное выражение, тоже не команда"
+
+
+def test_real_command_execution_is_still_flagged_after_the_r40_fix():
+    """Обратный край: чинится ПОЛУЧАТЕЛЬ, а не правило.
+
+    Стойка «пере-срабатывание безопасно, под-срабатывание — нет» остаётся: снимается ровно класс
+    «получатель — регулярное выражение», а `.exec(` с неизвестным получателем по-прежнему флагается,
+    потому что получатель может оказаться обёрткой над child_process.
+    """
+    случаи = {
+        "прямой вызов": 'const cp = require("child_process");\ncp.exec("rm -rf " + userInput);\n',
+        "деструктуризация": 'const { exec } = require("child_process");\nexec(cmd);\n',
+        "инлайн-require": 'require("child_process").exec(userInput);\n',
+        "execSync": 'import { execSync } from "child_process";\nexecSync(`git ${arg}`);\n',
+        "неизвестный получатель": 'import cp from "child_process";\nrunner.exec(cmd);\n',
+    }
+    for имя, код in случаи.items():
+        флаги = [f for f in ss.scan_injection({"srv.js": код})
+                 if f["id"] == "node_child_process_exec"]
+        assert флаги, f"{имя}: настоящее исполнение команды перестало ловиться"
+
+    # Регулярка в одной строке с настоящим вызовом не прячет его.
+    смесь = (
+        'const cp = require("child_process");\n'
+        'if (/^\\w+$/.exec(arg)) cp.exec("ls " + arg);\n'
+    )
+    assert [f for f in ss.scan_injection({"srv.js": смесь})
+            if f["id"] == "node_child_process_exec"], "снятие регулярки спрятало реальный вызов"
+
+
 def test_the_forgiven_list_only_shrinks():
-    """Ратчет: новый прощённый файл — решение, а не побочный эффект отладки."""
-    assert len(ss.DETECTOR_OWN_MATERIAL) <= 4, sorted(ss.DETECTOR_OWN_MATERIAL)
+    """Ратчет: новый прощённый файл — решение, а не побочный эффект отладки.
+
+    Список сверяется ПОИМЁННО, а не числом: потолок `<= 4` оставлял свободное место, и занять его
+    можно было молча. Четвёртое место занято решением #1157 — `security/security-domains.yaml`:
+    это реестр правил детектора, а флаг стоял на ТЕКСТЕ условия блокировки
+    («innerHTML/dangerouslySetInnerHTML без санитизации»), не на вызове. Файл едет в дочку и был
+    одним из четырёх адресов раздела поставки на свежей установке. Свободных мест больше нет:
+    добавить — значит поменять этот список осознанно; убрать — можно и нужно, когда причина уйдёт.
+    """
+    assert set(ss.DETECTOR_OWN_MATERIAL) <= {
+        "ai_ops_kit/security/security_scan.py",
+        "tests/unit/test_security_scan.py",
+        "tests/unit/test_property_based.py",
+        "security/security-domains.yaml",          # #1157: реестр правил, флаг — текст условия
+    }, sorted(ss.DETECTOR_OWN_MATERIAL)
+
+
+def test_the_node_rules_added_no_noise_to_this_repository():
+    """#1094: правила профиля Node/TS приехали с ЗАМЕРОМ, а не с обещанием.
+
+    Замер 22.09.2026 на дереве кита: injection-флагов 39 до правил и 39 после, секретов 0 и 0.
+    Здесь сторожится ровно то, что можно сторожить на собственном репозитории: ни одно из новых
+    правил не поднимает флаг на коде и фикстурах кита. Это НЕ утверждение, что правила молчат
+    вообще (обратная половина — парные тесты в test_security_scan.py) и НЕ замер шума на дочке:
+    доля флагов, признанных судьёй нерелевантными на реальном диффе Node/TS-продукта, здесь
+    измерена быть не может и остаётся открытой частью приёмки.
+    """
+    new_rule_ids = {"sql_template_literal", "js_new_function", "node_vm_run_in_context",
+                    "dom_outerhtml_assign", "dom_insert_adjacent_html", "dom_document_write",
+                    "vue_v_html"}
+    rep = ss.scan_repo(PKG)
+    noisy = [f for f in rep["injection_flags"] if f["id"] in new_rule_ids]
+    assert noisy == [], (
+        "новое правило шумит на собственном репозитории — разбирать надо шаблон, а не привыкать "
+        f"пролистывать список: {noisy}")
+
+
+def test_the_detector_declares_no_secret_of_its_own():
+    """Для секретов прощёного списка НЕТ — значит образцы не живут в исходниках детектора.
+
+    Правило #1094 про строку подключения родилось с примером прямо в комментарии, и сканер тут же
+    нашёл «утечку» в самом себе. Сторож дешевле, чем повторный разбор.
+    """
+    src = (PKG / "ai_ops_kit" / "security" / "security_scan.py").read_text(encoding="utf-8")
+    assert ss.scan_secrets({"ai_ops_kit/security/security_scan.py": src}) == []
 
 
 def test_prose_is_not_an_injection_surface():

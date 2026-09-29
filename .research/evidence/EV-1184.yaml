@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1184
+request_id: RR-020
+statement: >
+  НАША сторона, контракт исполнителя: в реестре рантаймов у claude-code записан путь
+  kit_driven_executing со статусом verified — кит сам оркестрирует внешнего писателя через
+  локальный `claude -p`, писатель только ПРЕДЛАГАЕТ действия текстом, а worktree, diff, evidence,
+  гейты и доставка остаются за китом (писатель не пушит, не создаёт PR, не меняет основной
+  checkout, не закрывает собственное ревью и не владеет жизненным циклом). Там же назван общий
+  контракт: «AI Ops = control plane; Claude Code = сильный заменяемый исполнитель». То есть точка
+  подключения ЛЮБОГО стороннего писателя в ките уже существует и описана, а не проектируется.
+evidence_type: documented_fact
+source:
+  title: "AI Ops Kit — registry/runtimes.yaml (claude-code.kit_driven_executing)"
+  url: null
+  type: internal_data
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "registry/runtimes.yaml, блок runtimes.claude-code.kit_driven_executing (status/via/contract/proven_live/routing)"
+  quote: "AI Ops = control plane; Claude Code = сильный заменяемый исполнитель"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: >
+    Наш собственный реестр — SELF-EVIDENCE, помечено для спот-чека судьи. Статус verified в реестре
+    относится к пути через claude-cli и доказан прошлым живым прогоном; на сторонний раннер он НЕ
+    переносится — здесь запись используется только как свидетельство о СУЩЕСТВОВАНИИ контракта
+    подключения, не как оценка чужого исполнителя.
+status: active
+superseded_by: null

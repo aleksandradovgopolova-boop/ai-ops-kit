@@ -22,6 +22,8 @@ import sys
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
+# #1097: один источник форматов секретов на весь кит (фундамент — доставке импортировать можно)
+from ai_ops_kit.shared import secret_formats as _secret_formats  # noqa: E402
 # переиспользуем разбор owner/repo и работу с REST из concurrency_preflight (без дублирования)
 from ai_ops_kit.gates import concurrency_preflight as _cp   # noqa: E402
 import urllib.error                    # noqa: E402
@@ -30,8 +32,14 @@ import urllib.request                  # noqa: E402
 
 def _pr_payload(branch, title, body, base):
     """Чистая функция: тело запроса на создание draft PR (тестируется offline). base ОБЯЗАТЕЛЕН —
-    не хардкодим 'main' (v2.93 finding: дефолт-ветка репо может быть master/develop/trunk)."""
-    return {"title": title, "head": branch, "base": base, "body": body or "", "draft": True}
+    не хардкодим 'main' (v2.93 finding: дефолт-ветка репо может быть master/develop/trunk).
+
+    #1097: ЗАГОЛОВОК И ТЕЛО ПРОХОДЯТ СКРАБ. Тело PR кит собирает сам — из фрагментов вывода
+    инструментов и диффов, — поэтому секрет может приехать не из git-stderr, а из материала работы.
+    Скраб стоит ЗДЕСЬ, а не в месте отправки, потому что этот же payload возвращается наружу в
+    honest-`unavailable` (нет токена): иначе ветка «PR не создан» печатала бы секрет в отчёт."""
+    return {"title": _scrub_secrets(title), "head": branch, "base": base,
+            "body": _scrub_secrets(body) or "", "draft": True}
 
 
 def _status_docs_note(status_docs):
@@ -64,37 +72,54 @@ def _git(root, *args):
     return gitio.git(root, *args)   # v3.0.13 (блок C): единый git-хелпер с таймаутом
 
 
-# Маскировка секретов в git-stderr перед попаданием в note/тело PR. ЦЕЛЕВОЙ вектор именно этого
-# stderr — credentials, ВСТРОЕННЫЕ В URL (оператор вручную настроил origin вида
-# https://<токен>@github.com/...), плюс распознаваемые формы GitHub-токенов на всякий случай.
-# Паттерны ЛОКАЛЬНЫ намеренно: канонический скраб живёт в security-слое (security_scan.SECRET_PATTERNS,
-# используется engine.tool_broker._scrub_output), но delivery не может импортировать security/engine, не
-# добавив cross-ребро слоёв (ратчет layering морозит текущий набор; delivery↔engine осознанно снята в
-# v3.38 K3). Поэтому здесь — узкий самодостаточный набор под ровно этот канал; при появлении общего
-# примитива в `shared` его стоит переиспользовать. Держать в синхроне с security_scan.SECRET_PATTERNS.
-_SECRET_SUBS = (
-    re.compile(r"(https?://)[^/\s:@]+(?::[^/\s@]+)?@"),          # user:pass@ / токен@ в URL
-    re.compile(r"gh[pousr]_[A-Za-z0-9]{20,}"),                   # ghp_/gho_/ghs_/ghr_/ghu_ PAT
-    re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),                 # fine-grained PAT
-    re.compile(r"(?i)(authorization:\s*(?:bearer|token)\s+)\S+"),# заголовок авторизации
+# Маскировка секретов во всём, что доставка печатает наружу: git-stderr упавшего push (попадает в
+# note) и ТЕЛО PR (его пишет сам кит из фрагментов вывода инструментов и диффов).
+#
+# #1097: КАНОНИЧЕСКИЙ СПИСОК ФОРМАТОВ БОЛЬШЕ НЕ КОПИРУЕТСЯ СЮДА. Раньше здесь лежали четыре
+# собственных правила с пометкой «держать в синхроне с security_scan.SECRET_PATTERNS», и синхрон
+# разошёлся: детектор после #1094 знал строку подключения с паролем, JWT, npm- и LLM-ключи, а этот
+# скраб — нет, то есть кит умел опознать формат и всё равно печатал его в тело PR. Список переехал
+# в `shared/secret_formats.py`; `shared` — фундамент, поэтому delivery читает его НЕ нарушая слоёв
+# (импортировать `security`/`engine` доставке по-прежнему нельзя — cross-ребро в ратчете layering).
+#
+# _CHANNEL_SUBS — то, что у ЭТОГО канала есть СВЕРХ канонического списка. Детектору эти формы не
+# нужны (он смотрит на содержимое файлов продукта), а здесь целевой вектор — credentials, ВСТРОЕННЫЕ
+# В URL: оператор вручную настроил origin вида https://<токен>@github.com/..., и git печатает это
+# в stderr. Первое правило сохраняет схему (`https://`), чтобы из диагностики было видно, ЧТО
+# отредактировано, а не только что текст изменился.
+_CHANNEL_SUBS = (
+    (re.compile(r"(https?://)[^/\s:@]+(?::[^/\s@]+)?@"),          # user:pass@ / токен@ в URL
+     r"\1" + _secret_formats.REDACTION_MARKER + "@"),
+    (re.compile(r"github_pat_[A-Za-z0-9_]{20,}"),                 # fine-grained PAT
+     _secret_formats.REDACTION_MARKER),
+    # Классический PAT: канонический шаблон требует РОВНО 36 символов, здесь порог мягче (20+) —
+    # это не дубль, а более широкая сеть на канале, где цена пропуска выше цены лишней замены.
+    (re.compile(r"\bgh[posru]_[A-Za-z0-9]{20,}"),
+     _secret_formats.REDACTION_MARKER),
+    (re.compile(r"(?i)(authorization:\s*(?:bearer|token)\s+)\S+"),  # заголовок авторизации
+     r"\1" + _secret_formats.REDACTION_MARKER),
 )
-_URL_CRED_RE = _SECRET_SUBS[0]
+
+
+def _scrub_secrets(text):
+    """Затереть секреты в тексте, который доставка отправляет наружу (note, тело PR). -> текст.
+
+    Канонические форматы + правила этого канала (креды в URL, fine-grained PAT, заголовок
+    авторизации). fail-closed: не смогли отредактировать -> содержимое не показываем вовсе (лучше
+    без диагностики, чем с утёкшим секретом)."""
+    if not text:
+        return text
+    try:
+        return _secret_formats.scrub(text, _CHANNEL_SUBS)
+    except Exception as _e:  # noqa: BLE001 — сбой скраба не показывает содержимое (не унести секрет)
+        return f"«***OUTPUT-WITHHELD: скраб секретов не выполнен ({type(_e).__name__})***»"
 
 
 def _scrub_git_output(text):
     """P2 (безопасность): git-stderr упавшего push может унести секрет в note/тело PR — если оператор
     ВРУЧНУЮ настроил origin со встроенным в URL токеном. Маскируем ДО обрезки, чтобы срез не оставил
-    половину. fail-closed: не смогли отредактировать -> содержимое не показываем вовсе (лучше без
-    диагностики, чем с утёкшим секретом)."""
-    if not text:
-        return text
-    try:
-        text = _URL_CRED_RE.sub(r"\1«***REDACTED-SECRET***»@", text)
-        for _pat in _SECRET_SUBS[1:]:
-            text = _pat.sub("«***REDACTED-SECRET***»", text)
-    except Exception as _e:  # noqa: BLE001 — сбой скраба не показывает содержимое (не унести секрет)
-        return f"«***OUTPUT-WITHHELD: скраб секретов не выполнен ({type(_e).__name__})***»"
-    return text
+    половину. Имя сохранено: так этот канал зовут вызывающие и тесты."""
+    return _scrub_secrets(text)
 
 
 def _is_non_fast_forward(err):

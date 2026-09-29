@@ -1,0 +1,39 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1196
+request_id: RR-021
+statement: >
+  НАША сторона, контракт гейта: гейт security в ките блокирующий, закрывается судьёй и требует трёх
+  улик — no_secrets, no_injection_surface, deps_approved. Детерминированный сканер кита
+  (ai_ops_kit/security/security_scan.py) честно делит их на две части: он МОЖЕТ доказать отсутствие
+  известных секретов и отсутствие новых зависимостей и закрыть no_secrets/deps_approved, а
+  no_injection_surface объявлен СУЖДЕНИЕМ — эвристика лишь флагит места (eval/exec, shell=True,
+  pickle, yaml.load, SQL через f-строку, dangerouslySetInnerHTML, child_process), и закрывает его
+  независимый security-reviewer или человек, потому что writer не судит себя. Надстройка
+  security_pack добавляет то же правило на уровне доменов: домен нельзя закрыть фразой
+  «уязвимостей нет», авто-закрытие возможно только там, где улики целиком покрыты пройденными
+  детерминированными проверками. То есть в ките УЖЕ есть место для чужих находок — и уже есть
+  запрет закрывать проверку отсутствием находок.
+evidence_type: documented_fact
+source:
+  title: "AI Ops Kit — quality/gates.yaml (gate security) + ai_ops_kit/security/security_scan.py + security_pack.py"
+  url: null
+  type: internal_data
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "quality/gates.yaml, блок gates.security (required_evidence, blocking, closed_by judge); security_scan.py — докстрока модуля «Честная граница»; security_pack.py — докстрока «Честность»"
+  quote: "no_injection_surface — СУЖДЕНИЕ"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: >
+    Наш собственный контур — SELF-EVIDENCE, помечено для спот-чека судьи. Читались реестр гейтов и
+    докстроки исполняемых модулей, а не описание в документации; правило «отсутствие находок не
+    закрывает суждение» сформулировано в самом коде, который эти улики производит.
+status: active
+superseded_by: null

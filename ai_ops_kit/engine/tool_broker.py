@@ -30,6 +30,8 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared import argv_command
+
 # ВАЖНО (finding аудита исполнения): shell — НЕ полноценная security boundary. Статически
 # проверить произвольную команду нельзя, поэтому НА ВХОДЕ для shell действуют только timeout +
 # denylist деструктивных команд + scrub_env.
@@ -250,6 +252,8 @@ GIT_PUSH_RE = re.compile(r"\bgit\b[^\n;&|]*\bpush\b", re.I)
 
 # подстановка команд / process substitution — статически не проверить -> в allowlist-режиме денай.
 _SUBST_RE = re.compile(r"\$\(|`|<\(|>\(")
+# `\r` перед переводом строки или в конце команды — CRLF, а не часть слова (см. execute).
+_CR_AT_EOL_RE = re.compile(r"\r+(?=\n)|\r+\Z")
 
 
 class Policy:
@@ -385,11 +389,12 @@ class Policy:
                             "reason": "подстановка команд ($()/`…`/<()) запрещена в allowlist-режиме "
                                       "(нельзя статически проверить вложенные бинарники)"}
                 # ПОСЕГМЕНТНО: каждый бинарь после ; && || | должен быть в allowlist (v2.85 —
-                # иначе `pytest && curl` обходил проверку по первому токену)
-                bad = [b for b in _command_binaries(norm) if b not in self.shell_allowlist]
-                if bad:
-                    return {"allow": False,
-                            "reason": f"{bad} не в shell_allowlist {sorted(self.shell_allowlist)}"}
+                # иначе `pytest && curl` обходил проверку по первому токену). Слова — по СЫРОЙ
+                # команде тем же разбором, что у запуска (кавычки, escape, только пробел/таб):
+                # проверяется ровно то, что исполнится; неоднозначное — отказ.
+                why = _allowlist_denial(cmd, self.shell_allowlist)
+                if why:
+                    return {"allow": False, "reason": why}
         return {"allow": True, "reason": f"{op} в пределах уровня {self.level}"}
 
 
@@ -434,6 +439,12 @@ def execute(action: dict, root, policy: Policy) -> dict:
         if _relp:
             _normalized_from = action.get("path")
             action = dict(action, path=_relp)
+    # CRLF (команда из файла с Windows-переводами строк): `\r` в конце строки срезаем ДО решения
+    # политики — и решение, и запуск видят одну и ту же команду. Срезать только в проверке было
+    # бы обходом: `./gradlew\r` оболочка исполняет как другой файл. `\r` в середине строки
+    # остаётся и allowlist-режимом отклоняется.
+    if action.get("op") in ("shell", "git") and "\r" in (action.get("command") or ""):
+        action = dict(action, command=_CR_AT_EOL_RE.sub("", action["command"]))
     d = policy.decide(action)
     ev = {"op": action.get("op"), "target": action.get("path") or action.get("command"),
           "allowed": d["allow"], "reason": d["reason"], "revision": _revision(root)}
@@ -506,19 +517,37 @@ def execute(action: dict, root, policy: Policy) -> dict:
             p.write_text(action.get("content", ""), encoding="utf-8")
             ev.update({"ok": True, "bytes": len(action.get("content", "").encode("utf-8"))})
         else:  # shell / git — env со скрабленными секретами (модель не получает токены)
-            # SECURITY: shell=True с модельным выводом — риск инъекций.
-            # Митигации: scrub_env() удаляет секреты из env, timeout ограничивает выполнение,
-            # output scrubbing скрывает чувствительные данные в выводе.
-            # Policy Engine контролирует, какие команды разрешены (read/write/shell levels).
-            # Для production рекомендуется shell=False + list args, но tool-loop требует shell
-            # для поддержки pipe/redirect/glob, которые генерирует модель.
+            # БЕЗ ОБОЛОЧКИ, КОГДА ОНА НЕ НУЖНА (#1157). Команды движка — установка и проверки из
+            # профиля (`npm ci`, `pytest -q`, `git status`) — это бинарь и аргументы; оболочка там
+            # давала лишь поверхность внедрения. Такие команды идут СПИСКОМ: исполняется ровно
+            # argv[0], и денай-проверки выше судят то, что будет исполнено, а не текст до `sh`.
+            #
+            # ОБОЛОЧКА ОСТАЁТСЯ ОСОЗНАННО — ДЛЯ КОМАНД С ЕЁ СИНТАКСИСОМ. Модель tool-loop пишет
+            # конвейеры, `&&`, перенаправления (`echo … > f`), маски — это объявленная возможность
+            # op `shell`, и на её ПОСЛЕДСТВИЯХ построен пост-фактум сторож путей ниже. Исполнить
+            # такую строку без оболочки значило бы написать свою оболочку («свой tool-loop не
+            # наращиваем», AGENTS.md). Контур этой ветки: Policy.decide (уровень, allowlist по
+            # КАЖДОМУ сегменту, денай подстановок/сети/push), scrub_env (секретов в окружении нет),
+            # timeout, скраб вывода, откат правок protected/вне scope; полная изоляция — контейнер.
+            # Флаг сканера на `shell=True` здесь — правда, а не шум: это настоящая поверхность, и
+            # прятать её от сканера (`["sh", "-c", …]`) было бы подгонкой замера.
             timeout = action.get("timeout", SHELL_TIMEOUT_DEFAULT)
             # v3.36: снимок ДО команды — основа пост-фактум сторожа путей (см. _fs_snapshot)
             _pre = _fs_snapshot(root, policy)
             try:
-                r = subprocess.run(action["command"], shell=True, cwd=str(root),
-                                   capture_output=True, text=True, env=scrub_env(),
-                                   timeout=timeout)
+                _env = scrub_env()
+                try:
+                    _argv, _env_extra = argv_command.split(action["command"])
+                except argv_command.NeedsShell:
+                    _argv = None
+                if _argv is None:
+                    r = subprocess.run(action["command"], shell=True, cwd=str(root),
+                                       capture_output=True, text=True, env=_env,
+                                       timeout=timeout)
+                else:
+                    r = argv_command.run(_argv, cwd=str(root), env={**_env, **_env_extra},
+                                         timeout=timeout)
+                ev["via_shell"] = _argv is None
                 ev.update({"ok": r.returncode == 0, "exit_code": r.returncode,
                            "command": action["command"],
                            "output_tail": _scrub_output((r.stdout + r.stderr)[-SHELL_OUTPUT_TAIL:])})
@@ -567,6 +596,7 @@ def execute(action: dict, root, policy: Policy) -> dict:
 # модульные глобали (импортированы здесь на уровне модуля). Сателлит фасад НЕ импортирует — ни
 # одного обратного ребра (все вынесенные функции берут root/policy/pre параметрами).
 from ai_ops_kit.engine.tool_broker_fs import (  # noqa: E402  — ре-экспорт в конце модуля
+    _allowlist_denial,
     _command_binaries,
     _escapes_root,
     _first_binary,

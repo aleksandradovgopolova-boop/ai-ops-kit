@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1193
+request_id: RR-021
+statement: >
+  Исполнение идёт внутри Docker-контейнера на базе Kali Linux с предустановленным НАСТУПАТЕЛЬНЫМ
+  инструментарием, доступным агенту через терминал: разведка (Subfinder, Naabu, httpx, Katana,
+  ffuf, Nmap), веб-тестирование (Arjun, Dirsearch, wafw00f, GoSpider), автоматические сканеры
+  (Nuclei, SQLMap, Wapiti, OWASP ZAP), анализ JavaScript, а также source-aware слой (Semgrep,
+  ast-grep, Tree-sitter с преднастроенными грамматиками Java/JS/TS/Python/Go/Bash/JSON/YAML,
+  Bandit) и детекторы секретов. Практическое следствие: прогон против живой цели порождает
+  РЕАЛЬНЫЙ атакующий трафик, а не только чтение кода.
+evidence_type: documented_fact
+source:
+  title: "Strix — docs/tools/sandbox.mdx"
+  url: "https://github.com/usestrix/strix/blob/main/docs/tools/sandbox.mdx"
+  type: official_documentation
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "sandbox.mdx, таблицы Reconnaissance / Web Testing / Automated Scanners / JavaScript Analysis / Source-Aware Analysis / Secret Detection; прочитан 22.09.2026"
+  quote: "Strix runs inside a Kali Linux-based Docker container"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Официальная документация с поимённым перечнем инструментов. Вывод «порождает реальный
+    атакующий трафик» — прямое следствие наличия SQLMap/Nuclei/ffuf в исполняемой среде, а не
+    отдельное измерение.
+status: active
+superseded_by: null

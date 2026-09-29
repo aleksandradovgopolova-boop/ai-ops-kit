@@ -1,0 +1,37 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1173
+request_id: RR-020
+statement: >
+  Архитектура харнеса по README первоисточника: вход с глобально уникальным ID -> сессионный inbox
+  (идемпотентность) -> координатор (ходы LLM, диспетчеризация) -> реестр инструментов и
+  translator'ы, которые ЧИСТО (без I/O) переводят вызов инструмента в ОПЕРАЦИЮ -> менеджер операций
+  (актор-рантайм, сменный) -> session store (append-only история с возобновлением и форком).
+  README прямо объявляет инварианты расширяемости: элементы session store сериализуемы, формат
+  версионирован, операции версионированы и всегда сериализуемы; несовместимая версия сессии даёт
+  явную ошибку на resume, а не молчаливую деградацию. Там же назван мотив такого дизайна: прокси-
+  менеджер операций может отправлять сериализованные операции в менеджер внутри удалённой песочницы,
+  чтобы инструменты исполнялись ТАМ.
+evidence_type: documented_fact
+source:
+  title: "unreal-agent — README.md (Glossary, Components, Extending the harness)"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/README.md"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "README.md, разделы Glossary / Components / Extending the harness; прочитан целиком в клоне на коммите b7c9bf1"
+  quote: "Operation: a serializable description of work produced by a tool translator"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: >
+    Первоисточник, прочитан целиком; описанное в README сверено с кодом (harness/session,
+    harness/operation, harness/sessionstore, harness/tool) — интерфейсы соответствуют заявленному,
+    а не только обещаны текстом.
+status: active
+superseded_by: null

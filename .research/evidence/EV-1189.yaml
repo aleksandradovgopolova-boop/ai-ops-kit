@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1189
+request_id: RR-021
+statement: >
+  Машинный контракт прогона (из руководства для агентов, написанного самими авторами): headless-
+  режим `strix -n`, коды возврата 0 — чисто, 1 — фатальная ошибка, 2 — уязвимости найдены.
+  Артефакты в `strix_runs/<run-name>/`: penetration_test_report.md, vulnerabilities/*.md,
+  vulnerabilities.json, findings.sarif (SARIF 2.1.0) и run.json со статусом и llm_usage.cost.
+  Есть бюджет прогона (`--max-budget`). КРИТИЧЕСКИ ВАЖНОЕ для нас место — авторы сами
+  ограничивают смысл нуля: ноль покрывает только то, что было проанализировано, и прежде чем
+  называть прогон чистым, следует проверить run.json (статус и израсходованный бюджет против
+  лимита). То есть инструмент штатно различает «чисто» и «не дошли» и не выдаёт второе за первое.
+evidence_type: documented_fact
+source:
+  title: "Strix — AGENTS.md (Two ways to run, same engine)"
+  url: "https://github.com/usestrix/strix/blob/main/AGENTS.md"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "AGENTS.md, блок «Open-source CLI (self-hosted)»: коды возврата, перечень артефактов, оговорка про exit 0; прочитан целиком 22.09.2026"
+  quote: "A `0` only covers what was analyzed"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Это не маркетинг, а операционный контракт для машинного потребителя, изложенный авторами в
+    репозитории; проверяемый по кодам возврата и составу каталога при первом же прогоне. Сам
+    контракт нами не исполнялся — заявленный, не измеренный.
+status: active
+superseded_by: null

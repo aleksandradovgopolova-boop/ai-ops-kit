@@ -1,0 +1,31 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1172
+request_id: RR-020
+statement: >
+  unreallabsai/unreal-agent — публичный репозиторий Unreal Labs на Go под MIT, описанный как
+  "Async-first agent harness". На 22.09.2026: 67 звёзд, 6 форков, 0 открытых issue, homepage
+  unreallabs.ai, создан 21.09.2026, последний push 22.09.2026. То есть публично проекту вторые
+  сутки — но это дата ПУБЛИКАЦИИ, а не разработки (см. EV-1179 о составе истории).
+evidence_type: documented_fact
+source:
+  title: "GitHub API: repos/unreallabsai/unreal-agent"
+  url: "https://api.github.com/repos/unreallabsai/unreal-agent"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "Ответ GitHub API, снят 22.09.2026 через `gh api repos/unreallabsai/unreal-agent`"
+  quote: "Async-first agent harness"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Первичный машинный источник (API самой площадки), снят напрямую. Числа звёзд/форков
+    volatile по своей природе — помечены и получили срок годности.
+status: active
+superseded_by: null

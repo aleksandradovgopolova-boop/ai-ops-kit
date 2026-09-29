@@ -51,6 +51,11 @@ def from_graph_trace(result: dict) -> dict:
     if result.get("goal"):
         summary = (f"Функция «{titles[-1]}» служит цели «{titles[0]}»: {chain_line}. "
                    f"{phrase.capitalize()}.")
+    elif result.get("unresolved_goal"):
+        # Автор цель НАЗВАЛ, но такой цели в плане нет. Это не то же самое, что «цель не указана»:
+        # молчание тут соврало бы дважды — и про наличие цели, и про причину обрыва.
+        summary = (f"Функция «{feature}» ссылается на цель «{result['unresolved_goal']}», которой "
+                   f"нет в плане продукта, — до цели нить не доходит.")
     else:
         summary = f"Функция «{feature}»: {chain_line}. {phrase.capitalize()}."
     # «Зачем функция появилась» — из РЕШЕНИЯ (истории), а не из пересказа кода. Если решение
@@ -123,6 +128,17 @@ def from_graph_trace(result: dict) -> dict:
                    "built_by": built_by, "review": review})
 
 
+def _scorecard_line(m: dict) -> str:
+    """Одна строка карты для человека: измеренная — долей в процентах, неизмеренная — причиной.
+
+    Инвариант карты «честность превыше полноты»: неизмеренное печатается «не измерено — причина», а не
+    нулём и не выдуманным числом. Един для пяти метрик и для показателя «ценность для дочки»."""
+    if m.get("measured"):
+        pct = round((m.get("value") or 0) * 100)
+        return f"• {m.get('title')}: {pct}% ({m.get('numerator')}/{m.get('denominator')})"
+    return f"• {m.get('title')}: не измерено — {m.get('reason')}"
+
+
 def from_scorecard(scorecard: dict) -> dict:
     """`product_scorecard.build_scorecard()` -> UserMessage. Карта продукта кита из 5 метрик.
 
@@ -132,20 +148,28 @@ def from_scorecard(scorecard: dict) -> dict:
     metrics = scorecard.get("metrics") or []
     measured = scorecard.get("measured_count") or 0
     total = len(metrics)
-    lines = []
-    for m in metrics:
-        if m.get("measured"):
-            pct = round((m.get("value") or 0) * 100)
-            lines.append(f"• {m.get('title')}: {pct}% ({m.get('numerator')}/{m.get('denominator')})")
-        else:
-            lines.append(f"• {m.get('title')}: не измерено — {m.get('reason')}")
+    lines = [_scorecard_line(m) for m in metrics]
     summary = ("Мерю себя как продукт, а не числом возможностей — карта из 5 метрик:\n"
                + "\n".join(lines))
+    # Стрелка «работа кита -> исход дочки» — ОТДЕЛЬНОЙ строкой рядом с картой (направление
+    # prove-the-loop): доказана ли ценность построенного для ДОЧЕК, а не самолюбование кита.
+    cv = scorecard.get("child_value")
+    if isinstance(cv, dict) and cv.get("title"):
+        summary += ("\nСтрелка «работа кита → исход дочки» (доказана ли ценность для дочек):\n"
+                    + _scorecard_line(cv))
     if scorecard.get("unmeasured_count"):
         status = "degraded"
         headline = f"Карта продукта: измерено честно {measured} из {total} метрик"
-        why = ("Результат после релиза и влияние уроков на решения честно стоят «не измерено»: "
-               "у самого кита живой аналитики нет, а выдуманное число было бы враньём.")
+        # ПОЧЕМУ ЗДЕСЬ БОЛЬШЕ НЕ НАЗЫВАЮТСЯ КОНКРЕТНЫЕ МЕТРИКИ (23.09.2026). Стояло «результат после
+        # релиза и влияние уроков честно стоят „не измерено“: у самого кита живой аналитики нет» —
+        # и это ехало в КАЖДЫЙ подключённый репозиторий, независимо от того, какие метрики у него
+        # на самом деле не измерены и есть ли у него аналитика. Теперь строка называет то, что
+        # реально не измерено В ЭТОМ проекте, а причину каждая метрика несёт свою.
+        unmeasured = [m.get("title") for m in metrics if not m.get("measured")]
+        сколько = "Одна мера" if len(unmeasured) == 1 else f"{len(unmeasured)} меры"
+        why = (f"{сколько} честно стоит «не измерено», и рядом сказано почему: "
+               f"{'; '.join(t for t in unmeasured if t)}. "
+               "Выдуманное число на этом месте было бы враньём.")
     else:
         status = "ok"
         headline = "Карта продукта: все метрики измерены"
@@ -179,6 +203,50 @@ def from_graph_gaps(result: dict) -> dict:
         why_it_matters="Такую дыру иначе видно только при ручной сверке плана, метрик и релизов.",
         next_steps=lines,
         technical=result)
+
+
+def from_graph_questions(result: dict) -> dict:
+    """`feature_life_history.answer_ten_questions()` -> UserMessage. Десять вопросов жизни фичи.
+
+    Каждый вопрос — с ответом из связанной улики ИЛИ честным «неизвестно: <чего не хватает>». Итог —
+    сколько из десяти отвечено; полная история (10/10) читается как один связный ответ «почему мы
+    вообще сделали эту функцию и что с ней стало».
+    """
+    feature = result.get("feature")
+    if result.get("verdict") == "unknown":
+        return message(
+            status="blocked",
+            summary=f"Функции «{feature}» в графе нет — историю её жизни строить не из чего.",
+            why_it_matters="Отвечаю только из объявленного в плане, обучении и паспортах; выдумывать "
+                           "историю не буду.",
+            next_steps=["проверь id функции", "или собери граф: ./ai-ops graph build"])
+    qs = result.get("questions") or []
+    answered = result.get("answered_count") or 0
+    total = result.get("total") or len(qs)
+    lines = []
+    for q in qs:
+        if q.get("answered"):
+            lines.append(f"✓ {q['question']} {q['answer']}")
+        else:
+            lines.append(f"✗ {q['question']} неизвестно: {q.get('unknown_reason')}")
+    complete = result.get("complete")
+    if complete:
+        summary = (f"На все десять вопросов жизни функции «{feature}» есть ответ из связанной "
+                   f"истории — почему возникла, для кого, какая гипотеза, что построили, что "
+                   f"доказано и что дальше.")
+    else:
+        summary = (f"Из десяти вопросов жизни функции «{feature}» из связанной истории отвечено "
+                   f"{answered} — остальные честно «неизвестно» с указанием, какого звена не хватает.")
+    return message(
+        status="ok" if complete else "degraded",
+        headline=None if complete else "История фичи собрана не целиком",
+        summary=summary,
+        why_it_matters="Раньше «зачем мы вообще сделали эту функцию и что с ней стало» собиралось "
+                       "вручную из плана, решений, обучения, паспорта и истории работ; теперь это "
+                       "один связный ответ, и у каждого пункта видно, чем он подтверждён.",
+        next_steps=lines,
+        technical={"answered": answered, "total": total, "complete": complete,
+                   "questions": qs, "verdict": result.get("verdict")})
 
 
 def from_kit_feedback_status(rep: dict) -> dict:

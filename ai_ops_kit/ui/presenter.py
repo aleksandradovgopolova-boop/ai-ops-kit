@@ -118,6 +118,7 @@ from ai_ops_kit.ui.presenter_core import (  # noqa: E402
 from ai_ops_kit.ui.presenter_graph import (  # noqa: E402
     from_graph_build,
     from_graph_gaps,
+    from_graph_questions,
     from_graph_trace,
     from_kit_feedback_status,
     from_scorecard,

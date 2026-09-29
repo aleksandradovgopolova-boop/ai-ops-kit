@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1188
+request_id: RR-021
+statement: >
+  ЗАЯВЛЕНИЕ ВЕНДОРА (не проверенный нами факт): Strix позиционируется как автономные
+  AI-пентестеры, которые запускают код динамически, находят уязвимости и ВАЛИДИРУЮТ их рабочими
+  proof-of-concept, — в противопоставление «ложным срабатываниям инструментов статического
+  анализа». Заявленный охват: OWASP Top 10 и шире (нарушение контроля доступа, инъекции, SSRF/XXE/
+  RCE, XSS/CSRF, гонки и обход бизнес-логики, JWT/сессии, инфраструктура и облако, API). Заявлены
+  также многоагентная оркестрация, автопочинка с патчами и отчёты под комплаенс. Ключевое для нас
+  утверждение — «working PoCs, not false positives» — нами НЕ проверялось ни одним прогоном.
+evidence_type: vendor_claim
+source:
+  title: "Strix — README.md (Overview, Key Capabilities, Comprehensive Vulnerability Scanner)"
+  url: "https://github.com/usestrix/strix/blob/main/README.md"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "README.md, разделы Strix Overview / Key Capabilities / Features; прочитан в клоне 22.09.2026"
+  quote: "Real exploit validation"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: low
+  rationale: >
+    Тип записи выбран сознательно: это маркетинговое самоописание продукта, а не измерение.
+    Reliability low не означает «неправда» — означает «источник заинтересован, проверки не было».
+    Всё, что в DP опирается на ценность PoC, обязано ссылаться сюда как на ГИПОТЕЗУ, подлежащую
+    проверке, а не как на установленный факт.
+status: active
+superseded_by: null

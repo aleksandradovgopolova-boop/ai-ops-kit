@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1187
+request_id: RR-021
+statement: >
+  usestrix/strix — открытый проект под Apache-2.0 на Python, описанный как "Open-source AI
+  penetration testing tool to find and fix your app's vulnerabilities". На 22.09.2026: 64 183
+  звезды, 7 019 форков, 407 ОТКРЫТЫХ issue, создан 05.08.2025, последний push 22.09.2026,
+  версия пакета strix-agent 1.6.2, требуется Python >= 3.12. То есть это не новорождённый проект,
+  а зрелый по возрасту и вниманию; число открытых issue при этом велико и само по себе сигнал о
+  нагрузке на сопровождение, а не о качестве.
+evidence_type: documented_fact
+source:
+  title: "GitHub API: repos/usestrix/strix + pyproject.toml"
+  url: "https://api.github.com/repos/usestrix/strix"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "Ответ GitHub API через `gh api repos/usestrix/strix`, снят 22.09.2026; версия и requires-python — из pyproject.toml клона"
+  quote: "Open-source AI penetration testing tool to find and fix your app’s vulnerabilities."
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Первичный машинный источник площадки + манифест пакета из клона. Числа волатильны по природе,
+    помечены и получили срок годности.
+status: active
+superseded_by: null

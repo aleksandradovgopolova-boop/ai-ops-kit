@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1174
+request_id: RR-020
+statement: >
+  «Async-first» — не маркетинговое слово, а наблюдаемая семантика, закреплённая в системном
+  преамбуле, который харнес вшивает в контекст модели: вызовы инструментов стартуют немедленно и
+  идут в фоне, ни один не блокирует модель; по завершении результат дописывается и БУДИТ новый ход;
+  результаты, пришедшие вместе, приходят одним ходом; ход без вызовов при активных вызовах = сон до
+  первого результата, ход без вызовов при пустой очереди = конец сессии. Отдельно заведён heartbeat:
+  если вызовы активны и десять минут ничего не происходит, модель будят проверить состояние.
+  Модели прямо предписано идти ВШИРЬ: независимые команды — одним ходом, а не цепочкой ходов.
+evidence_type: documented_fact
+source:
+  title: "unreal-agent — harness/contextbuilder/prompts/preamble.md"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/harness/contextbuilder/prompts/preamble.md"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "preamble.md целиком (встраивается через //go:embed в contextbuilder); коммит b7c9bf1"
+  quote: "Tool calls are asynchronous: each starts the moment you issue it and runs in the background"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: >
+    Первичный артефакт, который реально едет в модель (embed в бинарник), а не описание поведения
+    в документации. Это заявленная семантика; ЗАМЕРА поведения под нагрузкой здесь нет — см. EV-1186.
+status: active
+superseded_by: null

@@ -8,6 +8,9 @@ feature:
   profile: lean
   current_stage: delivery        # построено и доставлено PR'ом; аналитика/итог не накоплены
 links:
+  # РАДИ ЧЕГО: цель из planning/plan.yaml — без неё история функции обрывается на
+  # «построили», а зачем она продукту, сказать нечем.
+  goal: one-feature-end-to-end
   # ЗАЧЕМ появилась (из решения, не из пересказа кода): продуктовое ревью владельца 16.09 (P0 №5) —
   # «Verified-readout как уровень знания (не счёт гейтов)» в context решения.
   decision: ep-2026-09-16-product-freeze-held-until-external-clean-run

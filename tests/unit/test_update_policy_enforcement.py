@@ -127,6 +127,20 @@ def test_policy_pr_prepares_a_branch_with_the_change(child):
 
 
 @pytest.mark.slow
+def test_prepared_branch_message_names_the_security_surface(child):
+    """#1157: тело PR обновления говорит, что выпуск привозит по безопасности — и пустое тоже.
+
+    Поставка в этой дочке уже совпадает с пакетом, новых адресов нет — и это сказано словом
+    «ничего», а не отсутствием раздела (молчание читалось бы как «не проверяли»)."""
+    _policy(child, "pr")
+    r = _run(child, "update")
+    assert r.returncode == 0, r.stdout[-500:]
+    body = _git(child, "log", "-1", "--format=%B", _branches(child)[0]).stdout
+    assert "Что этот выпуск привозит по безопасности" in body, body
+    assert "ничего:" in body, body
+
+
+@pytest.mark.slow
 def test_prepared_branch_does_not_carry_the_backup(child):
     """Дифф обязан быть ОТСМАТРИВАЕМЫМ: бэкап managed-слоя в PR не едет.
 
@@ -162,6 +176,7 @@ def test_report_survives_and_names_the_deferral(child):
     assert rep["pull_request"], "поле pull_request снова пустое — это и была улика F-022"
     assert rep["pull_request"] == rep["deferred_to_branch"] == _branches(child)[0]
     assert rep["update_policy"] == "pr"
+    assert "Что этот выпуск привозит по безопасности" in rep["security_surface"]["text"]
 
 
 @pytest.mark.slow
@@ -203,6 +218,9 @@ def test_in_place_flag_applies_in_place(child):
     assert "installed_version: 3.0.0" not in (child / ".ai-ops.yaml").read_text(encoding="utf-8"), (
         "с --in-place обновление не применилось — CI-путь сломан")
     assert not _branches(child), "с --in-place кит всё равно создал ветку"
+    # #1157: CI-шаблон собирает тело PR из отчёта — раздел безопасности обязан лежать в нём.
+    sec = _report(child)["security_surface"]
+    assert sec["status"] == "nothing" and "ничего:" in sec["text"], sec
 
 
 @pytest.mark.slow

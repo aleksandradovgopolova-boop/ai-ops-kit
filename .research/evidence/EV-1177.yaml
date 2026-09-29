@@ -1,0 +1,35 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1177
+request_id: RR-020
+statement: >
+  Набор LLM-клиентов ограничен пятью: openai, openaicodex, openrouter, fireworks, ollama.
+  СОБСТВЕННОГО клиента Anthropic в открытой части нет. Квалификатор охвата: проверено полным
+  перечислением каталога harness/llm/clients/ и grep по `anthropic` во всех .go и .md файлах клона
+  на коммите b7c9bf1 — слово встречается только в клиенте openrouter, в тесте запроса и в README
+  бенчмарка, то есть Anthropic достижим ТОЛЬКО через OpenRouter как посредника. Это утверждение об
+  открытом репозитории; во внутренней кодовой базе Unreal Labs (из которой репозиторий — выборка,
+  EV-1181) может быть иначе, и это не проверялось.
+evidence_type: documented_fact
+source:
+  title: "unreal-agent — harness/llm/clients/ (перечень пакетов)"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/harness/llm/clients"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "Полное перечисление harness/llm/clients/ в клоне + `grep -rli anthropic` по *.go и *.md; коммит b7c9bf1"
+  quote: "openrouter"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: medium
+  rationale: >
+    Негативное утверждение («клиента Anthropic нет») с явным охватом: один коммит, только открытая
+    часть, механическая проверка перечислением и grep. По правилу центра негатив не поднимается
+    выше medium. Набор клиентов волатилен — проект активно пушат, срок годности проставлен.
+status: active
+superseded_by: null

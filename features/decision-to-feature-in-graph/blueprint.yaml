@@ -8,6 +8,9 @@ feature:
   profile: lean
   current_stage: delivery
 links:
+  # РАДИ ЧЕГО: цель из planning/plan.yaml — без неё история функции обрывается на
+  # «построили», а зачем она продукту, сказать нечем.
+  goal: product-memory-org-intelligence
   # ЗАЧЕМ: решение снять freeze и взять направление product-memory-org-intelligence, в рамках
   # которого замер нити истории вскрыл разрыв «нет ребра decision→feature».
   decision: ep-2026-09-16b-freeze-lifted-by-owner-led-ii-sreda-run

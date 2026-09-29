@@ -1,0 +1,34 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1191
+request_id: RR-021
+statement: >
+  Встраивание в конвейер предусмотрено штатно и узко-прицельно: headless `-n`, а для прогонов в
+  духе pull request quick-скан АВТОМАТИЧЕСКИ сужается до изменённых файлов, и это поведение можно
+  задать явно — `--scope-mode diff --diff-base origin/main`. Приведены готовые рецепты для GitLab
+  CI, Jenkins и CircleCI (везде — установка скриптом с сайта вендора плюс запуск), и повторена
+  таблица кодов возврата 0/1/2. То есть механика «проверять только дельту PR» у инструмента есть
+  из коробки, а не достигается обвязкой.
+evidence_type: documented_fact
+source:
+  title: "Strix — docs/integrations/ci-cd.mdx"
+  url: "https://github.com/usestrix/strix/blob/main/docs/integrations/ci-cd.mdx"
+  type: official_documentation
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "ci-cd.mdx, разделы Headless Mode / Exit Codes / GitLab CI / Jenkins / CircleCI; прочитан 22.09.2026"
+  quote: "--scope-mode diff --diff-base origin/main"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Официальная документация с конкретными флагами и рецептами. Оговорка охвата: во всех рецептах
+    установка идёт `curl ... | bash` с сайта вендора — это их способ доставки, и в наш периметр
+    он въезжает вместе с рецептом (учтено в рисках DP-119).
+status: active
+superseded_by: null

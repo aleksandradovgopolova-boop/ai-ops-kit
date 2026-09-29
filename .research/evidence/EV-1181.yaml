@@ -1,0 +1,32 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1181
+request_id: RR-020
+statement: >
+  Управляемость проекта ограничена его же правилами: CONTRIBUTING объявляет репозиторий ВЫБОРКОЙ
+  компонентов из большей внутренней кодовой базы, обещает делиться дальше по мере оценки
+  надёжности, приглашает issue с вопросами и багами — и прямо отказывается принимать pull request'ы
+  из-за нехватки ресурса на ревью. Практическое следствие для потребителя: на найденный дефект
+  доступны issue или форк, но не патч в upstream.
+evidence_type: documented_fact
+source:
+  title: "unreal-agent — CONTRIBUTING.md"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/CONTRIBUTING.md"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "CONTRIBUTING.md целиком (файл в четыре абзаца); коммит b7c9bf1"
+  quote: "we don't currently have the capacity to review and merge pull requests."
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Прямое заявление владельцев репозитория о собственной политике. Волатильно: политика может
+    смениться — срок годности проставлен.
+status: active
+superseded_by: null

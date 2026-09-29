@@ -1,0 +1,37 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1195
+request_id: RR-021
+statement: >
+  У продукта есть управляемый облачный путь (app.strix.ai), в котором исходный код рабочего дерева
+  ЗАГРУЖАЕТСЯ к вендору: «отправьте локальное рабочее дерево в управляемый белоящичный сканер».
+  Загрузка устроена аккуратно — двухшаговое подтверждение по sha256 (сначала `--dry-run
+  --show-files --json`, человек сверяет манифест и фиксирует хэш, затем повторный запуск с
+  `--approve-sha256`; изменившийся снимок отвергается), по умолчанию исключаются .git, скрытые
+  файлы, симлинки, сборочные артефакты, файлы с секретоподобными именами и вложенные архивы, есть
+  .strixignore и лимиты (20 000 файлов, 25 МиБ на файл, 250 МиБ в распакованном виде). Но факт
+  остаётся фактом: в облачном режиме код дочки покидает периметр владельца, и это решение
+  владельца, а не кита.
+evidence_type: documented_fact
+source:
+  title: "Strix — docs/cloud/overview.mdx (Scan Local Source)"
+  url: "https://github.com/usestrix/strix/blob/main/docs/cloud/overview.mdx"
+  type: official_documentation
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "cloud/overview.mdx, раздел «Scan Local Source»; детали исключений, лимитов и обработки неопределённого исхода загрузки — AGENTS.md, блок «Managed cloud»; прочитано 22.09.2026"
+  quote: "Send a local working tree to the managed white-box scanner"
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Официальная документация вендора о собственном облаке. Оговорка охвата: мы читали описание
+    процедуры, а не проверяли её исполнение — что именно уезжает при реальной загрузке, нами не
+    наблюдалось.
+status: active
+superseded_by: null

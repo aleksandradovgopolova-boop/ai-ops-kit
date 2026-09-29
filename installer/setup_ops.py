@@ -335,14 +335,55 @@ def _setup_remaining(root: Path, first_hour=None):
     return out
 
 
-def _setup_summary(root: Path, steps_done, steps_failed, first_hour=None):
-    """Один финальный экран: «сделано автоматически» и «осталось от тебя» (продуктовый язык).
+def _first_result_lead(root: Path, first_hour):
+    """Верхний блок финального экрана: ПЕРВЫЙ РЕЗУЛЬТАТ, а не «установлено». -> list[str].
 
-    `first_hour` — разобранный результат `model --flow --apply --json` (или None): по нему остаток
-    «ответь на вопросы» зависит от стадии первого часа, а не от простого наличия формы."""
+    Конец установки — первый полезный результат, а строка «кит установлен» уходит в подробности
+    ниже. Стадия первого часа решает, что здесь стоит: собранный план (ready), нужные ответы
+    (needs_answers), честное «пока не из чего» (blocked) или — если старый managed-слой не отдал
+    первый час — приглашение собрать результат вручную. Файл результата (`.ai/generated/
+    first-result.md`) называем ссылкой, только если он реально есть."""
+    stage = (first_hour or {}).get("stage") if first_hour else None
+    have_file = (root / ".ai" / "generated" / "first-result.md").is_file()
+    lines = ["═══ Первый результат ═══"]
+    if stage == _STAGE_READY:
+        lines.append("Кит понял репозиторий и собрал направление и план продукта из фактов —")
+        lines.append("это результат, а не «кит установлен».")
+        nb = (first_hour.get("next") or {}).get("next_best") or {}
+        title = nb.get("title") or nb.get("id")
+        if title:
+            lines.append(f"Первой имеет смысл взять: {title}")
+        if have_file:
+            lines.append("Результат целиком (языком человека): .ai/generated/first-result.md")
+        lines.append("Продолжить: `ai-ops next` — очередь работ и рекомендация.")
+    elif stage == _STAGE_NEEDS_ANSWERS:
+        lines.append("Кит разобрался в репозитории — это первый результат. Направление собрать пока")
+        lines.append("не из чего: часть фактов знает только человек, из кода их не вывести.")
+        if have_file:
+            lines.append("Что понято и какие вопросы открыты: .ai/generated/first-result.md")
+        lines.append('Ответить (без правки YAML): `ai-ops model --answer <вопрос> "<ответ>"`,')
+        lines.append("потом `ai-ops model --flow --apply` — соберу направление, план и первую работу.")
+    elif stage == _STAGE_BLOCKED:
+        lines.append("Честно: первого результата пока нет — репозиторий не прочитался, направление")
+        lines.append("собирать не из чего.")
+        lines.append("Проверь доступ к дереву репозитория и повтори: `ai-ops model --flow --apply`.")
+    else:
+        # Первый час не разобрался (старый managed-слой / сбой парсинга) — «установлено» за результат
+        # не выдаём, а честно зовём собрать его вручную.
+        lines.append("Установка прошла. Первый результат этой версией показать не удалось —")
+        lines.append("собери его вручную: `ai-ops model --flow --apply`.")
+    return lines
+
+
+def _setup_summary(root: Path, steps_done, steps_failed, first_hour=None):
+    """Один финальный экран, который ВЕДЁТ первым результатом, а не строкой «установлено».
+
+    `first_hour` — разобранный результат `model --flow --apply --json` (или None): по нему и верхний
+    блок (первый результат), и остаток «ответь на вопросы» зависят от стадии первого часа."""
     print()
-    print("AI Ops установлен одной командой. Ниже — что сделано и что осталось.")
-    print("\nСделано автоматически:")
+    for line in _first_result_lead(root, first_hour):
+        print(line)
+    print("\nЧто кит сделал по пути (одной командой):")
     for s in steps_done:
         print(f"  • {s}")
     if steps_failed:

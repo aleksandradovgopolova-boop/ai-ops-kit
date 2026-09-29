@@ -1,0 +1,33 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1175
+request_id: RR-020
+statement: >
+  Поставляется headless-раннер `unreal-agent-runner`: принимает JSON-запрос (аргументом, из stdin
+  или `-p 'промпт'`), пишет события в stdout как JSONL и завершается по окончании задачи. Ставится
+  `go install` либо запускается образом `unrea1labs/unreal-agent` (Linux amd64/arm64) с
+  примонтированным рабочим каталогом; релизы публикуют git-тег для пиннинга версии. Провайдер
+  выбирается переменной `UNREAL_HARNESS_LLM_PROVIDER` из набора openai, openai-codex, openrouter,
+  fireworks, ollama; модель — `UNREAL_HARNESS_LLM_MODEL`. Рабочий каталог задаётся `-workspace`.
+evidence_type: documented_fact
+source:
+  title: "unreal-agent — cmd/unreal-agent-runner/README.md"
+  url: "https://github.com/unreallabsai/unreal-agent/blob/main/cmd/unreal-agent-runner/README.md"
+  type: source_repository
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "README раннера целиком; сверено с cmd/unreal-agent-runner/main.go на коммите b7c9bf1"
+  quote: "It writes events to stdout as JSONL and exits when the task finishes."
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-020"
+freshness:
+  volatile: false
+  expires_at: null
+reliability:
+  level: high
+  rationale: >
+    Первоисточник + сверка с точкой входа в коде. Установка и запуск НЕ проверялись исполнением
+    (Go на машине владельца отсутствует) — заявленная возможность, не измеренная.
+status: active
+superseded_by: null

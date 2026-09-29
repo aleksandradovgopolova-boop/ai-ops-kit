@@ -1,0 +1,36 @@
+schema_version: 1
+kind: research.evidence
+id: EV-1194
+request_id: RR-021
+statement: >
+  Периметр данных: официальная документация прямо противопоставляет локальные модели («данные
+  остаются локально», пригодно для чувствительных внутренних сетей и изолированных сред) и
+  облачные («данные отправляются провайдеру»). Там же — ПРЕДУПРЕЖДЕНИЕ САМОГО ВЕНДОРА против
+  локального пути по существу: Strix опирается на продвинутые агентские способности (использование
+  инструментов, многошаговое планирование, самокоррекция), большинство локальных моделей, особенно
+  меньше 70B, с этим не справляются, и для ответственных проверок авторы настоятельно рекомендуют
+  сильные облачные модели, а локальные — только когда приватность абсолютный приоритет.
+  Практическое следствие: «приватно» и «работает хорошо» здесь — выбор одного из двух, по словам
+  самого производителя.
+evidence_type: documented_fact
+source:
+  title: "Strix — docs/llm-providers/local.mdx"
+  url: "https://github.com/usestrix/strix/blob/main/docs/llm-providers/local.mdx"
+  type: official_documentation
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "local.mdx, таблица «Privacy vs Performance» и блок Warning «Compatibility Note»; прочитан 22.09.2026"
+  quote: "Use local models only when privacy is the absolute priority."
+captured_at: "2026-09-22"
+captured_by: "AI Ops research (Claude), прогон RR-021"
+freshness:
+  volatile: true
+  expires_at: "2026-12-22"
+reliability:
+  level: high
+  rationale: >
+    Сильный тип свидетельства: вендор ограничивает СОБСТВЕННЫЙ продукт, то есть говорит против
+    своего интереса. Волатильно — по мере роста локальных моделей формулировка устареет.
+status: active
+superseded_by: null
