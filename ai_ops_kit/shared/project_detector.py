@@ -37,7 +37,7 @@ PROFILE_REL = Path(".ai") / "repository-profile.yaml"
 
 # Манифесты, от которых зависит РЕЗУЛЬТАТ детекции: изменился состав или содержимое любого —
 # профиль протух (failure mode #3: прогон по устаревшему стеку после правки манифестов).
-_WATCHED_FILES = (
+_WATCHED_FILES: tuple[str, ...] = (
     "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pnpm-workspace.yaml",
     "lerna.json", "turbo.json", "nx.json",
     "pyproject.toml", "requirements.txt", "requirements-dev.txt", "uv.lock",
