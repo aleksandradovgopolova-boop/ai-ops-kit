@@ -9,12 +9,18 @@
 существующее через инъектируемый `client`) → ПЛАН (создать/обновить/закрыть); мутации только при
 `apply=True`. Сеть (`gh`) — в адаптере CLI, ядро тестируется на фейковом клиенте. Идемпотентно: ключ
 вшит в тело `<!-- roadmap-sync: KEY -->`; issue, заведённые вручную, усыновляются по заголовку/телу.
+
+Формат заголовка и тела — единый формат issue кита (`issue_format`: `<slug>: <исход>` + четыре
+секции). Старые заголовки `[roadmap:<goal>] …` / `[<goal>] …` по-прежнему узнаются `parse_key`, а
+заголовки уже заведённых issue сверка не переписывает — новый формат получают только новые issue.
 """
 from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
 from typing import Protocol
+
+from ai_ops_kit.planning import issue_format
 
 LABEL = "roadmap-direction"
 _KEY_RE = re.compile(r"<!--\s*roadmap-sync:\s*([a-z0-9:_-]+)\s*-->")
@@ -119,58 +125,92 @@ def _work_key(goal: str, work_id: str) -> str:
     return f"work:{goal}:{work_id}"
 
 
-def epic_title(goal: str) -> str:
-    return f"[roadmap:{goal}] {DIRECTION_TITLES.get(goal, goal)}"
+# Исход в заголовке эпика, когда у направления нет человекочитаемого названия (только slug):
+# статичный, а не со счётчиком — заголовки заведённых issue сверка не переписывает.
+_EPIC_FALLBACK_OUTCOME = "направление роадмапа достигнуто целиком"
+
+
+def _direction_title(goal: str, title: str | None = None) -> str | None:
+    """Человеческое название направления: словарь кита, иначе название цели плана (если это не slug)."""
+    if goal in DIRECTION_TITLES:
+        return DIRECTION_TITLES[goal]
+    t = " ".join(str(title or "").split())
+    return t if t and t != goal else None
+
+
+def epic_title(goal: str, title: str | None = None) -> str:
+    """`<goal>: <исход направления>` — единый формат issue (`issue_format`).
+
+    Новый формат действует для НОВЫХ issue: заголовки заведённых сверка не трогает (ключ — маркер в
+    теле), поэтому массового переименования живых issue нет."""
+    return issue_format.render_title(goal, _direction_title(goal, title) or _EPIC_FALLBACK_OUTCOME)
 
 
 def work_title(goal: str, work: dict) -> str:
-    title = str(work.get("title") or work["id"]).strip().replace("\n", " ")
-    if len(title) > 90:
-        title = title[:87] + "…"
-    return f"[{goal}] {title}"
+    """`<id работы>: <название работы>` — slug = id работы в `planning/plan.yaml`, по нему её и ищут."""
+    title = str(work.get("title") or work["id"])
+    return issue_format.render_title(str(work["id"]), title)
 
 
 def epic_body(goal: str, horizon: str, reached: int, total: int,
               missing: list[str], sub_numbers: list[int | None],
-              waiting: list[dict] | None = None) -> str:
+              waiting: list[dict] | None = None, title: str | None = None) -> str:
     waiting = waiting or []
-    lines = [f"<!-- roadmap-sync: {_epic_key(goal)} -->",
-             f"Направление роадмапа **`{goal}`** (горизонт: {_HZ_HUMAN.get(horizon, horizon)}). "
-             f"Готово {reached} из {total} исходов.", "", "### Что ещё не достигнуто"]
-    for m in missing:
-        lines.append(f"- [ ] `{m}`")
-    lines.append("")
+    hz = _HZ_HUMAN.get(horizon, horizon)
+    human = _direction_title(goal, title)
+    what = (f"Довести направление роадмапа **`{goal}`** до всех исходов (горизонт: {hz}). "
+            f"Готово {reached} из {total} исходов.")
+    why = (f"Направление обещано в роадмапе на горизонте «{hz}»"
+           + (f" — «{human}»" if human else "")
+           + ". Пока его исходы не достигнуты, это обещание не выполнено.")
+    if missing:
+        verifiable = ("Все исходы направления достигнуты — тогда направление уходит из горизонтов, "
+                      "и сверка закрывает эпик сама. Ещё не достигнуто:\n"
+                      + "\n".join(f"- [ ] `{m}`" for m in missing))
+    else:
+        verifiable = ("Все исходы направления достигнуты — эпик закроется при следующей сверке.")
+    bounds = ("Источник — `ROADMAP.md` и цель `" + goal + "` в `planning/plan.yaml`: там зависимости, "
+              "write_scope и исходы работ. Эпик не заменяет план: его ведёт команда "
+              "`roadmap sync-issues`, правки руками она перезапишет.")
+    extra: list[str] = []
     if waiting:
         # Работа-замер ждёт живого прогона владельца — не writer'а. Показываем отдельно от подзадач,
         # чтобы не выдать её за назначаемую работу и не молчать о ней («работ нет» было бы неправдой).
-        lines.append("### Ждёт owner-прогон")
+        extra.append("### Ждёт owner-прогон")
         for w in waiting:
             reason = _one_line(w.get("waiting_on") or "")
-            lines.append(f"- `{w['id']}` — ждёт прогона владельца" + (f": {reason}" if reason else ""))
-        lines.append("")
+            extra.append(f"- `{w['id']}` — ждёт прогона владельца" + (f": {reason}" if reason else ""))
+        extra.append("")
     if sub_numbers:
-        lines.append("### Подзадачи (работы плана)")
+        extra.append("### Подзадачи (работы плана)")
         for n in sub_numbers:
-            lines.append(f"- [ ] #{n}" if n is not None else "- [ ] _(будет заведена)_")
-        lines.append("")
+            extra.append(f"- [ ] #{n}" if n is not None else "- [ ] _(будет заведена)_")
+        extra.append("")
     elif not waiting:
-        lines.append("_Заведённых работ под направлением сейчас нет — открыт только исход выше._")
-        lines.append("")
-    lines.append("_Эпик направления. Поддерживается командой `roadmap sync-issues`; трекер "
-                 "деталей — `planning/plan.yaml` и `ROADMAP.md`._")
-    return "\n".join(lines).rstrip() + "\n"
+        extra.append("_Заведённых работ под направлением сейчас нет — открыт только исход выше._")
+    return issue_format.render_body(what, why, verifiable, bounds,
+                                    marker=f"<!-- roadmap-sync: {_epic_key(goal)} -->",
+                                    extra="\n".join(extra))
 
 
 def work_body(goal: str, work: dict) -> str:
     # Ссылка на эпик — по slug направления, не по номеру: номер эпика может появиться позже
     # (эпик заводится вторым), а тело работы должно быть стабильным ради идемпотентности. Связь
     # «эпик → подзадача» несёт task-list в теле эпика — именно его GitHub рисует как sub-issue.
-    return (f"<!-- roadmap-sync: {_work_key(goal, work['id'])} -->\n"
-            f"Работа `{work['id']}` под направлением-эпиком `{goal}`. "
-            f"Статус в плане: **{work.get('status')}**.\n\n"
-            f"Трекер работы — `planning/plan.yaml` (id `{work['id']}`): там зависимости, "
-            f"write_scope и исходы. Issue закрывается вместе с работой.\n\n"
-            f"_Подзадача направления. Поддерживается командой `roadmap sync-issues`._\n")
+    wid = work["id"]
+    title = _one_line(work.get("title") or wid, limit=300)
+    what = (f"Работа `{wid}` под направлением-эпиком `{goal}`: {title}. "
+            f"Статус в плане: **{work.get('status')}**.")
+    why = (_one_line(work.get("rationale") or "", limit=600)
+           or f"Работа ведёт направление `{goal}` к его исходам.")
+    deps = [str(d) for d in (work.get("depends_on") or [])]
+    verifiable = ("Работа закрыта в `planning/plan.yaml`; issue закрывается вместе с ней при "
+                  "следующей сверке." + (f" Начинается после: {', '.join(f'`{d}`' for d in deps)}."
+                                         if deps else ""))
+    bounds = (f"Трекер работы — `planning/plan.yaml` (id `{wid}`): там зависимости, write_scope и "
+              f"исходы. Подзадача направления; поддерживается командой `roadmap sync-issues`.")
+    return issue_format.render_body(what, why, verifiable, bounds,
+                                    marker=f"<!-- roadmap-sync: {_work_key(goal, wid)} -->")
 
 
 def _canonical(body: str) -> str:
@@ -202,10 +242,12 @@ def sync(report: dict, plan_items: list[dict], client: Client, apply: bool = Fal
     """
     roadmap = report.get("roadmap") or {}
     directions = []  # (goal, horizon, reached, total, missing)
+    dir_titles: dict[str, str | None] = {}
     for hz in ("now", "next"):
         for g in roadmap.get(hz, []) or []:
             missing = [o["name"] for o in g.get("outcomes", []) if not o.get("reached")]
             directions.append((g["goal"], hz, g.get("reached", 0), g.get("total", 0), missing))
+            dir_titles[g["goal"]] = g.get("title")
     works_by = _open_works_by_goal(plan_items)
     waiting_by = _waiting_works_by_goal(plan_items)
 
@@ -250,8 +292,9 @@ def sync(report: dict, plan_items: list[dict], client: Client, apply: bool = Fal
         key = _epic_key(goal)
         desired_keys.add(key)
         subs = [work_number.get(_work_key(goal, w["id"])) for w in works_by.get(goal, [])]
-        title = epic_title(goal)
-        body = epic_body(goal, hz, reached, total, missing, subs, waiting_by.get(goal, []))
+        title = epic_title(goal, dir_titles.get(goal))
+        body = epic_body(goal, hz, reached, total, missing, subs, waiting_by.get(goal, []),
+                         title=dir_titles.get(goal))
         cur = by_key.get(key)
         if cur is None:
             num = client.create(title, body, [LABEL]) if apply else None

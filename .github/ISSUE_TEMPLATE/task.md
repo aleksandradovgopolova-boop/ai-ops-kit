@@ -10,6 +10,9 @@ labels: []
 ТЕЛО: отвечает на четыре вопроса ниже В ЭТОМ ПОРЯДКЕ. Так задачи читаются так же
 предсказуемо, как история коммитов (conventional commits). Стиль — часть стандарта кита (tier3,
 advisory): его несёт `registry/artifact-registry.yaml -> standard_catalog[issue_template]`.
+Секции — одна правда с генераторами issue: `ai_ops_kit/planning/issue_format.py -> SECTION_HEADINGS`;
+расхождение ловит `tests/unit/test_issue_format.py`. Направление с подзадачами — шаблон `epic.md`.
+Заводите через `gh issue create --body`? Тело всё равно в этих четырёх секциях по порядку.
 -->
 
 **Что.** Что меняется — одним-двумя предложениями по существу.
