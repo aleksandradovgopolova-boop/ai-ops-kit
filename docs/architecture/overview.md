@@ -4,24 +4,19 @@ AI Ops Kit — модульная система с чётким разделе�
 
 ## Слои
 
+Пакеты движка `ai_ops_kit/` лежат в пяти слоях; зависимость разрешена только вниз
+(источник истины — `packages/layering.yaml`, проверка — `validate_layering.py`):
+
 ```
-┌─────────────────────────────────────────────────┐
-│  Installer (installer/ai_ops.py)                │
-│  Устанавлиет пакеты в child-репозитории          │
-├─────────────────────────────────────────────────┤
-│  Product Layer (agents/, templates/, skills/)    │
-│  AI-агенты, шаблоны, навыки                      │
-├─────────────────────────────────────────────────┤
-│  Execution Layer (ai_ops_kit/)                   │
-│  Движок: orchestrator → pipeline → delivery      │
-├─────────────────────────────────────────────────┤
-│  Quality Layer (quality/, ai_ops_kit/validation/)│
-│  Гейты, валидаторы, evidence                     │
-├─────────────────────────────────────────────────┤
-│  Core Layer (registry/, schemas/, config/)       │
-│  SoT: агенты, workflow, модели, провайдеры       │
-└─────────────────────────────────────────────────┘
+entrypoints   cli · devtools · validation          точки входа
+intelligence  intelligence                          аналитика, читает события ядра
+capabilities  context · providers · lifecycle · gates · engine · delivery · engops · planning
+primitives    security · ui · integrations · governance · checks
+foundation    shared · kernel                       пути, контракты, порты ядра
 ```
+
+Вокруг движка: `installer/ai_ops.py` ставит кит в дочку, `registry/` и `schemas/` — источник
+истины (агенты, workflow, модели), `agents/`, `templates/`, `skills/` — прозаический слой.
 
 > Плоский слой `tools/` снят в 4.0 — движок целиком под пакетом `ai_ops_kit/`
 > (см. `MIGRATION_GUIDE_4.0.md`). Корневого `validation/` нет с 3.34 — валидаторы
@@ -49,5 +44,5 @@ AI Ops Kit — модульная система с чётким разделе�
 ## Три кольца (v3.26.0)
 
 1. **Kernel** — не зависит от Intelligence. Ядро execution engine.
-2. **Intelligence** — читает события Kernel. Модели, провайдеры, роутинг.
+2. **Intelligence** — читает события Kernel. Аналитика, product-learning, ночные обзоры.
 3. **Governance** — соединяется по риску. Гейты, security, compliance.

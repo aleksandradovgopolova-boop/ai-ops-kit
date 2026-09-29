@@ -2,7 +2,7 @@
 
 ## Требования
 
-- Python 3.9+
+- Python 3.12+
 - Git
 - (Опционально) Node.js 22+ для OpenSpec
 
