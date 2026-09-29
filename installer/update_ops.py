@@ -462,7 +462,8 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
             print(f"⚠ allowed_version_range расширен до \"{_new_range}\" — мажор-переход "
                   f"осознанный (--force). Без этого установленная {target} осталась бы вне своего "
                   f"же диапазона, и следующее обновление молча пропустилось бы как несовместимое.")
-    report["skills_synced"] = _core().sync_skills(_ao().REPO_ROOT)
+    # `inst` — выпуск ДО обновления: по нему сверяются навыки установок без записи о поставке (#1224)
+    report["skills_synced"] = _core().sync_skills(_ao().REPO_ROOT, previous_version=inst)
     report["commands_installed"] = _core().materialize_runtime(_ao().REPO_ROOT)
     # v3.35: блок политики общения обновляется вместе с китом — «правьте политику и
     # перегенерируйте» стало правдой, а не обещанием в шаблоне. Текст вне маркеров не трогается.
