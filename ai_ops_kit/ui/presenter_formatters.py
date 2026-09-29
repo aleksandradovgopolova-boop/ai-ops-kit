@@ -21,7 +21,7 @@ from ai_ops_kit.ui.presenter_ceremony import risk_ceremony_line  # связь р
 # `presenter_report_formatters.py`, чтобы этот файл держался под потолком размера. Реэкспорт
 # оставляет `presenter_formatters.from_bootstrap(...)` и обращения `presenter.from_*` рабочими,
 # а сам импорт — тот не-тестовый потребитель, без которого сосед был бы «построен, но не проведён».
-from ai_ops_kit.shared.project_detector import lint_unguarded  # где «линтера нет» = «не нашла»
+from ai_ops_kit.shared.project_detector import lint_unguarded  # где «линтера нет» = «не нашёл»
 from ai_ops_kit.ui.presenter_report_formatters import (
     code_style_unguarded,
     from_bootstrap,
@@ -161,7 +161,7 @@ def from_onboarding_profile(prof: dict, written: str) -> dict:
             status="degraded", headline="Разобрался, но не до конца",
             summary=f"Проект написан на {what}.",
             why_it_matters="Чего я не знаю: " + "; ".join(notes) + ". Пока это так, часть проверок "
-                           "я провести не смогу и не буду делать вид, что провела." + style,
+                           "я провести не смогу и не буду делать вид, что провёл." + style,
             next_steps=["скажи недостающие команды — или спроси «что дальше», и я начну работу "
                         "с тем, что уже знаю"],
             technical=tech)

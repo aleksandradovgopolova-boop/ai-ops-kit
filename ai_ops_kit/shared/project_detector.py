@@ -62,7 +62,7 @@ _WATCHED_FILES += _ESLINT_CONFIGS + _BIOME_CONFIGS + _PRETTIER_CONFIGS
 # гейта не вправе менять дерево, которое она судит. Evidence collector гоняет лишь четыре первых.
 SLOTS = ("build", "lint", "typecheck", "test", "format")
 # Стеки, у которых детектор УМЕЕТ искать линтер (конфиг/скрипт/хук/Makefile/CI). Только для них
-# `lint: None` значит «не нашла»; у java линтер не ищется вовсе, и там None значит «не знаю».
+# `lint: None` значит «не нашёл»; у java линтер не ищется вовсе, и там None значит «не знаю».
 LINT_DETECTABLE = ("node", "python", "go", "rust")
 
 

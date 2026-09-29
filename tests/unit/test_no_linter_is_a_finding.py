@@ -155,7 +155,7 @@ def test_docs_only_change_keeps_its_own_exemption_even_when_lint_is_required(rep
 
 
 def test_stack_where_linter_is_not_searched_is_not_called_unguarded(repo):
-    """java: детектор линтер не ищет — «не нашла» значило бы «не искала»; неизвестно ≠ нет."""
+    """java: детектор линтер не ищет — «не нашёл» значило бы «не искал»; неизвестно ≠ нет."""
     _config(repo, "standard:\n  lint: required\n")
     coll, res, g = _run(repo, _profile(language="java"))
     assert "finding" not in coll["checks"]["lint"]
