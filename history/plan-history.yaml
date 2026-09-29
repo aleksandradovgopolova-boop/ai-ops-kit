@@ -19,6 +19,21 @@ kind: delivery-plan-history
 
 
 work:
+  - id: lint-profile-enforced-everywhere
+    title: >-
+      Профиль стиля исполняется там же, где линт дочки: в хуке при правке, в её CI и в прогоне кита
+    goal: child-code-style-held-by-machine
+    status: done
+    closed_at: '2026-09-29'
+    issue: 1183
+    pr: 1213
+    evidence: qualification/CODE-STYLE-FIELD-RUN-2026-09-29.md
+    result: >-
+      ЗАКРЫТО 2026-09-29 (PR #1213). Применённый профиль проверяется в хуке по ОДНОМУ изменённому файлу
+      против базы, во входе CI дочки (тот же путь, что `lint-profile check`) и в `lint_passed` прогона
+      кита (рост снимает флаг с адресами). Без профиля поведение прежнее. На клоне ии-среды (код до
+      ii-sreda#1007): база 4 891, новое имя -> хук exit 2, CI красный, `lint_passed` снят; убрано ->
+      зелено. Реального раннера GitHub не видел — Actions ии-среды стоят по оплате.
   - id: identifier-and-lint-articles-in-constitution
     title: >-
       Конституция: статьи «один язык идентификаторов» и «линтер в дочке исполняется»; честные метки исполнения

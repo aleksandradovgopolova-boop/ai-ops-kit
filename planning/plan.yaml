@@ -1210,28 +1210,8 @@ work:
   # линта с базой (#1198), «нет линтера» — находка (#1197), хук при правке и шаблон CI дочки (#1196),
   # ревьюер по конституции (#1195), кит держит своё правило (#1185). Суд вскрыл стык: профиль
   # исполняется только отдельной командой — хук, CI и прогон кита его не видят. Это работа ниже.
-  - id: lint-profile-enforced-everywhere
-    title: >-
-      Профиль стиля исполняется там же, где линт дочки: в хуке при правке, в её CI и в прогоне кита
-    type: engineering
-    goal: child-code-style-held-by-machine
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 1183
-    write_scope:
-    - templates/runtime/lint_hook.py
-    - templates/ci/ai-ops-lint.yml
-    - ai_ops_kit/checks/
-    - ai_ops_kit/cli/lint_profile_cli.py
-    - ai_ops_kit/gates/evidence_collector.py
-    - tests/unit/test_lint_*
-    rationale: >-
-      `./ai-ops lint-profile --apply` кладёт профиль отдельным конфигом (`eslint.ai-ops.config.mjs`,
-      база — в `.ai/project/lint/`), а хук (#1196), CI-шаблон (#1196) и `lint_passed` прогона (#1197)
-      гоняют собственную команду линта дочки. Без стыка правило «имена латиницей» держит только тот,
-      кто вспомнил запустить команду, — ровно прозаический класс, который направление закрывает.
-
+  # lint-profile-enforced-everywhere ЗАКРЫТА в историю 2026-09-29 (PR #1213): профиль исполняется
+  # в хуке при правке, во входе CI дочки и в `lint_passed` прогона кита. В дочку едет следующим выпуском.
   - id: code-style-field-run-on-ii-sreda
     title: >-
       Полевой прогон на ии-среде: профиль с базой включён, новое нарушение отказано при правке и в
@@ -1246,7 +1226,6 @@ work:
     - lint-profile-per-stack-with-baseline
     - lint-runs-at-edit-and-in-child-ci
     - child-without-linter-is-a-finding
-    - lint-profile-enforced-everywhere
     write_scope:
     - qualification/
     rationale: >-
