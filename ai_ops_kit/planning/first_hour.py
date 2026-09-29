@@ -95,13 +95,31 @@ def _classification(res: dict) -> str:
     return cls or "—"
 
 
+_HEALTH_MARK = {"ok": "✓", "attention": "•", "urgent": "⚠", "not_checked": "?", "info": "·"}
+
+
+def _health_lines(res: dict) -> list:
+    """Раздел «Состояние проекта сейчас» (#1200): итог одной фразой + по строке на проверку.
+
+    Итог считает слой команд (`cli/ai_ops_cli_first_health`) из уже существующих проверок; здесь его
+    только печатаем. Нет итога (старый вызов / не посчитан) — раздела нет, а не «всё в порядке»."""
+    health = res.get("health")
+    if not isinstance(health, dict) or not health.get("verdict"):
+        return []
+    lines = ["## Состояние проекта сейчас", "", f"**{health['verdict']}**", ""]
+    for it in health.get("items") or []:
+        mark = _HEALTH_MARK.get(it.get("status"), "·")
+        lines.append(f"- {mark} **{it.get('area')}**: {it.get('text')}")
+    return lines + [""]
+
+
 def _render_needs_answers(res: dict, cls: str) -> str:
     """Первый результат стадии needs_answers: что понято + какие ответы нужны (без правки YAML)."""
     lines = ["# Первый результат AI Ops", "",
              "Кит разобрался в репозитории. Это первый результат: не «кит установлен», а понимание",
              "проекта. Собрать направление и план пока не из чего — часть фактов знает только человек,",
              "из кода их не вывести. Недоказанное кит называет недоказанным, а не выдаёт за готовое.",
-             "", f"**Что понято.** Класс репозитория: `{cls}`.", ""]
+             "", f"**Что понято.** Класс репозитория: `{cls}`.", ""] + _health_lines(res)
     for c in res.get("conflicts") or []:
         if len(lines) and lines[-1] != "":
             lines.append("")
@@ -136,7 +154,7 @@ def _render_ready(res: dict, cls: str) -> str:
              "догадок. Это и есть первый результат: не «кит установлен», а материал, с которым можно",
              "работать.", "",
              f"**Что понято.** Класс репозитория: `{cls}`.",
-             f"**Собрано.** Работ в плане: {n_work}.", ""]
+             f"**Собрано.** Работ в плане: {n_work}.", ""] + _health_lines(res)
     written = boot.get("written") or []
     if written:
         lines += ["**Записанные артефакты:**", ""]

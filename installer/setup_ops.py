@@ -346,6 +346,10 @@ def _first_result_lead(root: Path, first_hour):
     stage = (first_hour or {}).get("stage") if first_hour else None
     have_file = (root / ".ai" / "generated" / "first-result.md").is_file()
     lines = ["═══ Первый результат ═══"]
+    # #1200: в каком состоянии проект сейчас — итог одной фразой, если первый час его посчитал.
+    health = (first_hour or {}).get("health") if first_hour else None
+    if isinstance(health, dict) and health.get("verdict"):
+        lines.append(f"Состояние проекта: {health['verdict']}")
     if stage == _STAGE_READY:
         lines.append("Кит понял репозиторий и собрал направление и план продукта из фактов —")
         lines.append("это результат, а не «кит установлен».")
