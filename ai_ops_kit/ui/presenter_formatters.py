@@ -21,7 +21,9 @@ from ai_ops_kit.ui.presenter_ceremony import risk_ceremony_line  # связь р
 # `presenter_report_formatters.py`, чтобы этот файл держался под потолком размера. Реэкспорт
 # оставляет `presenter_formatters.from_bootstrap(...)` и обращения `presenter.from_*` рабочими,
 # а сам импорт — тот не-тестовый потребитель, без которого сосед был бы «построен, но не проведён».
+from ai_ops_kit.shared.project_detector import lint_unguarded  # где «линтера нет» = «не нашла»
 from ai_ops_kit.ui.presenter_report_formatters import (
+    code_style_unguarded,
     from_bootstrap,
     from_doctor,
     from_first_hour,
@@ -141,7 +143,12 @@ def from_onboarding_profile(prof: dict, written: str) -> dict:
             technical=tech)
 
     what = ", ".join(langs)
-    missing_cmds = sorted({k for s in stacks for k, v in (s.get("commands") or {}).items() if not v})
+    # format — не пробел проверки (гейт его не гоняет): без форматтера профиль не «неполон»
+    missing_cmds = sorted({k for s in stacks for k, v in (s.get("commands") or {}).items()
+                           if not v and k != "format"})
+    # #1183: без линтера — не «не хватает команды», а последствие для кода и совет, что поставить
+    bare = lint_unguarded(prof)
+    style = (" " + code_style_unguarded(bare)) if bare else ""
     notes = []
     if missing_cmds:
         notes.append("команды для " + ", ".join(_CMD_RU.get(k, k) for k in missing_cmds))
@@ -154,7 +161,7 @@ def from_onboarding_profile(prof: dict, written: str) -> dict:
             status="degraded", headline="Разобрался, но не до конца",
             summary=f"Проект написан на {what}.",
             why_it_matters="Чего я не знаю: " + "; ".join(notes) + ". Пока это так, часть проверок "
-                           "я провести не смогу и не буду делать вид, что провела.",
+                           "я провести не смогу и не буду делать вид, что провела." + style,
             next_steps=["скажи недостающие команды — или спроси «что дальше», и я начну работу "
                         "с тем, что уже знаю"],
             technical=tech)

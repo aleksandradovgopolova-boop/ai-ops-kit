@@ -27,9 +27,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import yaml
+
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import project_detector       # noqa: E402
 from ai_ops_kit.gates import verification_tiers     # noqa: E402  v3.26.0
+# текст находки «стиль кода никто не держит» — в слое речи (ui ниже gates, импорт вниз разрешён)
+from ai_ops_kit.ui.presenter_report_formatters import CODE_STYLE_POLICIES, code_style_unguarded
 
 # проверка -> (флаг required_evidence, ключ в evidence_schema гейта)
 CHECK_MAP = {
@@ -50,6 +54,86 @@ def _commands_by_check(profile):
             if check in out and cmd:
                 out[check].append((lang, cmd))
     return out
+
+
+def _docs_only_result(revision, impact_status, verification_info):
+    """Изменение только документации -> ОСВОБОЖДЕНИЕ с названной причиной (не пустой pass).
+
+    ПРОПУСК ОБЯЗАН БЫТЬ ОСВОБОЖДЕНИЕМ, А НЕ ПУСТЫМ `pass` (B2-08, живой прогон 14.08).
+
+    Прежде эта ветка возвращала `status: pass` с единственным флагом `skip_verification`,
+    которого НЕТ в `required_evidence`, и `not_applicable: []`. Дальше `gate_executor`
+    честно не находил ни одного из пяти обязательных флагов и превращал такой pass в
+    БЛОКИРУЮЩИЙ отказ «бездоказательный pass». То есть ветка, созданная чтобы пропустить
+    проверку, сама её и заваливала — на ЛЮБОМ репозитории, включая кит: воспроизведено на
+    полном наборе команд, отсутствие тестов у продукта тут ни при чём.
+    Цена: ни одно изменение только документации не могло дойти до владельца.
+
+    Теперь флаги объявлены НЕПРИМЕНИМЫМИ с названной причиной, и `gate_executor` пишет
+    это в warnings: проверка не выдумана, она явно не делалась и сказано почему.
+    `tested_revision` в освобождение НЕ входит — ревизия известна, это настоящее
+    доказательство, и подменять его освобождением значило бы прятать факт за отговоркой."""
+    return {
+        "schema_version": 1, "kind": "evidence-collection",
+        "revision": revision, "checks": {},
+        "schema_evidence": {},
+        "gate_evidence": {"implementation_verification": {
+            "status": "pass",
+            # веха 4.2 (#588): коллектор — детерминированный путь (реальные exit-коды),
+            # честно помечаем источник как deterministic.
+            "source": "deterministic",
+            "provided": ["skip_verification", "tested_revision"],
+            "evidence": [f"skip_reason:{impact_status}", f"revision:{revision}"],
+        }},
+        "not_applicable": ["build_passed", "lint_passed", "typecheck_passed",
+                           "tests_passed"],
+        "not_applicable_reason": "изменение только документации — продуктовые проверки не применимы",
+        "tests_absent": False,
+        "verification": verification_info,
+    }
+
+
+def lint_policy(root) -> tuple:
+    """`.ai-ops.yaml -> standard.lint` СУДИМОЙ ревизии -> (policy, как объявлено).
+
+    Читается из дерева, которое судит гейт: настройка — часть той же ревизии, что и код. Ключа нет
+    -> `advisory` (новый ключ с рабочим значением по умолчанию не ломает дочку). Незнакомое значение
+    -> `invalid`, и потребитель трактует его строже, а не мягче (fail-closed): опечатка в
+    `required` не должна тихо превращать обязательную проверку в совет. Нечитаемый файл — как у
+    прочих читателей конфига кита: намерения владельца из него не извлечь, работает умолчание."""
+    for fname in (".ai-ops.yaml", ".ai-ops.yml"):
+        cfg = Path(root) / fname
+        if not cfg.is_file():
+            continue
+        try:
+            data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return "advisory", None
+        std = data.get("standard") if isinstance(data, dict) else None
+        declared = std.get("lint") if isinstance(std, dict) else None
+        if declared is None:
+            return "advisory", None
+        return (declared if declared in CODE_STYLE_POLICIES else "invalid"), declared
+    return "advisory", None
+
+
+def style_finding(profile, root):
+    """Находка владельцу «стиль кода никто не проверяет» (#1183) -> dict | None.
+
+    Прежде отсутствие линтера молча уходило в `not_applicable`, и гейт писал «освобождено (нет
+    инструмента в стеке): lint_passed» — внутреннее имя и причину без последствия. Последствие
+    видно только в дочке: каждый агент пишет по-своему, стиль расползается.
+
+    Находка только для стеков, у которых детектор УМЕЕТ искать линтер: для остальных «не нашла»
+    значило бы «не искала», и сказать «никто не проверяет» было бы неправдой (неизвестно ≠ нет).
+    Нет стека вовсе — тоже не находка: о коде, которого кит не распознал, судить нечем."""
+    bare = project_detector.lint_unguarded(profile)
+    if not bare:
+        return None
+    policy, declared = lint_policy(root)
+    return {"kind": "code-style-unguarded", "languages": bare, "policy": policy,
+            "declared": declared, "blocking": policy != "advisory",
+            "text": code_style_unguarded(bare, policy, declared)}
 
 
 def collect(profile, root, policy, changed_files=None, broker=None):
@@ -82,38 +166,7 @@ def collect(profile, root, policy, changed_files=None, broker=None):
 
         # v3.27.3 WP4: skip tier — docs-only, не запускаем product build/test
         if tier == "skip":
-            # ПРОПУСК ОБЯЗАН БЫТЬ ОСВОБОЖДЕНИЕМ, А НЕ ПУСТЫМ `pass` (B2-08, живой прогон 14.08).
-            #
-            # Прежде эта ветка возвращала `status: pass` с единственным флагом `skip_verification`,
-            # которого НЕТ в `required_evidence`, и `not_applicable: []`. Дальше `gate_executor`
-            # честно не находил ни одного из пяти обязательных флагов и превращал такой pass в
-            # БЛОКИРУЮЩИЙ отказ «бездоказательный pass». То есть ветка, созданная чтобы пропустить
-            # проверку, сама её и заваливала — на ЛЮБОМ репозитории, включая кит: воспроизведено на
-            # полном наборе команд, отсутствие тестов у продукта тут ни при чём.
-            # Цена: ни одно изменение только документации не могло дойти до владельца.
-            #
-            # Теперь флаги объявлены НЕПРИМЕНИМЫМИ с названной причиной, и `gate_executor` пишет
-            # это в warnings: проверка не выдумана, она явно не делалась и сказано почему.
-            # `tested_revision` в освобождение НЕ входит — ревизия известна, это настоящее
-            # доказательство, и подменять его освобождением значило бы прятать факт за отговоркой.
-            return {
-                "schema_version": 1, "kind": "evidence-collection",
-                "revision": revision, "checks": {},
-                "schema_evidence": {},
-                "gate_evidence": {"implementation_verification": {
-                    "status": "pass",
-                    # веха 4.2 (#588): коллектор — детерминированный путь (реальные exit-коды),
-                    # честно помечаем источник как deterministic.
-                    "source": "deterministic",
-                    "provided": ["skip_verification", "tested_revision"],
-                    "evidence": [f"skip_reason:{impact_status}", f"revision:{revision}"],
-                }},
-                "not_applicable": ["build_passed", "lint_passed", "typecheck_passed",
-                                   "tests_passed"],
-                "not_applicable_reason": "изменение только документации — продуктовые проверки не применимы",
-                "tests_absent": False,
-                "verification": verification_info,
-            }
+            return _docs_only_result(revision, impact_status, verification_info)
 
         # Если tier=full или нет targeted command — используем обычные команды из профиля
         # Если tier=affected/module и есть targeted command — заменяем test-команду
@@ -185,6 +238,14 @@ def collect(profile, root, policy, changed_files=None, broker=None):
             reason = "отклонено policy" if any_denied else "команда завершилась с ненулевым кодом"
             blockers.append(f"{check}: {reason}")
 
+    # стиль кода без линтера — находка владельцу, а не молчаливое освобождение (#1183); при
+    # `standard.lint: required` (или непонятом значении) — отказ без освобождения
+    style = style_finding(profile, root)
+    if style:
+        checks_report["lint"]["finding"] = style
+        if style["blocking"]:
+            blockers.append(style["text"])
+            not_applicable = [f for f in not_applicable if f != "lint_passed"]
     if revision:
         provided.append("tested_revision")
 
@@ -209,6 +270,11 @@ def collect(profile, root, policy, changed_files=None, broker=None):
     }
     if blockers:
         gate_evidence["implementation_verification"]["blockers"] = blockers
+    if style and not style["blocking"]:
+        # освобождение по lint_passed ОБЪЯСНЕНО последствием — общая строка «нет инструмента»
+        # его больше не называет (gate_executor, explained_exemptions)
+        gate_evidence["implementation_verification"].update(
+            warnings=[style["text"]], explained_exemptions=["lint_passed"])
 
     return {
         "schema_version": 1, "kind": "evidence-collection",

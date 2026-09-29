@@ -566,3 +566,37 @@ def from_doctor(lines) -> dict:
         why_it_matters="Работать можно; замечания стоит закрыть, чтобы проверки говорили полную правду.",
         next_steps=[r.get("text", "") for r in gaps][:2],
         technical={r.get("id", f"строка{i}"): r.get("text") for i, r in enumerate(rows)})
+
+
+# ── Стиль кода, который никто не держит (#1183) ────────────────────────────────────────────────
+# Прежде владелец читал «освобождено (нет инструмента в стеке): lint_passed» — внутреннее имя флага
+# и причину без последствия. Последствие и есть то, ради чего сообщают: без линтера каждый агент
+# пишет по-своему, и стиль расползается от правки к правке. Одна рекомендация на язык, не список:
+# политика общения требует совета, а не меню.
+_STYLE_LINTER = {"python": "Ruff", "node": "ESLint", "go": "golangci-lint"}
+_STYLE_LANG = {"python": "Python", "node": "JavaScript/TypeScript", "go": "Go"}
+CODE_STYLE_POLICIES = ("advisory", "required")
+
+
+def code_style_unguarded(languages, policy="advisory", declared=None) -> str:
+    """Находка «линтера нет» — одна фраза для отчёта гейта, сводки прогона и онбординга.
+
+    `policy` — значение `.ai-ops.yaml -> standard.lint`: `advisory` (по умолчанию) сообщает,
+    `required` отказывает в приёмке, незнакомое значение отказывает тоже (fail-closed) и называет,
+    что именно не понято. «Не нашла» — не «нет»: судим по репозиторию, чужую машину не видим.
+    """
+    langs = [str(x) for x in (languages or [])]
+    offer = ", ".join(f"для {_STYLE_LANG.get(x, x)} — {_STYLE_LINTER[x]}"
+                      for x in langs if x in _STYLE_LINTER)
+    offer = (f"Предлагаю поставить набор правил под язык проекта: {offer}." if offer
+             else "Предлагаю поставить набор правил под язык проекта.")
+    found = "в репозитории я не нашла ни линтера, ни его настроек"
+    if policy == "advisory":
+        return (f"Стиль кода в проекте никто не проверяет: {found}, поэтому каждый агент пишет "
+                f"по-своему — имена, оформление и границы модулей расходятся от правки к правке. {offer}")
+    if policy == "required":
+        return (f"Работу принять не могу: в .ai-ops.yaml проверка стиля объявлена обязательной "
+                f"(standard.lint: required), а {found} — проверить стиль нечем. {offer}")
+    return (f"Не понимаю настройку standard.lint = «{declared}» в .ai-ops.yaml: допустимо "
+            f"{' или '.join(CODE_STYLE_POLICIES)}. Пока она не исправлена, считаю проверку стиля "
+            f"обязательной, а {found}, — поэтому работу не принимаю. Исправьте значение.")

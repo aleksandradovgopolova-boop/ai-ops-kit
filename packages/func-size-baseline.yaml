@@ -128,10 +128,12 @@ scopes:
     max_function_file: session_telemetry_provider.py
     max_function_lineno: 165
   - path: ai_ops_kit/gates/
-    max_function_lines: 171
+    # 2026-09-29 (#1183): 171 -> 153. Ветка «изменение только документации» вынесена из `collect`
+    # в `_docs_only_result`, чтобы проводка находки «линтера нет» не подняла потолок.
+    max_function_lines: 153
     max_function: collect
     max_function_file: evidence_collector.py
-    max_function_lineno: 55
+    max_function_lineno: 139
   - path: ai_ops_kit/governance/
     max_function_lines: 52
     max_function: adjust_priority

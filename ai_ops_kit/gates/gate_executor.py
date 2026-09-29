@@ -225,14 +225,19 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
                                                           if c.get("status") == "pass"}
             covered = real_covered | exempt
             used_exempt = [k for k in required if k in exempt and k not in real_covered]
-            if used_exempt:
+            # Освобождение, которое evidence уже ОБЪЯСНИЛ последствием (#1183: «стиль кода никто не
+            # проверяет…» в его warnings), общая строка не повторяет — иначе рядом с последствием
+            # стояла бы прежняя отговорка «нет инструмента». Объяснение и флаг приходят вместе.
+            _explained = set(ev.get("explained_exemptions") or []) if not exempt_reason else set()
+            _generic = [k for k in used_exempt if k not in _explained]
+            if _generic:
                 # ПРИЧИНА ОСВОБОЖДЕНИЯ НАЗЫВАЕТСЯ, А НЕ ПОДРАЗУМЕВАЕТСЯ. Прежде текст был жёстко
                 # «нет инструмента в стеке» — единственная причина, которая существовала в v2.61.
                 # Освобождение по другому поводу (изменение только документации) писало бы в отчёт
                 # ЧУЖУЮ причину: владелец читал бы «нет инструмента» там, где инструмент есть и
                 # просто не нужен. Ложное основание хуже отсутствующего — по нему принимают решения.
                 warnings = warnings + [f"освобождено ({exempt_reason or 'нет инструмента в стеке'}): "
-                                       f"{', '.join(used_exempt)}"]
+                                       f"{', '.join(_generic)}"]
             missing = [k for k in required if k not in covered]
             if missing:
                 msg = f"бездоказательный pass: не подтверждены required_evidence: {', '.join(missing)}"
