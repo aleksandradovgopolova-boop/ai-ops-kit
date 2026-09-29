@@ -59,16 +59,27 @@ def test_code_review_checklist_names_semantic_articles_from_kit_registry():
     assert "CODE-004 · SHOULD · Имена раскрывают намерение" in out
     assert "ARCH-003 · SHOULD · Логика живёт в своём слое" in out
     assert "ARCH-001 · MUST NOT ·" in out          # уровень читаемый, без подчёркивания
+    assert "CODE-011 · " in out                     # новая статья реестра подхвачена без правки кода
     assert "цитатой изменённого файла" in out       # заземление вердикта не снято
 
 
 @pytest.mark.unit
 def test_only_parts_one_and_two_are_selected():
-    """Преамбула HON-*, SEC-* (свой гейт) и DATA-* в критерии ревью кода не попадают."""
+    """В критерии идут ВСЕ статьи частей I–II реестра (число берётся из реестра, не зашито), а
+    преамбула HON-*, SEC-* (свой гейт) и DATA-* — нет. Весь набор влезает в лимит без хвоста."""
+    import yaml
+    rules = yaml.safe_load(_KIT_RULES.read_text(encoding="utf-8"))["rules"]
+    wanted = [r["id"] for r in rules if r.get("part") in ("I", "II")]
+    others = [r["id"] for r in rules if r.get("part") not in ("I", "II")]
+    assert wanted and others
     out = ph._gate_checklist(_CODE_REVIEW)
+    listed = [ln[2:].split(" · ")[0] for ln in out.splitlines() if ln.startswith("- ")]
+    assert listed == wanted
+    assert not any(f"- {rid} ·" in out for rid in others)
     for absent in ("HON-", "SEC-", "DATA-"):
         assert absent not in out
-    assert out.count("\n- ARCH-") == 8 and out.count("\n- CODE-") == 10
+    assert "не вошло статей" not in out
+    assert len(out) <= ph._CONSTITUTION_ARTICLES_CAP + len(out.splitlines()[0]) + 1
 
 
 @pytest.mark.unit
