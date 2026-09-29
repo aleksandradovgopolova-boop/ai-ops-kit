@@ -161,6 +161,39 @@ goals:
       # Уроки из накопленных outcome ВЛИЯЮТ на следующие решения (не просто записаны) — петля обучения замкнута.
       learnings_from_outcomes_shape_next_decisions: true
 
+  - id: child-code-style-held-by-machine
+    # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-29 по жалобе владельца из дочек: где пишут несколько
+    # людей и агентов, код расползается — русские имена, импорты через слои, разная структура. Ресерч
+    # и замер — #1183. Замер на ии-среде (main 95e931e): её ESLint зелёный, а пробное правило
+    # «имена латиницей» нашло ≈6 300 не-латинских идентификаторов в 148 файлах (5 175 — в `server/`);
+    # слои FSD охраняются только для `shared`/`entities`, в остальных 57 пересечений. Сам кит нарушает
+    # собственный инвариант AGENTS.md «идентификаторы — английские»: `ruff --select PLC2401` = 630.
+    #
+    # КОРЕНЬ — не в дочке, а в ките: CODE-004/ARCH-002 в дочке не проверяет НИЧТО (HON-001: правило
+    # без гейта — пожелание); нет линтера → `lint_passed` освобождается молча; CI-шаблон дочки линт не
+    # гоняет; ревьюер получает только «подтверди reviewed_revision, blockers_closed».
+    #
+    # РЕШЕНИЕ ВЛАДЕЛЬЦА 2026-09-29: латиница в идентификаторах — ПО УМОЛЧАНИЮ для всех дочек; отказ
+    # только явным объявлением в `.ai-ops.yaml` (`standard.identifiers: any`).
+    #
+    # НЕ СЛОМАТЬ ДОЧКУ: у ии-среды тысячи существующих нарушений. Всё, что включается, включается с
+    # БАЗОЙ существующего (храповик вниз), иначе правило уронит её main и его выключат.
+    freeze_relation: extension
+    status: active
+    outcome:
+      # Агент в дочке пишет идентификатор не латиницей — получает отказ в момент правки и не может
+      # влить изменение (CI дочки); существующие нарушения зафиксированы базой и не растут.
+      new_non_latin_identifier_is_refused_at_edit_and_in_ci: false
+      # Новое пересечение объявленных слоёв (у ии-среды — FSD) блокируется; существующие — базой.
+      layer_crossing_is_refused_with_existing_frozen: false
+      # Дочка без линтера слышит об этом простыми словами с готовым профилем, а не молчаливое
+      # «освобождено (нет инструмента в стеке)».
+      child_without_linter_is_told_not_exempted: false
+      # Ревьюер получает применимые статьи конституции, а не только «подтверди revision».
+      reviewer_judges_against_the_constitution: false
+      # Кит сам держит своё правило: `PLC2401` в его ruff с базой 630, счётчик вниз.
+      kit_follows_its_own_identifier_rule: false
+
   - id: first-hour-for-a-stranger
     # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-23 из независимого продуктового ревью (разделы
     # «acquisition» и «installation UX»). Все зачётные прогоны (14–16.09) — owner-led: кит на старте
@@ -1077,6 +1110,142 @@ work:
   # заводилась разбором ревью, параллельная сессия закрыла тот же остаток #1109 работой
   # `namesake-cascade-is-named-in-full` (PR #1113) — и шире, чем планировалось здесь. Запись ушла в
   # history/plan-history.yaml со статусом dropped: принцип dp-001, дубли уже построенного отклоняем.
+  # ── Направление child-code-style-held-by-machine (взято 2026-09-29, ресерч #1183) ─────────────
+  # Нарезка по НЕПЕРЕСЕКАЮЩИМСЯ write_scope — пять работ можно вести одновременно; полевой прогон
+  # на ии-среде идёт последним и ждёт профиля, петли агента и находки «нет линтера».
+  - id: identifier-and-lint-articles-in-constitution
+    title: >-
+      Конституция: статья «один язык идентификаторов» и «линтер в дочке обязан исполняться» — с
+      гейтом и исполнением child; честные метки исполнения
+    type: architecture
+    goal: child-code-style-held-by-machine
+    status: todo
+    owner_role: architect
+    value: high
+    issue: 1183
+    write_scope:
+    - standards/architecture/
+    - tests/unit/test_architecture_constitution*
+    rationale: >-
+      CODE-004 объявлен «машиной ловится слабо», хотя его механическая часть (алфавит, регистр)
+      ловится любым линтером; требования «в дочке есть линтер» нет вовсе. ARCH-006 помечен «both»,
+      но `validate_module_size` смотрит только в пути кита — метка вводит в заблуждение.
+
+  - id: lint-profile-per-stack-with-baseline
+    title: >-
+      Профиль линта по стеку дочки (JS/TS, Python, Go, запасной для любого языка) с базой
+      существующих нарушений и ключом `standard.identifiers` (по умолчанию latin)
+    type: engineering
+    goal: child-code-style-held-by-machine
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 1183
+    write_scope:
+    - templates/lint/
+    - ai_ops_kit/checks/
+    - ai_ops_kit/cli/
+    - docs/api/public-surface.md
+    - tests/unit/test_lint_profile*
+    rationale: >-
+      Механику закрывают готовые инструменты (ESLint `id-match`/`naming-convention`/границы, Ruff
+      `PLC2401`/`N` + import-linter, golangci `asciicheck`/`depguard`); кит должен их поставлять и
+      генерировать границы слоёв из объявленной архитектуры, а не изобретать свой сканер.
+
+  - id: child-without-linter-is-a-finding
+    title: >-
+      Нет линтера в дочке — находка владельцу с предложением профиля, а не молчаливое освобождение;
+      детектор видит конфиги ESLint/Biome/Prettier/Ruff без скрипта и слот «формат»
+    type: engineering
+    goal: child-code-style-held-by-machine
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 1183
+    write_scope:
+    - ai_ops_kit/shared/project_detector.py
+    - ai_ops_kit/gates/
+    - ai_ops_kit/ui/
+    - tests/unit/test_project_detector*
+    - tests/unit/test_gate_executor*
+    rationale: >-
+      Сегодня `lint_passed` уходит в `not_applicable`, гейт проходит с предупреждением «освобождено»,
+      а Node-линтер находится только через `scripts.lint` — `eslint.config.js` без скрипта невидим.
+
+  - id: lint-runs-at-edit-and-in-child-ci
+    title: >-
+      Линт дочки исполняется в момент правки агента (хук после записи файла) и обязательным шагом
+      её CI
+    type: engineering
+    goal: child-code-style-held-by-machine
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 1183
+    write_scope:
+    - templates/ci/
+    - templates/runtime/
+    - installer/
+    - tests/unit/test_lint_hook*
+    rationale: >-
+      Правило в CLAUDE.md агент исполнять не обязан (документация Claude Code: «context, not enforced
+      configuration»); CI-шаблон дочки гоняет только валидаторы кита — мимо `ai-ops run` не
+      проверяется ничего.
+
+  - id: reviewer-gets-constitution-criteria
+    title: >-
+      Ревьюер получает применимые статьи конституции и находки соответствия по изменённым файлам
+    type: quality
+    goal: child-code-style-held-by-machine
+    status: todo
+    owner_role: engineer
+    value: medium
+    issue: 1183
+    write_scope:
+    - ai_ops_kit/engine/tool_loop.py
+    - ai_ops_kit/engine/pipeline_helpers.py
+    - tests/unit/test_reviewer_criteria*
+    rationale: >-
+      Промпт ревьюера (`engine/tool_loop.py`) получает только `_gate_checklist()` — роль и имена
+      улик; смысловую часть (имя не раскрывает намерение, логика не в том слое) некому судить.
+
+  - id: kit-follows-its-own-identifier-rule
+    title: >-
+      Кит сам держит «идентификаторы — английские»: `PLC2401`/`PLC2403` в его ruff с базой, счётчик
+      вниз
+    type: quality
+    goal: child-code-style-held-by-machine
+    status: todo
+    owner_role: engineer
+    value: medium
+    issue: 1183
+    write_scope:
+    - pyproject.toml
+    - tests/contracts/test_identifier_baseline*
+    rationale: >-
+      Инвариант AGENTS.md объявлен прозой и нарушен 630 раз (379 в `ai_ops_kit/`); по HON-001 кит
+      не может требовать от дочки того, чего не держит сам.
+
+  - id: code-style-field-run-on-ii-sreda
+    title: >-
+      Полевой прогон на ии-среде: профиль с базой включён, новое нарушение отказано при правке и в
+      CI, main дочки не упал
+    type: quality
+    goal: child-code-style-held-by-machine
+    status: todo
+    owner_role: qa
+    value: high
+    issue: 1183
+    depends_on:
+    - lint-profile-per-stack-with-baseline
+    - lint-runs-at-edit-and-in-child-ci
+    - child-without-linter-is-a-finding
+    write_scope:
+    - qualification/
+    rationale: >-
+      Приёмка направления — на реальном продукте, а не на фикстуре: засчёт исходов требует
+      наблюдения в дочке, где проблема и возникла.
+
   - id: does-the-scanner-judge-the-installed-kit-at-all
     title: >-
       Должен ли сканер вообще судить установленную копию кита в дочке (`.ai/managed/`)
