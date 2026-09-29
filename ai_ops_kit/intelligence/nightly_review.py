@@ -310,7 +310,7 @@ def format_brief(delta: dict, root: Path) -> str:
 
     # 2. Что система сделала — НАХОДКИ ПО ОСЯМ (ротация фокуса; ось без сигнала — «не наблюдается»).
     groups = delta.get("dimensions") or nd.group_findings_by_axis(findings)
-    L += ["", "## Что я проверила — по осям", "", *nd.format_dimensions(groups, focus=delta.get("focus"))]
+    L += ["", "## Что я проверил — по осям", "", *nd.format_dimensions(groups, focus=delta.get("focus"))]
     if isinstance(plan.get("by_status"), dict):
         L.append(f"- план: " + ", ".join(f"{k} — {v}" for k, v in sorted(plan["by_status"].items())))
     elif plan.get("error"):
@@ -331,15 +331,15 @@ def format_brief(delta: dict, root: Path) -> str:
     fpr = delta.get("false_positive_rate") or false_positive_rate(root)
     L += ["", "## Насколько можно доверять моим флагам", "", format_false_positive_rate(fpr)]
 
-    # 3. Чего НЕ стала делать и почему.
-    L += ["", "## Чего я не стала делать и почему", ""]
-    L.append("- **Ничего не правила**: v0 работает только на чтение. Это граница выпуска, а не "
+    # 3. Чего НЕ стал делать и почему.
+    L += ["", "## Чего я не стал делать и почему", ""]
+    L.append("- **Ничего не правил**: v0 работает только на чтение. Это граница выпуска, а не "
              "недоделка: автофикс без измеренного false-positive rate — тот же ложный green, "
              "только теперь он коммитит.")
     for f in unknown:
         L.append(f"- **{f['check']}** не проверена: {f['detail']}")
     if open_prs is None:
-        L.append(f"- Состояние запросов на слияние не узнала: "
+        L.append(f"- Состояние запросов на слияние не узнал: "
                  f"{prs.get('unavailable', 'причина не названа')}.")
     if not unknown and open_prs is not None:
         L.append("- Остальное из объявленного объёма проверено.")
@@ -474,7 +474,7 @@ def enabled_fixers(root: Path, enabled=None) -> list:
 
 def run_autofix(root: Path, *, dry_run: bool = False, enabled=None, date: str | None = None,
                 policy=None, verify=None) -> dict:
-    """Собрать включённые правки класса A в ОДИН черновой PR за ночь (или сказать, почему не собрала).
+    """Собрать включённые правки класса A в ОДИН черновой PR за ночь (или сказать, почему не собрал).
 
     Возврат (AutoFixResult): {status, reason?, branch?, base_sha?, head_sha?, applied, skipped, pr?,
     budget, enabled}. status: disabled | suggest-only | no_changes | prepared | dry_run | rolled_back.
@@ -542,7 +542,7 @@ def format_autofix_report(res: dict) -> str:
     st = res.get("status")
     L = ["# Ночной автофикс (класс A)", ""]
     if st in ("disabled", "suggest-only"):
-        L.append(f"Ничего не правила: {res.get('reason')}.")
+        L.append(f"Ничего не правил: {res.get('reason')}.")
         L.append("Это граница по решению, а не недоделка: класс A открывается по одному пункту.")
         return "\n".join(L)
     if st == "no_changes":
@@ -650,7 +650,7 @@ def main():
 
     if args.autofix:
         # КЛАСС A: детерминированный автофикс в worktree -> один черновой PR. По умолчанию класс A
-        # пуст (fail-closed) — тогда честно скажет, что ничего не правила и почему. Никогда не пишет
+        # пуст (fail-closed) — тогда честно скажет, что ничего не правил и почему. Никогда не пишет
         # в main и не мержит.
         res = run_autofix(root, dry_run=args.dry_run)
         if args.json:
