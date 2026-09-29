@@ -48,6 +48,12 @@ def test_doctor_ok_on_fresh_install(installed_copy, tmp_path):
     Окружение изолировано (см. `_isolated_env`) — иначе тест мерил бы чистоту site-packages
     разработчика, а не свежую установку."""
     env = _isolated_env(tmp_path)
+    # Установка теперь сама выводит имя проекта из репозитория (#1205); заготовку ставим руками —
+    # предмет теста в том, что кит её ЗАМЕЧАЕТ, а не в том, что установка её оставляет.
+    import re as _re
+    _cfg = installed_copy / ".ai-ops.yaml"
+    _cfg.write_text(_re.sub(r"(?m)^(  name:\s*).*$", r"\g<1><project-name>",
+                            _cfg.read_text(encoding="utf-8"), count=1), encoding="utf-8")
     r = _run_cli(installed_copy, "doctor", env=env)
     out = r.stdout + r.stderr
     assert "Traceback" not in out
