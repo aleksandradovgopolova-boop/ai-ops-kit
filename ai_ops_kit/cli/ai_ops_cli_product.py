@@ -322,6 +322,12 @@ def _intent_model(task, child_root, signals, a):
         from ai_ops_kit.planning import first_hour
         res = first_hour.run(child_root, apply=bool(getattr(a, "apply", False)),
                              budget_left=getattr(a, "budget", None), understanding=rep)
+        # #1200: первый результат говорит, в каком состоянии проект СЕЙЧАС — из уже существующих
+        # проверок (конституция, сканер, команды проверки). Только чтение; на непрочитанном дереве не
+        # считаем: говорить «в порядке» о том, чего кит не понял, — выдумка.
+        if res.get("stage") != first_hour.BLOCKED_UNDERSTANDING:
+            from ai_ops_kit.cli import ai_ops_cli_first_health as _health
+            res["health"] = _health.assess(child_root)
         # Конец первого часа — не строка на экране, которая улетит вверх, а ФАЙЛ с результатом,
         # который человек может открыть. Пишем только при apply (та же дисциплина, что у bootstrap:
         # сухой прогон в чужой репозиторий ничего не пишет). None — стадия без результата (дерево
@@ -339,6 +345,8 @@ def _intent_model(task, child_root, signals, a):
             from ai_ops_kit.ui import presenter
             aud = presenter.audience_from_config(child_root)
             print(presenter.render(presenter.from_first_hour(res), audience=aud))
+            if (res.get("health") or {}).get("verdict"):
+                print(f"\nСостояние проекта: {res['health']['verdict']}")
             if result_file:
                 print(f"\nПервый результат сохранён: {result_file}")
         return 0
