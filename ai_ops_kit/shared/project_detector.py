@@ -57,7 +57,11 @@ _BIOME_CONFIGS = ("biome.json", "biome.jsonc")
 _PRETTIER_CONFIGS = tuple(".prettierrc" + e for e in (
     "", ".json", ".json5", ".yaml", ".yml", ".toml", ".js", ".cjs", ".mjs")) + tuple(
     f"prettier.config.{e}" for e in ("js", "cjs", "mjs"))
-_WATCHED_FILES += _ESLINT_CONFIGS + _BIOME_CONFIGS + _PRETTIER_CONFIGS
+_WATCHED_FILES += _ESLINT_CONFIGS + _BIOME_CONFIGS + _PRETTIER_CONFIGS + (".ai-ops.yaml",)
+# Имена скрипта проверки типов у Node. `check-types` — соглашение turbo-монорепо (шаблон
+# create-turbo): без него «Нити» получали `typecheck: None`, хотя проверка объявлена (#1202).
+_NODE_TYPECHECK = ("typecheck", "type-check", "check-types", "check:types", "types:check", "tsc")
+_DECLARED_SRC = ".ai-ops.yaml"
 # Слоты команд профиля. `format` — только проверка оформления (`--check`), не переписывание: команда
 # гейта не вправе менять дерево, которое она судит. Evidence collector гоняет лишь четыре первых.
 SLOTS = ("build", "lint", "typecheck", "test", "format")
@@ -195,7 +199,7 @@ _CI_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
     "node": {
         "build": (r"(?:npm\s+run|yarn|pnpm(?:\s+run)?)\s+build\b",),
         "lint": (r"(?:npm\s+run|yarn|pnpm(?:\s+run)?)\s+lint\b",),
-        "typecheck": (r"(?:npm\s+run|yarn|pnpm(?:\s+run)?)\s+(?:typecheck|type-check)\b",),
+        "typecheck": (r"(?:npm\s+run|yarn|pnpm(?:\s+run)?)\s+(?:typecheck|type-check|check-types)\b",),
         "test": (r"npm\s+(?:run\s+)?test\b", r"(?:yarn|pnpm)\s+(?:run\s+)?test\b"),
         "format": (r"(?:npx\s+)?prettier\s+(?:.*\s)?--check\b",),
     },
@@ -247,15 +251,48 @@ def _ci_commands(root: Path) -> dict:
 
 
 _MAKE_ALIASES = {"build": ("build",), "lint": ("lint",),
-                 "typecheck": ("typecheck", "type-check", "types"), "test": ("test", "tests"),
+                 "typecheck": ("typecheck", "type-check", "check-types", "types"), "test": ("test", "tests"),
                  "format": ("format-check", "fmt-check", "check-format")}
 
 
-def _finalize(stack: dict, root: Path, ci_for_lang: dict | None, make_targets: set, make_file: str | None) -> dict:
+def _declared_commands(root: Path, stacks: list) -> dict:
+    """Команды, которые ОБЪЯВИЛ человек в `.ai-ops.yaml` (`verification.commands`), по языку стека.
+
+    Повод (#1202): вписанный руками ответ жил в `.ai/repository-profile.yaml`, а этот файл — кеш,
+    он в .gitignore и пересобирается при следующем onboard; ответ молча терялся. `.ai-ops.yaml` —
+    конфиг проекта, лежит в git, и объявленное в нём переживает повторный осмотр. Формы две:
+    `{typecheck: "..."}` — только когда стек один (иначе непонятно, чей он); `{node: {typecheck: ...}}`
+    — по языку. Файл-источник есть, поэтому инвариант честности соблюдён: команда не из воздуха.
+    """
+    try:
+        cfg = yaml.safe_load((root / _DECLARED_SRC).read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+    decl = ((cfg.get("verification") or {}) if isinstance(cfg, dict) else {}).get("commands") or {}
+    if not isinstance(decl, dict):
+        return {}
+    langs = [st["language"] for st in stacks]
+    out: dict = {}
+    flat = {k: v for k, v in decl.items() if k in SLOTS and isinstance(v, str) and v.strip()}
+    if flat and len(langs) == 1:
+        out[langs[0]] = flat
+    for lang in langs:
+        per = decl.get(lang)
+        if isinstance(per, dict):
+            out.setdefault(lang, {}).update(
+                {k: v for k, v in per.items() if k in SLOTS and isinstance(v, str) and v.strip()})
+    return out
+
+
+def _finalize(stack: dict, root: Path, ci_for_lang: dict | None, make_targets: set, make_file: str | None,
+              declared: dict | None = None) -> dict:
     """Добить пустые слоты общерепозиторными фактами (Makefile, CI) и запечатать инвариант
-    честности: команда без файла-источника снимается в None."""
+    честности: команда без файла-источника снимается в None. Объявленное человеком в `.ai-ops.yaml`
+    сильнее выведенного: это его прямое слово о своём проекте."""
     cmds = dict(stack.get("commands") or {})
     ev = dict(stack.pop("_command_evidence", None) or {})
+    for slot, command in (declared or {}).items():
+        cmds[slot], ev[slot] = command.strip(), _DECLARED_SRC
     for slot in SLOTS:
         if not cmds.get(slot):
             for target in _MAKE_ALIASES[slot]:
@@ -343,7 +380,7 @@ def _node_stack(d: Path, root: Path) -> dict:
                "yarn": "yarn install --frozen-lockfile" if has_lock else "yarn install",
                "pnpm": "pnpm install --frozen-lockfile" if has_lock else "pnpm install"}[pm]
     cmd("build", "build"); cmd("lint", "lint"); cmd("test", "test")
-    cmd("typecheck", "typecheck", "tsc", "type-check")
+    cmd("typecheck", *_NODE_TYPECHECK)
     cmd("format", "format:check", "format-check", "check-format", "fmt:check")
     _node_style(d, pkg, pm, slots)     # конфиг без скрипта; скрипт, если есть, уже занял слот
     return {
@@ -564,8 +601,10 @@ def detect(root: Path) -> dict:
     # инвариант честности: каждая оставшаяся команда имеет файл-источник
     ci_cmds = _ci_commands(root)
     make_targets, make_file = _make_targets(root)
+    declared = _declared_commands(root, stacks)
     for s in stacks:
-        _finalize(s, root, ci_cmds.get(s["language"]), make_targets, make_file)
+        _finalize(s, root, ci_cmds.get(s["language"]), make_targets, make_file,
+                  declared.get(s["language"]))
 
     # monorepo (v2.84): workspaces / pnpm-workspace / lerna / turbo / nx / много package.json
     monorepo, monorepo_reason = _detect_monorepo(root)

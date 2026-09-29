@@ -120,6 +120,12 @@ def test_remaining_names_config_placeholders_in_process(child):
     """
     r = _run_cli(child, "setup", ".")
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
+    # Установка теперь сама выводит имя проекта из репозитория (#1205); заготовку ставим руками —
+    # предмет теста в том, что кит её ЗАМЕЧАЕТ, а не в том, что установка её оставляет.
+    import re as _re
+    _cfg = child / ".ai-ops.yaml"
+    _cfg.write_text(_re.sub(r"(?m)^(  name:\s*).*$", r"\g<1><project-name>",
+                            _cfg.read_text(encoding="utf-8"), count=1), encoding="utf-8")
     installer = _load_installer()
     remaining = installer._setup_ops()._setup_remaining(child)
     joined = "\n".join(remaining)
@@ -210,6 +216,17 @@ def test_first_result_lead_leads_with_result_per_stage(tmp_path):
     assert "вручную" in lead_none and "model --flow --apply" in lead_none
 
 
+def test_first_result_lead_names_project_state_right_under_the_header(tmp_path):
+    """(#1200) Итог «в каком состоянии проект» стоит сразу под заголовком экрана; нет итога — нет строки."""
+    setup_ops = _load_installer()._setup_ops()
+    ready = {"kind": "first-hour", "stage": "ready",
+             "health": {"verdict": "По коду и безопасности проект в порядке — срочно править нечего."}}
+    lead = setup_ops._first_result_lead(tmp_path, ready)
+    assert lead[1] == "Состояние проекта: По коду и безопасности проект в порядке — срочно править нечего."
+    assert not any("Состояние проекта" in x
+                   for x in setup_ops._first_result_lead(tmp_path, {"kind": "first-hour", "stage": "ready"}))
+
+
 def test_setup_leaves_first_result_artifact_and_leads_with_it(child):
     """(issue #1140) Конец установки — первый РЕЗУЛЬТАТ: setup оставляет открываемый файл
     `.ai/generated/first-result.md` и ведёт им экран, а не строкой «AI Ops установлен»."""
@@ -261,3 +278,48 @@ def test_setup_commits_only_kit_files_not_foreign(child):
     status = _git(child, "status", "--porcelain", "MY-OWN-NOTES.txt").stdout
     assert status.strip().startswith("??"), \
         f"посторонний файл должен остаться нетронутым (untracked), а статус: {status!r}"
+
+
+# ── #1205: имя проекта выводится из репозитория, а не остаётся заготовкой ─────────────────────────
+
+
+def _bare_repo(tmp_path, name="work"):
+    import subprocess
+    root = tmp_path / name
+    root.mkdir()
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    return root
+
+
+def test_project_name_from_origin_remote(tmp_path):
+    import subprocess
+    setup_ops = _load_installer()._setup_ops()
+    root = _bare_repo(tmp_path)
+    (root / "package.json").write_text('{"name": "niti-init"}', encoding="utf-8")
+    subprocess.run(["git", "-C", str(root), "remote", "add", "origin",
+                    "https://github.com/acme/niti.git"], check=True)
+    assert setup_ops._project_name(root) == "niti"          # remote однозначнее манифеста
+
+
+def test_project_name_from_manifest_without_remote(tmp_path):
+    setup_ops = _load_installer()._setup_ops()
+    root = _bare_repo(tmp_path)
+    (root / "pyproject.toml").write_text('[project]\nname = "okoshko"\n', encoding="utf-8")
+    assert setup_ops._project_name(root) == "okoshko"
+    root2 = _bare_repo(tmp_path, "other")
+    (root2 / "package.json").write_text('{"name": "@acme/web-app"}', encoding="utf-8")
+    assert setup_ops._project_name(root2) == "web-app"      # scope пакета — не имя проекта
+
+
+def test_project_name_falls_back_to_the_main_repo_dir(tmp_path):
+    setup_ops = _load_installer()._setup_ops()
+    root = _bare_repo(tmp_path, "shop")
+    assert setup_ops._project_name(root) == "shop"
+
+
+def test_project_name_is_none_when_nothing_fits(tmp_path):
+    """Ничего пригодного -> None: заготовка остаётся, имя не выдумывается."""
+    setup_ops = _load_installer()._setup_ops()
+    root = tmp_path / "Мой проект"
+    root.mkdir()
+    assert setup_ops._project_name(root) is None

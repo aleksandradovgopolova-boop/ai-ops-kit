@@ -139,9 +139,13 @@ def test_doctor_on_a_real_install_does_not_greenlight_a_placeholder(tmp_path):
 
     cfg = child / ".ai-ops.yaml"
     doc = yaml.safe_load(cfg.read_text(encoding="utf-8"))
-    assert str((doc.get("project") or {}).get("name", "")).startswith("<"), (
-        "проба не дошла до дефекта: установка больше не оставляет заготовку имени — "
-        "тогда предмет теста другой")
+    # С #1205 установка сама выводит имя из репозитория — заготовку она больше не оставляет.
+    assert not str((doc.get("project") or {}).get("name", "")).startswith("<"), doc.get("project")
+    # Установка теперь сама выводит имя проекта из репозитория (#1205); заготовку ставим руками —
+    # предмет теста в том, что кит её ЗАМЕЧАЕТ, а не в том, что установка её оставляет.
+    import re as _re
+    cfg.write_text(_re.sub(r"(?m)^(  name:\s*).*$", r"\g<1><project-name>",
+                           cfg.read_text(encoding="utf-8"), count=1), encoding="utf-8")
 
     before = _cli(child, "doctor", env=env)
     assert "конфиг дочки" in before.stdout, before.stdout

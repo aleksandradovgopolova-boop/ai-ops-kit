@@ -330,6 +330,7 @@
 - `templates/quality/TestReport.md`
 - `templates/quality/VerificationEvidence.md`
 - `templates/release/FeatureFlag.md`
+- `templates/release/ReleaseNotes.md`
 - `templates/release/RollbackStrategy.md`
 - `templates/release/RolloutPlan.md`
 - `templates/runtime/runtime-binding.example.yaml` — child объявляет, чем закрывает контракт persistent-agent-runtime (v2.21)
