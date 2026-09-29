@@ -119,6 +119,22 @@ def work_items(understanding: dict, model: dict | None = None, child_root=".") -
     return out
 
 
+def _roadmap_is_kit_template(path: Path) -> bool:
+    """ROADMAP — это заготовка кита, а не направление продукта? (#1204)
+
+    Установщик кладёт `ROADMAP.md` с целями-заглушками `goal-id-N`. Прежде bootstrap видел «файл уже
+    есть» и не трогал его — план он в том же случае заменял, а направление нет: ответы владельца до
+    ROADMAP не доходили, и советы кита читали заглушку («безымянное направление»). Заготовка —
+    когда ВСЕ цели файла заглушки: хоть одно своё имя — это уже слово человека, его не трогаем.
+    """
+    try:
+        parsed = _roadmap.parse(path.read_text(encoding="utf-8"))
+    except OSError:
+        return False
+    goals = [g for h in parsed.values() for g in h["goals"]]
+    return bool(goals) and all(_plan.is_placeholder_goal(g) for g in goals)
+
+
 def _roadmap_text(understanding: dict) -> str:
     """ROADMAP из ФАКТОВ, с честными пробелами там, где фактов нет."""
     rec = understanding.get("reconstructed") or {}
@@ -215,10 +231,14 @@ def plan(child_root, understanding: dict | None = None, model: dict | None = Non
 
     actions = []
     rm_exists = (root / rm_rel).is_file()
+    rm_is_template = rm_exists and _roadmap_is_kit_template(root / rm_rel)
     actions.append({
         "path": rm_rel, "what": "направление продукта (четыре горизонта)",
-        "exists": rm_exists, "will_write": not rm_exists,
-        "why": ("уже есть — не трогаю: существующий файл сильнее любого шаблона" if rm_exists
+        "exists": rm_exists, "will_write": (not rm_exists) or rm_is_template,
+        "replaces_template": rm_is_template,
+        "why": ("в файле лежит заготовка кита (цели-заглушки) — заменю её направлением из фактов"
+                if rm_is_template else
+                "уже есть — не трогаю: существующий файл сильнее любого шаблона" if rm_exists
                 else "направление не является артефактом, поэтому «что важнее сейчас» "
                      "не на чём считать"),
         "provenance": "факты репозитория + пометки «нужно ваше слово» там, где фактов нет"})
