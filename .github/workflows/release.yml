@@ -82,15 +82,22 @@ jobs:
         if: steps.check_release.outputs.needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.check_release.outputs.version }}
+          TAG: ${{ steps.check_release.outputs.tag }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          VERSION="${{ steps.check_release.outputs.version }}"
-          TAG="${{ steps.check_release.outputs.tag }}"
-          # Раздел CHANGELOG для этой версии (от '## [X.Y.Z]' до следующего '## ')
-          awk -v ver="$VERSION" '
-            $0 ~ "^## \\[" ver "\\]" {on=1}
-            on && $0 ~ "^## " && $0 !~ "^## \\[" ver "\\]" {exit}
-            on {print}
-          ' CHANGELOG.md > /tmp/notes.md
+          # ТЕЛО RELEASE — СЛОЙ ВЛАДЕЛЬЦА, А НЕ ВЕСЬ ЖУРНАЛ (#1210). Раньше сюда копировался раздел
+          # CHANGELOG целиком, вместе со «Служебным» (план, история). Теперь тело — слой A между
+          # маркерами `<!-- owner-layer:start/end -->` (что меняется для вас, известные ограничения,
+          # что дальше) и ссылка на полный раздел. Раздел без маркеров (выпуски до #1210) — как прежде,
+          # целиком. Сборка — функция `release_body` (покрыта tests/unit/test_release_owner_layer.py);
+          # это шаг сборки текста, а не проверка. Значения — только из env, в shell ничего не
+          # подставляется выражением.
+          if ! python3 -m ai_ops_kit.devtools.release_bump --release-notes "$VERSION" --root . \
+               --changelog-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$TAG/CHANGELOG.md" > /tmp/notes.md; then
+            echo "::error::текст выпуска $TAG не собран из CHANGELOG.md (причина — строкой выше) — выпуск не создан. Поправьте CHANGELOG.md и перезапустите release (тег ещё не создан, ничего откатывать не нужно)."
+            exit 1
+          fi
           # ОТКАЗ, А НЕ КРАТКИЕ ЗАПИСКИ (работа `release-has-a-gate`, 18.08.2026). Здесь стояло
           # «записки будут краткими» и `echo "AI Ops Kit $TAG"` — то есть выпуск выходил С ПУСТОЙ
           # историей, и никто об этом не узнавал. Замер EV-1112: 236 версий за 40 дней и ни одного
@@ -106,8 +113,8 @@ jobs:
           case "$VERSION" in *-*) PRERELEASE="--prerelease" ;; esac   # SemVer pre-release (rc/alpha/beta)
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --target "${{ github.event.workflow_run.head_sha }}" \
+            --target "$HEAD_SHA" \
             --title "AI Ops Kit $TAG" \
             $PRERELEASE \
             --notes-file /tmp/notes.md
-          echo "Создан $TAG -> ${{ github.event.workflow_run.head_sha }}"
+          echo "Создан $TAG -> $HEAD_SHA"

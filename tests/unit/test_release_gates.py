@@ -268,12 +268,13 @@ class TestReleaseRefusesWithoutChangelogSection:
 
     def _run(self, tmp_path, changelog, version):
         script = self._release_snippet()
-        script = script.replace('VERSION="${{ steps.check_release.outputs.version }}"',
-                                f'VERSION="{version}"')
-        script = script.replace('TAG="${{ steps.check_release.outputs.tag }}"', f'TAG="v{version}"')
         script = script.replace("/tmp/notes.md", str(tmp_path / "notes.md"))
         (tmp_path / "CHANGELOG.md").write_text(changelog, encoding="utf-8")
-        return subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path,
+        # Версия и тег приходят в шаг через env (в shell ничего не подставляется выражением), а
+        # тело собирает `release_bump --release-notes` — ему нужен пакет кита на пути (#1210).
+        env = {**os.environ, "VERSION": version, "TAG": f"v{version}", "PYTHONPATH": str(KIT),
+               "GITHUB_SERVER_URL": "https://github.com", "GITHUB_REPOSITORY": "o/r"}
+        return subprocess.run(["bash", "-e", "-c", script], cwd=tmp_path, env=env,
                               capture_output=True, text=True, timeout=60)
 
     def test_missing_section_refuses_with_a_named_reason(self, tmp_path):
