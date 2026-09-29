@@ -9,6 +9,7 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+from pathlib import Path
 from ai_ops_kit.gates import gate_executor
 
 
@@ -194,14 +195,120 @@ def _reviewable_gates(gate_ids, signals):
     return out
 
 
-def _gate_checklist(gate):
-    """Короткий чек-лист для ревьюера: required_evidence + ответственная роль."""
+def _gate_checklist(gate, root=None, changed_files=None):
+    """Чек-лист для ревьюера: required_evidence + ответственная роль + (для ревью кода) статьи
+    Архитектурной конституции и, если переданы изменённые файлы, машинные находки по ним.
+
+    Тот же текст уходит и в промпт живого ревьюера (`<criteria>`), и в поле `checklist` запроса
+    внешнему ревьюеру (`reviewer_handoff.open_request`) — оба зовут эту функцию."""
     req = gate.get("required_evidence", []) or []
     role = gate.get("responsible_role", "reviewer")
     parts = [f"роль: {role}"]
     if req:
         parts.append("подтверди по факту: " + ", ".join(req))
-    return "; ".join(parts)
+    base = "; ".join(parts)
+    block = _constitution_criteria(gate.get("id"), root=root, changed_files=changed_files)
+    return f"{base}\n{block}" if block else base
+
+
+# ── Статьи конституции в критериях ревьюера (#1183) ─────────────────────────────
+# ЗАЧЕМ. Смысловую часть стиля и архитектуры («имя не раскрывает намерение» CODE-004, «логика не в
+# своём слое» ARCH-003) линтер не поймает — её может оценить только ревьюер. Раньше ревьюер получал
+# в критериях лишь роль и required_evidence и не знал, по каким статьям судить. Теперь для ревью кода
+# в критерии кладутся статьи частей I (архитектура, ARCH-*) и II (код, CODE-*) — все уровни (MUST,
+# MUST_NOT, SHOULD): SHOULD как раз смысловые. Преамбула HON-* — про процесс кита, SEC-* судит свой
+# гейт security (NO_SELF_REVIEW), DATA-* — предметная; в ревью кода они шум.
+# ИСТОЧНИК — машинный реестр `standards/architecture/rules.yaml`: только он едет в дочку (манифест,
+# managed_set); тяжёлый ARCHITECTURE_CONSTITUTION.md с «подсказками агенту» — родительский, поэтому
+# подсказок в критериях нет (иначе кит и дочка видели бы разное).
+# РАЗМЕР ограничен: статьи — не больше `_CONSTITUTION_ARTICLES_CAP` символов, находки — не больше
+# `_CONSTITUTION_FINDINGS_CAP`; не влезшее названо числом, а не молча отрезано.
+# WRITER ≠ JUDGE не меняется: это критерии, вердикт по-прежнему заземляется цитатой изменённого файла.
+_CONSTITUTION_PARTS = {"code_review": ("I", "II")}
+_CONSTITUTION_ARTICLES_CAP = 1800
+_CONSTITUTION_FINDINGS_CAP = 600
+_CONSTITUTION_REL = "standards/architecture/rules.yaml"
+
+
+def _constitution_rules_path(root=None):
+    """Реестр Архитектурной конституции. `root` — корень репозитория (в дочке кит лежит под
+    `.ai/managed/`, резолв — общий `constitution_conformance.registry_path`); без `root` — корень
+    ЗАПУЩЕННОГО кита (`_bootstrap.PKG`: в ките — корень репо, в дочке — `.ai/managed`)."""
+    from ai_ops_kit.checks import constitution_conformance as _cc
+    from ai_ops_kit.shared import _bootstrap
+    return _cc.registry_path(Path(root) if root else _bootstrap.PKG, "architecture")
+
+
+def _load_review_articles(path, parts):
+    """Статьи нужных частей из rules.yaml. -> list | None (None — реестра нет или он нечитаем)."""
+    import yaml
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return None
+    rules = doc.get("rules") if isinstance(doc, dict) else None
+    if not isinstance(rules, list):
+        return None
+    return [r for r in rules if isinstance(r, dict) and r.get("id") and r.get("part") in parts]
+
+
+def _render_capped(header, lines, cap, tail):
+    """Заголовок + строки, пока влезают в `cap`; остаток назван числом через `tail(n)`."""
+    out, used = [header], len(header)
+    for i, ln in enumerate(lines):
+        if used + len(ln) + 1 > cap:
+            out.append(tail(len(lines) - i))
+            break
+        out.append(ln)
+        used += len(ln) + 1
+    return "\n".join(out)
+
+
+def _render_articles(articles):
+    lines = [f"- {r['id']} · {str(r.get('level', '')).replace('_', ' ')} · {r.get('title', '')}"
+             for r in articles]
+    header = (f"Статьи Архитектурной конституции для ревью кода ({_CONSTITUTION_REL}, части I–II). "
+              "Замечание по статье называй её ID; SHOULD-статьи (имена, место логики) машина не "
+              "ловит — их проверяешь ты. Вердикт по-прежнему заземляй цитатой изменённого файла:")
+    return _render_capped(header, lines, _CONSTITUTION_ARTICLES_CAP,
+                          lambda n: f"… не вошло статей: {n} (лимит размера) — см. {_CONSTITUTION_REL}")
+
+
+def _render_findings(root, changed_files):
+    """Машинные находки конформанса ТОЛЬКО по изменённым файлам (пофайловые эвристики, дёшево:
+    разбор AST лишь этих файлов). Сбой советчика критерии не роняет — говорим об этом прямо."""
+    try:
+        from ai_ops_kit.checks import constitution_conformance as _cc
+        findings = _cc.conform_paths(root, changed_files)
+    except (ImportError, OSError, ValueError, SyntaxError):
+        return "машинная проверка конституции по изменённым файлам не выполнилась — суди без неё"
+    if not findings:
+        return "машинных находок конституции по изменённым .py-файлам нет (эвристики — только размер и вложенность)"
+    lines = [f"- {f['article_id']} {f['title']}: {', '.join(f['locations'][:3])}"
+             + (f" (+{len(f['locations']) - 3})" if len(f["locations"]) > 3 else "") for f in findings]
+    header = "Машинные находки конституции по изменённым файлам (совет, НЕ блок; проверь чтением):"
+    return _render_capped(header, lines, _CONSTITUTION_FINDINGS_CAP,
+                          lambda n: f"… не вошло находок: {n} (лимит размера)")
+
+
+def _constitution_criteria(gate_id, root=None, changed_files=None):
+    """Блок критериев конституции для гейта. -> str ('' — гейту статьи не положены).
+
+    Реестра нет или он нечитаем — ЧЕСТНАЯ строка «статьи недоступны», а не пустота: иначе ревьюер
+    не отличил бы «судить не по чему» от «кит забыл положить». Находки по изменённым файлам — только
+    если вызывающий передал `root` и `changed_files` (дорогой скан всего репо здесь не запускаем)."""
+    parts = _CONSTITUTION_PARTS.get(gate_id)
+    if not parts:
+        return ""
+    path = _constitution_rules_path(root)
+    articles = _load_review_articles(path, parts)
+    if not articles:
+        block = f"статьи конституции недоступны: реестр {_CONSTITUTION_REL} не найден или пуст — суди без них"
+    else:
+        block = _render_articles(articles)
+    if root is not None and changed_files is not None:
+        block += "\n" + _render_findings(root, changed_files)
+    return block
 
 
 def _parse_yaml_block(text):
