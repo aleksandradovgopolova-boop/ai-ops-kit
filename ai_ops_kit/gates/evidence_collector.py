@@ -25,6 +25,8 @@ broker (`engine.tool_broker`) и печатает результат, вынес
 """
 from __future__ import annotations
 
+import shlex
+import shutil
 from pathlib import Path
 
 import yaml
@@ -32,6 +34,8 @@ import yaml
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import project_detector       # noqa: E402
 from ai_ops_kit.gates import verification_tiers     # noqa: E402  v3.26.0
+# профиль стиля дочки (#1183): линия и её сравнение — в checks (слой ниже gates, импорт вниз разрешён)
+from ai_ops_kit.checks import lint_baseline, lint_profile
 # текст находки «стиль кода никто не держит» — в слое речи (ui ниже gates, импорт вниз разрешён)
 from ai_ops_kit.ui.presenter_report_formatters import CODE_STYLE_POLICIES, code_style_unguarded
 
@@ -134,6 +138,88 @@ def style_finding(profile, root):
     return {"kind": "code-style-unguarded", "languages": bare, "policy": policy,
             "declared": declared, "blocking": policy != "advisory",
             "text": code_style_unguarded(bare, policy, declared)}
+
+
+def _broker_run(broker, policy):
+    """`run(argv, cwd)` для `lint_baseline.run_tool` через Tool Broker: процесс гейт сам не запускает.
+
+    Отказ политики или обрезанный исполнителем вывод — код 2 с причиной: инструмент «не отработал»,
+    а не «нашёл ноль». Результат ESLint/Ruff/golangci-lint идёт файлом, обрезка их не касается."""
+    limit = getattr(broker, "SHELL_OUTPUT_TAIL", None)
+
+    def run(argv, cwd):
+        exe = Path(argv[0])
+        if exe.parent.name == ".bin" and exe.parent.parent.name == "node_modules":
+            # локальный бинарь node — через `npx --offline` (бинарь уже стоит, сеть не нужна): так
+            # команду пропускает и allowlist песочницы, где путь к node_modules/.bin не значится
+            argv = ["npx", "--offline", exe.name, *argv[1:]]
+        elif shutil.which(exe.name) == str(exe):
+            argv = [exe.name, *argv[1:]]         # найден в PATH — зовём по имени, как команды профиля
+        ev = broker.execute({"op": "shell", "command": shlex.join(argv)}, cwd, policy)
+        if not ev.get("allowed"):
+            return 2, f"запуск отклонён политикой исполнения ({str(ev.get('reason'))[:120]})"
+        tail = ev.get("output_tail") or ""
+        if ev.get("exit_code") is None:
+            return 2, f"не запустился: {tail}"
+        if limit and len(tail) >= limit and argv and Path(argv[0]).name in ("ast-grep", "lint-imports"):
+            return 2, "вывод длиннее, чем отдаёт исполнитель — находки не сосчитать"
+        return ev["exit_code"], tail
+    return run
+
+
+def style_profile(root, broker, policy):
+    """Профиль стиля дочки (`./ai-ops lint-profile --apply`) против замороженной линии -> dict | None.
+
+    None — профиль не включён: доказательство `lint_passed` считается как прежде. Иначе результат
+    `lint_baseline.check` (то же сравнение, что у команды `check`, хука и CI) + адреса роста."""
+    tools = lint_profile.applied_tools(root)
+    if not tools:
+        return None
+    res = lint_baseline.check(root, tools, lambda r, spec, extra=(), targets=None: lint_baseline.run_tool(
+        r, spec, _broker_run(broker, policy), extra, targets))
+    return {**res, "addresses": [lint_baseline.address(g) for g in lint_baseline.grown(res)]}
+
+
+def _apply_style_profile(checks_report, provided, blockers, not_applicable, warnings, style):
+    """Рост сверх линии профиля роняет `lint_passed`; «проверено не всё» — предупреждение."""
+    lint = checks_report["lint"]
+    lint["style_profile"] = style
+    if style["status"] == lint_baseline.GREW:
+        lint["status"] = "fail"
+        for bucket in (provided, not_applicable):
+            if "lint_passed" in bucket:
+                bucket.remove("lint_passed")
+        head = "; ".join(style["addresses"][:8]) + (" …" if len(style["addresses"]) > 8 else "")
+        blockers.append(f"lint: профиль стиля — новые расхождения сверх замороженного: {head}")
+    missed = [f"{r['tool']}: {r.get('reason')}" for r in style["tools"]
+              if r["status"] == lint_baseline.NOT_CHECKED]
+    if missed:
+        warnings.append("профиль стиля проверен не весь — " + "; ".join(missed))
+
+
+def _code_style(profile, root, broker, policy, checks_report, provided, blockers, not_applicable):
+    """Стиль кода поверх exit-кода линтера (#1183) -> (находка «никто не держит» | None, предупреждения).
+
+    Два источника: нет линтера — находка владельцу (при `standard.lint: required` — блокер без
+    освобождения); включён профиль стиля — рост сверх его линии снимает `lint_passed`. Списки
+    правятся на месте: их дальше читает `collect`."""
+    style = style_finding(profile, root)
+    if style:
+        checks_report["lint"]["finding"] = style
+        if style["blocking"]:
+            blockers.append(style["text"])
+            if "lint_passed" in not_applicable:
+                not_applicable.remove("lint_passed")
+    warnings: list = []
+    prof = style_profile(root, broker, policy)
+    if prof:
+        _apply_style_profile(checks_report, provided, blockers, not_applicable, warnings, prof)
+    return style, warnings
+
+
+def _add_warnings(iv: dict, extra: list) -> None:
+    if extra:
+        iv["warnings"] = list(iv.get("warnings") or []) + extra
 
 
 def collect(profile, root, policy, changed_files=None, broker=None):
@@ -240,12 +326,8 @@ def collect(profile, root, policy, changed_files=None, broker=None):
 
     # стиль кода без линтера — находка владельцу, а не молчаливое освобождение (#1183); при
     # `standard.lint: required` (или непонятом значении) — отказ без освобождения
-    style = style_finding(profile, root)
-    if style:
-        checks_report["lint"]["finding"] = style
-        if style["blocking"]:
-            blockers.append(style["text"])
-            not_applicable = [f for f in not_applicable if f != "lint_passed"]
+    style, style_warnings = _code_style(profile, root, broker, policy, checks_report, provided,
+                                        blockers, not_applicable)
     if revision:
         provided.append("tested_revision")
 
@@ -275,6 +357,7 @@ def collect(profile, root, policy, changed_files=None, broker=None):
         # его больше не называет (gate_executor, explained_exemptions)
         gate_evidence["implementation_verification"].update(
             warnings=[style["text"]], explained_exemptions=["lint_passed"])
+    _add_warnings(gate_evidence["implementation_verification"], style_warnings)
 
     return {
         "schema_version": 1, "kind": "evidence-collection",
