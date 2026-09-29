@@ -38,7 +38,7 @@ PKG = Path(__file__).resolve().parents[2]
 
 # Живой корпус: пользовательские доки + структурные карты + живые policy-доки.
 CORPUS_ROOTS = ("docs", "rules", "runtime", "workflows", "templates")
-CORPUS_FILES = ("README.md", "FILE_INDEX.md", "AGENTS.md", "NOTICE.md", "APPLY.md")
+CORPUS_FILES = ("README.md", "FILE_INDEX.md", "AGENTS.md", "NOTICE.md")
 
 # Записи о прошлом — не обещания о настоящем.
 PAST_PREFIXES = (

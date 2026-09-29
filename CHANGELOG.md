@@ -580,4 +580,4 @@ god-функций ядра и др. (полный список — `newsfragmen
 **Полная история — [DEVELOPMENT-HISTORY.md](history/DEVELOPMENT-HISTORY.md)** (релизы 3.37.0 → 3.20.1;
 оттуда — ссылки на более старые архивы `docs/changelog/`).
 
-Правила ведения и каденция релизов — [docs/agent-guides/release-cadence.md](docs/agent-guides/release-cadence.md).
+Правила ведения и каденция релизов — раздел «Релизный процесс» в [AGENTS.md](AGENTS.md#релизный-процесс).

@@ -14,7 +14,7 @@ child-репозиториев. Здесь разрабатывается сам
 | `quality/gates.yaml` | Реестр quality gates | Да; blocking-гейтов MVP-хребта ≤ 8; доменные гейты блокируют условно (по применимости) |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
-| `ai_ops_kit/` | **Код движка**: модули в пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новая capability живёт в СУЩЕСТВУЮЩЕМ домене (top-level пакетов — потолок 19, `package_ceiling` в `packages/layering.yaml`; новый пакет = архитектурное решение + ADR/DP, а не привычка). Модуль обязан уложиться в слои `packages/layering.yaml` и быть отнесён к одному из четырёх роль-слоёв (`conceptual_layers`). Запуск скриптом — `python3 -m ai_ops_kit.<pkg>.<mod>` (плоский слой `tools/` снят в 4.0) |
+| `ai_ops_kit/` | **Код движка**: модули в пакетах (перечень и слои — `packages/layering.yaml`) | Да; новая capability живёт в СУЩЕСТВУЮЩЕМ домене (top-level пакетов — потолок 19, `package_ceiling` в `packages/layering.yaml`; новый пакет = архитектурное решение + ADR/DP, а не привычка). Модуль обязан уложиться в слои `packages/layering.yaml` и быть отнесён к одному из четырёх роль-слоёв (`conceptual_layers`). Запуск скриптом — `python3 -m ai_ops_kit.<pkg>.<mod>` (плоский слой `tools/` снят в 4.0) |
 | `ai_ops_kit/planning/` | Контур Planning & Execution (v3.35): модель контуров продукта, delivery plan, ROADMAP-контракт, отбор следующей работы, понимание репозитория при онбординге | Да; словари (роли, типы, состояния) живут в `registry/product-operating-model.yaml`, а не в коде |
 | `ai_ops_kit/validation/` | Валидаторы (Python, только pyyaml). Единственный каталог, ИЗ КОТОРОГО запускают скрипты напрямую (валидаторы через `import _bootstrap` — sys.path[0] = сам каталог); остальные модули пакета зовутся `python3 -m ai_ops_kit...`. `import _bootstrap` двурежимный (пакетный в `try`, плоский в `except`) | Да; тесты валидатора — в `tests/`, не внутри модуля |
 | `installer/ai_ops.py` | CLI `ai-ops` для child-репозиториев | Да |
@@ -44,10 +44,9 @@ child-репозиториев. Здесь разрабатывается сам
   Границы зоны проверяются: она одна, в ней только точки входа, и список объявленных
   не-валидаторов вправе только сокращаться (`tests/unit/test_package_surface.py`).
 - **Слои пакетов.** `foundation` → `primitives` → `capabilities` → `intelligence` → `entrypoints`; зависимость вверх
-  запрещена (`packages/layering.yaml`, `validate_layering.py`). Взаимные связи ВНУТРИ ядра пока
-  разрешены осознанно — замер 12 пар и 210 циклов длиннее двух; строгий DAG требует разбора, а не
-  выключателя. С v3.34 замер — ПОТОЛОК: новая пара или цикл краснеет, ушедшая обязана быть списана
-  в `packages/layering.yaml` (ратчет ходит только вниз).
+  запрещена (`packages/layering.yaml`, `validate_layering.py`). Взаимных связей и циклов
+  между пакетами больше нет (граф — DAG с 10.09.2026, цель `layering-ring-is-a-dag`); потолок в
+  `packages/layering.yaml` стоит на нуле, и новая пара или цикл краснеет.
 - **Потолок пакетов и роль-слои (#638).** Число top-level пакетов в `ai_ops_kit/` — ПОТОЛОК
   (`package_ceiling`, сейчас 19): структура отражает доменную модель, а не историю разработки.
   Новая capability живёт в СУЩЕСТВУЮЩЕМ домене; рост числа требует архитектурного решения (ADR/DP),
@@ -91,9 +90,7 @@ child-репозиториев. Здесь разрабатывается сам
 - **Runtime через адаптер, не замена.** AI Ops управляет исполнителем (Claude Code/Codex/OpenHands SDK/…)
   через адаптер; workflow/approvals/evidence не переписываются при смене runtime. Свой tool-loop не наращиваем,
   если внешний runtime делает это надёжно.
-- **Capability_freeze (3.8): СНЯТ — 3.8 stable достигнут.** В 3.9 аддитивно добавлены first-class Claude Code
-  executing adapter + complexity-aware routing (доказаны live). Новые концепт-возможности — ПО ДАННЫМ реальных
-  прогонов (3.10 Real-Product Qualification), а не по красоте; точечно и аддитивно.
+- **Новые возможности — по данным реальных прогонов, а не по красоте;** точечно и аддитивно.
 
 ## Публичная граница и breaking change
 

@@ -9,7 +9,8 @@ owner: product-team
 
 Видение — в `VISION.md`. Релизы — в `CHANGELOG.md`. Пройденный путь (фазы v1.3 → v3.36) —
 в [`docs/changelog/roadmap-history.md`](docs/changelog/roadmap-history.md). Достигнутые цели живут
-фактом в `history/plan-history.yaml`, а не здесь: roadmap смотрит вперёд, история — назад.
+фактом в `planning/plan.yaml` (статус `achieved`), закрытая работа — в `history/plan-history.yaml`, а не
+здесь: roadmap смотрит вперёд, история — назад.
 
 Совместимость: текущий мажор — **4.x** (текущий канал — **v4.9.0 qualification**; заработанный stable —
 на миноре 4.3; точная версия — в `VERSION`). Переход 3.x → 4.0 был breaking: снят плоский слой `tools/`, точки входа только пакетные

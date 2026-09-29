@@ -3293,4 +3293,4 @@ json parse, _record_call, retries).
 - [v2.x](../docs/changelog/v2.md)
 - [v0.x — v1.x](../docs/changelog/v0-v1.md)
 
-Правила ведения и каденция релизов — [docs/agent-guides/release-cadence.md](../docs/agent-guides/release-cadence.md).
+Правила ведения и каденция релизов — раздел «Релизный процесс» в [AGENTS.md](../AGENTS.md#релизный-процесс).
