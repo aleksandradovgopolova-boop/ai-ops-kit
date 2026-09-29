@@ -255,7 +255,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
     if applied:
         tech["записано в этом ответе"] = ", ".join(sorted(applied))
     if unmatched:
-        tech["не узнала слова"] = ", ".join(unmatched)
+        tech["не узнал слова"] = ", ".join(unmatched)
     if answer_error:
         tech["запись ответа не удалась"] = str(answer_error)
     # Исход 3 (#768) + #958 (risk_selects_the_process_not_the_human): провизорность — это внутренний
@@ -281,7 +281,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
     # Провизорность честно проговариваем прямо здесь (в _disclosure — вопрос к человеку; тут — причина).
     _ceremony = risk_ceremony_line(level_name, level_reason, provisional=spec_provisional)
     tech["процесс подобран по риску"] = _ceremony
-    _echo = f"Поняла: «{task.strip()}». " if (task or "").strip() else ""
+    _echo = f"Понял: «{task.strip()}». " if (task or "").strip() else ""
     if created:
         _origin = "начата"
     elif n_added:
@@ -297,10 +297,10 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
             ask += f" — и ещё {len(questions) - 4} (полный список в технических деталях)"
         steps = []
         if unmatched:
-            steps.append("несколько слов из ответа я не узнала: " + ", ".join(unmatched)
+            steps.append("несколько слов из ответа я не узнал: " + ", ".join(unmatched)
                         + " — назови их словами из вопросов ниже")
         steps.append("ответь словами, не открывая файл: " + ask)
-        steps.append("потом скажи, что переходим к плану — дальше я работаю сама")
+        steps.append("потом скажи, что переходим к плану — дальше я работаю сам")
         # #958 (исход one_input_hides_the_pipeline): точные команды (синтаксис `--answers`,
         # следующий шаг) — НЕ в лицо человеку. В next_steps остаётся продуктовая формулировка
         # «ответь словами», а сама механика (и внутренний feature id кит держит на своей стороне)
@@ -325,7 +325,7 @@ def from_specification(path, created, level_name, sections, blocking_missing, ne
     tech["следующий шаг"] = next_command
     return message(status="ok", headline="Описание задачи готово",
                    summary=_ceremony + " " + _echo + "Всё, что нужно было описать, описано." + _disclosure,
-                   next_steps=["скажи, что переходим к плану — дальше я работаю сама"],
+                   next_steps=["скажи, что переходим к плану — дальше я работаю сам"],
                    technical=tech)
 
 
@@ -337,7 +337,7 @@ def from_discovery_draft(path, created) -> dict:
         why_it_matters="Он пустой намеренно: чью боль решаем и как поймём, что помогло, "
                        "я за тебя не придумаю.",
         next_steps=[f"заполни разделы в {path}",
-                    "потом попроси построить описание задачи — дальше я работаю сама"],
+                    "потом попроси построить описание задачи — дальше я работаю сам"],
         technical={"draft": str(path), "создан": bool(created)})
 
 
@@ -412,7 +412,7 @@ def from_review(rep: dict) -> dict:
     if verdict == "no-ai-review-gates":
         return message(
             status="ok", headline="Вливать можно, но проверка не проводилась",
-            summary="У этой работы нет мест, которые я обязана отдавать на независимую проверку.",
+            summary="У этой работы нет мест, которые я обязан отдавать на независимую проверку.",
             why_it_matters="Поэтому «замечаний нет» здесь значит «их никто не искал» — "
                            "решение вливать за тобой.",
             next_steps=["можно вливать"], technical=tech)
@@ -424,7 +424,7 @@ def from_review(rep: dict) -> dict:
     if no_verdict:
         return message(
             status="degraded", headline="Проверять было некому",
-            summary="Работа сделана, но независимую проверку я не провела.",
+            summary="Работа сделана, но независимую проверку я не провёл.",
             why_it_matters="Своё же изменение я судить не имею права, а живого проверяющего "
                            "здесь не было. Это не «всё хорошо» — это «не проверено».",
             next_steps=["подключи проверяющего — тогда у вердикта появится основание"],
