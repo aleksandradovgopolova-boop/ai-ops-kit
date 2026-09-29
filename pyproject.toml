@@ -129,30 +129,33 @@ select = [
 # по `PLC2401`: заморожено ровно то, что нарушало правило на момент включения, и ничего сверх.
 # Ходит только ВНИЗ — это держит `tests/contracts/test_identifier_baseline.py`:
 #   * записей не больше потолка (18) — добавить файл в заморозку нельзя, только убрать;
+#   * у каждого файла свой потолок ЧИСЛА находок (`FROZEN_COUNTS` в тесте — единственное место,
+#     где записаны числа): запись здесь гасит правило для всего файла, и без этого потолка новое
+#     кириллическое имя в замороженном файле прошло бы незамеченным. Число только опускается;
 #   * каждый файл в списке ВСЁ ЕЩЁ нарушает правило — исправил файл, убери его отсюда, иначе
 #     заморозка тихо прикроет следующую кириллицу в уже чистом файле;
 #   * ни одного glob'а и ни одного правила сверх `PLC2401` — заморозка не расширяется на «всё рядом».
 # Переименование — отдельная уборка по файлу (идут параллельные правки `ai_ops_kit/security/`),
 # не здесь: этот шаг ставит только храповик.
 [tool.ruff.lint.per-file-ignores]
-"ai_ops_kit/security/scan_exec_call.py" = ["PLC2401"]                         # 101 на 2026-09-29
-"ai_ops_kit/security/scan_inline_code.py" = ["PLC2401"]                       # 188
-"ai_ops_kit/security/scan_prose.py" = ["PLC2401"]                             # 39
-"ai_ops_kit/security/scan_secret_noise.py" = ["PLC2401"]                      # 21
-"ai_ops_kit/security/scan_vendor.py" = ["PLC2401"]                            # 11
-"ai_ops_kit/security/security_pack.py" = ["PLC2401"]                          # 1
-"ai_ops_kit/security/security_scan.py" = ["PLC2401"]                          # 17
-"ai_ops_kit/ui/presenter_graph.py" = ["PLC2401"]                              # 1
-"tests/unit/test_delivered_kit_scan.py" = ["PLC2401"]                         # 1
-"tests/unit/test_security_scan.py" = ["PLC2401"]                              # 6
-"tests/unit/test_security_scan_address_not_led_away.py" = ["PLC2401"]         # 30
-"tests/unit/test_security_scan_inline_code.py" = ["PLC2401"]                  # 38
-"tests/unit/test_security_scan_literal_binary.py" = ["PLC2401"]               # 62
-"tests/unit/test_security_scan_placeholder_is_a_word.py" = ["PLC2401"]        # 28
-"tests/unit/test_security_scan_product_path_vs_harness.py" = ["PLC2401"]      # 6
-"tests/unit/test_security_scan_secret_false_blocks.py" = ["PLC2401"]          # 15
-"tests/unit/test_security_scan_tells_the_truth.py" = ["PLC2401"]              # 11
-"tests/unit/test_security_scan_vendor_section.py" = ["PLC2401"]               # 54
+"ai_ops_kit/security/scan_exec_call.py" = ["PLC2401"]
+"ai_ops_kit/security/scan_inline_code.py" = ["PLC2401"]
+"ai_ops_kit/security/scan_prose.py" = ["PLC2401"]
+"ai_ops_kit/security/scan_secret_noise.py" = ["PLC2401"]
+"ai_ops_kit/security/scan_vendor.py" = ["PLC2401"]
+"ai_ops_kit/security/security_pack.py" = ["PLC2401"]
+"ai_ops_kit/security/security_scan.py" = ["PLC2401"]
+"ai_ops_kit/ui/presenter_graph.py" = ["PLC2401"]
+"tests/unit/test_delivered_kit_scan.py" = ["PLC2401"]
+"tests/unit/test_security_scan.py" = ["PLC2401"]
+"tests/unit/test_security_scan_address_not_led_away.py" = ["PLC2401"]
+"tests/unit/test_security_scan_inline_code.py" = ["PLC2401"]
+"tests/unit/test_security_scan_literal_binary.py" = ["PLC2401"]
+"tests/unit/test_security_scan_placeholder_is_a_word.py" = ["PLC2401"]
+"tests/unit/test_security_scan_product_path_vs_harness.py" = ["PLC2401"]
+"tests/unit/test_security_scan_secret_false_blocks.py" = ["PLC2401"]
+"tests/unit/test_security_scan_tells_the_truth.py" = ["PLC2401"]
+"tests/unit/test_security_scan_vendor_section.py" = ["PLC2401"]
 
 # РАТЧЕТ ПО ГАШЕНИЮ ИСКЛЮЧЕНИЙ ЗАКРЫТ ПОЛНОСТЬЮ (2026-08-12).
 #

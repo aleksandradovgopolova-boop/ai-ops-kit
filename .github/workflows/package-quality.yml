@@ -67,7 +67,10 @@ jobs:
       # поэтому любой запуск требовал pytest-cov, а каждый скрипт гасил покрытие через `--no-cov`;
       # джобы, забывшие поставить пакет, падали с «unrecognized arguments: --cov=...» ещё до
       # тестов. Покрытие переехало в отдельную джобу `coverage`, где у него есть порог.
-      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
+      # ruff — ТОТ ЖЕ пин, что в джобе `lint` (2026-09-29, #1183): шард `contracts` гоняет
+      # `tests/contracts/test_identifier_baseline.py`, который пересчитывает ruff'ом находки PLC2401
+      # в замороженных файлах. Без ruff этот сторож громко пропускается, то есть в CI не исполнялся бы.
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
