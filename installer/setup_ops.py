@@ -15,6 +15,7 @@ model). Вынесено из `installer/ai_ops.py`.
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -133,8 +134,16 @@ def cmd_init(target_dir):
         if _sv is not None:
             text = re.sub(r"(^standard:\n(?:.*\n)*?\s*version:\s*)\S+", rf"\g<1>{_sv}",
                           text, count=1, flags=re.M)
+        # ИМЯ ПРОЕКТА — ИЗ РЕПОЗИТОРИЯ, А НЕ ЗАГОТОВКА (#1205, репетиция на «Нитях»): имя однозначно
+        # выводится, а `<project-name>` оставался и его вписывал помощник. Не вывелось — заготовка
+        # остаётся, и doctor честно о ней скажет (B2-25): выдумывать имя нельзя.
+        pname = _project_name(root)
+        if pname:
+            text = re.sub(r"(^\s*name:\s*)<project-name>\s*$", rf"\g<1>{pname}", text, count=1,
+                          flags=re.M)
         cfg.write_text(text, encoding="utf-8")
-        edit_hint = "project.name и providers" if psrc else "project.name, providers и parent.source"
+        edit_hint = ("providers" if pname else "project.name и providers") if psrc else \
+            ("providers и parent.source" if pname else "project.name, providers и parent.source")
         print(f"создана заготовка {cfg} (версия {_core().pkg_version()}; "
               f"source {'из git remote' if psrc else 'placeholder — заполните'}) — отредактируйте {edit_hint}.")
     # ТА ЖЕ доставка, что и в `update` (v3.36.2): установка и обновление зовут одну функцию,
@@ -335,6 +344,45 @@ def _setup_remaining(root: Path, first_hour=None):
     return out
 
 
+_NAME_OK = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+
+
+def _project_name(root: Path):
+    """Имя проекта из репозитория. -> str | None. Порядок — от самого однозначного (#1205).
+
+    1) имя репозитория в `origin` (`…/niti.git` -> `niti`); 2) имя из манифеста (`pyproject.toml`
+    [project].name, `package.json` name без scope); 3) имя каталога ОСНОВНОГО репозитория (через
+    `git-common-dir`: у рабочей копии в `.claude/worktrees/<x>` своё имя каталога — не имя проекта).
+    Ничего подходящего -> None: заготовка остаётся, выдумывать имя нельзя."""
+    def _git(*args):
+        try:
+            r = subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
+                               timeout=10)
+            return r.stdout.strip() if r.returncode == 0 else ""
+        except (OSError, subprocess.TimeoutExpired):
+            return ""
+    cands = []
+    url = _git("remote", "get-url", "origin")
+    if url:
+        cands.append(re.sub(r"\.git$", "", url.rstrip("/")).rsplit("/", 1)[-1].rsplit(":", 1)[-1])
+    try:
+        m = re.search(r"""(?ms)^\[project\].*?^name\s*=\s*["']([^"']+)["']""",
+                      (root / "pyproject.toml").read_text(encoding="utf-8"))
+        if m:
+            cands.append(m.group(1))
+    except OSError:
+        pass
+    try:
+        cands.append(str(json.loads((root / "package.json").read_text(encoding="utf-8"))
+                         .get("name") or "").rsplit("/", 1)[-1])
+    except (OSError, ValueError, AttributeError):
+        pass
+    common = _git("rev-parse", "--path-format=absolute", "--git-common-dir")
+    if common:
+        cands.append(Path(common).parent.name)
+    return next((c for c in cands if c and _NAME_OK.match(c)), None)
+
+
 def _first_result_lead(root: Path, first_hour):
     """Верхний блок финального экрана: ПЕРВЫЙ РЕЗУЛЬТАТ, а не «установлено». -> list[str].
 
@@ -346,6 +394,10 @@ def _first_result_lead(root: Path, first_hour):
     stage = (first_hour or {}).get("stage") if first_hour else None
     have_file = (root / ".ai" / "generated" / "first-result.md").is_file()
     lines = ["═══ Первый результат ═══"]
+    # #1200: в каком состоянии проект сейчас — итог одной фразой, если первый час его посчитал.
+    health = (first_hour or {}).get("health") if first_hour else None
+    if isinstance(health, dict) and health.get("verdict"):
+        lines.append(f"Состояние проекта: {health['verdict']}")
     if stage == _STAGE_READY:
         lines.append("Кит понял репозиторий и собрал направление и план продукта из фактов —")
         lines.append("это результат, а не «кит установлен».")
