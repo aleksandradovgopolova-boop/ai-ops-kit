@@ -44,7 +44,9 @@ def installed(tmp_path_factory):
                             "PYTHONDONTWRITEBYTECODE": "1"})
     assert r.returncode == 0, r.stdout + r.stderr
     cfg = root / ".ai-ops.yaml"
-    cfg.write_text(cfg.read_text(encoding="utf-8").replace("<project-name>", "demo"), encoding="utf-8")
+    import re as _re
+    cfg.write_text(_re.sub(r"(?m)^(  name:\s*).*$", r"\g<1>demo",
+                           cfg.read_text(encoding="utf-8"), count=1), encoding="utf-8")
     return root
 
 

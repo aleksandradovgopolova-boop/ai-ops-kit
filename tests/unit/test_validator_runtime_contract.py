@@ -117,6 +117,7 @@ NEEDS_ARTIFACT = [
     "validate_knowledge_graph",
     "validate_plan_artifact",
     "validate_product_objects",
+    "validate_release_notes",   # #1210: без режима (--layer-a FILE | --fragments) проверять нечего -> 2
     "validate_requirements_artifact",
     "validate_reviewer_result",
     "validate_run_handoff",

@@ -18,12 +18,22 @@
     файл кита `.ai/project/lint/baseline.json` той же формы (`{инструмент: {файл: {правило:
     {"count": N}}}}`) и сравнение, которое краснеет ТОЛЬКО на росте.
 
+ТРИ ТОЧКИ ПРИНУЖДЕНИЯ — ОДНА ЛОГИКА (#1183, `lint-profile-enforced-everywhere`). Линию сверяет не только
+`./ai-ops lint-profile check`: хук правки агента (`templates/runtime/lint_hook.py`, ОДИН файл —
+`check(..., files=[файл])`), шаг child-CI (та же команда `check`) и доказательство `lint_passed`
+прогона кита (`gates.evidence_collector`). Командную строку инструмента и разбор его вывода собирает
+`run_tool` здесь же; сам процесс запускает переданный снаружи `run(argv, cwd) -> (код, вывод)` —
+у команды и хука это subprocess, у гейта — Tool Broker. Третьей копии сравнения не появляется.
+
 ПЕРЕЗАМОРОЗКА НЕ ПРОИСХОДИТ САМА. Повторное `--apply` линию не трогает: иначе рост можно было бы
 «отмыть» пересборкой. Заморозить заново — осознанно, `--apply --force`, и это видно в диффе файла линии.
 """
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
 from ai_ops_kit.checks import lint_profile as lp
@@ -33,6 +43,31 @@ KIND = "ai-ops-lint-baseline"
 ESLINT_NATIVE_MIN = (9, 24)
 
 OK, GREW, NOT_CHECKED = "ok", "grew", "not_checked"
+# Инструменты, пишущие результат в файл (а не в stdout): вывод не зависит от лимита исполнителя.
+FILE_OUTPUT = ("eslint", "ruff", "golangci-lint")
+_EXE = {"import-linter": "lint-imports"}
+RULE_RU = (("ai-ops/id-match", "имя не латиницей"),
+           ("ai-ops/naming-convention", "имя типа не латиницей"),
+           ("ai-ops/no-restricted-imports", "импорт через границу слоя"),
+           ("PLC24", "имя не латиницей"), ("N", "имя не по соглашениям Python"),
+           ("asciicheck", "имя не латиницей"), ("revive", "имя не по соглашениям Go"),
+           ("depguard", "импорт через границу слоя"), ("import-linter", "импорт через границу слоя"),
+           ("ai-ops-latin", "имя не латиницей"))
+
+
+def rule_ru(rule: str) -> str:
+    return next((ru for pfx, ru in RULE_RU if str(rule).startswith(pfx)), str(rule))
+
+
+def address(g: dict) -> str:
+    """Строка роста для человека: где, что и насколько выросло."""
+    where = g["file"] + (":" + str(g["lines"][0]) if g.get("lines") else "")
+    return f"{where} — {rule_ru(g['rule'])} (было {g['was']}, стало {g['now']})"
+
+
+def grown(res: dict) -> list:
+    """Все строки роста результата `check` (по всем инструментам)."""
+    return [g for r in res.get("tools") or [] for g in r.get("grown") or []]
 
 
 # ── Файл линии кита. ──────────────────────────────────────────────────────────────────────────
@@ -167,6 +202,93 @@ def parse_import_linter(text: str) -> list:
     return found
 
 
+# ── Запуск инструмента: argv и разбор здесь, сам процесс — у вызывающего. ────────────────────
+def executable(root, tool: str):
+    """Исполняемый файл инструмента профиля: локальный (node_modules/.bin, .venv/bin), затем PATH."""
+    name = _EXE.get(tool, tool)
+    for cand in (Path(root) / "node_modules" / ".bin" / name, Path(root) / ".venv" / "bin" / name):
+        if cand.is_file():
+            return str(cand)
+    return shutil.which(name)
+
+
+def _paths(targets) -> list:
+    """Пути, которые инструмент не примет за флаги (`-rf.py` -> `./-rf.py`)."""
+    return [f"./{t}" if str(t).startswith("-") else str(t) for t in targets] if targets else ["."]
+
+
+def tool_argv(spec: dict, exe: str, out_file: str, extra=(), targets=None):
+    """Командная строка инструмента профиля -> argv | None (по файлам этот инструмент не умеет).
+
+    targets — репо-относительные файлы (None — весь проект). golangci-lint проверяет ПАКЕТ, поэтому
+    файл превращается в свой каталог, а лишнее отсекает `check` фильтром по файлам."""
+    tool, cfg, paths = spec["tool"], spec["config"], _paths(targets)
+    if tool == "eslint":
+        return [exe, "-c", cfg, "-f", "json", "-o", out_file, *extra, *paths]
+    if tool == "ruff":
+        return [exe, "check", "--config", cfg, "--output-format", "json", "--output-file", out_file,
+                "--exit-zero", "--force-exclude", *paths]
+    if tool == "golangci-lint":
+        pkgs = (sorted({"./" + Path(t).parent.as_posix() for t in targets} - {"./."}
+                       | ({"."} if any(Path(t).parent == Path(".") for t in targets) else set()))
+                if targets else ["./..."])
+        return [exe, "run", "-c", cfg, "--output.json.path", out_file, "--issues-exit-code", "0", *pkgs]
+    if tool == "ast-grep":
+        return [exe, "scan", "--rule", cfg, "--json=compact", *paths]
+    if tool == "import-linter" and not targets:
+        return [exe, "--config", cfg]
+    return None
+
+
+def parse_run(spec: dict, rc, text: str, root) -> tuple:
+    """Код и вывод инструмента -> (находки|None, подавлено, причина-если-не-вышло)."""
+    tool = spec["tool"]
+    tail = (text or "").strip()[-300:]
+    try:
+        if tool == "eslint":
+            if rc == 2 or not (text or "").strip().startswith("["):
+                return None, {}, "ESLint не отработал: " + tail
+            found, supp = parse_eslint(text, root, spec.get("rule_prefix", "ai-ops/"))
+            return found, supp, None
+        if tool == "golangci-lint":
+            return ((parse_golangci(text, root, spec.get("rules") or ()), {}, None) if rc == 0
+                    else (None, {}, "golangci-lint не отработал: " + tail))
+        if tool == "import-linter":
+            return ((parse_import_linter(text), {}, None) if rc in (0, 1)
+                    else (None, {}, "lint-imports не отработал: " + tail))
+        if rc != 0 and not (text or "").strip().startswith(("[", "{")):
+            return None, {}, f"{tool} не отработал: " + tail
+        return ((parse_ruff(text, root, spec.get("rules") or ()) if tool == "ruff"
+                 else parse_ast_grep(text, root)), {}, None)
+    except (ValueError, KeyError) as e:
+        return None, {}, f"{tool}: вывод не разобран ({e})"
+
+
+def run_tool(root, spec: dict, run, extra=(), targets=None) -> tuple:
+    """Прогнать инструмент профиля -> (находки|None, подавлено, причина). Процесс — через `run`."""
+    root = Path(root)
+    tool = spec["tool"]
+    exe = executable(root, tool)
+    if not exe:
+        return None, {}, f"{tool} не найден — проверить нечем"
+    fd, tmp = tempfile.mkstemp(suffix=".json")
+    os.close(fd)
+    try:
+        argv = tool_argv(spec, exe, tmp, extra, targets)
+        if argv is None:
+            return None, {}, f"{tool} проверяет проект целиком — по одному файлу не запускаю"
+        rc, out = run(argv, root)
+        text = out
+        if tool in FILE_OUTPUT:
+            try:
+                text = Path(tmp).read_text(encoding="utf-8") or out
+            except OSError:
+                text = out
+        return parse_run(spec, rc, text, root)
+    finally:
+        Path(tmp).unlink(missing_ok=True)
+
+
 # ── Версия ESLint и состояние линии. ────────────────────────────────────────────────────────
 def eslint_version(root) -> tuple:
     try:
@@ -236,11 +358,23 @@ def _from_kit(root: Path) -> dict:
     return {t: _from_file(s) for t, s in (load(root).get("tools") or {}).items()}
 
 
-def check(child_root, tools: list, measure, tighten: bool = False) -> dict:
-    """Сверить текущее с линией. tighten — ужать линию под исправленное (рост не впитывается)."""
+def _only(files, frozen: dict, found: list, supp: dict) -> tuple:
+    """Сузить линию и замер до `files`: чужие файлы не сверяются, их находки не в счёт."""
+    keep = set(files)
+    return ({f: v for f, v in frozen.items() if f in keep}, [x for x in found if x[0] in keep],
+            {k: n for k, n in supp.items() if k[0] in keep})
+
+
+def check(child_root, tools: list, measure, tighten: bool = False, files=None) -> dict:
+    """Сверить текущее с линией. tighten — ужать линию под исправленное (рост не впитывается).
+
+    files — сверить только эти файлы (хук правки): инструмент зовётся на них (`measure(...,
+    targets=files)`), линия и находки сужаются до них. Ужатие при этом не делается — по части
+    проекта линию не переписывают."""
     root = Path(child_root)
     kit = _from_kit(root)
     rows, kit_changed = [], False
+    tighten = tighten and not files
     for spec in tools:
         t = spec["tool"]
         native = _native(root, spec)
@@ -251,10 +385,13 @@ def check(child_root, tools: list, measure, tighten: bool = False) -> dict:
             continue
         extra = ["--suppressions-location", spec["suppressions"],
                  "--pass-on-unpruned-suppressions"] if native else []
-        found, supp, why = measure(root, spec, extra)
+        found, supp, why = measure(root, spec, extra, targets=list(files)) if files \
+            else measure(root, spec, extra)
         if found is None:
             rows.append({"tool": t, "status": NOT_CHECKED, "reason": why})
             continue
+        if files:
+            frozen, found, supp = _only(files, frozen, found, supp)
         if native:
             # Превышение счётчика ESLint возвращает ВСЕ находки правила в файле, в пределах — все
             # подавлены. Поэтому «стало» по ключу = подавленные + неподавленные.
