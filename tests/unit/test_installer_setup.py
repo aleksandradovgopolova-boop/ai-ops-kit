@@ -210,6 +210,17 @@ def test_first_result_lead_leads_with_result_per_stage(tmp_path):
     assert "вручную" in lead_none and "model --flow --apply" in lead_none
 
 
+def test_first_result_lead_names_project_state_right_under_the_header(tmp_path):
+    """(#1200) Итог «в каком состоянии проект» стоит сразу под заголовком экрана; нет итога — нет строки."""
+    setup_ops = _load_installer()._setup_ops()
+    ready = {"kind": "first-hour", "stage": "ready",
+             "health": {"verdict": "По коду и безопасности проект в порядке — срочно править нечего."}}
+    lead = setup_ops._first_result_lead(tmp_path, ready)
+    assert lead[1] == "Состояние проекта: По коду и безопасности проект в порядке — срочно править нечего."
+    assert not any("Состояние проекта" in x
+                   for x in setup_ops._first_result_lead(tmp_path, {"kind": "first-hour", "stage": "ready"}))
+
+
 def test_setup_leaves_first_result_artifact_and_leads_with_it(child):
     """(issue #1140) Конец установки — первый РЕЗУЛЬТАТ: setup оставляет открываемый файл
     `.ai/generated/first-result.md` и ведёт им экран, а не строкой «AI Ops установлен»."""
