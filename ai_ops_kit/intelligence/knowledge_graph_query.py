@@ -443,10 +443,12 @@ def _source_bound(c: dict, next_action: dict) -> dict:
                              unknown_reason=_source_gap(insight, source, "гипотеза")))
     rationale = _text(src.get("solution_rationale"))
     if rationale:
-        opt = _text(src.get("solution_chosen"))
+        opt, did = _text(src.get("solution_chosen")), _text(src.get("solution_rationale_decision"))
+        # Обоснование из решения, а не из урока -> улика указывает на решение и его ребро.
+        why_ev = [did, f"{did} -motivates-> {fid}", "decisions/registry.yaml"] if did else ev
         out["solution_rationale"] = _qa("solution_rationale", _Q["solution_rationale"],
                                         answer=(f"выбрано «{opt}»: {rationale}" if opt else rationale),
-                                        evidence=ev)
+                                        evidence=why_ev)
     else:
         out["solution_rationale"] = _qa("solution_rationale", _Q["solution_rationale"],
                                         unknown_reason=_source_gap(insight, source, "обоснование решения"))

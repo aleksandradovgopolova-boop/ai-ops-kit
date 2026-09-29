@@ -617,7 +617,8 @@ def feature_life_source(graph: dict, feature: str, child_root: str | os.PathLike
     останется пробелом).
 
     -> `{audience, hypothesis, solution_rationale, solution_chosen, learnings, follow_up}` (только
-    найденные ключи).
+    найденные ключи). Нет обоснования в уроке -> `reason` связанного решения и
+    `solution_rationale_decision` (его id — улика ответа).
     """
     root = Path(child_root)
     graph_dir = root / "knowledge"
@@ -662,7 +663,21 @@ def feature_life_source(graph: dict, feature: str, child_root: str | os.PathLike
         out["solution_rationale"] = _text(chosen["reason"])
         if _text(chosen.get("option")):
             out["solution_chosen"] = _text(chosen["option"])
+    elif (why := _decision_reason(graph, fid, root)):
+        # Урок обоснования не несёт — его несёт СВЯЗАННОЕ решение (`decision -motivates-> feature`),
+        # поле `reason` эпизода в decisions/registry.yaml. Улика — это решение, а не урок.
+        out["solution_rationale"], out["solution_rationale_decision"] = why
     return out
+
+
+def _decision_reason(graph: dict, fid: str, root: Path) -> tuple[str, str] | None:
+    """(reason, id решения) первого решения, мотивирующего функцию; нет ребра/поля -> None."""
+    dids = [_slug(e.get("from")) for e in graph.get("edges") or []
+            if isinstance(e, dict) and e.get("type") == "motivates" and _slug(e.get("to")) == fid]
+    eps = {_slug(ep.get("id")): ep for ep in
+           _load_yaml(root / "decisions" / "registry.yaml").get("episodes") or [] if isinstance(ep, dict)}
+    return next(((_text(eps[d]["reason"]), d) for d in dids if d in eps and _text(eps[d].get("reason"))),
+                None)
 
 
 # ── Вопросы к собранному графу — в сателлите `knowledge_graph_query` ─────────────────────────────
