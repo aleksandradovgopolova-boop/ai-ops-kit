@@ -246,3 +246,56 @@ def test_enriched_graph_still_passes_integrity(child: Path, tmp_path: Path):
         p.write_text(yaml.safe_dump(graph, allow_unicode=True), encoding="utf-8")
         errors = vkg.validate_graph(p, types, rels)
     assert errors == [], errors
+
+
+# ── Обоснование решения: урок не несёт — несёт связанное решение ──────────────────────────────────
+# Полевой прогон на ии-среде (analytics-visit-tracking, 29.09): обоснование было записано в поле
+# `reason` решения, мотивирующего функцию, а в уроке `solution_options` не было — кит отвечал
+# «неизвестно», хотя ответ лежал в уже связанной улике.
+
+
+def _decision_with_reason(child: Path, reason: str | None) -> None:
+    ep = {"id": "ep-2026-08-01-fast-checkout", "decision": "убрать шаг адреса для повторных покупателей"}
+    if reason is not None:
+        ep["reason"] = reason
+    _write(child / "decisions" / "registry.yaml", {"episodes": [ep]})
+
+
+def _lesson_without_options(child: Path) -> None:
+    fl = yaml.safe_load((child / "product-learning" / "FL-010.yaml").read_text(encoding="utf-8"))
+    fl.pop("solution_options")
+    _write(child / "product-learning" / "FL-010.yaml", fl)
+
+
+def test_rationale_falls_back_to_the_motivating_decision_reason(child: Path):
+    """Урок без обоснования -> ответ из `reason` связанного решения, и улика указывает на РЕШЕНИЕ."""
+    _lesson_without_options(child)
+    _decision_with_reason(child, "адрес устаревает, а повторный покупатель теряется на этом шаге")
+    graph = kg.build_graph(child)
+    q = {x["id"]: x for x in _answer(graph, "express-checkout", child_root=child)["questions"]}
+    why = q["solution_rationale"]
+    assert why["answered"] is True
+    assert "теряется на этом шаге" in why["answer"]
+    assert why["evidence"][0] == "ep-2026-08-01-fast-checkout"
+    assert "ep-2026-08-01-fast-checkout -motivates-> express-checkout" in why["evidence"]
+    assert why["evidence"][0] in {n["id"] for n in graph["nodes"]}
+    assert not any(e and e.startswith("FL-") for e in why["evidence"])
+
+
+def test_lesson_rationale_wins_over_decision_reason(child: Path):
+    """Есть выбранный вариант в уроке -> ответ из урока; решение его не перебивает."""
+    _decision_with_reason(child, "причина из решения")
+    graph = kg.build_graph(child)
+    q = {x["id"]: x for x in _answer(graph, "express-checkout", child_root=child)["questions"]}
+    assert "самый короткий путь" in q["solution_rationale"]["answer"]
+    assert "причина из решения" not in q["solution_rationale"]["answer"]
+
+
+def test_decision_without_reason_stays_an_honest_unknown(child: Path):
+    """Ни урок, ни решение обоснования не несут -> честное «неизвестно», текст решения не выдаётся за «почему»."""
+    _lesson_without_options(child)
+    _decision_with_reason(child, None)
+    graph = kg.build_graph(child)
+    q = {x["id"]: x for x in _answer(graph, "express-checkout", child_root=child)["questions"]}
+    assert q["solution_rationale"]["answered"] is False
+    assert "не заполнен" in q["solution_rationale"]["unknown_reason"]
