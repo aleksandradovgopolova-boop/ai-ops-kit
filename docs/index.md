@@ -137,5 +137,5 @@ python3 <path-to-ai-ops-kit>/installer/ai_ops.py init .
 
 ## Версия
 
-Текущая: **v4.3.2**, канал `stable` — `stable` заработан полевыми доказательствами на живых дочках
-и проверяется машиной (`registry/release-claims.yaml`). Точная версия — в `VERSION`.
+Точная версия — в `VERSION`, канал — в `registry/release-claims.yaml`. Канал заработан, а не
+объявлен: `stable` требует полевых доказательств на живых дочках и проверяется машиной.

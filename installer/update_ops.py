@@ -81,6 +81,21 @@ def _changelog_slice(from_version, to_version):
         return []                                      #   не должно ронять применённое обновление
 
 
+def _whats_new(from_version, to_version):
+    """Слой владельца каждой версии между from и to — для отчёта, вывода и PR обновления (#1210).
+
+    -> {status, versions, text}. Тонкая обёртка над `devtools.release_bump.whats_new`: текст идёт в
+    тело PR ТЕКСТОМ, а не внутри JSON. Версия без слоя A показана заголовком раздела, и это сказано.
+    Любой сбой -> status=failed и честное «прочитать НЕ УДАЛОСЬ» — не «ничего нового»."""
+    try:
+        from ai_ops_kit.devtools import release_bump
+        return release_bump.whats_new(from_version, to_version)
+    except Exception as e:                             # noqa: BLE001 — сбой описания не должен
+        return {"status": "failed", "versions": [],     #   ронять применённое обновление
+                "text": (f"Что нового для вас: прочитать описание выпусков НЕ УДАЛОСЬ "
+                         f"({type(e).__name__}) — это не «ничего нового»; см. CHANGELOG кита.")}
+
+
 def cmd_status():
     inst, avail = _core().installed_version(), _core().pkg_version()
     drift = _core().detect_drift() or []
@@ -259,7 +274,8 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
         msg = (f"chore(ai-ops): обновление кита {inst or '—'} -> {target}\n\n"
                f"Подготовлено `ai-ops update` при `parent.update_policy: pr`: применено в отдельной "
                f"ветке, рабочее дерево не тронуто (кроме .ai/runtime/last-update-report.json — "
-               f"отчёт об обновлении, в gitignore). Отчёт — .ai/runtime/last-update-report.json.\n"
+               f"отчёт об обновлении, в gitignore). Отчёт — .ai/runtime/last-update-report.json.\n\n"
+               + _whats_new(inst, target)["text"] + "\n"
                + _deferred_security_text(wt, staged))
         c = subprocess.run(["git", "-C", str(wt),
                             "-c", "user.name=ai-ops-updater",
@@ -468,6 +484,9 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # заголовков CHANGELOG между from->to называет фактические изменения. Пусто -> `propose` честно
     # откатится на «версия + число файлов». CHANGELOG кита в дочку не едет — отчёт единственный носитель.
     report["changelog_slice"] = _changelog_slice(inst, target)
+    # ЧТО МЕНЯЕТСЯ ДЛЯ ВЛАДЕЛЬЦА — В ОТЧЁТ И НА ЭКРАН (#1210): слой A каждой версии между from и to,
+    # текстом. Его выводит тело PR CI-шаблона и коммит отложенного пути; заголовки выше — для `propose`.
+    report["whats_new"] = _whats_new(inst, target)
     # РАЗДЕЛ БЕЗОПАСНОСТИ — В ОТЧЁТ (#1157): его читает тело PR CI-шаблона и коммит отложенного пути.
     report["security_surface"] = security_surface(_ao().REPO_ROOT, [c["path"] for c in changes])
     report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
@@ -479,6 +498,7 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
                         + " Создайте PR с этим diff — silent update запрещён.")
     out = _core().write_report(report)
     print(report["report"]); print(f"отчёт: {out}")
+    print("\n" + report["whats_new"]["text"] + "\n")
     # ПРИГЛАШЕНИЕ К БРИФИНГУ ПО ФУНДАМЕНТУ — ровно после «N изменений, создайте PR». Раньше здесь
     # путь обрывался: владелец обновлённой дочки не знал ни что нового, ни что делать дальше.
     if report["status"] == "ok":

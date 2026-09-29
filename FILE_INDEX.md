@@ -12,14 +12,15 @@
 - `.gitignore`
 - `.pre-commit-config.yaml`
 - `AGENTS.md`
-- `APPLY.md`
-- `CHANGELOG.md` — свежие релизы (свежее 3.38.0); детальная история — `history/DEVELOPMENT-HISTORY.md`
+- `ARCHITECTURE.md` — архитектура кита в одном файле (слои, компоненты, ограничения); читается `test_required_architecture.py`
+- `CHANGELOG.md` — релизы 3.38.0 и новее (собирается из `newsfragments/` на релизе); детальная история — `history/DEVELOPMENT-HISTORY.md`
 - `CLAUDE.md`
 - `FILE_INDEX.md` — этот файл
 - `LICENSE`
 - `MIGRATION_GUIDE_4.0.md` — переход на 4.0: снятие плоского слоя `tools/` (warn-минор 3.40 предупреждает заранее)
 - `NOTICE.md`
 - `README.md` — обзор; актуальная витрина «что кит умеет сегодня» — `docs/capability-map.md` (built≠wired честно, генерируется из реестров)
+- `SECURITY.md` — модель угроз и границы безопасности кита
 - `ROADMAP.md` — направление продукта: четыре горизонта (Сейчас / Следующий результат / Дальше / Later), контракт проверяется `ai_ops_kit/planning/roadmap.py`. История пути — `docs/changelog/roadmap-history.md`
 - `VERSION`
 - `VISION.md`
@@ -32,7 +33,7 @@
 
 Записи о прошлых состояниях: верны как история, но не описывают поведение текущего main.
 
-- `history/plan-history.yaml` — закрытые работы и цели, уехавшие из активного плана
+- `history/plan-history.yaml` — закрытые работы, уехавшие из активного плана (цели остаются в `planning/plan.yaml` со статусом `achieved`)
 - `history/DEVELOPMENT-HISTORY.md` — детальная инженерная история релизов (3.37.0 → 3.20.1, архив),
   вынесена из `CHANGELOG.md`; перенесена из корня (B2), чтобы вход читался за минуту
 - `history/MIGRATION_GUIDE.md` — миграция со старой структуры агентов и 1.x→2.0; перенесён из корня
@@ -42,7 +43,7 @@
 
 ## planning/
 
-- `planning/plan.yaml` — delivery plan самого кита: 5 целей (id совпадают с `ROADMAP.md`) и подтверждённый остаток ревизии как работа. Читается `ai-ops next`; проверяется `delivery_plan.validate` через `validate_product_model`
+- `planning/plan.yaml` — delivery plan самого кита: цели (активные совпадают по id с `ROADMAP.md`, достигнутые остаются со статусом `achieved`) и открытая работа. Читается `ai-ops next`; проверяется `delivery_plan.validate` через `validate_product_model`
 
 ## scripts/
 
@@ -57,6 +58,7 @@
 
 Документация для людей: Onboarding (ценность простым языком), Quickstart (+типовые ошибки), Walkthrough (сквозной сценарий), гайд внедрения по ролям, параллельные сессии.
 
+- `docs/index.md` — вход в документацию: с него достижима каждая страница `docs/` (сторож `test_docs_index_coverage.py`); подразделы — `docs/architecture/`, `docs/api/`, `docs/guides/`, `docs/agent-guides/`
 - `docs/capability-map.md` — витрина «что кит умеет сегодня»: capability → состояние (built / built≠wired / partial / planned) → как проверить. СГЕНЕРИРОВАНА из реестров и кода (`python3 -m ai_ops_kit.devtools.capability_inventory`), свежесть держит `tests/contracts/test_capability_inventory.py`
 - `docs/ONBOARDING.md`
 - `docs/QUICKSTART.md`
@@ -566,15 +568,22 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `openspec/schemas/product/schema.yaml`
 - `openspec/schemas/research/schema.yaml`
 
-## platform-guides/
+## plugin/, .claude-plugin/
 
-Краткие руководства по подключению конкретных runtime'ов.
+Кит как плагин Claude Code: `plugin/commands/`, `plugin/skills/` (копия скилла `ai-ops`) и
+манифесты `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`.
 
-- `platform-guides/claude-code.md`
-- `platform-guides/codex.md`
-- `platform-guides/github-copilot.md`
-- `platform-guides/roo-code.md`
-- `platform-guides/zcode.md`
+## standards/
+
+Конституции, которые кит несёт в дочку: `standards/architecture/`, `standards/product/`,
+`standards/uiux/`, `standards/feature-registry/` — правила (`rules.yaml`), проза и скрипты проверки.
+
+## features/, findings/, dashboard/, newsfragments/
+
+- `features/<id>/` — рабочие пакеты фич самого кита (blueprint + delivery)
+- `findings/from-children/` — наблюдения, пришедшие из дочек
+- `dashboard/` — пульт состояния кита: `index.html` + `data.json` (собирает `build_data.py`)
+- `newsfragments/` — очередь заявлений в CHANGELOG (towncrier); правила — `newsfragments/README.md`
 
 ## ai_ops_kit/
 
@@ -723,7 +732,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `qualification/scenarios.yaml` — 5 канонических live-сценариев квалификации движка + матрица ОС/стеков (v2.84)
 - `docs/qualification-runbook.md` — как прогнать живую квалификацию на реальном child (env, команды, чтение отчёта, матрица) (v2.84)
 - `packages/<name>/package.yaml` — декларации границ 5 пакетов 3.0 (файл→пакет), без переноса файлов (v2.46)
-- `packages/layering.yaml` — слои 12 пакетов `ai_ops_kit/*` и допустимые направления зависимостей; замер циклов и то, что сегодня непроверяемо (v3.32.0)
+- `packages/layering.yaml` — слои пакетов `ai_ops_kit/*` и допустимые направления зависимостей; замер циклов и то, что сегодня непроверяемо (v3.32.0)
 - `ai_ops_kit/engine/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `ai_ops_kit/engine/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
 - `ai_ops_kit/devtools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
@@ -800,4 +809,4 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `.github/workflows/package-quality.yml`
 - `.github/workflows/pr-smoke.yml`
 - `.github/workflows/release.yml`
-- `.github/ci-groups/{fast,contracts,selftests-a,selftests-m}.sh` — разбиение полного контура на группы
+- `.github/ci-groups/{fast-1,fast-2,contracts,selftests-a,selftests-m}.sh` — разбиение полного контура на группы
