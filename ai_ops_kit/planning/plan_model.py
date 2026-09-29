@@ -61,8 +61,9 @@ FORBIDDEN_ITEM_KEYS = ("runtime", "model", "provider", "executor", "assignee", "
 # (is_template), и одиночный id (для отображения через `goal_display_name`).
 PLACEHOLDER_GOAL_IDS = frozenset({"goal-id-1", "goal-id-2"})
 _PLACEHOLDER_GOAL_RE = re.compile(r"^goal-id-\d+$")
-# Как назвать безымянное направление ВЛАДЕЛЬЦУ вместо сырого id — с подсказкой, чем это чинится.
-UNNAMED_GOAL_LABEL = "безымянное направление (задай имя через `ai-ops model`)"
+# Как назвать безымянное направление ВЛАДЕЛЬЦУ вместо сырого id. Без команды в тексте (#1204):
+# человеку — что сделать словами, команду зовёт помощник, а не владелец.
+UNNAMED_GOAL_LABEL = "безымянное направление (у него пока нет имени — назови его своими словами)"
 
 
 def is_placeholder_goal(gid) -> bool:
