@@ -4,13 +4,16 @@
 целиком, вместе со «Служебным» (план, история), а PR обновления дочки прятал «что нового» в свёрнутый
 JSON, и то одними заголовками. «Честно: что ещё не сделано» в 4.8.0 вставили руками — механизма не
 было. Теперь `release_bump` собирает СЛОЙ ВЛАДЕЛЬЦА (слой A) между маркерами в начале раздела,
-ограничения берёт из фрагментов типа `limit`, а Release и PR обновления показывают именно его.
+ограничения берёт из фрагментов типа `limit`, проверяет слой той же функцией, что
+`validate_release_notes --layer-a --strict`, а Release и PR обновления показывают именно его.
 
-Тесты держат и положительные, и отказные ветки: без `--headline` выпуск не собирается; маркеров нет —
-извлечение не выдумывает слой, а отдаёт прежнее; сбой описания — «НЕ УДАЛОСЬ», а не «ничего».
+Тесты держат и положительные, и отказные ветки: без `--owner-notes` выпуск не собирается; замечание
+проверки или отсутствие правил — отказ до записи файлов; маркеров нет — извлечение не выдумывает слой,
+а отдаёт прежнее; сбой описания — «НЕ УДАЛОСЬ», а не «ничего».
 """
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import os
@@ -27,14 +30,54 @@ KIT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(KIT))
 
 from ai_ops_kit.devtools import release_bump as rb  # noqa: E402
+from ai_ops_kit.validation import validate_release_notes as vr  # noqa: E402
 
 pytestmark = pytest.mark.unit
 
 HEADLINE = "Кит теперь сам пишет, что меняется для вас, и честно называет, чего ещё нет."
 
+# Правила слоя A по договору #1210 (форма `registry/communication-policy.yaml -> release_notes`) —
+# поверх НАСТОЯЩЕЙ политики кита, с её настоящим глоссарием.
+TITLES = {"headline": "Что меняется для вас", "whats_in": "Что вошло",
+          "behaviour_changes": "Что изменилось в привычном поведении", "who_is_affected": "Кого касается",
+          "known_limits": "Известные ограничения", "after_release": "Что сделать после выпуска",
+          "details": "Подробнее"}
+RELEASE_NOTES = {
+    "layer_a": {"max_words": 250, "max_item_chars": 200, "no_version_number": True,
+                "required_blocks": ["headline", "whats_in", "known_limits", "after_release", "details"],
+                "block_order": list(TITLES), "block_titles": dict(TITLES),
+                "citation_exempt_blocks": ["headline", "details"]},
+    "banned_phrases": ["исправлены ошибки и улучшена стабильность"],
+    "jargon_source": "product_glossary",
+    "every_item_cites_source": True,
+}
 
-def _repo(root: Path, ver="1.2.3", towncrier=False) -> Path:
-    """Репозиторий со всеми версионными поверхностями; `towncrier=True` — с конфигом и маркером."""
+
+def notes(headline=HEADLINE, whats_in="- Описание выпуска начинается с того, что важно вам (#1210)",
+          limits="нет", after="- Через неделю прочитайте описание следующего выпуска (#1210)",
+          wrap=True) -> str:
+    """Документ слоя А по шаблону `templates/release/ReleaseNotes.md` (с обёрткой «Слой А/Б»)."""
+    body = (f"### Что меняется для вас\n\n{headline}\n\n### Что вошло\n\n{whats_in}\n\n"
+            f"### Известные ограничения\n\n{limits}\n\n### Что сделать после выпуска\n\n{after}\n\n"
+            "### Подробнее\n\nПолный список изменений — раздел этой версии в CHANGELOG.\n")
+    if not wrap:
+        return body
+    return ("# Описание выпуска\n\n<!-- подсказки шаблона -->\n\n## Слой А — для владельца и "
+            f"пользователей\n\n{body}\n## Слой Б — полный журнал изменений\n\n- технический пункт\n\n"
+            "## Самопроверка перед публикацией\n\n- [ ] пункт\n")
+
+
+def _policy_text(release_notes) -> str:
+    base = yaml.safe_load((KIT / "registry" / "communication-policy.yaml").read_text(encoding="utf-8"))
+    base.pop("release_notes", None)
+    if release_notes is not None:
+        base["release_notes"] = release_notes
+    return yaml.safe_dump(base, allow_unicode=True, sort_keys=False)
+
+
+def _repo(root: Path, ver="1.2.3", towncrier=False, release_notes=RELEASE_NOTES) -> Path:
+    """Репозиторий со всеми версионными поверхностями и правилами описания выпуска в реестре;
+    `towncrier=True` — с конфигом и маркером; `release_notes=None` — правил в реестре нет."""
     root.mkdir(parents=True, exist_ok=True)
     (root / "VERSION").write_text(f"{ver}\n", encoding="utf-8")
     (root / "manifest").mkdir()
@@ -44,6 +87,8 @@ def _repo(root: Path, ver="1.2.3", towncrier=False) -> Path:
     (root / "registry" / "release-claims.yaml").write_text(
         f"version: {ver}\nchannel: qualification\n", encoding="utf-8")
     (root / "registry" / "release-notes.yaml").write_text(f"version: {ver}\n", encoding="utf-8")
+    (root / "registry" / "communication-policy.yaml").write_text(_policy_text(release_notes),
+                                                                 encoding="utf-8")
     (root / "README.md").write_text(f"**v{ver} qualification**\n", encoding="utf-8")
     (root / "ROADMAP.md").write_text(f"**v{ver} qualification**\n", encoding="utf-8")
     marker = f"\n{rb._TOWNCRIER_MARKER}\n" if towncrier else ""
@@ -71,57 +116,134 @@ def _section(root: Path, ver: str) -> str:
     return rb.version_section((root / "CHANGELOG.md").read_text(encoding="utf-8"), ver)
 
 
-# ── CLI: без абзаца «что меняется для вас» выпуск не собирается ─────────────────────────────────
+def _layer(root: Path, ver: str = "1.2.4") -> str:
+    return rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), ver) or ""
 
-def test_cli_bump_without_headline_fails_and_changes_nothing(tmp_path, capsys):
+
+def _block(layer: str, title: str) -> str:
+    """Тело раздела `#### <title>` слоя A — до следующего заголовка."""
+    return layer.split(f"#### {title}", 1)[1].split("\n####", 1)[0].strip()
+
+
+def _bump(root: Path, text: str | None = None, **kw):
+    return rb.bump(root, "1.2.4", title="t", date="2026-09-29",
+                   owner_notes=notes() if text is None else text, **kw)
+
+
+def _cli(root: Path, tmp_path: Path, text: str | None):
+    args = ["x", "1.2.4", "--title", "t", "--date", "2026-09-29", "--root", str(root)]
+    if text is not None:
+        f = tmp_path / "notes.md"
+        f.write_text(text, encoding="utf-8")
+        args += ["--owner-notes", str(f)]
+    return rb.main(args)
+
+
+# ── CLI: без описания выпуска для владельца выпуск не собирается ────────────────────────────────
+
+def test_cli_bump_without_owner_notes_fails_and_changes_nothing(tmp_path, capsys):
     root = _repo(tmp_path / "r")
     before = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-    rc = rb.main(["x", "1.2.4", "--title", "t", "--date", "2026-09-29", "--root", str(root)])
-    assert rc == 1
-    assert "--headline" in capsys.readouterr().out
-    assert rb.current_version(root) == "1.2.3", "без --headline версия всё равно поднялась"
+    assert _cli(root, tmp_path, None) == 1
+    assert "--owner-notes" in capsys.readouterr().out
+    assert rb.current_version(root) == "1.2.3", "без описания выпуска версия всё равно поднялась"
     assert (root / "CHANGELOG.md").read_text(encoding="utf-8") == before
 
 
-def test_cli_bump_with_headline_writes_the_owner_layer(tmp_path):
+def test_cli_bump_with_owner_notes_writes_the_owner_layer(tmp_path):
     root = _repo(tmp_path / "r")
-    rc = rb.main(["x", "1.2.4", "--title", "t", "--date", "2026-09-29", "--headline", HEADLINE,
-                  "--root", str(root)])
-    assert rc == 0
-    assert HEADLINE in (rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), "1.2.4") or "")
+    assert _cli(root, tmp_path, notes()) == 0
+    assert HEADLINE in _layer(root)
 
 
-def test_cli_check_still_works_without_headline(tmp_path):
+def test_cli_check_still_works_without_owner_notes(tmp_path):
     root = _repo(tmp_path / "r")
     assert rb.main(["x", "--check", "--root", str(root)]) == 0
 
 
-@pytest.mark.parametrize("bad, why", [
-    ("", "пустой"),
-    ("Первый абзац.\n\nВторой абзац.", "ОДНИМ абзацем"),
-    ("В версии 4.9.0 кит стал лучше.", "без номера версии"),
-])
-def test_bad_headline_is_refused_before_any_write(tmp_path, bad, why):
+def test_only_layer_a_of_the_template_goes_into_the_changelog(tmp_path):
     root = _repo(tmp_path / "r")
-    with pytest.raises(ValueError) as e:
-        rb.bump(root, "1.2.4", title="t", date="2026-09-29", headline=bad)
-    if why != "пустой":
-        assert why in str(e.value)
+    _bump(root)
+    layer = _layer(root)
+    assert "технический пункт" not in layer and "Самопроверка" not in layer, "в слой A попал слой Б"
+    assert "подсказки шаблона" not in layer and "Слой А" not in layer
+    unwrapped = _repo(tmp_path / "u")
+    _bump(unwrapped, notes(wrap=False))
+    assert _layer(unwrapped) == layer, "документ без обёртки «Слой А» разобран иначе"
+
+
+@pytest.mark.parametrize("headline, why", [
+    ("Первый абзац.\n\nВторой абзац.", "ОДНИМ абзацем"),
+    ("В версии 4.9.0 кит стал лучше.", "номера версии"),
+])
+def test_bad_headline_is_refused_before_any_write(tmp_path, headline, why):
+    root = _repo(tmp_path / "r")
+    with pytest.raises(ValueError, match=why):
+        _bump(root, notes(headline=headline))
     assert rb.current_version(root) == "1.2.3", "отказ после записи — версия уже поднята"
+
+
+def test_unfilled_template_is_refused(tmp_path):
+    root = _repo(tmp_path / "r")
+    with pytest.raises(ValueError, match="незаполненный шаблон"):
+        _bump(root, notes(headline="<Главное изменение выпуска и что оно даёт владельцу.>"))
+    with pytest.raises(ValueError, match="незаполненный шаблон"):
+        _bump(root, notes() + "\n> Пример: Клиенты сами переносят запись.\n")
+
+
+# ── строгая проверка слоя A на бампе: те же правила, что validate_release_notes ──────────────────
+
+def test_clean_owner_layer_passes_the_release_notes_check(tmp_path):
+    root = _repo(tmp_path / "r")
+    _frag(root, "hook-lint.limit.md", "Проверка стиля при правке пока работает только для Python.")
+    _bump(root)
+    rules = vr.rules_from(yaml.safe_load(
+        (root / "registry" / "communication-policy.yaml").read_text(encoding="utf-8")))
+    assert vr.check_layer_a(_layer(root), rules) == [], "собранный слой не проходит свою же проверку"
+
+
+def test_jargon_in_headline_refuses_the_bump(tmp_path, capsys):
+    root = _repo(tmp_path / "r")
+    rc = _cli(root, tmp_path, notes(headline="Каждый gate теперь сверяет tested_revision."))
+    out = capsys.readouterr().out
+    assert rc == 1 and "внутренний язык" in out and "gate" in out, out
+    assert rb.current_version(root) == "1.2.3", "отказ проверки после записи — версия уже поднята"
+
+
+def test_overlong_limit_item_refuses_the_bump(tmp_path):
+    root = _repo(tmp_path / "r")
+    _frag(root, "long-limit.limit.md", "ограничение " * 30)
+    with pytest.raises(ValueError, match="пункт длиннее предела"):
+        _bump(root)
+    assert rb.current_version(root) == "1.2.3"
 
 
 def test_owner_layer_over_word_limit_is_refused(tmp_path):
     root = _repo(tmp_path / "r")
-    with pytest.raises(ValueError, match="слов при пределе"):
-        rb.bump(root, "1.2.4", title="t", date="2026-09-29", headline="слово " * 260)
+    with pytest.raises(ValueError, match="длиннее предела"):
+        _bump(root, notes(headline="слово " * 260))
     assert rb.current_version(root) == "1.2.3"
 
 
-def test_too_long_limit_item_is_refused(tmp_path):
+def test_missing_required_block_refuses_the_bump(tmp_path):
     root = _repo(tmp_path / "r")
-    _frag(root, "long.limit.md", "ограничение " * 30)
-    with pytest.raises(ValueError, match="limit.md"):
-        rb.bump(root, "1.2.4", title="t", date="2026-09-29", headline=HEADLINE)
+    text = notes().replace("### Что вошло", "### Посторонний раздел")
+    with pytest.raises(ValueError, match="Что вошло"):
+        _bump(root, text)
+
+
+def test_item_without_source_refuses_the_bump(tmp_path):
+    root = _repo(tmp_path / "r")
+    with pytest.raises(ValueError, match="источник"):
+        _bump(root, notes(whats_in="- Описание выпуска начинается с главного"))
+
+
+def test_missing_rules_refuse_the_bump(tmp_path):
+    """«Не проверено» не равно «прошло»: без правил в реестре выпуск кита не собирается."""
+    root = _repo(tmp_path / "r", release_notes=None)
+    with pytest.raises(ValueError, match="проверить не по чему"):
+        _bump(root)
+    assert rb.current_version(root) == "1.2.3"
 
 
 # ── слой A в разделе: маркеры, порядок, ограничения ─────────────────────────────────────────────
@@ -129,44 +251,52 @@ def test_too_long_limit_item_is_refused(tmp_path):
 def test_owner_layer_sits_between_markers_right_under_the_header(tmp_path):
     root = _repo(tmp_path / "r")
     rb.bump(root, "1.2.4", title="Заголовок", date="2026-09-29", body="- инженерный пункт",
-            headline=HEADLINE)
+            owner_notes=notes())
     sec = _section(root, "1.2.4")
     lines = sec.splitlines()
     assert lines[0] == "## [1.2.4] — 2026-09-29 · Заголовок"
     assert lines[2] == rb.OWNER_START, "слой A не стоит сразу под шапкой раздела"
     assert sec.index(rb.OWNER_END) < sec.index("- инженерный пункт"), "слой B оказался внутри слоя A"
-    layer = rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), "1.2.4")
-    for title in ("Что меняется для вас", "Известные ограничения", "Что дальше", "Подробности"):
-        assert f"**{title}" in layer, f"в слое A нет блока «{title}»"
-    assert "инженерный пункт" not in layer
+    layer = _layer(root)
+    got = [ln[5:] for ln in layer.splitlines() if ln.startswith("#### ")]
+    assert got == ["Что меняется для вас", "Что вошло", "Известные ограничения",
+                   "Что сделать после выпуска", "Подробнее"], "блоки не в порядке реестра"
     assert rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), "1.2.3") is None
 
 
-def test_no_limit_fragments_means_explicit_no(tmp_path):
-    root = _repo(tmp_path / "r")
-    rb.bump(root, "1.2.4", title="t", date="2026-09-29", headline=HEADLINE)
-    layer = rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), "1.2.4")
-    after = layer.split("**Известные ограничения**", 1)[1].split("**Что дальше", 1)[0]
-    assert after.strip().startswith("Нет"), f"пустые ограничения не названы явным «Нет»: {after!r}"
+def test_block_titles_and_order_come_from_the_policy(tmp_path):
+    rn = copy.deepcopy(RELEASE_NOTES)
+    rn["layer_a"]["block_titles"]["whats_in"] = "Что нового"
+    rn["layer_a"]["block_order"] = ["headline", "known_limits", "whats_in", "after_release", "details"]
+    root = _repo(tmp_path / "r", release_notes=rn)
+    _bump(root, notes().replace("### Что вошло", "### Что нового"))
+    got = [ln[5:] for ln in _layer(root).splitlines() if ln.startswith("#### ")]
+    assert got[1:3] == ["Известные ограничения", "Что нового"], got
 
 
-def test_limit_fragments_land_in_known_limits(tmp_path):
+def test_explicit_no_limits_stays_no(tmp_path):
     root = _repo(tmp_path / "r")
-    _frag(root, "hook.limit.md", "Хук при правке пока\nне гоняет профиль линтера.")
+    _bump(root)
+    assert _block(_layer(root), "Известные ограничения") == "нет"
+
+
+def test_limit_fragments_replace_no_and_carry_their_source(tmp_path):
+    root = _repo(tmp_path / "r")
+    _frag(root, "hook-lint.limit.md", "Хук при правке пока\nне гоняет профиль линтера.")
     _frag(root, "other.feat.md", "Новая возможность, не ограничение.")
-    rb.bump(root, "1.2.4", title="t", date="2026-09-29", headline=HEADLINE)
-    layer = rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), "1.2.4")
-    limits = layer.split("**Известные ограничения**", 1)[1].split("**Что дальше", 1)[0]
-    assert "- Хук при правке пока не гоняет профиль линтера." in limits
-    assert "Новая возможность" not in limits and "Нет" not in limits
+    _bump(root)
+    body = _block(_layer(root), "Известные ограничения")
+    assert body == "- Хук при правке пока не гоняет профиль линтера. (hook-lint.limit)", body
 
 
-def test_after_release_text_is_used_when_given(tmp_path):
+def test_limit_already_listed_by_the_author_is_not_duplicated(tmp_path):
     root = _repo(tmp_path / "r")
-    rb.bump(root, "1.2.4", title="t", date="2026-09-29", headline=HEADLINE,
-            after_release="Перезапустите `ai-ops doctor`.")
-    layer = rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), "1.2.4")
-    assert "**Что дальше.** Перезапустите `ai-ops doctor`." in layer
+    _frag(root, "hook-lint.limit.md", "Хук пока не гоняет профиль.")
+    _frag(root, "ci-only.limit.md", "Проверка в CI дочки пока только для Python.")
+    _bump(root, notes(limits="- Хук при правке пока только для Python. (hook-lint.limit)"))
+    body = _block(_layer(root), "Известные ограничения")
+    assert body.count("(hook-lint.limit)") == 1, body
+    assert "- Проверка в CI дочки пока только для Python. (ci-only.limit)" in body
 
 
 def test_towncrier_drain_keeps_layer_a_on_top_and_limits_in_layer_b(tmp_path):
@@ -174,14 +304,13 @@ def test_towncrier_drain_keeps_layer_a_on_top_and_limits_in_layer_b(tmp_path):
     pytest.importorskip("towncrier", reason="towncrier не установлен — сборка проверяется в CI")
     root = _repo(tmp_path / "r", towncrier=True)
     _frag(root, "x.feat.md", "Новая штука.")
-    _frag(root, "y.limit.md", "Штука пока только для Python.")
-    rb.bump(root, "1.2.4", title="t", date="2026-09-29", headline=HEADLINE)
-    text = (root / "CHANGELOG.md").read_text(encoding="utf-8")
-    sec = rb.version_section(text, "1.2.4")
+    _frag(root, "python-only.limit.md", "Штука пока только для Python.")
+    _bump(root)
+    sec = _section(root, "1.2.4")
     assert sec.splitlines()[2] == rb.OWNER_START
     layer_b = sec.split(rb.OWNER_END, 1)[1]
     assert "### Известные ограничения" in layer_b and "Штука пока только для Python." in layer_b
-    assert "- Штука пока только для Python." in rb.owner_layer(text, "1.2.4")
+    assert "- Штука пока только для Python. (python-only.limit)" in _layer(root)
     assert [p.name for p in (root / "newsfragments").iterdir()] == ["README.md"]
 
 
@@ -366,3 +495,70 @@ def test_release_step_really_publishes_only_the_owner_layer(tmp_path):
     assert notes.startswith("**Что меняется для вас.** Смысл.")
     assert "(https://github.com/o/r/blob/v2.0.0/CHANGELOG.md)" in notes
     assert "план и история" not in notes and "старый пункт" not in notes
+
+
+# ── гейт на самом выпуске: слой A выпускаемой версии в CHANGELOG кита строго проверен ────────────
+
+def owner_layer_release_findings(root: Path) -> list:
+    """Замечания к слою A версии из VERSION в CHANGELOG `root`: ручная правка CHANGELOG после бампа
+    мимо проверки не проходит. Нет слоя, нет правил — тоже замечание (строгий режим кита)."""
+    ver = rb.current_version(root)
+    layer = rb.owner_layer((root / "CHANGELOG.md").read_text(encoding="utf-8"), ver)
+    if layer is None:
+        return [f"у выпуска {ver} нет слоя владельца между маркерами — соберите его "
+                f"`release_bump {ver} --owner-notes <файл>`"]
+    try:
+        rules = rb.release_rules(root)
+    except ValueError as e:
+        return [str(e)]
+    return rb.check_owner_layer(layer, rules)
+
+
+def test_release_gate_helper_flags_hand_edited_jargon(tmp_path):
+    root = _repo(tmp_path / "r")
+    _bump(root)
+    assert owner_layer_release_findings(root) == []
+    ch = root / "CHANGELOG.md"
+    ch.write_text(ch.read_text(encoding="utf-8").replace(HEADLINE, "Каждый gate стал строже."),
+                  encoding="utf-8")
+    found = owner_layer_release_findings(root)
+    assert found and "gate" in found[0], found
+
+
+def test_release_gate_helper_flags_missing_layer_and_missing_rules(tmp_path):
+    root = _repo(tmp_path / "r")
+    assert "нет слоя владельца" in owner_layer_release_findings(root)[0]
+    _bump(root)
+    (root / "registry" / "communication-policy.yaml").write_text(_policy_text(None), encoding="utf-8")
+    assert "проверить не по чему" in owner_layer_release_findings(root)[0]
+
+
+@pytest.mark.release_gate
+@pytest.mark.slow
+def test_released_version_owner_layer_passes_the_strict_check():
+    """Гонится ТОЛЬКО на выпуске (release.yml, `-m release_gate`): слой A версии из VERSION в
+    CHANGELOG кита проходит `validate_release_notes` строго — иначе тег не создаётся."""
+    found = owner_layer_release_findings(KIT)
+    assert not found, "описание выпуска для владельца не прошло проверку:\n  " + "\n  ".join(found)
+
+
+def test_release_workflow_runs_the_owner_layer_gate_before_the_tag():
+    wf = yaml.safe_load((KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
+    steps = wf["jobs"]["release"]["steps"]
+    gate = next(i for i, s in enumerate(steps)
+                if "test_release_owner_layer.py" in str(s.get("run")) and "-m release_gate" in str(s.get("run")))
+    tag = next(i for i, s in enumerate(steps) if "gh release create" in str(s.get("run")))
+    assert gate < tag, "проверка слоя владельца стоит после создания тега"
+    assert str(steps[gate].get("if")) == "steps.check_release.outputs.needed == 'true'"
+
+
+def test_kit_own_policy_and_template_titles_build_a_clean_layer(tmp_path):
+    """Правила и шаблон кита (#1219) как есть: документ с заголовками шаблона проходит строго."""
+    root = _repo(tmp_path / "r")
+    shutil.copy(KIT / "registry" / "communication-policy.yaml",
+                root / "registry" / "communication-policy.yaml")
+    template = (KIT / "templates" / "release" / "ReleaseNotes.md").read_text(encoding="utf-8")
+    for title in TITLES.values():
+        assert f"### {title}" in template, f"шаблон и названия блоков разошлись: «{title}»"
+    _bump(root)
+    assert HEADLINE in _layer(root)

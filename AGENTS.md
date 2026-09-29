@@ -182,21 +182,35 @@ Python, та, что стоит у тебя. Объявленный пол `requ
 
 **ВОРОТА (с 18.08.2026, работа `release-has-a-gate`).** Три проверки, каждая с кодом возврата:
 - **запись для CHANGELOG добавлена в этой ветке** — `towncrier check --compare-with origin/main` в
-  обязательной джобе `lint`. Фрагмент — файл `newsfragments/<что-это>.<feat|fix|quality|chore>.md`
-  (инструкция — в `newsfragments/README.md`). `towncrier build` НЕ запускается нигде: старый
-  `CHANGELOG.md` остаётся как есть;
+  обязательной джобе `lint`. Фрагмент — файл `newsfragments/<что-это>.<feat|fix|quality|limit|chore>.md`
+  (инструкция — в `newsfragments/README.md`). `towncrier build` в CI НЕ запускается: очередь сливает
+  в раздел версии только `release_bump` на бампе;
 - **формат новых коммитов** — `cz check` от точки включения
   (`pyproject.toml -> [tool.ai_ops.release_gates] commit_format_enforced_after`). Только НОВЫЕ:
   в истории 72 коммита без conventional-префикса из 594, и переписывать её не будем;
 - **выпуск без раздела CHANGELOG для своей версии ОТКАЗЫВАЕТСЯ** (`release.yml`). Прежде он выходил
   «с краткими записками», то есть с пустой историей.
+- **описание выпуска для владельца проверено строго** (#1210). `release_bump` собирает слой владельца
+  и проверяет его `validate_release_notes` (правила — `registry/communication-policy.yaml ->
+  release_notes`) ДО записи файлов; `release.yml` повторяет проверку на релизном коммите (pytest
+  `-m release_gate`), так что ручная правка CHANGELOG мимо неё не пройдёт. Замечание, нет слоя или нет
+  правил — тег не создаётся.
 
 Согласованность версии (`VERSION` ↔ манифест ↔ `registry/release-claims.yaml`) уже проверяют
 `validate_ai_first_registry` (п. 7) и `validate_release_claims` (п. 1) — второй механизм на то же
 место был бы второй правдой.
 
-1. Обновить `VERSION`, `manifest/ai-ops-manifest.yaml -> ai_ops.package_version`
-   и добавить раздел `## [X.Y.Z] — дата` в `CHANGELOG.md`.
-2. Коммит `release: AI Ops Kit vX.Y.Z` в `main`.
+1. Написать описание выпуска для владельца по шаблону `templates/release/ReleaseNotes.md` (слой А:
+   что меняется для вас, что вошло, известные ограничения, что сделать после выпуска, подробнее —
+   каждый пункт со ссылкой на источник) — это делает агент release-manager или человек. Известные
+   ограничения заранее записываются фрагментами `newsfragments/<что-это>.limit.md`: бамп сам допишет их
+   в «Известные ограничения», если автор их ещё не назвал. Затем одной командой:
+   `python3 -m ai_ops_kit.devtools.release_bump X.Y.Z --title "…" --date YYYY-MM-DD --owner-notes notes.md`.
+   Она поднимает версию во всех поверхностях, сливает очередь фрагментов в раздел `## [X.Y.Z]`
+   `CHANGELOG.md` (слой Б) и кладёт в его начало проверенный слой А между
+   `<!-- owner-layer:start -->` / `<!-- owner-layer:end -->`. Без `--owner-notes`, с замечанием
+   проверки или без правил в реестре бамп отказывает и ничего не меняет.
+2. Коммит `chore(release): vX.Y.Z — …` в `main` через PR.
 3. Тег `vX.Y.Z` и GitHub Release создаёт автоматически `.github/workflows/release.yml`
-   (по изменению VERSION в main; текст — раздел CHANGELOG). Руками теги не создавать.
+   (по изменению VERSION в main; текст — слой владельца и ссылка на полный раздел CHANGELOG; у
+   раздела без маркеров — раздел целиком). Руками теги не создавать.

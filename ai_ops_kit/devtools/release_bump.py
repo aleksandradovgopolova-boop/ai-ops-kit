@@ -9,7 +9,7 @@ validate_ai_first_registry), но уже ПОСТФАКТУМ — класс «�
 
 Использование:
   release_bump.py <X.Y.Z> --title "заголовок раздела CHANGELOG" --date YYYY-MM-DD
-                  --headline "один абзац «что меняется для вас»" [--after-release "…"]
+                  --owner-notes notes.md   # слой А по шаблону templates/release/ReleaseNotes.md
                   [--root .] [--body "строка/строки под заголовком"]
   release_bump.py --check [--root .]   # версия одинакова во всех поверхностях?
   release_bump.py --release-notes X.Y.Z [--changelog-url URL]   # тело GitHub Release в stdout
@@ -28,11 +28,12 @@ newsfragments/, но раньше релиз `build` НЕ звал — фраг�
 на релизе краснит джобу и тег не создаётся — обещание «на релизе очередь пуста» стало проверяемым.
 
 ОПИСАНИЕ ВЫПУСКА — СООБЩЕНИЕ ЧЕЛОВЕКУ (#1210). Раздел CHANGELOG — инженерный журнал; его целиком
-копировали в GitHub Release и прятали в JSON PR обновления дочки. Теперь бамп собирает СЛОЙ ВЛАДЕЛЬЦА
-(слой A) — абзац «что меняется для вас» (`--headline`, обязателен в CLI), известные ограничения из
-фрагментов типа `limit` (явное «Нет», если их нет), «что дальше» и ссылку на полный раздел — и кладёт
-его в начало раздела версии между маркерами `OWNER_START`/`OWNER_END`. Ниже остаётся полный вывод
-towncrier (слой B). Машины достают слой A функциями `owner_layer`/`release_body`/`whats_new`
+копировали в GitHub Release и прятали в JSON PR обновления дочки. Теперь бамп принимает СЛОЙ
+ВЛАДЕЛЬЦА (слой A) документом `--owner-notes` (обязателен в CLI; шаблон
+`templates/release/ReleaseNotes.md`, пишет агент release-manager или человек), дописывает в
+«Известные ограничения» фрагменты типа `limit`, строго проверяет слой `validate_release_notes`
+(правила — `registry/communication-policy.yaml -> release_notes`) и кладёт его в начало раздела версии
+между маркерами `OWNER_START`/`OWNER_END`. Ниже остаётся полный вывод towncrier (слой B). Машины достают слой A функциями `owner_layer`/`release_body`/`whats_new`
 (`--release-notes` для release.yml); раздела без маркеров (старые выпуски) они не выдумывают —
 отдают прежнее содержимое и так и говорят.
 """
@@ -65,27 +66,27 @@ _KIT_PASSPORT_REL = ".ai/project/context/product/PRODUCT_PASSPORT.md"
 OWNER_START = "<!-- owner-layer:start -->"
 OWNER_END = "<!-- owner-layer:end -->"
 
-# Названия блоков и пределы — из `registry/communication-policy.yaml -> release_notes` (правила ведёт
-# соседняя работа #1210). Пока их там нет, действуют эти значения по умолчанию — те же ключи и числа,
-# что в общем контракте, чтобы появление правил в реестре не меняло форму уже собранных выпусков.
+# Названия блоков и их порядок — из реестра (`release_notes.layer_a.block_titles` / `block_order`),
+# тем же разбором, что `validate_release_notes`. Эти значения — ТОЛЬКО запасные: для ключа, которому
+# реестр не дал названия (или если в реестре нет `block_order`). Совпадают с договором #1210.
 _DEFAULT_BLOCK_TITLES = {
     "headline": "Что меняется для вас",
     "whats_in": "Что вошло",
-    "behaviour_changes": "Что изменится в поведении",
+    "behaviour_changes": "Что изменилось в привычном поведении",
     "who_is_affected": "Кого касается",
     "known_limits": "Известные ограничения",
-    "after_release": "Что дальше",
-    "details": "Подробности",
+    "after_release": "Что сделать после выпуска",
+    "details": "Подробнее",
 }
-_DEFAULT_MAX_WORDS = 250
-_DEFAULT_MAX_ITEM_CHARS = 200
-_DEFAULT_AFTER_RELEASE = ("Обновление приходит PR-ом `ai-ops update` в ваш репозиторий; отдельных "
-                          "шагов после выпуска не объявлено.")
-_NO_LIMITS = "Нет (ограничений к этому выпуску не заявлено)."
 # Фрагмент ограничения: `<slug>.limit.md` или с номером towncrier `<slug>.limit.1.md`.
 _LIMIT_FRAGMENT = re.compile(r"\.limit(?:\.\d+)?\.md$")
 # Номер версии в абзаце «что меняется для вас» — запрещён: человеку важен смысл, версия в заголовке.
 _VERSION_IN_TEXT = re.compile(r"\bv?\d+\.\d+(?:\.\d+)?\b")
+_HEADING = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
+_COMMENT = re.compile(r"<!--.*?-->", re.DOTALL)
+# Незаполненный шаблон: заглушка `<…>` или оставленный пример — такой слой в выпуск не идёт.
+_PLACEHOLDER = re.compile(r"<[^<>\n]*[А-Яа-яЁё][^<>\n]*>|^>\s*Пример", re.MULTILINE)
+_NONE_WORDS = {"нет", "нет."}
 
 
 def _channel(root: Path) -> str:
@@ -147,71 +148,121 @@ def _towncrier_ready(root: Path) -> bool:
     return ch.is_file() and _TOWNCRIER_MARKER in ch.read_text(encoding="utf-8")
 
 
-def release_notes_policy(root: Path) -> dict:
-    """Названия блоков и пределы слоя A. -> {titles, max_words, max_item_chars}.
+def release_rules(root: Path) -> dict:
+    """Правила слоя A из реестра — тем же разбором, что `validate_release_notes` (одна правда).
 
-    Источник — `registry/communication-policy.yaml -> release_notes`, если раздел там есть; иначе
-    значения по умолчанию (`_DEFAULT_*`). Нечитаемый реестр — тоже умолчания: бамп не падает из-за
-    чужого файла, а правила, которых нет, не выдумываются."""
-    rules: dict = {}
-    p = root / "registry" / "communication-policy.yaml"
-    if p.is_file():
-        try:
-            import yaml  # локально: devtools зовут и без pyyaml (только --check)
-            rules = (yaml.safe_load(p.read_text(encoding="utf-8")) or {}).get("release_notes") or {}
-        except Exception:                               # noqa: BLE001 — нечитаемые правила = умолчания
-            rules = {}
-    if not isinstance(rules, dict):
-        rules = {}
-    layer_raw = rules.get("layer_a")
-    layer: dict = layer_raw if isinstance(layer_raw, dict) else {}
-    titles = dict(_DEFAULT_BLOCK_TITLES)
-    if isinstance(rules.get("block_titles"), dict):
-        titles.update({str(k): str(v) for k, v in rules["block_titles"].items() if v})
-    return {"titles": titles,
-            "max_words": int(layer.get("max_words") or _DEFAULT_MAX_WORDS),
-            "max_item_chars": int(layer.get("max_item_chars") or _DEFAULT_MAX_ITEM_CHARS)}
+    Правил нет -> ValueError: выпуск кита строгий, «не проверено» не равно «прошло»."""
+    from ai_ops_kit.validation import validate_release_notes as vr
+    try:
+        policy = vr.load_policy(root / "registry" / "communication-policy.yaml")
+        rules = vr.rules_from(policy)
+    except vr.RulesMissing as e:
+        raise ValueError(f"описание выпуска проверить не по чему — {e}. Выпуск без проверенного "
+                         f"слоя владельца не собирается") from e
+    layer = policy["release_notes"]["layer_a"]
+    rules["block_order"] = list(layer.get("block_order") or [])
+    rules["no_version_number"] = layer.get("no_version_number", True) is not False
+    return rules
+
+
+def check_owner_layer(inner: str, rules: dict) -> list:
+    """Замечания проверки `validate_release_notes` к тексту слоя A. -> ['строка N — замечание']."""
+    from ai_ops_kit.validation import validate_release_notes as vr
+    return [f"строка {n} — {msg}" for n, msg in vr.check_layer_a(inner, rules)]
 
 
 def limit_fragments(root: Path) -> list:
-    """Известные ограничения из очереди: тексты фрагментов `*.limit.md` (строки склеены в одну)."""
-    return [" ".join(p.read_text(encoding="utf-8").split())
-            for p in _pending_fragments(root) if _LIMIT_FRAGMENT.search(p.name)]
+    """Известные ограничения из очереди: пункты `текст (slug.limit)` — ссылка на свой фрагмент."""
+    out = []
+    for p in _pending_fragments(root):
+        if _LIMIT_FRAGMENT.search(p.name):
+            slug = _LIMIT_FRAGMENT.sub("", p.name)
+            out.append(f"{' '.join(p.read_text(encoding='utf-8').split())} ({slug}.limit)")
+    return out
 
 
-def _check_headline(headline: str) -> str:
-    """Абзац «что меняется для вас»: непустой, ОДИН абзац, без номера версии. -> очищенный текст."""
-    text = (headline or "").strip()
-    if not text:
-        raise ValueError("нужен --headline: один абзац «что меняется для вас» — без него выпуск "
-                         "выходит инженерным журналом, а не сообщением человеку")
+def _norm_title(title: str) -> str:
+    return re.sub(r"\s+", " ", title.strip().rstrip(":").strip()).lower()
+
+
+def _layer_a_text(notes: str) -> str:
+    """Слой А из документа по шаблону: раздел под заголовком «Слой А…» (до заголовка того же или
+    более высокого уровня); без такого заголовка — документ целиком. Комментарии шаблона сняты."""
+    lines = _COMMENT.sub("", notes).splitlines()
+    start = next((i for i, ln in enumerate(lines)
+                  if (h := _HEADING.match(ln)) and _norm_title(h.group(2)).startswith("слой а")), None)
+    if start is None:
+        return "\n".join(lines)
+    level = len(_HEADING.match(lines[start]).group(1))  # type: ignore[union-attr]
+    out = []
+    for ln in lines[start + 1:]:
+        h = _HEADING.match(ln)
+        if h and len(h.group(1)) <= level:
+            break
+        out.append(ln)
+    return "\n".join(out)
+
+
+def _owner_blocks(notes: str, titles: dict) -> dict:
+    """{ключ блока: тело} по заголовкам, совпавшим с названиями блоков. Прочие заголовки закрывают
+    текущий блок; текст вне блоков в слой не идёт."""
+    by_title = {_norm_title(v): k for k, v in titles.items()}
+    blocks: dict = {}
+    cur = None
+    for ln in _layer_a_text(notes).splitlines():
+        h = _HEADING.match(ln)
+        if h:
+            cur = by_title.get(_norm_title(h.group(2)))
+            if cur:
+                blocks.setdefault(cur, [])
+            continue
+        if cur:
+            blocks[cur].append(ln)
+    return {k: "\n".join(v).strip() for k, v in blocks.items()}
+
+
+def _merge_limits(blocks: dict, limits: list) -> None:
+    """Фрагменты `limit` — в «Известные ограничения», если пункт с их ссылкой ещё не назван.
+    Было «нет» — заменяется пунктами: ограничение, объявленное фрагментом, словом «нет» не скрыть."""
+    body = blocks.get("known_limits")
+    if body is None or not limits:
+        return
+    new = [x for x in limits if x.rsplit(" (", 1)[-1] not in body]
+    if not new:
+        return
+    head = "" if body.strip().lower() in _NONE_WORDS else body.rstrip() + "\n"
+    blocks["known_limits"] = head + "\n".join(f"- {x}" for x in new)
+
+
+def _check_headline(blocks: dict, rules: dict) -> None:
+    """Абзац «что меняется для вас»: ОДИН абзац, без номера версии (`no_version_number`)."""
+    text = blocks.get("headline", "")
     if re.search(r"\n\s*\n", text):
-        raise ValueError("--headline должен быть ОДНИМ абзацем (найдена пустая строка внутри)")
-    if _VERSION_IN_TEXT.search(text):
-        raise ValueError("--headline без номера версии: версия уже в заголовке раздела, человеку "
-                         "нужен смысл выпуска")
-    return " ".join(text.split())
+        raise ValueError("блок «что меняется для вас» должен быть ОДНИМ абзацем")
+    if rules.get("no_version_number", True) and _VERSION_IN_TEXT.search(text):
+        raise ValueError("в блоке «что меняется для вас» не должно быть номера версии: версия уже в "
+                         "заголовке раздела, человеку нужен смысл выпуска")
 
 
-def owner_layer_block(headline: str, limits: list, after_release: str, policy: dict) -> str:
-    """Слой A между маркерами: headline, known_limits, after_release, details. Бросает ValueError,
-    если слой длиннее `max_words` или пункт ограничения длиннее `max_item_chars` — проверка ДО
-    записи файлов, чтобы отказ ничего не менял."""
-    t = policy["titles"]
-    for item in limits:
-        if len(item) > policy["max_item_chars"]:
-            raise ValueError(f"ограничение длиннее {policy['max_item_chars']} знаков — сократите "
-                             f"фрагмент `*.limit.md`: «{item[:60]}…»")
-    limits_md = "\n".join(f"- {x}" for x in limits) if limits else _NO_LIMITS
-    after = " ".join((after_release or _DEFAULT_AFTER_RELEASE).split())
-    inner = (f"**{t['headline']}.** {_check_headline(headline)}\n\n"
-             f"**{t['known_limits']}**\n\n{limits_md}\n\n"
-             f"**{t['after_release']}.** {after}\n\n"
-             f"**{t['details']}.** Полный список изменений — раздел этой версии в CHANGELOG.md.")
-    words = len(inner.split())
-    if words > policy["max_words"]:
-        raise ValueError(f"описание выпуска для владельца — {words} слов при пределе "
-                         f"{policy['max_words']}: сократите --headline или ограничения")
+def owner_layer_block(notes: str, limits: list, rules: dict) -> str:
+    """Слой A между маркерами из документа владельца (`--owner-notes`, шаблон
+    `templates/release/ReleaseNotes.md`): блоки — `#### <название>` в порядке реестра, ограничения из
+    фрагментов `limit` дописаны. Проверяется ДО записи файлов той же функцией, что
+    `validate_release_notes --layer-a --strict`; любое замечание -> ValueError со всеми замечаниями."""
+    titles = {**_DEFAULT_BLOCK_TITLES, **{str(k): str(v) for k, v in rules["block_titles"].items()}}
+    if _PLACEHOLDER.search(_COMMENT.sub("", notes)):
+        raise ValueError("описание выпуска — незаполненный шаблон: замените заглушки `<…>` своим "
+                         "текстом и удалите строки «> Пример»")
+    blocks = _owner_blocks(notes, titles)
+    _merge_limits(blocks, limits)
+    _check_headline(blocks, rules)
+    order = [k for k in (rules.get("block_order") or list(titles)) if k in titles]
+    order += [k for k in titles if k not in order]
+    inner = "\n\n".join(f"#### {titles[k]}\n\n{blocks[k]}" for k in order if k in blocks)
+    found = check_owner_layer(inner, rules)
+    if found:
+        raise ValueError("описание выпуска для владельца не прошло проверку (validate_release_notes):\n  "
+                         + "\n  ".join(found))
     return f"{OWNER_START}\n{inner}\n{OWNER_END}"
 
 
@@ -295,20 +346,21 @@ def refresh_kit_passport(root: Path) -> str | None:
 
 
 def bump(root: Path, new: str, title: str, date: str, body: str = "",
-         headline: str | None = None, after_release: str = "") -> list:
+         owner_notes: str | None = None) -> list:
     """Поднять версию до `new` во всех поверхностях + раздел CHANGELOG + release-newsfragment.
 
-    `headline` задан -> в начало раздела ложится слой владельца (см. `owner_layer_block`); он
-    проверяется ДО любой записи, так что отказ ничего не меняет. `headline=None` — раздел без слоя A
-    (фикстуры и не-китовые репозитории); CLI выпуска без `--headline` отказывает (см. `main`).
+    `owner_notes` (текст документа слоя А по шаблону `templates/release/ReleaseNotes.md`) задан ->
+    в начало раздела ложится слой владельца (см. `owner_layer_block`); он проверяется правилами
+    реестра ДО любой записи, так что отказ ничего не меняет. `owner_notes=None` — раздел без слоя A
+    (фикстуры и не-китовые репозитории); CLI выпуска без `--owner-notes` отказывает (см. `main`).
     -> список изменённых относительных путей. Бросает ValueError на битом semver/ненайденной версии."""
     if not _SEMVER.match(new):
         raise ValueError(f"версия '{new}' не по semver X.Y.Z")
     old = current_version(root)
     if new == old:
         raise ValueError(f"версия уже {new} — нечего поднимать")
-    owner = ("" if headline is None else
-             owner_layer_block(headline, limit_fragments(root), after_release, release_notes_policy(root)))
+    owner = ("" if owner_notes is None else
+             owner_layer_block(owner_notes, limit_fragments(root), release_rules(root)))
     channel = _channel(root)
     changed = []
     for rel, pattern, repl in _surfaces(old, new, channel):
@@ -424,9 +476,8 @@ def _parse_args(argv):
     ap.add_argument("--title", default="", help="заголовок раздела CHANGELOG")
     ap.add_argument("--date", default="", help="дата релиза YYYY-MM-DD (называет вызывающий)")
     ap.add_argument("--body", default="", help="тело раздела CHANGELOG (опционально)")
-    ap.add_argument("--headline", default="",
-                    help="один абзац «что меняется для вас», без номера версии (обязателен)")
-    ap.add_argument("--after-release", default="", help="что дальше после выпуска (опционально)")
+    ap.add_argument("--owner-notes", default="", metavar="FILE",
+                    help="слой А описания выпуска по шаблону templates/release/ReleaseNotes.md (обязателен)")
     ap.add_argument("--root", default=str(PKG))
     ap.add_argument("--check", action="store_true", help="проверить согласованность версий, не менять")
     ap.add_argument("--release-notes", metavar="X.Y.Z", default="",
@@ -447,13 +498,13 @@ def main(argv) -> int:
             return 1
         print(f"RELEASE-BUMP-OK: версия {current_version(root)} согласована во всех поверхностях.")
         return 0
-    if not a.version or not a.title or not a.date or not a.headline.strip():
-        print("нужны <X.Y.Z>, --title, --date и --headline (один абзац «что меняется для вас», без "
-              "номера версии); в --check и --release-notes они не нужны")
+    if not a.version or not a.title or not a.date or not a.owner_notes:
+        print("нужны <X.Y.Z>, --title, --date и --owner-notes <файл> — описание выпуска для владельца "
+              "по шаблону templates/release/ReleaseNotes.md; в --check и --release-notes они не нужны")
         return 1
     try:
-        changed = bump(root, a.version, a.title, a.date, a.body,
-                       headline=a.headline, after_release=a.after_release)
+        notes = Path(a.owner_notes).read_text(encoding="utf-8")
+        changed = bump(root, a.version, a.title, a.date, a.body, owner_notes=notes)
     except (ValueError, OSError) as e:
         print(f"ОШИБКА: {e}")
         return 1

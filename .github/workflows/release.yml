@@ -78,6 +78,14 @@ jobs:
         if: steps.check_release.outputs.needed == 'true'
         run: python3 -m pytest tests/unit/test_changelog_queue_release_gate.py -q -m release_gate
 
+      # ГЕЙТ СЛОЯ ВЛАДЕЛЬЦА (#1210). `release_bump` уже проверяет слой A при сборке, но CHANGELOG можно
+      # поправить руками после бампа. Здесь — та же строгая проверка (`validate_release_notes`, правила
+      # из реестра) на слое выпускаемой версии, на релизном SHA: замечание, нет слоя или нет правил ->
+      # тег не создаётся. Через pytest (PYTEST-ONLY) с маркером `release_gate`, как гейт очереди выше.
+      - name: Описание выпуска для владельца проходит проверку (гейт слоя A)
+        if: steps.check_release.outputs.needed == 'true'
+        run: python3 -m pytest tests/unit/test_release_owner_layer.py -q -m release_gate
+
       - name: Создать тег и Release из CHANGELOG
         if: steps.check_release.outputs.needed == 'true'
         env:
