@@ -231,12 +231,17 @@ _CONSTITUTION_REL = "standards/architecture/rules.yaml"
 
 
 def _constitution_rules_path(root=None):
-    """Реестр Архитектурной конституции. `root` — корень репозитория (в дочке кит лежит под
-    `.ai/managed/`, резолв — общий `constitution_conformance.registry_path`); без `root` — корень
-    ЗАПУЩЕННОГО кита (`_bootstrap.PKG`: в ките — корень репо, в дочке — `.ai/managed`)."""
+    """Реестр Архитектурной конституции. Сперва — в проверяемом дереве `root` (в дочке кит лежит
+    под `.ai/managed/`, резолв — общий `constitution_conformance.registry_path`); нет там (или `root`
+    не задан) — у ЗАПУЩЕННОГО кита (`_bootstrap.PKG`: в ките — корень репо, в дочке — `.ai/managed`).
+    Откат нужен: одноразовое дерево прогона может не нести `.ai/managed`, а кит его несёт всегда."""
     from ai_ops_kit.checks import constitution_conformance as _cc
     from ai_ops_kit.shared import _bootstrap
-    return _cc.registry_path(Path(root) if root else _bootstrap.PKG, "architecture")
+    if root:
+        own = _cc.registry_path(Path(root), "architecture")
+        if own.is_file():
+            return own
+    return _cc.registry_path(_bootstrap.PKG, "architecture")
 
 
 def _load_review_articles(path, parts):
@@ -274,14 +279,16 @@ def _render_articles(articles):
                           lambda n: f"… не вошло статей: {n} (лимит размера) — см. {_CONSTITUTION_REL}")
 
 
-def _render_findings(root, changed_files):
-    """Машинные находки конформанса ТОЛЬКО по изменённым файлам (пофайловые эвристики, дёшево:
-    разбор AST лишь этих файлов). Сбой советчика критерии не роняет — говорим об этом прямо."""
+def _render_findings(root, changed_files, rules_path=None):
+    """Машинные находки конформанса ТОЛЬКО по изменённым файлам (пофайловые эвристики, только .py,
+    дёшево: разбор AST лишь этих файлов). Статьи — из того же реестра, что показан ревьюеру.
+    Сбой советчика ревью НЕ роняет (это совет, не гейт) — ревьюер видит честную строку о сбое."""
     try:
         from ai_ops_kit.checks import constitution_conformance as _cc
-        findings = _cc.conform_paths(root, changed_files)
-    except (ImportError, OSError, ValueError, SyntaxError):
-        return "машинная проверка конституции по изменённым файлам не выполнилась — суди без неё"
+        findings = _cc.conform_paths(root, sorted(changed_files), rules_path=rules_path)
+    except Exception as exc:  # noqa: BLE001 — любой сбой советчика -> названная строка, а не упавшее ревью
+        return (f"машинная проверка конституции по изменённым файлам не выполнилась "
+                f"({type(exc).__name__}) — суди без неё")
     if not findings:
         return "машинных находок конституции по изменённым .py-файлам нет (эвристики — только размер и вложенность)"
     lines = [f"- {f['article_id']} {f['title']}: {', '.join(f['locations'][:3])}"
@@ -306,8 +313,9 @@ def _constitution_criteria(gate_id, root=None, changed_files=None):
         block = f"статьи конституции недоступны: реестр {_CONSTITUTION_REL} не найден или пуст — суди без них"
     else:
         block = _render_articles(articles)
-    if root is not None and changed_files is not None:
-        block += "\n" + _render_findings(root, changed_files)
+    # находки — только при известном реестре: без статей конформанс молчал бы, и «находок нет» солгало бы
+    if articles and root is not None and changed_files is not None:
+        block += "\n" + _render_findings(root, changed_files, rules_path=path)
     return block
 
 

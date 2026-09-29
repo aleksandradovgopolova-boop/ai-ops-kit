@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import json
 import shutil
+import subprocess
 from pathlib import Path
 
 import pytest
 
+from ai_ops_kit.engine import pipeline_evidence
 from ai_ops_kit.engine import pipeline_helpers as ph
 from ai_ops_kit.engine import reviewer_handoff
 from ai_ops_kit.engine import reviewer_prompt
@@ -112,13 +114,24 @@ def test_child_layout_resolved_by_running_kit_root(tmp_path, monkeypatch):
 
 @pytest.mark.unit
 @pytest.mark.parametrize("content", [None, "rules: [неправильно", "version: '1.0'\nrules: []\n"])
-def test_missing_or_broken_registry_gives_honest_note(tmp_path, content):
-    """Нет реестра / битый YAML / пустой — критерии строятся, с честной строкой, а не пустотой."""
+def test_missing_or_broken_registry_gives_honest_note(tmp_path, monkeypatch, content):
+    """Нет реестра / битый YAML / пустой — ни в дереве, ни у запущенного кита — критерии строятся,
+    с честной строкой, а не пустотой; находок при этом не обещаем («нет находок» было бы ложью)."""
     if content is not None:
         _child_with_rules(tmp_path, content)
-    out = ph._gate_checklist(_CODE_REVIEW, root=tmp_path)
+    monkeypatch.setattr(_bootstrap, "PKG", tmp_path / ".ai" / "managed")
+    (tmp_path / "bad.py").write_text(_long_function("bad_fn"), encoding="utf-8")
+    out = ph._gate_checklist(_CODE_REVIEW, root=tmp_path, changed_files=["bad.py"])
     assert out.startswith("роль: code-reviewer")
     assert "статьи конституции недоступны" in out.splitlines()[1]
+    assert len(out.splitlines()) == 2
+
+
+@pytest.mark.unit
+def test_tree_without_registry_falls_back_to_running_kit(tmp_path):
+    """Одноразовое дерево прогона без `.ai/managed` — статьи берутся у запущенного кита."""
+    out = ph._gate_checklist(_CODE_REVIEW, root=tmp_path)
+    assert "CODE-004 · SHOULD · Имена раскрывают намерение" in out
 
 
 @pytest.mark.unit
@@ -201,3 +214,90 @@ def test_findings_block_is_bounded(tmp_path):
     assert all(ln.endswith("(+37)") for ln in lines[1:-1]) and len(lines) > 2
     shown = len(lines) - 2
     assert lines[-1] == f"… не вошло находок: {3 - shown} (лимит размера)"
+
+
+# --- боевой путь: _run_reviews -> промпт живого ревьюера и handoff-запрос -------------------------
+
+def _vcs(root, *args):
+    return subprocess.run(["git", *args], cwd=root, capture_output=True, text=True, check=True)
+
+
+def _repo_with_violation(base: Path):
+    """Репозиторий-дочка: реестр под `.ai/managed`, коммит добавляет src/long.py с длинной функцией
+    (нарушение CODE-001) и не трогает src/old.py с таким же нарушением. -> (root, sha)."""
+    root = base / "repo"
+    root.mkdir()
+    _vcs(root, "init", "-q")
+    _vcs(root, "config", "user.email", "t@t")
+    _vcs(root, "config", "user.name", "t")
+    _child_with_rules(root)
+    (root / "src").mkdir()
+    (root / "src" / "old.py").write_text(_long_function("old_fn"), encoding="utf-8")
+    _vcs(root, "add", ".")
+    _vcs(root, "commit", "-q", "-m", "init")
+    (root / "src" / "long.py").write_text(_long_function("long_fn"), encoding="utf-8")
+    _vcs(root, "add", ".")
+    _vcs(root, "commit", "-q", "-m", "add long")
+    return root, _vcs(root, "rev-parse", "HEAD").stdout.strip()
+
+
+def _run_code_review(root, sha, provider):
+    return pipeline_evidence._run_reviews(
+        provider, str(root), ["code_review"], {}, {"task_type": "ENGINEERING"}, sha,
+        {"max_model_calls": 4}, child_root=str(root))
+
+
+def _capturing(prompts):
+    def provider(prompt):
+        prompts.append(prompt)
+        return "Recommendation: needs_work"
+    return provider
+
+
+_FINDING = "- CODE-001 Функции короткие и односмысловые: src/long.py:1:long_fn"
+
+
+@pytest.mark.unit
+def test_run_reviews_puts_changed_file_findings_into_live_prompt(tmp_path):
+    """Боевой путь: находка по ДОСТАВЛЕННОМУ файлу доходит до `<criteria>` живого ревьюера,
+    а не тронутый правкой файл с тем же нарушением — нет."""
+    root, sha = _repo_with_violation(tmp_path)
+    prompts = []
+    _run_code_review(root, sha, _capturing(prompts))
+    criteria = reviewer_prompt.recover_sections(prompts[0])["criteria"]
+    assert _FINDING in criteria
+    assert "CODE-004 · SHOULD · Имена раскрывают намерение" in criteria
+    assert "old.py" not in criteria
+
+
+@pytest.mark.unit
+def test_run_reviews_puts_findings_into_handoff_request(tmp_path):
+    """Боевой путь handoff: ревьюер недоступен -> request.json несёт те же находки в `checklist`."""
+    from ai_ops_kit.providers.orchestrator_providers import ProviderEnvUnavailableError
+    root, sha = _repo_with_violation(tmp_path)
+
+    def env_down(_prompt):
+        raise ProviderEnvUnavailableError("claude-cli", "duration_api_ms:0")
+
+    gate_ev, _ = _run_code_review(root, sha, env_down)
+    assert gate_ev["code_review"]["status"] == "fail"          # awaiting_reviewer, не ложный зелёный
+    req = json.loads(reviewer_handoff.request_path(root, "code_review").read_text(encoding="utf-8"))
+    assert _FINDING in req["checklist"]
+
+
+@pytest.mark.unit
+def test_run_reviews_survives_conformance_crash(tmp_path, monkeypatch):
+    """Советчик упал — ревью идёт дальше, ревьюер видит названную причину, а не пустоту."""
+    from ai_ops_kit.checks import constitution_conformance as cc
+    root, sha = _repo_with_violation(tmp_path)
+
+    def boom(*_a, **_k):
+        raise RuntimeError("сломался советчик")
+
+    monkeypatch.setattr(cc, "conform_paths", boom)
+    prompts = []
+    _gate_ev, reviews = _run_code_review(root, sha, _capturing(prompts))
+    criteria = reviewer_prompt.recover_sections(prompts[0])["criteria"]
+    assert ("машинная проверка конституции по изменённым файлам не выполнилась (RuntimeError)"
+            in criteria)
+    assert reviews and reviews[0]["gate"] == "code_review"
