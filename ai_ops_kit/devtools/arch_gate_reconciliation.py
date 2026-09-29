@@ -8,7 +8,12 @@ backing-проверка и правда ли она доходит до доч�
 (HON-001), а parent-only-гейт, выданный за защиту дочки, — ложная зрелость (HON-003).
 
 Ничего своего не хранит — читает реестр конституции и код. Витрина read-only, как
-`capability_inventory`. Генерирует `standards/architecture/gate-reconciliation.md`; свежесть держит
+`capability_inventory`.
+
+ЕДЕТ ≠ ВИДИТ (#1183). Доставка валидатора в дочку ещё не значит, что он проверяет её код: гейт,
+объявивший корни сканирования (`SOURCE_ROOTS`) только из путей кита, в дочке судит лишь
+поставленную копию кита. Такой гейт до дочки «не доходит» — иначе `ARCH-006` числился бы `both`,
+хотя `validate_module_size` продуктового кода дочки не видит. Генерирует `standards/architecture/gate-reconciliation.md`; свежесть держит
 `tests/unit/test_architecture_gate_reconciliation.py` (поведенческий — импортирует и зовёт этот
 модуль).
 
@@ -16,6 +21,7 @@ backing-проверка и правда ли она доходит до доч�
 """
 from __future__ import annotations
 
+import ast
 import importlib.util
 import sys
 from pathlib import Path
@@ -30,6 +36,10 @@ OUT_MD = KIT / "standards" / "architecture" / "gate-reconciliation.md"
 _SPECIAL_BACKING = {
     "required_repo_artifacts": "ai_ops_kit/planning/standard.py",
 }
+
+# Корни, которые принадлежат киту, а не продукту дочки: валидатор, чьи `SOURCE_ROOTS` целиком
+# отсюда, продуктовый код дочки не сканирует.
+_KIT_SOURCE_ROOTS = frozenset({"ai_ops_kit", "installer", "tools"})
 
 _ENF_LABEL = {
     "parent": "только CI кита",
@@ -70,6 +80,35 @@ def resolve_backing(gate: str) -> tuple[str | None, str]:
     return None, "unresolved"
 
 
+def declared_source_roots(rel: str | None) -> tuple[str, ...] | None:
+    """Корни сканирования, объявленные модулем-гейтом (`SOURCE_ROOTS = (...)`), или None.
+
+    Читается AST'ом, без импорта: модуль-гейт не исполняется ради сверки. None — корни не объявлены
+    литералом (тогда о зоне сканирования не судим и доставку считаем доходящей).
+    """
+    if not rel or not (KIT / rel).is_file():
+        return None
+    tree = ast.parse((KIT / rel).read_text(encoding="utf-8"))
+    for node in tree.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if any(isinstance(t, ast.Name) and t.id == "SOURCE_ROOTS" for t in node.targets):
+            try:
+                value = ast.literal_eval(node.value)
+            except ValueError:
+                return None
+            return (value,) if isinstance(value, str) else tuple(value)
+    return None
+
+
+def scans_child_code(rel: str | None, kind: str) -> bool:
+    """Видит ли гейт продуктовый код дочки. Нет — если все его корни принадлежат киту."""
+    if kind != "validator":
+        return True
+    roots = declared_source_roots(rel)
+    return roots is None or not set(roots) <= _KIT_SOURCE_ROOTS
+
+
 def ships_to_child(gate: str, rel: str | None, kind: str, installer) -> bool:
     """Доходит ли backing до дочки — по тому же критерию, что и доставка."""
     if kind in ("meta", "none", "unresolved"):
@@ -89,7 +128,9 @@ def reconcile() -> list[dict]:
     for r in load_rules():
         gate = r["gate"]
         rel, kind = resolve_backing(gate)
-        child = ships_to_child(gate, rel, kind, installer)
+        ships = ships_to_child(gate, rel, kind, installer)
+        scans = scans_child_code(rel, kind)
+        child = ships and scans                 # доходит = едет И видит код дочки
         declared = r["enforced_in"]
         # ОЖИДАНИЕ честности: объявленное Исполнение согласовано с реальной доставкой.
         if declared in ("child", "both"):
@@ -106,6 +147,7 @@ def reconcile() -> list[dict]:
             "id": r["id"], "title": r["title"], "part": r["part"],
             "gate": gate, "enforced_in": declared,
             "backing": rel or "—", "kind": kind,
+            "ships_to_child": ships, "scans_child_code": scans,
             "reaches_child": child, "honest": honest,
         })
     return rows
@@ -113,6 +155,16 @@ def reconcile() -> list[dict]:
 
 def dishonest_rows() -> list[dict]:
     return [row for row in reconcile() if not row["honest"]]
+
+
+def _child_cell(r: dict) -> str:
+    if r["reaches_child"]:
+        return "да"
+    if r["gate"] in ("none", "meta"):
+        return "—"
+    if r["ships_to_child"]:
+        return "нет (едет, но видит только пути кита)"
+    return "нет"
 
 
 def render_markdown() -> str:
@@ -127,14 +179,15 @@ def render_markdown() -> str:
         "",
         "Колонка **«в дочке?»** — ключевая честность: `validate_layering`/`validate_func_size` и",
         "контракты dormant/reachability гоняются **только в CI кита**; в дочку из структурного едут",
-        "`validate_module_size` и `validate_test_taxonomy` + рантайм `reviewer_handoff`. Статьи с",
-        "`gate: none` — честный долг (#827), а не защита.",
+        "`validate_test_taxonomy` + рантайм `reviewer_handoff`. `validate_module_size` в дочку ЕДЕТ,",
+        "но сканирует только пути кита (`SOURCE_ROOTS`) — продуктовый код дочки он не видит, поэтому",
+        "«нет». Статьи с `gate: none` — честный долг (#827), а не защита.",
         "",
         "| ID | Статья | Гейт | Исполнение | Backing | В дочке? |",
         "|---|---|---|---|---|---|",
     ]
     for r in rows:
-        child = "да" if r["reaches_child"] else ("—" if r["gate"] in ("none", "meta") else "нет")
+        child = _child_cell(r)
         gate = "—" if r["gate"] == "none" else f"`{r['gate']}`"
         out.append(
             f"| {r['id']} | {r['title']} | {gate} | {r['enforced_in']} "

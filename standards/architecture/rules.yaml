@@ -3,7 +3,7 @@
 # level/category/severity/gate/enforced_in — явные поля источника, не эвристика.
 # validation.automated = (gate ∉ {none, meta}); manual = не automated или severity high/critical.
 version: "1.0"
-rules_total: 38
+rules_total: 40
 rules:
   - id: HON-001
     title: "Правило без гейта — пожелание"
@@ -122,7 +122,7 @@ rules:
     category: anti_pattern
     severity: high
     gate: "validate_module_size"
-    enforced_in: both
+    enforced_in: parent
     validation:
       automated: true
       manual: true
@@ -252,6 +252,28 @@ rules:
     part: II
     level: MUST_NOT
     category: anti_pattern
+    severity: high
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: CODE-011
+    title: "Один язык идентификаторов и одна конвенция имён"
+    part: II
+    level: MUST
+    category: principle
+    severity: medium
+    gate: "none"
+    enforced_in: none
+    validation:
+      automated: false
+      manual: true
+  - id: CODE-012
+    title: "Линтер и форматтер в дочке исполняются"
+    part: II
+    level: MUST
+    category: principle
     severity: high
     gate: "none"
     enforced_in: none

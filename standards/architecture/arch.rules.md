@@ -17,7 +17,7 @@
 - **ARCH-003** · SHOULD · Логика живёт в своём слое — gate: `none` (none)
 - **ARCH-004** · MUST · Один источник истины — gate: `none` (none)
 - **ARCH-005** · MUST NOT · Границы модулей — только через контракты — gate: `none` (none)
-- **ARCH-006** · MUST NOT · Нет god-модуля и монолита — gate: `validate_module_size` (both)
+- **ARCH-006** · MUST NOT · Нет god-модуля и монолита — gate: `validate_module_size` (parent)
 - **ARCH-007** · SHOULD · Фреймворк изолирован адаптером — gate: `none` (none)
 - **ARCH-008** · MUST · Контракты явные и версионируемые — gate: `none` (none)
 
@@ -32,6 +32,8 @@
 - **CODE-008** · MUST · Тестируемость — gate: `validate_test_taxonomy` (child)
 - **CODE-009** · SHOULD · Строгая типизация — gate: `none` (none)
 - **CODE-010** · MUST NOT · Без галлюцинаций API — gate: `none` (none)
+- **CODE-011** · MUST · Один язык идентификаторов и одна конвенция имён — gate: `none` (none)
+- **CODE-012** · MUST · Линтер и форматтер в дочке исполняются — gate: `none` (none)
 
 ## Часть III — Безопасность
 - **SEC-001** · MUST · Путь раскрытия уязвимостей в каждом репозитории — gate: `required_repo_artifacts` (child)
