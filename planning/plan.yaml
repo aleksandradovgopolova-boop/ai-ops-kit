@@ -192,7 +192,10 @@ goals:
       # Ревьюер получает применимые статьи конституции, а не только «подтверди revision».
       reviewer_judges_against_the_constitution: false
       # Кит сам держит своё правило: `PLC2401` в его ruff с базой 630, счётчик вниз.
-      kit_follows_its_own_identifier_rule: false
+      # ДОСТИГНУТО 2026-09-29 (PR #1185): `PLC2401`/`PLC2403` в блокирующем наборе ruff кита; 630
+      # существующих имён заморожены ПОФАЙЛОВЫМИ потолками числа находок (`tests/contracts/
+      # test_identifier_baseline.py`, исполняется в CI), новое имя в любом файле — красное.
+      kit_follows_its_own_identifier_rule: true
 
   - id: first-hour-for-a-stranger
     # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-23 из независимого продуктового ревью (разделы
@@ -1111,30 +1114,13 @@ work:
   # `namesake-cascade-is-named-in-full` (PR #1113) — и шире, чем планировалось здесь. Запись ушла в
   # history/plan-history.yaml со статусом dropped: принцип dp-001, дубли уже построенного отклоняем.
   # ── Направление child-code-style-held-by-machine (взято 2026-09-29, ресерч #1183) ─────────────
-  # Нарезка по НЕПЕРЕСЕКАЮЩИМСЯ write_scope — пять работ можно вести одновременно; полевой прогон
-  # на ии-среде идёт последним и ждёт профиля, петли агента и находки «нет линтера».
-  - id: identifier-and-lint-articles-in-constitution
+  # Первая волна (шесть работ) ЗАКРЫТА в историю 2026-09-29: статьи CODE-011/012 (#1194), профиль
+  # линта с базой (#1198), «нет линтера» — находка (#1197), хук при правке и шаблон CI дочки (#1196),
+  # ревьюер по конституции (#1195), кит держит своё правило (#1185). Суд вскрыл стык: профиль
+  # исполняется только отдельной командой — хук, CI и прогон кита его не видят. Это работа ниже.
+  - id: lint-profile-enforced-everywhere
     title: >-
-      Конституция: статья «один язык идентификаторов» и «линтер в дочке обязан исполняться» — с
-      гейтом и исполнением child; честные метки исполнения
-    type: architecture
-    goal: child-code-style-held-by-machine
-    status: todo
-    owner_role: architect
-    value: high
-    issue: 1183
-    write_scope:
-    - standards/architecture/
-    - tests/unit/test_architecture_constitution*
-    rationale: >-
-      CODE-004 объявлен «машиной ловится слабо», хотя его механическая часть (алфавит, регистр)
-      ловится любым линтером; требования «в дочке есть линтер» нет вовсе. ARCH-006 помечен «both»,
-      но `validate_module_size` смотрит только в пути кита — метка вводит в заблуждение.
-
-  - id: lint-profile-per-stack-with-baseline
-    title: >-
-      Профиль линта по стеку дочки (JS/TS, Python, Go, запасной для любого языка) с базой
-      существующих нарушений и ключом `standard.identifiers` (по умолчанию latin)
+      Профиль стиля исполняется там же, где линт дочки: в хуке при правке, в её CI и в прогоне кита
     type: engineering
     goal: child-code-style-held-by-machine
     status: todo
@@ -1142,89 +1128,17 @@ work:
     value: high
     issue: 1183
     write_scope:
-    - templates/lint/
+    - templates/runtime/lint_hook.py
+    - templates/ci/ai-ops-lint.yml
     - ai_ops_kit/checks/
-    - ai_ops_kit/cli/
-    - docs/api/public-surface.md
-    - tests/unit/test_lint_profile*
+    - ai_ops_kit/cli/lint_profile_cli.py
+    - ai_ops_kit/gates/evidence_collector.py
+    - tests/unit/test_lint_*
     rationale: >-
-      Механику закрывают готовые инструменты (ESLint `id-match`/`naming-convention`/границы, Ruff
-      `PLC2401`/`N` + import-linter, golangci `asciicheck`/`depguard`); кит должен их поставлять и
-      генерировать границы слоёв из объявленной архитектуры, а не изобретать свой сканер.
-
-  - id: child-without-linter-is-a-finding
-    title: >-
-      Нет линтера в дочке — находка владельцу с предложением профиля, а не молчаливое освобождение;
-      детектор видит конфиги ESLint/Biome/Prettier/Ruff без скрипта и слот «формат»
-    type: engineering
-    goal: child-code-style-held-by-machine
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 1183
-    write_scope:
-    - ai_ops_kit/shared/project_detector.py
-    - ai_ops_kit/gates/
-    - ai_ops_kit/ui/
-    - tests/unit/test_project_detector*
-    - tests/unit/test_gate_executor*
-    rationale: >-
-      Сегодня `lint_passed` уходит в `not_applicable`, гейт проходит с предупреждением «освобождено»,
-      а Node-линтер находится только через `scripts.lint` — `eslint.config.js` без скрипта невидим.
-
-  - id: lint-runs-at-edit-and-in-child-ci
-    title: >-
-      Линт дочки исполняется в момент правки агента (хук после записи файла) и обязательным шагом
-      её CI
-    type: engineering
-    goal: child-code-style-held-by-machine
-    status: todo
-    owner_role: engineer
-    value: high
-    issue: 1183
-    write_scope:
-    - templates/ci/
-    - templates/runtime/
-    - installer/
-    - tests/unit/test_lint_hook*
-    rationale: >-
-      Правило в CLAUDE.md агент исполнять не обязан (документация Claude Code: «context, not enforced
-      configuration»); CI-шаблон дочки гоняет только валидаторы кита — мимо `ai-ops run` не
-      проверяется ничего.
-
-  - id: reviewer-gets-constitution-criteria
-    title: >-
-      Ревьюер получает применимые статьи конституции и находки соответствия по изменённым файлам
-    type: quality
-    goal: child-code-style-held-by-machine
-    status: todo
-    owner_role: engineer
-    value: medium
-    issue: 1183
-    write_scope:
-    - ai_ops_kit/engine/tool_loop.py
-    - ai_ops_kit/engine/pipeline_helpers.py
-    - tests/unit/test_reviewer_criteria*
-    rationale: >-
-      Промпт ревьюера (`engine/tool_loop.py`) получает только `_gate_checklist()` — роль и имена
-      улик; смысловую часть (имя не раскрывает намерение, логика не в том слое) некому судить.
-
-  - id: kit-follows-its-own-identifier-rule
-    title: >-
-      Кит сам держит «идентификаторы — английские»: `PLC2401`/`PLC2403` в его ruff с базой, счётчик
-      вниз
-    type: quality
-    goal: child-code-style-held-by-machine
-    status: todo
-    owner_role: engineer
-    value: medium
-    issue: 1183
-    write_scope:
-    - pyproject.toml
-    - tests/contracts/test_identifier_baseline*
-    rationale: >-
-      Инвариант AGENTS.md объявлен прозой и нарушен 630 раз (379 в `ai_ops_kit/`); по HON-001 кит
-      не может требовать от дочки того, чего не держит сам.
+      `./ai-ops lint-profile --apply` кладёт профиль отдельным конфигом (`eslint.ai-ops.config.mjs`,
+      база — в `.ai/project/lint/`), а хук (#1196), CI-шаблон (#1196) и `lint_passed` прогона (#1197)
+      гоняют собственную команду линта дочки. Без стыка правило «имена латиницей» держит только тот,
+      кто вспомнил запустить команду, — ровно прозаический класс, который направление закрывает.
 
   - id: code-style-field-run-on-ii-sreda
     title: >-
@@ -1240,11 +1154,13 @@ work:
     - lint-profile-per-stack-with-baseline
     - lint-runs-at-edit-and-in-child-ci
     - child-without-linter-is-a-finding
+    - lint-profile-enforced-everywhere
     write_scope:
     - qualification/
     rationale: >-
       Приёмка направления — на реальном продукте, а не на фикстуре: засчёт исходов требует
-      наблюдения в дочке, где проблема и возникла.
+      наблюдения в дочке, где проблема и возникла. Здесь же — живое наблюдение ревьюера по статьям
+      конституции и перевод меток CODE-011/CODE-012 из `none` в `child`, когда гейт реально дошёл.
 
   - id: does-the-scanner-judge-the-installed-kit-at-all
     title: >-
