@@ -189,6 +189,12 @@ def _parallel_set(candidates, by_id, anchor=None):
 
     chosen, skipped = [], []
     if anchor is not None:
+        if not (by_id.get(anchor["id"]) or {}).get("write_scope"):
+            # Якорь без области записи: «не пересекается с ним» сравнивало бы с пустотой и было бы
+            # всегда правдой — ровно то «наверное, не пересекаются», которое здесь запрещено (#1203).
+            return [], [{"id": c["id"], "reason": f"у {anchor['id']} нет write_scope — "
+                                                  f"параллельность с ней недоказуема"}
+                        for c in candidates if c["id"] != anchor["id"]]
         chosen.append(anchor)                      # якорь занимает свою область записи первым
     for c in candidates:
         w = by_id[c["id"]]
