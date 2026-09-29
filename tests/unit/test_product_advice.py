@@ -97,7 +97,8 @@ def test_direction_without_work_is_an_opportunity_grounded_in_roadmap(tmp_path):
 def test_placeholder_goal_id_is_not_echoed_to_owner(tmp_path):
     """Свежая установка: bootstrap рисует цели-заглушки `goal-id-N`. `propose` НЕ должен говорить
     «начать двигать направление «goal-id-1»» — внутренний id в лицо владельца это утечка трубопровода
-    (репетиция P0 №3, находка №1). Ожидаем «безымянное направление» + подсказку `ai-ops model`."""
+    (репетиция P0 №3, находка №1). Ожидаем «безымянное направление» + подсказку словами, без
+    команды: команда в тексте для человека — та же утечка (репетиция на «Нитях», #1204)."""
     _write_roadmap(tmp_path, goal="goal-id-1")
     _write_plan(tmp_path, goal="goal-id-1", work_goal="other")   # работы под goal-id-1 нет
     out = PA.recommend(str(tmp_path))
@@ -106,7 +107,8 @@ def test_placeholder_goal_id_is_not_echoed_to_owner(tmp_path):
     need = opps[0]["need"]
     assert "goal-id-1" not in need, f"сырой id-заглушка утёк в текст рекомендации: {need!r}"
     assert "безымянное направление" in need, "безымянное направление должно называться словами"
-    assert "ai-ops model" in need, "нет подсказки, чем задать имя направлению"
+    assert "назови его" in need, "нет подсказки, чем задать имя направлению"
+    assert "`" not in need and "ai-ops" not in need, f"команда в тексте для человека: {need!r}"
 
 
 @pytest.mark.unit
