@@ -161,6 +161,14 @@ def _node_tool(root: Path, lint_cmd: str):
     return None
 
 
+def _as_path_arg(rel: str) -> str:
+    """Путь, который линтер не примет за флаг: файл `--fix.js` или `-rf.py` агент создать может.
+
+    `./`, а не `--`: префикс `./` — просто путь, его одинаково понимает любой из четырёх линтеров
+    (ruff, flake8, eslint, biome), а разбор `--` у них не одинаков и полагаться на него не стоит."""
+    return f"./{rel}" if rel.startswith("-") else rel
+
+
 def per_file_command(root: Path, rel: str, lang: str, lint_cmd: str):
     """Команда линта ОДНОГО файла -> (argv, cwd, None) | (None, None, причина пропуска).
 
@@ -174,7 +182,8 @@ def per_file_command(root: Path, rel: str, lang: str, lint_cmd: str):
         exe, cwd = _find_bin(tool, root)
         if exe is None:
             return None, None, f"линтер {tool} не установлен"
-        argv = [exe, "check", "--force-exclude", rel] if tool == "ruff" else [exe, rel]
+        target = _as_path_arg(rel)
+        argv = [exe, "check", "--force-exclude", target] if tool == "ruff" else [exe, target]
         return argv, cwd, None
     if lang == "node":
         tool = _node_tool(root, lint_cmd)
@@ -183,7 +192,7 @@ def per_file_command(root: Path, rel: str, lang: str, lint_cmd: str):
         exe, cwd = _find_bin(tool, root, start=file_abs.parent)
         if exe is None:
             return None, None, f"линтер {tool} не установлен (нет node_modules/.bin/{tool})"
-        target = os.path.relpath(file_abs, cwd)
+        target = _as_path_arg(os.path.relpath(file_abs, cwd))
         return ([exe, "lint", target] if tool == "biome" else [exe, target]), cwd, None
     if lang == "go":
         if "golangci-lint" not in lint_cmd:

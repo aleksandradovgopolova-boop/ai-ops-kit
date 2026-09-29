@@ -312,6 +312,40 @@ def test_ci_refuses_format_command_that_rewrites(lh, tmp_path, monkeypatch):
     assert code == 0
 
 
+# ── имя файла, похожее на флаг: линтер обязан получить ПУТЬ, а не опцию ──────────────────────────
+
+@pytest.mark.parametrize("lang,lint,tool,bin_rel,name,expected", [
+    ("python", "ruff check .", "ruff", ".venv/bin/ruff", "-rf.py",
+     ["check", "--force-exclude", "./-rf.py"]),
+    ("python", "flake8", "flake8", ".venv/bin/flake8", "--fix.py", ["./--fix.py"]),
+    ("node", "eslint .", "eslint", "node_modules/.bin/eslint", "--fix.js", ["./--fix.js"]),
+    ("node", "biome lint .", "biome", "node_modules/.bin/biome", "-rf.ts", ["lint", "./-rf.ts"]),
+], ids=["ruff", "flake8", "eslint", "biome"])
+def test_dash_named_file_reaches_the_linter_as_a_path(lh, tmp_path, lang, lint, tool, bin_rel,
+                                                     name, expected):
+    """Файл `--fix.js`/`-rf.py` в корне агент создать может; без `./` линтер прочёл бы его как флаг.
+
+    Проверено на живом ruff: `ruff check -rf.py` — отказ разбора аргументов (код 2), а
+    `ruff check ./-rf.py` — обычная проверка файла."""
+    root = tmp_path / "child"
+    root.mkdir()
+    _profile(root, [{"language": lang, "commands": {"lint": lint}}])
+    log = tmp_path / f"{tool}.log"
+    _fake_linter(root / bin_rel, log)
+    f = root / name
+    f.write_text("BAD\n", encoding="utf-8")
+    code, err, _ = lh.run_hook(_event(f), root)
+    (call,) = _calls(log)
+    assert call.split() == expected, call
+    assert code == 2 and tool in err, "файл-«флаг» не дошёл до линтера как файл"
+
+
+def test_plain_paths_are_not_rewritten(lh):
+    assert lh._as_path_arg("src/-a.py") == "src/-a.py"
+    assert lh._as_path_arg("a.py") == "a.py"
+    assert lh._as_path_arg("-x.py") == "./-x.py"
+
+
 def test_ci_writes_step_summary(lh, tmp_path, monkeypatch):
     summary = tmp_path / "summary.md"
     monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
