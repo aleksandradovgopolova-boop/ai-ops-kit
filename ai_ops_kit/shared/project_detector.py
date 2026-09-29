@@ -37,7 +37,7 @@ PROFILE_REL = Path(".ai") / "repository-profile.yaml"
 
 # Манифесты, от которых зависит РЕЗУЛЬТАТ детекции: изменился состав или содержимое любого —
 # профиль протух (failure mode #3: прогон по устаревшему стеку после правки манифестов).
-_WATCHED_FILES = (
+_WATCHED_FILES: tuple[str, ...] = (
     "package.json", "package-lock.json", "yarn.lock", "pnpm-lock.yaml", "pnpm-workspace.yaml",
     "lerna.json", "turbo.json", "nx.json",
     "pyproject.toml", "requirements.txt", "requirements-dev.txt", "uv.lock",
@@ -49,6 +49,27 @@ _WATCHED_FILES = (
 )
 _WATCHED_GLOBS = ("*/package.json", "apps/*/package.json", "packages/*/package.json",
                   ".github/workflows/*.yml", ".github/workflows/*.yaml")
+# Конфиги стиля Node (#1183): линтер и форматтер объявляются файлом, а не только скриптом. Без
+# них в наблюдаемых кеш профиля не протухал бы, когда в репозитории появляется `eslint.config.js`.
+_ESLINT_CONFIGS = tuple(f"eslint.config.{e}" for e in ("js", "mjs", "cjs", "ts", "mts", "cts")) + tuple(
+    ".eslintrc" + e for e in ("", ".js", ".cjs", ".json", ".yaml", ".yml"))
+_BIOME_CONFIGS = ("biome.json", "biome.jsonc")
+_PRETTIER_CONFIGS = tuple(".prettierrc" + e for e in (
+    "", ".json", ".json5", ".yaml", ".yml", ".toml", ".js", ".cjs", ".mjs")) + tuple(
+    f"prettier.config.{e}" for e in ("js", "cjs", "mjs"))
+_WATCHED_FILES += _ESLINT_CONFIGS + _BIOME_CONFIGS + _PRETTIER_CONFIGS
+# Слоты команд профиля. `format` — только проверка оформления (`--check`), не переписывание: команда
+# гейта не вправе менять дерево, которое она судит. Evidence collector гоняет лишь четыре первых.
+SLOTS = ("build", "lint", "typecheck", "test", "format")
+# Стеки, у которых детектор УМЕЕТ искать линтер (конфиг/скрипт/хук/Makefile/CI). Только для них
+# `lint: None` значит «не нашёл»; у java линтер не ищется вовсе, и там None значит «не знаю».
+LINT_DETECTABLE = ("node", "python", "go", "rust")
+
+
+def lint_unguarded(profile: dict) -> list:
+    """Языки стеков, у которых линтер ИСКАЛИ и НЕ НАШЛИ (#1183) — одна правда для гейта и речи."""
+    return [s.get("language") for s in (profile or {}).get("stacks") or []
+            if s.get("language") in LINT_DETECTABLE and not (s.get("commands") or {}).get("lint")]
 
 
 def _read_json(p: Path) -> dict:
@@ -169,12 +190,14 @@ _CI_PATTERNS: dict[str, dict[str, tuple[str, ...]]] = {
         "lint": (r"(?:python3?\s+-m\s+)?ruff\s+check\b", r"(?:python3?\s+-m\s+)?flake8\b"),
         "typecheck": (r"(?:python3?\s+-m\s+)?mypy\b", r"pyright\b"),
         "build": (r"python3?\s+-m\s+build\b",),
+        "format": (r"(?:python3?\s+-m\s+)?ruff\s+format\s+--check\b", r"black\s+--check\b"),
     },
     "node": {
         "build": (r"(?:npm\s+run|yarn|pnpm(?:\s+run)?)\s+build\b",),
         "lint": (r"(?:npm\s+run|yarn|pnpm(?:\s+run)?)\s+lint\b",),
         "typecheck": (r"(?:npm\s+run|yarn|pnpm(?:\s+run)?)\s+(?:typecheck|type-check)\b",),
         "test": (r"npm\s+(?:run\s+)?test\b", r"(?:yarn|pnpm)\s+(?:run\s+)?test\b"),
+        "format": (r"(?:npx\s+)?prettier\s+(?:.*\s)?--check\b",),
     },
     "go": {"build": (r"go\s+build\b",), "test": (r"go\s+test\b",),
            "typecheck": (r"go\s+vet\b",), "lint": (r"golangci-lint\s+run\b",)},
@@ -224,7 +247,8 @@ def _ci_commands(root: Path) -> dict:
 
 
 _MAKE_ALIASES = {"build": ("build",), "lint": ("lint",),
-                 "typecheck": ("typecheck", "type-check", "types"), "test": ("test", "tests")}
+                 "typecheck": ("typecheck", "type-check", "types"), "test": ("test", "tests"),
+                 "format": ("format-check", "fmt-check", "check-format")}
 
 
 def _finalize(stack: dict, root: Path, ci_for_lang: dict | None, make_targets: set, make_file: str | None) -> dict:
@@ -232,7 +256,7 @@ def _finalize(stack: dict, root: Path, ci_for_lang: dict | None, make_targets: s
     честности: команда без файла-источника снимается в None."""
     cmds = dict(stack.get("commands") or {})
     ev = dict(stack.pop("_command_evidence", None) or {})
-    for slot in ("build", "lint", "typecheck", "test"):
+    for slot in SLOTS:
         if not cmds.get(slot):
             for target in _MAKE_ALIASES[slot]:
                 if target in make_targets and make_file:
@@ -246,7 +270,7 @@ def _finalize(stack: dict, root: Path, ci_for_lang: dict | None, make_targets: s
         cmds.setdefault(slot, None)
         if not cmds.get(slot):
             ev.pop(slot, None)
-    stack["commands"] = {k: cmds.get(k) for k in ("build", "lint", "typecheck", "test")}
+    stack["commands"] = {k: cmds.get(k) for k in SLOTS}
     stack["command_evidence"] = {k: ev[k] for k in sorted(ev)}
     srcs = list(stack.get("evidence_source") or [])
     for s in sorted(set(ev.values())):
@@ -264,6 +288,27 @@ def _node_pm(d: Path) -> str:
     if (d / "package-lock.json").exists():
         return "npm"
     return "npm"
+
+
+def _first_file(d: Path, names: tuple) -> str | None:
+    return next((n for n in names if (d / n).is_file()), None)
+
+
+def _node_style(d: Path, pkg: dict, pm: str, slots: "_Slots") -> None:
+    """Линтер и форматтер Node по КОНФИГУ инструмента, когда скрипта нет (#1183).
+
+    Прежде линтер находился только через `scripts.lint`: репозиторий с `eslint.config.js`, но без
+    скрипта, получал `lint: None` — и гейт освобождал проверку стиля, хотя правила в проекте
+    объявлены. Бинарь запускается через менеджер пакетов проекта; у npm — `--no-install`: чужой
+    пакет из сети гейт не тянет, нет локального инструмента — честный провал, а не скачивание."""
+    x = {"npm": "npx --no-install", "yarn": "yarn", "pnpm": "pnpm exec"}[pm]
+    biome = _first_file(d, _BIOME_CONFIGS)
+    slots.put("lint", f"{x} eslint .",
+              _first_file(d, _ESLINT_CONFIGS) or ("package.json" if "eslintConfig" in pkg else None))
+    slots.put("lint", f"{x} biome lint .", biome)
+    slots.put("format", f"{x} prettier --check .",
+              _first_file(d, _PRETTIER_CONFIGS) or ("package.json" if "prettier" in pkg else None))
+    slots.put("format", f"{x} biome format .", biome)   # без --write biome только сверяет
 
 
 def _node_stack(d: Path, root: Path) -> dict:
@@ -297,17 +342,16 @@ def _node_stack(d: Path, root: Path) -> dict:
     install = {"npm": "npm ci" if has_lock else "npm install",
                "yarn": "yarn install --frozen-lockfile" if has_lock else "yarn install",
                "pnpm": "pnpm install --frozen-lockfile" if has_lock else "pnpm install"}[pm]
+    cmd("build", "build"); cmd("lint", "lint"); cmd("test", "test")
+    cmd("typecheck", "typecheck", "tsc", "type-check")
+    cmd("format", "format:check", "format-check", "check-format", "fmt:check")
+    _node_style(d, pkg, pm, slots)     # конфиг без скрипта; скрипт, если есть, уже занял слот
     return {
         "language": "node",
         "package_manager": pm,
         "frameworks": fw,
         "install_command": install,
-        "commands": {
-            "build": cmd("build", "build"),
-            "lint": cmd("lint", "lint"),
-            "typecheck": cmd("typecheck", "typecheck", "tsc", "type-check"),
-            "test": cmd("test", "test"),
-        },
+        "commands": {k: slots.cmd.get(k) for k in SLOTS},
         "evidence_source": ["package.json"] + ([f"{pm}-lock"] if pm else []),
         "_command_evidence": slots.src,
     }
@@ -385,6 +429,20 @@ def _python_commands(d: Path, dep_src: Callable) -> "_Slots":
     if dep_src("pyright"):
         s.put("typecheck", "pyright", dep_src("pyright"))
 
+    # format (#1183): только ОБЪЯВЛЕННЫЙ форматтер. `[tool.ruff]` — это линтер; что проект
+    # форматирует ruff'ом, из него не следует, и «проверка оформления» по догадке была бы выдумкой.
+    if _has_section(pyproject, "tool.ruff.format"):
+        s.put("format", "ruff format --check .", "pyproject.toml")
+    for name in (".ruff.toml", "ruff.toml"):
+        if _has_section(_text(d / name), "format"):
+            s.put("format", "ruff format --check .", name)
+    if "ruff-format" in hooks:
+        s.put("format", "ruff format --check .", PRECOMMIT)
+    if _has_section(pyproject, "tool.black"):
+        s.put("format", "black --check .", "pyproject.toml")
+    if "black" in hooks:
+        s.put("format", "black --check .", PRECOMMIT)
+
     # build: сборку дистрибутива никто не «угадывает» — только явный Makefile/CI (см. _finalize)
     return s
 
@@ -426,7 +484,7 @@ def _python_stack(d: Path) -> dict:
         "package_manager": pm,
         "frameworks": fw,
         "install_command": install,
-        "commands": {k: slots.cmd.get(k) for k in ("build", "lint", "typecheck", "test")},
+        "commands": {k: slots.cmd.get(k) for k in SLOTS},
         "evidence_source": src,
         "_command_evidence": slots.src,
     }
@@ -469,7 +527,9 @@ def detect(root: Path) -> dict:
     # python
     if (root / "pyproject.toml").exists() or (root / "requirements.txt").exists():
         stacks.append(_python_stack(root))
-    # go: lint — только при объявленном конфиге golangci-lint (иначе линтера в репо просто нет)
+    # go: lint — только при объявленном конфиге golangci-lint (иначе линтера в репо просто нет).
+    # format у go НЕ выводится: `gofmt -l` возвращает 0 и при неотформатированных файлах — такая
+    # команда зеленила бы гейт вхолостую, а честной проверки без оболочки у тулчейна нет.
     if (root / "go.mod").exists():
         go_stack = _simple_stack("go", ["go.mod"], root,
                                  {"build": "go build ./...", "lint": None,
@@ -519,7 +579,9 @@ def detect(root: Path) -> dict:
     if not stacks:
         undetermined.append("стек не определён — нет известных манифестов (package.json/pyproject/go.mod/…)")
     for s in stacks:
-        miss = [k for k, v in s["commands"].items() if v is None]
+        # format в этот список не входит: его отсутствие гейт не освобождает (он его не гоняет),
+        # и «не выведены команды …, format» у каждого проекта без форматтера было бы шумом
+        miss = [k for k, v in s["commands"].items() if v is None and k != "format"]
         if miss:
             # честная причина: не «не умеем», а «в репозитории нет доказательства команды»
             # `', '.join(...)`, а не repr списка: строка человекочитаемая, и `['build', 'lint']`
