@@ -1144,6 +1144,8 @@ work:
     write_scope:
     - templates/lint/
     - ai_ops_kit/checks/
+    - ai_ops_kit/cli/
+    - docs/api/public-surface.md
     - tests/unit/test_lint_profile*
     rationale: >-
       Механику закрывают готовые инструменты (ESLint `id-match`/`naming-convention`/границы, Ruff
@@ -1163,6 +1165,7 @@ work:
     write_scope:
     - ai_ops_kit/shared/project_detector.py
     - ai_ops_kit/gates/
+    - ai_ops_kit/ui/
     - tests/unit/test_project_detector*
     - tests/unit/test_gate_executor*
     rationale: >-
