@@ -346,12 +346,21 @@ def test_release_body_for_missing_version_is_empty():
     assert rb.release_body(_WITH, "3.0.0") == ""
 
 
-def test_cli_release_notes_prints_body_and_refuses_missing_version(tmp_path, capsys):
+def test_cli_release_notes_prints_body_and_empty_for_missing_version(tmp_path, capsys):
+    """Раздела нет — пустой вывод с причиной в stderr: отказывает ОДНА строка release.yml."""
     (tmp_path / "CHANGELOG.md").write_text(_WITH, encoding="utf-8")
     assert rb.main(["x", "--release-notes", "2.0.0", "--root", str(tmp_path)]) == 0
     assert "Смысл." in capsys.readouterr().out
-    assert rb.main(["x", "--release-notes", "3.0.0", "--root", str(tmp_path)]) == 1
-    assert "[3.0.0]" in capsys.readouterr().err
+    assert rb.main(["x", "--release-notes", "3.0.0", "--root", str(tmp_path)]) == 0
+    out = capsys.readouterr()
+    assert out.out == "" and "[3.0.0]" in out.err
+
+
+def test_release_step_refusal_line_is_unique_for_the_mutation_probe():
+    """Проба `release-refuses-without-changelog-section` мутирует строку `exit 1` шага выпуска:
+    вторая такая строка сделала бы мутацию неоднозначной, а отказ — недоказанным."""
+    text = (KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    assert text.count("            exit 1") == 1
 
 
 def _release_step():

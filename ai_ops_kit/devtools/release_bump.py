@@ -460,12 +460,15 @@ def whats_new(old_version, new_version, text: str | None = None, max_versions: i
 
 
 def _print_release_notes(root: Path, version: str, changelog_url: str) -> int:
-    """`--release-notes`: тело Release в stdout. 0 — есть; 1 — раздела версии нет (причина в stderr)."""
+    """`--release-notes`: тело Release в stdout, код 0. Раздела версии нет — stdout ПУСТ (причина в
+    stderr), код тоже 0: отказ выпуска — одна строка release.yml (`[ ! -s notes ]`, её держит
+    мутационная проба `release-refuses-without-changelog-section`), а не второй путь здесь. Ненулевой
+    код — только сбой самой сборки (нет CHANGELOG.md, битый файл)."""
     body = release_body((root / "CHANGELOG.md").read_text(encoding="utf-8"), version, changelog_url)
     if not body:
         print(f"в CHANGELOG.md нет раздела [{version}] — добавьте раздел '## [{version}] — <дата>'",
               file=sys.stderr)
-        return 1
+        return 0
     print(body)
     return 0
 
