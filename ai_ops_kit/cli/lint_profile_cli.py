@@ -14,30 +14,16 @@
 from __future__ import annotations
 
 import json
-import os
-import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 from ai_ops_kit.checks import lint_baseline
 
 _STACK_RU = {"javascript": "JavaScript", "typescript": "TypeScript", "python": "Python", "go": "Go"}
-_RULE_RU = (("ai-ops/id-match", "имя не латиницей"),
-            ("ai-ops/naming-convention", "имя типа не латиницей"),
-            ("ai-ops/no-restricted-imports", "импорт через границу слоя"),
-            ("PLC24", "имя не латиницей"), ("N", "имя не по соглашениям Python"),
-            ("asciicheck", "имя не латиницей"), ("revive", "имя не по соглашениям Go"),
-            ("depguard", "импорт через границу слоя"), ("import-linter", "импорт через границу слоя"),
-            ("ai-ops-latin", "имя не латиницей"))
 _TOOL_RU = {"eslint": "ESLint", "ruff": "Ruff", "import-linter": "import-linter",
             "golangci-lint": "golangci-lint", "ast-grep": "ast-grep"}
 
 TIMEOUT_S = 900
-
-
-def _rule_ru(rule: str) -> str:
-    return next((ru for pfx, ru in _RULE_RU if str(rule).startswith(pfx)), str(rule))
 
 
 def _stacks_ru(stacks) -> str:
@@ -45,67 +31,22 @@ def _stacks_ru(stacks) -> str:
     return ", ".join(names) or "—"
 
 
-# ── Запуск инструментов (процесс живёт здесь, в точке входа; логика линии — в checks). ─────────
-def _which(root: Path, name: str):
-    for cand in (root / "node_modules" / ".bin" / name, root / ".venv" / "bin" / name):
-        if cand.is_file():
-            return str(cand)
-    return shutil.which(name)
-
-
-def _run(argv, cwd: Path, out_file=None) -> tuple:
-    """-> (код, текст результата). Результат — из файла вывода, если он задан, иначе stdout."""
+# ── Запуск инструментов: процесс живёт здесь, в точке входа; argv, разбор и линия — в checks. ──
+def _run(argv, cwd: Path, timeout=TIMEOUT_S) -> tuple:
+    """-> (код, вывод). Не запустился / не уложился — код 2 и причина."""
     try:
-        proc = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True, timeout=TIMEOUT_S)
+        proc = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
     except (OSError, subprocess.TimeoutExpired) as e:
         return 2, f"не запустился: {e}"
-    if out_file:
-        try:
-            return proc.returncode, Path(out_file).read_text(encoding="utf-8")
-        except OSError:
-            return 2, (proc.stderr or proc.stdout or "")[-2000:]
     return proc.returncode, proc.stdout if proc.stdout.strip() else proc.stdout + proc.stderr
 
 
-def measure(root: Path, spec: dict, extra=()) -> tuple:
-    """Прогнать инструмент профиля -> (находки|None, подавлено, причина-если-не-вышло)."""
-    tool = spec["tool"]
-    exe = _which(root, {"import-linter": "lint-imports"}.get(tool, tool))
-    if not exe:
-        return None, {}, f"{tool} не найден — проверить нечем"
-    fd, tmp = tempfile.mkstemp(suffix=".json")
-    os.close(fd)
-    try:
-        if tool == "eslint":
-            argv = [exe, "-c", spec["config"], "-f", "json", "-o", tmp, *extra, "."]
-            rc, text = _run(argv, root, tmp)
-            if rc == 2 or not text.strip().startswith("["):
-                return None, {}, "ESLint не отработал: " + text.strip()[-300:]
-            found, supp = lint_baseline.parse_eslint(text, root, spec.get("rule_prefix", "ai-ops/"))
-            return found, supp, None
-        if tool == "golangci-lint":
-            argv = [exe, "run", "-c", spec["config"], "--output.json.path", tmp,
-                    "--issues-exit-code", "0", "./..."]
-            rc, text = _run(argv, root, tmp)
-            return (lint_baseline.parse_golangci(text, root, spec.get("rules") or ()), {}, None) if rc == 0 \
-                else (None, {}, "golangci-lint не отработал: " + text.strip()[-300:])
-        argv = {"ruff": [exe, "check", "--config", spec["config"], "--output-format", "json",
-                         "--exit-zero", "."],
-                "import-linter": [exe, "--config", spec["config"]],
-                "ast-grep": [exe, "scan", "--rule", spec["config"], "--json=compact", "."]}[tool]
-        rc, text = _run(argv, root)
-        if tool == "import-linter":
-            return (lint_baseline.parse_import_linter(text), {}, None) if rc in (0, 1) \
-                else (None, {}, "lint-imports не отработал: " + text.strip()[-300:])
-        if rc != 0 and not text.strip().startswith(("[", "{")):
-            return None, {}, f"{tool} не отработал: " + text.strip()[-300:]
-        parse = lint_baseline.parse_ruff(text, root, spec.get("rules") or ()) if tool == "ruff" \
-            else lint_baseline.parse_ast_grep(text, root)
-        return parse, {}, None
-    except (ValueError, KeyError) as e:
-        return None, {}, f"{tool}: вывод не разобран ({e})"
-    finally:
-        Path(tmp).unlink(missing_ok=True)
+def measure(root: Path, spec: dict, extra=(), targets=None, timeout=TIMEOUT_S) -> tuple:
+    """Прогнать инструмент профиля -> (находки|None, подавлено, причина-если-не-вышло).
+
+    targets — только эти файлы (хук правки); timeout — потолок времени вызывающего (у хука свой)."""
+    return lint_baseline.run_tool(root, spec, lambda argv, cwd: _run(argv, cwd, timeout),
+                                  extra, targets)
 
 
 def _say(root: Path, msg: dict) -> None:
@@ -176,17 +117,12 @@ def _apply(root: Path, profile: dict, force: bool) -> int:
     return 1 if missing else 0
 
 
-def _address(g: dict) -> str:
-    where = g["file"] + (":" + str(g["lines"][0]) if g.get("lines") else "")
-    return f"{where} — {_rule_ru(g['rule'])} (было {g['was']}, стало {g['now']})"
-
-
 def _check(root: Path, profile: dict, tighten: bool) -> int:
     from ai_ops_kit.checks import lint_profile
     stale = lint_profile.drift(root, profile)
     res = lint_baseline.check(root, profile["tools"], measure, tighten=tighten)
     rows = res["tools"]
-    grown = [g for r in rows for g in r.get("grown") or []]
+    grown = lint_baseline.grown(res)
     shrunk = sum(s["was"] - s["now"] for r in rows for s in r.get("shrunk") or [])
     frozen = sum(r.get("frozen", 0) for r in rows)
     unchecked = [f"{_TOOL_RU.get(r['tool'], r['tool'])}: {r['reason']}" for r in rows
@@ -203,7 +139,7 @@ def _check(root: Path, profile: dict, tighten: bool) -> int:
         _say(root, _message("blocked", f"Появились новые расхождения со стилем кода: {len(grown)} "
                             f"в {files} файл(ах).", why_it_matters="Стиль заморожен и может только "
                             "улучшаться: эти изменения не пройдут проверку, пока их не исправить.",
-                            next_steps=[_address(g) for g in grown[:8]]
+                            next_steps=[lint_baseline.address(g) for g in grown[:8]]
                             + ["Исправьте и запустите снова: ./ai-ops lint-profile check"],
                             technical=tech))
         return 1

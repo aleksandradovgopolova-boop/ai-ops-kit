@@ -430,6 +430,47 @@ def render_fallback(child_root, latin: bool) -> dict | None:
             "notes": [], "tools": [{"tool": "ast-grep", "config": ASTGREP_OUT}]}
 
 
+# ── Записанный профиль: что принуждать, когда он включён (#1183). ─────────────────────────────
+GO_LINTERS = ("asciicheck", "revive", "depguard")
+
+
+def applied_tools(child_root) -> list:
+    """Инструменты профиля, ЗАПИСАННОГО в дочке, — по файлам на диске, без пересборки.
+
+    Этим читают профиль три точки принуждения: хук правки, шаг CI и доказательство `lint_passed`
+    прогона кита. Пересборка им не подходит: ей нужно объявление архитектуры (слой planning, гейту
+    недоступен), и принуждать надо то, что владелец СОХРАНИЛ в репозитории, а не то, что собралось
+    бы сейчас (расхождение сборки с диском называет `lint-profile check`). Пустой список — профиль не
+    включён: точки принуждения ведут себя как прежде.
+    """
+    from ai_ops_kit.checks import lint_profile_js as js
+    root = Path(child_root)
+    latin = identifiers_policy(root)["value"] == IDENTIFIERS_LATIN
+    out: list[dict] = []
+    if (root / js.OUT).is_file():
+        out.append({"tool": "eslint", "config": js.OUT, "suppressions": js.SUPPRESSIONS,
+                    "rule_prefix": "ai-ops/"})
+    if (root / RUFF_OUT).is_file():
+        out.append({"tool": "ruff", "config": RUFF_OUT,
+                    "rules": list(RUFF_IDENTIFIER_RULES if latin else ()) + list(RUFF_STYLE_RULES)})
+    if (root / IMPORTLINTER_OUT).is_file():
+        out.append({"tool": "import-linter", "config": IMPORTLINTER_OUT})
+    if (root / GOLANGCI_OUT).is_file():
+        out.append({"tool": "golangci-lint", "config": GOLANGCI_OUT, "rules": list(GO_LINTERS)})
+    if (root / ASTGREP_OUT).is_file():
+        out.append({"tool": "ast-grep", "config": ASTGREP_OUT})
+    return out
+
+
+def tools_for_file(tools: list, rel: str) -> list:
+    """Инструменты профиля, которые судят этот файл (по расширению)."""
+    from ai_ops_kit.checks import lint_profile_js as js
+    ext = rel.rsplit(".", 1)[-1] if "." in rel else ""
+    exts = {"eslint": js.JS_EXT + js.TS_EXT, "ruff": ("py", "pyi"), "import-linter": ("py",),
+            "golangci-lint": ("go",), "ast-grep": tuple(AST_GREP_LANGS)}
+    return [t for t in tools if ext in exts.get(t["tool"], ())]
+
+
 def _render_stacks(child_root, decl: dict, latin: bool) -> list:
     return [render_python(child_root, decl, latin), render_go(child_root, decl, latin),
             render_fallback(child_root, latin)]
