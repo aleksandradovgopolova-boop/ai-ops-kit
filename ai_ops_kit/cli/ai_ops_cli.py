@@ -160,6 +160,9 @@ INTENTS = {
     # утечке пути/коммита/имени/вывода команд. Только чтение; честные разные пустые состояния.
     "portfolio": ("портфель отказов дочек обезличенно: какие классы повторяются по всем дочкам "
                   "(только паттерны и числа, без кода и путей)", "portfolio", False),
+    # #1183: стиль кода держит машина — профиль линтеров поверх конфига дочки + заморозка существующего.
+    "lint-profile": ("единый стиль кода: имена латиницей и границы слоёв поверх ваших линтеров; "
+                     "--apply — включить, check — новое расхождение краснеет", "lint-profile", False),
 }
 
 
@@ -170,7 +173,7 @@ DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "revi
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "propose", "products", "team",
                   "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach",
-                  "scorecard", "candidates", "portfolio")
+                  "scorecard", "candidates", "portfolio", "lint-profile")
 
 
 # ── Фасад владельца (P1 №8/№9 ревью): 7 действий человеческим языком поверх 34 intents ──────────────
@@ -330,8 +333,9 @@ from ai_ops_kit.cli.ai_ops_cli_commands import (  # noqa: E402,F401 — ре-э�
 from ai_ops_kit.cli.candidates_cli import _intent_candidates  # noqa: E402,F401 — ре-экспорт/регистрация
 # delivery-record: интент `delivery` вынесен спутником из product-хаба (ратчет размера модуля).
 from ai_ops_kit.cli.ai_ops_cli_delivery import _intent_delivery  # noqa: E402,F401 — ре-экспорт/регистрация
-# portfolio-intelligence (T5): команда `portfolio` — тоже отдельный спутник.
+# portfolio-intelligence (T5) и профиль стиля (#1183) — тоже отдельные спутники.
 from ai_ops_kit.cli.portfolio_cli import _intent_portfolio  # noqa: E402,F401 — ре-экспорт/регистрация
+from ai_ops_kit.cli.lint_profile_cli import _intent_lint_profile  # noqa: E402,F401 — регистрация
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
 for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery),
@@ -354,7 +358,7 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("status", _intent_status), ("next", _intent_next),
                    ("review", _intent_review), ("advise", _intent_advise),
                    ("candidates", _intent_candidates),
-                   ("portfolio", _intent_portfolio)):
+                   ("portfolio", _intent_portfolio), ("lint-profile", _intent_lint_profile)):
     _intent(_name)(_fn)
 del _name, _fn
 
