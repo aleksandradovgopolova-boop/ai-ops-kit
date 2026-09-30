@@ -14,7 +14,7 @@ child-репозиториев. Здесь разрабатывается сам
 | `quality/gates.yaml` | Реестр quality gates | Да; blocking-гейтов MVP-хребта ≤ 8; доменные гейты блокируют условно (по применимости) |
 | `workflows/`, `commands/`, `rules/`, `templates/`, `context/`, `memory/` | Прозаический слой | Да |
 | `schemas/` | JSON Schema контрактов | Осторожно: это публичные контракты, breaking — только major |
-| `ai_ops_kit/` | **Код движка**: модули в пакетах (`shared`/`context`/`engine`/`gates`/`providers`/`lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`) | Да; новая capability живёт в СУЩЕСТВУЮЩЕМ домене (top-level пакетов — потолок 19, `package_ceiling` в `packages/layering.yaml`; новый пакет = архитектурное решение + ADR/DP, а не привычка). Модуль обязан уложиться в слои `packages/layering.yaml` и быть отнесён к одному из четырёх роль-слоёв (`conceptual_layers`). Запуск скриптом — `python3 -m ai_ops_kit.<pkg>.<mod>` (плоский слой `tools/` снят в 4.0) |
+| `ai_ops_kit/` | **Код движка**: модули в пакетах (перечень и слои — `packages/layering.yaml`) | Да; новая capability живёт в СУЩЕСТВУЮЩЕМ домене (top-level пакетов — потолок 19, `package_ceiling` в `packages/layering.yaml`; новый пакет = архитектурное решение + ADR/DP, а не привычка). Модуль обязан уложиться в слои `packages/layering.yaml` и быть отнесён к одному из четырёх роль-слоёв (`conceptual_layers`). Запуск скриптом — `python3 -m ai_ops_kit.<pkg>.<mod>` (плоский слой `tools/` снят в 4.0) |
 | `ai_ops_kit/planning/` | Контур Planning & Execution (v3.35): модель контуров продукта, delivery plan, ROADMAP-контракт, отбор следующей работы, понимание репозитория при онбординге | Да; словари (роли, типы, состояния) живут в `registry/product-operating-model.yaml`, а не в коде |
 | `ai_ops_kit/validation/` | Валидаторы (Python, только pyyaml). Единственный каталог, ИЗ КОТОРОГО запускают скрипты напрямую (валидаторы через `import _bootstrap` — sys.path[0] = сам каталог); остальные модули пакета зовутся `python3 -m ai_ops_kit...`. `import _bootstrap` двурежимный (пакетный в `try`, плоский в `except`) | Да; тесты валидатора — в `tests/`, не внутри модуля |
 | `installer/ai_ops.py` | CLI `ai-ops` для child-репозиториев | Да |
@@ -44,10 +44,9 @@ child-репозиториев. Здесь разрабатывается сам
   Границы зоны проверяются: она одна, в ней только точки входа, и список объявленных
   не-валидаторов вправе только сокращаться (`tests/unit/test_package_surface.py`).
 - **Слои пакетов.** `foundation` → `primitives` → `capabilities` → `intelligence` → `entrypoints`; зависимость вверх
-  запрещена (`packages/layering.yaml`, `validate_layering.py`). Взаимные связи ВНУТРИ ядра пока
-  разрешены осознанно — замер 12 пар и 210 циклов длиннее двух; строгий DAG требует разбора, а не
-  выключателя. С v3.34 замер — ПОТОЛОК: новая пара или цикл краснеет, ушедшая обязана быть списана
-  в `packages/layering.yaml` (ратчет ходит только вниз).
+  запрещена (`packages/layering.yaml`, `validate_layering.py`). Взаимных связей и циклов
+  между пакетами больше нет (граф — DAG с 10.09.2026, цель `layering-ring-is-a-dag`); потолок в
+  `packages/layering.yaml` стоит на нуле, и новая пара или цикл краснеет.
 - **Потолок пакетов и роль-слои (#638).** Число top-level пакетов в `ai_ops_kit/` — ПОТОЛОК
   (`package_ceiling`, сейчас 19): структура отражает доменную модель, а не историю разработки.
   Новая capability живёт в СУЩЕСТВУЮЩЕМ домене; рост числа требует архитектурного решения (ADR/DP),
@@ -91,9 +90,7 @@ child-репозиториев. Здесь разрабатывается сам
 - **Runtime через адаптер, не замена.** AI Ops управляет исполнителем (Claude Code/Codex/OpenHands SDK/…)
   через адаптер; workflow/approvals/evidence не переписываются при смене runtime. Свой tool-loop не наращиваем,
   если внешний runtime делает это надёжно.
-- **Capability_freeze (3.8): СНЯТ — 3.8 stable достигнут.** В 3.9 аддитивно добавлены first-class Claude Code
-  executing adapter + complexity-aware routing (доказаны live). Новые концепт-возможности — ПО ДАННЫМ реальных
-  прогонов (3.10 Real-Product Qualification), а не по красоте; точечно и аддитивно.
+- **Новые возможности — по данным реальных прогонов, а не по красоте;** точечно и аддитивно.
 
 ## Публичная граница и breaking change
 
@@ -178,25 +175,49 @@ Python, та, что стоит у тебя. Объявленный пол `requ
 4. **Не гонять полный цикл после каждой правки** — целевой selftest → core smoke → полный CI один раз.
 5. **Рефакторинг — правило третьего изменения.**
 
+## Issue — только в формате шаблона
+
+Issue заводится только в формате шаблона: задача — `.github/ISSUE_TEMPLATE/task.md`, направление с
+подзадачами — `epic.md`. Заголовок `<slug>: <исход простыми словами>`, тело — четыре секции по
+порядку: **Что.** / **Зачем.** / **Проверяемо.** / **Границы/Источник.**; чеклисты и списки
+подзадач — после них. `gh issue create --body` шаблон обходит, поэтому тело, переданное так, обязано
+следовать тем же секциям. Генераторы кита собирают issue через `ai_ops_kit/planning/issue_format.py`
+— новый путь заведения issue обязан идти через него же. Повод: из последних 150 issue формату
+следовали 4 — три пути заведения писали каждый по-своему.
+
 ## Релизный процесс
 
 **ВОРОТА (с 18.08.2026, работа `release-has-a-gate`).** Три проверки, каждая с кодом возврата:
 - **запись для CHANGELOG добавлена в этой ветке** — `towncrier check --compare-with origin/main` в
-  обязательной джобе `lint`. Фрагмент — файл `newsfragments/<что-это>.<feat|fix|quality|chore>.md`
-  (инструкция — в `newsfragments/README.md`). `towncrier build` НЕ запускается нигде: старый
-  `CHANGELOG.md` остаётся как есть;
+  обязательной джобе `lint`. Фрагмент — файл `newsfragments/<что-это>.<feat|fix|quality|limit|chore>.md`
+  (инструкция — в `newsfragments/README.md`). `towncrier build` в CI НЕ запускается: очередь сливает
+  в раздел версии только `release_bump` на бампе;
 - **формат новых коммитов** — `cz check` от точки включения
   (`pyproject.toml -> [tool.ai_ops.release_gates] commit_format_enforced_after`). Только НОВЫЕ:
   в истории 72 коммита без conventional-префикса из 594, и переписывать её не будем;
 - **выпуск без раздела CHANGELOG для своей версии ОТКАЗЫВАЕТСЯ** (`release.yml`). Прежде он выходил
   «с краткими записками», то есть с пустой историей.
+- **описание выпуска для владельца проверено строго** (#1210). `release_bump` собирает слой владельца
+  и проверяет его `validate_release_notes` (правила — `registry/communication-policy.yaml ->
+  release_notes`) ДО записи файлов; `release.yml` повторяет проверку на релизном коммите (pytest
+  `-m release_gate`), так что ручная правка CHANGELOG мимо неё не пройдёт. Замечание, нет слоя или нет
+  правил — тег не создаётся.
 
 Согласованность версии (`VERSION` ↔ манифест ↔ `registry/release-claims.yaml`) уже проверяют
 `validate_ai_first_registry` (п. 7) и `validate_release_claims` (п. 1) — второй механизм на то же
 место был бы второй правдой.
 
-1. Обновить `VERSION`, `manifest/ai-ops-manifest.yaml -> ai_ops.package_version`
-   и добавить раздел `## [X.Y.Z] — дата` в `CHANGELOG.md`.
-2. Коммит `release: AI Ops Kit vX.Y.Z` в `main`.
+1. Написать описание выпуска для владельца по шаблону `templates/release/ReleaseNotes.md` (слой А:
+   что меняется для вас, что вошло, известные ограничения, что сделать после выпуска, подробнее —
+   каждый пункт со ссылкой на источник) — это делает агент release-manager или человек. Известные
+   ограничения заранее записываются фрагментами `newsfragments/<что-это>.limit.md`: бамп сам допишет их
+   в «Известные ограничения», если автор их ещё не назвал. Затем одной командой:
+   `python3 -m ai_ops_kit.devtools.release_bump X.Y.Z --title "…" --date YYYY-MM-DD --owner-notes notes.md`.
+   Она поднимает версию во всех поверхностях, сливает очередь фрагментов в раздел `## [X.Y.Z]`
+   `CHANGELOG.md` (слой Б) и кладёт в его начало проверенный слой А между
+   `<!-- owner-layer:start -->` / `<!-- owner-layer:end -->`. Без `--owner-notes`, с замечанием
+   проверки или без правил в реестре бамп отказывает и ничего не меняет.
+2. Коммит `chore(release): vX.Y.Z — …` в `main` через PR.
 3. Тег `vX.Y.Z` и GitHub Release создаёт автоматически `.github/workflows/release.yml`
-   (по изменению VERSION в main; текст — раздел CHANGELOG). Руками теги не создавать.
+   (по изменению VERSION в main; текст — слой владельца и ссылка на полный раздел CHANGELOG; у
+   раздела без маркеров — раздел целиком). Руками теги не создавать.

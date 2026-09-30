@@ -8,8 +8,7 @@ AI Ops Kit устанавливается в child-репозитории как
 your-project/
 ├── .ai/
 │   ├── managed/          # AI Ops Kit (обновляется автоматически)
-│   │   ├── tools/
-│   │   ├── validation/
+│   │   ├── ai_ops_kit/
 │   │   ├── registry/
 │   │   └── ...
 │   ├── usage/            # Usage ledger (стоимость вызовов)

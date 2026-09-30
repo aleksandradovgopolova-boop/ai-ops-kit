@@ -1141,52 +1141,13 @@ work:
   # `namesake-cascade-is-named-in-full` (PR #1113) — и шире, чем планировалось здесь. Запись ушла в
   # history/plan-history.yaml со статусом dropped: принцип dp-001, дубли уже построенного отклоняем.
   # ── Направление release-notes-speak-to-people (взято 2026-09-29, #1210) ─────────────────────────
-  # Три работы по НЕПЕРЕСЕКАЮЩИМСЯ write_scope на общем договоре (см. цель): шаблон+правила+агент,
-  # машинная проверка, публикация слоя А китом. Полевая проверка — на следующем выпуске кита и PR
-  # обновления ии-среды.
-  - id: release-notes-template-rules-and-agent
+  # Все три работы ЗАКРЫТЫ в историю 2026-09-29: шаблон и правила (#1219), машинная проверка (#1214),
+  # выпуск кита публикует слой для людей (#1216). Исходы направления НЕ засчитаны: ни одного выпуска
+  # кита по новому порядку ещё не было — засчёт на первом настоящем выпуске и PR обновления дочки.
+  - id: first-release-written-to-people
     title: >-
-      Русский шаблон описания выпуска в два слоя, правила в communication-policy и инструкция агенту
-      release-manager
-    type: docs
-    goal: release-notes-speak-to-people
-    status: todo
-    owner_role: docs
-    value: high
-    issue: 1210
-    write_scope:
-    - templates/release/ReleaseNotes.md
-    - templates/documentation/ReleaseNotes.md
-    - registry/communication-policy.yaml
-    - agents/delivery/release-manager.md
-    - skills/user-documentation/
-    - evaluations/agents/
-    rationale: >-
-      Шаблон дочки — пустые английские заголовки без правил; правило «на языке результата» живёт
-      прозой в newsfragments/README.md и не исполняется; агент, который пишет описание, инструкции
-      по нему не получает.
-
-  - id: release-notes-checked-by-machine
-    title: >-
-      Проверка описания выпуска: в дочке рекомендательная, для слоя А кита — строгая; длина
-      фрагментов — сначала замер и предупреждение
-    type: quality
-    goal: release-notes-speak-to-people
-    status: todo
-    owner_role: engineer
-    value: medium
-    issue: 1210
-    write_scope:
-    - ai_ops_kit/validation/validate_release_notes.py
-    - tests/unit/test_validate_release_notes*
-    rationale: >-
-      Медиана пункта CHANGELOG — 468 знаков, самый длинный — 1 732; предел нигде не проверяется. Жёсткий
-      предел сразу повалил бы поток, поэтому для фрагментов — предупреждение и замер, храповик потом.
-
-  - id: kit-release-publishes-the-owner-layer
-    title: >-
-      Выпуск кита публикует слой А: release_bump --headline, GitHub Release со слоем А, тип фрагмента
-      «ограничения», слой А открытым текстом в PR обновления дочки
+      Первый выпуск кита по новому порядку: слой для людей проходит строгую проверку, GitHub Release и
+      PR обновления ии-среды несут его открытым текстом
     type: delivery
     goal: release-notes-speak-to-people
     status: todo
@@ -1194,16 +1155,10 @@ work:
     value: high
     issue: 1210
     write_scope:
-    - ai_ops_kit/devtools/release_bump.py
-    - .github/workflows/release.yml
-    - templates/ci/ai-ops-update.yml
-    - installer/update_ops.py
-    - tests/unit/test_release_bump*
-    - tests/unit/test_release_owner_layer*
+    - qualification/
     rationale: >-
-      `release.yml` копирует раздел CHANGELOG целиком (вместе со «Служебным»); PR обновления в дочке
-      несёт «FROM → TO» и JSON, сводка спрятана внутри; «Честно: что не сделано» в 4.8.0 — ручная
-      вставка, механизма нет.
+      Механизм построен и проверен тестами, но ни один настоящий выпуск по нему не собирался; засчитать
+      исходы до этого — выдать построенное за доказанное.
 
   # ── Направление child-code-style-held-by-machine (взято 2026-09-29, ресерч #1183) ─────────────
   # Первая волна (шесть работ) ЗАКРЫТА в историю 2026-09-29: статьи CODE-011/012 (#1194), профиль
