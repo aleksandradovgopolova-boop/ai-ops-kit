@@ -174,3 +174,25 @@ def test_unknown_git_base_refuses_execution(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "changed_paths", lambda *a: (_ for _ in ()).throw(subprocess.CalledProcessError(128, "git")))
     monkeypatch.setattr(cli.subprocess, "call", lambda *a, **kw: pytest.fail("executed on incomplete scope"))
     assert cli.main(["--root", str(tmp_path), "--base", "missing"]) == 2
+
+
+def test_multiline_js_import_keeps_its_consumer(tmp_path):
+    write(tmp_path, "src/a.ts", "export const a = 1;")
+    write(tmp_path, "tests/direct.test.ts", "import { a } from '../src/a';")
+    write(tmp_path, "tests/multiline.test.ts", "import {\n a\n} from '../src/a';")
+    profile = {"stacks": [{"language": "typescript", "commands": {"test": "vitest run"}}]}
+    result = tiers.select_tests(["src/a.ts"], tmp_path, profile=profile)
+    assert not result["full_command"]
+    assert result["affected_tests"] == ["tests/direct.test.ts", "tests/multiline.test.ts"]
+
+
+def test_side_effect_before_multiline_import_keeps_both_dependencies(tmp_path):
+    write(tmp_path, "src/a.ts", "export const a = 1;")
+    write(tmp_path, "src/b.ts", "export const b = 2;")
+    write(tmp_path, "tests/direct.test.ts", "import { a } from '../src/a';")
+    write(tmp_path, "tests/mixed.test.ts", "import '../src/a';\nimport {\n b\n} from '../src/b';")
+    graph = repo_graph.build_graph(tmp_path, subdirs=None)
+    assert graph["import_edges"]["tests/mixed.test.ts"] == ["src/a.ts", "src/b.ts"]
+    profile = {"stacks": [{"language": "typescript", "commands": {"test": "vitest run"}}]}
+    result = tiers.select_tests(["src/a.ts"], tmp_path, profile=profile)
+    assert result["affected_tests"] == ["tests/direct.test.ts", "tests/mixed.test.ts"]
