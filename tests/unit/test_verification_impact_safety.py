@@ -59,11 +59,31 @@ def test_deleted_test_forces_full(tmp_path):
     assert tiers.select_tests(["tests/test_deleted.py"], tmp_path, profile=PROFILE)["full_command"]
 
 
-def test_direct_test_edits_do_not_scan_dependencies(tmp_path, monkeypatch):
-    write(tmp_path, "tests/test_a.py", "def test_a(): pass")
-    monkeypatch.setattr(repo_graph, "build_graph", lambda *a, **kw: pytest.fail("unnecessary graph"))
-    result = tiers.select_tests(["tests/test_a.py"], tmp_path, profile=PROFILE)
-    assert not result["full_command"] and result["affected_tests"] == ["tests/test_a.py"]
+def test_test_helper_edit_includes_consumers(tmp_path):
+    write(tmp_path, "tests/test_helpers.py", "def helper(): return 1\ndef test_helper(): pass")
+    write(tmp_path, "tests/test_consumer.py", "from tests.test_helpers import helper\ndef test_consumer(): assert helper() == 1")
+    result = tiers.select_tests(["tests/test_helpers.py"], tmp_path, profile=PROFILE)
+    assert not result["full_command"]
+    assert result["affected_tests"] == ["tests/test_consumer.py", "tests/test_helpers.py"]
+
+
+def test_js_directory_import_includes_both_consumers(tmp_path):
+    write(tmp_path, "src/util/index.ts", "export const value = 1;")
+    write(tmp_path, "tests/direct.test.ts", "import { value } from '../src/util/index';")
+    write(tmp_path, "tests/directory.test.ts", "import { value } from '../src/util';")
+    profile = {"stacks": [{"language": "typescript", "commands": {"test": "vitest run"}}]}
+    result = tiers.select_tests(["src/util/index.ts"], tmp_path, profile=profile)
+    assert not result["full_command"]
+    assert result["affected_tests"] == ["tests/direct.test.ts", "tests/directory.test.ts"]
+
+
+def test_commonjs_alias_forces_full(tmp_path):
+    write(tmp_path, "src/value.ts", "export const value = 1;")
+    write(tmp_path, "tests/direct.test.ts", "import { value } from '../src/value';")
+    write(tmp_path, "tests/alias.test.ts", "const value = require('@src/value');")
+    profile = {"stacks": [{"language": "typescript", "commands": {"test": "vitest run"}}]}
+    result = tiers.select_tests(["src/value.ts"], tmp_path, profile=profile)
+    assert result["full_command"] and "incomplete" in result["note"]
 
 
 def test_module_checkpoint_expands_neighbour_sources(tmp_path):

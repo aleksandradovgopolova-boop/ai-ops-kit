@@ -161,24 +161,20 @@ def select_tests(changed_files: list, child_root: str, tier: str = None, lifecyc
         return fallback("deleted, missing or renamed source")
     if any(Path(f).suffix not in (".py", *repo_graph.JS_TS_EXTENSIONS) for f in sources):
         return fallback("non-source assets/configuration need the complete configured suite")
-    is_test = lambda f: (Path(f).name.startswith("test_") and f.endswith(".py")) or any(
-        token in f for token in (".test.", ".spec."))
-    # Direct test edits need no repository scan. Module checkpoints still inspect neighbours.
-    if tier == "affected" and all(is_test(f) for f in sources):
-        affected = sorted(set(sources))
-    else:
-        graph = repo_graph.build_graph(child_root, subdirs=None, include_js=True)
-        if any(f not in graph["files"] for f in sources):
-            return fallback("non-source assets/configuration need the complete configured suite")
-        if graph.get("uncertainties"):
-            return fallback("dependency graph incomplete: " + ", ".join(graph["uncertainties"][:3]))
-        if any(not repo_graph.affected_tests(graph, [f]) for f in sources):
-            return fallback("at least one changed source has unknown test impact")
-        impacted = sources
-        if tier == "module":
-            parents = {str(Path(f).parent) for f in sources}
-            impacted = [f for f in graph["files"] if str(Path(f).parent) in parents]
-        affected = repo_graph.affected_tests(graph, impacted)
+    # Test modules can be imported as helpers by other tests: include their
+    # importers too. Unknown dependencies anywhere retain the full fallback.
+    graph = repo_graph.build_graph(child_root, subdirs=None, include_js=True)
+    if any(f not in graph["files"] for f in sources):
+        return fallback("non-source assets/configuration need the complete configured suite")
+    if graph.get("uncertainties"):
+        return fallback("dependency graph incomplete: " + ", ".join(graph["uncertainties"][:3]))
+    if any(not repo_graph.affected_tests(graph, [f]) for f in sources):
+        return fallback("at least one changed source has unknown test impact")
+    impacted = sources
+    if tier == "module":
+        parents = {str(Path(f).parent) for f in sources}
+        impacted = [f for f in graph["files"] if str(Path(f).parent) in parents]
+    affected = repo_graph.affected_tests(graph, impacted)
     profile = profile if profile is not None else project_detector.detect(child_root)
     test_commands = _get_test_commands_from_profile(profile, affected, child_root)
     if not test_commands:

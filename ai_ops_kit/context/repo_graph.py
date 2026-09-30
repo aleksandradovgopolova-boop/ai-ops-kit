@@ -160,6 +160,7 @@ def _uncertain_dependency(path: Path) -> bool:
                 isinstance(n.func, ast.Attribute) and n.func.attr in
                 ("import_module", "spec_from_file_location", "run_path", "run_module")) for n in ast.walk(tree))
         return bool(re.search(r"\bimport\s*\(|\brequire\s*\((?!\s*['\"])|"
+                              r"\brequire\s*\(\s*['\"](?:@|/)|"
                               r"(?:from\s*|import\s*)['\"](?:@|/)|\bexport\s+.*?\bfrom\s", text))
     except (SyntaxError, OSError, UnicodeError):
         return True
@@ -178,7 +179,7 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
         rel = str(f.relative_to(root))
         rels.append((f, rel))
         stem_to_rels.setdefault(f.stem, set()).add(rel)
-        if f.name == "__init__.py":
+        if f.name == "__init__.py" or (f.suffix in JS_TS_EXTENSIONS and f.stem == "index"):
             stem_to_rels.setdefault(f.parent.name, set()).add(rel)
 
     file_info, symbol_index, import_edges, tests = {}, {}, {}, {}
