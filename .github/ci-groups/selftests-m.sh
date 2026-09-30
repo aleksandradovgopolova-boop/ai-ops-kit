@@ -17,5 +17,6 @@ cd "$(dirname "$0")/../.."
 # Партиция полная и непересекающаяся по построению: здесь ровно `not (то, что в группе a)` с тем же
 # исключением монолита, ни один slow-тест не потерян и не гоняется дважды. Границу уточнять по
 # фактическим временам прогона.
-python3 -m pytest -n auto --dist loadfile tests/ -q -m "slow and not nightly and not release_gate" \
+# Contract tests have one owner: the contracts job; compatibility jobs remain complete.
+python3 -m pytest -n auto --dist loadfile tests/ --ignore=tests/contracts -q -m "slow and not nightly and not release_gate" \
   -k "not (test_a or test_b or test_c or test_d or test_e or test_f or test_g or test_h or test_w) and not test_validate_release"

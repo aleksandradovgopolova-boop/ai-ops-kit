@@ -13,5 +13,6 @@ cd "$(dirname "$0")/../.."
 # Набор volume-bound (равный счёт ≈ равное время); границу уточнять по фактическим временам джоб CI.
 # Новые тесты с прочими буквами копятся именно ЗДЕСЬ — при заметном перекосе двигать границу
 # (перенести букву в fast-1) по замеру времён.
-python3 -m pytest -n auto --dist loadfile tests/ -q -m "not slow" \
+# Contract tests have one owner: the contracts job; compatibility jobs remain complete.
+python3 -m pytest -n auto --dist loadfile tests/ --ignore=tests/contracts -q -m "not slow" \
   -k "not (test_r or test_s or test_c or test_b)"

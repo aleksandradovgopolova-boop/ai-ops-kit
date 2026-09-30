@@ -29,12 +29,13 @@ def main(argv):
     c.add_argument("root", nargs="?", default=".")
     c.add_argument("--policy-level", default="execution")
     c.add_argument("--changed", nargs="*", default=None, help="changed files for progressive verification")
+    c.add_argument("--intent", choices=("explore", "draft", "ready_for_review", "merge_candidate", "release_candidate"))
     c.add_argument("--json", action="store_true")
     a = ap.parse_args(argv)
     if a.cmd == "collect":
         profile = project_detector.detect(a.root)
         policy = tool_broker.Policy(level=a.policy_level)
-        r = evidence_collector.collect(profile, a.root, policy, changed_files=a.changed, broker=tool_broker)
+        r = evidence_collector.collect(profile, a.root, policy, changed_files=a.changed, broker=tool_broker, lifecycle_intent=a.intent)
         if a.json:
             print(json.dumps(r, ensure_ascii=False, indent=2))
         else:
