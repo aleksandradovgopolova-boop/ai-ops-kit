@@ -131,11 +131,12 @@ def _analyze_js(path: Path):
 
     # Imports: import ... from 'module', import 'module', require('module')
     mods = set()
-    # ES modules: import ... from '...'
-    for m in re.findall(r'''import\s+(?:.*?\s+from\s+)?['"]([^'"]+)['"]''', content):
-        # Берём только relative imports (начинаются с . или ..) или внутренние модули
+    # Read side-effect imports separately from `from` specifiers: a multiline
+    # named import must not swallow a preceding side-effect statement.
+    specifiers = set(re.findall(r"\bimport\s*['\"]([^'\"]+)['\"]", content))
+    specifiers.update(re.findall(r"\bfrom\s*['\"]([^'\"]+)['\"]", content))
+    for m in specifiers:
         if m.startswith(".") or (not m.startswith("/") and not m.startswith("@")):
-            # Извлекаем имя модуля (без расширения и пути)
             mod_name = Path(m).stem if "/" in m else m.split("/")[0]
             mods.add(mod_name)
     # CommonJS: require('...')
