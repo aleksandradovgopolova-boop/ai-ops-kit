@@ -222,7 +222,7 @@ def _add_warnings(iv: dict, extra: list) -> None:
         iv["warnings"] = list(iv.get("warnings") or []) + extra
 
 
-def collect(profile, root, policy, changed_files=None, broker=None):
+def collect(profile, root, policy, changed_files=None, broker=None, lifecycle_intent=None):
     """Прогнать команды профиля через Tool Broker и собрать evidence для implementation_verification.
 
     v3.27.3 WP4: Если changed_files задан, используется verification_tiers для определения
@@ -245,7 +245,7 @@ def collect(profile, root, policy, changed_files=None, broker=None):
     # v3.27.3 WP4: Progressive Verification — определяем verification tier и targeted command
     verification_info = None
     if changed_files:
-        verification_info = verification_tiers.select_tests(changed_files, str(root))
+        verification_info = verification_tiers.select_tests(changed_files, str(root), lifecycle_intent=lifecycle_intent, profile=profile)
         tier = verification_info.get("tier", "affected")
         impact_status = verification_info.get("impact_status")
         targeted_cmd = verification_info.get("targeted_command")
