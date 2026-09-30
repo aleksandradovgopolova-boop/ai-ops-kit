@@ -70,8 +70,9 @@ def test_every_declared_probe_of_the_kit_kills_its_mutant():
     Это не про аккуратность автора: выживший мутант означает, что механизм держится на честном слове
     и его можно молча снести, оставив контур зелёным. Ровно тот класс, который 11 джоб CI не видят.
     """
-    rep = mp.run(PKG_ROOT)
+    rep = mp.run(PKG_ROOT, workers=4)
 
+    assert rep["checked"] == len(mp.load_probes(PKG_ROOT)), "часть реестра потеряна при распределении"
     assert rep["checked"] > 0, "реестр проб пуст — контур ничего не охраняет"
     assert rep["survived"] == [], (
         f"мутанты ВЫЖИЛИ (охрана не проверяется ничем): {rep['survived']}")
@@ -247,3 +248,44 @@ def test_only_selected_probes_run_when_asked(tmp_path):
     rep = mp.run(root, only=["takoj-proby-net"], python=sys.executable)
 
     assert rep["checked"] == 0 and rep["survived"] == []
+
+
+def test_parallel_private_copies_match_serial_outcomes_and_preserve_source(tmp_path):
+    root = _probes(_mini_repo(tmp_path))
+    (root / "tests/test_second.py").write_text('from guarded import keep\ndef test_ok(): assert keep(1) == "ок"\n')
+    registry = root / "quality/mutation-probes.yaml"
+    doc = yaml.safe_load(registry.read_text())
+    doc["probes"].append({"id": "ok-return", "file": "guarded.py", "find": 'return "ок"',
+                          "replace_with": 'return "сломано"', "tests": ["tests/test_second.py"], "why": "return"})
+    registry.write_text(yaml.safe_dump(doc, allow_unicode=True))
+    before = (root / "guarded.py").read_bytes()
+    serial = mp.run(root, python=sys.executable, workers=1)
+    parallel = mp.run(root, python=sys.executable, workers=2)
+    assert parallel == serial
+    assert [p["id"] for p in parallel["probes"]] == ["guard-refuses-none", "ok-return"]
+    assert [p["outcome"] for p in parallel["probes"]] == ["killed", "killed"]
+    assert (root / "guarded.py").read_bytes() == before
+
+
+@pytest.mark.parametrize("workers", [0, 5, True, 1.5])
+def test_invalid_parallelism_refuses_before_execution(tmp_path, workers):
+    with pytest.raises(ValueError, match="workers"):
+        mp.run(tmp_path, workers=workers)
+
+
+def test_mutant_timeout_is_unknown_not_killed(tmp_path, monkeypatch):
+    root = _probes(_mini_repo(tmp_path))
+    calls = iter([(0, "baseline green"), (124, "timeout")])
+    monkeypatch.setattr(mp, "_pytest", lambda *args: next(calls))
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"]
+    assert result["probes"][0]["outcome"] == "not_verified"
+
+
+def test_mutation_target_cannot_escape_copy(tmp_path):
+    root = _probes(_mini_repo(tmp_path / "repo"), file="../external.py")
+    external = tmp_path / "external.py"
+    external.write_text(GUARDED)
+    result = mp.run(root, workers=2)
+    assert result["not_verified"] == ["guard-refuses-none"]
+    assert external.read_text() == GUARDED

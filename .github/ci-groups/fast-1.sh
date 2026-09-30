@@ -26,5 +26,6 @@ cd "$(dirname "$0")/../.."
 # временам джоб CI, а не по буквам. Имена CI-контекстов новые (`quality (fast-1, …)`) — required-
 # статусы branch protection обязан обновить владелец (см. описание PR), иначе старый `fast` не
 # отчитается и заблокирует ветку.
-python3 -m pytest -n auto --dist loadfile tests/ -q -m "not slow" \
+# Contract tests have one owner: the contracts job; compatibility jobs remain complete.
+python3 -m pytest -n auto --dist loadfile tests/ --ignore=tests/contracts -q -m "not slow" \
   -k "test_r or test_s or test_c or test_b"

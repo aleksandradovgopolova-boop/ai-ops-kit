@@ -67,6 +67,10 @@ def _report(now=(), next_=()):
             "roadmap": {"now": block(now), "next": block(next_), "later": []}}
 
 
+def _epic(client):
+    return next(i for i in client.list() if "roadmap-sync: dir:" in i.body)
+
+
 def _plan_items(*works):
     return [{"id": wid, "goal": goal, "status": st} for wid, goal, st in works]
 
@@ -82,11 +86,13 @@ def test_creates_epics_and_subtasks_and_links_them():
     s.sync(rep, items, c, apply=True)
 
     titles = [i.title for i in c.list()]
-    assert any(t.startswith("[roadmap:checks-that-run]") for t in titles)   # эпик
-    assert sum(1 for t in titles if t.startswith("[checks-that-run]")) == 2  # две открытые работы
+    assert "checks-that-run: Каждая объявленная проверка реально исполняется" in titles   # эпик
+    assert {t.split(": ")[0] for t in titles if not t.startswith("checks-that-run:")} == {
+        "w-types", "w-fmt"}                                                   # две открытые работы
     # Эпик ссылается на номера подзадач (task-list → sub-issue).
-    epic = next(i for i in c.list() if i.title.startswith("[roadmap:"))
-    sub_nums = [i.number for i in c.list() if i.title.startswith("[checks-that-run]")]
+    epic = _epic(c)
+    sub_nums = [i.number for i in c.list() if "roadmap-sync: work:" in i.body]
+    assert len(sub_nums) == 2
     for n in sub_nums:
         assert f"#{n}" in epic.body
     assert "achieved" not in "".join(i.body for i in c.list())
@@ -157,9 +163,9 @@ def test_waiting_on_owner_work_shown_in_epic_not_as_subtask():
     s.sync(rep, items, c, apply=True)
 
     titles = [i.title for i in c.list()]
-    assert any(t.startswith("[roadmap:owner-speaks") for t in titles)                 # эпик заведён
-    assert not any(t.startswith("[owner-speaks-product-not-pipeline]") for t in titles)  # подзадачи НЕТ
-    epic = next(i for i in c.list() if i.title.startswith("[roadmap:"))
+    assert titles == ["owner-speaks-product-not-pipeline: "
+                      "Владелец говорит обычным языком, кит ведёт остальное"]   # эпик, подзадачи НЕТ
+    epic = _epic(c)
     assert "Ждёт owner-прогон" in epic.body
     assert "zero-touch-run" in epic.body
     assert "владелец проводит на cockpit" in epic.body
@@ -177,3 +183,18 @@ def test_parse_key_reads_marker_and_legacy():
     assert s.parse_key(s.Issue(2, "[roadmap:foo] t", "тело", "open")) == "dir:foo"
     assert s.parse_key(s.Issue(3, "[foo] t", "Работа `w-1` под ...", "open")) == "work:foo:w-1"
     assert s.parse_key(s.Issue(4, "не наше", "просто issue", "open")) is None
+
+
+def test_old_format_issue_with_marker_keeps_its_title_and_is_not_duplicated():
+    # Живые issue заведены в старом формате `[roadmap:<goal>] …`. Новый формат — только для новых:
+    # сверка находит старое issue по маркеру, обновляет ТЕЛО и не заводит второе, заголовок не трогает.
+    rep = _report(now=[("checks-that-run", [("a", False)])])
+    old_title = "[roadmap:checks-that-run] checks-that-run"
+    seed = [s.Issue(900, old_title, "<!-- roadmap-sync: dir:checks-that-run -->\nстарое тело", "open")]
+    c = FakeClient(seed)
+    plan = s.sync(rep, [], c, apply=True)
+    assert plan.creates == []
+    assert [a.kind for a in plan.actions] == ["update"]
+    iss = c.list()[0]
+    assert iss.title == old_title
+    assert iss.body.startswith("<!-- roadmap-sync: dir:checks-that-run -->")

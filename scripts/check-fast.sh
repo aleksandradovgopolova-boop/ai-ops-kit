@@ -39,6 +39,14 @@ else
   echo "ЛИНТЕР НЕ ЗАПУЩЕН: ruff не установлен, класс F821/F811/B023 сейчас НЕ проверен (в CI он есть)."
 fi
 
+# Opt-in impact mode includes ALL dirty files plus optional committed base diff.
+# Existing default stays the complete non-slow suite; merge/release forces check-full.
+if [[ "${1:-}" == "--impact" ]]; then
+  shift
+  "$PYTHON" -m ai_ops_kit.devtools.impact_check_cli "$@"
+  exit $?
+fi
+
 # -n auto: параллель по ядрам (набор параллель-безопасен — проверено на полном прогоне). Без
 # pytest-xdist прогон идёт последовательно — быстрый профиль не обязан падать из-за его отсутствия.
 XNUM=""

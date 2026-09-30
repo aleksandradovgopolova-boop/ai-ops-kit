@@ -45,7 +45,7 @@ class TestDecideTier:
         """lifecycle_intent=explore -> skip."""
         tier = verification_tiers.decide_tier(["tools/usage_ledger.py"],
                                               lifecycle_intent="explore")
-        assert tier == "skip"
+        assert tier == "affected"
 
     def test_decide_tier_lifecycle_intent_merge(self):
         """lifecycle_intent=merge_candidate -> full."""
@@ -68,7 +68,7 @@ class TestDecideTier:
         """lifecycle_intent takes precedence over file-based detection."""
         tier = verification_tiers.decide_tier(["ai_ops_kit/providers/orchestrator.py"],
                                               lifecycle_intent="explore")
-        assert tier == "skip"  # intent overrides even infra files
+        assert tier == "full"  # risk floor wins over intent
 
 
 @pytest.mark.unit
@@ -106,7 +106,7 @@ class TestSelectTests:
         (tmp_path / "tools" / "module.py").write_text("def func(): return 1\n", encoding="utf-8")
         (tmp_path / "tools" / "test_module.py").write_text(
             "import module\ndef test_func(): assert module.func() == 1\n", encoding="utf-8")
-        result = verification_tiers.select_tests(["tools/module.py"], str(tmp_path))
+        result = verification_tiers.select_tests(["tools/module.py"], str(tmp_path), profile={"stacks": [{"language": "python", "commands": {"test": "pytest tools/ -q"}}]})
         assert result["tier"] == "affected"
         assert "tools/test_module.py" in (result["affected_tests"] or [])
         assert result["impact_status"] == verification_tiers.IMPACT_TARGETED_TESTS_FOUND

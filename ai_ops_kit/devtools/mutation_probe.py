@@ -28,6 +28,7 @@
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import shutil
 import subprocess
@@ -71,7 +72,7 @@ def _pytest(root, tests, python=None, timeout=900):
     return r.returncode, (r.stdout or "")[-400:]
 
 
-def run(root=None, only=None, python=None, timeout=900) -> dict:
+def _run_serial(root, probes, python=None, timeout=900) -> dict:
     """Прогнать пробы. -> {"checked": n, "survived": [...], "not_verified": [...], "probes": [...]}.
 
     `survived` — мутант выжил: охранная проверка снята, а тесты зелёные. Это ДЕФЕКТ КОНТУРА, и он
@@ -79,7 +80,6 @@ def run(root=None, only=None, python=None, timeout=900) -> dict:
     на честном слове автора.
     """
     root = Path(root or PKG)
-    probes = [p for p in load_probes(root) if not only or p.get("id") in set(only)]
     out, survived, not_verified = [], [], []
     baseline_cache = {}
 
@@ -91,6 +91,10 @@ def run(root=None, only=None, python=None, timeout=900) -> dict:
             tests = list(pr.get("tests") or [])
             target = work / str(pr.get("file"))
             entry = {"id": pid, "file": pr.get("file"), "tests": tests, "why": pr.get("why")}
+
+            if not target.resolve().is_relative_to(work.resolve()):
+                entry.update(outcome="not_verified", reason="mutation target escapes isolated copy")
+                not_verified.append(pid); out.append(entry); continue
 
             # 1. База: названные тесты обязаны быть ЗЕЛЁНЫМИ до мутации.
             key = tuple(tests)
@@ -121,7 +125,10 @@ def run(root=None, only=None, python=None, timeout=900) -> dict:
             finally:
                 target.write_text(src, encoding="utf-8")
 
-            if rc == 0:
+            if rc == 124:
+                entry.update(outcome="not_verified", reason="mutant run timed out; no proof of detection")
+                not_verified.append(pid)
+            elif rc == 0:
                 entry.update(outcome="survived",
                             reason="охрана снята, а названные тесты ЗЕЛЁНЫЕ — проверка не проверяется")
                 survived.append(pid)
@@ -133,10 +140,45 @@ def run(root=None, only=None, python=None, timeout=900) -> dict:
             "survived": survived, "not_verified": not_verified, "probes": out}
 
 
+def run(root=None, only=None, python=None, timeout=900, workers=1) -> dict:
+    """Bounded opt-in parallelism; every worker owns a private disposable repository copy.
+
+    Probes sharing a test command stay together, preserving one green baseline per command.
+    There is no persistent cache or shared mutable tree; output retains registry order.
+    """
+    if not isinstance(workers, int) or isinstance(workers, bool) or not 1 <= workers <= 4:
+        raise ValueError("workers must be an integer from 1 to 4")
+    root = Path(root or PKG)
+    probes = [p for p in load_probes(root) if not only or p.get("id") in set(only)]
+    if workers == 1 or len(probes) < 2:
+        return _run_serial(root, probes, python, timeout)
+    groups = {}
+    for index, probe in enumerate(probes):
+        groups.setdefault(tuple(probe.get("tests") or []), []).append((index, probe))
+    buckets = [[] for _ in range(min(workers, len(groups)))]
+    weights = [0] * len(buckets)
+    for group in sorted(groups.values(), key=lambda g: -len(g)):
+        bucket = min(range(len(buckets)), key=lambda i: weights[i])
+        buckets[bucket].extend(group)
+        weights[bucket] += len(group) + 1
+    if not buckets:
+        return _run_serial(root, probes, python, timeout)
+    def execute(bucket):
+        result = _run_serial(root, [probe for _, probe in bucket], python, timeout)
+        return [(index, entry) for (index, _), entry in zip(bucket, result["probes"], strict=True)]
+    with ThreadPoolExecutor(max_workers=len(buckets)) as pool:
+        indexed = [entry for results in pool.map(execute, buckets) for entry in results]
+    entries = [entry for _, entry in sorted(indexed)]
+    return {"schema_version": 1, "kind": "mutation-probe-report", "checked": len(entries),
+            "survived": [e["id"] for e in entries if e["outcome"] == "survived"],
+            "not_verified": [e["id"] for e in entries if e["outcome"] == "not_verified"], "probes": entries}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(prog="mutation_probe.py")
     ap.add_argument("repo", nargs="?", default=str(PKG))
     ap.add_argument("--only", default="")
+    ap.add_argument("--workers", type=int, choices=range(1, 5), default=1, help="isolated copies (1 restores serial execution)")
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--selftest", action="store_true")
     ns = ap.parse_args(argv if argv is not None else sys.argv[1:])
@@ -144,7 +186,7 @@ def main(argv=None):
         print(__doc__)
         print("Проверки модуля — в tests/unit/test_mutation_probe.py (в том числе выживший мутант).")
         return 0
-    rep = run(ns.repo, only=[x for x in ns.only.split(",") if x])
+    rep = run(ns.repo, only=[x for x in ns.only.split(",") if x], workers=ns.workers)
     if ns.json:
         print(json.dumps(rep, ensure_ascii=False, indent=2))
     else:

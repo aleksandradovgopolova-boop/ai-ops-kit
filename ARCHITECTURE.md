@@ -56,8 +56,7 @@ workflow-контракты, quality gates, маршрутизация моде�
 
 ## 5. Components
 
-- `ai_ops_kit/` — код движка по пакетам: `shared`/`context`/`engine`/`gates`/`providers`/
-  `lifecycle`/`planning`/`intelligence`/`delivery`/`engops`/`security`/`ui`/`cli`/`devtools`.
+- `ai_ops_kit/` — код движка по пакетам; перечень и слои — `packages/layering.yaml`.
 - `ai_ops_kit/planning/` — контур Planning & Execution: модель контуров продукта, delivery-plan,
   ROADMAP-контракт, отбор следующей работы, понимание репозитория при онбординге.
 - `ai_ops_kit/validation/` — валидаторы (Python, только pyyaml); единственная зона, из которой
@@ -173,7 +172,6 @@ built ≠ wired (дормант заморожен потолком-ратчет
 
 ## 19. Known Limitations
 
-- Взаимные связи ВНУТРИ ядра пакетов пока разрешены осознанно (замер как потолок; строгий DAG — позже).
 - Разбор импортов JS/TS в анализе дочки — регулярными выражениями (даёт пропуски, не ложные тревоги);
   инварианты поверх такого графа рождаются `advisory`.
 - Governance на PR дочки проверяет здоровье УСТАНОВКИ, полноценная проверка продукта дочки — в
@@ -185,7 +183,7 @@ built ≠ wired (дормант заморожен потолком-ратчет
 Current: пакетный движок со слоями и ратчетами; registry-driven; managed-доставка с PR-обновлением;
 контур Planning & Execution; artifact-registry Product Operating Layer. Next: инженерный стандарт как
 версионируемый объект (SR-1..4), секционная валидация артефактов (SR-5/6), governance продукта на PR.
-Future: строгий DAG пакетов, supply-chain/OpenSSF проверки, замкнутая петля outcome→insight→work.
+Future: supply-chain/OpenSSF проверки, замкнутая петля outcome→insight→work.
 Триггеры миграций записываются отдельными решениями (ADR/DP), а не молча.
 
 ## 21. AI Development Contract
