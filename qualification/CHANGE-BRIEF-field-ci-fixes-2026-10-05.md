@@ -1,0 +1,11 @@
+# Change Brief — исправления CI по трём owner-led прогонам
+
+Результат: новые установки/обновления не получают пустой GitHub expression, прямой baseline push в защищённый main или неверный язык CodeQL; принятые результаты трёх сессий сведены с самоотчётом владельца о нулевых корректирующих подсказках.
+Пути: templates/ci/ai-ops-{update,feature-coverage,codeql}.yml; tests/unit/test_field_ci_workflows.py; newsfragments/field-ci-fixes.fix.md; квалификационные журналы/наблюдения. GitHub1256 получает ссылку на доказательства без ложного закрытия. Доставка — отдельные PR дочкам после проверки parent; кастомизации/opt-out сохраняются.
+Инварианты: contents:read у coverage; baseline принимается через PR, рост сверх принятого блокируется; CodeQL исключает .ai/managed и зависимости, ошибка чтения/невалидный override не даёт зелёный пропуск; отсутствие подходящего языка называется явно. Нет новых runtime dependencies, gates, пакетов и обязательных конфигурационных полей.
+Failure modes: seed artifact принят за персистентный baseline; пропуск SAST назван проверкой; managed Kit принят за язык продукта; workflow/YAML проходит локально, но expressions не разбираются GitHub; обновление перетирает owner workflow.
+Доказательство: исполняемые шаги workflow на Python/JS/mixed/docs и malformed override; coverage реальный регрессионный сценарий; отсутствие git mutations; actionlint и GitHub CI; full-current-python до коммита; свежий read-only reviewer без авторского контекста до merge.
+Не входит: новые продуктовые фичи, измеренный causal эффект, полный qualification verdict; обновление версии только отдельным релизным действием после проверенного исправления.
+
+
+Уточнение доставки до её выполнения: отдельные owned checkout Garden/Cosmic/dashboard, только .github/workflows/ai-ops-*.yml и при отсутствующем baseline .ai/feature-coverage-baseline.yaml. Existing action pins, Garden Python matrix и dashboard private CodeQL opt-in сохраняются. Исходный baseline рассчитывается validator --seed и предлагается первым PR, не push напрямую. Managed пакет/версия остаются прежними. Artifact допускает hidden files; PR baseline сверяется с git base и не может повысить/удалить/повредить принятый потолок. TypeScript .mts/.cts распознаются; declaration files исключаются.
