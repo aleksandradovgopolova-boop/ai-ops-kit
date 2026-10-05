@@ -19,6 +19,39 @@ kind: delivery-plan-history
 
 
 work:
+  - id: accept-security-signal-field-verdict
+    title: Повторная приёмка независимого полевого вердикта
+    type: quality
+    goal: security-signal-is-actionable
+    status: dropped
+    owner_role: product
+    value: high
+    closed_at: '2026-10-05'
+    evidence: qualification/RELEASE-DELIVERY-v4.9.3-2026-10-05.md
+    result: Дополнительная ручная приёмка удалена как ошибочно добавленное условие; решение владельца 25.09 задаёт три критерия и независимого судью, все три подтверждены на установленном v4.9.3.
+
+  - id: first-release-written-to-people
+    title: 'Первый выпуск кита по новому порядку: слой для людей проходит строгую проверку, GitHub Release
+      и PR обновления ии-среды несут его открытым текстом'
+    type: delivery
+    goal: release-notes-speak-to-people
+    status: done
+    owner_role: delivery
+    value: high
+    issue: 1210
+    write_scope:
+    - qualification/
+    rationale: Механизм построен и проверен тестами, но ни один настоящий выпуск по нему не собирался; засчитать
+      исходы до этого — выдать построенное за доказанное.
+    closed_at: '2026-10-05'
+    pr: 1235
+    evidence: qualification/RELEASE-DELIVERY-v4.9.3-2026-10-05.md
+    result: >-
+      Выпущен v4.9.3 штатным workflow на ad16611c после package-quality и синхронной проверки
+      мутаций. GitHub Release содержит слой владельца; PR ii-sreda#1095 показывает его открытым
+      текстом, установка из чистого тега воспроизводима (679 checksum), четыре smoke прошли.
+      Строгая проверка слоя дочки и независимое ревью прошли; ограничения живого агента сохранены.
+
   - id: security-signal-precision-and-independent-remeasure
     title: Уточнить правило для безопасного запуска команды и повторить независимый замер остатка сигнала
       безопасности на полном дереве реального продукта
