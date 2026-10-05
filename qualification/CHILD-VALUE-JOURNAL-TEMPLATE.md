@@ -7,7 +7,7 @@
 - work_id / cohort / protocol_version / дата регистрации:
 - Дочка / исходный полный SHA / запрос и backlog / реальный пользователь:
 - Включена или исключена / причина (для исключения сохранить в общем журнале):
-- Человек-исполнитель / runtime-model-version / ОС / Kit tag-SHA-digest:
+- Owner-led = да/нет / прежнее знакомство с Kit / человек-исполнитель / runtime-model-version / ОС / Kit tag-SHA-digest:
 - Тип fix/feature / сложность small/extended / обоснование из brief:
 - Заранее полезное поведение и воспроизводимая приёмка / владелец:
 - Outcome показатель / baseline / источник / окно / причина отклонения от default:
