@@ -641,7 +641,8 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/devtools/` — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
   (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,
   `kit_observability`, `model_comparison`, `mutation_probe`, `promotion_qual`, `qual_run`,
-  `retrieval_bench`
+  `retrieval_bench`; `decision_eval`, `decision_capture`, `decision_llm_capture` и `decision_model_experiment` — offline-сравнение bounded decisions
+  и экспериментальный живой Jev capture (#1247 / #1253), без production-проводки
 - `ai_ops_kit/checks/` — проверки-контракты артефактов и результатов: `feature_blueprint`,
   `requirements_artifact`, `plan_artifact`, `spec_artifact`, `acceptance_result`, `reviewer_result`,
   `cross_artifacts`, `run_handoff`, `context_bundle`, `adr_registry`, `architecture_decision`,
@@ -810,3 +811,5 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `.github/workflows/pr-smoke.yml`
 - `.github/workflows/release.yml`
 - `.github/ci-groups/{fast-1,fast-2,contracts,selftests-a,selftests-m}.sh` — разбиение полного контура на группы
+
+- `qualification/decision-plane/` — фиксированный smoke-корпус, локальный baseline JSON/Markdown и инструкция живого сравнения current / LLM / Jev; ограничения и незавершённые прогоны объявлены явно

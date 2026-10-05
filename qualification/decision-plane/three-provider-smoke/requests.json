@@ -1,0 +1,292 @@
+{
+  "dataset_sha256": "0c7e189c13de6f629c2eb6bb16bfcfcbc3f62faeb1e217bbd6cdd992b3dcc724",
+  "requests": [
+    {
+      "id": "ceremony-01",
+      "task": "Опечатка в README",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-02",
+      "task": "Новая интеграция API",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-03",
+      "task": "Изменить пользовательский checkout",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "PRODUCT"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-04",
+      "task": "Удалить production базу",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "destructive": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-05",
+      "task": "Секрет пересёк границу доверия",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "secret_boundary": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-06",
+      "task": "Новый экран с измеримым поведением",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "measurable_behavior": true,
+        "user_facing_change": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-07",
+      "task": "Исправить локальную настройку",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-08",
+      "task": "Выделить модуль без изменения поведения",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-09",
+      "task": "Проверить продуктовую гипотезу",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "RESEARCH"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-10",
+      "task": "Быстрая правка, risk high, просим L0",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "high",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-11",
+      "task": "Инцидент: исправить ротацию ключа",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "incident-fix"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "ceremony-12",
+      "task": "Необратимое изменение; названа мелкой правкой",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "irreversible": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "model-01",
+      "task": "Опечатка в описании",
+      "point": "model_effort",
+      "signals": {
+        "task_type": "QUICK"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ]
+    },
+    {
+      "id": "model-02",
+      "task": "Спроектировать интеграцию",
+      "point": "model_effort",
+      "signals": {
+        "task_type": "ENGINEERING"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ]
+    },
+    {
+      "id": "model-03",
+      "task": "Локальная правка без риска",
+      "point": "model_effort",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ]
+    },
+    {
+      "id": "model-04",
+      "task": "Проверить критическую миграцию",
+      "point": "model_effort",
+      "signals": {
+        "task_type": "CRITICAL",
+        "risk": "critical"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ]
+    },
+    {
+      "id": "agent-01",
+      "task": "Классифицировать мелкую задачу",
+      "point": "agent_skill",
+      "signals": {
+        "task_type": "QUICK",
+        "stage": "intake"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ]
+    },
+    {
+      "id": "agent-02",
+      "task": "Проверить готовность локальной правки",
+      "point": "agent_skill",
+      "signals": {
+        "task_type": "QUICK",
+        "stage": "local-verify"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ]
+    },
+    {
+      "id": "agent-03",
+      "task": "Внести исправление",
+      "point": "agent_skill",
+      "signals": {
+        "task_type": "QUICK",
+        "stage": "local-change"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ]
+    },
+    {
+      "id": "agent-04",
+      "task": "Независимо проверить инженерный код",
+      "point": "agent_skill",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "stage": "review"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ]
+    }
+  ]
+}

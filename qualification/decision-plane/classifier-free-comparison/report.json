@@ -1,0 +1,2440 @@
+{
+  "dataset_sha256": "0c7e189c13de6f629c2eb6bb16bfcfcbc3f62faeb1e217bbd6cdd992b3dcc724",
+  "dataset_version": "0.1",
+  "providers": {
+    "current": {
+      "status": "measured",
+      "kind": "local",
+      "source": {
+        "revision": "38429f984acb7bde79884327b2916954f796f10c",
+        "dirty": true,
+        "source_sha256": {
+          "ai_ops_kit/devtools/decision_eval.py": "999125337b2010bf39a52c6312dc243569bce0f8c034e7444ae40af3f06ed9a2",
+          "ai_ops_kit/gates/spec_levels.py": "024bac5ce8f2fe6ef92ecfb1a954de19981d8c77fc3d1c4c7700dcddb48247e9",
+          "ai_ops_kit/providers/model_router.py": "f5cff23ddd8702b1bb8e5bd13f4476161570ac5fc5da723048c324e95962b8d9",
+          "ai_ops_kit/shared/ai_route.py": "0391d992cdd9706b67054c78d3f07e1349e8c7eabc73f475970aa0bb8e7febe5",
+          "registry/agents.yaml": "45d4e8d5e53db58db7d7fdd87736acc9414aca39aac03fd17a6625a7710e62de",
+          "registry/artifact-registry.yaml": "d7888f4cc7905650546acc628fdce74587e93e52ecef63b1e90b9d6c87343ced",
+          "registry/capability-index.yaml": "a73dd824a5f319c6a065798dd4cdbf45df613a3f6b1eedae1e0e41297f66c712",
+          "registry/capability-policy.yaml": "13faa0ca15f8ae2a3c6bd1e3e40ff9f96962cd80cb6a13111e540730cb74f049",
+          "registry/communication-policy.yaml": "0f3d648018f76cc3334aa3f44c1d74a24a12465e355d5e59ccde4c7c59e0fe9c",
+          "registry/coordination-files.yaml": "c777c2f9406df7df2a978a4f9f4edaead8b8accae2d0d1f68b31db73ff40aafd",
+          "registry/decision-boundary.yaml": "4082fb3a15657f15c9dcdf693c37904e9f01119351823011423ee917034d4a6c",
+          "registry/enforcement-inventory.yaml": "6f028a38ea3865a6fd245a3b191d01968d6ad4a3d8f3be9754212ebb09bc4742",
+          "registry/entities.yaml": "417e857a7cd6e1f7806190b682763ff02e77403a07ce2108acbdcc95c313eb9a",
+          "registry/model-qualification.yaml": "da1d226a8fbb5467d72a25a2ac4720b2a6cb313f152b1dcf96337a428107384a",
+          "registry/model-roles.yaml": "def3f2d393627adc3a7a8f0df2625f4dc73ded89644f89cbbfa4e3b2cc7425aa",
+          "registry/models.yaml": "e28eea865553b29979bb59fdf80729015a9e924cea5a93001f6167930872fdb1",
+          "registry/product-operating-model.yaml": "9cafa543aa4e07834c032dca3e2fcc495b4ecc8b33af570ad80e83331a8861a6",
+          "registry/providers.yaml": "873dc811e42d419e31c92d2bf8f6f22f0020b4274780faeefb7b1d3d4b816fbb",
+          "registry/release-claims.yaml": "9591f1ccd2babaad7bb0ccb42d3e054cfa067de90dc00e68bad5ec098e336a56",
+          "registry/release-notes.yaml": "36fcec8eea13f42dfb8c72bc3df85a4f77b2b663e4434235a49fac9b0bc06c2c",
+          "registry/routing-policy.yaml": "1bcda1fd9716adb447c46de80037c8091e5e46163399f854eef462ece7baf737",
+          "registry/runtimes.yaml": "ff05417848841a81ba868006b9eab418eec60064fc82756572719415b1d8c701",
+          "registry/standard.yaml": "515514743e920ccd673a1b748d7517b068dde59e9e634f1dd2a8f3d304d008ff",
+          "registry/tools.yaml": "e6386941d1c747e3cd4848d33a9bdac9b4aff5f91ebe3fa3618a3829d19ed49b",
+          "registry/tracks.yaml": "4d002641470b8b3dc04c660bdb5f7a4b1a2e126329131a8f8e9f00265ce32d72",
+          "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41"
+        }
+      },
+      "declared_baseline_revision": "38429f984acb7bde79884327b2916954f796f10c"
+    },
+    "heuristic": {
+      "status": "measured",
+      "kind": "local",
+      "source": {
+        "revision": "38429f984acb7bde79884327b2916954f796f10c",
+        "dirty": true,
+        "source_sha256": {
+          "ai_ops_kit/devtools/decision_eval.py": "999125337b2010bf39a52c6312dc243569bce0f8c034e7444ae40af3f06ed9a2",
+          "ai_ops_kit/gates/spec_levels.py": "024bac5ce8f2fe6ef92ecfb1a954de19981d8c77fc3d1c4c7700dcddb48247e9",
+          "ai_ops_kit/providers/model_router.py": "f5cff23ddd8702b1bb8e5bd13f4476161570ac5fc5da723048c324e95962b8d9",
+          "ai_ops_kit/shared/ai_route.py": "0391d992cdd9706b67054c78d3f07e1349e8c7eabc73f475970aa0bb8e7febe5",
+          "registry/agents.yaml": "45d4e8d5e53db58db7d7fdd87736acc9414aca39aac03fd17a6625a7710e62de",
+          "registry/artifact-registry.yaml": "d7888f4cc7905650546acc628fdce74587e93e52ecef63b1e90b9d6c87343ced",
+          "registry/capability-index.yaml": "a73dd824a5f319c6a065798dd4cdbf45df613a3f6b1eedae1e0e41297f66c712",
+          "registry/capability-policy.yaml": "13faa0ca15f8ae2a3c6bd1e3e40ff9f96962cd80cb6a13111e540730cb74f049",
+          "registry/communication-policy.yaml": "0f3d648018f76cc3334aa3f44c1d74a24a12465e355d5e59ccde4c7c59e0fe9c",
+          "registry/coordination-files.yaml": "c777c2f9406df7df2a978a4f9f4edaead8b8accae2d0d1f68b31db73ff40aafd",
+          "registry/decision-boundary.yaml": "4082fb3a15657f15c9dcdf693c37904e9f01119351823011423ee917034d4a6c",
+          "registry/enforcement-inventory.yaml": "6f028a38ea3865a6fd245a3b191d01968d6ad4a3d8f3be9754212ebb09bc4742",
+          "registry/entities.yaml": "417e857a7cd6e1f7806190b682763ff02e77403a07ce2108acbdcc95c313eb9a",
+          "registry/model-qualification.yaml": "da1d226a8fbb5467d72a25a2ac4720b2a6cb313f152b1dcf96337a428107384a",
+          "registry/model-roles.yaml": "def3f2d393627adc3a7a8f0df2625f4dc73ded89644f89cbbfa4e3b2cc7425aa",
+          "registry/models.yaml": "e28eea865553b29979bb59fdf80729015a9e924cea5a93001f6167930872fdb1",
+          "registry/product-operating-model.yaml": "9cafa543aa4e07834c032dca3e2fcc495b4ecc8b33af570ad80e83331a8861a6",
+          "registry/providers.yaml": "873dc811e42d419e31c92d2bf8f6f22f0020b4274780faeefb7b1d3d4b816fbb",
+          "registry/release-claims.yaml": "9591f1ccd2babaad7bb0ccb42d3e054cfa067de90dc00e68bad5ec098e336a56",
+          "registry/release-notes.yaml": "36fcec8eea13f42dfb8c72bc3df85a4f77b2b663e4434235a49fac9b0bc06c2c",
+          "registry/routing-policy.yaml": "1bcda1fd9716adb447c46de80037c8091e5e46163399f854eef462ece7baf737",
+          "registry/runtimes.yaml": "ff05417848841a81ba868006b9eab418eec60064fc82756572719415b1d8c701",
+          "registry/standard.yaml": "515514743e920ccd673a1b748d7517b068dde59e9e634f1dd2a8f3d304d008ff",
+          "registry/tools.yaml": "e6386941d1c747e3cd4848d33a9bdac9b4aff5f91ebe3fa3618a3829d19ed49b",
+          "registry/tracks.yaml": "4d002641470b8b3dc04c660bdb5f7a4b1a2e126329131a8f8e9f00265ce32d72",
+          "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41"
+        }
+      },
+      "declared_baseline_revision": "38429f984acb7bde79884327b2916954f796f10c"
+    },
+    "jev": {
+      "id": "jev",
+      "kind": "live",
+      "revision": "jev-1.13.0",
+      "requested_model": "jev-latest",
+      "endpoint": "https://classifier.dev/v1/systemone",
+      "service": "classifier-free",
+      "provenance": "classifier-free API; 2026-10-05T11:41:00.165891+00:00",
+      "input_price_usd_per_million": null,
+      "status": "measured"
+    },
+    "llm": {
+      "status": "not_run",
+      "reason": "Нет записанного живого прогона"
+    }
+  },
+  "metrics": {
+    "current": {
+      "development": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "1": 1
+            },
+            "2": {
+              "2": 2
+            },
+            "3": {
+              "3": 2
+            }
+          },
+          "p50_latency_ms": 0.0019169965526089072,
+          "p95_latency_ms": 0.0035727498470805585,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 188.66666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0018540013115853071,
+          "p95_latency_ms": 0.001985413837246597,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 189.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "intake-classifier": {
+              "intake-classifier": 1
+            },
+            "final-verifier": {
+              "final-verifier": 1
+            }
+          },
+          "p50_latency_ms": 49.896917000296526,
+          "p95_latency_ms": 50.01582950208103,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 273.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      },
+      "held_out": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "1": 2
+            },
+            "3": {
+              "3": 3
+            }
+          },
+          "p50_latency_ms": 0.0009994837455451488,
+          "p95_latency_ms": 0.0015622354112565517,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 202.16666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0009999930625781417,
+          "p95_latency_ms": 0.0011503041605465114,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 216.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "implementation-integrator": {
+              "implementation-integrator": 1
+            },
+            "code-reviewer": {
+              "code-reviewer": 1
+            }
+          },
+          "p50_latency_ms": 49.941458491957746,
+          "p95_latency_ms": 50.09449584322283,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 263.0,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      }
+    },
+    "heuristic": {
+      "development": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 0.5,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "0": 1
+            },
+            "2": {
+              "0": 2
+            },
+            "3": {
+              "3": 2
+            }
+          },
+          "p50_latency_ms": 0.0013335084076970816,
+          "p95_latency_ms": 0.006551999831572175,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 3,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 188.66666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.00039600126910954714,
+          "p95_latency_ms": 0.00041489984141662717,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 189.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "intake-classifier": {
+              "<abstain>": 1
+            },
+            "final-verifier": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0003119930624961853,
+          "p95_latency_ms": 0.0003308785380795598,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 273.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      },
+      "held_out": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 0.3333333333333333,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "0": 2
+            },
+            "3": {
+              "0": 2,
+              "3": 1
+            }
+          },
+          "p50_latency_ms": 0.0006460031727328897,
+          "p95_latency_ms": 0.0012502350728027523,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 4,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 202.16666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0002915039658546448,
+          "p95_latency_ms": 0.0002919492544606328,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 216.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "implementation-integrator": {
+              "<abstain>": 1
+            },
+            "code-reviewer": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0002915039658546448,
+          "p95_latency_ms": 0.0002919492544606328,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 263.0,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      }
+    },
+    "jev": {
+      "development": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "1": 1
+            },
+            "2": {
+              "2": 2
+            },
+            "3": {
+              "3": 2
+            }
+          },
+          "p50_latency_ms": 1110.3476459975354,
+          "p95_latency_ms": 1431.5573959902395,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 5,
+          "hcer": 0.0,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 601.5,
+          "mean_output_tokens": 45.0,
+          "mean_context_bytes": 899.6666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "cheap-api/low": 1
+            },
+            "strong-executor/high": {
+              "strong-executor/high": 1
+            }
+          },
+          "p50_latency_ms": 1278.2518129970413,
+          "p95_latency_ms": 1478.756719091325,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 2,
+          "hcer": 0.0,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 519.5,
+          "mean_output_tokens": 41.5,
+          "mean_context_bytes": 742.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "intake-classifier": {
+              "intake-classifier": 1
+            },
+            "final-verifier": {
+              "final-verifier": 1
+            }
+          },
+          "p50_latency_ms": 1306.4455624989932,
+          "p95_latency_ms": 1527.0641937313485,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 1,
+          "hcer": 0.0,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 542.0,
+          "mean_output_tokens": 61.5,
+          "mean_context_bytes": 760.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      },
+      "held_out": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 0.8333333333333334,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "1": 2
+            },
+            "3": {
+              "0": 1,
+              "3": 2
+            }
+          },
+          "p50_latency_ms": 1021.8254165083636,
+          "p95_latency_ms": 1102.1485210076207,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 4,
+          "hcer": 0.0,
+          "unsafe_downgrade_count": 1,
+          "mean_input_tokens": 607.5,
+          "mean_output_tokens": 45.0,
+          "mean_context_bytes": 913.1666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "cheap-api/low": 1
+            },
+            "strong-executor/high": {
+              "strong-executor/high": 1
+            }
+          },
+          "p50_latency_ms": 1134.2650419974234,
+          "p95_latency_ms": 1149.2789922835073,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 2,
+          "hcer": 0.0,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 529.0,
+          "mean_output_tokens": 41.5,
+          "mean_context_bytes": 769.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "implementation-integrator": {
+              "implementation-integrator": 1
+            },
+            "code-reviewer": {
+              "code-reviewer": 1
+            }
+          },
+          "p50_latency_ms": 1203.6567499890225,
+          "p95_latency_ms": 1284.6399127985933,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 530.0,
+          "mean_output_tokens": 61.0,
+          "mean_context_bytes": 750.0,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0038330035749822855,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-01",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0027919886633753777,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-02",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "2",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0015420082490891218,
+      "context_bytes": 182,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-03",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0022919848561286926,
+      "context_bytes": 177,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-04",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0015409896150231361,
+      "context_bytes": 204,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-05",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "2",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0012910168152302504,
+      "context_bytes": 243,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-06",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0010409858077764511,
+      "context_bytes": 193,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-07",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0007920025382190943,
+      "context_bytes": 202,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-08",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0007089984137564898,
+      "context_bytes": 183,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-09",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0017079873941838741,
+      "context_bytes": 215,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-10",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0011249794624745846,
+      "context_bytes": 191,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-11",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0009579816833138466,
+      "context_bytes": 229,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-12",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=cheap-api; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.00200001522898674,
+      "context_bytes": 180,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-01",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=strong-executor; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.0017079873941838741,
+      "context_bytes": 199,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-02",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=cheap-api; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.001167005393654108,
+      "context_bytes": 208,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-03",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=strong-executor; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.0008329807315021753,
+      "context_bytes": 225,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-04",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "intake-classifier",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 50.02904200227931,
+      "context_bytes": 264,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-01",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "intake-classifier",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "final-verifier",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 49.76479199831374,
+      "context_bytes": 283,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-02",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "final-verifier",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "implementation-integrator",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 49.7714169905521,
+      "context_bytes": 247,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-03",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "implementation-integrator",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "code-reviewer",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 50.111499993363395,
+      "context_bytes": 279,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-04",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "code-reviewer",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.008000002708286047,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-01",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0018750142771750689,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-02",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.002207991201430559,
+      "context_bytes": 182,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-03",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0007920025382190943,
+      "context_bytes": 177,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-04",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0007080088835209608,
+      "context_bytes": 204,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-05",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.000667001586407423,
+      "context_bytes": 243,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-06",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0006250047590583563,
+      "context_bytes": 193,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-07",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0014169781934469938,
+      "context_bytes": 202,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-08",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0006250047590583563,
+      "context_bytes": 183,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-09",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0006249756552278996,
+      "context_bytes": 215,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-10",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.000667001586407423,
+      "context_bytes": 191,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-11",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0007500057108700275,
+      "context_bytes": 229,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-12",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0004169996827840805,
+      "context_bytes": 180,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-01",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.00037500285543501377,
+      "context_bytes": 199,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-02",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0002910092007368803,
+      "context_bytes": 208,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-03",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.00029199873097240925,
+      "context_bytes": 225,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-04",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0002910092007368803,
+      "context_bytes": 264,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-01",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "intake-classifier",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0003329769242554903,
+      "context_bytes": 283,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-02",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "final-verifier",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.00029199873097240925,
+      "context_bytes": 247,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-03",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "implementation-integrator",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0002910092007368803,
+      "context_bytes": 279,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-04",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "code-reviewer",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "case_id": "ceremony-01",
+      "context_bytes": 874,
+      "fallback": false,
+      "input_tokens": 593,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "0",
+            "confidence": 0.99,
+            "probabilities": {
+              "1": 0.0,
+              "0": 1.0,
+              "2": 0.0,
+              "3": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 593,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "0",
+      "confidence": 0.99,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1428.1610840116628,
+      "provider": "jev",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-02",
+      "context_bytes": 874,
+      "fallback": false,
+      "input_tokens": 593,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "1",
+            "confidence": 0.96,
+            "probabilities": {
+              "3": 0.02,
+              "1": 0.96,
+              "0": 0.01,
+              "2": 0.01
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 593,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "1",
+      "confidence": 0.96,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1137.650249991566,
+      "provider": "jev",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-03",
+      "context_bytes": 893,
+      "fallback": false,
+      "input_tokens": 599,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "2",
+            "confidence": 0.88,
+            "probabilities": {
+              "1": 0.03,
+              "2": 0.91,
+              "0": 0.03,
+              "3": 0.03
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 599,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "2",
+      "confidence": 0.88,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1083.045042003505,
+      "provider": "jev",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-04",
+      "context_bytes": 888,
+      "fallback": false,
+      "input_tokens": 595,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "3",
+            "confidence": 0.99,
+            "probabilities": {
+              "1": 0.0,
+              "0": 0.01,
+              "3": 0.99,
+              "2": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 595,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "3",
+      "confidence": 0.99,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 987.0824580139015,
+      "provider": "jev",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-05",
+      "context_bytes": 915,
+      "fallback": false,
+      "input_tokens": 609,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "3",
+            "confidence": 0.98,
+            "probabilities": {
+              "0": 0.01,
+              "1": 0.0,
+              "3": 0.99,
+              "2": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 609,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "3",
+      "confidence": 0.98,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1432.6894999830984,
+      "provider": "jev",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-06",
+      "context_bytes": 954,
+      "fallback": false,
+      "input_tokens": 620,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "2",
+            "confidence": 0.93,
+            "probabilities": {
+              "3": 0.01,
+              "0": 0.05,
+              "1": 0.0,
+              "2": 0.94
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 620,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "2",
+      "confidence": 0.93,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1019.8029590246733,
+      "provider": "jev",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-07",
+      "context_bytes": 904,
+      "fallback": false,
+      "input_tokens": 610,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "0",
+            "confidence": 0.98,
+            "probabilities": {
+              "2": 0.0,
+              "1": 0.01,
+              "0": 0.99,
+              "3": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 610,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "0",
+      "confidence": 0.98,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1113.4741670102812,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-08",
+      "context_bytes": 913,
+      "fallback": false,
+      "input_tokens": 594,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "1",
+            "confidence": 0.91,
+            "probabilities": {
+              "1": 0.9400000000000001,
+              "3": 0.0,
+              "0": 0.06,
+              "2": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 594,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "1",
+      "confidence": 0.91,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 997.7764590003062,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-09",
+      "context_bytes": 894,
+      "fallback": false,
+      "input_tokens": 604,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "1",
+            "confidence": 0.94,
+            "probabilities": {
+              "1": 0.96,
+              "0": 0.01,
+              "2": 0.03,
+              "3": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 604,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "1",
+      "confidence": 0.94,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1030.7301249995362,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-10",
+      "context_bytes": 926,
+      "fallback": false,
+      "input_tokens": 615,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "0",
+            "confidence": 0.54,
+            "probabilities": {
+              "1": 0.01,
+              "0": 0.66,
+              "2": 0.0,
+              "3": 0.33
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 615,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "0",
+      "confidence": 0.54,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 975.0623749860097,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-11",
+      "context_bytes": 902,
+      "fallback": false,
+      "input_tokens": 606,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "3",
+            "confidence": 0.9,
+            "probabilities": {
+              "0": 0.03,
+              "2": 0.0,
+              "3": 0.93,
+              "1": 0.04
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 606,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "3",
+      "confidence": 0.9,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1012.9207080171909,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "ceremony-12",
+      "context_bytes": 940,
+      "fallback": false,
+      "input_tokens": 616,
+      "output_tokens": 45,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "3",
+            "confidence": 0.69,
+            "probabilities": {
+              "0": 0.21,
+              "1": 0.02,
+              "3": 0.76,
+              "2": 0.01
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 616,
+          "output_tokens": 45
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "3",
+      "confidence": 0.69,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1068.1715829996392,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "model-01",
+      "context_bytes": 733,
+      "fallback": false,
+      "input_tokens": 515,
+      "output_tokens": 41,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "cheap-api/low",
+            "confidence": 0.95,
+            "probabilities": {
+              "cheap-api/low": 0.97,
+              "strong-executor/high": 0.03
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 515,
+          "output_tokens": 41
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "cheap-api/low",
+      "confidence": 0.95,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1501.03504199069,
+      "provider": "jev",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "model-02",
+      "context_bytes": 752,
+      "fallback": false,
+      "input_tokens": 524,
+      "output_tokens": 42,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "strong-executor/high",
+            "confidence": 0.97,
+            "probabilities": {
+              "cheap-api/low": 0.01,
+              "strong-executor/high": 0.99
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 524,
+          "output_tokens": 42
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "strong-executor/high",
+      "confidence": 0.97,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1055.4685840033926,
+      "provider": "jev",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "model-03",
+      "context_bytes": 761,
+      "fallback": false,
+      "input_tokens": 523,
+      "output_tokens": 41,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "cheap-api/low",
+            "confidence": 0.99,
+            "probabilities": {
+              "strong-executor/high": 0.0,
+              "cheap-api/low": 1.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 523,
+          "output_tokens": 41
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "cheap-api/low",
+      "confidence": 0.99,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1117.5828750128858,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "model-04",
+      "context_bytes": 778,
+      "fallback": false,
+      "input_tokens": 535,
+      "output_tokens": 42,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "strong-executor/high",
+            "confidence": 1.0,
+            "probabilities": {
+              "strong-executor/high": 1.0,
+              "cheap-api/low": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 535,
+          "output_tokens": 42
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "strong-executor/high",
+      "confidence": 1.0,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1150.947208981961,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "agent-01",
+      "context_bytes": 751,
+      "fallback": false,
+      "input_tokens": 538,
+      "output_tokens": 62,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "intake-classifier",
+            "confidence": 1.0,
+            "probabilities": {
+              "intake-classifier": 1.0,
+              "implementation-integrator": 0.0,
+              "final-verifier": 0.0,
+              "code-reviewer": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 538,
+          "output_tokens": 62
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "intake-classifier",
+      "confidence": 1.0,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1551.577374979388,
+      "provider": "jev",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "intake-classifier",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": true,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "agent-02",
+      "context_bytes": 770,
+      "fallback": false,
+      "input_tokens": 546,
+      "output_tokens": 61,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "final-verifier",
+            "confidence": 0.35,
+            "probabilities": {
+              "final-verifier": 0.52,
+              "intake-classifier": 0.0,
+              "implementation-integrator": 0.03,
+              "code-reviewer": 0.45
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 546,
+          "output_tokens": 61
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "final-verifier",
+      "confidence": 0.35,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1061.3137500185985,
+      "provider": "jev",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "final-verifier",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "agent-03",
+      "context_bytes": 734,
+      "fallback": false,
+      "input_tokens": 527,
+      "output_tokens": 61,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "implementation-integrator",
+            "confidence": 0.48,
+            "probabilities": {
+              "final-verifier": 0.04,
+              "intake-classifier": 0.01,
+              "implementation-integrator": 0.6,
+              "code-reviewer": 0.35
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 527,
+          "output_tokens": 61
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "implementation-integrator",
+      "confidence": 0.48,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1293.6380419996567,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "implementation-integrator",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "case_id": "agent-04",
+      "context_bytes": 766,
+      "fallback": false,
+      "input_tokens": 533,
+      "output_tokens": 61,
+      "response_model": "jev-1.13.0",
+      "raw_response": {
+        "model": "jev-1.13.0",
+        "answers": {
+          "route": {
+            "type": "choice",
+            "choice": "code-reviewer",
+            "confidence": 0.83,
+            "probabilities": {
+              "code-reviewer": 0.87,
+              "final-verifier": 0.13,
+              "implementation-integrator": 0.0,
+              "intake-classifier": 0.0
+            }
+          }
+        },
+        "usage": {
+          "input_tokens": 533,
+          "output_tokens": 61
+        }
+      },
+      "estimated_cost_usd": null,
+      "decision": "code-reviewer",
+      "confidence": 0.83,
+      "abstain": false,
+      "actual_cost_usd": 0,
+      "latency_ms": 1113.6754579783883,
+      "provider": "jev",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "code-reviewer",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    }
+  ],
+  "verdict": "reject",
+  "limitation": "Авторский синтетический корпус; независимая разметка и живые прогоны обязательны до ship."
+}

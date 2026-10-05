@@ -1,0 +1,1913 @@
+{
+  "dataset_sha256": "64eef465fc3f9aa4c7a5f989977fffadaa3237f6ef153f2150d29502583065bf",
+  "providers": [
+    {
+      "id": "jev",
+      "kind": "live",
+      "revision": "jev-1.13.0",
+      "requested_model": "jev-latest",
+      "endpoint": "https://classifier.dev/v1/systemone",
+      "service": "classifier-free",
+      "provenance": "classifier-free API; 2026-10-05T11:48:13.062098+00:00",
+      "input_price_usd_per_million": null,
+      "responses": [
+        {
+          "case_id": "independent-ceremony-01",
+          "context_bytes": 1028,
+          "fallback": false,
+          "input_tokens": 655,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.99,
+                "probabilities": {
+                  "2": 0.0,
+                  "3": 0.0,
+                  "0": 1.0,
+                  "1": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 655,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1672.9992920008954
+        },
+        {
+          "case_id": "independent-ceremony-02",
+          "context_bytes": 1044,
+          "fallback": false,
+          "input_tokens": 672,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.6,
+                "probabilities": {
+                  "0": 0.29,
+                  "1": 0.7,
+                  "2": 0.01,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 672,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.6,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 973.5152920184191
+        },
+        {
+          "case_id": "independent-ceremony-03",
+          "context_bytes": 1073,
+          "fallback": false,
+          "input_tokens": 665,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "2",
+                "confidence": 0.67,
+                "probabilities": {
+                  "0": 0.23,
+                  "2": 0.75,
+                  "3": 0.0,
+                  "1": 0.02
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 665,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "2",
+          "confidence": 0.67,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1012.334999977611
+        },
+        {
+          "case_id": "independent-ceremony-04",
+          "context_bytes": 1025,
+          "fallback": false,
+          "input_tokens": 641,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.38,
+                "probabilities": {
+                  "0": 0.54,
+                  "2": 0.07,
+                  "3": 0.01,
+                  "1": 0.38
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 641,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.38,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1114.7067080019042
+        },
+        {
+          "case_id": "independent-ceremony-05",
+          "context_bytes": 1101,
+          "fallback": false,
+          "input_tokens": 681,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.99,
+                "probabilities": {
+                  "0": 1.0,
+                  "3": 0.0,
+                  "2": 0.0,
+                  "1": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 681,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1061.330458993325
+        },
+        {
+          "case_id": "independent-ceremony-06",
+          "context_bytes": 1073,
+          "fallback": false,
+          "input_tokens": 666,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.99,
+                "probabilities": {
+                  "0": 1.0,
+                  "2": 0.0,
+                  "3": 0.0,
+                  "1": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 666,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 994.9710420041811
+        },
+        {
+          "case_id": "independent-ceremony-07",
+          "context_bytes": 1042,
+          "fallback": false,
+          "input_tokens": 660,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.99,
+                "probabilities": {
+                  "1": 0.0,
+                  "0": 1.0,
+                  "3": 0.0,
+                  "2": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 660,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1044.252708001295
+        },
+        {
+          "case_id": "independent-ceremony-08",
+          "context_bytes": 1077,
+          "fallback": false,
+          "input_tokens": 663,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.98,
+                "probabilities": {
+                  "2": 0.0,
+                  "3": 0.0,
+                  "0": 0.99,
+                  "1": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 663,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.98,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1056.2951249885373
+        },
+        {
+          "case_id": "independent-ceremony-09",
+          "context_bytes": 1084,
+          "fallback": false,
+          "input_tokens": 670,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.74,
+                "probabilities": {
+                  "3": 0.0,
+                  "1": 0.15,
+                  "2": 0.05,
+                  "0": 0.8
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 670,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.74,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1041.3857079984155
+        },
+        {
+          "case_id": "independent-ceremony-10",
+          "context_bytes": 1076,
+          "fallback": false,
+          "input_tokens": 680,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.99,
+                "probabilities": {
+                  "2": 0.0,
+                  "3": 0.0,
+                  "0": 1.0,
+                  "1": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 680,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1102.3279170040041
+        },
+        {
+          "case_id": "independent-ceremony-11",
+          "context_bytes": 1051,
+          "fallback": false,
+          "input_tokens": 637,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.47,
+                "probabilities": {
+                  "0": 0.39,
+                  "3": 0.0,
+                  "1": 0.6,
+                  "2": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 637,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.47,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1170.1513750012964
+        },
+        {
+          "case_id": "independent-ceremony-12",
+          "context_bytes": 1018,
+          "fallback": false,
+          "input_tokens": 658,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.96,
+                "probabilities": {
+                  "2": 0.0,
+                  "1": 0.98,
+                  "0": 0.02,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 658,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.96,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1222.783334000269
+        },
+        {
+          "case_id": "independent-ceremony-13",
+          "context_bytes": 1033,
+          "fallback": false,
+          "input_tokens": 647,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.93,
+                "probabilities": {
+                  "1": 0.94,
+                  "0": 0.05,
+                  "2": 0.01,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 647,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.93,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1002.0002499804832
+        },
+        {
+          "case_id": "independent-ceremony-14",
+          "context_bytes": 1106,
+          "fallback": false,
+          "input_tokens": 687,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "2",
+                "confidence": 0.39,
+                "probabilities": {
+                  "2": 0.55,
+                  "1": 0.26,
+                  "0": 0.19,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 687,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "2",
+          "confidence": 0.39,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1022.8713749966118
+        },
+        {
+          "case_id": "independent-ceremony-15",
+          "context_bytes": 1030,
+          "fallback": false,
+          "input_tokens": 654,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "2",
+                "confidence": 0.52,
+                "probabilities": {
+                  "0": 0.24,
+                  "1": 0.11,
+                  "2": 0.65,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 654,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "2",
+          "confidence": 0.52,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 982.6066669775173
+        },
+        {
+          "case_id": "independent-ceremony-16",
+          "context_bytes": 1041,
+          "fallback": false,
+          "input_tokens": 671,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "2",
+                "confidence": 0.35,
+                "probabilities": {
+                  "1": 0.35,
+                  "0": 0.14,
+                  "2": 0.51,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 671,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "2",
+          "confidence": 0.35,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1021.6506669821683
+        },
+        {
+          "case_id": "independent-ceremony-17",
+          "context_bytes": 1018,
+          "fallback": false,
+          "input_tokens": 647,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "2",
+                "confidence": 0.48,
+                "probabilities": {
+                  "0": 0.28,
+                  "2": 0.62,
+                  "3": 0.0,
+                  "1": 0.1
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 647,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "2",
+          "confidence": 0.48,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1037.344165990362
+        },
+        {
+          "case_id": "independent-ceremony-18",
+          "context_bytes": 1052,
+          "fallback": false,
+          "input_tokens": 667,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "3",
+                "confidence": 0.39,
+                "probabilities": {
+                  "1": 0.43,
+                  "0": 0.01,
+                  "3": 0.54,
+                  "2": 0.02
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 667,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "3",
+          "confidence": 0.39,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1181.8895420001354
+        },
+        {
+          "case_id": "independent-ceremony-19",
+          "context_bytes": 1043,
+          "fallback": false,
+          "input_tokens": 651,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "3",
+                "confidence": 0.39,
+                "probabilities": {
+                  "0": 0.01,
+                  "1": 0.02,
+                  "3": 0.54,
+                  "2": 0.43
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 651,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "3",
+          "confidence": 0.39,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1021.3112089841161
+        },
+        {
+          "case_id": "independent-ceremony-20",
+          "context_bytes": 1068,
+          "fallback": false,
+          "input_tokens": 679,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.25,
+                "probabilities": {
+                  "3": 0.35,
+                  "1": 0.43,
+                  "2": 0.01,
+                  "0": 0.21
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 679,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.25,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1029.8101250082254
+        },
+        {
+          "case_id": "independent-ceremony-21",
+          "context_bytes": 1052,
+          "fallback": false,
+          "input_tokens": 651,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.62,
+                "probabilities": {
+                  "0": 0.72,
+                  "2": 0.02,
+                  "3": 0.2,
+                  "1": 0.06
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 651,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.62,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 981.1185830039904
+        },
+        {
+          "case_id": "independent-ceremony-22",
+          "context_bytes": 1059,
+          "fallback": false,
+          "input_tokens": 646,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.82,
+                "probabilities": {
+                  "2": 0.0,
+                  "3": 0.12,
+                  "0": 0.01,
+                  "1": 0.87
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 646,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.82,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1035.981624998385
+        },
+        {
+          "case_id": "independent-ceremony-23",
+          "context_bytes": 1036,
+          "fallback": false,
+          "input_tokens": 653,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.35,
+                "probabilities": {
+                  "3": 0.1,
+                  "1": 0.51,
+                  "2": 0.02,
+                  "0": 0.37
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 653,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.35,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1034.2722089844756
+        },
+        {
+          "case_id": "independent-ceremony-24",
+          "context_bytes": 993,
+          "fallback": false,
+          "input_tokens": 650,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.74,
+                "probabilities": {
+                  "0": 0.81,
+                  "1": 0.16,
+                  "3": 0.0,
+                  "2": 0.03
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 650,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.74,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1026.4076669991482
+        }
+      ]
+    },
+    {
+      "id": "llm",
+      "kind": "live",
+      "revision": "gpt-5.6-sol",
+      "requested_model": "gpt-5.6-sol",
+      "effort": "low",
+      "actual_model_revision": null,
+      "runtime": "codex exec",
+      "provenance": "Codex CLI tool-free; 2026-10-05T11:56:16.470909+00:00",
+      "limitations": "Alias revision не сообщается CLI; стоимость подписки неизвестна; wall latency включает запуск процесса, input tokens включают системный контекст CLI.",
+      "responses": [
+        {
+          "decision": null,
+          "confidence": null,
+          "abstain": true,
+          "fallback": false,
+          "error": "ValueError",
+          "case_id": "independent-ceremony-01",
+          "latency_ms": 10609.281874989392
+        },
+        {
+          "decision": "1",
+          "confidence": 0.96,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12934,
+          "output_tokens": 21,
+          "context_bytes": 1263,
+          "prompt_sha256": "bd1cedb0cd9717e0abf4bfa5c0ef75b22ebc472c726ab8c6bb4edd1b2daa198d",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be7-a3ed-7780-ba60-72b06235dc00"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"1\",\"confidence\":0.96}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12934,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12934,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-02",
+          "latency_ms": 10253.619499999331
+        },
+        {
+          "decision": "2",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12948,
+          "output_tokens": 21,
+          "context_bytes": 1292,
+          "prompt_sha256": "e1ad05e51349d9536c26cb45aaa0c448c4e6c9967d8e5ab3540044e523c4320b",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be7-cbed-7172-8271-a399ab4e436d"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"2\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12948,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12948,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-03",
+          "latency_ms": 10859.046917001251
+        },
+        {
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12935,
+          "output_tokens": 21,
+          "context_bytes": 1244,
+          "prompt_sha256": "0963eb66a406dc800b89fd3c4af75b5edbf48da1f413b100170b636c6f9347e0",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be7-f65d-71c2-890c-cc5f86b49693"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12935,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12935,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-04",
+          "latency_ms": 10420.90383300092
+        },
+        {
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12951,
+          "output_tokens": 21,
+          "context_bytes": 1320,
+          "prompt_sha256": "5517083430701fba8d19911f7fac831de508a42cc05dd34af5692bdad2483ccb",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be8-1f28-7f50-91cc-f44eb54b6f92"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12951,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12951,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-05",
+          "latency_ms": 13471.966915996745
+        },
+        {
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12951,
+          "output_tokens": 21,
+          "context_bytes": 1292,
+          "prompt_sha256": "01e3fb14d4481731688d9f97ba7ae733e0033eb1f6113a908daea1fa7c84912f",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be8-542b-7e51-a12d-391d9992c292"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12951,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12951,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-06",
+          "latency_ms": 10601.133040996501
+        },
+        {
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12932,
+          "output_tokens": 21,
+          "context_bytes": 1261,
+          "prompt_sha256": "bc611b072d7e301ecf767457069ac9a68e6050387358df3bb1e95495267e86b2",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be8-7d36-7093-8483-e245d152b128"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12932,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12932,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-07",
+          "latency_ms": 10410.044874995947
+        },
+        {
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12946,
+          "output_tokens": 21,
+          "context_bytes": 1296,
+          "prompt_sha256": "ead00f426eff969156a80ad03731276f87b56dbc50e39c34a880fd8afe2b9f6c",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be8-a5df-7e32-b15e-e5ca9a4d6190"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12946,
+                "cached_input_tokens": 8448,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12946,
+            "cached_input_tokens": 8448,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-08",
+          "latency_ms": 10251.618125010282
+        },
+        {
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12945,
+          "output_tokens": 21,
+          "context_bytes": 1303,
+          "prompt_sha256": "2d678c102cec74c3451eb58861ab9eb93e1ccd14e133c3400da8510e1bf9c36a",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be8-cde2-7762-ace7-f49b794bc7d0"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12945,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12945,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-09",
+          "latency_ms": 11162.79379199841
+        },
+        {
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12950,
+          "output_tokens": 21,
+          "context_bytes": 1295,
+          "prompt_sha256": "a361d2221eb2b85ba3290b829c93988ed3e155e1dea4ccb8e88617344b236096",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be8-f98c-7290-a4af-f5ea9830626a"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12950,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12950,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-10",
+          "latency_ms": 11935.596082999837
+        },
+        {
+          "decision": "1",
+          "confidence": 0.97,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12929,
+          "output_tokens": 21,
+          "context_bytes": 1270,
+          "prompt_sha256": "8f75b86139108c6c2bbbd5f9424441aa321252408c4e7fcfd07a245757859aee",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be9-2832-7d33-a929-10dcfe367fa9"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"1\",\"confidence\":0.97}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12929,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12929,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-11",
+          "latency_ms": 10327.526709006634
+        },
+        {
+          "decision": "1",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12933,
+          "output_tokens": 21,
+          "context_bytes": 1237,
+          "prompt_sha256": "26c173b2608b105970869fb4ec6400f109225d7cbe1bb45a1453e5207d7e52c4",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be9-507f-77f0-9aa8-06c1c91fe7ea"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"1\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12933,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12933,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-12",
+          "latency_ms": 13724.847292003687
+        },
+        {
+          "decision": "1",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12923,
+          "output_tokens": 21,
+          "context_bytes": 1252,
+          "prompt_sha256": "d5397d404c112a24c77c3db6af568b448a67f1fdb9c544faa939a9a5249517b2",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be9-8643-7c53-9754-4b7566c6518e"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"1\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12923,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12923,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-13",
+          "latency_ms": 19188.933416997315
+        },
+        {
+          "decision": "2",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12950,
+          "output_tokens": 21,
+          "context_bytes": 1325,
+          "prompt_sha256": "17faca1ad5c1350d0c5854743ce9295d458576d9e70d7fb79b63c2bca7bccba0",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be9-d111-7da2-9a93-27f381f5392c"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"2\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12950,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12950,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-14",
+          "latency_ms": 10863.24183299439
+        },
+        {
+          "decision": "2",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12924,
+          "output_tokens": 21,
+          "context_bytes": 1249,
+          "prompt_sha256": "3ec9d702d050cd528ff11486dac5e8c87227f8e3f8f0143e9392beb8d03472ab",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10be9-fb7c-76a2-b4b0-416f586fe11d"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"2\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12924,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12924,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-15",
+          "latency_ms": 12351.416375022382
+        },
+        {
+          "decision": "2",
+          "confidence": 0.98,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12931,
+          "output_tokens": 21,
+          "context_bytes": 1260,
+          "prompt_sha256": "d9437fa96388758d077ae6b1ecc85ec77b0b97f8cf72cecc14983ac396996d9e",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10bea-2bcb-78e2-b5ad-5702d7e85837"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"2\",\"confidence\":0.98}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12931,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12931,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-16",
+          "latency_ms": 12190.934125013882
+        },
+        {
+          "decision": "2",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12936,
+          "output_tokens": 21,
+          "context_bytes": 1237,
+          "prompt_sha256": "e9f563cd12600f88e6a676f0f8cf9a921717ed59932cafc6b2dfad19ef5203ac",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10bea-5b6c-7e83-a097-14b7dc6c3806"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"2\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12936,
+                "cached_input_tokens": 0,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12936,
+            "cached_input_tokens": 0,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-17",
+          "latency_ms": 10969.963874988025
+        },
+        {
+          "decision": "3",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12942,
+          "output_tokens": 21,
+          "context_bytes": 1271,
+          "prompt_sha256": "509cb1b4f27e59aedbcc8d2bc411a7f5c15fe46a9191b24b38bf533b4d370bbc",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10bea-8631-7762-bd68-a1b6102d5fb5"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"3\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12942,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12942,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-18",
+          "latency_ms": 13626.875209010905
+        },
+        {
+          "decision": "3",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12938,
+          "output_tokens": 21,
+          "context_bytes": 1262,
+          "prompt_sha256": "95ecaa10fb5ef7a2ffc4f8889604eb21546e4fcaf45d62b105f4311956b3d762",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10bea-bb72-7042-b003-e8e4dc4c066b"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"3\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12938,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12938,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-19",
+          "latency_ms": 15450.88529199711
+        },
+        {
+          "decision": "3",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12948,
+          "output_tokens": 21,
+          "context_bytes": 1287,
+          "prompt_sha256": "46d83bdc3c2dd44d9768e774e8f499bb0050f800bc514e8a7511e0e035338c52",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10bea-f7d7-7e82-b697-e8a68b7ea0c4"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"3\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12948,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12948,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-20",
+          "latency_ms": 12068.995416979305
+        },
+        {
+          "decision": "3",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12938,
+          "output_tokens": 45,
+          "context_bytes": 1271,
+          "prompt_sha256": "5ba9294279657bdf6eae4ffec075515211636df031b39ce5cd39a3a943e71c74",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10beb-26fa-7841-b798-56b919f6680c"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"3\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12938,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 45,
+                "reasoning_output_tokens": 22
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12938,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 45,
+            "reasoning_output_tokens": 22
+          },
+          "case_id": "independent-ceremony-21",
+          "latency_ms": 13060.95812501735
+        },
+        {
+          "decision": "3",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12940,
+          "output_tokens": 21,
+          "context_bytes": 1278,
+          "prompt_sha256": "f934690004eace1606886d2dd4f513cf2a619fa14b0cd824409d297bd99c48ba",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10beb-5a04-7f71-9f74-770033e163c5"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"3\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12940,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12940,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-22",
+          "latency_ms": 10215.601458010497
+        },
+        {
+          "decision": "3",
+          "confidence": 0.99,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12933,
+          "output_tokens": 53,
+          "context_bytes": 1255,
+          "prompt_sha256": "da3df9c230bd1d7973ed480f023cb08fad7a79959bede8d49cf5339fa7678c08",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10beb-81f6-7c11-bf20-4d2e159b9e7d"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"3\",\"confidence\":0.99}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12933,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 53,
+                "reasoning_output_tokens": 30
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12933,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 53,
+            "reasoning_output_tokens": 30
+          },
+          "case_id": "independent-ceremony-23",
+          "latency_ms": 15208.074291993398
+        },
+        {
+          "decision": "0",
+          "confidence": 0.98,
+          "abstain": false,
+          "fallback": false,
+          "input_tokens": 12928,
+          "output_tokens": 21,
+          "context_bytes": 1212,
+          "prompt_sha256": "c0a1dd7a444454c9e85bb3f43d3e02c7741ff92c534f5b3d9f357dc87d8e922d",
+          "raw_events": [
+            {
+              "type": "thread.started",
+              "thread_id": "01a10beb-bd4a-7e61-ab2e-2989c25e5e5c"
+            },
+            {
+              "type": "turn.started"
+            },
+            {
+              "type": "item.completed",
+              "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "{\"decision\":\"0\",\"confidence\":0.98}"
+              }
+            },
+            {
+              "type": "turn.completed",
+              "usage": {
+                "input_tokens": 12928,
+                "cached_input_tokens": 11520,
+                "cache_write_input_tokens": 0,
+                "output_tokens": 21,
+                "reasoning_output_tokens": 0
+              }
+            }
+          ],
+          "usage": {
+            "input_tokens": 12928,
+            "cached_input_tokens": 11520,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 21,
+            "reasoning_output_tokens": 0
+          },
+          "case_id": "independent-ceremony-24",
+          "latency_ms": 15058.098040986806
+        }
+      ]
+    }
+  ]
+}
