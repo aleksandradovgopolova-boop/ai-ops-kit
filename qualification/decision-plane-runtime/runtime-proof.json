@@ -1,0 +1,1003 @@
+{
+  "kind": "runtime-boundary-proof",
+  "source_head": "ad44ddd9e698b7ef159da7182ebe3728a1710a66",
+  "source_dirty": true,
+  "module_sha256": {
+    "ai_ops_kit/providers/orchestrator.py": "38adb894b747768cd234218389c8b61af3f2a2067060de6b4780965ba07a2726",
+    "ai_ops_kit/providers/skill_context.py": "1ea926da0e180c069010b385db5eaa8ae72d1fe6d78a8644acc370dfacc11205",
+    "ai_ops_kit/gates/gate_executor.py": "4d33f23d3d377a7b9293f42099cbf2c4faa8114b5c4c21b9115cb8eee06ca0b6",
+    "ai_ops_kit/shared/claim_provenance.py": "5609ff53f2f09f0aa4b52eefde4b1fa0ef793640cd94467e78fff4e9c8e8839b"
+  },
+  "limitations": "Recording mock provider, fixed synthetic task; no LLM downstream quality/token/cost qualification; no blind held-out accuracy claim.",
+  "workflow_rows": [
+    {
+      "workflow": "QUICK",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "QUICK",
+      "stage": "local-change",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2053,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "QUICK",
+      "stage": "local-verify",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2716,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "QUICK",
+      "stage": "result",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1576,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "requirements",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3285,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "requirements-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1938,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "specification",
+      "declared_skills": [
+        "contradiction-resolution"
+      ],
+      "recorded_skills": [
+        "contradiction-resolution"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 7310,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "plan",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2242,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "plan-critique",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4063,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "implementation",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2752,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "verify",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3417,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4308,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2358,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "problem",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1165,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "users",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1396,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "value",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1481,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "hypotheses",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1569,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "discovery-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3494,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "requirements",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4115,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "specification",
+      "declared_skills": [
+        "contradiction-resolution"
+      ],
+      "recorded_skills": [
+        "contradiction-resolution"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 7978,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "plan",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2910,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "plan-critique",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4731,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "implementation",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3420,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "validation",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4085,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "stakeholder-handoff",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2943,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3043,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "question",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "scope",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3436,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "source-strategy",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2693,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "RESEARCH",
+      "blocked_before_stage": "research",
+      "failure": "deep-research: skill недоступен исполнителю",
+      "calls": 3
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "ux-flow",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1511,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "states",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1679,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "design-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3333,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "design-system-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4558,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "accessibility-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3961,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "implementation",
+      "declared_skills": [
+        "frontend-design"
+      ],
+      "recorded_skills": [
+        "frontend-design"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 7279,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "verify",
+      "declared_skills": [
+        "e2e-browser-testing"
+      ],
+      "recorded_skills": [
+        "e2e-browser-testing"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 7745,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2363,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "metrics-definition",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1395,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "event-design",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1574,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "dashboard-spec",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1747,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "analytics-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3008,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "implementation",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2757,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "verify",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3422,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2196,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "data-collection",
+      "declared_skills": [
+        "product-session-review"
+      ],
+      "recorded_skills": [
+        "product-session-review"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 11444,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "health-report",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1571,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "insight-synthesis",
+      "declared_skills": [
+        "system-constraint-analysis"
+      ],
+      "recorded_skills": [
+        "system-constraint-analysis"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 7890,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "insight-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3518,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "hypotheses-for-discovery",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1939,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2038,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "recommendation",
+      "declared_skills": [
+        "decision-support"
+      ],
+      "recorded_skills": [
+        "decision-support"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 6985,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "principle-review",
+      "declared_skills": [
+        "decision-support"
+      ],
+      "recorded_skills": [
+        "decision-support"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 8836,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "one-way-door-brief",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1666,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "decision-record",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1761,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "outcome-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2102,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2032,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "launch-readiness",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1956,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "analytics-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2658,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "adoption-plan",
+      "declared_skills": [
+        "product-demo-video"
+      ],
+      "recorded_skills": [
+        "product-demo-video"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 6143,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "user-docs",
+      "declared_skills": [
+        "user-documentation"
+      ],
+      "recorded_skills": [
+        "user-documentation"
+      ],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 7679,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "docs-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3355,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "feedback-loop",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2826,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "post-launch-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3000,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4213,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2540,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "target-scenario",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2696,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "eval-dataset",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2689,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "implementation",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2862,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "offline-evals",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3338,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "red-team",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3990,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "verify",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3410,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2184,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "intake",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3282,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "risk-assessment",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 1686,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "plan",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2058,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "plan-critique",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3879,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "implementation",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2568,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "verify",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 3233,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "security-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2744,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "code-review",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 4300,
+      "stage_origin": "JUDGMENT"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "human-approval",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2519,
+      "stage_origin": "REASONING"
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "memory-capture",
+      "declared_skills": [],
+      "recorded_skills": [],
+      "all_declared_in_prompt": true,
+      "prompt_bytes": 2530,
+      "stage_origin": "REASONING"
+    }
+  ],
+  "policy_attacks": [
+    {
+      "signals": {
+        "risk": "critical",
+        "task_type": "QUICK"
+      },
+      "proposed_gates": [],
+      "evaluated_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "plan_readiness",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ],
+      "blocked": true,
+      "claim_origins": {
+        "intake_completeness": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "concurrency_preflight": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "implementation_verification": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "plan_readiness": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "security": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "code_review": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "architecture_review": {
+          "kind": "FACT",
+          "description": "факт проверки"
+        },
+        "deploy_readiness": {
+          "kind": "FACT",
+          "description": "факт проверки"
+        }
+      }
+    },
+    {
+      "signals": {
+        "security_surface_changed": true,
+        "task_type": "QUICK"
+      },
+      "proposed_gates": [],
+      "evaluated_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "security"
+      ],
+      "blocked": true,
+      "claim_origins": {
+        "intake_completeness": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "concurrency_preflight": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "implementation_verification": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "security": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        }
+      }
+    },
+    {
+      "signals": {
+        "privileged": true,
+        "task_type": "QUICK"
+      },
+      "proposed_gates": [],
+      "evaluated_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "security"
+      ],
+      "blocked": true,
+      "claim_origins": {
+        "intake_completeness": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "concurrency_preflight": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "implementation_verification": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "security": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        }
+      }
+    },
+    {
+      "signals": {
+        "destructive": true,
+        "task_type": "QUICK"
+      },
+      "proposed_gates": [],
+      "evaluated_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "security"
+      ],
+      "blocked": true,
+      "claim_origins": {
+        "intake_completeness": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "concurrency_preflight": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "implementation_verification": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        },
+        "security": {
+          "kind": null,
+          "description": "источник не подтверждён"
+        }
+      }
+    }
+  ],
+  "unsafe_pass_count": 0
+}

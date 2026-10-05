@@ -173,6 +173,7 @@ def _gate_ev_from_verdict(gid, g, rv, *, revision, delivered, work_root, valid_i
     entry = {"gate": gid, "stopped": rv.get("stopped"), "reads": rv.get("reads"),
              "denied": rv.get("denied"), "valid": not errs, "source": rv.get("source"),
              "status": (res or {}).get("status") if not errs else None,
+             "provenance": "JUDGMENT" if not errs else None,
              "blockers": (res or {}).get("blockers") if isinstance(res, dict) else None,
              "errors": errs or None}
     if errs:
@@ -271,6 +272,8 @@ def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *
             gid, g, rv, revision=revision, delivered=delivered, work_root=work_root,
             valid_ids=valid_ids, signals=signals, calibrated_enforcement=calibrated_enforcement,
             ui_evidence=ui_evidence)
+        if entry.get("valid"):
+            ev["provenance"] = "JUDGMENT"
         gate_ev[gid] = ev
         reviews.append(entry)
     return gate_ev, reviews
@@ -370,6 +373,8 @@ def _run_reviews(reviewer_proposer, work_root, gate_ids, gate_ev, signals, revis
             gid, g, rv, revision=revision, delivered=delivered, work_root=work_root,
             valid_ids=valid_ids, signals=signals, calibrated_enforcement=calibrated_enforcement,
             ui_evidence=ui_evidence)
+        if entry.get("valid"):
+            ev["provenance"] = "JUDGMENT"
         gate_ev[gid] = ev
         reviews.append(entry)
     return gate_ev, reviews

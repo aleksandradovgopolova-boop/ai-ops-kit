@@ -29,7 +29,8 @@ def _run(child_root, judge_fn, mode="enforced", monkeypatch=None):
                         lambda _p, _c: (judge_fn, {"mode": mode, "mechanism": "проба"}))
     return orchestrator.run_workflow(
         workflow_id=WF, task_text="проверить утверждение", child_root=child_root,
-        provider=orchestrator.mock_provider, verbose=False, fresh=True, collect=True)
+        provider=orchestrator.mock_provider, verbose=False, fresh=True, collect=True,
+        skill_resolver=lambda sid: "Тестовый доступный внешний research skill")
 
 
 def _gate(run_dir, gate_id):

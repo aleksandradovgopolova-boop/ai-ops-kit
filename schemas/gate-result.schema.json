@@ -7,6 +7,7 @@
   "properties": {
     "schema_version": { "const": 1 },
     "gate": { "type": "string" },
+    "provenance": {"type": ["string", "null"], "enum": ["FACT", "JUDGMENT", "REASONING", "HUMAN_DECISION", null], "description": "Происхождение утверждения; само по себе не доказательство истинности."},
     "status": { "type": "string", "enum": ["pass", "warn", "fail"] },
     "blocking": { "type": "boolean" },
     "awaiting_human": { "type": "boolean", "description": "Gate is blocked pending a human decision (ApprovalRecord), not by a defect an agent can fix. Always present, never absent: a missing field would read as 'unknown', which here is indistinguishable from 'no'." },
