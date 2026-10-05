@@ -1,0 +1,37 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-10-05-шаблон-ai-ops-update-yml-0f590832
+at: '2026-10-05T11:22:38+00:00'
+statement: 'Шаблон ai-ops-update.yml релиза 4.9.3 содержит пустое GitHub expression
+  в shell-комментарии: установка Garden потребовала исправить копию workflow до запуска
+  jobs.'
+observation_class: defect
+severity: p1
+kit_version: 4.9.3
+child:
+  name: garden
+  path: /private/tmp/ai-ops-first-hour-selection-20261005.okUBc5/garden-installed-pr
+  commit: 45d39c0de94b
+evidence:
+- kind: file
+  path: templates/ci/ai-ops-update.yml:166
+  quote: '            # не проходит ни через `${{ }}`, ни через переменную shell,
+    поэтому кавычки и `$()`'
+- kind: command
+  command: gh api repos/aleksandradovgopolova-boop/garden/actions/runs/37300910173;
+    gh api repos/aleksandradovgopolova-boop/garden/actions/runs/37300910173/jobs
+  output: head_sha=bff90296a77a8f08cd88d4ec54295bbbae548544; conclusion=failure; jobs=[];
+    workflow=.github/workflows/ai-ops-update.yml
+- kind: file
+  path: internal/engineering/ai-ops/installation-2026-10-05.md
+  quote: На PR9 45d39c0de94b описано исправление пустого expression в комментарии
+    child workflow. Managed package не менялся. Все 8 checks SUCCESS; последняя 2026-10-05T11:10:41Z.
+- kind: note
+  text: Upstream-исправление ещё не выполнено. Проверка обычного YAML не доказывает
+    принятие expressions GitHub; при исправлении нужен регрессионный случай и действительный
+    запуск workflow.
+state: delivered
+state_reason: null
+delivered_to:
+  kit_root: /Users/sasad/.codex/worktrees/garden-field-accounting/ai-ops-kit
+  at: '2026-10-05T11:22:38+00:00'
