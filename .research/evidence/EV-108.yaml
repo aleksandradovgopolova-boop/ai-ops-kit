@@ -1,0 +1,43 @@
+schema_version: 1
+kind: research.evidence
+id: EV-108
+request_id: RR-001
+statement: >
+  Пересчёт стоимости генерации одной книги на 2026-09-22 (то же допущение: ~100K токенов выхода
+  + ~200K токенов входа без учёта кэша): deepseek-v4-flash ≈ $0.06; deepseek-v4-pro ≈ $0.17;
+  kimi-k2.6 ≈ $0.59 у официального провайдера Moonshot (≈ $0.39 у самого дешёвого провайдера
+  листинга); kimi-k3 ≈ $2.10. Против EV-106 изменилась только строка kimi-k2.6 ($0.47 → $0.59,
+  +26%): цены DeepSeek и K3 на дату пересчёта прежние. Разброс между дешёвым и качественным
+  вариантом остался ~35x; кэширование промптов снижает входную часть у всех.
+evidence_type: inference
+derived_from: [EV-101, EV-103, EV-107]
+source:
+  title: "Расчёт на основе EV-101/EV-103/EV-107"
+  url: ""
+  type: internal_data
+  published_at: "2026-09-22"
+  is_primary: true
+citation:
+  locator: "формула: 0.1M*output_price + 0.2M*input_price(cache-miss); цены K2.6 — EV-107, DeepSeek — EV-101, K3 — EV-103"
+captured_at: "2026-09-22"
+captured_by: "freshness-Watch (scheduled task, прогон 2026-09-22)"
+freshness:
+  volatile: true
+  expires_at: "2026-10-22"
+reliability:
+  level: medium
+  rationale: >
+    Арифметика от цен источников верна и перепроверена, но размер книги — по-прежнему допущение:
+    фактический профиль токенов пайплайна не измерялся. Цены DeepSeek (EV-101) и K3 (EV-103) взяты
+    без повторной проверки — их собственный freshness истекает 2026-10-22, до этой даты они
+    считаются актуальными.
+conflicts_with:
+  - evidence_id: EV-106
+    claim: "EV-106: kimi-k2.6 ≈ $0.47 за книгу."
+    source: "Расчёт на основе EV-101/EV-103/EV-104"
+    status: resolved
+    note: >
+      Расхождение целиком объясняется изменением входной цены K2.6 (EV-104 → EV-107), а не
+      ошибкой в арифметике. EV-106 переведён в status: superseded.
+status: active
+superseded_by: null

@@ -26,7 +26,7 @@ captured_at: "2026-08-12"
 captured_by: "novelty-Watch (scheduled task, прогон 2026-08-12)"
 freshness:
   volatile: true
-  expires_at: "2026-09-12"
+  expires_at: "2026-10-23"
 reliability:
   level: high
   rationale: >
@@ -34,6 +34,9 @@ reliability:
     API пользователя, прямой HTTP с редиректами, поиск по дословному описанию) в одном прогоне
     2026-08-12. Ограничение: причина исчезновения (удаление владельцем, переименование аккаунта,
     блокировка платформой) НЕ установлена и по внешним данным не устанавливается.
+    Re-verify 2026-09-22 (freshness-Watch): все три адреса по-прежнему 404
+    (GET /repos/0xwilliamortiz/ratchet, GET /users/0xwilliamortiz, curl -L по HTML-адресу) —
+    факт исчезновения источника подтверждён, freshness продлён на исходный горизонт (31 день).
 conflicts_with:
   - evidence_id: EV-672
     claim: "EV-672 описывает механизм ratchet как читаемый в первоисточнике (код верифицирован 2026-08-05)."

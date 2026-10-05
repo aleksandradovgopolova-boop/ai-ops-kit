@@ -9,6 +9,8 @@
      evidence_ids/derived_from/superseded_by указывают на существующие EV (переиспользование
      EV между запросами разрешено — это research memory); status: superseded требует superseded_by;
      EV-id, упомянутые в rationale/decision_brief DP, обязаны входить в evidence_ids.
+     DP не опирается на снятый EV: ссылка на superseded/stale/retracted — ошибка для
+     открытого (draft) пакета и предупреждение для уже закрытого.
   3. Freshness (структурно): volatile: true требует expires_at; даты — ISO; просроченный
      active-EV — WARNING (temporal-контроль — у еженедельного freshness_sweep), --strict -> ошибка.
   4. Quote grounding (конвенция v0.2): для EV с captured_at >= 2026-07-23, непустым source.url
@@ -127,6 +129,55 @@ def check_links(rrs, evs, dps):
     return errs
 
 
+def _newest_successor(ev_id, evs):
+    """Пройти цепочку superseded_by до последней записи. Возвращает id или None.
+
+    Цепочки реальны: EV-660 -> EV-673 -> EV-1170. Ссылаться на середину цепочки так же
+    неверно, как на её начало, поэтому в сообщении называется последняя запись.
+    """
+    seen = {ev_id}
+    cur = ev_id
+    while True:
+        nxt = (evs.get(cur) or {}).get('superseded_by')
+        if not nxt or nxt not in evs or nxt in seen:   # обрыв, дыра или цикл
+            break
+        seen.add(nxt)
+        cur = nxt
+    return None if cur == ev_id else cur
+
+
+def check_evidence_currency(evs, dps):
+    """DP не должен опираться на снятый EV. Возвращает (errors, warnings).
+
+    Улов freshness-Watch 2026-09-22: ссылочная целостность ловила только НЕСУЩЕСТВУЮЩИЙ id,
+    поэтому DP-101 спокойно ссылался на EV-104 после его supersession — «решение опирается на
+    устаревшие данные» находил еженедельный свип и ничто больше.
+
+    Тяжесть зависит от статуса DP, а не от статуса EV: пока пакет `draft`, решение открыто и
+    ссылку надо просто переставить на преемника — это ошибка. Уже `reviewed`/`accepted` пакет —
+    исторический снимок решения, принятого на данных своей даты; переписывать его задним числом
+    нельзя, поэтому предупреждение для человека, а не красный контур навсегда.
+    """
+    errs, warns = [], []
+    for dp_id in sorted(dps):
+        dp = dps[dp_id]
+        open_dp = dp.get('status') == 'draft'
+        for eid in dp.get('evidence_ids') or []:
+            ev = evs.get(eid)
+            if not ev:
+                continue                       # несуществующий id — дело check_links
+            status = ev.get('status')
+            if status in (None, 'active'):
+                continue
+            successor = _newest_successor(eid, evs) if status == 'superseded' else None
+            tail = f'; актуальная запись — {successor}' if successor else ''
+            msg = (f'{dp_id}: evidence_ids {eid} в статусе {status} — '
+                   f'решение опирается на снятые данные{tail}')
+            (errs if open_dp else warns).append(
+                msg if open_dp else msg + ' (DP закрыт, правка — решение человека)')
+    return errs, warns
+
+
 def check_freshness_and_quotes(evs, today):
     """Возвращает (errors, warnings)."""
     errs, warns = [], []
@@ -208,6 +259,10 @@ def main():
         all_errs.extend(schema_errs)
         all_errs.extend(f'[{label}] {e}' for e in check_links(
             objs['research-request'], objs['research-evidence'], objs['decision-package']))
+        c_errs, c_warns = check_evidence_currency(
+            objs['research-evidence'], objs['decision-package'])
+        all_errs.extend(f'[{label}] {e}' for e in c_errs)
+        all_warns.extend(f'[{label}] {w}' for w in c_warns)
         f_errs, f_warns = check_freshness_and_quotes(objs['research-evidence'], today)
         all_errs.extend(f'[{label}] {e}' for e in f_errs)
         all_warns.extend(f'[{label}] {w}' for w in f_warns)
