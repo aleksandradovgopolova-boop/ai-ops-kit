@@ -44,7 +44,7 @@ PROBES_REL = "quality/mutation-probes.yaml"
 KIND = "mutation-probes"
 #: Что не копируем в дерево прогона: история, кеши, окружения. Копия нужна только для запуска тестов.
 SKIP = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".venv", "node_modules", ".mypy_cache",
-                              ".pytest_cache", ".ruff_cache", "htmlcov", ".ai")
+                              ".pytest_cache", ".ruff_cache", "htmlcov", ".ai", "build", "dist")
 
 
 def load_probes(root=None) -> list:

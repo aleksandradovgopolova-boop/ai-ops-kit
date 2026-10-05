@@ -1,0 +1,45 @@
+schema_version: 1
+kind: research.evidence
+id: EV-107
+request_id: RR-001
+statement: >
+  Kimi K2.6 на листинге OpenRouter (пересъёмка 2026-09-22): у официального провайдера
+  Moonshot AI — $0.95 вход / $4.00 выход / $0.16 cache-read за 1M токенов. Цены $0.66 / $3.41
+  (EV-104) на странице больше нет ни у одного из 21 провайдера. В заголовке карточки показана
+  цена самого дешёвого провайдера — $0.50 вход / $2.85 выход за 1M (Chutes); контекст
+  262,144 токена не изменился.
+evidence_type: documented_fact
+source:
+  title: "OpenRouter — moonshotai/kimi-k2.6"
+  url: "https://openrouter.ai/moonshotai/kimi-k2.6"
+  type: vendor_page
+  published_at: null
+  is_primary: false
+citation:
+  locator: "карточка модели, встроенный payload провайдеров: endpoint с provider_name Moonshot AI, объект pricing (цены за 1 токен: 0.00000095 / 0.000004 / 0.00000016); заголовок карточки и JSON-LD featureList — цена дешёвого провайдера и контекст"
+  quote: '\"prompt\":\"0.00000095\",\"completion\":\"0.000004\",\"input_cache_read\":\"0.00000016\"'
+captured_at: "2026-09-22"
+captured_by: "freshness-Watch (scheduled task, прогон 2026-09-22)"
+freshness:
+  volatile: true
+  expires_at: "2026-11-22"
+reliability:
+  level: medium
+  rationale: >
+    Вторичный источник (агрегатор, но строка официального провайдера Moonshot AI), тот же класс,
+    что у EV-104. Цены сняты из встроенного payload страницы, а не с официальной страницы
+    платформы Kimi — первичный источник по-прежнему не проверен. Косвенное усиление: цифра
+    $0.95 / $4.00, которая в EV-104 числилась противоречащим сторонним обзором, теперь совпадает
+    со строкой официального провайдера.
+conflicts_with:
+  - evidence_id: EV-104
+    claim: "EV-104: у официального провайдера Moonshot цена K2.6 — $0.66 вход / $3.41 выход за 1M токенов."
+    source: "https://openrouter.ai/moonshotai/kimi-k2.6"
+    status: resolved
+    note: >
+      На 2026-07-22 утверждение EV-104 было верным по той же странице; на 2026-09-22 цены
+      официального провайдера другие ($0.95 / $4.00), а $0.66 / $3.41 не встречаются ни у одного
+      провайдера. EV-104 переведён в status: superseded. Не установлено, изменилась цена провайдера
+      или в июле была снята строка другого провайдера — различить постфактум нельзя.
+status: active
+superseded_by: null

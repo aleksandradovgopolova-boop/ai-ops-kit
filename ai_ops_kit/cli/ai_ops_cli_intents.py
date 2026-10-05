@@ -137,7 +137,7 @@ def _intent_readout(task, child_root, signals, a):
 _GRAPH_SUBS = ("build", "trace", "gaps", "questions")
 
 
-def _graph_positionals(a):
+def _graph_positionals(a, child_root):
     """Позиционные интента `graph` без каталога репозитория: [sub, feature] в любом порядке вызова.
 
     `./ai-ops` подставляет путь то в начало, то в хвост; каталогом ни подкоманда, ни id функции не
@@ -147,7 +147,15 @@ def _graph_positionals(a):
             return Path(p).is_dir()
         except OSError:
             return False
-    args = [x for x in (getattr(a, "rest", None) or []) if not _is_dir(x)]
+    args = list(getattr(a, "rest", None) or [])
+    root = Path(child_root).resolve()
+    for index in reversed(range(len(args))):
+        value = args[index]
+        # Удаляем корень один раз: относительное имя может совпадать с командой.
+        if (len(args) > 1 or value not in _GRAPH_SUBS) and Path(value).resolve() == root:
+            args.pop(index)
+            break
+    args = [x for x in args if x in _GRAPH_SUBS or not _is_dir(x)]
     sub = (args[0] if args else "").strip().lower()
     feature = args[1] if len(args) > 1 else getattr(a, "feature", None)
     return sub, feature
@@ -236,7 +244,7 @@ def _intent_graph(task, child_root, signals, a):
     from ai_ops_kit.intelligence import knowledge_graph as kg
     from ai_ops_kit.ui import presenter
     root = Path(child_root)
-    sub, feature = _graph_positionals(a)
+    sub, feature = _graph_positionals(a, root)
     if sub not in _GRAPH_SUBS:
         _graph_help(js)
         return 2

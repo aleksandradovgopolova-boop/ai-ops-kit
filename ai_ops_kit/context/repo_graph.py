@@ -83,7 +83,7 @@ def _analyze(path: Path):
         # `<unknown>:11: invalid escape sequence`, по которой нельзя ни починить, ни осознанно
         # пропустить: непонятно даже, чей это файл — его продукта или кита.
         tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
-    except (SyntaxError, OSError):
+    except (SyntaxError, OSError, UnicodeError):
         return [], set()
     symbols = [n.name for n in tree.body
                if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))]
@@ -92,11 +92,11 @@ def _analyze(path: Path):
         if isinstance(n, ast.Import):
             for a in n.names:
                 mods.add(_stem(a.name.split(".")))
-                mods.add(a.name.split(".")[-1])
+                mods.update(a.name.split("."))
         elif isinstance(n, ast.ImportFrom):
             if n.module:
                 parts = n.module.split(".")
-                mods.add(parts[-1])
+                mods.update(parts)
                 mods.update(a.name for a in n.names)
                 # `from ai_ops_kit.<пакет> import <модуль>, ...` — модули перечислены в names,
                 # а не в module. Без этой ветки все внутренние связи схлопывались бы в один узел
@@ -122,7 +122,7 @@ def _analyze_js(path: Path):
     Парсит: import ... from '...', import '...', require('...'), export function/class."""
     try:
         content = path.read_text(encoding="utf-8")
-    except OSError:
+    except (OSError, UnicodeError):
         return [], set()
 
     # Symbols: export function/class/const
@@ -156,6 +156,16 @@ def _uncertain_dependency(path: Path) -> bool:
         text = path.read_text(encoding="utf-8")
         if path.suffix == ".py":
             tree = ast.parse(text, filename=str(path))
+            dynamic_names = {"__import__", "eval", "exec", "import_module",
+                             "spec_from_file_location", "run_path", "run_module"}
+            # Imported loaders may be aliased or passed to another function; the
+            # presence of such a binding already makes this graph incomplete.
+            if any(isinstance(n, ast.Attribute) and n.attr in dynamic_names
+                   for n in ast.walk(tree)):
+                return True
+            if any(isinstance(n, ast.ImportFrom) and any(
+                    a.name in dynamic_names for a in n.names) for n in ast.walk(tree)):
+                return True
             return any(isinstance(n, ast.Call) and (
                 isinstance(n.func, ast.Name) and n.func.id in ("__import__", "eval", "exec") or
                 isinstance(n.func, ast.Attribute) and n.func.attr in
@@ -183,6 +193,7 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
         if f.name == "__init__.py" or (f.suffix in JS_TS_EXTENSIONS and f.stem == "index"):
             stem_to_rels.setdefault(f.parent.name, set()).add(rel)
 
+    known_rels = {rel for _, rel in rels}
     file_info, symbol_index, import_edges, tests = {}, {}, {}, {}
     for f, rel in rels:
         # Выбираем анализатор по расширению
@@ -193,7 +204,16 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
         file_info[rel] = {"symbols": syms, "imports": sorted(mods), "language": "js" if f.suffix in JS_TS_EXTENSIONS else "py"}
         for s in syms:
             symbol_index.setdefault(s, []).append(rel)
-        internal = sorted({target for m in mods for target in stem_to_rels.get(m, ()) if target != rel})
+        internal = {target for m in mods for target in stem_to_rels.get(m, ()) if target != rel}
+        if f.suffix == ".py":
+            # Importing a descendant executes every existing package initializer,
+            # including when the import uses a relative module name.
+            for parent in Path(rel).parents:
+                initializer = str(parent / "__init__.py")
+                if initializer in known_rels:
+                    if initializer != rel:
+                        internal.add(initializer)
+        internal = sorted(internal)
         import_edges[rel] = internal
         stem = Path(rel).stem
         if stem.startswith("test_") or stem.endswith("_test") or stem.endswith(".test") or stem.endswith(".spec"):

@@ -519,14 +519,14 @@ def _parse_task_and_root(intent, rest):
 
     Порядок правил важен: сначала абсолютный путь в НАЧАЛЕ (так делает только обёртка), потом хвост
     (так пишет человек), потом относительный путь в начале (`./ai-ops specify . "текст"`).
-    Абсолютность в первом правиле отличает подстановку обёртки от текста задачи, случайно совпавшего
-    с именем каталога.
+    Абсолютный путь отличает подстановку обёртки от текста задачи с именем каталога.
     """
     needs_task = INTENTS.get(intent, ("", "", False))[2]
     task, child_root = None, "."
     if len(rest) >= 2 and _is_dir_safe(rest[0]) and Path(rest[0]).is_absolute():
         child_root = rest.pop(0)
-    elif rest and _is_dir_safe(rest[-1]):
+    elif rest and _is_dir_safe(rest[-1]) and not (
+            intent == "graph" and len(rest) == 1 and rest[0] in ("build", "trace", "gaps", "questions")):
         child_root = rest.pop()
     elif len(rest) >= 2 and _is_dir_safe(rest[0]):
         child_root = rest.pop(0)

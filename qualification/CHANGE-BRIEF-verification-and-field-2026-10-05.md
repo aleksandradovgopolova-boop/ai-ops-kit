@@ -1,0 +1,6 @@
+Результат: завершить незапубликованный остаток сверки исследований и плана; безопасно завершить выбор проверок, подтвердить доставку выпуска и полевые проверки.
+Затрагиваемые пути: repo_graph → verification_tiers → impact_check/evidence_collector; research validator → pytest; plan/history → roadmap issue sync; release_bump → release workflow → installer/update PR; child lint hook → CI → reviewer; security scanner → независимый вердикт.
+Инварианты: неизвестное влияние требует полного набора; merge/release сохраняют регрессию; writer ≠ judge; registry остаётся источником; пользовательские файлы сохранены; внешняя приёмка не выводится из unit-тестов.
+Failure modes: alias dynamic import или initializer пакета скрывает потребителя; одноимённый каталог скрывает команду графа; устаревший checkout повторно вносит код; план закрывает недоказанное; опубликованная сводка не доезжает в дочку.
+Доказательство: регрессии import graph с выполненным побочным эффектом; целевые pytest; check-full full-current-python; CI compatibility-matrix; независимый review; реальный release/update PR; наблюдение hook/CI/reviewer и независимый security scan.
+Не входит: новая capability, ручной тег, изменение главной метрики или засчёт незнакомца вместо живого участника; продакшн-деплой дочки.

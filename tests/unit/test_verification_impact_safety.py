@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import shlex
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -196,3 +197,50 @@ def test_side_effect_before_multiline_import_keeps_both_dependencies(tmp_path):
     profile = {"stacks": [{"language": "typescript", "commands": {"test": "vitest run"}}]}
     result = tiers.select_tests(["src/a.ts"], tmp_path, profile=profile)
     assert result["affected_tests"] == ["tests/direct.test.ts", "tests/mixed.test.ts"]
+
+
+@pytest.mark.parametrize("binding", ["from importlib import import_module",
+                                      "from importlib import import_module as load",
+                                      "from runpy import run_module as load",
+                                      "import importlib\nload = importlib.import_module"])
+def test_imported_dynamic_loader_forces_full(tmp_path, binding):
+    write(tmp_path, "src/a.py", "value = 1")
+    write(tmp_path, "tests/test_direct.py", "from src.a import value\ndef test_value(): assert value == 1")
+    write(tmp_path, "src/loader.py", binding)
+    result = tiers.select_tests(["src/a.py"], tmp_path, profile=PROFILE)
+    assert result["full_command"] and "incomplete" in result["note"]
+
+
+def test_dynamic_alias_really_loads_changed_source(tmp_path):
+    write(tmp_path, "src/a.py", "value = 1")
+    write(tmp_path, "tests/test_direct.py", "from src.a import value\ndef test_direct(): assert value == 1")
+    write(tmp_path, "tests/test_alias.py", "from importlib import import_module as load\n"
+          "def test_alias(): assert load('src.a').value == 1")
+    def run():
+        return subprocess.run([sys.executable, "-m", "pytest", "tests/test_alias.py", "-q"],
+                              cwd=tmp_path, capture_output=True, text=True,
+                              env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    assert run().returncode == 0
+    write(tmp_path, "src/a.py", "value = 22")
+    failed = run()
+    assert failed.returncode == 1 and "22 == 1" in failed.stdout
+    assert tiers.select_tests(["src/a.py"], tmp_path, profile=PROFILE)["full_command"]
+
+
+def test_nested_initializer_effect_reaches_descendant_consumer(tmp_path):
+    write(tmp_path, "pkg/__init__.py")
+    write(tmp_path, "pkg/sub/__init__.py", "import builtins\nbuiltins.package_value = 1")
+    write(tmp_path, "pkg/sub/worker.py", "import builtins\nvalue = builtins.package_value")
+    write(tmp_path, "tests/test_direct.py", "import pkg.sub\ndef test_direct(): pass")
+    write(tmp_path, "tests/test_worker.py", "from pkg.sub.worker import value\ndef test_value(): assert value == 1")
+    def run():
+        return subprocess.run([sys.executable, "-m", "pytest", "tests/test_worker.py", "-q"],
+                              cwd=tmp_path, capture_output=True, text=True,
+                              env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    assert run().returncode == 0
+    write(tmp_path, "pkg/sub/__init__.py", "import builtins\nbuiltins.package_value = 22")
+    failed = run()
+    assert failed.returncode == 1 and "22 == 1" in failed.stdout
+    result = tiers.select_tests(["pkg/sub/__init__.py"], tmp_path, profile=PROFILE)
+    assert not result["full_command"]
+    assert result["affected_tests"] == ["tests/test_direct.py", "tests/test_worker.py"]

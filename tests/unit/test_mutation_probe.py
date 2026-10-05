@@ -289,3 +289,21 @@ def test_mutation_target_cannot_escape_copy(tmp_path):
     result = mp.run(root, workers=2)
     assert result["not_verified"] == ["guard-refuses-none"]
     assert external.read_text() == GUARDED
+
+
+@pytest.mark.parametrize("directory", ["build", "dist"])
+def test_generated_output_does_not_contaminate_mutation_copy(tmp_path, directory):
+    source = ("from pathlib import Path\nfrom guarded import keep\n"
+              f"def test_guard():\n    assert not Path('{directory}').exists()\n"
+              "    assert keep(None) == 'отказ'\n")
+    root = _probes(_mini_repo(tmp_path, test_body=source))
+    generated = root / directory / "stale.py"
+    generated.parent.mkdir()
+    generated.write_text("stale = 1\n")
+    assert generated.is_file()
+    result = mp.run(root, python=sys.executable)
+    assert result["checked"] == 1
+    assert result["not_verified"] == [] and result["survived"] == []
+    assert result["probes"][0]["outcome"] == "killed"
+    assert generated.read_text() == "stale = 1\n"
+    assert (root / "guarded.py").read_text() == GUARDED
