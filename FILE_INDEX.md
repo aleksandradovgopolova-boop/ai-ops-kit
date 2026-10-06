@@ -835,3 +835,6 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/devtools/runtime_context_probe.py` — непоставляемый offline prototype контекста и аудита command hooks.
 - `qualification/runtime-context-prototype/` — synthetic native-shape inputs и actual CLI capture, границы доказательств.
 - `qualification/CHANGE-BRIEF-runtime-context-2026-10-06.md` — brief перед prototype #1267.
+
+- `qualification/runtime-context-live/` — actual native CLI evidence, controls, source data и ограничения live qualification #1269.
+- `qualification/CHANGE-BRIEF-runtime-context-live-2026-10-06.md` — brief перед native экспериментом.
