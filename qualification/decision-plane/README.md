@@ -181,3 +181,10 @@ Raw provider с unsafe остаётся reject даже если guarded вар�
 oracle/input/splits. Это повтор после protocol repair, не новая blind qualification.
 
 Финальный охват `full-current-python` (CPython 3.14.7/macOS): **8856 passed, 35 skipped, 1 failed** за 462 с; ruff passed. Единственный сбой — `test_every_module_imports_with_root_only`: probe удаляет лежащие внутри корня `.venv/site-packages`, поэтому теряется PyYAML. Собственный прежний timeout-contract теперь проходит. Compatibility-matrix не запускалась; зелёный full-current-python не заявляется.
+
+## Проверка после обновления базы (06.10.2026)
+
+PR #1259 синхронизирован с main, конфликт файлового указателя разрешён сохранением обоих
+разделов. Внешнее окружение устраняет потерю PyYAML в root-only probe без изменения теста.
+`full-current-python` (CPython 3.14.7 / darwin): **8907 passed, 35 skipped, 2 warnings**;
+ruff прошёл. Предыдущий незелёный прогон выше сохранён как историческое evidence.
