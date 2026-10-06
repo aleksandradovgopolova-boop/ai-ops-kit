@@ -1,0 +1,30 @@
+{
+  "runtime_returncode": 1,
+  "model": "gpt-5.6-luna",
+  "effort": "low",
+  "actual_revision": null,
+  "latency_ms": 5631.47087499965,
+  "raw_events": [
+    {
+      "type": "thread.started",
+      "thread_id": "01a10bfd-7875-7113-a238-f2ea8fc1a4d5"
+    },
+    {
+      "type": "turn.started"
+    },
+    {
+      "type": "error",
+      "message": "Selected model is at capacity. Please try a different model."
+    },
+    {
+      "type": "turn.failed",
+      "error": {
+        "message": "Selected model is at capacity. Please try a different model."
+      }
+    }
+  ],
+  "context_bytes": 795,
+  "prompt_sha256": "7eaf75d0ebe93fbabd796c644c29cb36e432798b8e4d49a1e9cd6d1f2c3ef8ef",
+  "answer": null,
+  "error": "invalid_runtime_result"
+}

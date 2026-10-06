@@ -1,0 +1,681 @@
+{
+  "version": 1,
+  "baseline_revision": "38429f984acb7bde79884327b2916954f796f10c",
+  "annotation": {
+    "origin": "Новая синтетическая авторская выборка, составленная отдельным агентом для #1247/#1253. Прочитаны AGENTS.md и ai_ops_kit/gates/spec_levels.py; прежний dataset.json, capture, prompt и результаты не читались.",
+    "label_method": "Эталоны назначены вручную по существующим правилам classify: базовый task_type, критическая эскалация, совместные продуктовые сигналы, затем requested_level. expected — минимальный принятый уровень с учётом явного запроса; allowed_by_policy включает его и более высокие уровни.",
+    "split_method": "4 development и 20 held_out назначены до любого прогона; каждая группа полностью находится в одном split. Парафразных семейств нет.",
+    "independence": "Независимость от прежних примеров и результатов, но не от правил политики: автор видел код классификатора. Авторская разметка не является независимой экспертной разметкой людей.",
+    "limitations": [
+      "Выборка синтетическая и мала; не репрезентативна для рабочих задач и не даёт оценки production precision.",
+      "Негативные тексты проверяют, что упоминание опасного понятия в безопасном контексте не отменяет явные низкие signals.",
+      "Сигналы считаются явно заданными фактами; извлечение фактов из текста и разрешение противоречащих им фактов не оценены.",
+      "Held_out не использован для подбора промпта или правил на момент создания; последующий доступ к нему нужно учитывать при заявлениях о независимости."
+    ]
+  },
+  "cases": [
+    {
+      "id": "independent-ceremony-01",
+      "group": "dev-caption",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Заменить подпись графика в локальном руководстве; вычисления и доступ к данным не меняются.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "documentation"
+      ]
+    },
+    {
+      "id": "independent-ceremony-02",
+      "group": "dev-parser",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Добавить необязательный параметр разделителя в парсер отчётов с прежним значением по умолчанию.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "1",
+      "allowed_by_policy": [
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "engineering",
+        "reversible"
+      ]
+    },
+    {
+      "id": "independent-ceremony-03",
+      "group": "dev-funnel",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Проверить новый порядок подсказок при записи на занятие по доле завершённых записей.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "measurable_behavior": true,
+        "user_facing_change": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "2",
+      "allowed_by_policy": [
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "measurable_behavior",
+        "user_facing_change"
+      ]
+    },
+    {
+      "id": "independent-ceremony-04",
+      "group": "dev-access",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Закрыть возможность читать чужие квитанции через подмену идентификатора.",
+      "signals": {
+        "task_type": "security-fix",
+        "risk": "low",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "security",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-05",
+      "group": "glossary-security",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Исправить пунктуацию в словаре на странице «Безопасность». Правила авторизации не изменять.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "irreversible": false,
+        "destructive": false,
+        "secret_boundary": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "negative_security_keyword"
+      ]
+    },
+    {
+      "id": "independent-ceremony-06",
+      "group": "glossary-delete",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Переименовать пример кнопки «Удалить всё» в учебном макете; обработчика удаления в нём нет.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "destructive": false,
+        "irreversible": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "negative_destructive_keyword"
+      ]
+    },
+    {
+      "id": "independent-ceremony-07",
+      "group": "glossary-critical",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Поправить перенос строки в заголовке «Критический риск» внутри статической памятки.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "secret_boundary": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "negative_critical_keyword"
+      ]
+    },
+    {
+      "id": "independent-ceremony-08",
+      "group": "glossary-incident",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Отсортировать ссылки в архиве заметок об инцидентах; рабочих систем и секретов не касаться.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "irreversible": false,
+        "secret_boundary": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "negative_incident_keyword"
+      ]
+    },
+    {
+      "id": "independent-ceremony-09",
+      "group": "internal-measurement",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Добавить счётчик времени генерации тестовых фикстур в локальный инструмент разработчика.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "measurable_behavior": true,
+        "user_facing_change": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "measurable_behavior",
+        "negative_product_escalation"
+      ]
+    },
+    {
+      "id": "independent-ceremony-10",
+      "group": "static-footer",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Исправить опечатку в подписи футера; пользовательский сценарий и метрики не меняются.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "user_facing_change": true,
+        "measurable_behavior": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "user_facing_change",
+        "negative_product_escalation"
+      ]
+    },
+    {
+      "id": "independent-ceremony-11",
+      "group": "cache-engineering",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Добавить повторное использование результата чтения конфигурации внутри одного запуска.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "1",
+      "allowed_by_policy": [
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "engineering",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-12",
+      "group": "research-export",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Сравнить три формата экспорта на обезличенных локальных образцах и записать выводы.",
+      "signals": {
+        "task_type": "RESEARCH",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "1",
+      "allowed_by_policy": [
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "research",
+        "read_only"
+      ]
+    },
+    {
+      "id": "independent-ceremony-13",
+      "group": "medium-only",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Изменить группировку внутренних журналов по дням без смены пользовательского поведения.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "medium"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "1",
+      "allowed_by_policy": [
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "engineering",
+        "medium_risk"
+      ]
+    },
+    {
+      "id": "independent-ceremony-14",
+      "group": "booking-behavior",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Добавить напоминание перед завершением записи в библиотеку и измерить долю завершения.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "measurable_behavior": true,
+        "user_facing_change": true,
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "2",
+      "allowed_by_policy": [
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "measurable_behavior",
+        "user_facing_change",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-15",
+      "group": "product-calendar",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Спроектировать выбор свободного времени для консультации с проверкой понятности сценария.",
+      "signals": {
+        "task_type": "PRODUCT",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "2",
+      "allowed_by_policy": [
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "product"
+      ]
+    },
+    {
+      "id": "independent-ceremony-16",
+      "group": "ai-hints",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Добавить генерацию черновика описания музейного экспоната с ручным подтверждением публикации.",
+      "signals": {
+        "task_type": "AI_FEATURE",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "2",
+      "allowed_by_policy": [
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ai_feature",
+        "reversible"
+      ]
+    },
+    {
+      "id": "independent-ceremony-17",
+      "group": "requested-product",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Дополнить локальное руководство примером, владелец явно просит глубину L2.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "requested_level": 2
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "2",
+      "allowed_by_policy": [
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "low_risk",
+        "requested_above_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-18",
+      "group": "high-transfer",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Изменить округление сумм при межбанковских переводах; ошибка затронет реальные расчёты.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "high",
+        "requested_level": 1
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "high_risk",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-19",
+      "group": "critical-routing",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Переключить маршрутизацию экстренных уведомлений на новый канал в рабочей системе.",
+      "signals": {
+        "task_type": "PRODUCT",
+        "risk": "critical",
+        "requested_level": 2
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "critical_risk",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-20",
+      "group": "irreversible-anonymize",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Необратимо обезличить оригиналы старых обращений, таблицу соответствий не сохранять.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "irreversible": true,
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "irreversible",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-21",
+      "group": "destructive-images",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Удалить исходные изображения после проверки миниатюр; задача затрагивает сохранённые файлы.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "destructive": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "destructive"
+      ]
+    },
+    {
+      "id": "independent-ceremony-22",
+      "group": "secret-proxy",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Провести служебный токен через новый прокси и проверить границу доступа к нему.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "secret_boundary": true,
+        "requested_level": 1
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "security",
+        "secret_boundary",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-23",
+      "group": "incident-queue",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Исправить остановившуюся очередь подтверждений во время активного инцидента.",
+      "signals": {
+        "task_type": "incident-fix",
+        "risk": "medium",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "incident",
+        "requested_below_floor"
+      ]
+    },
+    {
+      "id": "independent-ceremony-24",
+      "group": "hotfix-receipts",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Выпустить срочное исправление дублирования квитанций в рабочем потоке.",
+      "signals": {
+        "task_type": "hotfix",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "hotfix"
+      ]
+    }
+  ]
+}

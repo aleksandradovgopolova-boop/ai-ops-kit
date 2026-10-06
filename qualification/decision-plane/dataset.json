@@ -1,0 +1,497 @@
+{
+  "version": "0.1",
+  "baseline_revision": "38429f984acb7bde79884327b2916954f796f10c",
+  "annotation": "Авторский синтетический smoke; model effort — гипотеза, agent selection — owner стадии, skills ещё не измеряются.",
+  "cases": [
+    {
+      "id": "ceremony-01",
+      "group": "ceremony-01",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Опечатка в README",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "ceremony-02",
+      "group": "ceremony-02",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Новая интеграция API",
+      "signals": {
+        "task_type": "ENGINEERING"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "1",
+      "allowed_by_policy": [
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "ceremony-03",
+      "group": "ceremony-03",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Изменить пользовательский checkout",
+      "signals": {
+        "task_type": "PRODUCT"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "2",
+      "allowed_by_policy": [
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "ceremony-04",
+      "group": "ceremony-04",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Удалить production базу",
+      "signals": {
+        "task_type": "QUICK",
+        "destructive": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "mandatory"
+      ]
+    },
+    {
+      "id": "ceremony-05",
+      "group": "ceremony-05",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Секрет пересёк границу доверия",
+      "signals": {
+        "task_type": "QUICK",
+        "secret_boundary": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "mandatory"
+      ]
+    },
+    {
+      "id": "ceremony-06",
+      "group": "ceremony-06",
+      "split": "development",
+      "point": "ceremony",
+      "task": "Новый экран с измеримым поведением",
+      "signals": {
+        "task_type": "QUICK",
+        "measurable_behavior": true,
+        "user_facing_change": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "2",
+      "allowed_by_policy": [
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "ceremony-07",
+      "group": "ceremony-07",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Исправить локальную настройку",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "0",
+      "allowed_by_policy": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "ceremony-08",
+      "group": "ceremony-08",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Выделить модуль без изменения поведения",
+      "signals": {
+        "task_type": "ENGINEERING"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "1",
+      "allowed_by_policy": [
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "ceremony-09",
+      "group": "ceremony-09",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Проверить продуктовую гипотезу",
+      "signals": {
+        "task_type": "RESEARCH"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "1",
+      "allowed_by_policy": [
+        "1",
+        "2",
+        "3"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "ceremony-10",
+      "group": "ceremony-10",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Быстрая правка, risk high, просим L0",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "high",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "mandatory"
+      ]
+    },
+    {
+      "id": "ceremony-11",
+      "group": "ceremony-11",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Инцидент: исправить ротацию ключа",
+      "signals": {
+        "task_type": "incident-fix"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "mandatory"
+      ]
+    },
+    {
+      "id": "ceremony-12",
+      "group": "ceremony-12",
+      "split": "held_out",
+      "point": "ceremony",
+      "task": "Необратимое изменение; названа мелкой правкой",
+      "signals": {
+        "task_type": "QUICK",
+        "irreversible": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ],
+      "expected": "3",
+      "allowed_by_policy": [
+        "3"
+      ],
+      "risk_labels": [
+        "mandatory"
+      ]
+    },
+    {
+      "id": "model-01",
+      "group": "model-01",
+      "split": "development",
+      "point": "model_effort",
+      "task": "Опечатка в описании",
+      "signals": {
+        "task_type": "QUICK"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ],
+      "expected": "cheap-api/low",
+      "allowed_by_policy": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ],
+      "risk_labels": [
+        "author_judgment"
+      ]
+    },
+    {
+      "id": "model-02",
+      "group": "model-02",
+      "split": "development",
+      "point": "model_effort",
+      "task": "Спроектировать интеграцию",
+      "signals": {
+        "task_type": "ENGINEERING"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ],
+      "expected": "strong-executor/high",
+      "allowed_by_policy": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ],
+      "risk_labels": [
+        "author_judgment"
+      ]
+    },
+    {
+      "id": "model-03",
+      "group": "model-03",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Локальная правка без риска",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ],
+      "expected": "cheap-api/low",
+      "allowed_by_policy": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ],
+      "risk_labels": [
+        "author_judgment"
+      ]
+    },
+    {
+      "id": "model-04",
+      "group": "model-04",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Проверить критическую миграцию",
+      "signals": {
+        "task_type": "CRITICAL",
+        "risk": "critical"
+      },
+      "options": [
+        "cheap-api/low",
+        "strong-executor/high"
+      ],
+      "expected": "strong-executor/high",
+      "allowed_by_policy": [
+        "strong-executor/high"
+      ],
+      "risk_labels": [
+        "author_judgment"
+      ]
+    },
+    {
+      "id": "agent-01",
+      "group": "agent-01",
+      "split": "development",
+      "point": "agent_skill",
+      "task": "Классифицировать мелкую задачу",
+      "signals": {
+        "task_type": "QUICK",
+        "stage": "intake"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ],
+      "expected": "intake-classifier",
+      "allowed_by_policy": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "agent-02",
+      "group": "agent-02",
+      "split": "development",
+      "point": "agent_skill",
+      "task": "Проверить готовность локальной правки",
+      "signals": {
+        "task_type": "QUICK",
+        "stage": "local-verify"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ],
+      "expected": "final-verifier",
+      "allowed_by_policy": [
+        "final-verifier"
+      ],
+      "risk_labels": [
+        "writer_judge"
+      ]
+    },
+    {
+      "id": "agent-03",
+      "group": "agent-03",
+      "split": "held_out",
+      "point": "agent_skill",
+      "task": "Внести исправление",
+      "signals": {
+        "task_type": "QUICK",
+        "stage": "local-change"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ],
+      "expected": "implementation-integrator",
+      "allowed_by_policy": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ],
+      "risk_labels": [
+        "ordinary"
+      ]
+    },
+    {
+      "id": "agent-04",
+      "group": "agent-04",
+      "split": "held_out",
+      "point": "agent_skill",
+      "task": "Независимо проверить инженерный код",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "stage": "review"
+      },
+      "options": [
+        "intake-classifier",
+        "implementation-integrator",
+        "final-verifier",
+        "code-reviewer"
+      ],
+      "expected": "code-reviewer",
+      "allowed_by_policy": [
+        "code-reviewer"
+      ],
+      "risk_labels": [
+        "writer_judge"
+      ]
+    }
+  ]
+}

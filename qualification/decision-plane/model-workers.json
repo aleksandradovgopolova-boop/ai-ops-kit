@@ -1,0 +1,21 @@
+{
+  "version": "0.1",
+  "workers": {
+    "fast/low": {
+      "model": "gpt-5.6-terra",
+      "effort": "low"
+    },
+    "balanced/medium": {
+      "model": "gpt-5.6-terra",
+      "effort": "medium"
+    },
+    "deep/high": {
+      "model": "gpt-5.6-sol",
+      "effort": "high"
+    },
+    "strongest/high": null,
+    "human-required": null
+  },
+  "confidence_threshold": 0.9,
+  "notes": "Экспериментальная привязка к доступным aliases, не квалификация реестра и не production routing. Strongest не доказан доступным: human stop. Цена подписки неизвестна. Перед downstream-run fast alias luna отказал capacity: fast/low = terra low, balanced/medium = terra medium, чтобы изолировать effort; это не квалификация fast класса."
+}
