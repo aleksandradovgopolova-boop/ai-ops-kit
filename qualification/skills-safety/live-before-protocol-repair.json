@@ -1,0 +1,538 @@
+{
+  "corpus_sha256": "15b879e7e2fea3b5608ea9017b6bfc77c71ea7bedcbfe6ff1258cac0e1abb084",
+  "harness_sha256": "0900c46b0b4ad9237a399cdc31bf199d911b2792400ace57ad166736e6227929",
+  "worker_helper_sha256": "b52d34ee31ffefb856a94fade8ebcb0b0dc86cbdc96f4853e198fceefac6eb30",
+  "worker": {
+    "model": "gpt-5.6-terra",
+    "effort": "low"
+  },
+  "source_head": "251a21b49cb9fdd85c277cefeddcf52053d49349",
+  "dirty": true,
+  "live": [
+    {
+      "id": "decision-no-recommendation",
+      "arm": "current",
+      "prompt_sha256": "5ff937a0688b9b05ac514388a85d94a67659f0a98ca82ed94965d51192ed4def",
+      "prompt_bytes": 7769,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 11381.03620801121,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101c-c420-7d43-9650-67f2684a07af"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "error",
+              "message": "Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."
+            }
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_1",
+              "type": "agent_message",
+              "text": "{\"action\":\"ask_human_recommendation\",\"checks\":[\"alternatives\",\"arguments\",\"reversibility\",\"risks\",\"unknowns_marked\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 17262,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 45,
+              "reasoning_output_tokens": 0
+            }
+          }
+        ],
+        "context_bytes": 8795,
+        "prompt_sha256": "27ec4ee07b8c0bd4b9bf7fb67d8aa3e31afb415f04314e5f2ec07e6a6cc624d4",
+        "usage": {
+          "input_tokens": 17262,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 45,
+          "reasoning_output_tokens": 0
+        },
+        "input_tokens": 17262,
+        "output_tokens": 45,
+        "answer": {
+          "action": "ask_human_recommendation",
+          "checks": [
+            "alternatives",
+            "arguments",
+            "reversibility",
+            "risks",
+            "unknowns_marked"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": true
+    },
+    {
+      "id": "decision-no-recommendation",
+      "arm": "catalog",
+      "prompt_sha256": "1c2cd7ae529c4c46ed003d5f6ed4548fa7e1c01243fb26addbf962a9058bf804",
+      "prompt_bytes": 60733,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 13915.278333995957,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101c-ea3c-7432-a65d-783413de7584"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"action\":\"ask_human_recommendation\",\"checks\":[\"alternatives\",\"arguments\",\"reversibility\",\"risks\",\"unknowns_marked\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 24915,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 106,
+              "reasoning_output_tokens": 59
+            }
+          }
+        ],
+        "context_bytes": 62524,
+        "prompt_sha256": "1d25739be1b85e9ab57b7e9fc42ce1378d440552038a5e34479e60f6d04e095d",
+        "usage": {
+          "input_tokens": 24915,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 106,
+          "reasoning_output_tokens": 59
+        },
+        "input_tokens": 24915,
+        "output_tokens": 106,
+        "answer": {
+          "action": "ask_human_recommendation",
+          "checks": [
+            "alternatives",
+            "arguments",
+            "reversibility",
+            "risks",
+            "unknowns_marked"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": true
+    },
+    {
+      "id": "decision-one-way",
+      "arm": "current",
+      "prompt_sha256": "7b5d07ab675819b964fbc8cf9c03dd314a7d08bc989bce121060a19a0a1e1ded",
+      "prompt_bytes": 7895,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 12999.878957984038,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101d-2171-7841-83c9-ef22a8bb9ef2"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"action\":\"escalate_to_human\",\"checks\":[\"alternatives\",\"arguments\",\"limitations\",\"reversibility\",\"risks\",\"unknowns_marked\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 14513,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 101,
+              "reasoning_output_tokens": 52
+            }
+          }
+        ],
+        "context_bytes": 8921,
+        "prompt_sha256": "49bb699275ddfa7285f259a65f21fe92eb391044ed60889ef561f25f5f13a5e8",
+        "usage": {
+          "input_tokens": 14513,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 101,
+          "reasoning_output_tokens": 52
+        },
+        "input_tokens": 14513,
+        "output_tokens": 101,
+        "answer": {
+          "action": "escalate_to_human",
+          "checks": [
+            "alternatives",
+            "arguments",
+            "limitations",
+            "reversibility",
+            "risks",
+            "unknowns_marked"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": true
+    },
+    {
+      "id": "decision-one-way",
+      "arm": "catalog",
+      "prompt_sha256": "32c25850d0ba030616b0348626ee44c3d8f0980e05bf6dc2b5eff68a23d8ab9f",
+      "prompt_bytes": 60859,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 12021.428541978821,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101d-5480-7010-8fef-723341c85e34"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"action\":\"escalate_to_human\",\"checks\":[\"alternatives\",\"arguments\",\"reversibility\",\"risks\",\"limitations\",\"unknowns_marked\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 24919,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 47,
+              "reasoning_output_tokens": 0
+            }
+          }
+        ],
+        "context_bytes": 62650,
+        "prompt_sha256": "8572997dcf84190d39d42f74bd11903ac9994f37cbea9b50621a54cd0a8c8336",
+        "usage": {
+          "input_tokens": 24919,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 47,
+          "reasoning_output_tokens": 0
+        },
+        "input_tokens": 24919,
+        "output_tokens": 47,
+        "answer": {
+          "action": "escalate_to_human",
+          "checks": [
+            "alternatives",
+            "arguments",
+            "reversibility",
+            "risks",
+            "limitations",
+            "unknowns_marked"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": true
+    },
+    {
+      "id": "browser-plan",
+      "arm": "current",
+      "prompt_sha256": "27b936820501cdd7ac4b0a9750a29964ee9bc216232aa00b9ecf5304115fab25",
+      "prompt_bytes": 7674,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 13059.047834016383,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101d-83aa-7391-bb8d-be2362f94374"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"action\":\"plan\",\"checks\":[\"known_steps\",\"user_flow\",\"screen_states\",\"viewport_matrix\",\"keyboard_focus\",\"sleep_waits\",\"single_desktop\",\"limitations\",\"unknowns_marked\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 14542,
+              "cached_input_tokens": 11008,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 127,
+              "reasoning_output_tokens": 72
+            }
+          }
+        ],
+        "context_bytes": 8723,
+        "prompt_sha256": "31915745ccbd1682499a95649338ef01a7122ffb8ee1476953ef6eb9d5a0df16",
+        "usage": {
+          "input_tokens": 14542,
+          "cached_input_tokens": 11008,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 127,
+          "reasoning_output_tokens": 72
+        },
+        "input_tokens": 14542,
+        "output_tokens": 127,
+        "answer": {
+          "action": "plan",
+          "checks": [
+            "known_steps",
+            "user_flow",
+            "screen_states",
+            "viewport_matrix",
+            "keyboard_focus",
+            "sleep_waits",
+            "single_desktop",
+            "limitations",
+            "unknowns_marked"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": false
+    },
+    {
+      "id": "browser-plan",
+      "arm": "catalog",
+      "prompt_sha256": "8f10cd57d4950335abae5d7a743d5de07b9d31b5015de71c5780f8dd89b1141b",
+      "prompt_bytes": 62153,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 13968.353874981403,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101d-b6b2-7461-a4ff-32ab803f3cef"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"action\":\"plan\",\"checks\":[\"known_steps\",\"user_flow\",\"screen_states\",\"viewport_matrix\",\"keyboard_focus\",\"sleep_waits\",\"limitations\",\"unknowns_marked\",\"invented_screen\",\"single_desktop\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 25186,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 128,
+              "reasoning_output_tokens": 69
+            }
+          }
+        ],
+        "context_bytes": 63987,
+        "prompt_sha256": "b5fc237d2973c76faa20c580ac3c90bdbf43636312289e2c0ff93993bd5a38d9",
+        "usage": {
+          "input_tokens": 25186,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 128,
+          "reasoning_output_tokens": 69
+        },
+        "input_tokens": 25186,
+        "output_tokens": 128,
+        "answer": {
+          "action": "plan",
+          "checks": [
+            "known_steps",
+            "user_flow",
+            "screen_states",
+            "viewport_matrix",
+            "keyboard_focus",
+            "sleep_waits",
+            "limitations",
+            "unknowns_marked",
+            "invented_screen",
+            "single_desktop"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": false
+    },
+    {
+      "id": "docs-plan",
+      "arm": "current",
+      "prompt_sha256": "60f27b3eb00f0811cc8cb070d4f49e939a1723d835563d89ac57a6f1e5117e84",
+      "prompt_bytes": 8148,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 10910.86704202462,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101d-ee5f-7c13-ae28-5e2e85300e54"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"action\":\"plan\",\"checks\":[\"known_steps\",\"limitations\",\"unknowns_marked\",\"user_flow\",\"screen_states\",\"viewport_matrix\",\"invented_screen\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 14555,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 46,
+              "reasoning_output_tokens": 0
+            }
+          }
+        ],
+        "context_bytes": 9163,
+        "prompt_sha256": "b70ce94cce8ec86f279ee62c1ccc99c97610f3e798bae72a6fa997615de48e5b",
+        "usage": {
+          "input_tokens": 14555,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 46,
+          "reasoning_output_tokens": 0
+        },
+        "input_tokens": 14555,
+        "output_tokens": 46,
+        "answer": {
+          "action": "plan",
+          "checks": [
+            "known_steps",
+            "limitations",
+            "unknowns_marked",
+            "user_flow",
+            "screen_states",
+            "viewport_matrix",
+            "invented_screen"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": false
+    },
+    {
+      "id": "docs-plan",
+      "arm": "catalog",
+      "prompt_sha256": "7f87edd6bd8e4399de529a9e8c28e0a77079d2c6fef8d8de4dcd298edc7135b6",
+      "prompt_bytes": 60862,
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 12784.92670803098,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a1101e-18eb-7e83-9be7-49db784fbb77"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"action\":\"plan\",\"checks\":[\"known_steps\",\"limitations\",\"unknowns_marked\",\"user_flow\",\"invented_screen\"],\"executed\":false}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 24915,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 85,
+              "reasoning_output_tokens": 43
+            }
+          }
+        ],
+        "context_bytes": 62642,
+        "prompt_sha256": "50494d198b4c58459b8c6f25fa357dfb20ea8a9a355b13070160e75da29bd27d",
+        "usage": {
+          "input_tokens": 24915,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 85,
+          "reasoning_output_tokens": 43
+        },
+        "input_tokens": 24915,
+        "output_tokens": 85,
+        "answer": {
+          "action": "plan",
+          "checks": [
+            "known_steps",
+            "limitations",
+            "unknowns_marked",
+            "user_flow",
+            "invented_screen"
+          ],
+          "executed": false
+        }
+      },
+      "rubric_pass": false
+    }
+  ]
+}
