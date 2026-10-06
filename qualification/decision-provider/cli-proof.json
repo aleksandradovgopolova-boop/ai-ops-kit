@@ -1,0 +1,1046 @@
+{
+  "scope": "official offline CLI after devtools relocation, deterministic current baseline only",
+  "cli_exit_code": 1,
+  "verdict": "continue experiment",
+  "dataset_sha256": "0c7e189c13de6f629c2eb6bb16bfcfcbc3f62faeb1e217bbd6cdd992b3dcc724",
+  "source": {
+    "status": "measured",
+    "kind": "local",
+    "source": {
+      "revision": "4cbcb82c70248d70dff5ad54494ce469e53c72c2",
+      "dirty": true,
+      "source_sha256": {
+        "ai_ops_kit/devtools/decision_eval.py": "c0a5fa61dae2648a4ae76539f37615c6ee6ecf53c7bb886d599bf555a3781f82",
+        "ai_ops_kit/gates/spec_levels.py": "024bac5ce8f2fe6ef92ecfb1a954de19981d8c77fc3d1c4c7700dcddb48247e9",
+        "ai_ops_kit/providers/model_router.py": "f5cff23ddd8702b1bb8e5bd13f4476161570ac5fc5da723048c324e95962b8d9",
+        "ai_ops_kit/shared/ai_route.py": "0391d992cdd9706b67054c78d3f07e1349e8c7eabc73f475970aa0bb8e7febe5",
+        "ai_ops_kit/devtools/decision_provider.py": "e99e1ea7137126132ca5691e6d11c76246dedab52becc0391fa99a7428afcc6f",
+        "registry/agents.yaml": "45d4e8d5e53db58db7d7fdd87736acc9414aca39aac03fd17a6625a7710e62de",
+        "registry/artifact-registry.yaml": "d7888f4cc7905650546acc628fdce74587e93e52ecef63b1e90b9d6c87343ced",
+        "registry/capability-index.yaml": "a73dd824a5f319c6a065798dd4cdbf45df613a3f6b1eedae1e0e41297f66c712",
+        "registry/capability-policy.yaml": "13faa0ca15f8ae2a3c6bd1e3e40ff9f96962cd80cb6a13111e540730cb74f049",
+        "registry/communication-policy.yaml": "0f3d648018f76cc3334aa3f44c1d74a24a12465e355d5e59ccde4c7c59e0fe9c",
+        "registry/coordination-files.yaml": "c777c2f9406df7df2a978a4f9f4edaead8b8accae2d0d1f68b31db73ff40aafd",
+        "registry/decision-boundary.yaml": "4082fb3a15657f15c9dcdf693c37904e9f01119351823011423ee917034d4a6c",
+        "registry/enforcement-inventory.yaml": "6f028a38ea3865a6fd245a3b191d01968d6ad4a3d8f3be9754212ebb09bc4742",
+        "registry/entities.yaml": "417e857a7cd6e1f7806190b682763ff02e77403a07ce2108acbdcc95c313eb9a",
+        "registry/model-qualification.yaml": "da1d226a8fbb5467d72a25a2ac4720b2a6cb313f152b1dcf96337a428107384a",
+        "registry/model-roles.yaml": "def3f2d393627adc3a7a8f0df2625f4dc73ded89644f89cbbfa4e3b2cc7425aa",
+        "registry/models.yaml": "e28eea865553b29979bb59fdf80729015a9e924cea5a93001f6167930872fdb1",
+        "registry/product-operating-model.yaml": "9cafa543aa4e07834c032dca3e2fcc495b4ecc8b33af570ad80e83331a8861a6",
+        "registry/providers.yaml": "873dc811e42d419e31c92d2bf8f6f22f0020b4274780faeefb7b1d3d4b816fbb",
+        "registry/release-claims.yaml": "543f977faf9d5e97eba33802cd36513af51cfbe524cf696e4f4d7c77d1f34b57",
+        "registry/release-notes.yaml": "1f5f603186a71403c90b50d4ed2497e94b68e2b080c8735bcc154a8dbae7efcd",
+        "registry/routing-policy.yaml": "1bcda1fd9716adb447c46de80037c8091e5e46163399f854eef462ece7baf737",
+        "registry/runtimes.yaml": "ff05417848841a81ba868006b9eab418eec60064fc82756572719415b1d8c701",
+        "registry/standard.yaml": "515514743e920ccd673a1b748d7517b068dde59e9e634f1dd2a8f3d304d008ff",
+        "registry/tools.yaml": "e6386941d1c747e3cd4848d33a9bdac9b4aff5f91ebe3fa3618a3829d19ed49b",
+        "registry/tracks.yaml": "4d002641470b8b3dc04c660bdb5f7a4b1a2e126329131a8f8e9f00265ce32d72",
+        "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41"
+      }
+    },
+    "declared_baseline_revision": "38429f984acb7bde79884327b2916954f796f10c"
+  },
+  "cases": [
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "0",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "0",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.01812499249354005,
+            "request_sha256": "1cd2f4244c455dc672e8bf9e17446cc0453246a0e03fe7bbb6dacf7f780a6f96"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.1871249987743795,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-01",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "1",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "1",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.012249976862221956,
+            "request_sha256": "fcf2ebb9edcd780481fae2bb81e2ff4ab5c6441bb1f9f2cf044ac4ad51b059e7"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.07358298171311617,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-02",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "2",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "2",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "2",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.007583992555737495,
+            "request_sha256": "59ae059e89958639ec28a3f129715d4870bef44b62a53e7d5aa0bbeaaf4ef094"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.046625034883618355,
+      "context_bytes": 182,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-03",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "3",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "3",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.010207993909716606,
+            "request_sha256": "00bd7a5c5949c1e8c5155f9bb599b730ba0f0a14aaab3200767aa0a644cab395"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.045707973185926676,
+      "context_bytes": 177,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-04",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "3",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "3",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.006083049811422825,
+            "request_sha256": "6c0f590dd3777c46a0e782d1ec2fa9ae030677a8815c8ce5f833ea1bb3c88d96"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.0384590239264071,
+      "context_bytes": 204,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-05",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "2",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "2",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "2",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.08029199671000242,
+            "request_sha256": "330ec22901ead14955894eb7f9efc659a9aaf76de703ff329864404bd2fe1a9e"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.1308330101892352,
+      "context_bytes": 243,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-06",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "0",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "0",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.010041985660791397,
+            "request_sha256": "686abcbbb29300fd42d5b94fdb135401ab81211637fb49d542f386408ff37b6b"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.07312500383704901,
+      "context_bytes": 193,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-07",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "1",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "1",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.00762502895668149,
+            "request_sha256": "898467db1491995ead060796d69e598ce31cca4d59b685ebd2dd5fbd53e1f36f"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.07545901462435722,
+      "context_bytes": 202,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-08",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "1",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "1",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.005292007699608803,
+            "request_sha256": "0c422050e80e1a6d937e20b442e73628d87dfd5b6e2a1f543af1301c19741eba"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.04029198316857219,
+      "context_bytes": 183,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-09",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "3",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "3",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.009040988516062498,
+            "request_sha256": "d57648e6653d0a33424fb6e088fd1d248ada6a75a525fae547a365fdc1a92efd"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.048874993808567524,
+      "context_bytes": 215,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-10",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "3",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "3",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.005750043783336878,
+            "request_sha256": "5eab2f63c32b11f34d29e516f93645806d008d18535732819fc75ba8816e4f1e"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.037416990380734205,
+      "context_bytes": 191,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-11",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "ceremony",
+        "status": "selected",
+        "decision": "3",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "3",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 0.004999979864805937,
+            "request_sha256": "7d3d6508561de5f855326103b6ce5196ffd62a04c090f0c4ef050d18546db824"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.03749999450519681,
+      "context_bytes": 229,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-12",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "fallback": false,
+      "reason": "writer_tier=cheap-api; effort unsupported",
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "model_effort",
+        "status": "abstain",
+        "decision": null,
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "abstain",
+            "decision": null,
+            "confidence": null,
+            "reason": "writer_tier=cheap-api; effort unsupported",
+            "latency_ms": 0.01133297337219119,
+            "request_sha256": "b9ea990b113a72ef65c44d54ebb5ae4e5fadb8bab0e2dac077d7aed58dbcd155"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.04345795605331659,
+      "context_bytes": 180,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-01",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "fallback": false,
+      "reason": "writer_tier=strong-executor; effort unsupported",
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "model_effort",
+        "status": "abstain",
+        "decision": null,
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "abstain",
+            "decision": null,
+            "confidence": null,
+            "reason": "writer_tier=strong-executor; effort unsupported",
+            "latency_ms": 0.014499993994832039,
+            "request_sha256": "c7e96c3124f6fee1d18e75231c23cb7a11d195c362789268b4b1745718522e55"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.09683298412710428,
+      "context_bytes": 199,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-02",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "fallback": false,
+      "reason": "writer_tier=cheap-api; effort unsupported",
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "model_effort",
+        "status": "abstain",
+        "decision": null,
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "abstain",
+            "decision": null,
+            "confidence": null,
+            "reason": "writer_tier=cheap-api; effort unsupported",
+            "latency_ms": 0.006041023880243301,
+            "request_sha256": "848311f0481c462da8feae3a2e1a526f24209dd38f5ee164a0b5f0ff762ff869"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.04895904567092657,
+      "context_bytes": 208,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-03",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "fallback": false,
+      "reason": "writer_tier=strong-executor; effort unsupported",
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "model_effort",
+        "status": "abstain",
+        "decision": null,
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "abstain",
+            "decision": null,
+            "confidence": null,
+            "reason": "writer_tier=strong-executor; effort unsupported",
+            "latency_ms": 0.004542001988738775,
+            "request_sha256": "7bc60e391cec3edb947348941cca2b02ec964930c8b74e7bbf6fba1b7c4d11f4"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 0.04174996865913272,
+      "context_bytes": 225,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-04",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "intake-classifier",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "agent_skill",
+        "status": "selected",
+        "decision": "intake-classifier",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "intake-classifier",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 164.5756249781698,
+            "request_sha256": "95dda1ed6f58ef8dce23ef894be4a09d8f7afe4aa0b18dd9f7e8b76afe357f91"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 164.64333300245926,
+      "context_bytes": 264,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-01",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "intake-classifier",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "final-verifier",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "agent_skill",
+        "status": "selected",
+        "decision": "final-verifier",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "final-verifier",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 158.16749999066815,
+            "request_sha256": "68c4f208512280f725f01f72081702ecf2d544693effc0b9c0e00135badccc39"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 158.34954101592302,
+      "context_bytes": 283,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-02",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "final-verifier",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "implementation-integrator",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "agent_skill",
+        "status": "selected",
+        "decision": "implementation-integrator",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "implementation-integrator",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 161.41687502386048,
+            "request_sha256": "3831fbb8038634bd78c4e9b871fb9a4438ef02e23b0f65ec267dd2022f1c5f0d"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 161.59575001802295,
+      "context_bytes": 247,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-03",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "implementation-integrator",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    },
+    {
+      "decision": "code-reviewer",
+      "confidence": null,
+      "abstain": false,
+      "fallback": false,
+      "reason": null,
+      "error": null,
+      "decision_audit": {
+        "schema_version": 1,
+        "decision_type": "agent_skill",
+        "status": "selected",
+        "decision": "code-reviewer",
+        "confidence": null,
+        "provider": "current",
+        "provenance": "FACT",
+        "fallback": false,
+        "attempts": [
+          {
+            "provider": "current",
+            "revision": "current-rules-v1",
+            "kind": "deterministic",
+            "provenance": "FACT",
+            "status": "selected",
+            "decision": "code-reviewer",
+            "confidence": null,
+            "reason": null,
+            "latency_ms": 145.24816698394716,
+            "request_sha256": "487ba04f493d00f5f321f184c1cb13300dcdf3b0be54984840f83903f2ba6b47"
+          }
+        ]
+      },
+      "provider": "current",
+      "latency_ms": 145.35224996507168,
+      "context_bytes": 279,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-04",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "code-reviewer",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "raw_unsafe_downgrade": false,
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false
+    }
+  ]
+}

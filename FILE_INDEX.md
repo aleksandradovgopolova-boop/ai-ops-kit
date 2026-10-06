@@ -818,3 +818,10 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `docs/decision-plane-runtime.md` — границы skills binding, обязательной policy и происхождения (#1251/#1252/#1254)
 - `ai_ops_kit/devtools/skills_qualification.py` — offline/live квалификация объявленных skills, контекста и обязательного floor (#1251/#1252)
 - `qualification/skills-safety/` — фиксированные корпуса, before/after evidence и измерения контекста без Jev
+
+### DecisionProvider (#1248)
+
+- `ai_ops_kit/devtools/decision_provider.py` — внутренний контракт bounded decision, проверка ответа, изоляция state и аудит primary/fallback; фактический потребитель — offline baseline.
+- `tests/unit/test_decision_provider.py` — взаимозаменяемость, реальные вызовы, fail-closed и независимый policy floor.
+- `qualification/CHANGE-BRIEF-decision-provider-2026-10-06.md` — границы реализации контракта до кода.
+- `qualification/decision-provider/` — actual CLI audit proof и границы квалификации контракта.

@@ -57,3 +57,48 @@ Legacy evidence без source/provenance сохраняет прежнюю об�
 живые tokens, найдены и устранены high-risk gaps; сохранены before/after и protocol repairs.
 Mandatory union дополнен существующим deterministic ceremony floor, независимо от router.
 Широкая semantic selection accuracy остаётся незакрытой, новая production модель не вводится.
+
+## Внутренний контракт DecisionProvider (#1248)
+
+`devtools.decision_provider` — internal, не стабильная поверхность дочки. Его фактический
+потребитель — `devtools.decision_eval.current`: тот же deterministic baseline, теперь с
+машинным аудитом ограниченного выбора. Production workflow не вызывает новый провайдер. Контракт размещён в непоставляемом devtools:
+он нужен родительскому измерителю; перенос в production — отдельная работа.
+
+`DecisionRequest(state, question, options, decision_type)` передаёт JSON-состояние, вопрос,
+непустой уникальный набор строковых ID и тип решения. `DecisionProvider.decide(request,
+budget_ms=...)` возвращает `DecisionReply`: selected с ID опции либо abstain/error с причиной.
+Не требуется генерация текста, tool call или writer. Составной выбор model/effort или
+agent/skills потребитель заранее кодирует конечными ID, без произвольного payload.
+
+`run_decision` проверяет границу, изолирует состояние каждого вызова и возвращает
+`DecisionResult` schema_version=1: тип/статус/решение/confidence, provider, provenance,
+флаг фактически вызванного fallback и attempts. В каждой попытке записываются identity и
+revision адаптера, provenance, status/reason, решение/confidence, latency и SHA-256 исходного
+request. При успехе fallback первичная неудача остаётся в аудите. Секреты из сообщений
+исключений не попадают в отчёт; исходное состояние хранится у вызывающего, в аудите только хеш.
+
+Провайдеры подключаются структурно через Protocol или CallbackDecisionProvider. Deterministic
+правило получает FACT; heuristic и model — JUDGMENT. Вид задаёт доверенная конфигурация адаптера,
+а не его ответ. Это метка происхождения, не подтверждение истинности и не аутентификация
+внешней реализации. Контракт не создаёт HUMAN_DECISION/REASONING, evidence или pass гейта.
+Адаптеры Jev/LLM и сетевые вызовы здесь не реализованы и в runtime registry не объявлены.
+
+Некорректный ответ, неизвестная опция, NaN/bool confidence или исключение становятся error.
+Неверный запрос/configuration отвергается до вызовов. Fallback задаётся явно вызывающим,
+запускается только после abstain/error и в оставшемся общем бюджете. Отсутствующий fallback
+оставляет отказ; его собственный отказ не становится решением. Confidence в [0,1] не считается
+калиброванной вероятностью и сама по себе не разрешает исполнение. Политику порога уверенности
+определяет конкретный потребитель; текущий deterministic baseline confidence не выдумывает.
+
+Transport timeout обязан обеспечивать адаптер. Синхронная граница не прерывает зависший
+транспорт: budget_ms передаётся адаптеру, а после возврата поздний ответ отклоняется. На этом
+основании нельзя объявлять bounded wall-clock для будущего сетевого провайдера без его
+отдельной квалификации. TimeoutError/unavailable/malformed сохраняются как отказ; общий
+бюджет исключает новый fallback после истечения срока.
+
+Selected остаётся предложением. Независимый deterministic policy floor и mandatory union
+из #1252 применяются вне провайдера по исходным signals; смена адаптера не меняет workflow
+или эти правила. Тест демонстрирует реальный model downgrade до проверки и его исправление
+существующим floor, а также отказ JUDGMENT закрыть deterministic evidence. Production-проводка
+и пороги уверенности требуют отдельного полезного сценария и проверки downstream качества.
