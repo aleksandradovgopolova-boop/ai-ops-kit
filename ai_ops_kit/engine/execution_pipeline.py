@@ -198,6 +198,7 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
                   # «гейты пройдены» одинаково и там, где считала машина, и там, где высказался
                   # судья. 19 гейтов из 35 не имеют валидатора вовсе.
                   "closure": gates.get("closure"),
+                  "claim_origins": gates.get("claim_origins"),
                   # веха 4.2 (#588): вердикт честности evidence — verified привилегирует
                   # детерминированные сигналы; AI-суждение advisory видно, а не выдаётся за доказательство.
                   "evidence_verdict": gates.get("evidence_verdict"),

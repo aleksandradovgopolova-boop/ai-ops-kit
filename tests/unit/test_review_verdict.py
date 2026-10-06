@@ -88,7 +88,7 @@ def test_review_path_persists_independent_verdict(tmp_path: Path):
     с функцией. Это доказывает, что содержание идёт от судьи, а не от построившей работы.
     """
     from ai_ops_kit.engine import review_branch
-    reviews = [{"gate": "code_review", "status": "pass", "valid": True}]
+    reviews = [{"gate": "code_review", "status": "pass", "valid": True, "provenance": "JUDGMENT"}]
     signals = {"task_type": "QUICK"}
     relpath = review_branch._persist_review_verdict(tmp_path, "express-checkout", reviews,
                                                     signals, "abc1234")

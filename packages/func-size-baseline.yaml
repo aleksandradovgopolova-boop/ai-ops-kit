@@ -68,10 +68,10 @@ scopes:
 
   # providers/ — адаптеры исполнителей и оркестрация workflow.
   - path: ai_ops_kit/providers/
-    max_function_lines: 169
+    max_function_lines: 168
     max_function: run_workflow
     max_function_file: orchestrator.py
-    max_function_lineno: 149
+    max_function_lineno: 189
 
   # validation/ — валидаторы (сценарии квалификации — крупнейшая функция каталога).
   - path: ai_ops_kit/validation/

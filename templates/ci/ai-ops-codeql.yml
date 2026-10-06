@@ -17,10 +17,10 @@
 # ГРАНИЦА С ИНВАРИАНТОМ КИТА. Это ФОРДЖ-конфигурация дочки, а не код кита: GitHub-нативный CodeQL,
 # внешних рантайм-зависимостей у инструментов кита не прибавляет.
 #
-# ЯЗЫКИ. `language` в матрице подставьте под свой стек. Дефолт — `javascript-typescript`: это стек
-# большинства дочек, и пустой прогон на неподходящем языке — шум, а не сигнал. Другие значения:
-# python, go, java-kotlin, csharp, cpp, ruby, swift, actions (см. docs CodeQL «supported languages»).
-# Список — через несколько строк матрицы, по одной на язык.
+# ЯЗЫКИ. Python/JavaScript/TypeScript определяются из tracked исходников продукта, без .ai,
+# dependencies/build outputs. Другие языки или явный выбор — vars.AI_OPS_CODEQL_LANGUAGES,
+# JSON-массив поддерживаемых CodeQL language id. Пустой/ошибочный override — ошибка, не пропуск.
+# Без подходящих исходников анализ явно пропускается; это не доказательство SAST.
 #
 # ПИНЫ ДЕЙСТВИЙ. Здесь действия закреплены по МАЖОРНОМУ тегу. Для OpenSSF Pinned-Dependencies закрепите
 # их на commit SHA (см. SUPPLY-CHAIN.md); Dependabot (github-actions) будет двигать SHA за вас.
@@ -43,7 +43,40 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  languages:
+    runs-on: ${{ vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
+    outputs:
+      languages: ${{ steps.detect.outputs.languages }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: detect
+        name: Языки исходников продукта
+        env:
+          CODEQL_LANGUAGES: ${{ vars.AI_OPS_CODEQL_LANGUAGES }}
+        run: |
+          python3 - <<'PY'
+          import json, os, subprocess
+          from pathlib import PurePosixPath
+          override = os.environ.get("CODEQL_LANGUAGES", "").strip()
+          supported = {"python", "javascript-typescript", "go", "java-kotlin", "csharp", "cpp", "ruby", "swift", "actions"}
+          if override:
+              languages = json.loads(override)
+              if not isinstance(languages, list) or not languages or any(not isinstance(x, str) or x not in supported for x in languages):
+                  raise SystemExit("AI_OPS_CODEQL_LANGUAGES должен быть непустым JSON-массивом поддерживаемых языков")
+              languages = sorted(set(languages))
+          else:
+              files = subprocess.check_output(["git", "ls-files", "-z"]).decode().split("\0")
+              excluded = {".ai", ".git", "node_modules", "vendor", ".venv", "venv", "dist", "build"}
+              suffixes = {".py": "python", ".js": "javascript-typescript", ".jsx": "javascript-typescript", ".mjs": "javascript-typescript", ".cjs": "javascript-typescript", ".ts": "javascript-typescript", ".tsx": "javascript-typescript", ".mts": "javascript-typescript", ".cts": "javascript-typescript"}
+              languages = sorted({suffixes[p.suffix] for f in files if f and not f.endswith((".d.ts", ".d.mts", ".d.cts")) for p in [PurePosixPath(f)] if p.suffix in suffixes and not excluded.intersection(p.parts)})
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write("languages=" + json.dumps(languages) + "\n")
+          if not languages:
+              print("::notice::Нет Python/JavaScript/TypeScript исходников продукта; CodeQL пропущен, SAST не подтверждён. Для других языков задайте AI_OPS_CODEQL_LANGUAGES.")
+          PY
   analyze:
+    needs: languages
+    if: needs.languages.outputs.languages != '[]'
     name: CodeQL (${{ matrix.language }})
     # Раннер — переменной, а не зашит: в организации со своими раннерами `ubuntu-latest` висит в
     # очереди. Задайте vars.CI_RUNNER_LINUX — и проверка поедет на вашей машине.
@@ -55,7 +88,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: ["javascript-typescript"]   # ← ПОДСТАВЬТЕ свои языки (по строке на язык)
+        language: ${{ fromJSON(needs.languages.outputs.languages) }}
     steps:
       - uses: actions/checkout@v4
       # ПРЕДПОЛЁТ: включён ли в репозитории code scanning. Без него analyze падает с

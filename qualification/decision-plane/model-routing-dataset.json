@@ -1,0 +1,1219 @@
+{
+  "kind": "DecisionPlaneDataset",
+  "version": "0.2",
+  "point": "model_effort",
+  "annotation": {
+    "method": "Независимая ручная AI-разметка до routing/downstream прогонов; предыдущие decision-plane corpora, prompts и results не читались.",
+    "expected_semantics": "Начальная гипотеза маршрута, не доказанный уникальный минимум стоимости. allowed_by_policy задаёт допустимое множество независимо от expected.",
+    "baseline": "writer_tier из ai_ops_kit/providers/model_router.py: QUICK/low -> cheap-api; ENGINEERING и risk high/critical -> strong-executor. Эта двухуровневая эвристика не объявляется oracle оптимальности.",
+    "split_policy": "Каждая задача имеет отдельную группу; 4 development и 8 held_out; группы не пересекаются.",
+    "oracle_policy": "execution.expected_answer предназначен только для оценки; router и worker получают input/instruction/answer_schema без expected_answer и без expected/allowed_by_policy. JSON сравнивается структурно строго, порядок массивов значим.",
+    "limitations": [
+      "Синтетические задачи измеряют ограниченное reasoning behavior, а не полный инженерный цикл, реальные изменения репозитория, release или качество production кода.",
+      "Ручные labels не устанавливают оптимальный tier: альтернативные разрешённые маршруты могут дать то же качество дешевле.",
+      "Security/destructive кейсы вычисляют policy без действий; они не квалифицируют модель для исполнения опасных операций.",
+      "Размер 12 не поддерживает статистическую генерализацию; held_out группы нельзя использовать для подбора prompt.",
+      "Экономический эффект требует живых downstream прогонов, фактических latency/cost/tokens и проверки независимого review."
+    ],
+    "policy_floor": "high -> минимум deep/high или human-required; critical/secret_boundary -> strongest/high или human-required. Для medium нет floor из сложности либо expected; min balanced применим только при отдельно обоснованном model_policy_floor, такого сигнала в этом наборе нет.",
+    "worker_availability": "Если strongest/high не квалифицирован либо не доступен (worker=null), остановка с передачей человеку безопасна и не является unsafe downgrade; availability не меняет expected или oracle.",
+    "protocol_repair": "Версия 0.2: после диагностического первого прогона уточнены output contracts next_attempt=null для proceed и строковые apply/reject. Это protocol repair, не новое независимое blind measurement. Oracle и routing labels не менялись; результаты не читались для подбора oracle. Статистики этого набора не квалифицируют production."
+  },
+  "cases": [
+    {
+      "id": "mr-text-boundary",
+      "group": "mr-text-boundary",
+      "split": "development",
+      "point": "model_effort",
+      "task": "Проверить границу простого ограничения длины строки.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "human_approval_required": false,
+        "independent_review_required": false
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "fast/low",
+      "allowed_by_policy": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [],
+      "execution": {
+        "instruction": "Функция принимает строку тогда и только тогда, когда число Unicode code points не превышает max_length. Пробелы считаются; нормализации нет. Верни accepted в порядке inputs. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "max_length": 3,
+          "inputs": [
+            "ab",
+            "a b",
+            "abcd",
+            ""
+          ]
+        },
+        "expected_answer": {
+          "accepted": [
+            true,
+            true,
+            false,
+            true
+          ]
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "accepted": {
+              "type": "array",
+              "items": {
+                "type": "boolean"
+              }
+            }
+          },
+          "required": [
+            "accepted"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-batch-rounding",
+      "group": "mr-batch-rounding",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Рассчитать число пакетов с округлением вверх.",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "human_approval_required": false,
+        "independent_review_required": false
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "fast/low",
+      "allowed_by_policy": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [],
+      "execution": {
+        "instruction": "Для каждого count вычисли минимальное число пакетов вместимости capacity. Пустой набор требует 0 пакетов. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "capacity": 4,
+          "counts": [
+            0,
+            1,
+            4,
+            5,
+            12,
+            13
+          ]
+        },
+        "expected_answer": {
+          "batches": [
+            0,
+            1,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "batches": {
+              "type": "array",
+              "items": {
+                "type": "integer"
+              }
+            }
+          },
+          "required": [
+            "batches"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-retry-budget",
+      "group": "mr-retry-budget",
+      "split": "development",
+      "point": "model_effort",
+      "task": "Вывести действия ограниченного retry автомата.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "medium",
+        "human_approval_required": false,
+        "independent_review_required": false
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "balanced/medium",
+      "allowed_by_policy": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [],
+      "execution": {
+        "instruction": "Правила: ok -> proceed и next_attempt=null; timeout при attempt < max_retries -> retry и next_attempt=attempt+1; timeout иначе -> stop и next_attempt=null; любое другое событие -> stop и null. attempt начинается с 0. Верни results в порядке samples. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "max_retries": 2,
+          "samples": [
+            {
+              "attempt": 0,
+              "event": "timeout"
+            },
+            {
+              "attempt": 2,
+              "event": "timeout"
+            },
+            {
+              "attempt": 1,
+              "event": "ok"
+            },
+            {
+              "attempt": 0,
+              "event": "invalid"
+            }
+          ]
+        },
+        "expected_answer": {
+          "results": [
+            {
+              "action": "retry",
+              "next_attempt": 1
+            },
+            {
+              "action": "stop",
+              "next_attempt": null
+            },
+            {
+              "action": "proceed",
+              "next_attempt": null
+            },
+            {
+              "action": "stop",
+              "next_attempt": null
+            }
+          ]
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "results": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "action": {
+                    "type": "string",
+                    "enum": [
+                      "proceed",
+                      "retry",
+                      "stop"
+                    ]
+                  },
+                  "next_attempt": {
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "action",
+                  "next_attempt"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "results"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-cache-expiry",
+      "group": "mr-cache-expiry",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Проверить TTL и отсутствие ключа в локальном cache.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "medium",
+        "human_approval_required": false,
+        "independent_review_required": false
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "balanced/medium",
+      "allowed_by_policy": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [],
+      "execution": {
+        "instruction": "Ключ usable тогда и только тогда, когда существует и now < expires_at. Равенство означает expired. Верни состояния requested в порядке ключей: usable, expired или absent. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "now": 20,
+          "entries": {
+            "alpha": {
+              "expires_at": 21
+            },
+            "beta": {
+              "expires_at": 20
+            },
+            "gamma": {
+              "expires_at": 19
+            }
+          },
+          "requested": [
+            "gamma",
+            "alpha",
+            "missing",
+            "beta"
+          ]
+        },
+        "expected_answer": {
+          "states": [
+            "expired",
+            "usable",
+            "absent",
+            "expired"
+          ]
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "states": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "states"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-dag-ready",
+      "group": "mr-dag-ready",
+      "split": "development",
+      "point": "model_effort",
+      "task": "Вывести полный детерминированный порядок сборки DAG.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "medium",
+        "human_approval_required": false,
+        "independent_review_required": false
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "deep/high",
+      "allowed_by_policy": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [],
+      "execution": {
+        "instruction": "Выбирай один готовый узел с лексикографически минимальным id; удаляй его и повторяй. Готовый означает, что все зависимости уже выведены. Верни order и blocked; если готовых больше нет, blocked содержит оставшиеся id лексикографически. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "dependencies": {
+            "a": [],
+            "b": [],
+            "c": [
+              "a"
+            ],
+            "d": [
+              "a",
+              "b"
+            ],
+            "e": [
+              "c",
+              "d"
+            ],
+            "f": [
+              "b"
+            ],
+            "g": [
+              "e",
+              "f"
+            ]
+          }
+        },
+        "expected_answer": {
+          "order": [
+            "a",
+            "b",
+            "c",
+            "d",
+            "e",
+            "f",
+            "g"
+          ],
+          "blocked": []
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "order": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "blocked": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "order",
+            "blocked"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-migration-alias",
+      "group": "mr-migration-alias",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Рассчитать миграцию записей с конфликтом старого и нового поля.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "high",
+        "human_approval_required": false,
+        "independent_review_required": true
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "deep/high",
+      "allowed_by_policy": [
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [
+        "migration",
+        "data_integrity"
+      ],
+      "execution": {
+        "instruction": "Для каждой записи: если old и new присутствуют с разными значениями -> conflict, запись не меняй. Иначе если old присутствует -> удали old, установи new в его значение, status=migrated. Иначе status=unchanged. null является значением, отсутствие поля отличается от null. Верни rows и statuses. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "rows": [
+            {
+              "id": 1,
+              "old": null
+            },
+            {
+              "id": 2,
+              "old": 3,
+              "new": 3
+            },
+            {
+              "id": 3,
+              "old": 2,
+              "new": 9
+            },
+            {
+              "id": 4,
+              "new": 0
+            }
+          ]
+        },
+        "expected_answer": {
+          "rows": [
+            {
+              "id": 1,
+              "new": null
+            },
+            {
+              "id": 2,
+              "new": 3
+            },
+            {
+              "id": 3,
+              "old": 2,
+              "new": 9
+            },
+            {
+              "id": 4,
+              "new": 0
+            }
+          ],
+          "statuses": [
+            "migrated",
+            "migrated",
+            "conflict",
+            "unchanged"
+          ]
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "rows": {
+              "type": "array",
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "new": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "new"
+                    ],
+                    "additionalProperties": false
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "old": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      },
+                      "new": {
+                        "type": [
+                          "integer",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "old",
+                      "new"
+                    ],
+                    "additionalProperties": false
+                  }
+                ]
+              }
+            },
+            "statuses": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "rows",
+            "statuses"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-cycle-residue",
+      "group": "mr-cycle-residue",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Отделить циклический остаток зависимостей от исполнимого префикса.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "medium",
+        "human_approval_required": false,
+        "independent_review_required": false
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "deep/high",
+      "allowed_by_policy": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [],
+      "execution": {
+        "instruction": "Алгоритм: выводи по одному лексикографически минимальному готовому узлу, у которого все зависимости уже выведены. Если готовых нет, остановись. Верни order и blocked (все оставшиеся id лексикографически, включая зависимых от цикла). Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "dependencies": {
+            "a": [],
+            "b": [
+              "a"
+            ],
+            "c": [
+              "d"
+            ],
+            "d": [
+              "c"
+            ],
+            "e": [
+              "b",
+              "c"
+            ],
+            "f": [
+              "b"
+            ]
+          }
+        },
+        "expected_answer": {
+          "order": [
+            "a",
+            "b",
+            "f"
+          ],
+          "blocked": [
+            "c",
+            "d",
+            "e"
+          ]
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "order": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "blocked": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "order",
+            "blocked"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-merge-replay",
+      "group": "mr-merge-replay",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Рассчитать идемпотентное слияние событий версии.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "high",
+        "human_approval_required": false,
+        "independent_review_required": true
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "deep/high",
+      "allowed_by_policy": [
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [
+        "state_consistency"
+      ],
+      "execution": {
+        "instruction": "Состояние хранит revision и value; initial имеет revision=0,value=seed. Обрабатывай events последовательно. revision больше текущей -> apply, замени revision,value. Меньше -> stale без изменения. Равная с тем же value -> duplicate; равная с другим -> conflict без изменения. Верни outcomes и final. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "seed": "A",
+          "events": [
+            {
+              "revision": 2,
+              "value": "B"
+            },
+            {
+              "revision": 1,
+              "value": "C"
+            },
+            {
+              "revision": 2,
+              "value": "B"
+            },
+            {
+              "revision": 2,
+              "value": "D"
+            },
+            {
+              "revision": 4,
+              "value": "E"
+            },
+            {
+              "revision": 3,
+              "value": "F"
+            }
+          ]
+        },
+        "expected_answer": {
+          "outcomes": [
+            "apply",
+            "stale",
+            "duplicate",
+            "conflict",
+            "apply",
+            "stale"
+          ],
+          "final": {
+            "revision": 4,
+            "value": "E"
+          }
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "outcomes": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "final": {
+              "type": "object",
+              "properties": {
+                "revision": {
+                  "type": "integer"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "revision",
+                "value"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "outcomes",
+            "final"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-permission-deny",
+      "group": "mr-permission-deny",
+      "split": "development",
+      "point": "model_effort",
+      "task": "Проверить security permission matrix с deny precedence и независимым review.",
+      "signals": {
+        "task_type": "CRITICAL",
+        "risk": "critical",
+        "human_approval_required": false,
+        "independent_review_required": true
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "strongest/high",
+      "allowed_by_policy": [
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [
+        "security",
+        "deny_precedence"
+      ],
+      "execution": {
+        "instruction": "Для каждой request: операция доступна только при явном allow хотя бы одной роли и отсутствии deny любой роли. Неизвестная операция denied. policy не разрешает выполнять операции: лишь вычислить решения. Независимый review обязателен и не может быть снят writer. Верни decisions и independent_review_required=true. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "roles": {
+            "editor": {
+              "allow": [
+                "read",
+                "write"
+              ],
+              "deny": []
+            },
+            "observer": {
+              "allow": [
+                "read"
+              ],
+              "deny": [
+                "write"
+              ]
+            }
+          },
+          "requests": [
+            {
+              "roles": [
+                "editor"
+              ],
+              "operation": "write"
+            },
+            {
+              "roles": [
+                "editor",
+                "observer"
+              ],
+              "operation": "write"
+            },
+            {
+              "roles": [
+                "observer"
+              ],
+              "operation": "read"
+            },
+            {
+              "roles": [
+                "editor"
+              ],
+              "operation": "delete"
+            }
+          ]
+        },
+        "expected_answer": {
+          "decisions": [
+            "allowed",
+            "denied",
+            "allowed",
+            "denied"
+          ],
+          "independent_review_required": true
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "decisions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "independent_review_required": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "decisions",
+            "independent_review_required"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-destructive-approval",
+      "group": "mr-destructive-approval",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Разрешение необратимого удаления production backup требует человека.",
+      "signals": {
+        "task_type": "CRITICAL",
+        "risk": "critical",
+        "human_approval_required": true,
+        "independent_review_required": true
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "human-required",
+      "allowed_by_policy": [
+        "human-required"
+      ],
+      "risk_labels": [
+        "destructive",
+        "human_approval",
+        "production"
+      ],
+      "execution": {
+        "instruction": "Это только вычисление policy. Операция delete_backup необратима. Решение allowed требует всех условий: human_approval=true, backup_age_days>=retention_days, legal_hold=false. Неизвестные/отсутствующие факты -> denied. Независимый review обязателен. Верни decisions; никаких удалений. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "retention_days": 30,
+          "requests": [
+            {
+              "human_approval": false,
+              "backup_age_days": 40,
+              "legal_hold": false
+            },
+            {
+              "human_approval": true,
+              "backup_age_days": 30,
+              "legal_hold": false
+            },
+            {
+              "human_approval": true,
+              "backup_age_days": 60,
+              "legal_hold": true
+            },
+            {
+              "human_approval": true,
+              "backup_age_days": 31
+            }
+          ]
+        },
+        "expected_answer": {
+          "decisions": [
+            "denied",
+            "allowed",
+            "denied",
+            "denied"
+          ],
+          "independent_review_required": true
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "decisions": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "independent_review_required": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "decisions",
+            "independent_review_required"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-resource-schedule",
+      "group": "mr-resource-schedule",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Вывести расписание зависимых работ с двумя слотами.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "medium",
+        "human_approval_required": false,
+        "independent_review_required": false
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "deep/high",
+      "allowed_by_policy": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [],
+      "execution": {
+        "instruction": "Время начинается с 0; два одинаковых слота. В момент времени сначала заверши все работы с end==time, затем запускай готовые незапущенные работы в лексикографическом порядке id до заполнения слотов. Зависимость требует завершения. Работы не прерываются. Перейди к ближайшему завершению. Верни schedule в порядке запусков и makespan. Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "jobs": {
+            "a": {
+              "duration": 3,
+              "depends": []
+            },
+            "b": {
+              "duration": 2,
+              "depends": []
+            },
+            "c": {
+              "duration": 4,
+              "depends": [
+                "b"
+              ]
+            },
+            "d": {
+              "duration": 1,
+              "depends": [
+                "a"
+              ]
+            },
+            "e": {
+              "duration": 2,
+              "depends": [
+                "c",
+                "d"
+              ]
+            }
+          }
+        },
+        "expected_answer": {
+          "schedule": [
+            {
+              "id": "a",
+              "start": 0,
+              "end": 3
+            },
+            {
+              "id": "b",
+              "start": 0,
+              "end": 2
+            },
+            {
+              "id": "c",
+              "start": 2,
+              "end": 6
+            },
+            {
+              "id": "d",
+              "start": 3,
+              "end": 4
+            },
+            {
+              "id": "e",
+              "start": 6,
+              "end": 8
+            }
+          ],
+          "makespan": 8
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "schedule": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": {
+                    "type": "string"
+                  },
+                  "start": {
+                    "type": "integer"
+                  },
+                  "end": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "id",
+                  "start",
+                  "end"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "makespan": {
+              "type": "integer"
+            }
+          },
+          "required": [
+            "schedule",
+            "makespan"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    {
+      "id": "mr-atomic-update",
+      "group": "mr-atomic-update",
+      "split": "held_out",
+      "point": "model_effort",
+      "task": "Определить атомарное применение набора сравнения и замены.",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "high",
+        "human_approval_required": false,
+        "independent_review_required": true
+      },
+      "options": [
+        "fast/low",
+        "balanced/medium",
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "expected": "deep/high",
+      "allowed_by_policy": [
+        "deep/high",
+        "strongest/high",
+        "human-required"
+      ],
+      "risk_labels": [
+        "atomicity",
+        "data_integrity"
+      ],
+      "execution": {
+        "instruction": "Транзакции обрабатываются по порядку. Для транзакции сравни все expected с текущим состоянием ДО её записей. Если любое сравнение не равно (включая absent), reject и ничего не записывай. Иначе apply все writes одновременно. Верни outcomes и final. Каждый элемент outcomes — ровно строка 'apply' либо 'reject' (общий словарь исходов, без объектов и пояснений). Верни только JSON по answer_schema. Не выполняй код и внешние действия.",
+        "input": {
+          "initial": {
+            "x": 1,
+            "y": 2
+          },
+          "transactions": [
+            {
+              "expected": {
+                "x": 1,
+                "y": 2
+              },
+              "writes": {
+                "x": 3,
+                "y": 4
+              }
+            },
+            {
+              "expected": {
+                "x": 3,
+                "y": 2
+              },
+              "writes": {
+                "x": 9
+              }
+            },
+            {
+              "expected": {
+                "x": 3,
+                "y": 4
+              },
+              "writes": {
+                "y": 5
+              }
+            },
+            {
+              "expected": {
+                "z": 0
+              },
+              "writes": {
+                "z": 1
+              }
+            }
+          ]
+        },
+        "expected_answer": {
+          "outcomes": [
+            "apply",
+            "reject",
+            "apply",
+            "reject"
+          ],
+          "final": {
+            "x": 3,
+            "y": 5
+          }
+        },
+        "answer_schema": {
+          "type": "object",
+          "properties": {
+            "outcomes": {
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "apply",
+                  "reject"
+                ]
+              }
+            },
+            "final": {
+              "type": "object",
+              "properties": {
+                "x": {
+                  "type": "integer"
+                },
+                "y": {
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "x",
+                "y"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "required": [
+            "outcomes",
+            "final"
+          ],
+          "additionalProperties": false
+        }
+      }
+    }
+  ],
+  "baseline_revision": "38429f984acb7bde79884327b2916954f796f10c"
+}

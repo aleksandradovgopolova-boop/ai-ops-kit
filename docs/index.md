@@ -141,3 +141,5 @@ python3 <path-to-ai-ops-kit>/installer/ai_ops.py init .
 
 Точная версия — в `VERSION`, канал — в `registry/release-claims.yaml`. Канал заработан, а не
 объявлен: `stable` требует полевых доказательств на живых дочках и проверяется машиной.
+
+- [Skills, обязательная policy и происхождение решений](decision-plane-runtime.md) — #1251/#1252/#1254.

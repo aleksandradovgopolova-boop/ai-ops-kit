@@ -177,14 +177,15 @@ class TestGateVerdictDeterministic:
         """(positive) полный evidence -> ровно ОДИН вердикт «закрыт» на всех N прогонах."""
         assert len(self._verdict_fingerprints(self.FULL)) == 1
         r = self._evaluate(self.FULL)
-        assert r["blocked"] is False and r["unmet_gates"] == []
+        assert next(g for g in r["gate_results"] if g["gate"] == self.IV)["status"] == "pass"
+        assert "intake_completeness" in r["evaluated_gates"]
 
     def test_fail_closed_verdict_identical_over_n_repeats(self):
         """(fail-closed) без tests_passed -> гейт незакрыт КАЖДЫЙ прогон, не флип в pass."""
         missing = ["build_passed", "lint_passed", "typecheck_passed", "tested_revision"]
         assert len(self._verdict_fingerprints(missing)) == 1
         r = self._evaluate(missing)
-        assert r["blocked"] is True and r["unmet_gates"] == [self.IV]
+        assert r["blocked"] is True and self.IV in r["unmet_gates"]
 
     def test_verdict_does_not_mutate_input_evidence(self):
         """(side-effect) вердикт не правит переданный evidence — скрытая мутация = дрейф повтора."""

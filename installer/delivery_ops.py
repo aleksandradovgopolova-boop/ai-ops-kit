@@ -337,6 +337,7 @@ RUNTIME_VALIDATORS = frozenset({
     "validate_adr_registry", "validate_quality_attributes", "validate_architecture_decision",
     "validate_surface_wiring", "validate_scenario_evidence", "validate_event_catalog",
     "validate_openspec_change", "validate_engops_policy", "validate_duties",
+    "validate_parallel_safety",  # локальная проверка перед PR (#1257)
     "validate_knowledge_graph", "validate_storybook_evidence",
     # F-033 (поле 15.08.2026): сверка критериев приёмки с результатом — механизм ПРОТИВ ложного
     # green, построенный 14.08 и починенный 15.08, — в дочке не исполнялся НИКОГДА: его зовёт

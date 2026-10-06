@@ -102,8 +102,11 @@ def agent_body(agent_id: str, agents_index: dict):
     return f"# {agent_id}\n(тело роли не найдено в пакете — используется контракт из registry)"
 
 
-def build_role_prompt(stage, agent_id, agents_index, task_text, published):
+def build_role_prompt(stage, agent_id, agents_index, task_text, published, skill_bodies=None):
     """Изолированный промпт роли: тело агента + задача + ТОЛЬКО опубликованные артефакты."""
+    from ai_ops_kit.providers.skill_context import resolve_skills
+    bodies = resolve_skills(stage, PKG) if skill_bodies is None else skill_bodies
+    skill_text = "\n".join(f"## Skill: {sid}\n{body}" for sid, body in bodies.items())
     is_judge = stage.get("review_mode") == "read-only"
     pub = "\n".join(f"--- {name} ---\n{content}" for name, content in published.items()) or "(пока нет)"
     guard = ("\nВНИМАНИЕ: ты judge (read-only). Не изменяй проверяемые артефакты; "
@@ -114,7 +117,7 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published):
              "\"status\":\"pass|warn|fail\",\"checks\":[{\"id\":\"...\",\"status\":\"pass|warn|fail\"}],"
              "\"blockers\":[\"...при fail...\"]}.\n") if is_judge else ""
     return (f"{agent_body(agent_id, agents_index)}\n"
-            f"{guard}\n## Задача\n{task_text}\n\n## Опубликованные артефакты\n{pub}\n")
+            f"{skill_text}\n{guard}\n## Задача\n{task_text}\n\n## Опубликованные артефакты\n{pub}\n")
 
 
 def _write_reviewer_json(run_dir, sid, text):
@@ -146,10 +149,47 @@ def _write_reviewer_json(run_dir, sid, text):
     return True
 
 
+def _prepare_stage_prompt(stage, owner, agents_index, task, published, child_root, resolver, state, run_dir):
+    from ai_ops_kit.providers.skill_context import resolve_skills, runtime_skill_resolver
+    bodies = resolve_skills(stage, PKG, resolver=resolver or runtime_skill_resolver(child_root))
+    prompt = build_role_prompt(stage, owner, agents_index, task, published, skill_bodies=bodies)
+    state.setdefault('skill_context', {})[stage['id']] = {
+        k: {'sha256': hashlib.sha256(v.encode()).hexdigest(), 'bytes': len(v.encode())}
+        for k, v in bodies.items()}
+    save_state(run_dir, state)
+    return prompt
+
+
+def _save_stage_origin(stage, owner, result, out):
+    origin = {'kind': 'JUDGMENT' if stage.get('review_mode') == 'read-only' else 'REASONING',
+              'actor': owner, 'source': out.name, 'sha256': hashlib.sha256(result.encode()).hexdigest()}
+    out.with_suffix('.provenance.json').write_text(
+        json.dumps(origin, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    return origin
+
+
+def _finish_run_state(state, gates, skill_failure, budget_exceeded):
+    if skill_failure:
+        state['status'] = 'blocked'
+        state['skill_failure'] = skill_failure
+        state['unmet_gates'] = gates.get('unmet_gates', [])
+    elif budget_exceeded:
+        # бюджет исчерпан до завершения стадий — честный blocked с причиной
+        state["status"] = "blocked"
+        state["budget_exceeded"] = budget_exceeded
+        state["unmet_gates"] = gates.get("unmet_gates", [])
+    elif gates["blocked"]:
+        state["status"] = "blocked"
+        state["unmet_gates"] = gates["unmet_gates"]
+    else:
+        state["status"] = "done"
+        state.pop("unmet_gates", None)
+
+
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                  provider=mock_provider, verbose=True, gate_evidence=None,
                  collect=False, fresh=False, provider_name="mock", workitem_id=None,
-                 budget=None, gate_ids=None, signals=None):
+                 budget=None, gate_ids=None, signals=None, skill_resolver=None):
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -187,6 +227,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     from ai_ops_kit.shared import budget as _budget_mod
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     budget_exceeded = None
+    skill_failure = None
 
     stages = w["stages"]
     done_ids = {s for s in state.get("completed_checks", [])}
@@ -204,7 +245,13 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         state["next_action"] = sid
         save_state(run_dir, state)
 
-        prompt = build_role_prompt(stage, owner, agents_index, task_text, published)
+        from ai_ops_kit.providers.skill_context import SkillUnavailable
+        try:
+            prompt = _prepare_stage_prompt(stage, owner, agents_index, task_text, published,
+                                           child_root, skill_resolver, state, run_dir)
+        except SkillUnavailable as exc:
+            skill_failure = {'stage': sid, 'reason': str(exc)}
+            break
         try:
             bud.charge_call()          # потолок проверяется ДО вызова — превышение = не вызываем
         except _budget_mod.BudgetExceeded as e:
@@ -243,6 +290,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         out = run_dir / f"stage-{sid}.md"
         out.write_text(result, encoding="utf-8")
         published[out.stem] = result
+        state.setdefault('stage_provenance', {})[sid] = _save_stage_origin(stage, owner, result, out)
 
         # judge-стадии: извлечь СТРУКТУРНОЕ reviewer-result из ответа (source of truth для гейтов,
         # не regex по прозе — finding аудита). Пишем stage-<sid>.reviewer.json только если он
@@ -284,17 +332,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     state["current_phase"] = None
     state["gate_report"] = "GateReport.json"
     state["budget"] = bud.to_dict()
-    if budget_exceeded:
-        # бюджет исчерпан до завершения стадий — честный blocked с причиной
-        state["status"] = "blocked"
-        state["budget_exceeded"] = budget_exceeded
-        state["unmet_gates"] = gates.get("unmet_gates", [])
-    elif gates["blocked"]:
-        state["status"] = "blocked"
-        state["unmet_gates"] = gates["unmet_gates"]
-    else:
-        state["status"] = "done"
-        state.pop("unmet_gates", None)
+    _finish_run_state(state, gates, skill_failure, budget_exceeded)
     save_state(run_dir, state)
     # append-only аудит-лог действия ИИ (security-posture: audit-log)
     # Ф0: НЕ писать сырой task_text (может содержать ПДн/секреты) — только id и хэш.
@@ -306,10 +344,11 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         "model_calls": bud.model_calls,
         "budget_exceeded": bool(budget_exceeded)})
     if verbose:
-        if gates["blocked"]:
+        if state["status"] == "blocked":
             print(f"BLOCKED: workflow {workflow_id} прошёл {len(state['completed_checks'])} стадий, "
                   f"но блокирующие гейты не выполнены: {', '.join(gates['unmet_gates'])}. "
-                  f"Отчёт гейтов: {run_dir / 'GateReport.json'}")
+                  f"Отчёт гейтов: {run_dir / 'GateReport.json'}"
+                  f"{'; skill недоступен: ' + skill_failure['reason'] if skill_failure else ''}")
         else:
             print(f"OK: workflow {workflow_id} завершён sequential-режимом; "
                   f"{len(state['completed_checks'])} стадий, все блокирующие гейты выполнены; "

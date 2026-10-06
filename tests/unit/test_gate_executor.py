@@ -613,7 +613,9 @@ class TestRiskCalibratedEnforcement:
     def test_evaluate_on_unblocks_internal_low_risk(self):
         res = gate_executor.evaluate("QUICK", {"ux_review": self._FAIL},
                                      gate_ids=["ux_review"], signals=self._on("internal"))
-        assert res["blocked"] is False and res["unmet_gates"] == []
+        assert "ux_review" not in res["unmet_gates"]
+        assert res["blocked"] is True  # обязательные QUICK gates нельзя удалить selection
+        assert "implementation_verification" in res["evaluated_gates"]
 
     def test_evaluate_on_critical_still_blocks(self):
         res = gate_executor.evaluate("QUICK", {"ux_review": self._FAIL},

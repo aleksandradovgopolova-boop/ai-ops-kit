@@ -174,7 +174,7 @@ def test_source_map_covers_every_closed_by_value():
 def test_deterministic_pass_yields_verified():
     """Пройденный детерминированный гейт — верификация опирается на воспроизводимый сигнал."""
     gates = {"impl": {"validator": "validate-evidence"}}
-    verdict = ge.evidence_verdict([{"gate": "impl", "status": "pass"}], gates)
+    verdict = ge.evidence_verdict([{"gate": "impl", "status": "pass", "provenance": "FACT"}], gates)
     assert verdict["verified"] is True
     assert verdict["deterministic"] == ["impl"]
 
@@ -182,7 +182,7 @@ def test_deterministic_pass_yields_verified():
 def test_single_ai_judgment_without_deterministic_backing_is_not_verified():
     """ЦЕНТРАЛЬНЫЙ инвариант вехи 4.2: одно AI-суждение (advisory) не даёт verified."""
     gates = {"review": {"review_mode": "read-only", "responsible_role": "reviewer"}}
-    verdict = ge.evidence_verdict([{"gate": "review", "status": "pass"}], gates)
+    verdict = ge.evidence_verdict([{"gate": "review", "status": "pass", "provenance": "JUDGMENT"}], gates)
     assert verdict["verified"] is False
     assert verdict["advisory"] == ["review"] == verdict["ai_judgment"]
     assert "advisory" in verdict["reason"] and "verified не выставляется" in verdict["reason"]
@@ -191,7 +191,7 @@ def test_single_ai_judgment_without_deterministic_backing_is_not_verified():
 def test_writer_selfclaim_alone_is_not_verified():
     """Самозаявление писателя — слабейший источник, тоже не даёт verified в одиночку."""
     gates = {"selfcheck": {"review_mode": "writer", "responsible_role": "impl"}}
-    verdict = ge.evidence_verdict([{"gate": "selfcheck", "status": "pass"}], gates)
+    verdict = ge.evidence_verdict([{"gate": "selfcheck", "status": "pass", "provenance": "JUDGMENT"}], gates)
     assert verdict["verified"] is False
     assert verdict["advisory"] == ["selfcheck"]
 
@@ -200,7 +200,7 @@ def test_ai_judgment_verified_only_when_a_deterministic_gate_also_passes():
     """AI-суждение РЯДОМ с пройденным детерминированным гейтом — verified опирается на машину."""
     gates = {"impl": {"validator": "validate-evidence"},
              "review": {"review_mode": "read-only", "responsible_role": "reviewer"}}
-    results = [{"gate": "impl", "status": "pass"}, {"gate": "review", "status": "pass"}]
+    results = [{"gate": "impl", "status": "pass", "provenance": "FACT"}, {"gate": "review", "status": "pass", "provenance": "JUDGMENT"}]
     verdict = ge.evidence_verdict(results, gates)
     assert verdict["verified"] is True
     assert verdict["deterministic"] == ["impl"]
@@ -211,7 +211,7 @@ def test_failed_deterministic_gate_does_not_back_verified():
     """verified требует ПРОЙДЕННОГО детерминированного гейта — упавший опорой не является."""
     gates = {"impl": {"validator": "validate-evidence"},
              "review": {"review_mode": "read-only", "responsible_role": "reviewer"}}
-    results = [{"gate": "impl", "status": "fail"}, {"gate": "review", "status": "pass"}]
+    results = [{"gate": "impl", "status": "fail"}, {"gate": "review", "status": "pass", "provenance": "JUDGMENT"}]
     verdict = ge.evidence_verdict(results, gates)
     assert verdict["verified"] is False
     assert verdict["deterministic"] == []
@@ -219,7 +219,7 @@ def test_failed_deterministic_gate_does_not_back_verified():
 
 def test_human_only_is_not_deterministic_verification():
     """Решение человека само по себе не делает вердикт детерминированным (но названо отдельно)."""
-    verdict = ge.evidence_verdict([{"gate": "approval", "status": "pass"}],
+    verdict = ge.evidence_verdict([{"gate": "approval", "status": "pass", "provenance": "HUMAN_DECISION"}],
                                   {"approval": {"human_approval": True}})
     assert verdict["verified"] is False
     assert verdict["human"] == ["approval"]

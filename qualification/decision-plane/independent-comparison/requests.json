@@ -1,0 +1,393 @@
+{
+  "dataset_sha256": "64eef465fc3f9aa4c7a5f989977fffadaa3237f6ef153f2150d29502583065bf",
+  "requests": [
+    {
+      "id": "independent-ceremony-01",
+      "task": "Заменить подпись графика в локальном руководстве; вычисления и доступ к данным не меняются.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-02",
+      "task": "Добавить необязательный параметр разделителя в парсер отчётов с прежним значением по умолчанию.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-03",
+      "task": "Проверить новый порядок подсказок при записи на занятие по доле завершённых записей.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "measurable_behavior": true,
+        "user_facing_change": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-04",
+      "task": "Закрыть возможность читать чужие квитанции через подмену идентификатора.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "security-fix",
+        "risk": "low",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-05",
+      "task": "Исправить пунктуацию в словаре на странице «Безопасность». Правила авторизации не изменять.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "irreversible": false,
+        "destructive": false,
+        "secret_boundary": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-06",
+      "task": "Переименовать пример кнопки «Удалить всё» в учебном макете; обработчика удаления в нём нет.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "destructive": false,
+        "irreversible": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-07",
+      "task": "Поправить перенос строки в заголовке «Критический риск» внутри статической памятки.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "secret_boundary": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-08",
+      "task": "Отсортировать ссылки в архиве заметок об инцидентах; рабочих систем и секретов не касаться.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "irreversible": false,
+        "secret_boundary": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-09",
+      "task": "Добавить счётчик времени генерации тестовых фикстур в локальный инструмент разработчика.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "measurable_behavior": true,
+        "user_facing_change": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-10",
+      "task": "Исправить опечатку в подписи футера; пользовательский сценарий и метрики не меняются.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "user_facing_change": true,
+        "measurable_behavior": false
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-11",
+      "task": "Добавить повторное использование результата чтения конфигурации внутри одного запуска.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-12",
+      "task": "Сравнить три формата экспорта на обезличенных локальных образцах и записать выводы.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "RESEARCH",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-13",
+      "task": "Изменить группировку внутренних журналов по дням без смены пользовательского поведения.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "medium"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-14",
+      "task": "Добавить напоминание перед завершением записи в библиотеку и измерить долю завершения.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "measurable_behavior": true,
+        "user_facing_change": true,
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-15",
+      "task": "Спроектировать выбор свободного времени для консультации с проверкой понятности сценария.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "PRODUCT",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-16",
+      "task": "Добавить генерацию черновика описания музейного экспоната с ручным подтверждением публикации.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "AI_FEATURE",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-17",
+      "task": "Дополнить локальное руководство примером, владелец явно просит глубину L2.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "requested_level": 2
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-18",
+      "task": "Изменить округление сумм при межбанковских переводах; ошибка затронет реальные расчёты.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "high",
+        "requested_level": 1
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-19",
+      "task": "Переключить маршрутизацию экстренных уведомлений на новый канал в рабочей системе.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "PRODUCT",
+        "risk": "critical",
+        "requested_level": 2
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-20",
+      "task": "Необратимо обезличить оригиналы старых обращений, таблицу соответствий не сохранять.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "irreversible": true,
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-21",
+      "task": "Удалить исходные изображения после проверки миниатюр; задача затрагивает сохранённые файлы.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "QUICK",
+        "risk": "low",
+        "destructive": true
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-22",
+      "task": "Провести служебный токен через новый прокси и проверить границу доступа к нему.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "ENGINEERING",
+        "risk": "low",
+        "secret_boundary": true,
+        "requested_level": 1
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-23",
+      "task": "Исправить остановившуюся очередь подтверждений во время активного инцидента.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "incident-fix",
+        "risk": "medium",
+        "requested_level": 0
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    {
+      "id": "independent-ceremony-24",
+      "task": "Выпустить срочное исправление дублирования квитанций в рабочем потоке.",
+      "point": "ceremony",
+      "signals": {
+        "task_type": "hotfix",
+        "risk": "low"
+      },
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    }
+  ]
+}

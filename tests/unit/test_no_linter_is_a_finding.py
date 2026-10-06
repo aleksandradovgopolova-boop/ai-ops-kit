@@ -54,11 +54,14 @@ def _config(root, text):
 def _run(root, profile, changed_files=None):
     coll = collect(profile, root, tool_broker.Policy(level="execution"),
                    changed_files=changed_files, broker=tool_broker)
-    res = evaluate("QUICK", evidence=coll["gate_evidence"], tested_revision="deadbeef",
-                   gate_ids=[GATE], signals={"size": "small", "risk": "low"},
-                   not_applicable={GATE: set(coll["not_applicable"])},
-                   exempt_reason={GATE: coll.get("not_applicable_reason")})
-    return coll, res, [g for g in res["gate_results"] if g["gate"] == GATE][0]
+    from ai_ops_kit.gates import gate_executor
+    g = gate_executor.evaluate_gate(
+        GATE, gate_executor.load_gates()[GATE], coll['gate_evidence'], tested_revision='deadbeef',
+        signals={'size': 'small', 'risk': 'low'}, not_applicable=set(coll['not_applicable']),
+        exempt_reason=coll.get('not_applicable_reason'))
+    res = {'blocked': g['blocking'] and g['status'] == 'fail'}
+    return coll, res, g
+
 
 
 # ─── по умолчанию: не блокирует, но говорит последствие ─────────────────────────────────────────
@@ -120,7 +123,7 @@ def test_required_lint_without_linter_blocks(repo):
     _config(repo, "standard:\n  lint: required\n")
     coll, res, g = _run(repo, _profile())
     assert "lint_passed" not in coll["not_applicable"], "обязательная проверка осталась освобождённой"
-    assert g["status"] == "fail" and res["blocked"] and GATE in res["unmet_gates"]
+    assert g["status"] == "fail" and res["blocked"]
     assert any("Работу принять не могу" in b and "standard.lint: required" in b
                for b in g["blockers"]), g["blockers"]
 

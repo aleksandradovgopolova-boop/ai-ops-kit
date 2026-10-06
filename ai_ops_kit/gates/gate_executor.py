@@ -37,6 +37,7 @@ from pathlib import Path
 
 import yaml  # noqa: F401 — исторически импортируем из gate_executor (внешние тесты берут его отсюда)
 
+from ai_ops_kit.shared.claim_provenance import evidence_kind, describe
 from ai_ops_kit.gates import gate_policy  # риск-калиброванная строгость под owner-флагом (#543)
 
 # --- сателлиты: классификация + сбор evidence (фундамент) и детерминированные раннеры ---
@@ -89,7 +90,7 @@ _ALLOWED_KEYS = {
     "schema_version", "gate", "status", "blocking", "awaiting_human", "scope", "checks", "blockers",
     "warnings", "evidence", "affected_files", "affected_artifacts", "tested_revision",
     "artifact_hashes", "owner", "review_mode", "created_at", "expires_at", "override",
-    "suggested_next",
+    "suggested_next", "provenance",
 }
 
 
@@ -136,10 +137,11 @@ def evidence_verdict(gate_results: list, gates: dict, signals: dict = None) -> d
         g = (gates or {}).get(gid)
         if g is not None:
             src[gid] = evidence_source(g, signals)
-    passed = [r for r in (gate_results or []) if r.get("status") == "pass"]
-    det = sorted(r["gate"] for r in passed if src.get(r.get("gate")) == "deterministic")
-    aij = sorted(r["gate"] for r in passed if src.get(r.get("gate")) == "ai_judgment")
-    hum = sorted(r["gate"] for r in passed if src.get(r.get("gate")) == "human")
+    passed = [r for r in (gate_results or []) if r.get("status") == "pass" and "not_applicable" not in r.get("scope", [])]
+    det = sorted(r["gate"] for r in passed if src.get(r.get("gate")) == "deterministic" and r.get("provenance") == "FACT")
+    aij = sorted(r["gate"] for r in passed if r.get("provenance") == "JUDGMENT")
+    hum = sorted(r["gate"] for r in passed if r.get("provenance") == "HUMAN_DECISION")
+    unknown = sorted(r["gate"] for r in passed if r.get("provenance") is None)
     verified = bool(det)
     if verified:
         reason = f"есть детерминированная опора ({', '.join(det)}) — verified"
@@ -148,10 +150,12 @@ def evidence_verdict(gate_results: list, gates: dict, signals: dict = None) -> d
                   f"{', '.join(aij)}) — детерминированной опоры нет, verified не выставляется")
     elif hum:
         reason = f"закрыто человеком ({', '.join(hum)}); детерминированной верификации нет"
+    elif unknown:
+        reason = "происхождение legacy evidence неизвестно — verified не выставляется"
     else:
         reason = "нет пройденных гейтов — верифицировать нечего"
     return {"verified": verified, "deterministic": det, "ai_judgment": aij,
-            "advisory": aij, "human": hum, "reason": reason}
+            "advisory": aij, "human": hum, "unknown": unknown, "reason": reason}
 
 
 def _unmet_reason(kind: str, gate: dict) -> str:
@@ -161,6 +165,36 @@ def _unmet_reason(kind: str, gate: dict) -> str:
         "human-approval": "требуется ручное одобрение — не получено",
         "writer-check": "результат ответственной стадии не предоставлен",
     }[kind]
+
+
+def _origin_check(ev, gate, signals):
+    try:
+        provenance = evidence_kind(ev) if ev else None
+    except ValueError:
+        provenance = None
+    expected_source = evidence_source(gate, signals)
+    explicit_origin = 'provenance' in ev or 'source' in ev
+    invalid_source = explicit_origin and (provenance is None
+                      or (expected_source == 'deterministic' and provenance != 'FACT')
+                      or (expected_source == 'human' and provenance != 'HUMAN_DECISION')
+                      or (expected_source == 'ai_judgment' and provenance != 'JUDGMENT'))
+    return provenance, invalid_source
+
+
+def _not_applicable_result(gate_id, gate, tested_revision, rw):
+    return {
+        "provenance": "FACT",
+        "schema_version": 1, "gate": gate_id, "status": "pass", "blocking": False,
+        # признак обязан быть у КАЖДОГО результата, включая честный пропуск: отсутствие поля
+        # читается как «не знаю», а здесь это неотличимо от «нет»
+        "awaiting_human": False,
+        "scope": ["not_applicable"], "checks": [], "blockers": [],
+        "warnings": [f"гейт неприменим: нет ни одного сигнала {rw} — не оценивался (honest skip)"],
+        "evidence": [], "tested_revision": tested_revision,
+        "owner": gate.get("responsible_role", "unknown"),
+        "review_mode": gate.get("review_mode", "read-only"),
+        "created_at": None, "expires_at": None, "override": None,
+    }
 
 
 def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None, signals=None,
@@ -187,18 +221,7 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     # ЧЕСТНЫЙ non-blocking skip (scope=not_applicable, записан в warnings), не тихий pass и не блок.
     rw = gate.get("required_when") or []
     if rw and not any((signals or {}).get(s) for s in rw):
-        return {
-            "schema_version": 1, "gate": gate_id, "status": "pass", "blocking": False,
-            # признак обязан быть у КАЖДОГО результата, включая честный пропуск: отсутствие поля
-            # читается как «не знаю», а здесь это неотличимо от «нет»
-            "awaiting_human": False,
-            "scope": ["not_applicable"], "checks": [], "blockers": [],
-            "warnings": [f"гейт неприменим: нет ни одного сигнала {rw} — не оценивался (honest skip)"],
-            "evidence": [], "tested_revision": tested_revision,
-            "owner": gate.get("responsible_role", "unknown"),
-            "review_mode": gate.get("review_mode", "read-only"),
-            "created_at": None, "expires_at": None, "override": None,
-        }
+        return _not_applicable_result(gate_id, gate, tested_revision, rw)
 
     # авто-исполнение детерминированного валидатора, если evidence не подан
     if not ev.get("status") and kind == "deterministic":
@@ -206,7 +229,8 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
         if run:
             st, checks, provided = run
             ev = {"status": st, "checks": checks, "provided": provided,
-                  "evidence": [f"validator {gate.get('validator')} executed"]}
+                  "evidence": [f"validator {gate.get('validator')} executed"],
+                  "source": "deterministic", "provenance": "FACT"}
 
     status = ev.get("status")
     if status in ("pass", "warn", "fail"):
@@ -256,6 +280,14 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
         evid = []
         override = None
 
+    provenance, invalid_source = _origin_check(ev, gate, signals)
+    if invalid_source:
+        status = 'fail' if blocking else 'warn'
+        msg = 'происхождение evidence не подтверждает обязательную проверку'
+        blockers = blockers + [msg] if blocking else blockers
+        warnings = warnings + [msg]
+        override = None
+
     # Вывод 1 «дефектов одной сессии»: scenario-как-evidence — ADVISORY, НИКОГДА не блок (не меняет
     # status/blockers). «тесты есть» != «тест смотрит на пользовательский сценарий, а не на слой». Для
     # applicable task_type (advisory_applicability) добавляем warning, если evidence не несёт
@@ -284,6 +316,7 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
             status = "warn"
 
     result = {
+        "provenance": provenance,
         "schema_version": 1,
         "gate": gate_id,
         "status": status,
@@ -328,7 +361,28 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
     gates = load_gates()
     if workflow_id not in workflows:
         raise SystemExit(f"неизвестный workflow '{workflow_id}' (есть: {', '.join(workflows)})")
-    gate_ids = list(gate_ids) if gate_ids is not None else (workflows[workflow_id].get("quality_gates", []) or [])
+    selected_explicitly = gate_ids is not None
+    floor_workflow, floor_fallback = workflow_id, False
+    requested = list(gate_ids) if gate_ids is not None else []
+    mandatory = list(workflows[workflow_id].get('quality_gates', []) or [])
+    if signals:
+        from ai_ops_kit.shared import ai_route
+        try:
+            floor_workflow = ai_route.route(signals)['workflow']
+        except Exception:  # noqa: BLE001 — отказ router не разрешает более слабую policy
+            floor_workflow, floor_fallback = 'CRITICAL', True
+        if floor_workflow not in workflows:
+            raise ValueError('не удалось определить обязательную policy workflow')
+        mandatory.extend(workflows[floor_workflow].get('quality_gates', []) or [])
+        tracks = yaml.safe_load((PKG / 'registry/tracks.yaml').read_text(encoding='utf-8'))['tracks']
+        for track in tracks.values():
+            if signals.get(track['signal']):
+                mandatory.extend(track['gates'])
+    for gid, gate in gates.items():
+        if _approval_required(gate, signals):
+            mandatory.append(gid)
+    mandatory = list(dict.fromkeys(mandatory))
+    gate_ids = list(dict.fromkeys(mandatory + requested))
 
     results, kinds, unmet = [], {}, []
     for gid in gate_ids:
@@ -348,7 +402,13 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
         "schema_version": 1,
         "workflow": workflow_id,
         "evaluated_gates": gate_ids,
+        "policy_restored_gates": [g for g in mandatory if g not in requested] if selected_explicitly else [],
+        "policy_floor_workflow": floor_workflow,
+        "policy_floor_fallback": floor_fallback,
         "gate_kinds": kinds,
+        "claim_origins": {r["gate"]: {"kind": r.get("provenance"),
+                           "description": describe(r["provenance"]) if r.get("provenance") else "источник не подтверждён"}
+                          for r in results},
         # КТО ЗАКРЫЛ КАЖДЫЙ ГЕЙТ. Классификация существовала и раньше (`gate_kinds`), но наружу не
         # выходила: в отчёте прогона все гейты выглядели одинаково, и «зелёное» от валидатора было
         # неотличимо от «зелёного» по мнению судьи. Дочка, читающая отчёт, обязана видеть разницу.

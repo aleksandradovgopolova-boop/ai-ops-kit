@@ -1286,8 +1286,8 @@ probes:
 - id: honest-skip-answers-the-question-too
   kind: guard
   file: ai_ops_kit/gates/gate_executor.py
-  find: '            "awaiting_human": False,'
-  replace_with: '            "scope_placeholder_removed": False,'
+  find: '        "awaiting_human": False,'
+  replace_with: '        "scope_placeholder_removed": False,'
   tests:
   - tests/unit/test_gate_says_when_the_move_is_humans.py
   why: 'Ранний возврат неприменимого гейта — тоже результат. Мутация убирает у него поле, и

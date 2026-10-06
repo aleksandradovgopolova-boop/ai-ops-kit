@@ -1,0 +1,689 @@
+{
+  "dataset_sha256": "0c7e189c13de6f629c2eb6bb16bfcfcbc3f62faeb1e217bbd6cdd992b3dcc724",
+  "providers": [
+    {
+      "id": "jev",
+      "kind": "live",
+      "revision": "jev-1.13.0",
+      "requested_model": "jev-latest",
+      "endpoint": "https://classifier.dev/v1/systemone",
+      "service": "classifier-free",
+      "provenance": "classifier-free API; 2026-10-05T11:41:00.165891+00:00",
+      "input_price_usd_per_million": null,
+      "responses": [
+        {
+          "case_id": "ceremony-01",
+          "context_bytes": 874,
+          "fallback": false,
+          "input_tokens": 593,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.99,
+                "probabilities": {
+                  "1": 0.0,
+                  "0": 1.0,
+                  "2": 0.0,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 593,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1428.1610840116628
+        },
+        {
+          "case_id": "ceremony-02",
+          "context_bytes": 874,
+          "fallback": false,
+          "input_tokens": 593,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.96,
+                "probabilities": {
+                  "3": 0.02,
+                  "1": 0.96,
+                  "0": 0.01,
+                  "2": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 593,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.96,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1137.650249991566
+        },
+        {
+          "case_id": "ceremony-03",
+          "context_bytes": 893,
+          "fallback": false,
+          "input_tokens": 599,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "2",
+                "confidence": 0.88,
+                "probabilities": {
+                  "1": 0.03,
+                  "2": 0.91,
+                  "0": 0.03,
+                  "3": 0.03
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 599,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "2",
+          "confidence": 0.88,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1083.045042003505
+        },
+        {
+          "case_id": "ceremony-04",
+          "context_bytes": 888,
+          "fallback": false,
+          "input_tokens": 595,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "3",
+                "confidence": 0.99,
+                "probabilities": {
+                  "1": 0.0,
+                  "0": 0.01,
+                  "3": 0.99,
+                  "2": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 595,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "3",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 987.0824580139015
+        },
+        {
+          "case_id": "ceremony-05",
+          "context_bytes": 915,
+          "fallback": false,
+          "input_tokens": 609,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "3",
+                "confidence": 0.98,
+                "probabilities": {
+                  "0": 0.01,
+                  "1": 0.0,
+                  "3": 0.99,
+                  "2": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 609,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "3",
+          "confidence": 0.98,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1432.6894999830984
+        },
+        {
+          "case_id": "ceremony-06",
+          "context_bytes": 954,
+          "fallback": false,
+          "input_tokens": 620,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "2",
+                "confidence": 0.93,
+                "probabilities": {
+                  "3": 0.01,
+                  "0": 0.05,
+                  "1": 0.0,
+                  "2": 0.94
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 620,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "2",
+          "confidence": 0.93,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1019.8029590246733
+        },
+        {
+          "case_id": "ceremony-07",
+          "context_bytes": 904,
+          "fallback": false,
+          "input_tokens": 610,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.98,
+                "probabilities": {
+                  "2": 0.0,
+                  "1": 0.01,
+                  "0": 0.99,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 610,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.98,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1113.4741670102812
+        },
+        {
+          "case_id": "ceremony-08",
+          "context_bytes": 913,
+          "fallback": false,
+          "input_tokens": 594,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.91,
+                "probabilities": {
+                  "1": 0.9400000000000001,
+                  "3": 0.0,
+                  "0": 0.06,
+                  "2": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 594,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.91,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 997.7764590003062
+        },
+        {
+          "case_id": "ceremony-09",
+          "context_bytes": 894,
+          "fallback": false,
+          "input_tokens": 604,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "1",
+                "confidence": 0.94,
+                "probabilities": {
+                  "1": 0.96,
+                  "0": 0.01,
+                  "2": 0.03,
+                  "3": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 604,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "1",
+          "confidence": 0.94,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1030.7301249995362
+        },
+        {
+          "case_id": "ceremony-10",
+          "context_bytes": 926,
+          "fallback": false,
+          "input_tokens": 615,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "0",
+                "confidence": 0.54,
+                "probabilities": {
+                  "1": 0.01,
+                  "0": 0.66,
+                  "2": 0.0,
+                  "3": 0.33
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 615,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "0",
+          "confidence": 0.54,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 975.0623749860097
+        },
+        {
+          "case_id": "ceremony-11",
+          "context_bytes": 902,
+          "fallback": false,
+          "input_tokens": 606,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "3",
+                "confidence": 0.9,
+                "probabilities": {
+                  "0": 0.03,
+                  "2": 0.0,
+                  "3": 0.93,
+                  "1": 0.04
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 606,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "3",
+          "confidence": 0.9,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1012.9207080171909
+        },
+        {
+          "case_id": "ceremony-12",
+          "context_bytes": 940,
+          "fallback": false,
+          "input_tokens": 616,
+          "output_tokens": 45,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "3",
+                "confidence": 0.69,
+                "probabilities": {
+                  "0": 0.21,
+                  "1": 0.02,
+                  "3": 0.76,
+                  "2": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 616,
+              "output_tokens": 45
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "3",
+          "confidence": 0.69,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1068.1715829996392
+        },
+        {
+          "case_id": "model-01",
+          "context_bytes": 733,
+          "fallback": false,
+          "input_tokens": 515,
+          "output_tokens": 41,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "cheap-api/low",
+                "confidence": 0.95,
+                "probabilities": {
+                  "cheap-api/low": 0.97,
+                  "strong-executor/high": 0.03
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 515,
+              "output_tokens": 41
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "cheap-api/low",
+          "confidence": 0.95,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1501.03504199069
+        },
+        {
+          "case_id": "model-02",
+          "context_bytes": 752,
+          "fallback": false,
+          "input_tokens": 524,
+          "output_tokens": 42,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "strong-executor/high",
+                "confidence": 0.97,
+                "probabilities": {
+                  "cheap-api/low": 0.01,
+                  "strong-executor/high": 0.99
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 524,
+              "output_tokens": 42
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "strong-executor/high",
+          "confidence": 0.97,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1055.4685840033926
+        },
+        {
+          "case_id": "model-03",
+          "context_bytes": 761,
+          "fallback": false,
+          "input_tokens": 523,
+          "output_tokens": 41,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "cheap-api/low",
+                "confidence": 0.99,
+                "probabilities": {
+                  "strong-executor/high": 0.0,
+                  "cheap-api/low": 1.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 523,
+              "output_tokens": 41
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "cheap-api/low",
+          "confidence": 0.99,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1117.5828750128858
+        },
+        {
+          "case_id": "model-04",
+          "context_bytes": 778,
+          "fallback": false,
+          "input_tokens": 535,
+          "output_tokens": 42,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "strong-executor/high",
+                "confidence": 1.0,
+                "probabilities": {
+                  "strong-executor/high": 1.0,
+                  "cheap-api/low": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 535,
+              "output_tokens": 42
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "strong-executor/high",
+          "confidence": 1.0,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1150.947208981961
+        },
+        {
+          "case_id": "agent-01",
+          "context_bytes": 751,
+          "fallback": false,
+          "input_tokens": 538,
+          "output_tokens": 62,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "intake-classifier",
+                "confidence": 1.0,
+                "probabilities": {
+                  "intake-classifier": 1.0,
+                  "implementation-integrator": 0.0,
+                  "final-verifier": 0.0,
+                  "code-reviewer": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 538,
+              "output_tokens": 62
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "intake-classifier",
+          "confidence": 1.0,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1551.577374979388
+        },
+        {
+          "case_id": "agent-02",
+          "context_bytes": 770,
+          "fallback": false,
+          "input_tokens": 546,
+          "output_tokens": 61,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "final-verifier",
+                "confidence": 0.35,
+                "probabilities": {
+                  "final-verifier": 0.52,
+                  "intake-classifier": 0.0,
+                  "implementation-integrator": 0.03,
+                  "code-reviewer": 0.45
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 546,
+              "output_tokens": 61
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "final-verifier",
+          "confidence": 0.35,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1061.3137500185985
+        },
+        {
+          "case_id": "agent-03",
+          "context_bytes": 734,
+          "fallback": false,
+          "input_tokens": 527,
+          "output_tokens": 61,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "implementation-integrator",
+                "confidence": 0.48,
+                "probabilities": {
+                  "final-verifier": 0.04,
+                  "intake-classifier": 0.01,
+                  "implementation-integrator": 0.6,
+                  "code-reviewer": 0.35
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 527,
+              "output_tokens": 61
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "implementation-integrator",
+          "confidence": 0.48,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1293.6380419996567
+        },
+        {
+          "case_id": "agent-04",
+          "context_bytes": 766,
+          "fallback": false,
+          "input_tokens": 533,
+          "output_tokens": 61,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "code-reviewer",
+                "confidence": 0.83,
+                "probabilities": {
+                  "code-reviewer": 0.87,
+                  "final-verifier": 0.13,
+                  "implementation-integrator": 0.0,
+                  "intake-classifier": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 533,
+              "output_tokens": 61
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "code-reviewer",
+          "confidence": 0.83,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1113.6754579783883
+        }
+      ]
+    }
+  ]
+}

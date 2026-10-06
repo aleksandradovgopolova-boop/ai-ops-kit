@@ -1,0 +1,30 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-10-05-feature-coverage-workflo-cb759390
+at: '2026-10-05T11:39:32+00:00'
+statement: 'Feature-coverage workflow Kit пытается коммитить baseline напрямую в защищённый
+  main: первый push Garden завершился GH006; baseline должен приниматься через PR.'
+observation_class: defect
+severity: p1
+kit_version: 4.9.3
+child:
+  name: garden
+  path: /private/tmp/ai-ops-first-hour-selection-20261005.okUBc5/garden-delivered-main
+  commit: da4b8b1d1674
+evidence:
+- kind: command
+  command: gh run view 37303245290 --repo aleksandradovgopolova-boop/garden --log-failed
+  output: 'remote: error: GH006: Protected branch update failed for refs/heads/main;
+    main -> main (protected branch hook declined)'
+- kind: file
+  path: .github/workflows/ai-ops-feature-coverage.yml
+  quote: В итоговом main da4b8b1d после PR15 права contents:read, proposed baseline
+    отдаётся artifact вместо прямого push; seed baseline принят через PR.
+- kind: note
+  text: Исправлено в child PR15; upstream ещё не исправлен этим учётным шагом. Managed
+    файлы не изменены.
+state: delivered
+state_reason: null
+delivered_to:
+  kit_root: /Users/sasad/.codex/worktrees/garden-field-accounting/ai-ops-kit
+  at: '2026-10-05T11:39:32+00:00'

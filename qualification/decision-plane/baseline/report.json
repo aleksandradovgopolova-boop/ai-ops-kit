@@ -1,0 +1,1369 @@
+{
+  "dataset_sha256": "0c7e189c13de6f629c2eb6bb16bfcfcbc3f62faeb1e217bbd6cdd992b3dcc724",
+  "dataset_version": "0.1",
+  "providers": {
+    "current": {
+      "status": "measured",
+      "kind": "local",
+      "source": {
+        "revision": "38429f984acb7bde79884327b2916954f796f10c",
+        "dirty": true,
+        "source_sha256": {
+          "ai_ops_kit/devtools/decision_eval.py": "999125337b2010bf39a52c6312dc243569bce0f8c034e7444ae40af3f06ed9a2",
+          "ai_ops_kit/gates/spec_levels.py": "024bac5ce8f2fe6ef92ecfb1a954de19981d8c77fc3d1c4c7700dcddb48247e9",
+          "ai_ops_kit/providers/model_router.py": "f5cff23ddd8702b1bb8e5bd13f4476161570ac5fc5da723048c324e95962b8d9",
+          "ai_ops_kit/shared/ai_route.py": "0391d992cdd9706b67054c78d3f07e1349e8c7eabc73f475970aa0bb8e7febe5",
+          "registry/agents.yaml": "45d4e8d5e53db58db7d7fdd87736acc9414aca39aac03fd17a6625a7710e62de",
+          "registry/artifact-registry.yaml": "d7888f4cc7905650546acc628fdce74587e93e52ecef63b1e90b9d6c87343ced",
+          "registry/capability-index.yaml": "a73dd824a5f319c6a065798dd4cdbf45df613a3f6b1eedae1e0e41297f66c712",
+          "registry/capability-policy.yaml": "13faa0ca15f8ae2a3c6bd1e3e40ff9f96962cd80cb6a13111e540730cb74f049",
+          "registry/communication-policy.yaml": "0f3d648018f76cc3334aa3f44c1d74a24a12465e355d5e59ccde4c7c59e0fe9c",
+          "registry/coordination-files.yaml": "c777c2f9406df7df2a978a4f9f4edaead8b8accae2d0d1f68b31db73ff40aafd",
+          "registry/decision-boundary.yaml": "4082fb3a15657f15c9dcdf693c37904e9f01119351823011423ee917034d4a6c",
+          "registry/enforcement-inventory.yaml": "6f028a38ea3865a6fd245a3b191d01968d6ad4a3d8f3be9754212ebb09bc4742",
+          "registry/entities.yaml": "417e857a7cd6e1f7806190b682763ff02e77403a07ce2108acbdcc95c313eb9a",
+          "registry/model-qualification.yaml": "da1d226a8fbb5467d72a25a2ac4720b2a6cb313f152b1dcf96337a428107384a",
+          "registry/model-roles.yaml": "def3f2d393627adc3a7a8f0df2625f4dc73ded89644f89cbbfa4e3b2cc7425aa",
+          "registry/models.yaml": "e28eea865553b29979bb59fdf80729015a9e924cea5a93001f6167930872fdb1",
+          "registry/product-operating-model.yaml": "9cafa543aa4e07834c032dca3e2fcc495b4ecc8b33af570ad80e83331a8861a6",
+          "registry/providers.yaml": "873dc811e42d419e31c92d2bf8f6f22f0020b4274780faeefb7b1d3d4b816fbb",
+          "registry/release-claims.yaml": "9591f1ccd2babaad7bb0ccb42d3e054cfa067de90dc00e68bad5ec098e336a56",
+          "registry/release-notes.yaml": "36fcec8eea13f42dfb8c72bc3df85a4f77b2b663e4434235a49fac9b0bc06c2c",
+          "registry/routing-policy.yaml": "1bcda1fd9716adb447c46de80037c8091e5e46163399f854eef462ece7baf737",
+          "registry/runtimes.yaml": "ff05417848841a81ba868006b9eab418eec60064fc82756572719415b1d8c701",
+          "registry/standard.yaml": "515514743e920ccd673a1b748d7517b068dde59e9e634f1dd2a8f3d304d008ff",
+          "registry/tools.yaml": "e6386941d1c747e3cd4848d33a9bdac9b4aff5f91ebe3fa3618a3829d19ed49b",
+          "registry/tracks.yaml": "4d002641470b8b3dc04c660bdb5f7a4b1a2e126329131a8f8e9f00265ce32d72",
+          "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41"
+        }
+      },
+      "declared_baseline_revision": "38429f984acb7bde79884327b2916954f796f10c"
+    },
+    "heuristic": {
+      "status": "measured",
+      "kind": "local",
+      "source": {
+        "revision": "38429f984acb7bde79884327b2916954f796f10c",
+        "dirty": true,
+        "source_sha256": {
+          "ai_ops_kit/devtools/decision_eval.py": "999125337b2010bf39a52c6312dc243569bce0f8c034e7444ae40af3f06ed9a2",
+          "ai_ops_kit/gates/spec_levels.py": "024bac5ce8f2fe6ef92ecfb1a954de19981d8c77fc3d1c4c7700dcddb48247e9",
+          "ai_ops_kit/providers/model_router.py": "f5cff23ddd8702b1bb8e5bd13f4476161570ac5fc5da723048c324e95962b8d9",
+          "ai_ops_kit/shared/ai_route.py": "0391d992cdd9706b67054c78d3f07e1349e8c7eabc73f475970aa0bb8e7febe5",
+          "registry/agents.yaml": "45d4e8d5e53db58db7d7fdd87736acc9414aca39aac03fd17a6625a7710e62de",
+          "registry/artifact-registry.yaml": "d7888f4cc7905650546acc628fdce74587e93e52ecef63b1e90b9d6c87343ced",
+          "registry/capability-index.yaml": "a73dd824a5f319c6a065798dd4cdbf45df613a3f6b1eedae1e0e41297f66c712",
+          "registry/capability-policy.yaml": "13faa0ca15f8ae2a3c6bd1e3e40ff9f96962cd80cb6a13111e540730cb74f049",
+          "registry/communication-policy.yaml": "0f3d648018f76cc3334aa3f44c1d74a24a12465e355d5e59ccde4c7c59e0fe9c",
+          "registry/coordination-files.yaml": "c777c2f9406df7df2a978a4f9f4edaead8b8accae2d0d1f68b31db73ff40aafd",
+          "registry/decision-boundary.yaml": "4082fb3a15657f15c9dcdf693c37904e9f01119351823011423ee917034d4a6c",
+          "registry/enforcement-inventory.yaml": "6f028a38ea3865a6fd245a3b191d01968d6ad4a3d8f3be9754212ebb09bc4742",
+          "registry/entities.yaml": "417e857a7cd6e1f7806190b682763ff02e77403a07ce2108acbdcc95c313eb9a",
+          "registry/model-qualification.yaml": "da1d226a8fbb5467d72a25a2ac4720b2a6cb313f152b1dcf96337a428107384a",
+          "registry/model-roles.yaml": "def3f2d393627adc3a7a8f0df2625f4dc73ded89644f89cbbfa4e3b2cc7425aa",
+          "registry/models.yaml": "e28eea865553b29979bb59fdf80729015a9e924cea5a93001f6167930872fdb1",
+          "registry/product-operating-model.yaml": "9cafa543aa4e07834c032dca3e2fcc495b4ecc8b33af570ad80e83331a8861a6",
+          "registry/providers.yaml": "873dc811e42d419e31c92d2bf8f6f22f0020b4274780faeefb7b1d3d4b816fbb",
+          "registry/release-claims.yaml": "9591f1ccd2babaad7bb0ccb42d3e054cfa067de90dc00e68bad5ec098e336a56",
+          "registry/release-notes.yaml": "36fcec8eea13f42dfb8c72bc3df85a4f77b2b663e4434235a49fac9b0bc06c2c",
+          "registry/routing-policy.yaml": "1bcda1fd9716adb447c46de80037c8091e5e46163399f854eef462ece7baf737",
+          "registry/runtimes.yaml": "ff05417848841a81ba868006b9eab418eec60064fc82756572719415b1d8c701",
+          "registry/standard.yaml": "515514743e920ccd673a1b748d7517b068dde59e9e634f1dd2a8f3d304d008ff",
+          "registry/tools.yaml": "e6386941d1c747e3cd4848d33a9bdac9b4aff5f91ebe3fa3618a3829d19ed49b",
+          "registry/tracks.yaml": "4d002641470b8b3dc04c660bdb5f7a4b1a2e126329131a8f8e9f00265ce32d72",
+          "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41"
+        }
+      },
+      "declared_baseline_revision": "38429f984acb7bde79884327b2916954f796f10c"
+    },
+    "llm": {
+      "status": "not_run",
+      "reason": "Нет записанного живого прогона"
+    },
+    "jev": {
+      "status": "not_run",
+      "reason": "Нет записанного живого прогона"
+    }
+  },
+  "metrics": {
+    "current": {
+      "development": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "1": 1
+            },
+            "2": {
+              "2": 2
+            },
+            "3": {
+              "3": 2
+            }
+          },
+          "p50_latency_ms": 0.0024579931050539017,
+          "p95_latency_ms": 0.004354253178462386,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 188.66666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0025830086087808013,
+          "p95_latency_ms": 0.002882700937334448,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 189.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "intake-classifier": {
+              "intake-classifier": 1
+            },
+            "final-verifier": {
+              "final-verifier": 1
+            }
+          },
+          "p50_latency_ms": 52.84208350349218,
+          "p95_latency_ms": 52.90050835465081,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 273.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      },
+      "held_out": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "1": 2
+            },
+            "3": {
+              "3": 3
+            }
+          },
+          "p50_latency_ms": 0.0011044758139178157,
+          "p95_latency_ms": 0.001843247446231544,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 202.16666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0011665106285363436,
+          "p95_latency_ms": 0.0013541604857891798,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 216.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 1.0,
+          "confusion_matrix": {
+            "implementation-integrator": {
+              "implementation-integrator": 1
+            },
+            "code-reviewer": {
+              "code-reviewer": 1
+            }
+          },
+          "p50_latency_ms": 52.47377048362978,
+          "p95_latency_ms": 52.720914539531805,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 263.0,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      }
+    },
+    "heuristic": {
+      "development": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 0.5,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "0": 1
+            },
+            "2": {
+              "0": 2
+            },
+            "3": {
+              "3": 2
+            }
+          },
+          "p50_latency_ms": 0.0013750104699283838,
+          "p95_latency_ms": 0.0054169868235476315,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 3,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 188.66666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.00041650491766631603,
+          "p95_latency_ms": 0.0004916539182886481,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 189.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "intake-classifier": {
+              "<abstain>": 1
+            },
+            "final-verifier": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0002709857653826475,
+          "p95_latency_ms": 0.0002898974344134331,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 273.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      },
+      "held_out": {
+        "ceremony": {
+          "total": 6,
+          "accuracy": 0.3333333333333333,
+          "confusion_matrix": {
+            "0": {
+              "0": 1
+            },
+            "1": {
+              "0": 2
+            },
+            "3": {
+              "0": 2,
+              "3": 1
+            }
+          },
+          "p50_latency_ms": 0.0006455084076151252,
+          "p95_latency_ms": 0.0012610034900717437,
+          "latency_observed": 6,
+          "fallback_rate": 0.0,
+          "abstain_rate": 0.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 4,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 202.16666666666666,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "model_effort": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "cheap-api/low": {
+              "<abstain>": 1
+            },
+            "strong-executor/high": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.0002705055521801114,
+          "p95_latency_ms": 0.0002889588358812034,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 216.5,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        },
+        "agent_skill": {
+          "total": 2,
+          "accuracy": 0.0,
+          "confusion_matrix": {
+            "implementation-integrator": {
+              "<abstain>": 1
+            },
+            "code-reviewer": {
+              "<abstain>": 1
+            }
+          },
+          "p50_latency_ms": 0.00029099464882165194,
+          "p95_latency_ms": 0.00029100774554535747,
+          "latency_observed": 2,
+          "fallback_rate": 0.0,
+          "abstain_rate": 1.0,
+          "error_count": 0,
+          "high_confidence_count": 0,
+          "hcer": null,
+          "unsafe_downgrade_count": 0,
+          "mean_input_tokens": 0.0,
+          "mean_output_tokens": 0.0,
+          "mean_context_bytes": 263.0,
+          "actual_cost_per_1k_usd": 0.0,
+          "estimated_cost_per_1k_usd": null
+        }
+      }
+    }
+  },
+  "cases": [
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.004750007065013051,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-01",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0031669915188103914,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-02",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "2",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0018329883459955454,
+      "context_bytes": 182,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-03",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.003082997864112258,
+      "context_bytes": 177,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-04",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0016250123735517263,
+      "context_bytes": 204,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-05",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "2",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0013750104699283838,
+      "context_bytes": 243,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-06",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0011669762898236513,
+      "context_bytes": 193,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-07",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0008330098353326321,
+      "context_bytes": 202,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-08",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "1",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0008330098353326321,
+      "context_bytes": 183,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-09",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.002040993422269821,
+      "context_bytes": 215,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-10",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.0012500095181167126,
+      "context_bytes": 191,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-11",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 0.00104197533801198,
+      "context_bytes": 229,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-12",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=cheap-api; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.00291600008495152,
+      "context_bytes": 180,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-01",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=strong-executor; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.0022500171326100826,
+      "context_bytes": 199,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-02",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=cheap-api; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.0013750104699283838,
+      "context_bytes": 208,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-03",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "writer_tier=strong-executor; effort unsupported",
+      "provider": "current",
+      "latency_ms": 0.0009580107871443033,
+      "context_bytes": 225,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-04",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "intake-classifier",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 52.777167002204806,
+      "context_bytes": 264,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-01",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "intake-classifier",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "final-verifier",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 52.90700000477955,
+      "context_bytes": 283,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-02",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "final-verifier",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "implementation-integrator",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 52.19916597707197,
+      "context_bytes": 247,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-03",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "implementation-integrator",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "code-reviewer",
+      "confidence": null,
+      "abstain": false,
+      "provider": "current",
+      "latency_ms": 52.748374990187585,
+      "context_bytes": 279,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-04",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "code-reviewer",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.006541988113895059,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-01",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.00204198295250535,
+      "context_bytes": 163,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-02",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0018330174498260021,
+      "context_bytes": 182,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-03",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0007920025382190943,
+      "context_bytes": 177,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-04",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.000667001586407423,
+      "context_bytes": 204,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-05",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0009170034900307655,
+      "context_bytes": 243,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-06",
+      "split": "development",
+      "point": "ceremony",
+      "expected": "2",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.000541971530765295,
+      "context_bytes": 193,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-07",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "0",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0014590041246265173,
+      "context_bytes": 202,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-08",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0005829788278788328,
+      "context_bytes": 183,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-09",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "1",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0006660120561718941,
+      "context_bytes": 215,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-10",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "3",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.0006250047590583563,
+      "context_bytes": 191,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-11",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": true,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": "0",
+      "confidence": null,
+      "abstain": false,
+      "provider": "heuristic",
+      "latency_ms": 0.000667001586407423,
+      "context_bytes": 229,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "ceremony-12",
+      "split": "held_out",
+      "point": "ceremony",
+      "expected": "3",
+      "risk_labels": [
+        "mandatory"
+      ],
+      "correct": false,
+      "unsafe_downgrade": true,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.000500003807246685,
+      "context_bytes": 180,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-01",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.00033300602808594704,
+      "context_bytes": 199,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-02",
+      "split": "development",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0002910092007368803,
+      "context_bytes": 208,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-03",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "cheap-api/low",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0002500019036233425,
+      "context_bytes": 225,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "model-04",
+      "split": "held_out",
+      "point": "model_effort",
+      "expected": "strong-executor/high",
+      "risk_labels": [
+        "author_judgment"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0002499727997928858,
+      "context_bytes": 264,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-01",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "intake-classifier",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.00029199873097240925,
+      "context_bytes": 283,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-02",
+      "split": "development",
+      "point": "agent_skill",
+      "expected": "final-verifier",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.0002910092007368803,
+      "context_bytes": 247,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-03",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "implementation-integrator",
+      "risk_labels": [
+        "ordinary"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    },
+    {
+      "decision": null,
+      "confidence": null,
+      "abstain": true,
+      "reason": "unsupported",
+      "provider": "heuristic",
+      "latency_ms": 0.00029098009690642357,
+      "context_bytes": 279,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "actual_cost_usd": 0,
+      "case_id": "agent-04",
+      "split": "held_out",
+      "point": "agent_skill",
+      "expected": "code-reviewer",
+      "risk_labels": [
+        "writer_judge"
+      ],
+      "correct": false,
+      "unsafe_downgrade": false,
+      "high_confidence": false,
+      "high_confidence_error": false,
+      "fallback": false
+    }
+  ],
+  "verdict": "continue experiment",
+  "limitation": "Авторский синтетический корпус; независимая разметка и живые прогоны обязательны до ship."
+}

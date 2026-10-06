@@ -17,13 +17,15 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared.claim_provenance import KINDS
+
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 # `pending_human`/`human_handoff` — часть формы evidence, а не приписка сбоку: гейт, который ждёт
 # ЧЕЛОВЕКА, отличается от гейта, который нашёл дефект. Без объявления здесь такой признак в
 # загруженном evidence считался бы «неизвестным полем».
 _EVIDENCE_KEYS = {"status", "source", "provided", "checks", "evidence", "warnings", "blockers",
-                  "override", "pending_human", "human_handoff"}
+                  "override", "pending_human", "human_handoff", "provenance"}
 # веха 4.2 (#588): допустимые значения самодекларации источника доказательства.
 _EVIDENCE_SOURCE_KINDS = ("deterministic", "ai_judgment", "human")
 
@@ -41,6 +43,8 @@ def validate_evidence(evidence) -> list:
             errs.append(f"{gid}.status: '{e.get('status')}' вне [pass, warn, fail]")
         if "source" in e and e["source"] not in _EVIDENCE_SOURCE_KINDS:
             errs.append(f"{gid}.source: '{e['source']}' вне {list(_EVIDENCE_SOURCE_KINDS)}")
+        if "provenance" in e and e["provenance"] not in KINDS:
+            errs.append(f"{gid}.provenance: неизвестный тип")
         for k in ("provided", "evidence", "warnings", "blockers"):
             if k in e and not (isinstance(e[k], list) and all(isinstance(x, str) for x in e[k])):
                 errs.append(f"{gid}.{k}: должен быть списком строк")
@@ -156,12 +160,12 @@ def extract_reviewer_json(text):
 def evidence_from_reviewer_result(gate: dict, rr: dict, source: str) -> dict:
     """Структурный вердикт судьи -> evidence одного гейта (источник истины, не regex по прозе)."""
     if rr["status"] == "fail":
-        return {"status": "fail",
+        return {"source": "ai_judgment", "provenance": "JUDGMENT", "status": "fail",
                 "blockers": rr.get("blockers") or [f"reviewer FAIL @ {source}"],
                 "evidence": [source]}
     # pass/warn: та же дисциплина — required_evidence авто-даём только ai-review
     prov = list(gate.get("required_evidence", []) or []) if classify(gate) == "ai-review" else []
-    return {"status": rr["status"], "provided": prov,
+    return {"source": "ai_judgment", "provenance": "JUDGMENT", "status": rr["status"], "provided": prov,
             "checks": rr.get("checks", []), "evidence": [source]}
 
 
@@ -172,12 +176,12 @@ def evidence_from_markdown(gate: dict, text: str, source: str):
     if verdict is None:
         return None
     if verdict == "fail":
-        return {"status": "fail", "blockers": [f"reviewer verdict FAIL @ {source}"],
+        return {"source": "ai_judgment", "provenance": "JUDGMENT", "status": "fail", "blockers": [f"reviewer verdict FAIL @ {source}"],
                 "evidence": [source]}
     if verdict == "warn":
         # warn/needs_work ревьюера — то же, что структурный warn: на блокирующем гейте downstream
         # (evaluate_gate/_run_reviews) превращает его в блок. Тихим pass это не становится.
-        return {"status": "warn", "warnings": [f"reviewer verdict NEEDS_WORK/WARN @ {source}"],
+        return {"source": "ai_judgment", "provenance": "JUDGMENT", "status": "warn", "warnings": [f"reviewer verdict NEEDS_WORK/WARN @ {source}"],
                 "evidence": [source]}
     # pass:
     # Дисциплина evidence (v2.16): «pass» ревьюера — доказательство ТОЛЬКО для
@@ -185,10 +189,10 @@ def evidence_from_markdown(gate: dict, text: str, source: str):
     # слово ревьюера НЕ фабрикует required_evidence (build_passed/tests_passed/…):
     # их закрывают реальные валидаторы/факты, иначе «evidence» снова = «поверьте на слово».
     if classify(gate) == "ai-review":
-        return {"status": "pass", "provided": list(gate.get("required_evidence", []) or []),
+        return {"source": "ai_judgment", "provenance": "JUDGMENT", "status": "pass", "provided": list(gate.get("required_evidence", []) or []),
                 "evidence": [f"reviewer verdict @ {source}"]}
     # provided пуст -> при наличии required_evidence evaluate_gate честно даст fail
-    return {"status": "pass", "evidence": [f"reviewer verdict @ {source}"]}
+    return {"source": "ai_judgment", "provenance": "JUDGMENT", "status": "pass", "evidence": [f"reviewer verdict @ {source}"]}
 
 
 # Отказ провайдера, у которого причина «человеческая»: модель отказалась отвечать — тут нужен

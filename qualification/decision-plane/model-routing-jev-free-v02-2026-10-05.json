@@ -1,0 +1,437 @@
+{
+  "dataset_sha256": "92caef27c9bde4a4b8dc37140eee4291a383de9d5146d2c6a1edb6ce31a0235a",
+  "providers": [
+    {
+      "id": "jev",
+      "kind": "live",
+      "revision": "jev-1.13.0",
+      "requested_model": "jev-1.13.0",
+      "endpoint": "https://classifier.dev/v1/systemone",
+      "service": "classifier-free",
+      "provenance": "classifier-free API; 2026-10-05T12:25:57.114647+00:00",
+      "input_price_usd_per_million": null,
+      "responses": [
+        {
+          "case_id": "mr-text-boundary",
+          "context_bytes": 1887,
+          "fallback": false,
+          "input_tokens": 913,
+          "output_tokens": 64,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "fast/low",
+                "confidence": 0.98,
+                "probabilities": {
+                  "strongest/high": 0.0,
+                  "deep/high": 0.0,
+                  "human-required": 0.0,
+                  "fast/low": 0.99,
+                  "balanced/medium": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 913,
+              "output_tokens": 64
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "fast/low",
+          "confidence": 0.98,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 2015.9475000109524
+        },
+        {
+          "case_id": "mr-batch-rounding",
+          "context_bytes": 1771,
+          "fallback": false,
+          "input_tokens": 890,
+          "output_tokens": 64,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "fast/low",
+                "confidence": 1.0,
+                "probabilities": {
+                  "strongest/high": 0.0,
+                  "human-required": 0.0,
+                  "balanced/medium": 0.0,
+                  "deep/high": 0.0,
+                  "fast/low": 1.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 890,
+              "output_tokens": 64
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "fast/low",
+          "confidence": 1.0,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1124.7532079869416
+        },
+        {
+          "case_id": "mr-retry-budget",
+          "context_bytes": 2028,
+          "fallback": false,
+          "input_tokens": 952,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "balanced/medium",
+                "confidence": 0.59,
+                "probabilities": {
+                  "fast/low": 0.32,
+                  "balanced/medium": 0.68,
+                  "strongest/high": 0.0,
+                  "human-required": 0.0,
+                  "deep/high": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 952,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "balanced/medium",
+          "confidence": 0.59,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1035.7892500178423
+        },
+        {
+          "case_id": "mr-cache-expiry",
+          "context_bytes": 1969,
+          "fallback": false,
+          "input_tokens": 928,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "balanced/medium",
+                "confidence": 0.4,
+                "probabilities": {
+                  "fast/low": 0.48,
+                  "balanced/medium": 0.52,
+                  "deep/high": 0.0,
+                  "strongest/high": 0.0,
+                  "human-required": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 928,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "balanced/medium",
+          "confidence": 0.4,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 984.9134169926401
+        },
+        {
+          "case_id": "mr-dag-ready",
+          "context_bytes": 2076,
+          "fallback": false,
+          "input_tokens": 1026,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "balanced/medium",
+                "confidence": 0.81,
+                "probabilities": {
+                  "human-required": 0.0,
+                  "strongest/high": 0.0,
+                  "fast/low": 0.14,
+                  "deep/high": 0.01,
+                  "balanced/medium": 0.85
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1026,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "balanced/medium",
+          "confidence": 0.81,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1095.861125009833
+        },
+        {
+          "case_id": "mr-migration-alias",
+          "context_bytes": 2156,
+          "fallback": false,
+          "input_tokens": 1029,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "strongest/high",
+                "confidence": 0.79,
+                "probabilities": {
+                  "human-required": 0.0,
+                  "fast/low": 0.02,
+                  "strongest/high": 0.84,
+                  "deep/high": 0.12,
+                  "balanced/medium": 0.02
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1029,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "strongest/high",
+          "confidence": 0.79,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1036.4908750052564
+        },
+        {
+          "case_id": "mr-cycle-residue",
+          "context_bytes": 2096,
+          "fallback": false,
+          "input_tokens": 1048,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "balanced/medium",
+                "confidence": 0.91,
+                "probabilities": {
+                  "strongest/high": 0.0,
+                  "deep/high": 0.01,
+                  "fast/low": 0.06,
+                  "balanced/medium": 0.93,
+                  "human-required": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1048,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "balanced/medium",
+          "confidence": 0.91,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1094.458332983777
+        },
+        {
+          "case_id": "mr-merge-replay",
+          "context_bytes": 2190,
+          "fallback": false,
+          "input_tokens": 1037,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "strongest/high",
+                "confidence": 0.83,
+                "probabilities": {
+                  "strongest/high": 0.86,
+                  "human-required": 0.0,
+                  "balanced/medium": 0.03,
+                  "deep/high": 0.09,
+                  "fast/low": 0.02
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1037,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "strongest/high",
+          "confidence": 0.83,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1055.034582997905
+        },
+        {
+          "case_id": "mr-permission-deny",
+          "context_bytes": 2385,
+          "fallback": false,
+          "input_tokens": 1064,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "strongest/high",
+                "confidence": 0.98,
+                "probabilities": {
+                  "strongest/high": 0.99,
+                  "balanced/medium": 0.0,
+                  "human-required": 0.0,
+                  "fast/low": 0.0,
+                  "deep/high": 0.01
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1064,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "strongest/high",
+          "confidence": 0.98,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1136.646541999653
+        },
+        {
+          "case_id": "mr-destructive-approval",
+          "context_bytes": 2294,
+          "fallback": false,
+          "input_tokens": 1056,
+          "output_tokens": 63,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "human-required",
+                "confidence": 0.59,
+                "probabilities": {
+                  "deep/high": 0.01,
+                  "strongest/high": 0.32,
+                  "human-required": 0.67,
+                  "fast/low": 0.0,
+                  "balanced/medium": 0.0
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1056,
+              "output_tokens": 63
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "human-required",
+          "confidence": 0.59,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1186.6873750113882
+        },
+        {
+          "case_id": "mr-resource-schedule",
+          "context_bytes": 2357,
+          "fallback": false,
+          "input_tokens": 1126,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "balanced/medium",
+                "confidence": 0.93,
+                "probabilities": {
+                  "deep/high": 0.01,
+                  "strongest/high": 0.0,
+                  "balanced/medium": 0.94,
+                  "human-required": 0.0,
+                  "fast/low": 0.05
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1126,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "balanced/medium",
+          "confidence": 0.93,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1027.5088750058785
+        },
+        {
+          "case_id": "mr-atomic-update",
+          "context_bytes": 2417,
+          "fallback": false,
+          "input_tokens": 1157,
+          "output_tokens": 65,
+          "response_model": "jev-1.13.0",
+          "raw_response": {
+            "model": "jev-1.13.0",
+            "answers": {
+              "route": {
+                "type": "choice",
+                "choice": "strongest/high",
+                "confidence": 0.86,
+                "probabilities": {
+                  "human-required": 0.0,
+                  "balanced/medium": 0.03,
+                  "fast/low": 0.03,
+                  "strongest/high": 0.89,
+                  "deep/high": 0.05
+                }
+              }
+            },
+            "usage": {
+              "input_tokens": 1157,
+              "output_tokens": 65
+            }
+          },
+          "estimated_cost_usd": null,
+          "decision": "strongest/high",
+          "confidence": 0.86,
+          "abstain": false,
+          "actual_cost_usd": 0,
+          "latency_ms": 1121.955791983055
+        }
+      ]
+    }
+  ]
+}
