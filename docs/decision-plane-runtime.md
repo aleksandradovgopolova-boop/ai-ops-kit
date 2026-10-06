@@ -102,3 +102,9 @@ Selected остаётся предложением. Независимый deter
 или эти правила. Тест демонстрирует реальный model downgrade до проверки и его исправление
 существующим floor, а также отказ JUDGMENT закрыть deterministic evidence. Production-проводка
 и пороги уверенности требуют отдельного полезного сценария и проверки downstream качества.
+
+## Runtime integration research
+
+[Исследование hooks и Mods (#1255)](runtime-hooks-research.md) сравнивает текущие публичные
+поверхности, ограничения ошибок/coverage и проект общего адаптера. Research verdict —
+ограниченный prototype контекста/аудита; существующие broker/gates сохраняют обязательную policy.

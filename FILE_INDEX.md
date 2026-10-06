@@ -825,3 +825,9 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `tests/unit/test_decision_provider.py` — взаимозаменяемость, реальные вызовы, fail-closed и независимый policy floor.
 - `qualification/CHANGE-BRIEF-decision-provider-2026-10-06.md` — границы реализации контракта до кода.
 - `qualification/decision-provider/` — actual CLI audit proof и границы квалификации контракта.
+
+### Runtime hooks research (#1255)
+
+- `docs/runtime-hooks-research.md` — первичные источники, lifecycle mapping, проект минимального adapter contract и research verdict.
+- `qualification/runtime-hooks/` — source metadata и offline schema evidence без model turns.
+- `qualification/CHANGE-BRIEF-runtime-hooks-2026-10-06.md` — границы read-only исследования до артефактов.
