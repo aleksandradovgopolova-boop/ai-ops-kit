@@ -838,3 +838,11 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 
 - `qualification/runtime-context-live/` — actual native CLI evidence, controls, source data и ограничения live qualification #1269.
 - `qualification/CHANGE-BRIEF-runtime-context-live-2026-10-06.md` — brief перед native экспериментом.
+
+- `docs/codex-product-stage.md` — opt-in одна PRODUCT specification, ограничения native context/audit.
+- `qualification/CHANGE-BRIEF-codex-product-stage-2026-10-06.md` — инварианты интеграции native стадии.
+- `ai_ops_kit/providers/skill_context.py` — общий serializer и hash-only audit native hook shapes.
+- `ai_ops_kit/devtools/codex_stage.py` — bounded Codex stage и kit-owned публикация/гейты.
+- `ai_ops_kit/devtools/codex_stage_hook.py` — private SessionStart/deny-all tool hook.
+- `ai_ops_kit/devtools/codex_stage_cli.py` — внутренний opt-in вход, не shipped CLI intent.
+- `qualification/codex-product-stage/` — настоящий CLI capture одной стадии, вход, артефакт, gate report и source hashes.
