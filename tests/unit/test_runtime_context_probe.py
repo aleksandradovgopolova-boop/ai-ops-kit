@@ -132,7 +132,8 @@ def test_real_cli_gap_returns_degraded_exit_code(package):
     assert json.loads(run.stdout)['audit']['status'] == 'degraded'
 
 
-@pytest.mark.parametrize('raw', [b'{', b'null', b'{}', b'x' * (p.MAX_INPUT_BYTES + 1)])
+@pytest.mark.parametrize('raw', [b'{', b'null', b'{}', b'x' * (p.MAX_INPUT_BYTES + 1)],
+                         ids=['malformed-json', 'null', 'missing-fields', 'oversize'])
 def test_real_cli_invalid_input_returns_no_context(package, raw):
     run = invoke(package, raw)
     assert run.returncode == 2 and run.stdout == b''

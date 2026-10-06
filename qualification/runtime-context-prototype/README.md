@@ -66,3 +66,9 @@ native correlation, затем измерение downstream эффекта. Н�
 2 warnings. Шесть captures воспроизведены с теми же stdout/stderr hashes.
 Свежий independent read-only review — без actionable findings; reviewer отдельно проверил
 форматы по первичным источникам. Compatibility-matrix подтверждает только CI.
+
+Первый CI выявил Linux-only отказ самого тестового subprocess: pytest автоматически
+включил 262145-byte вход в param ID и PYTEST_CURRENT_TEST, превысив exec environment limit.
+Исправлены только IDs тестовых кейсов; payloads/assertions и код probe не изменены.
+После этой коррекции: 32 targeted tests passed; correction проверена reviewer. Результат
+full-current-python выше получен до смены pytest IDs; актуальную Linux проверку выполняет CI.
