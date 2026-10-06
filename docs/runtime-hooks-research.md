@@ -173,3 +173,12 @@ production изменений. Решение владельца ship/park/rejec
 разрешение объявленных skills; CLI replay проверяет correlation/gaps и hashes без исполнения
 tool_input. Артефакты: qualification/runtime-context-prototype. Это не live adapter: native
 контекст ещё не подтверждён, callbacks не аутентифицированы, enforcement/coverage не объявлены.
+
+## Контролируемый native прогон (#1269)
+
+Codex CLI подтвердил behavioral delivery canary через объявленный skill и связность native
+SessionStart/PreToolUse/PostToolUse с независимым fixture effect. Проверен также контекст
+PRODUCT.specification с contradiction-resolution; control без injection не знает nonce.
+Результаты и границы: qualification/runtime-context-live. Это не raw model-input capture,
+не качество всей продуктовой стадии и не complete coverage. Claude SessionStart выполнился,
+но inference отклонён политикой организации; Claude live qualification остаётся открытой.

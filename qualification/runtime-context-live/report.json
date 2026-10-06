@@ -1,0 +1,602 @@
+{
+  "date": "2026-10-06",
+  "scope": "controlled-native-cli-qualification",
+  "versions": {
+    "codex": "codex-cli 0.147.0",
+    "claude-code": "2.1.283 (Claude Code)"
+  },
+  "codex_model": "gpt-5.6-terra",
+  "codex_effort": "low",
+  "codex_sessions_completed": 4,
+  "claude_model_requests_completed": 0,
+  "jev_calls": 0,
+  "source_sha256": {
+    "ai_ops_kit/devtools/runtime_context_probe.py": "7bdd9e52ae4aac04ebcb47de95d2ee0eed4b8b70393dcae60090ea6ead2ee7b4",
+    "ai_ops_kit/providers/skill_context.py": "1ea926da0e180c069010b385db5eaa8ae72d1fe6d78a8644acc370dfacc11205",
+    "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41",
+    "skills/contradiction-resolution/SKILL.md": "c2ceaf7f8e7cbbbfae6dc41e28f8a8d22a292745b6fa7ade6e95825aafc65eeb"
+  },
+  "cases": [
+    {
+      "runtime": "codex",
+      "mode": "context",
+      "exit_code": 0,
+      "latency_ms": 19050,
+      "nonce_sha256": "36acaf366c4c4f510efd6687f33e6c08158101483cb076c1c68304e9aa1c0c6d",
+      "nonce_returned": true,
+      "owner_returned": true,
+      "review_mode_returned": true,
+      "answer": "{\"delivery_nonce\":\"65478fbc8417fea85800cf299271106f\",\"stage_owner\":\"implementation-integrator\",\"review_mode\":\"writer\"}",
+      "stdout_sha256": "3d3373e0d19708675c90f7fa57ddf291b6e192a49989fc31e895c61e509d4a5f",
+      "stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+      "context_receipt": {
+        "kind": "FACT",
+        "claim": "context_serialized",
+        "runtime": "codex",
+        "binding": {
+          "stage": "probe",
+          "owner": "implementation-integrator",
+          "review_mode": "writer",
+          "skills": {
+            "delivery-proof": "e10a639eed308b91b9f00251f2664099f6da20aa7460e23b947fe7114ce52764"
+          }
+        },
+        "context_sha256": "1227aa13828d62baaa643b5ae72f0e6c9939115c20aa15207c78cdcc9249d92b",
+        "context_bytes": 314,
+        "output_sha256": "a90766b7be6998c18aced0d46b1840eed7e461748261eb57a6227a452a93f21d",
+        "runtime_delivery_verified": false
+      },
+      "fixture_exists": true,
+      "fixture_exact": true,
+      "fixture_sha256": "3e4bbea917c3bae108e167b7e11d8b838753583b9148707091bcb1aee4a54331",
+      "audit": {
+        "status": "observed",
+        "records": [
+          {
+            "sequence": 1,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "SessionStart",
+            "session_id": "01a110e1-2c15-78b1-bd80-49d6d9b273f0",
+            "turn_id": null,
+            "call_id": null,
+            "payload_sha256": "75d35b9b51ba79e262c4a0b1d9bd708716649d7b89cb433343a18a21cd4afaea"
+          },
+          {
+            "sequence": 2,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PreToolUse",
+            "session_id": "01a110e1-2c15-78b1-bd80-49d6d9b273f0",
+            "turn_id": "01a110e1-2c62-7452-9160-ece34a4df354",
+            "call_id": "exec-d203dbce-9602-45dd-a895-0921357391c4",
+            "payload_sha256": "93ca0e72d650ae9e955d1029ba5b0cfd60d5d8af711d10b08d078de31fccbc63"
+          },
+          {
+            "sequence": 3,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PostToolUse",
+            "session_id": "01a110e1-2c15-78b1-bd80-49d6d9b273f0",
+            "turn_id": "01a110e1-2c62-7452-9160-ece34a4df354",
+            "call_id": "exec-d203dbce-9602-45dd-a895-0921357391c4",
+            "payload_sha256": "739308c31c911b3e9b45c75bbbad38bd9904777a25d365d918aa166aeedeaa47"
+          }
+        ],
+        "gaps": [],
+        "paired_calls": 1,
+        "native_coverage_verified": false,
+        "side_effect_verified": false
+      },
+      "events": [
+        {
+          "session_id": "01a110e1-2c15-78b1-bd80-49d6d9b273f0",
+          "hook_event_name": "SessionStart"
+        },
+        {
+          "session_id": "01a110e1-2c15-78b1-bd80-49d6d9b273f0",
+          "turn_id": "01a110e1-2c62-7452-9160-ece34a4df354",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-d203dbce-9602-45dd-a895-0921357391c4"
+        },
+        {
+          "session_id": "01a110e1-2c15-78b1-bd80-49d6d9b273f0",
+          "turn_id": "01a110e1-2c62-7452-9160-ece34a4df354",
+          "hook_event_name": "PostToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-d203dbce-9602-45dd-a895-0921357391c4"
+        }
+      ],
+      "stream_types": [
+        "item.completed",
+        "item.started",
+        "thread.started",
+        "turn.completed",
+        "turn.started"
+      ],
+      "usage": [
+        {
+          "input_tokens": 27162,
+          "cached_input_tokens": 13056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 172,
+          "reasoning_output_tokens": 39
+        }
+      ],
+      "cost_usd": [],
+      "case_id": "codex-context",
+      "harness_source": "initial-invalid-mcp-harness.source.txt"
+    },
+    {
+      "runtime": "codex",
+      "mode": "control",
+      "exit_code": 0,
+      "latency_ms": 23222,
+      "nonce_sha256": "dc849e3b62772abf70b5f25ce94cef7544505d803f5a41192b2b5a59b710a021",
+      "nonce_returned": false,
+      "owner_returned": false,
+      "review_mode_returned": false,
+      "answer": "{\"delivery_nonce\":null,\"stage_owner\":null,\"review_mode\":null}",
+      "stdout_sha256": "430dda07b48967c48c50e95195b9829e10528690a9935605c0cfe7fc9aac412f",
+      "stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+      "context_receipt": null,
+      "fixture_exists": true,
+      "fixture_exact": true,
+      "fixture_sha256": "3e4bbea917c3bae108e167b7e11d8b838753583b9148707091bcb1aee4a54331",
+      "audit": {
+        "status": "observed",
+        "records": [
+          {
+            "sequence": 1,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "SessionStart",
+            "session_id": "01a110e1-b297-7590-8cdc-1e7b71c39c6c",
+            "turn_id": null,
+            "call_id": null,
+            "payload_sha256": "fb9f3f811dc636945d3cfe3a44cd33467b82bb2bff6dd3cd7d9a6e2902642b59"
+          },
+          {
+            "sequence": 2,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PreToolUse",
+            "session_id": "01a110e1-b297-7590-8cdc-1e7b71c39c6c",
+            "turn_id": "01a110e1-b2e7-7a03-9207-c2163e4f5b60",
+            "call_id": "exec-79e92015-a6cb-4f6d-a4af-cc2581a32efe",
+            "payload_sha256": "26d8a72339a7c117f90ab695b2d3c1b536d02dd35af48b85ab5a88a3e837aa2b"
+          },
+          {
+            "sequence": 3,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PostToolUse",
+            "session_id": "01a110e1-b297-7590-8cdc-1e7b71c39c6c",
+            "turn_id": "01a110e1-b2e7-7a03-9207-c2163e4f5b60",
+            "call_id": "exec-79e92015-a6cb-4f6d-a4af-cc2581a32efe",
+            "payload_sha256": "a6e49b7980adb0ea8ff660144e6dd1461300e11cf25f426fb3dc6b54da9ee735"
+          }
+        ],
+        "gaps": [],
+        "paired_calls": 1,
+        "native_coverage_verified": false,
+        "side_effect_verified": false
+      },
+      "events": [
+        {
+          "session_id": "01a110e1-b297-7590-8cdc-1e7b71c39c6c",
+          "hook_event_name": "SessionStart"
+        },
+        {
+          "session_id": "01a110e1-b297-7590-8cdc-1e7b71c39c6c",
+          "turn_id": "01a110e1-b2e7-7a03-9207-c2163e4f5b60",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-79e92015-a6cb-4f6d-a4af-cc2581a32efe"
+        },
+        {
+          "session_id": "01a110e1-b297-7590-8cdc-1e7b71c39c6c",
+          "turn_id": "01a110e1-b2e7-7a03-9207-c2163e4f5b60",
+          "hook_event_name": "PostToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-79e92015-a6cb-4f6d-a4af-cc2581a32efe"
+        }
+      ],
+      "stream_types": [
+        "item.completed",
+        "item.started",
+        "thread.started",
+        "turn.completed",
+        "turn.started"
+      ],
+      "usage": [
+        {
+          "input_tokens": 26960,
+          "cached_input_tokens": 13056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 165,
+          "reasoning_output_tokens": 33
+        }
+      ],
+      "cost_usd": [],
+      "case_id": "codex-control",
+      "harness_source": "initial-invalid-mcp-harness.source.txt"
+    },
+    {
+      "runtime": "codex",
+      "mode": "context",
+      "exit_code": 0,
+      "latency_ms": 22578,
+      "nonce_sha256": "a357fe0fcec7572e3c696df24e893b38aff4d44732007ad5000b3c1d549a491e",
+      "nonce_returned": true,
+      "owner_returned": true,
+      "review_mode_returned": true,
+      "answer": "{\"delivery_nonce\":\"9b28197f6441264bcecc622a938cb9d2\",\"stage_owner\":\"solution-architect\",\"review_mode\":\"writer\"}",
+      "stdout_sha256": "906ff3987594317cac140fba302aa8c6b74759e2f5281a06910206c759c3ba86",
+      "stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+      "context_receipt": {
+        "kind": "FACT",
+        "claim": "context_serialized",
+        "runtime": "codex",
+        "binding": {
+          "stage": "specification",
+          "owner": "solution-architect",
+          "review_mode": "writer",
+          "skills": {
+            "contradiction-resolution": "c2ceaf7f8e7cbbbfae6dc41e28f8a8d22a292745b6fa7ade6e95825aafc65eeb",
+            "delivery-proof": "52208aab3af0c8577e2921d7af65960bee820ace66f840bc3cccea8a79eec2c8"
+          }
+        },
+        "context_sha256": "dc397c0d5bd7c68c6f9e4c5f00e86d16c8a9afb11688cb07115c672341c364d5",
+        "context_bytes": 5850,
+        "output_sha256": "302dd67c229ea9721c3860a8967f9177028b1c7deb3a9d0b9e3d3791a8b3d5b7",
+        "runtime_delivery_verified": false
+      },
+      "fixture_exists": true,
+      "fixture_exact": true,
+      "fixture_sha256": "3e4bbea917c3bae108e167b7e11d8b838753583b9148707091bcb1aee4a54331",
+      "audit": {
+        "status": "observed",
+        "records": [
+          {
+            "sequence": 1,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "SessionStart",
+            "session_id": "01a110e4-435a-7f81-8ec6-cecaf72150d7",
+            "turn_id": null,
+            "call_id": null,
+            "payload_sha256": "2b3b6f22568043f0038f6859e66938337db76c0b49987ae22b5e5c42875da2f6"
+          },
+          {
+            "sequence": 2,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PreToolUse",
+            "session_id": "01a110e4-435a-7f81-8ec6-cecaf72150d7",
+            "turn_id": "01a110e4-43a8-78f2-9c2e-0f8a537addc4",
+            "call_id": "exec-57d5b5d7-67fa-4deb-8a9d-120cc747dc98",
+            "payload_sha256": "181c1b1378ef3fece573bfd5ebc0e92a5483d63d4d154b0e3c0986b109159150"
+          },
+          {
+            "sequence": 3,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PostToolUse",
+            "session_id": "01a110e4-435a-7f81-8ec6-cecaf72150d7",
+            "turn_id": "01a110e4-43a8-78f2-9c2e-0f8a537addc4",
+            "call_id": "exec-57d5b5d7-67fa-4deb-8a9d-120cc747dc98",
+            "payload_sha256": "ab674f4db76d74c6c4901853056c8e7310fb6e5845748ceb2bebfac8cb8146b0"
+          }
+        ],
+        "gaps": [],
+        "paired_calls": 1,
+        "native_coverage_verified": false,
+        "side_effect_verified": false
+      },
+      "events": [
+        {
+          "session_id": "01a110e4-435a-7f81-8ec6-cecaf72150d7",
+          "hook_event_name": "SessionStart"
+        },
+        {
+          "session_id": "01a110e4-435a-7f81-8ec6-cecaf72150d7",
+          "turn_id": "01a110e4-43a8-78f2-9c2e-0f8a537addc4",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-57d5b5d7-67fa-4deb-8a9d-120cc747dc98"
+        },
+        {
+          "session_id": "01a110e4-435a-7f81-8ec6-cecaf72150d7",
+          "turn_id": "01a110e4-43a8-78f2-9c2e-0f8a537addc4",
+          "hook_event_name": "PostToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-57d5b5d7-67fa-4deb-8a9d-120cc747dc98"
+        }
+      ],
+      "stream_types": [
+        "item.completed",
+        "item.started",
+        "thread.started",
+        "turn.completed",
+        "turn.started"
+      ],
+      "usage": [
+        {
+          "input_tokens": 29265,
+          "cached_input_tokens": 14080,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 213,
+          "reasoning_output_tokens": 58
+        }
+      ],
+      "cost_usd": [],
+      "case_id": "codex-product-context",
+      "completed_non_message_items": [
+        {
+          "id": "item_0",
+          "type": "error"
+        },
+        {
+          "id": "item_1",
+          "type": "error"
+        },
+        {
+          "id": "item_3",
+          "type": "command_execution",
+          "exit_code": 0,
+          "status": "completed",
+          "command_sha256": "7e11d814e2cddf2558f656095d3ad1425d541b48a39e75906170b4055b21a98e"
+        }
+      ],
+      "harness_source": "product-harness.source.txt"
+    },
+    {
+      "runtime": "codex",
+      "mode": "control",
+      "exit_code": 0,
+      "latency_ms": 20996,
+      "nonce_sha256": "2ebaf1d421ffee750f79458798c2cde7baa8f5bf0a9a882fd62fd81548ed724d",
+      "nonce_returned": false,
+      "owner_returned": false,
+      "review_mode_returned": false,
+      "answer": "{\"delivery_nonce\":null,\"stage_owner\":null,\"review_mode\":null}",
+      "stdout_sha256": "867fd8b41aed76fcdf1ec1ddac3f920ef268ebbf475d5544142bbf24c8a0add2",
+      "stderr_sha256": "1aa26269eb1cc57f86b235a03cda53c004edb5b1e9fc99d4da4f00843293d721",
+      "context_receipt": null,
+      "fixture_exists": true,
+      "fixture_exact": true,
+      "fixture_sha256": "3e4bbea917c3bae108e167b7e11d8b838753583b9148707091bcb1aee4a54331",
+      "audit": {
+        "status": "observed",
+        "records": [
+          {
+            "sequence": 1,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "SessionStart",
+            "session_id": "01a110e5-0c25-71a0-b3f5-e24c852c6c55",
+            "turn_id": null,
+            "call_id": null,
+            "payload_sha256": "331ebdcc89b048c6f60271748350afdb0c666fae5d4e423322c15702cf683093"
+          },
+          {
+            "sequence": 2,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PreToolUse",
+            "session_id": "01a110e5-0c25-71a0-b3f5-e24c852c6c55",
+            "turn_id": "01a110e5-0c3c-7900-b49d-2ae3fcb8eaba",
+            "call_id": "exec-10fe04e3-11c3-4d23-9ee8-d2d982c9ef0e",
+            "payload_sha256": "aef62e7758009b33abda16ddfabe0775c5e8703de383aab54634cad9c7c6621d"
+          },
+          {
+            "sequence": 3,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "PostToolUse",
+            "session_id": "01a110e5-0c25-71a0-b3f5-e24c852c6c55",
+            "turn_id": "01a110e5-0c3c-7900-b49d-2ae3fcb8eaba",
+            "call_id": "exec-10fe04e3-11c3-4d23-9ee8-d2d982c9ef0e",
+            "payload_sha256": "8573ab662b0fba0c8562929ce5414a23fcecccc35c08a848eaa751113f637f71"
+          }
+        ],
+        "gaps": [],
+        "paired_calls": 1,
+        "native_coverage_verified": false,
+        "side_effect_verified": false
+      },
+      "events": [
+        {
+          "session_id": "01a110e5-0c25-71a0-b3f5-e24c852c6c55",
+          "hook_event_name": "SessionStart"
+        },
+        {
+          "session_id": "01a110e5-0c25-71a0-b3f5-e24c852c6c55",
+          "turn_id": "01a110e5-0c3c-7900-b49d-2ae3fcb8eaba",
+          "hook_event_name": "PreToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-10fe04e3-11c3-4d23-9ee8-d2d982c9ef0e"
+        },
+        {
+          "session_id": "01a110e5-0c25-71a0-b3f5-e24c852c6c55",
+          "turn_id": "01a110e5-0c3c-7900-b49d-2ae3fcb8eaba",
+          "hook_event_name": "PostToolUse",
+          "tool_name": "Bash",
+          "tool_use_id": "exec-10fe04e3-11c3-4d23-9ee8-d2d982c9ef0e"
+        }
+      ],
+      "stream_types": [
+        "item.completed",
+        "item.started",
+        "thread.started",
+        "turn.completed",
+        "turn.started"
+      ],
+      "usage": [
+        {
+          "input_tokens": 27017,
+          "cached_input_tokens": 13056,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 236,
+          "reasoning_output_tokens": 89
+        }
+      ],
+      "cost_usd": [],
+      "case_id": "codex-product-control",
+      "completed_non_message_items": [
+        {
+          "id": "item_0",
+          "type": "error"
+        },
+        {
+          "id": "item_1",
+          "type": "error"
+        },
+        {
+          "id": "item_3",
+          "type": "command_execution",
+          "exit_code": 0,
+          "status": "completed",
+          "command_sha256": "7e11d814e2cddf2558f656095d3ad1425d541b48a39e75906170b4055b21a98e"
+        }
+      ],
+      "harness_source": "product-harness.source.txt"
+    },
+    {
+      "runtime": "codex",
+      "mode": "missing-skill",
+      "scope": "preflight-real-skill-refusal",
+      "native_launch_started": false,
+      "error_type": "SkillUnavailable",
+      "stage": "specification",
+      "owner": "solution-architect",
+      "missing_skill": "contradiction-resolution",
+      "case_id": "codex-missing-skill",
+      "harness_source": "product-harness.source.txt"
+    },
+    {
+      "runtime": "claude-code",
+      "mode": "context",
+      "exit_code": 1,
+      "latency_ms": 3696,
+      "nonce_sha256": "636d046c457ad464645c921c263ec7f0461a0a98f2742059d86d2a11d6b3935b",
+      "nonce_returned": false,
+      "owner_returned": false,
+      "review_mode_returned": false,
+      "answer": "Your organization has disabled Claude subscription access for Claude Code · Use an Anthropic API key instead, or ask your admin to enable access",
+      "stdout_sha256": "fc05569168535ced88ff90f655d5897e37bae02261844e7aab7678d95e5f96de",
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "context_receipt": {
+        "kind": "FACT",
+        "claim": "context_serialized",
+        "runtime": "claude-code",
+        "binding": {
+          "stage": "probe",
+          "owner": "implementation-integrator",
+          "review_mode": "writer",
+          "skills": {
+            "delivery-proof": "2736ae02d81df1d2733cebaac4fa08944812510b6dbbc16b9ed4eceb5a52e184"
+          }
+        },
+        "context_sha256": "f8c058841b355b6924d99da50de8ab3b6c3245b6f3a843850009b8195b7ed982",
+        "context_bytes": 314,
+        "output_sha256": "e3855b2796d067391c05d14d4e87cfcc3a16526607e39d4810d1db358aeebe62",
+        "runtime_delivery_verified": false
+      },
+      "fixture_exists": false,
+      "fixture_exact": false,
+      "fixture_sha256": null,
+      "audit": {
+        "status": "observed",
+        "records": [
+          {
+            "sequence": 1,
+            "kind": "FACT",
+            "claim": "payload_observed",
+            "event": "SessionStart",
+            "session_id": "29d8b5af-6fc2-4562-ba59-3bd8ee12c748",
+            "turn_id": null,
+            "call_id": null,
+            "payload_sha256": "4839c51d7e4d014ee19b469791c8e517000e4f67a0bbb891604ad7c5202e2cfc"
+          }
+        ],
+        "gaps": [],
+        "paired_calls": 0,
+        "native_coverage_verified": false,
+        "side_effect_verified": false
+      },
+      "events": [
+        {
+          "session_id": "29d8b5af-6fc2-4562-ba59-3bd8ee12c748",
+          "hook_event_name": "SessionStart"
+        }
+      ],
+      "stream_types": [
+        "assistant",
+        "result",
+        "system"
+      ],
+      "usage": [
+        {
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          },
+          "input_tokens": 0,
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 0,
+          "output_tokens": 0,
+          "server_tool_use": {
+            "web_search_requests": 0,
+            "web_fetch_requests": 0
+          },
+          "service_tier": "standard",
+          "cache_creation": {
+            "ephemeral_1h_input_tokens": 0,
+            "ephemeral_5m_input_tokens": 0
+          },
+          "inference_geo": "",
+          "iterations": [],
+          "speed": "standard"
+        }
+      ],
+      "cost_usd": [
+        0
+      ],
+      "case_id": "claude-context",
+      "harness_source": "canary-harness.source.txt"
+    },
+    {
+      "runtime": "claude-code",
+      "mode": "context",
+      "exit_code": 1,
+      "latency_ms": 2833,
+      "nonce_sha256": "b2ef324902d9475a1ee7b1bdfad35819d6e386d32fe180d9e68dcfee22422e43",
+      "nonce_returned": false,
+      "owner_returned": false,
+      "review_mode_returned": false,
+      "answer": "",
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_sha256": "eebd2dc1cee42bc2a8169e840cb6528ccee9141014b25e9e239f4f916fd7246d",
+      "context_receipt": null,
+      "fixture_exists": false,
+      "fixture_exact": false,
+      "fixture_sha256": null,
+      "audit": null,
+      "events": [],
+      "stream_types": [],
+      "usage": [],
+      "cost_usd": [],
+      "case_id": "claude-config-failure",
+      "harness_source": "initial-invalid-mcp-harness.source.txt"
+    }
+  ],
+  "limitations": [
+    "behavioral nonce evidence, not raw model input capture",
+    "finite supported Bash path only; no complete native coverage",
+    "synthetic delivery canary accompanies real PRODUCT skill",
+    "Claude subscription access denied by organization",
+    "latency/cost comparisons are one pair per context shape, no benefit claim"
+  ]
+}
