@@ -527,6 +527,47 @@ def _is_git_worktree(root: Path):
     return r.returncode == 0 and r.stdout.strip() == "true"
 
 
+def _validate_pre_pr(argv):
+    """Повторить существующее правило CI до PR, без записи в дерево или индекс."""
+    if str(_ao().PKG) not in sys.path:
+        sys.path.insert(0, str(_ao().PKG))
+    from ai_ops_kit.validation import validate_parallel_safety as safety
+
+    explicit = "--base" in argv
+    base = None
+    if explicit:
+        index = argv.index("--base") + 1
+        if index < len(argv):
+            base = argv[index]
+        if not base or base.startswith("-"):
+            print("  FAIL  Проверка перед PR: после --base нужна Git-база.")
+            return 1
+    else:
+        for candidate in ("origin/main", "main", "origin/master", "master"):
+            try:
+                result = subprocess.run(["git", "-C", str(_ao().REPO_ROOT), "rev-parse",
+                                         "--verify", candidate + "^{commit}"],
+                                        capture_output=True, text=True)
+            except OSError:
+                break
+            if result.returncode == 0:
+                base = candidate
+                break
+    if not base:
+        print("  UNKNOWN  Проверка перед PR: база не найдена; укажите validate --base REF.")
+        return 0
+    rep = safety.assess(_ao().REPO_ROOT, base=base,
+                        defaults=_ao().PKG / "registry" / "coordination-files.yaml",
+                        include_worktree=True)
+    diff = rep.get("diff") or {}
+    if not rep.get("checked") or not diff.get("available"):
+        print("  UNKNOWN  Проверка перед PR: дифф или реестр не прочитан; "
+              "готовность PR не подтверждена.")
+        return 1 if explicit else 0
+    print(safety.render(rep))
+    return 1 if diff.get("mixed") else 0
+
+
 def cmd_validate(argv=()):
     # `ai-ops validate product-layer` (PR-5): отчёт Missing/Invalid/Outdated/Valid по `.ai-ops/`
     # ЭТОЙ дочки. Отдельная под-команда: общий `validate` проверяет установку кита, а этот —
@@ -545,7 +586,8 @@ def cmd_validate(argv=()):
     results = _core().run_validators(checks)
     for r in results:
         print(f"  {'PASS' if r['status']=='pass' else 'FAIL'}  {r['check']}")
-    return 0 if all(r["status"] == "pass" for r in results) else 1
+    pre_pr = _validate_pre_pr(argv)
+    return 0 if all(r["status"] == "pass" for r in results) and pre_pr == 0 else 1
 
 
 # ── Долг доказательства поставки (правило 3.27.4 для исторически выпущенных функций) ──────────

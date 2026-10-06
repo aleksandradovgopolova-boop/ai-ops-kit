@@ -140,6 +140,27 @@ def changed_files(root: Path, base: str) -> list | None:
     return [l.strip() for l in r.stdout.splitlines() if l.strip()]
 
 
+def working_changed_files(root: Path, base: str) -> list | None:
+    """Дифф будущего PR: merge-base до рабочего дерева плюс неигнорируемые новые файлы."""
+    try:
+        common = subprocess.run(["git", "-C", str(root), "merge-base", base, "HEAD"],
+                                capture_output=True, text=True)
+        if common.returncode:
+            return None
+        changed = [subprocess.run(["git", "-C", str(root), "diff", "--name-only", "-z",
+                                   common.stdout.strip(), *suffix],
+                                  capture_output=True, text=True)
+                   for suffix in ([], ["--cached"], ["HEAD"])]
+        added = subprocess.run(["git", "-C", str(root), "ls-files", "--others",
+                                "--exclude-standard", "-z"], capture_output=True, text=True)
+    except OSError:
+        return None
+    if any(result.returncode for result in changed) or added.returncode:
+        return None
+    paths = added.stdout + "".join(result.stdout for result in changed)
+    return sorted(set(p for p in paths.split("\0") if p))
+
+
 def is_kit_update_diff(changed: list, markers=None) -> bool:
     """PR — install/update кита? Признак — правка одного из `markers` (данные реестра, #384).
 
@@ -200,7 +221,7 @@ def diff_mixes_code_with_coordination(changed: list, coord: list, markers=None) 
             "docs": sorted(doc_hits), "kit_update": kit_update, "kit_release": kit_release}
 
 
-def assess(root, base=None, defaults=None) -> dict:
+def assess(root, base=None, defaults=None, include_worktree=False) -> dict:
     root = Path(root)
     coord = coordination_paths(root, defaults=defaults)
     rep = {"schema_version": 1, "kind": "parallel-safety", "coordination_files": coord,
@@ -212,7 +233,8 @@ def assess(root, base=None, defaults=None) -> dict:
         return rep
     rep["checked"] = True
     if base:
-        changed = changed_files(root, base)
+        changed = (working_changed_files(root, base) if include_worktree
+                   else changed_files(root, base))
         if changed is None:
             rep["diff"] = {"base": base, "available": False}
             rep["findings"].append(f"дифф против '{base}' не прочитан — смешение кода и координации "
