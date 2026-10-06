@@ -165,3 +165,11 @@ live прогон после выбора версии и подтверждён
 в этой задаче не выполняется. Для core enforcement hooks-only вариант сейчас отвергнут.
 Research verdict prototype относится к ограниченному context/audit эксперименту, не к delivery
 production изменений. Решение владельца ship/park/reject по всему #1246 остаётся отдельным.
+
+## Первый offline prototype (#1267)
+
+Реализован непоставляемый `ai_ops_kit/devtools/runtime_context_probe.py`: формы SessionStart
+контекста и нормализация Pre/PostToolUse для Claude Code и Codex. Он использует существующее
+разрешение объявленных skills; CLI replay проверяет correlation/gaps и hashes без исполнения
+tool_input. Артефакты: qualification/runtime-context-prototype. Это не live adapter: native
+контекст ещё не подтверждён, callbacks не аутентифицированы, enforcement/coverage не объявлены.
