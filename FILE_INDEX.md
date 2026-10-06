@@ -813,3 +813,6 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `.github/ci-groups/{fast-1,fast-2,contracts,selftests-a,selftests-m}.sh` — разбиение полного контура на группы
 
 - `qualification/decision-plane/` — фиксированный smoke-корпус, локальный baseline JSON/Markdown и инструкция живого сравнения current / LLM / Jev; ограничения и незавершённые прогоны объявлены явно
+- `ai_ops_kit/providers/skill_context.py` — разрешение объявленных skills до вызова executor; unavailable блокирует стадию (#1251)
+- `ai_ops_kit/shared/claim_provenance.py` — происхождение FACT/JUDGMENT/REASONING/HUMAN_DECISION (#1254), используется gate evidence
+- `docs/decision-plane-runtime.md` — границы skills binding, обязательной policy и происхождения (#1251/#1252/#1254)

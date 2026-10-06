@@ -212,7 +212,8 @@ def _persist_review_verdict(child_root, wid, reviews, signals, revision):
     from ai_ops_kit.shared import review_verdict
     try:
         gates_map = gate_executor.load_gates()
-        gate_results = [{"gate": r.get("gate"), "status": r.get("status")}
+        gate_results = [{"gate": r.get("gate"), "status": r.get("status"),
+                         "provenance": r.get("provenance")}
                         for r in reviews or [] if r.get("valid")]
         subset = {r["gate"]: gates_map[r["gate"]] for r in gate_results
                   if r.get("gate") in gates_map}

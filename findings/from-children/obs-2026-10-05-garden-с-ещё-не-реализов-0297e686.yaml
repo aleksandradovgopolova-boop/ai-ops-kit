@@ -1,0 +1,28 @@
+schema_version: 1
+kind: KitObservation
+id: obs-2026-10-05-garden-с-ещё-не-реализов-0297e686
+at: '2026-10-05T11:22:38+00:00'
+statement: Garden с ещё не реализованным приложением получил inferred-класс EXISTING_PRODUCT,
+  confidence medium. Паспорт явно сообщает отсутствие приложения; возможное трение
+  — чтение класса как продуктовой готовности.
+observation_class: friction
+severity: p2
+kit_version: 4.9.3
+child:
+  name: garden
+  path: /private/tmp/ai-ops-first-hour-selection-20261005.okUBc5/garden-installed-pr
+  commit: 45d39c0de94b
+evidence:
+- kind: file
+  path: .ai-ops/PRODUCT_PASSPORT.md
+  quote: EXISTING_PRODUCT; confidence medium; приложение ещё не реализовано; источник
+    inferred.
+- kind: note
+  text: 'Не установлен дефект классификатора: существующая документация/CI/tests являются
+    сигналами. Проверить понятность класса владельцу; не заменять evidence выводом
+    о готовом приложении.'
+state: delivered
+state_reason: null
+delivered_to:
+  kit_root: /Users/sasad/.codex/worktrees/garden-field-accounting/ai-ops-kit
+  at: '2026-10-05T11:22:38+00:00'
