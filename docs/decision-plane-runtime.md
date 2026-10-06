@@ -53,7 +53,7 @@ Legacy evidence без source/provenance сохраняет прежнюю об�
 
 ## Квалификация без Jev
 
-[Результаты #1251/#1252](../qualification/skills-safety/README.md): измерены actual context и
+[Результаты #1251/#1252](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/6e0360f8204fc054a28d3e6685930cbfb58a0abc/qualification/skills-safety/README.md): измерены actual context и
 живые tokens, найдены и устранены high-risk gaps; сохранены before/after и protocol repairs.
 Mandatory union дополнен существующим deterministic ceremony floor, независимо от router.
 Широкая semantic selection accuracy остаётся незакрытой, новая production модель не вводится.
