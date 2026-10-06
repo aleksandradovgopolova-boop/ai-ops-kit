@@ -28,6 +28,10 @@ def repo(tmp_path, monkeypatch):
     git(tmp_path, 'switch', '-qc', 'feature')
     monkeypatch.setattr(installer, 'REPO_ROOT', tmp_path)
     monkeypatch.setattr(installer, 'PKG', PKG)
+    # Воспроизвести namespace, оставленный тестом другого экземпляра установщика.
+    monkeypatch.setattr(installer._core(), '_AO_NS', {'REPO_ROOT': PKG, 'PKG': PKG})
+    # Фасад хранит текущий экземпляр установщика: привязать независимо от порядка тестов.
+    installer._core()
     return tmp_path
 
 
