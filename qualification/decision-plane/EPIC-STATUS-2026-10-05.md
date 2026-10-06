@@ -61,3 +61,10 @@ Smoke выбора agent owner не покрывает skill selection, lazy inj
 интеграцию, сохранив evaluation инструменты; при наличии — #1252 → #1248 → #1254 → проводка.
 
 Финальный охват `full-current-python` (CPython 3.14.7/macOS): **8856 passed, 35 skipped, 1 failed** за 462 с; ruff passed. Единственный сбой — `test_every_module_imports_with_root_only`: probe удаляет лежащие внутри корня `.venv/site-packages`, поэтому теряется PyYAML. Собственный прежний timeout-contract теперь проходит. Compatibility-matrix не запускалась; зелёный full-current-python не заявляется.
+
+## Уточнение после #1260 (06.10.2026)
+
+Skills binding, union обязательных gates и provenance уже вошли в main через PR #1260.
+Это устраняет обнаруженный context delivery gap, но не закрывает измерения lazy selection.
+Продолжение #1251/#1252 проходит отдельной квалификацией без Jev; экспериментальные
+результаты этого PR остаются park и не подменяются новой production-проводкой.
