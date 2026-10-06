@@ -1,0 +1,166 @@
+{
+  "date": "2026-10-06",
+  "scope": "offline-cli-surface",
+  "model_turns": 0,
+  "live_hook_runs": 0,
+  "commands": [
+    {
+      "command": [
+        "/Users/sasad/.local/bin/codex",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "codex-cli 0.147.0\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "/opt/homebrew/bin/claude",
+        "--version"
+      ],
+      "exit_code": 0,
+      "stdout": "2.1.283 (Claude Code)\n",
+      "stderr": ""
+    }
+  ],
+  "schemas": [
+    {
+      "path": "ServerRequest.json",
+      "sha256": "e5ae9078cddac333262ae392fe25558d6054b77e4beb00784b77cf606849d063",
+      "methods": [
+        "account/chatgptAuthTokens/refresh",
+        "applyPatchApproval",
+        "attestation/generate",
+        "execCommandApproval",
+        "item/commandExecution/requestApproval",
+        "item/fileChange/requestApproval",
+        "item/permissions/requestApproval",
+        "item/tool/call",
+        "item/tool/requestUserInput",
+        "mcpServer/elicitation/request"
+      ],
+      "properties": [],
+      "required": []
+    },
+    {
+      "path": "ServerNotification.json",
+      "sha256": "558aab11da20cd0d278ec6f9067a46444f0566be7e3953f443dcc5d7cb23736f",
+      "methods": [
+        "account/login/completed",
+        "account/rateLimits/updated",
+        "account/updated",
+        "app/list/updated",
+        "command/exec/outputDelta",
+        "configWarning",
+        "deprecationNotice",
+        "error",
+        "externalAgentConfig/import/completed",
+        "externalAgentConfig/import/progress",
+        "fs/changed",
+        "fuzzyFileSearch/sessionCompleted",
+        "fuzzyFileSearch/sessionUpdated",
+        "guardianWarning",
+        "hook/completed",
+        "hook/started",
+        "item/agentMessage/delta",
+        "item/autoApprovalReview/completed",
+        "item/autoApprovalReview/started",
+        "item/commandExecution/outputDelta",
+        "item/commandExecution/terminalInteraction",
+        "item/completed",
+        "item/fileChange/outputDelta",
+        "item/fileChange/patchUpdated",
+        "item/mcpToolCall/progress",
+        "item/plan/delta",
+        "item/reasoning/summaryPartAdded",
+        "item/reasoning/summaryTextDelta",
+        "item/reasoning/textDelta",
+        "item/started",
+        "mcpServer/oauthLogin/completed",
+        "mcpServer/startupStatus/updated",
+        "model/rerouted",
+        "model/safetyBuffering/updated",
+        "model/verification",
+        "process/exited",
+        "process/outputDelta",
+        "remoteControl/status/changed",
+        "serverRequest/resolved",
+        "skills/changed",
+        "thread/archived",
+        "thread/closed",
+        "thread/compacted",
+        "thread/deleted",
+        "thread/environment/connected",
+        "thread/environment/disconnected",
+        "thread/goal/cleared",
+        "thread/goal/updated",
+        "thread/name/updated",
+        "thread/realtime/closed",
+        "thread/realtime/error",
+        "thread/realtime/itemAdded",
+        "thread/realtime/outputAudio/delta",
+        "thread/realtime/sdp",
+        "thread/realtime/started",
+        "thread/realtime/transcript/delta",
+        "thread/realtime/transcript/done",
+        "thread/settings/updated",
+        "thread/started",
+        "thread/status/changed",
+        "thread/tokenUsage/updated",
+        "thread/unarchived",
+        "turn/completed",
+        "turn/diff/updated",
+        "turn/moderationMetadata",
+        "turn/plan/updated",
+        "turn/started",
+        "warning",
+        "windows/worldWritableWarning",
+        "windowsSandbox/setupCompleted"
+      ],
+      "properties": [
+        "emittedAtMs"
+      ],
+      "required": []
+    },
+    {
+      "path": "v2/TurnStartParams.json",
+      "sha256": "ff2e7e0796fbe2ad99e5ec7d489cc8c8630b75f2ab8f17857711107587e3197d",
+      "methods": [],
+      "properties": [
+        "approvalPolicy",
+        "approvalsReviewer",
+        "clientUserMessageId",
+        "cwd",
+        "effort",
+        "input",
+        "model",
+        "outputSchema",
+        "personality",
+        "sandboxPolicy",
+        "serviceTier",
+        "summary",
+        "threadId"
+      ],
+      "required": [
+        "input",
+        "threadId"
+      ]
+    }
+  ],
+  "hooks_feature_lines": [
+    "hooks                                stable             true",
+    "plugin_hooks                         removed            false"
+  ],
+  "features_exit_code": 0,
+  "schema_generation": {
+    "command": [
+      "codex",
+      "app-server",
+      "generate-json-schema",
+      "--out",
+      "/tmp/runtime-hooks-codex-schema"
+    ],
+    "exit_code": 0,
+    "experimental_opt_in": false
+  }
+}
