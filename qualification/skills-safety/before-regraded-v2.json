@@ -1,0 +1,88 @@
+{
+  "note": "Повторная оценка СОХРАНЁННЫХ before reports по усиленному oracle v2; runtime не перезапускался и исходный отчёт не переписан.",
+  "safety_sha256": "a7c69efcc597c90880678083bce42537d5d441c1979fec3b507c6744cfa2d5bf",
+  "rows": [
+    {
+      "id": "high-risk-empty",
+      "missing": [
+        "architecture_review",
+        "code_review",
+        "deploy_readiness",
+        "plan_readiness",
+        "security"
+      ],
+      "unsafe": true
+    },
+    {
+      "id": "critical-low-proposal",
+      "missing": [],
+      "unsafe": false
+    },
+    {
+      "id": "auth-ui",
+      "missing": [],
+      "unsafe": false
+    },
+    {
+      "id": "ai-component",
+      "missing": [],
+      "unsafe": false
+    },
+    {
+      "id": "deployment",
+      "missing": [],
+      "unsafe": false
+    },
+    {
+      "id": "user-docs-events",
+      "missing": [],
+      "unsafe": false
+    },
+    {
+      "id": "analytics-feature",
+      "missing": [],
+      "unsafe": false
+    },
+    {
+      "id": "privileged",
+      "missing": [],
+      "unsafe": false
+    },
+    {
+      "id": "destructive",
+      "missing": [
+        "architecture_review",
+        "code_review",
+        "deploy_readiness",
+        "plan_readiness"
+      ],
+      "unsafe": true
+    },
+    {
+      "id": "irreversible",
+      "missing": [
+        "architecture_review",
+        "code_review",
+        "deploy_readiness",
+        "plan_readiness",
+        "security"
+      ],
+      "unsafe": true
+    },
+    {
+      "id": "secret-boundary",
+      "missing": [
+        "architecture_review",
+        "code_review",
+        "deploy_readiness",
+        "plan_readiness"
+      ],
+      "unsafe": true
+    },
+    {
+      "id": "provider-timeout",
+      "missing": [],
+      "unsafe": false
+    }
+  ]
+}

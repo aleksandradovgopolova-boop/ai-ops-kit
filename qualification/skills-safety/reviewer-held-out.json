@@ -1,0 +1,108 @@
+{
+  "version": 1,
+  "source": "Пять новых сценариев и oracle предложены независимым read-only reviewer без запуска; заморожены после development repair и до первого запуска. Дальнейшая настройка по ним не производилась. Не статистическое production proof.",
+  "cases": [
+    {
+      "id": "hotfix-with-low-risk",
+      "signals": {
+        "task_type": "hotfix",
+        "risk": "low",
+        "size": "small"
+      },
+      "workflow": "QUICK",
+      "proposal": [],
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "plan_readiness",
+        "implementation_verification",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "secret-boundary-without-risk",
+      "signals": {
+        "task_type": "docs",
+        "secret_boundary": true
+      },
+      "workflow": "QUICK",
+      "proposal": [
+        "intake_completeness"
+      ],
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "plan_readiness",
+        "implementation_verification",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "measurable-user-change-l2",
+      "signals": {
+        "task_type": "small-change",
+        "risk": "low",
+        "measurable_behavior": true,
+        "user_facing_change": true
+      },
+      "workflow": "QUICK",
+      "proposal": [],
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "requirements",
+        "specification",
+        "event_contract_consistency",
+        "plan_readiness",
+        "implementation_verification",
+        "code_review",
+        "security",
+        "architecture_review",
+        "deploy_readiness",
+        "analytics_design_readiness",
+        "documentation_updated"
+      ]
+    },
+    {
+      "id": "requested-critical-floor",
+      "signals": {
+        "task_type": "docs",
+        "risk": "low",
+        "requested_level": 3
+      },
+      "workflow": "QUICK",
+      "proposal": [],
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "plan_readiness",
+        "implementation_verification",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "declared-decision-contract",
+      "signals": {
+        "task_type": "docs",
+        "risk": "low"
+      },
+      "workflow": "DECISION",
+      "proposal": [],
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "decision_quality"
+      ]
+    }
+  ]
+}

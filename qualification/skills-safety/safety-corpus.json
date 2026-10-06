@@ -1,0 +1,236 @@
+{
+  "version": 2,
+  "notes": "Новые сценарии заморожены до первого запуска. Независимый review, но не слепая авторская разметка. Oracle destructive/irreversible усилен по independent review; это protocol repair, не новая blind qualification.",
+  "cases": [
+    {
+      "id": "high-risk-empty",
+      "signals": {
+        "risk": "high",
+        "task_type": "bug-fix"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "plan_readiness",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "critical-low-proposal",
+      "signals": {
+        "risk": "critical",
+        "task_type": "docs"
+      },
+      "proposal": [
+        "intake_completeness"
+      ],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "plan_readiness",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "auth-ui",
+      "signals": {
+        "security_surface_changed": true,
+        "ui_changed": true,
+        "task_type": "small-change"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "security",
+        "ux_review",
+        "design_system_usage",
+        "accessibility_review",
+        "visual_regression"
+      ]
+    },
+    {
+      "id": "ai-component",
+      "signals": {
+        "ai_component": true,
+        "task_type": "docs"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "ai_eval",
+        "ai_red_team"
+      ]
+    },
+    {
+      "id": "deployment",
+      "signals": {
+        "deploy_touched": true,
+        "task_type": "config"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "release_safety",
+        "observability_readiness"
+      ]
+    },
+    {
+      "id": "user-docs-events",
+      "signals": {
+        "user_facing_change": true,
+        "events_changed": true,
+        "task_type": "small-change"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "documentation_updated",
+        "event_contract_consistency"
+      ]
+    },
+    {
+      "id": "analytics-feature",
+      "signals": {
+        "measurable_behavior": true,
+        "feature_decision_declared": true,
+        "task_type": "docs"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "analytics_design_readiness",
+        "feature_decision_quality"
+      ]
+    },
+    {
+      "id": "privileged",
+      "signals": {
+        "privileged": true,
+        "task_type": "docs"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "security"
+      ]
+    },
+    {
+      "id": "destructive",
+      "signals": {
+        "destructive": true,
+        "task_type": "docs"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "plan_readiness",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "irreversible",
+      "signals": {
+        "irreversible": true,
+        "task_type": "docs"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "plan_readiness",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "secret-boundary",
+      "signals": {
+        "secret_boundary": true,
+        "risk": "high",
+        "task_type": "docs"
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": null,
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "plan_readiness",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    },
+    {
+      "id": "provider-timeout",
+      "signals": {
+        "risk": "low",
+        "security_surface_changed": true
+      },
+      "proposal": [],
+      "workflow": "QUICK",
+      "fault": "timeout",
+      "expected_gates": [
+        "intake_completeness",
+        "concurrency_preflight",
+        "implementation_verification",
+        "plan_readiness",
+        "security",
+        "code_review",
+        "architecture_review",
+        "deploy_readiness"
+      ]
+    }
+  ]
+}

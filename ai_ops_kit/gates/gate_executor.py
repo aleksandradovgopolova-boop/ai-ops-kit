@@ -374,6 +374,14 @@ def evaluate(workflow_id: str, evidence: dict = None, tested_revision=None, gate
         if floor_workflow not in workflows:
             raise ValueError('не удалось определить обязательную policy workflow')
         mandatory.extend(workflows[floor_workflow].get('quality_gates', []) or [])
+        # Ceremony уже задаёт risk floor независимо от любого routing proposal.
+        from ai_ops_kit.gates.spec_levels import classify as ceremony_classify
+        ceremony_level = ceremony_classify(signals)['level']
+        risk_floor = 'CRITICAL' if ceremony_level >= 3 else 'ENGINEERING' if ceremony_level >= 2 else None
+        if risk_floor:
+            mandatory.extend(workflows[risk_floor].get('quality_gates', []) or [])
+            if risk_floor == 'CRITICAL' or floor_workflow != 'CRITICAL':
+                floor_workflow = risk_floor
         tracks = yaml.safe_load((PKG / 'registry/tracks.yaml').read_text(encoding='utf-8'))['tracks']
         for track in tracks.values():
             if signals.get(track['signal']):

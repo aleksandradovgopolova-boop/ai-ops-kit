@@ -1,0 +1,313 @@
+{
+  "corpus_sha256": "682b942390db15359c07e8105a7a14e43f5dbba5a0864d0d7281af3c111fdc6c",
+  "harness_sha256": "e85bb86031230f0c37d17b09adc28f1926ea78f6b10639cb389e1def9483de49",
+  "source": {
+    "head": "251a21b49cb9fdd85c277cefeddcf52053d49349",
+    "dirty": true,
+    "hashes": {
+      "ai_ops_kit/gates/gate_executor.py": "39653ae3f4b4919ce3c9bf1a8c520ae8bef2e64181cffa5ff92e2831f8ca790b",
+      "ai_ops_kit/gates/spec_levels.py": "024bac5ce8f2fe6ef92ecfb1a954de19981d8c77fc3d1c4c7700dcddb48247e9",
+      "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41",
+      "registry/routing-policy.yaml": "1bcda1fd9716adb447c46de80037c8091e5e46163399f854eef462ece7baf737",
+      "registry/tracks.yaml": "4d002641470b8b3dc04c660bdb5f7a4b1a2e126329131a8f8e9f00265ce32d72",
+      "manifest/ai-ops-manifest.yaml": "bc4cd269b0ec50c9f819838ed999c76ea7a2cd035f57ac7e9ed562b0bedcf383",
+      "skills/product-session-review/SKILL.md": "af243bcd7e2307137b3af5388f38a797c059e8995e254769f62b242be30c4742",
+      "skills/system-constraint-analysis/SKILL.md": "cfe6722e5c4ad1d41a7de7bbd7218ab5ee9b3d52cd9191019c800aa9dfc24dc7",
+      "skills/contradiction-resolution/SKILL.md": "c2ceaf7f8e7cbbbfae6dc41e28f8a8d22a292745b6fa7ade6e95825aafc65eeb",
+      "skills/decision-support/SKILL.md": "4f6dc591f7372ed54ff01766a18201a9ff7d144f0258b676915cbb099a7ebdd3",
+      "skills/frontend-design/SKILL.md": "34f9fea794138954a87bf78aaba069db9a618a095c2526e672b02fe0f7a16ac7",
+      "skills/e2e-browser-testing/SKILL.md": "ec459b31e5e33fb3d712f158226b2c83245806ce5a0c57eea8a83d0a660dd024",
+      "skills/user-documentation/SKILL.md": "cf95354e2d2f43511d347777504e6942f3b8492223315e2dd4934d7f8d01e290",
+      "skills/product-demo-video/SKILL.md": "8d7ab2731a11d45cbd9b6cde5ef3ed6924bb32ea6c7030840e0726d00e27d80a",
+      "skills/repo-onboarding/SKILL.md": "2cc0e4338dcdf6a24763bb3013903065dd5cb9f92217b3d58f1f400eb0c29a86",
+      "skills/plain-language-communication/SKILL.md": "92b09fce8948c02be1f78074512c7340e88d5cc1a50a25f7db673a3dff5c860c"
+    }
+  },
+  "note": "Agreement с указанной workflow/stage; это не free-text semantic accuracy.",
+  "worker": {
+    "model": "gpt-5.6-terra",
+    "effort": "low"
+  },
+  "selection": [
+    {
+      "id": "decision-no-recommendation",
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 21836.74533397425,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a11028-a4ea-7e13-a14c-22bc008b9514"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "error",
+              "message": "Skill descriptions were shortened to fit the skills context budget. Codex can still see every skill, but some descriptions are shorter. Disable unused skills or plugins to leave more room for the rest."
+            }
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_1",
+              "type": "agent_message",
+              "text": "{\"agent\":\"context-builder\",\"skills\":[\"decision-support\"],\"confidence\":0.94}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 19375,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 148,
+              "reasoning_output_tokens": 118
+            }
+          }
+        ],
+        "context_bytes": 19311,
+        "prompt_sha256": "0f24a55a1be97ff80447648816d720cb83c71c8f4714584142fe68284b3137b8",
+        "usage": {
+          "input_tokens": 19375,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 148,
+          "reasoning_output_tokens": 118
+        },
+        "input_tokens": 19375,
+        "output_tokens": 148,
+        "answer": {
+          "agent": "context-builder",
+          "skills": [
+            "decision-support"
+          ],
+          "confidence": 0.94
+        }
+      },
+      "public_input_sha256": "2c9a3a5f12c2b9ff333640ef1bd4a0e8f092925d2e3e1fcd06d2d3d9e6114edf",
+      "valid_response": true,
+      "agent_match": false,
+      "skills_match": true,
+      "protected_agent": "product-manager",
+      "protected_skills": [
+        "decision-support"
+      ],
+      "protection": {
+        "fallback": false,
+        "mandatory_restored": []
+      }
+    },
+    {
+      "id": "decision-one-way",
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 20762.51625001896,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a11028-f447-77c2-abd1-efe0aa60d248"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"agent\":\"context-builder\",\"skills\":[\"decision-support\",\"plain-language-communication\"],\"confidence\":0.9}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 16624,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 211,
+              "reasoning_output_tokens": 176
+            }
+          }
+        ],
+        "context_bytes": 19437,
+        "prompt_sha256": "8bd02ceac7915a4ac683f1b3e9edb2f3f1787938c92a75db2b30126384251e32",
+        "usage": {
+          "input_tokens": 16624,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 211,
+          "reasoning_output_tokens": 176
+        },
+        "input_tokens": 16624,
+        "output_tokens": 211,
+        "answer": {
+          "agent": "context-builder",
+          "skills": [
+            "decision-support",
+            "plain-language-communication"
+          ],
+          "confidence": 0.9
+        }
+      },
+      "public_input_sha256": "83afc85cefc3b09df79e4b2440fe1d2b7e74ce0666060c82713dc2b6b6d12d6f",
+      "valid_response": true,
+      "agent_match": false,
+      "skills_match": false,
+      "protected_agent": "product-manager",
+      "protected_skills": [
+        "decision-support",
+        "plain-language-communication"
+      ],
+      "protection": {
+        "fallback": false,
+        "mandatory_restored": []
+      }
+    },
+    {
+      "id": "browser-plan",
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 12162.516292009968,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a11029-46bf-7bd3-b7d5-592df39cc6d5"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"agent\":\"test-engineer\",\"skills\":[\"e2e-browser-testing\"],\"confidence\":0.98}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 16640,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 82,
+              "reasoning_output_tokens": 48
+            }
+          }
+        ],
+        "context_bytes": 19492,
+        "prompt_sha256": "86180b2e2376efa956b72717ba546cfdc5765cc1ff49cd295d4a9dbe4428679f",
+        "usage": {
+          "input_tokens": 16640,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 82,
+          "reasoning_output_tokens": 48
+        },
+        "input_tokens": 16640,
+        "output_tokens": 82,
+        "answer": {
+          "agent": "test-engineer",
+          "skills": [
+            "e2e-browser-testing"
+          ],
+          "confidence": 0.98
+        }
+      },
+      "public_input_sha256": "973f312f85177c7e716afdb9ac411c0f4aca938008eedb525faf9814fce37ba6",
+      "valid_response": true,
+      "agent_match": false,
+      "skills_match": true,
+      "protected_agent": "final-verifier",
+      "protected_skills": [
+        "e2e-browser-testing"
+      ],
+      "protection": {
+        "fallback": false,
+        "mandatory_restored": []
+      }
+    },
+    {
+      "id": "docs-plan",
+      "result": {
+        "runtime_returncode": 0,
+        "model": "gpt-5.6-terra",
+        "effort": "low",
+        "actual_revision": null,
+        "latency_ms": 11213.408000010531,
+        "raw_events": [
+          {
+            "type": "thread.started",
+            "thread_id": "01a11029-7757-7281-b83a-c9200bc636f4"
+          },
+          {
+            "type": "turn.started"
+          },
+          {
+            "type": "item.completed",
+            "item": {
+              "id": "item_0",
+              "type": "agent_message",
+              "text": "{\"agent\":\"documentation-steward\",\"skills\":[\"user-documentation\"],\"confidence\":0.98}"
+            }
+          },
+          {
+            "type": "turn.completed",
+            "usage": {
+              "input_tokens": 16641,
+              "cached_input_tokens": 0,
+              "cache_write_input_tokens": 0,
+              "output_tokens": 31,
+              "reasoning_output_tokens": 0
+            }
+          }
+        ],
+        "context_bytes": 19519,
+        "prompt_sha256": "e5c9bbebd4ffbec3c06c64a7b5f62bc696bfdbf2d9fe66e00b54fae20812d064",
+        "usage": {
+          "input_tokens": 16641,
+          "cached_input_tokens": 0,
+          "cache_write_input_tokens": 0,
+          "output_tokens": 31,
+          "reasoning_output_tokens": 0
+        },
+        "input_tokens": 16641,
+        "output_tokens": 31,
+        "answer": {
+          "agent": "documentation-steward",
+          "skills": [
+            "user-documentation"
+          ],
+          "confidence": 0.98
+        }
+      },
+      "public_input_sha256": "dace3831c825948123e65c7ade45353cdda74249a9af9684b5deac309fa9d4f1",
+      "valid_response": true,
+      "agent_match": true,
+      "skills_match": true,
+      "protected_agent": "documentation-steward",
+      "protected_skills": [
+        "user-documentation"
+      ],
+      "protection": {
+        "fallback": false,
+        "mandatory_restored": []
+      }
+    }
+  ],
+  "evaluation_harness_sha256": "bc75906d175ae55042fcae39647dd682eed6eb059c7723a50289047729e8d3a4",
+  "evaluation_note": "Повторная проверка сохранённых actual ответов более строгой формой; новых model calls нет."
+}
