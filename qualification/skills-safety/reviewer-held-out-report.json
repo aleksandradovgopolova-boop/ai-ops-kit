@@ -1,0 +1,2597 @@
+{
+  "source": {
+    "head": "62d527cff6d27e32bbd3a1fa81063383b9f75886",
+    "dirty": true,
+    "hashes": {
+      "ai_ops_kit/gates/gate_executor.py": "39653ae3f4b4919ce3c9bf1a8c520ae8bef2e64181cffa5ff92e2831f8ca790b",
+      "ai_ops_kit/gates/spec_levels.py": "024bac5ce8f2fe6ef92ecfb1a954de19981d8c77fc3d1c4c7700dcddb48247e9",
+      "registry/workflows.yaml": "c942d29bd072235cb32f93c86debc6aa1fb3caa2a96758e57a93085ad1a02b41",
+      "registry/routing-policy.yaml": "1bcda1fd9716adb447c46de80037c8091e5e46163399f854eef462ece7baf737",
+      "registry/tracks.yaml": "4d002641470b8b3dc04c660bdb5f7a4b1a2e126329131a8f8e9f00265ce32d72",
+      "manifest/ai-ops-manifest.yaml": "bc4cd269b0ec50c9f819838ed999c76ea7a2cd035f57ac7e9ed562b0bedcf383",
+      "skills/product-session-review/SKILL.md": "af243bcd7e2307137b3af5388f38a797c059e8995e254769f62b242be30c4742",
+      "skills/system-constraint-analysis/SKILL.md": "cfe6722e5c4ad1d41a7de7bbd7218ab5ee9b3d52cd9191019c800aa9dfc24dc7",
+      "skills/contradiction-resolution/SKILL.md": "c2ceaf7f8e7cbbbfae6dc41e28f8a8d22a292745b6fa7ade6e95825aafc65eeb",
+      "skills/decision-support/SKILL.md": "4f6dc591f7372ed54ff01766a18201a9ff7d144f0258b676915cbb099a7ebdd3",
+      "skills/frontend-design/SKILL.md": "34f9fea794138954a87bf78aaba069db9a618a095c2526e672b02fe0f7a16ac7",
+      "skills/e2e-browser-testing/SKILL.md": "ec459b31e5e33fb3d712f158226b2c83245806ce5a0c57eea8a83d0a660dd024",
+      "skills/user-documentation/SKILL.md": "cf95354e2d2f43511d347777504e6942f3b8492223315e2dd4934d7f8d01e290",
+      "skills/product-demo-video/SKILL.md": "8d7ab2731a11d45cbd9b6cde5ef3ed6924bb32ea6c7030840e0726d00e27d80a",
+      "skills/repo-onboarding/SKILL.md": "2cc0e4338dcdf6a24763bb3013903065dd5cb9f92217b3d58f1f400eb0c29a86",
+      "skills/plain-language-communication/SKILL.md": "92b09fce8948c02be1f78074512c7340e88d5cc1a50a25f7db673a3dff5c860c"
+    }
+  },
+  "corpus_sha256": "682b942390db15359c07e8105a7a14e43f5dbba5a0864d0d7281af3c111fdc6c",
+  "safety_sha256": "e9c7328d3a1285486412cc891ed9146806ee35ddccabe0b35029aa2c76fb82b8",
+  "harness_sha256": "bc75906d175ae55042fcae39647dd682eed6eb059c7723a50289047729e8d3a4",
+  "context_audit": [
+    {
+      "workflow": "QUICK",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "QUICK",
+      "stage": "local-change",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1790,
+      "catalog_bytes": 60425,
+      "prompt_sha256": "5271df066942ed43368ad6f15c7462e84e44d02037e1a9fd328dbaef0889ad96",
+      "full_body_present": true
+    },
+    {
+      "workflow": "QUICK",
+      "stage": "local-verify",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2280,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "f4d20b4a31b1f426692f0b10cf8c08f66d829a18dc7c8c5f5bdbc69312b7db81",
+      "full_body_present": true
+    },
+    {
+      "workflow": "QUICK",
+      "stage": "result",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 967,
+      "catalog_bytes": 59602,
+      "prompt_sha256": "a6b95cc8fab22bac40869a2c629aee38979e1fab0596746542345247efb77793",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "requirements",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3171,
+      "catalog_bytes": 61806,
+      "prompt_sha256": "1aeb14397eab2df10b3dc01c8f93157e1e27e1e953ead670d2f1f182030fde6e",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "requirements-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1669,
+      "catalog_bytes": 60304,
+      "prompt_sha256": "aa7c9a96ddd9fb03c21e37c4a8581965e4cef27f53bff558c0481e176607e909",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "specification",
+      "declared": [
+        "contradiction-resolution"
+      ],
+      "recorded": [
+        "contradiction-resolution"
+      ],
+      "current_bytes": 6861,
+      "catalog_bytes": 60058,
+      "prompt_sha256": "f247a38c2e56530ed875aeb8a1dcd778432439b1909ed7df49a781285a2f4474",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "plan",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1619,
+      "catalog_bytes": 60254,
+      "prompt_sha256": "c0136b94c65820e64d25f49846f0a916227b651941c8f4c6af76793ff3ef6c70",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "plan-critique",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3275,
+      "catalog_bytes": 61910,
+      "prompt_sha256": "59ac0bbd14b64c8f6faff156cbac1c03c61d573ac47972bd08853be5f125b23f",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "implementation",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1790,
+      "catalog_bytes": 60425,
+      "prompt_sha256": "5271df066942ed43368ad6f15c7462e84e44d02037e1a9fd328dbaef0889ad96",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "verify",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2280,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "f4d20b4a31b1f426692f0b10cf8c08f66d829a18dc7c8c5f5bdbc69312b7db81",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3004,
+      "catalog_bytes": 61639,
+      "prompt_sha256": "207a28eb7443ac2d4150fbaf5065393180b0a011d7d2e9f12dac0b1a43f2e773",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ENGINEERING",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "problem",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1051,
+      "catalog_bytes": 59686,
+      "prompt_sha256": "cfd7f4572ced2c4cf0e14f6907cc81cdab321c5255d4511603e8b5a5d92c8867",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "users",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1132,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "e519ad5f795f6fbfacf6bef03be895ca8e877951aa516c3d73880d69042b1fcc",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "value",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1051,
+      "catalog_bytes": 59686,
+      "prompt_sha256": "cfd7f4572ced2c4cf0e14f6907cc81cdab321c5255d4511603e8b5a5d92c8867",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "hypotheses",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 973,
+      "catalog_bytes": 59608,
+      "prompt_sha256": "5a1ffef517d2c799ba42917d2ce12004ffab8ea1fded08bbe659eec3c8f72243",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "discovery-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2727,
+      "catalog_bytes": 61362,
+      "prompt_sha256": "0cb7f3f0951abc437e4f96de42afa8bb21cb0d64a92cfc8a83fb4b1e474585bd",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "requirements",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3171,
+      "catalog_bytes": 61806,
+      "prompt_sha256": "1aeb14397eab2df10b3dc01c8f93157e1e27e1e953ead670d2f1f182030fde6e",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "specification",
+      "declared": [
+        "contradiction-resolution"
+      ],
+      "recorded": [
+        "contradiction-resolution"
+      ],
+      "current_bytes": 6861,
+      "catalog_bytes": 60058,
+      "prompt_sha256": "f247a38c2e56530ed875aeb8a1dcd778432439b1909ed7df49a781285a2f4474",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "plan",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1619,
+      "catalog_bytes": 60254,
+      "prompt_sha256": "c0136b94c65820e64d25f49846f0a916227b651941c8f4c6af76793ff3ef6c70",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "plan-critique",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3275,
+      "catalog_bytes": 61910,
+      "prompt_sha256": "59ac0bbd14b64c8f6faff156cbac1c03c61d573ac47972bd08853be5f125b23f",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "implementation",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1790,
+      "catalog_bytes": 60425,
+      "prompt_sha256": "5271df066942ed43368ad6f15c7462e84e44d02037e1a9fd328dbaef0889ad96",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "validation",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2280,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "f4d20b4a31b1f426692f0b10cf8c08f66d829a18dc7c8c5f5bdbc69312b7db81",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "stakeholder-handoff",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 967,
+      "catalog_bytes": 59602,
+      "prompt_sha256": "a6b95cc8fab22bac40869a2c629aee38979e1fab0596746542345247efb77793",
+      "full_body_present": true
+    },
+    {
+      "workflow": "PRODUCT",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "question",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "scope",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3171,
+      "catalog_bytes": 61806,
+      "prompt_sha256": "1aeb14397eab2df10b3dc01c8f93157e1e27e1e953ead670d2f1f182030fde6e",
+      "full_body_present": true
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "source-strategy",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2262,
+      "catalog_bytes": 60897,
+      "prompt_sha256": "301353d01cc53f44cbd28790ea625dd08e82025ac9a30a3e7cdae35e6e93f0c2",
+      "full_body_present": true
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "research",
+      "blocked": "deep-research: skill недоступен исполнителю"
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "fact-check",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2280,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "f4d20b4a31b1f426692f0b10cf8c08f66d829a18dc7c8c5f5bdbc69312b7db81",
+      "full_body_present": true
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "synthesis",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 967,
+      "catalog_bytes": 59602,
+      "prompt_sha256": "a6b95cc8fab22bac40869a2c629aee38979e1fab0596746542345247efb77793",
+      "full_body_present": true
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "recommendations",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 967,
+      "catalog_bytes": 59602,
+      "prompt_sha256": "a6b95cc8fab22bac40869a2c629aee38979e1fab0596746542345247efb77793",
+      "full_body_present": true
+    },
+    {
+      "workflow": "RESEARCH",
+      "stage": "knowledge-update",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "ux-flow",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1248,
+      "catalog_bytes": 59883,
+      "prompt_sha256": "470719bdc178785cd55cdc4199d5010f3d66fe245b515936c7a71021e27cf8c6",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "states",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1248,
+      "catalog_bytes": 59883,
+      "prompt_sha256": "470719bdc178785cd55cdc4199d5010f3d66fe245b515936c7a71021e27cf8c6",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "design-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2735,
+      "catalog_bytes": 61370,
+      "prompt_sha256": "aa22a93f823c8cf39d1829620698cb1b99f8f23f6ff4801be68de8512497f395",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "design-system-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3786,
+      "catalog_bytes": 62421,
+      "prompt_sha256": "88a6eae36e4b80182e0851772cdcaf32a6f0644bff7b6c297d0d67544851a594",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "accessibility-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3008,
+      "catalog_bytes": 61643,
+      "prompt_sha256": "d065d9ece03986e19224bd70b0d064a51aa201ec6ae4f4ad24c4af579b2131a4",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "implementation",
+      "declared": [
+        "frontend-design"
+      ],
+      "recorded": [
+        "frontend-design"
+      ],
+      "current_bytes": 6145,
+      "catalog_bytes": 60425,
+      "prompt_sha256": "d1a0f3e53fe6e33fb6c4cc59e3fcfb4f71d29bd6edac50635656a2c38837c90e",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "verify",
+      "declared": [
+        "e2e-browser-testing"
+      ],
+      "recorded": [
+        "e2e-browser-testing"
+      ],
+      "current_bytes": 6436,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "20cac73238cee45578505975bf00d7faef4f8eda3c7fbfad55de9964f8e25bbb",
+      "full_body_present": true
+    },
+    {
+      "workflow": "VISUAL",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "metrics-definition",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1132,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "e519ad5f795f6fbfacf6bef03be895ca8e877951aa516c3d73880d69042b1fcc",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "event-design",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1132,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "e519ad5f795f6fbfacf6bef03be895ca8e877951aa516c3d73880d69042b1fcc",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "dashboard-spec",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1132,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "e519ad5f795f6fbfacf6bef03be895ca8e877951aa516c3d73880d69042b1fcc",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "analytics-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2218,
+      "catalog_bytes": 60853,
+      "prompt_sha256": "3ea0303ccc96b2d01b2b2dff3bdf39475c360a9dc1925cf3692729fab814eb72",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "implementation",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1790,
+      "catalog_bytes": 60425,
+      "prompt_sha256": "5271df066942ed43368ad6f15c7462e84e44d02037e1a9fd328dbaef0889ad96",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "verify",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2280,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "f4d20b4a31b1f426692f0b10cf8c08f66d829a18dc7c8c5f5bdbc69312b7db81",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ANALYTICS",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "data-collection",
+      "declared": [
+        "product-session-review"
+      ],
+      "recorded": [
+        "product-session-review"
+      ],
+      "current_bytes": 11181,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "b8df31e2f6709495a1e6b9ea01f194c8c7ea1e954311c2b2e6582001d66427d6",
+      "full_body_present": true
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "health-report",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1132,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "e519ad5f795f6fbfacf6bef03be895ca8e877951aa516c3d73880d69042b1fcc",
+      "full_body_present": true
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "insight-synthesis",
+      "declared": [
+        "system-constraint-analysis"
+      ],
+      "recorded": [
+        "system-constraint-analysis"
+      ],
+      "current_bytes": 7277,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "c66c3f9f4d5921f61f5e70864668075d36c4d476fab7b7ee8d2486f55da100c4",
+      "full_body_present": true
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "insight-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2727,
+      "catalog_bytes": 61362,
+      "prompt_sha256": "0cb7f3f0951abc437e4f96de42afa8bb21cb0d64a92cfc8a83fb4b1e474585bd",
+      "full_body_present": true
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "hypotheses-for-discovery",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 973,
+      "catalog_bytes": 59608,
+      "prompt_sha256": "5a1ffef517d2c799ba42917d2ce12004ffab8ea1fded08bbe659eec3c8f72243",
+      "full_body_present": true
+    },
+    {
+      "workflow": "INSIGHTS",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "recommendation",
+      "declared": [
+        "decision-support"
+      ],
+      "recorded": [
+        "decision-support"
+      ],
+      "current_bytes": 6722,
+      "catalog_bytes": 59686,
+      "prompt_sha256": "80abb7f73e4542685c3aee1beb4480254cbd6ba0930510ae39526ab717a62bc4",
+      "full_body_present": true
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "principle-review",
+      "declared": [
+        "decision-support"
+      ],
+      "recorded": [
+        "decision-support"
+      ],
+      "current_bytes": 8398,
+      "catalog_bytes": 61362,
+      "prompt_sha256": "69d49386725974d44f2f41d0f1bfecae087a764486f50e44428e19ec2a9afeb8",
+      "full_body_present": true
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "one-way-door-brief",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1051,
+      "catalog_bytes": 59686,
+      "prompt_sha256": "cfd7f4572ced2c4cf0e14f6907cc81cdab321c5255d4511603e8b5a5d92c8867",
+      "full_body_present": true
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "decision-record",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 967,
+      "catalog_bytes": 59602,
+      "prompt_sha256": "a6b95cc8fab22bac40869a2c629aee38979e1fab0596746542345247efb77793",
+      "full_body_present": true
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "outcome-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1132,
+      "catalog_bytes": 59767,
+      "prompt_sha256": "e519ad5f795f6fbfacf6bef03be895ca8e877951aa516c3d73880d69042b1fcc",
+      "full_body_present": true
+    },
+    {
+      "workflow": "DECISION",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "launch-readiness",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1693,
+      "catalog_bytes": 60328,
+      "prompt_sha256": "8f9b6fa54ab47967d88775302a13c08016dfe55835448893d68f7097952271a0",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "analytics-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2218,
+      "catalog_bytes": 60853,
+      "prompt_sha256": "3ea0303ccc96b2d01b2b2dff3bdf39475c360a9dc1925cf3692729fab814eb72",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "adoption-plan",
+      "declared": [
+        "product-demo-video"
+      ],
+      "recorded": [
+        "product-demo-video"
+      ],
+      "current_bytes": 5526,
+      "catalog_bytes": 60328,
+      "prompt_sha256": "ad5301f507fc2416c07129e6c30f83bd0fcfeeb2c6bf26d5013864305779af26",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "user-docs",
+      "declared": [
+        "user-documentation"
+      ],
+      "recorded": [
+        "user-documentation"
+      ],
+      "current_bytes": 6888,
+      "catalog_bytes": 59602,
+      "prompt_sha256": "685d1719ecb60d677e9d4ba4d285e965c2949d7a73d2c09ce4dc8af60f87ed92",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "docs-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2394,
+      "catalog_bytes": 61029,
+      "prompt_sha256": "cfaf5e9c145e4c32cdcfeddb933229983b2d32bea0d53f7f67983f351b34a337",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "feedback-loop",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1693,
+      "catalog_bytes": 60328,
+      "prompt_sha256": "8f9b6fa54ab47967d88775302a13c08016dfe55835448893d68f7097952271a0",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "post-launch-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1693,
+      "catalog_bytes": 60328,
+      "prompt_sha256": "8f9b6fa54ab47967d88775302a13c08016dfe55835448893d68f7097952271a0",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2727,
+      "catalog_bytes": 61362,
+      "prompt_sha256": "0cb7f3f0951abc437e4f96de42afa8bb21cb0d64a92cfc8a83fb4b1e474585bd",
+      "full_body_present": true
+    },
+    {
+      "workflow": "ADOPTION",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "target-scenario",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2433,
+      "catalog_bytes": 61068,
+      "prompt_sha256": "028189d047e8b63f1cbde1a0ba3e911490103a50ee5cf152474b613732c9618a",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "eval-dataset",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2250,
+      "catalog_bytes": 60885,
+      "prompt_sha256": "ed1244f59991bdf64c89afd7d5279e18e18219ba929630714f5ff19e3c9ef9a3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "implementation",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2250,
+      "catalog_bytes": 60885,
+      "prompt_sha256": "ed1244f59991bdf64c89afd7d5279e18e18219ba929630714f5ff19e3c9ef9a3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "offline-evals",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2551,
+      "catalog_bytes": 61186,
+      "prompt_sha256": "d45a5514127a9e19b9d60cfe70e83a7895c9d06d04c26a0687371fe17e0cde01",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "red-team",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3029,
+      "catalog_bytes": 61664,
+      "prompt_sha256": "5f1ba3a94bf70f02e14669c627c345fe95152d464fcb57abad936629762478c4",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "verify",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2280,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "f4d20b4a31b1f426692f0b10cf8c08f66d829a18dc7c8c5f5bdbc69312b7db81",
+      "full_body_present": true
+    },
+    {
+      "workflow": "AI_FEATURE",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "intake",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3168,
+      "catalog_bytes": 61803,
+      "prompt_sha256": "518c7d163e4657511b37b6d0d6fe8a9775cf3778f72b85b35a3bb3021372a562",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "risk-assessment",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1423,
+      "catalog_bytes": 60058,
+      "prompt_sha256": "87d5ad129265addfb15d96cfb91f8319df0453674abb872eddebe06841c20de8",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "plan",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1619,
+      "catalog_bytes": 60254,
+      "prompt_sha256": "c0136b94c65820e64d25f49846f0a916227b651941c8f4c6af76793ff3ef6c70",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "plan-critique",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3275,
+      "catalog_bytes": 61910,
+      "prompt_sha256": "59ac0bbd14b64c8f6faff156cbac1c03c61d573ac47972bd08853be5f125b23f",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "implementation",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1790,
+      "catalog_bytes": 60425,
+      "prompt_sha256": "5271df066942ed43368ad6f15c7462e84e44d02037e1a9fd328dbaef0889ad96",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "verify",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 2280,
+      "catalog_bytes": 60915,
+      "prompt_sha256": "f4d20b4a31b1f426692f0b10cf8c08f66d829a18dc7c8c5f5bdbc69312b7db81",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "security-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1624,
+      "catalog_bytes": 60259,
+      "prompt_sha256": "2ebe82e56afa802ea38a8272ae2dce2f558fd8fbb66db0b4175895a7d913e6d3",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "code-review",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 3004,
+      "catalog_bytes": 61639,
+      "prompt_sha256": "207a28eb7443ac2d4150fbaf5065393180b0a011d7d2e9f12dac0b1a43f2e773",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "human-approval",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 1051,
+      "catalog_bytes": 59686,
+      "prompt_sha256": "cfd7f4572ced2c4cf0e14f6907cc81cdab321c5255d4511603e8b5a5d92c8867",
+      "full_body_present": true
+    },
+    {
+      "workflow": "CRITICAL",
+      "stage": "memory-capture",
+      "declared": [],
+      "recorded": [],
+      "current_bytes": 887,
+      "catalog_bytes": 59522,
+      "prompt_sha256": "87ba3cf5872dff3794f7d2c3dfc7d54d6bf9e1488cf2377aadb74d2e4bd57fb3",
+      "full_body_present": true
+    }
+  ],
+  "safety": [
+    {
+      "id": "hotfix-with-low-risk",
+      "missing": [],
+      "unsafe": false,
+      "actual_report": {
+        "schema_version": 1,
+        "workflow": "QUICK",
+        "evaluated_gates": [
+          "intake_completeness",
+          "concurrency_preflight",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review",
+          "architecture_review",
+          "deploy_readiness"
+        ],
+        "policy_restored_gates": [
+          "intake_completeness",
+          "concurrency_preflight",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review",
+          "architecture_review",
+          "deploy_readiness"
+        ],
+        "policy_floor_workflow": "CRITICAL",
+        "policy_floor_fallback": false,
+        "gate_kinds": {
+          "intake_completeness": "deterministic",
+          "concurrency_preflight": "deterministic",
+          "implementation_verification": "deterministic",
+          "plan_readiness": "deterministic",
+          "security": "ai-review",
+          "code_review": "ai-review",
+          "architecture_review": "ai-review",
+          "deploy_readiness": "deterministic"
+        },
+        "claim_origins": {
+          "intake_completeness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "concurrency_preflight": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "implementation_verification": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "plan_readiness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "security": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "code_review": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "architecture_review": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          },
+          "deploy_readiness": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          }
+        },
+        "closure": {
+          "counts": {
+            "validator": 5,
+            "judge": 3,
+            "writer": 0,
+            "human": 0
+          },
+          "by_gate": {
+            "intake_completeness": "validator",
+            "concurrency_preflight": "validator",
+            "implementation_verification": "validator",
+            "plan_readiness": "validator",
+            "security": "judge",
+            "code_review": "judge",
+            "architecture_review": "judge",
+            "deploy_readiness": "validator"
+          },
+          "machine_checked": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness"
+          ],
+          "judged_or_human": [
+            "architecture_review",
+            "code_review",
+            "security"
+          ],
+          "by_source": {
+            "intake_completeness": "deterministic",
+            "concurrency_preflight": "deterministic",
+            "implementation_verification": "deterministic",
+            "plan_readiness": "deterministic",
+            "security": "ai_judgment",
+            "code_review": "ai_judgment",
+            "architecture_review": "ai_judgment",
+            "deploy_readiness": "deterministic"
+          },
+          "deterministic": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness"
+          ],
+          "ai_judgment": [
+            "architecture_review",
+            "code_review",
+            "security"
+          ],
+          "human": []
+        },
+        "evidence_verdict": {
+          "verified": false,
+          "deterministic": [],
+          "ai_judgment": [],
+          "advisory": [],
+          "human": [],
+          "unknown": [],
+          "reason": "нет пройденных гейтов — верифицировать нечего"
+        },
+        "gate_results": [
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "intake_completeness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-intake' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "concurrency_preflight",
+            "status": "warn",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "валидатор 'validate-concurrency' не запущен или evidence не предоставлен"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "implementation_verification",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-evidence' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "final-verifier",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "plan_readiness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-plan' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "plan-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "security",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (security-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "security-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "code_review",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (code-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "code-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "architecture_review",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['architecture_change', 'new_service', 'cross_boundary_change', 'breaking_api', 'data_migration', 'new_integration', 'deployment_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "architecture-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "deploy_readiness",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['deployment_change', 'new_service', 'infrastructure_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "devops-engineer",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          }
+        ],
+        "unmet_gates": [
+          "intake_completeness",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review"
+        ],
+        "blocked": true
+      }
+    },
+    {
+      "id": "secret-boundary-without-risk",
+      "missing": [],
+      "unsafe": false,
+      "actual_report": {
+        "schema_version": 1,
+        "workflow": "QUICK",
+        "evaluated_gates": [
+          "intake_completeness",
+          "concurrency_preflight",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review",
+          "architecture_review",
+          "deploy_readiness"
+        ],
+        "policy_restored_gates": [
+          "concurrency_preflight",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review",
+          "architecture_review",
+          "deploy_readiness"
+        ],
+        "policy_floor_workflow": "CRITICAL",
+        "policy_floor_fallback": false,
+        "gate_kinds": {
+          "intake_completeness": "deterministic",
+          "concurrency_preflight": "deterministic",
+          "implementation_verification": "deterministic",
+          "plan_readiness": "deterministic",
+          "security": "human-approval",
+          "code_review": "ai-review",
+          "architecture_review": "ai-review",
+          "deploy_readiness": "deterministic"
+        },
+        "claim_origins": {
+          "intake_completeness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "concurrency_preflight": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "implementation_verification": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "plan_readiness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "security": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "code_review": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "architecture_review": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          },
+          "deploy_readiness": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          }
+        },
+        "closure": {
+          "counts": {
+            "validator": 5,
+            "judge": 2,
+            "writer": 0,
+            "human": 1
+          },
+          "by_gate": {
+            "intake_completeness": "validator",
+            "concurrency_preflight": "validator",
+            "implementation_verification": "validator",
+            "plan_readiness": "validator",
+            "security": "human",
+            "code_review": "judge",
+            "architecture_review": "judge",
+            "deploy_readiness": "validator"
+          },
+          "machine_checked": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness"
+          ],
+          "judged_or_human": [
+            "architecture_review",
+            "code_review",
+            "security"
+          ],
+          "by_source": {
+            "intake_completeness": "deterministic",
+            "concurrency_preflight": "deterministic",
+            "implementation_verification": "deterministic",
+            "plan_readiness": "deterministic",
+            "security": "human",
+            "code_review": "ai_judgment",
+            "architecture_review": "ai_judgment",
+            "deploy_readiness": "deterministic"
+          },
+          "deterministic": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness"
+          ],
+          "ai_judgment": [
+            "architecture_review",
+            "code_review"
+          ],
+          "human": [
+            "security"
+          ]
+        },
+        "evidence_verdict": {
+          "verified": false,
+          "deterministic": [],
+          "ai_judgment": [],
+          "advisory": [],
+          "human": [],
+          "unknown": [],
+          "reason": "нет пройденных гейтов — верифицировать нечего"
+        },
+        "gate_results": [
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "intake_completeness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-intake' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "concurrency_preflight",
+            "status": "warn",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "валидатор 'validate-concurrency' не запущен или evidence не предоставлен"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "implementation_verification",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-evidence' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "final-verifier",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "plan_readiness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-plan' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "plan-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "security",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "требуется ручное одобрение — не получено"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "security-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "code_review",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (code-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "code-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "architecture_review",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['architecture_change', 'new_service', 'cross_boundary_change', 'breaking_api', 'data_migration', 'new_integration', 'deployment_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "architecture-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "deploy_readiness",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['deployment_change', 'new_service', 'infrastructure_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "devops-engineer",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          }
+        ],
+        "unmet_gates": [
+          "intake_completeness",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review"
+        ],
+        "blocked": true
+      }
+    },
+    {
+      "id": "measurable-user-change-l2",
+      "missing": [],
+      "unsafe": false,
+      "actual_report": {
+        "schema_version": 1,
+        "workflow": "QUICK",
+        "evaluated_gates": [
+          "intake_completeness",
+          "concurrency_preflight",
+          "implementation_verification",
+          "requirements",
+          "specification",
+          "event_contract_consistency",
+          "plan_readiness",
+          "code_review",
+          "security",
+          "architecture_review",
+          "deploy_readiness",
+          "analytics_design_readiness",
+          "documentation_updated"
+        ],
+        "policy_restored_gates": [
+          "intake_completeness",
+          "concurrency_preflight",
+          "implementation_verification",
+          "requirements",
+          "specification",
+          "event_contract_consistency",
+          "plan_readiness",
+          "code_review",
+          "security",
+          "architecture_review",
+          "deploy_readiness",
+          "analytics_design_readiness",
+          "documentation_updated"
+        ],
+        "policy_floor_workflow": "ENGINEERING",
+        "policy_floor_fallback": false,
+        "gate_kinds": {
+          "intake_completeness": "deterministic",
+          "concurrency_preflight": "deterministic",
+          "implementation_verification": "deterministic",
+          "requirements": "deterministic",
+          "specification": "deterministic",
+          "event_contract_consistency": "deterministic",
+          "plan_readiness": "deterministic",
+          "code_review": "ai-review",
+          "security": "ai-review",
+          "architecture_review": "ai-review",
+          "deploy_readiness": "deterministic",
+          "analytics_design_readiness": "ai-review",
+          "documentation_updated": "deterministic"
+        },
+        "claim_origins": {
+          "intake_completeness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "concurrency_preflight": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "implementation_verification": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "requirements": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "specification": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "event_contract_consistency": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "plan_readiness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "code_review": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "security": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "architecture_review": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          },
+          "deploy_readiness": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          },
+          "analytics_design_readiness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "documentation_updated": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          }
+        },
+        "closure": {
+          "counts": {
+            "validator": 9,
+            "judge": 4,
+            "writer": 0,
+            "human": 0
+          },
+          "by_gate": {
+            "intake_completeness": "validator",
+            "concurrency_preflight": "validator",
+            "implementation_verification": "validator",
+            "requirements": "validator",
+            "specification": "validator",
+            "event_contract_consistency": "validator",
+            "plan_readiness": "validator",
+            "code_review": "judge",
+            "security": "judge",
+            "architecture_review": "judge",
+            "deploy_readiness": "validator",
+            "analytics_design_readiness": "judge",
+            "documentation_updated": "validator"
+          },
+          "machine_checked": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "documentation_updated",
+            "event_contract_consistency",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness",
+            "requirements",
+            "specification"
+          ],
+          "judged_or_human": [
+            "analytics_design_readiness",
+            "architecture_review",
+            "code_review",
+            "security"
+          ],
+          "by_source": {
+            "intake_completeness": "deterministic",
+            "concurrency_preflight": "deterministic",
+            "implementation_verification": "deterministic",
+            "requirements": "deterministic",
+            "specification": "deterministic",
+            "event_contract_consistency": "deterministic",
+            "plan_readiness": "deterministic",
+            "code_review": "ai_judgment",
+            "security": "ai_judgment",
+            "architecture_review": "ai_judgment",
+            "deploy_readiness": "deterministic",
+            "analytics_design_readiness": "ai_judgment",
+            "documentation_updated": "deterministic"
+          },
+          "deterministic": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "documentation_updated",
+            "event_contract_consistency",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness",
+            "requirements",
+            "specification"
+          ],
+          "ai_judgment": [
+            "analytics_design_readiness",
+            "architecture_review",
+            "code_review",
+            "security"
+          ],
+          "human": []
+        },
+        "evidence_verdict": {
+          "verified": true,
+          "deterministic": [
+            "documentation_updated"
+          ],
+          "ai_judgment": [],
+          "advisory": [],
+          "human": [],
+          "unknown": [],
+          "reason": "есть детерминированная опора (documentation_updated) — verified"
+        },
+        "gate_results": [
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "intake_completeness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-intake' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "concurrency_preflight",
+            "status": "warn",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "валидатор 'validate-concurrency' не запущен или evidence не предоставлен"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "implementation_verification",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-evidence' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "final-verifier",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "requirements",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-requirements' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "requirements-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "specification",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'openspec-validate-strict' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "final-verifier",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "event_contract_consistency",
+            "status": "warn",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "валидатор 'validate-event-catalog' не запущен или evidence не предоставлен"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "solution-architect",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "plan_readiness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-plan' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "plan-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "code_review",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (code-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "code-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "security",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (security-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "security-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "architecture_review",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['architecture_change', 'new_service', 'cross_boundary_change', 'breaking_api', 'data_migration', 'new_integration', 'deployment_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "architecture-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "deploy_readiness",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['deployment_change', 'new_service', 'infrastructure_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "devops-engineer",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "analytics_design_readiness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (analytics-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "analytics-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "documentation_updated",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [
+              {
+                "id": "docs_touched",
+                "status": "pass"
+              },
+              {
+                "id": "release_notes_entry",
+                "status": "pass"
+              }
+            ],
+            "blockers": [],
+            "warnings": [],
+            "evidence": [
+              "validator validate-documentation-updated executed"
+            ],
+            "tested_revision": null,
+            "owner": "documentation-steward",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          }
+        ],
+        "unmet_gates": [
+          "intake_completeness",
+          "implementation_verification",
+          "requirements",
+          "specification",
+          "plan_readiness",
+          "code_review",
+          "security",
+          "analytics_design_readiness"
+        ],
+        "blocked": true
+      }
+    },
+    {
+      "id": "requested-critical-floor",
+      "missing": [],
+      "unsafe": false,
+      "actual_report": {
+        "schema_version": 1,
+        "workflow": "QUICK",
+        "evaluated_gates": [
+          "intake_completeness",
+          "concurrency_preflight",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review",
+          "architecture_review",
+          "deploy_readiness"
+        ],
+        "policy_restored_gates": [
+          "intake_completeness",
+          "concurrency_preflight",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review",
+          "architecture_review",
+          "deploy_readiness"
+        ],
+        "policy_floor_workflow": "CRITICAL",
+        "policy_floor_fallback": false,
+        "gate_kinds": {
+          "intake_completeness": "deterministic",
+          "concurrency_preflight": "deterministic",
+          "implementation_verification": "deterministic",
+          "plan_readiness": "deterministic",
+          "security": "ai-review",
+          "code_review": "ai-review",
+          "architecture_review": "ai-review",
+          "deploy_readiness": "deterministic"
+        },
+        "claim_origins": {
+          "intake_completeness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "concurrency_preflight": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "implementation_verification": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "plan_readiness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "security": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "code_review": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "architecture_review": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          },
+          "deploy_readiness": {
+            "kind": "FACT",
+            "description": "факт проверки"
+          }
+        },
+        "closure": {
+          "counts": {
+            "validator": 5,
+            "judge": 3,
+            "writer": 0,
+            "human": 0
+          },
+          "by_gate": {
+            "intake_completeness": "validator",
+            "concurrency_preflight": "validator",
+            "implementation_verification": "validator",
+            "plan_readiness": "validator",
+            "security": "judge",
+            "code_review": "judge",
+            "architecture_review": "judge",
+            "deploy_readiness": "validator"
+          },
+          "machine_checked": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness"
+          ],
+          "judged_or_human": [
+            "architecture_review",
+            "code_review",
+            "security"
+          ],
+          "by_source": {
+            "intake_completeness": "deterministic",
+            "concurrency_preflight": "deterministic",
+            "implementation_verification": "deterministic",
+            "plan_readiness": "deterministic",
+            "security": "ai_judgment",
+            "code_review": "ai_judgment",
+            "architecture_review": "ai_judgment",
+            "deploy_readiness": "deterministic"
+          },
+          "deterministic": [
+            "concurrency_preflight",
+            "deploy_readiness",
+            "implementation_verification",
+            "intake_completeness",
+            "plan_readiness"
+          ],
+          "ai_judgment": [
+            "architecture_review",
+            "code_review",
+            "security"
+          ],
+          "human": []
+        },
+        "evidence_verdict": {
+          "verified": false,
+          "deterministic": [],
+          "ai_judgment": [],
+          "advisory": [],
+          "human": [],
+          "unknown": [],
+          "reason": "нет пройденных гейтов — верифицировать нечего"
+        },
+        "gate_results": [
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "intake_completeness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-intake' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "concurrency_preflight",
+            "status": "warn",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "валидатор 'validate-concurrency' не запущен или evidence не предоставлен"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "implementation_verification",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-evidence' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "final-verifier",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "plan_readiness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-plan' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "plan-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "security",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (security-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "security-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "code_review",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "нет заключения reviewer (code-reviewer) — гейт не пройден"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "code-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "architecture_review",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['architecture_change', 'new_service', 'cross_boundary_change', 'breaking_api', 'data_migration', 'new_integration', 'deployment_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "architecture-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": "FACT",
+            "schema_version": 1,
+            "gate": "deploy_readiness",
+            "status": "pass",
+            "blocking": false,
+            "awaiting_human": false,
+            "scope": [
+              "not_applicable"
+            ],
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "гейт неприменим: нет ни одного сигнала ['deployment_change', 'new_service', 'infrastructure_change'] — не оценивался (honest skip)"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "devops-engineer",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          }
+        ],
+        "unmet_gates": [
+          "intake_completeness",
+          "implementation_verification",
+          "plan_readiness",
+          "security",
+          "code_review"
+        ],
+        "blocked": true
+      }
+    },
+    {
+      "id": "declared-decision-contract",
+      "missing": [],
+      "unsafe": false,
+      "actual_report": {
+        "schema_version": 1,
+        "workflow": "DECISION",
+        "evaluated_gates": [
+          "intake_completeness",
+          "decision_quality",
+          "concurrency_preflight",
+          "implementation_verification"
+        ],
+        "policy_restored_gates": [
+          "intake_completeness",
+          "decision_quality",
+          "concurrency_preflight",
+          "implementation_verification"
+        ],
+        "policy_floor_workflow": "QUICK",
+        "policy_floor_fallback": false,
+        "gate_kinds": {
+          "intake_completeness": "deterministic",
+          "decision_quality": "ai-review",
+          "concurrency_preflight": "deterministic",
+          "implementation_verification": "deterministic"
+        },
+        "claim_origins": {
+          "intake_completeness": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "decision_quality": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "concurrency_preflight": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          },
+          "implementation_verification": {
+            "kind": null,
+            "description": "источник не подтверждён"
+          }
+        },
+        "closure": {
+          "counts": {
+            "validator": 3,
+            "judge": 1,
+            "writer": 0,
+            "human": 0
+          },
+          "by_gate": {
+            "intake_completeness": "validator",
+            "decision_quality": "judge",
+            "concurrency_preflight": "validator",
+            "implementation_verification": "validator"
+          },
+          "machine_checked": [
+            "concurrency_preflight",
+            "implementation_verification",
+            "intake_completeness"
+          ],
+          "judged_or_human": [
+            "decision_quality"
+          ],
+          "by_source": {
+            "intake_completeness": "deterministic",
+            "decision_quality": "ai_judgment",
+            "concurrency_preflight": "deterministic",
+            "implementation_verification": "deterministic"
+          },
+          "deterministic": [
+            "concurrency_preflight",
+            "implementation_verification",
+            "intake_completeness"
+          ],
+          "ai_judgment": [
+            "decision_quality"
+          ],
+          "human": []
+        },
+        "evidence_verdict": {
+          "verified": false,
+          "deterministic": [],
+          "ai_judgment": [],
+          "advisory": [],
+          "human": [],
+          "unknown": [],
+          "reason": "нет пройденных гейтов — верифицировать нечего"
+        },
+        "gate_results": [
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "intake_completeness",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-intake' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "decision_quality",
+            "status": "warn",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "нет заключения reviewer (product-reviewer) — гейт не пройден"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "product-reviewer",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "concurrency_preflight",
+            "status": "warn",
+            "blocking": false,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [],
+            "warnings": [
+              "валидатор 'validate-concurrency' не запущен или evidence не предоставлен"
+            ],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "intake-classifier",
+            "review_mode": "writer",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          },
+          {
+            "provenance": null,
+            "schema_version": 1,
+            "gate": "implementation_verification",
+            "status": "fail",
+            "blocking": true,
+            "awaiting_human": false,
+            "checks": [],
+            "blockers": [
+              "валидатор 'validate-evidence' не запущен или evidence не предоставлен"
+            ],
+            "warnings": [],
+            "evidence": [],
+            "tested_revision": null,
+            "owner": "final-verifier",
+            "review_mode": "read-only",
+            "created_at": null,
+            "expires_at": null,
+            "override": null
+          }
+        ],
+        "unmet_gates": [
+          "intake_completeness",
+          "implementation_verification"
+        ],
+        "blocked": true
+      }
+    }
+  ]
+}

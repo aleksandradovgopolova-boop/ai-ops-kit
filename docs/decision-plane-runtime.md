@@ -50,3 +50,10 @@ GateReport/JSON CLI выводят kind и описание каждого су�
 
 Legacy evidence без source/provenance сохраняет прежнюю обработку статуса, но имеет
 неизвестное происхождение и не даёт verified. Ожидаемый тип гейта не приписывается producer.
+
+## Квалификация без Jev
+
+[Результаты #1251/#1252](../qualification/skills-safety/README.md): измерены actual context и
+живые tokens, найдены и устранены high-risk gaps; сохранены before/after и protocol repairs.
+Mandatory union дополнен существующим deterministic ceremony floor, независимо от router.
+Широкая semantic selection accuracy остаётся незакрытой, новая production модель не вводится.
