@@ -68,6 +68,12 @@ runtimes:
     adapter_note: >
       Адаптер генерирует $CODEX_HOME/prompts/ ($-промпты); исполнение стадий и
       enforcement гейтов — на стороне Codex, не в коде кита.
+    bounded_stage_adapter:
+      status: implemented
+      stage: PRODUCT.specification
+      entrypoint: ai_ops_kit/devtools/codex_stage_cli.py
+      implementation: ai_ops_kit/devtools/codex_stage.py
+      note: "opt-in text-only; internal CLI не поставляется; workflow остаётся blocked; не general executing provider"
     default_provider: openai
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: orchestrated

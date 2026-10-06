@@ -1,0 +1,452 @@
+{
+  "schema_version": 1,
+  "workflow": "PRODUCT",
+  "evaluated_gates": [
+    "intake_completeness",
+    "concurrency_preflight",
+    "discovery_completeness",
+    "requirements",
+    "specification",
+    "event_contract_consistency",
+    "plan_readiness",
+    "implementation_verification",
+    "code_review",
+    "security",
+    "architecture_review",
+    "deploy_readiness",
+    "stakeholder_readiness"
+  ],
+  "policy_restored_gates": [],
+  "policy_floor_workflow": "PRODUCT",
+  "policy_floor_fallback": false,
+  "gate_kinds": {
+    "intake_completeness": "deterministic",
+    "concurrency_preflight": "deterministic",
+    "discovery_completeness": "ai-review",
+    "requirements": "deterministic",
+    "specification": "deterministic",
+    "event_contract_consistency": "deterministic",
+    "plan_readiness": "deterministic",
+    "implementation_verification": "deterministic",
+    "code_review": "ai-review",
+    "security": "ai-review",
+    "architecture_review": "ai-review",
+    "deploy_readiness": "deterministic",
+    "stakeholder_readiness": "ai-review"
+  },
+  "claim_origins": {
+    "intake_completeness": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "concurrency_preflight": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "discovery_completeness": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "requirements": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "specification": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "event_contract_consistency": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "plan_readiness": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "implementation_verification": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "code_review": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "security": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    },
+    "architecture_review": {
+      "kind": "FACT",
+      "description": "факт проверки"
+    },
+    "deploy_readiness": {
+      "kind": "FACT",
+      "description": "факт проверки"
+    },
+    "stakeholder_readiness": {
+      "kind": null,
+      "description": "источник не подтверждён"
+    }
+  },
+  "closure": {
+    "counts": {
+      "validator": 8,
+      "judge": 5,
+      "writer": 0,
+      "human": 0
+    },
+    "by_gate": {
+      "intake_completeness": "validator",
+      "concurrency_preflight": "validator",
+      "discovery_completeness": "judge",
+      "requirements": "validator",
+      "specification": "validator",
+      "event_contract_consistency": "validator",
+      "plan_readiness": "validator",
+      "implementation_verification": "validator",
+      "code_review": "judge",
+      "security": "judge",
+      "architecture_review": "judge",
+      "deploy_readiness": "validator",
+      "stakeholder_readiness": "judge"
+    },
+    "machine_checked": [
+      "concurrency_preflight",
+      "deploy_readiness",
+      "event_contract_consistency",
+      "implementation_verification",
+      "intake_completeness",
+      "plan_readiness",
+      "requirements",
+      "specification"
+    ],
+    "judged_or_human": [
+      "architecture_review",
+      "code_review",
+      "discovery_completeness",
+      "security",
+      "stakeholder_readiness"
+    ],
+    "by_source": {
+      "intake_completeness": "deterministic",
+      "concurrency_preflight": "deterministic",
+      "discovery_completeness": "ai_judgment",
+      "requirements": "deterministic",
+      "specification": "deterministic",
+      "event_contract_consistency": "deterministic",
+      "plan_readiness": "deterministic",
+      "implementation_verification": "deterministic",
+      "code_review": "ai_judgment",
+      "security": "ai_judgment",
+      "architecture_review": "ai_judgment",
+      "deploy_readiness": "deterministic",
+      "stakeholder_readiness": "ai_judgment"
+    },
+    "deterministic": [
+      "concurrency_preflight",
+      "deploy_readiness",
+      "event_contract_consistency",
+      "implementation_verification",
+      "intake_completeness",
+      "plan_readiness",
+      "requirements",
+      "specification"
+    ],
+    "ai_judgment": [
+      "architecture_review",
+      "code_review",
+      "discovery_completeness",
+      "security",
+      "stakeholder_readiness"
+    ],
+    "human": []
+  },
+  "evidence_verdict": {
+    "verified": false,
+    "deterministic": [],
+    "ai_judgment": [],
+    "advisory": [],
+    "human": [],
+    "unknown": [],
+    "reason": "нет пройденных гейтов — верифицировать нечего"
+  },
+  "gate_results": [
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "intake_completeness",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "валидатор 'validate-intake' не запущен или evidence не предоставлен"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "intake-classifier",
+      "review_mode": "writer",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "concurrency_preflight",
+      "status": "warn",
+      "blocking": false,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [],
+      "warnings": [
+        "валидатор 'validate-concurrency' не запущен или evidence не предоставлен"
+      ],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "intake-classifier",
+      "review_mode": "writer",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "discovery_completeness",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "нет заключения reviewer (product-reviewer) — гейт не пройден"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "product-reviewer",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "requirements",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "валидатор 'validate-requirements' не запущен или evidence не предоставлен"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "requirements-reviewer",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "specification",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "валидатор 'openspec-validate-strict' не запущен или evidence не предоставлен"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "final-verifier",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "event_contract_consistency",
+      "status": "warn",
+      "blocking": false,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [],
+      "warnings": [
+        "валидатор 'validate-event-catalog' не запущен или evidence не предоставлен"
+      ],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "solution-architect",
+      "review_mode": "writer",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "plan_readiness",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "валидатор 'validate-plan' не запущен или evidence не предоставлен"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "plan-reviewer",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "implementation_verification",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "валидатор 'validate-evidence' не запущен или evidence не предоставлен"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "final-verifier",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "code_review",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "нет заключения reviewer (code-reviewer) — гейт не пройден"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "code-reviewer",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "security",
+      "status": "fail",
+      "blocking": true,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [
+        "нет заключения reviewer (security-reviewer) — гейт не пройден"
+      ],
+      "warnings": [],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "security-reviewer",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": "FACT",
+      "schema_version": 1,
+      "gate": "architecture_review",
+      "status": "pass",
+      "blocking": false,
+      "awaiting_human": false,
+      "scope": [
+        "not_applicable"
+      ],
+      "checks": [],
+      "blockers": [],
+      "warnings": [
+        "гейт неприменим: нет ни одного сигнала ['architecture_change', 'new_service', 'cross_boundary_change', 'breaking_api', 'data_migration', 'new_integration', 'deployment_change'] — не оценивался (honest skip)"
+      ],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "architecture-reviewer",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": "FACT",
+      "schema_version": 1,
+      "gate": "deploy_readiness",
+      "status": "pass",
+      "blocking": false,
+      "awaiting_human": false,
+      "scope": [
+        "not_applicable"
+      ],
+      "checks": [],
+      "blockers": [],
+      "warnings": [
+        "гейт неприменим: нет ни одного сигнала ['deployment_change', 'new_service', 'infrastructure_change'] — не оценивался (honest skip)"
+      ],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "devops-engineer",
+      "review_mode": "writer",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    },
+    {
+      "provenance": null,
+      "schema_version": 1,
+      "gate": "stakeholder_readiness",
+      "status": "warn",
+      "blocking": false,
+      "awaiting_human": false,
+      "checks": [],
+      "blockers": [],
+      "warnings": [
+        "нет заключения reviewer (product-manager) — гейт не пройден"
+      ],
+      "evidence": [],
+      "tested_revision": null,
+      "owner": "product-manager",
+      "review_mode": "read-only",
+      "created_at": null,
+      "expires_at": null,
+      "override": null
+    }
+  ],
+  "unmet_gates": [
+    "intake_completeness",
+    "discovery_completeness",
+    "requirements",
+    "specification",
+    "plan_readiness",
+    "implementation_verification",
+    "code_review",
+    "security"
+  ],
+  "blocked": true
+}
