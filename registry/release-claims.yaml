@@ -5,7 +5,7 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 4.10.0
+version: 4.10.1
 # Поле `phase` УБРАНО (04.09.2026, лента release-metadata). Это была свободная проза релиза, которая
 # дублировала заголовок раздела CHANGELOG. `release_bump` бампает ЧИСЛО версии по всем поверхностям и
 # пишет заголовок CHANGELOG из `--title`, но `phase` не трогал, а `validate_release_claims` проверяет
@@ -28,7 +28,7 @@ version: 4.10.0
 # зелёный, в дочки не обкатан). Минор 4.3 остаётся заработанным stable по своим тегам (cockpit +
 # live-587, ниже), и дочки на stable-политике продолжают резолвиться на 4.3.x. Промоут 4.4 в stable —
 # после живого внешнего прогона (P0 №7 направления one-feature-end-to-end), который и даст field_evidence.
-channel: qualification
+channel: stable
 channels:
   edge:
     what: "то, что влито в main; лучший известный код, но без гарантий"
@@ -165,6 +165,34 @@ field_evidence:
     caveat: >-
       Прогон owner-led (владелец, не «человек совсем со стороны»); засчёт направления
       one-feature-end-to-end сделан владельцем. Отчёт: qualification/ONE-FEATURE-EXTERNAL-RUN-ii-sreda-2026-09-16.md.
+  - repo: ii-sreda
+    version: 4.10.0
+    date: '2026-10-06'
+    outcome: ok
+    how: >-
+      Обновление 4.9.3 -> 4.10.0 из тега v4.10.0 (593acf28c802) доставлено PR #1103;
+      все 15 PR checks успешны, merge f28f0c4d675c. На main 682 managed-файла без
+      расхождений SHA256; doctor/validate/next exit 0. Сохранены qualification/pr,
+      auto_update=false, диапазон и self-hosted раннеры. Подробности:
+      qualification/FIELD-UPDATES-4.10.0-2026-10-06.md.
+    caveat: >-
+      Обкатка установки, не доказательство качества модели или продуктовой пользы.
+      Замечания kit-doctor о документации и старом долге поставки не скрыты.
+      main CodeQL, secret-scan и продуктовый CI успешны; advisory OpenSSF Scorecard
+      не выполнен: контейнер linux/amd64 несовместим с ARM64-раннером (run 37438141493).
+  - repo: personal-cosmic-book
+    version: 4.10.0
+    date: '2026-10-06'
+    outcome: ok
+    how: >-
+      Обновление 4.9.3 -> 4.10.0 из того же релизного тега доставлено PR #17;
+      все PR checks и девять main workflow успешны, merge f0d5eb487851.
+      На main 682 managed-файла без расхождений SHA256; doctor/validate/next exit 0;
+      продуктовые тесты 33 passed, 1 skipped. Политика qualification/pr и контекст
+      сохранены. Подробности: qualification/FIELD-UPDATES-4.10.0-2026-10-06.md.
+    caveat: >-
+      Живые книги, внешние провайдеры, платежи и бизнес-эффект не проверялись.
+      Старые заготовки архитектуры/безопасности остаются ограничениями.
 # patch_note ПЕРЕЕХАЛ в `registry/release-notes.yaml` (20.08.2026, работа
 # `release-claims-stays-in-the-kit`): 61 336 Б релизной прозы — 75% этого файла — ехали в
 # каждую дочку, где их не читает ни одна строка кода. Здесь остался тот, кого дочка
