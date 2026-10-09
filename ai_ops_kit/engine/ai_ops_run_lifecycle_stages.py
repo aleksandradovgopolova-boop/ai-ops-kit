@@ -204,7 +204,9 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
         _out = sum(s.get("output_tokens") or 0 for s in _stats)
         _lat = round(sum(s.get("latency_s") or 0 for s in _stats), 3)
         _costs = [s.get("cost_usd_est") for s in _stats if s.get("cost_usd_est") is not None]
-        _cost = round(sum(_costs), 6) if _costs else None
+        # Частичный учёт не становится полной ценой прогона: отдельные
+        # известные вызовы сохраняются в ledger, итог при пропуске unavailable.
+        _cost = round(sum(_costs), 6) if len(_costs) == len(_stats) else None
         _cost_rep = {"calls": len(_stats), "input_tokens": _in, "output_tokens": _out,
                      "latency_s": _lat, "cost_usd_est": _cost, "model": model}
         rep["cost"] = _cost_rep

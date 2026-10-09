@@ -105,3 +105,21 @@ class TestCompareConfigs:
              "delivered_verified": True}},
             {"name": "cheap-but-failed", "attempt": {"calls_cost": 0.10, "delivered_verified": False}}])
         assert "cheap-but-failed" in cmp["excluded_no_verified_change"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("attempt", [{}, {"calls_cost": None}, {"calls_cost": 1, "retry_cost": None}])
+def test_unknown_change_price_is_unavailable(attempt):
+    result = cost_per_successful_change({**attempt, "delivered_verified": True})
+    assert result["total_cost"] is None
+    assert result["cost_per_change"] is None
+
+
+@pytest.mark.unit
+def test_unknown_price_cannot_win_configuration_ranking():
+    result = compare_configs([
+        {"name": "unknown", "attempt": {"calls_cost": None, "delivered_verified": True}},
+        {"name": "known", "attempt": {"calls_cost": 1, "delivered_verified": True}}])
+    assert result["cheapest_qualified"] == "known"
+    assert [row["name"] for row in result["ranking"]] == ["known"]
+    assert result["excluded_unknown_cost"] == ["unknown"]

@@ -20,6 +20,7 @@ CLI:  cost_account.py <budget.(yaml|json)> <run_cost.(json|yaml)> [--iterations 
 """
 from __future__ import annotations
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -77,13 +78,19 @@ def cost_per_successful_change(attempt: dict) -> dict:
     ручное вмешательство. attempt: {calls_cost, retry_cost, reviewer_cost, escalation_cost, latency_s,
     manual_interventions, delivered_verified: bool}. Не доставлено+проверено -> cost_per_change=None
     (стоимость без результата = чистые потери, не «дёшево»)."""
-    total = round(sum(float(attempt.get(k, 0) or 0)
-                      for k in ("calls_cost", "retry_cost", "reviewer_cost", "escalation_cost")), 6)
+    # Основная цена обязательна для известной суммы. Дополнительные компоненты
+    # по прежнему контракту по умолчанию нулевые; явный None означает неизвестность.
+    components = [attempt.get("calls_cost")] + [
+        attempt.get(key, 0) for key in ("retry_cost", "reviewer_cost", "escalation_cost")]
+    known = all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(value) and value >= 0 for value in components)
+    total = round(sum(components), 6) if known else None
     delivered = bool(attempt.get("delivered_verified"))
     return {"total_cost": total, "delivered_verified": delivered,
             "cost_per_change": (total if delivered else None),
             "latency_s": attempt.get("latency_s"), "manual_interventions": attempt.get("manual_interventions", 0),
-            "note": ("успешное проверенное изменение" if delivered
+            "note": ("AI-цена unavailable -> стоимость неизвестна, не 0" if total is None
+                     else "успешное проверенное изменение" if delivered
                      else "нет успешного проверенного изменения -> стоимость = потери (не экономия)")}
 
 
@@ -122,21 +129,26 @@ def cost_per_successful_outcome(attempt: dict, *, human_attention_cost_usd=None)
       * ставка не задана ИЛИ число вмешательств неизвестно -> человеческий компонент `None`
         (unavailable), нагруженная стоимость помечена нижней границей (`lower_bound=True`),
         но AI-часть не обнуляется и не выдаётся за полную;
+      * основная AI-цена отсутствует/None либо компонент неизвестен/недопустим ->
+        AI и нагруженная стоимость None (unavailable), complete=False;
       * инвариант «провал = чистые потери» сохранён: не доставлено+проверено -> `cost_per_outcome=None`.
     latency несётся сырьём у AI-метрики (наблюдаемость), в деньги здесь НЕ конвертируется —
     машинное время стены не равно вниманию человека.
     """
-    ai = cost_per_successful_change(attempt)
-    ai_total = ai["total_cost"]
+    ai_total = cost_per_successful_change(attempt)["total_cost"]
     mi = attempt.get("manual_interventions")
     mi = mi if isinstance(mi, int) and not isinstance(mi, bool) and mi >= 0 else None
     rate = human_attention_cost_usd
     rate = float(rate) if isinstance(rate, (int, float)) and not isinstance(rate, bool) and rate >= 0 else None
     human = round(mi * rate, 6) if (mi is not None and rate is not None) else None
-    complete = human is not None
-    loaded = round(ai_total + (human or 0.0), 6)
+    complete = ai_total is not None and human is not None
+    loaded = round(ai_total + (human or 0.0), 6) if ai_total is not None else None
     delivered = bool(attempt.get("delivered_verified"))
-    if not delivered:
+    if ai_total is None:
+        note = "AI-цена unavailable -> полная стоимость неизвестна, не 0"
+        if not delivered:
+            note += "; нет успешного проверенного исхода — затраты не объявляются экономией"
+    elif not delivered:
         note = "нет успешного проверенного исхода -> нагруженная стоимость = потери (не экономия)"
     elif complete:
         note = f"нагруженная стоимость исхода: AI {ai_total:g}$ + внимание человека {human:g}$"
@@ -203,10 +215,12 @@ def compare_configs(configs) -> dict:
     cost_per_change (безопасность важнее экономии — не-доставившие исключаются, не считаются «дешёвыми»).
     configs: [{name, attempt}]. -> {ranking, cheapest_qualified, excluded}."""
     rows = [{"name": c.get("name"), **cost_per_successful_change(c.get("attempt") or {})} for c in configs]
-    qualified = sorted((r for r in rows if r["delivered_verified"]), key=lambda r: r["cost_per_change"])
+    qualified = sorted((r for r in rows if r["delivered_verified"] and r["cost_per_change"] is not None), key=lambda r: r["cost_per_change"])
     excluded = [r["name"] for r in rows if not r["delivered_verified"]]
     return {"ranking": qualified, "cheapest_qualified": (qualified[0]["name"] if qualified else None),
-            "excluded_no_verified_change": excluded}
+            "excluded_no_verified_change": excluded,
+            "excluded_unknown_cost": [r["name"] for r in rows
+                                      if r["delivered_verified"] and r["cost_per_change"] is None]}
 
 
 def _load(p: Path):
