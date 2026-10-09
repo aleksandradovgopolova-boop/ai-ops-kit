@@ -82,9 +82,9 @@ def test_unsuccessful_change_is_honest_not_divide_by_zero(tmp_path):
 def test_cost_unknown_does_not_crash(tmp_path):
     """Провайдер не вернул стоимость (cost_usd_est=None) -> roid считается без падения."""
     rep = _finalize(tmp_path, ready_for_pr=True, cost_usd_est=None)
-    # cost_account трактует отсутствие стоимости как 0 (total_cost=0), исход при этом честен.
     assert rep["roid"]["delivered_verified"] is True
-    assert rep["roid"]["total_cost"] == 0
+    assert rep["roid"]["total_cost"] is None
+    assert rep["roid"]["cost_per_successful_change"] is None
 
 
 def _load_dormant_module():
@@ -104,3 +104,27 @@ def test_cost_account_is_wired_no_longer_dormant():
         "cost_account обязан иметь хотя бы один не-тестовый импортёр (проведён в контур прогона)"
     assert name not in tdi.KNOWN_DORMANT, "проведённый в контур модуль обязан уйти из KNOWN_DORMANT"
     assert name not in tdi._dormant_now(), "cost_account больше не должен числиться дормантным"
+
+
+def test_mixed_known_and_unknown_call_prices_do_not_become_complete_outcome(tmp_path):
+    import json
+
+    (tmp_path / ".ai-ops.yaml").write_text(
+        "engineering_operating_model:\n  economics:\n"
+        "    human_attention_cost_per_intervention_usd: 1.25\n", encoding="utf-8")
+    journal = tmp_path / "lifecycle-journal.jsonl"
+    stats = [{"input_tokens": 10, "output_tokens": 5, "latency_s": 1,
+              "cost_usd_est": cost} for cost in (1.0, None)]
+    report = {"ready_for_pr": True, "manual_interventions": 2}
+    _finalize_run_cost(
+        report, _FakeOrchestrator(stats), model="test-model", jname=journal,
+        fid="wi-mixed", attempt_id="a1", signals={"task_type": "feature"},
+        plan={"base_workflow": "standard"}, model_resolution={}, child_root=tmp_path)
+    records = [json.loads(line) for line in journal.read_text().splitlines()]
+    cost_record = next(record for record in records if record["kind"] == "run_cost")
+    assert cost_record["calls"] == 2
+    assert cost_record["cost_usd_est"] is None
+    assert report["cost"]["cost_usd_est"] is None
+    assert report["roid_outcome"]["human_attention_cost"] == 2.5
+    assert report["roid_outcome"]["complete"] is False
+    assert report["roid_outcome"]["cost_per_successful_outcome"] is None
