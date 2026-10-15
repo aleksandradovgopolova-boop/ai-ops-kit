@@ -19,6 +19,51 @@ kind: delivery-plan-history
 
 
 work:
+  - id: human-intents-follow-field-friction
+    title: Обычная задача проходит через существующий вход без выбора внутреннего конвейера
+    type: product
+    goal: first-hour-for-a-stranger
+    status: done
+    closed_at: "2026-10-15"
+    issue: 1239
+    pr: 1285
+    owner_role: product
+    value: medium
+    depends_on: []
+    write_scope:
+    - README.md
+    - docs/QUICKSTART.md
+    - commands/
+    - templates/
+    - qualification/
+    rationale: 'P1. По трём полевым журналам выбрать до шести обычных намерений; сопоставить существующим входам, отделить advanced-справочник, устранить самые частые тупики и повторить сценарий. Приёмка: пользователь задаёт реальную задачу словами, не выбирает роли/workflow/gates и не правит внутренние YAML; журнал называет вмешательства и пределы автоматизации. Команды не удаляются; новый parser не строится без выявленного разрыва. qualification/PRODUCT-REVIEW-NEXT-WAVE-2026-10-05.md'
+    result: >-
+      Шесть намерений из трёх журналов сопоставлены существующим входам; advanced отделён; реальный запрос словами → AI-работа #1201 доставлен #1291 без выбора внутренних ролей пользователем. Одно уточнение скопа сохранено, неизвестные минуты не ноль. Зависимость #1256 явно репланирована: три качественных журнала доступны, количественный pass #1256 не заявляется. qualification/FIRST-HOUR-INTENTS-AND-VIEW-DELIVERY-2026-10-15.md
+
+  - id: five-question-product-view-brief
+    title: Существующий пульт отвечает на пять вопросов и предлагает одну следующую работу
+    type: product
+    goal: first-hour-for-a-stranger
+    status: done
+    closed_at: "2026-10-15"
+    issue: 1240
+    pr: 1286
+    owner_role: product
+    value: medium
+    depends_on:
+    - human-intents-follow-field-friction
+    write_scope:
+    - qualification/
+    # 15.10: прямой запрос реализовать все открытые issues включает доработку
+    # существующего пульта, а не только brief; приёмка/зависимости сохранены.
+    - dashboard/
+    # Workflow: только fetch-depth для блока последних изменений; существующие
+    # permissions, environment и назначение deploy не расширяются.
+    - .github/workflows/status-dashboard.yml
+    rationale: 'P1. Проверить существующий пульт кита на вопросы где/зачем/что мешает/что изменилось/что дальше; записать разрывы и конкретный brief до реализации. Три сценария показывают одну рекомендацию и не более двух альтернатив, источники и unknown/degraded сохранены; ручное дублирование плана не требуется. Это доработка спецификации существующего пульта, не новый dashboard; распространение в дочки #1201 остаётся после доработки кита. qualification/PRODUCT-REVIEW-NEXT-WAVE-2026-10-05.md'
+    result: >-
+      Аудит/brief до кода #1285; существующий пульт доработан #1286; снимок и history depth3 #1289. Три сценария и публикация проверены; одна рекомендация ≤2 альтернатив, источники/unknown/degraded сохранены. P2 Markdown-labels явно задокументирован. #1201 выполнен после доставки родителя. qualification/FIRST-HOUR-INTENTS-AND-VIEW-DELIVERY-2026-10-15.md
+
   - id: runtime-qualification-boundaries
     title: Человек видит подтверждённую степень автоматизации каждого исполнителя
     type: quality
