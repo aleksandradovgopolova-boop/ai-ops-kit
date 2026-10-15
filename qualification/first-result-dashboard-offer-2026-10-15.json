@@ -1,0 +1,37 @@
+{
+  "issue": 1201,
+  "executor": "AI / Codex",
+  "registered_at": "2026-10-15T14:43:49.331435+00:00",
+  "measured_segment": "implementation after initial source inspection",
+  "pre_registration_inspection": "not timed",
+  "result_at": null,
+  "usd": null,
+  "usd_status": "unavailable",
+  "human_active_minutes": null,
+  "owner_acceptance": "not inferred",
+  "counts_toward_child_cohort": false,
+  "implementation_ready_at": "2026-10-15T14:58:56.839364+00:00",
+  "registration_to_implementation_ready_seconds": 907.507929,
+  "elapsed_is_not_active_work": true,
+  "focused_tests": {
+    "passed": 32,
+    "seconds": 3.65
+  },
+  "verification_status": "full-current-python and focused passed; GitHub CI/delivery pending",
+  "observed_human_corrections_since_registration": 0,
+  "earlier_parent_scope_correction_count": 1,
+  "native_review_invocations": 2,
+  "native_cli_reported_review_tokens": [
+    68215,
+    89405
+  ],
+  "native_cli_token_basis": "CLI summaries; cached split and invoice unavailable, not total task tokens",
+  "technical_ready_at": "2026-10-15T16:43:10.095468+00:00",
+  "full_current_python": {
+    "passed": 9095,
+    "skipped": 35,
+    "warnings": 2,
+    "seconds": 858.74,
+    "python": "CPython 3.14.7 / darwin"
+  }
+}

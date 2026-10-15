@@ -158,3 +158,115 @@ def test_write_result_skips_when_no_result(tmp_path):
     rel = FH.write_result(tmp_path, {"stage": FH.BLOCKED_UNDERSTANDING, "classification": "UNKNOWN"})
     assert rel is None
     assert not (tmp_path / FH.RESULT_REL).exists()
+
+
+def test_applied_result_offers_dashboard_in_all_existing_outputs(tmp_path, monkeypatch):
+    import ai_ops_kit.planning.product_bootstrap as boot
+    import ai_ops_kit.planning.next_work as nw
+    monkeypatch.setattr(boot, "plan", lambda *a, **k: {})
+    monkeypatch.setattr(boot, "apply", lambda *a, **k: {"written": [], "work_items": 1})
+    monkeypatch.setattr(nw, "compute", lambda *a, **k: {"plan_present": True, "next_best": {"id": "work"}})
+    res = FH.run(tmp_path, apply=True, understanding=_und())
+    assert res["dashboard_offer"]["request"] == "Создай пульт продукта"
+    assert "пульт продукта" in " ".join(PF.from_first_hour(res)["next"])
+    FH.write_result(tmp_path, res)
+    assert "Создай пульт продукта" in (tmp_path / FH.RESULT_REL).read_text()
+    assert not (tmp_path / "dashboard").exists()
+    assert not (tmp_path / ".github/workflows/status-dashboard.yml").exists()
+
+
+def test_preview_has_no_dashboard_offer(tmp_path, monkeypatch):
+    import ai_ops_kit.planning.product_bootstrap as boot
+    monkeypatch.setattr(boot, "plan", lambda *a, **k: {})
+    res = FH.run(tmp_path, understanding=_und())
+    assert not res.get("dashboard_offer")
+    assert "Создай пульт продукта" not in FH.render_result_markdown(res)
+
+
+def test_failed_apply_or_invalid_plan_has_no_dashboard_offer(tmp_path, monkeypatch):
+    import ai_ops_kit.planning.product_bootstrap as boot
+    import ai_ops_kit.planning.next_work as nw
+    monkeypatch.setattr(boot, "plan", lambda *a, **k: {})
+    monkeypatch.setattr(boot, "apply", lambda *a, **k: {"error": "cannot write"})
+    assert not FH.run(tmp_path, apply=True, understanding=_und()).get("dashboard_offer")
+    monkeypatch.setattr(boot, "apply", lambda *a, **k: {"written": []})
+    monkeypatch.setattr(nw, "compute", lambda *a, **k: {"plan_errors": ["invalid"]})
+    assert not FH.run(tmp_path, apply=True, understanding=_und()).get("dashboard_offer")
+
+
+def test_real_bootstrap_and_repeat_do_not_create_or_overwrite_dashboard(tmp_path):
+    from pathlib import Path
+    import ai_ops_kit.planning.product_bootstrap as boot
+
+    marker = tmp_path / "dashboard/index.html"
+    marker.parent.mkdir()
+    marker.write_text("existing product dashboard")
+    boot.apply(tmp_path, understanding=_und())
+    plan = tmp_path / "planning/plan.yaml"
+    roadmap = tmp_path / "ROADMAP.md"
+    plan.write_text(plan.read_text() + "\n# existing owner note\n")
+    roadmap.write_text(roadmap.read_text() + "\n<!-- existing owner note -->\n")
+    before = {p: p.read_bytes() for p in (plan, roadmap)}
+    before_files = {p.relative_to(tmp_path): p.read_bytes()
+                    for p in tmp_path.rglob("*") if p.is_file()}
+    for _ in range(2):
+        res = FH.run(tmp_path, apply=True, understanding=_und())
+        assert res["next"]["plan_present"] is True
+        assert not res["next"].get("plan_errors")
+        assert res["dashboard_offer"]
+        rel = FH.write_result(tmp_path, res)
+        assert "Создай пульт продукта" in (tmp_path / rel).read_text()
+        assert {p: p.read_bytes() for p in before} == before
+        after_files = {p.relative_to(tmp_path): p.read_bytes()
+                       for p in tmp_path.rglob("*") if p.is_file()}
+        assert set(after_files) == set(before_files) | {Path(FH.RESULT_REL)}
+        assert all(after_files[p] == data for p, data in before_files.items())
+    assert marker.read_text() == "existing product dashboard"
+    assert not (tmp_path / ".github").exists()
+
+
+def test_unreadable_or_unanswered_first_hour_never_offers_dashboard(tmp_path):
+    for und in (_und(cls="UNKNOWN"), _und(questions=[{"blocks_work": True}]),
+                _und(conflicts=[{"category": "goal", "summary": "conflict"}])):
+        res = FH.run(tmp_path, apply=True, understanding=und)
+        assert not res.get("dashboard_offer")
+        assert "Создай пульт продукта" not in (FH.render_result_markdown(res) or "")
+    assert not (tmp_path / "planning").exists()
+
+
+def test_real_model_cli_exposes_offer_in_json_file_and_rendered_output(tmp_path):
+    import json
+    import yaml
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    script = Path(__file__).resolve().parents[2] / "ai_ops_kit/cli/ai_ops_cli.py"
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+    def cli(*extra):
+        result = subprocess.run(
+            [sys.executable, str(script), "model", str(tmp_path), "--flow", "--apply", *extra],
+            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
+        assert result.returncode == 0, result.stderr
+        return result.stdout
+
+    (tmp_path / "README.md").write_text("# Bonus calculator\n\nCalculates employee bonuses.\n")
+    (tmp_path / "main.py").write_text("def bonus(amount):\n    return amount * 0.1\n")
+    answers = tmp_path / ".ai/project/onboarding-answers.yaml"
+    answers.parent.mkdir(parents=True)
+    answers.write_text(yaml.safe_dump({"answers": {
+        "primary_user": "Finance analyst", "main_problem": "Avoid manual bonus spreadsheets",
+        "key_scenarios": "Calculate a bonus and export a report",
+        "main_goal_now": "Make bonus reports reliable",
+        "next_outcome": "Analyst sees one correct bonus report",
+        "forbidden_without_approval": "Delete data or publish externally",
+        "protected_paths": "production/"}}))
+    res = json.loads(cli("--json"))
+    assert res["stage"] == "ready", res.get("blocking_questions")
+    assert res["dashboard_offer"]["request"] == "Создай пульт продукта"
+    assert "Создай пульт продукта" in (tmp_path / FH.RESULT_REL).read_text()
+    assert "Создай пульт продукта" in cli()
+    assert not (tmp_path / "dashboard").exists()
