@@ -215,17 +215,19 @@ def sections(repo_root: Path, evidence: dict | None = None) -> dict:
 
 
 def _tech_health(ev: dict) -> dict:
-    """Техническое здоровье из наблюдаемого: CI + тесты. unknown, если дерево нечитаемо."""
+    """Inventory показывает наличие проверок, но не результат их исполнения (#1257)."""
     if not ev.get("tree_readable"):
         return {"state": UNKNOWN, "band": "unknown", "reason": "дерево репозитория нечитаемо"}
     ci = bool(ev.get("ci"))
     tests = (ev.get("test_files") or 0) > 0
     if ci and tests:
-        return {"state": INFERRED, "band": "Green", "reason": "есть CI и тесты"}
-    if ci or tests:
-        return {"state": INFERRED, "band": "Yellow",
-                "reason": "есть " + ("CI, но тестов не видно" if ci else "тесты, но CI не найден")}
-    return {"state": INFERRED, "band": "Red", "reason": "ни CI, ни тестов не найдено"}
+        inventory = "есть CI и тесты"
+    elif ci or tests:
+        inventory = "есть " + ("CI, но тестов не видно" if ci else "тесты, но CI не найден")
+    else:
+        inventory = "ни CI, ни тестов не найдено"
+    return {"state": UNKNOWN, "band": "unknown",
+            "reason": inventory + "; результаты прогонов не проверены"}
 
 
 def _product_metrics_defined(root: Path) -> bool:
