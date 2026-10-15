@@ -51,6 +51,8 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 3  # последние три изменения для пульта, без полной истории
 
       - uses: actions/setup-python@v7
         with:
