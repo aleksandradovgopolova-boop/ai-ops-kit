@@ -1,0 +1,43 @@
+{
+  "date": "2026-10-15",
+  "runtime": "codex-cli 0.147.0",
+  "model": "gpt-5.6-terra",
+  "scope": "AI read-only intent replay, not owner-led acceptance",
+  "command_count": 5,
+  "commands": [
+    {
+      "exit_code": 0,
+      "command_sha256": "f2abba23330ad5427019ed08fc15179716de674bc0b425092460b1f426fa084f"
+    },
+    {
+      "exit_code": 0,
+      "command_sha256": "4e072b19de80cbe87c0e82e5ae09f4d1fb1ad6e18613bebf0052eba2616ff5fb"
+    },
+    {
+      "exit_code": 0,
+      "command_sha256": "d5d42f41610aebbd5f6002a2e1aa85d45d07ee70a9e42618d61904bfe83ffa84"
+    },
+    {
+      "exit_code": 0,
+      "command_sha256": "2e9ab2217a918209f18bcad7bda6c9a634e412a772f8100ddd5eaac9588c41f4"
+    },
+    {
+      "exit_code": 0,
+      "command_sha256": "f0cf2da03c0f9bcf8005437496fde647af5aa952f1b50ccc702c3de335d82475"
+    }
+  ],
+  "native_usage": {
+    "input_tokens": 247010,
+    "cached_input_tokens": 193024,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 1825,
+    "reasoning_output_tokens": 339
+  },
+  "cost_usd": null,
+  "cost_status": "unavailable",
+  "raw_answer_sha256": "9567bd4e3cb5faf070a89338202df0d08db751e60d05451940e5b388a5e4163b",
+  "normalized_answer": "qualification/HUMAN-INTENTS-REPLAY-2026-10-15.md",
+  "changes": "absolute paths normalized to immutable source commit links; raw answer hash retained",
+  "raw_stream_sha256": "3c7897155f62c560349d7f51e093ca60793892dc9bc43bce8db7faeb4fd49bdf",
+  "source_commit": "9cab0d43458640db306ddae50add014e23657875"
+}
