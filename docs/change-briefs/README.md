@@ -24,3 +24,5 @@
 же разделами (мотив, объём, доказательства, риск), — [`../audit-report.md`](../audit-report.md).
 
 - [Цена принятой работы — #1276](1276-accepted-work-economics.md).
+
+- [Границы автоматизации — #1241](1241-runtime-qualification-boundaries.md).
