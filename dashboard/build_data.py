@@ -147,7 +147,7 @@ def _health_from_passport(sections):
         return out
     val = next((s["value"] for s in sections if s["name"].startswith("Здоровье")), "") or ""
     def sig(label):
-        m = re.search(label + r"[^.]*?\*\*(Green|Yellow|Red)\*\*", val)
+        m = re.search(label + r"[^.]*?\*\*(Green|Yellow|Red|unknown)\*\*", val)
         if m:
             return m.group(1).lower()
         # Кит формулирует «нет вердикта» по-разному — все варианты читаем как unknown.
@@ -196,11 +196,48 @@ def discovery(root: Path):
     }
 
 
-def _plan(root: Path):
-    if not yaml:
+def next_action(root: Path):
+    """Существующий next_work — единственный источник ранжирования пульта."""
+    source = None
+    script = ("import json,sys\n"
+              "from ai_ops_kit.planning import next_work, delivery_plan\n"
+              "root=sys.argv[1]\n"
+              "print(json.dumps({'source':delivery_plan.plan_rel(root), 'report':next_work.compute(root)}, ensure_ascii=False))\n")
+    try:
+        result = subprocess.run([sys.executable, "-c", script, str(root)],
+                                cwd=root, capture_output=True, text=True, timeout=60)
+        data = json.loads(result.stdout)
+        source, rep = data["source"], data["report"]
+        if (result.returncode or not rep.get("plan_present") or rep.get("plan_is_template")
+                or rep.get("plan_errors") or (rep.get("roadmap") or {}).get("errors")):
+            return {"state": "degraded", "source": source, "report": None,
+                    "reason": rep.get("gap") or "план не прошёл проверку"}
+        row = lambda x: {k: x.get(k) for k in ("id", "title", "why", "unblocks")} if x else None
+        stale = rep.get("staleness") or {}
+        view = {"next_best": row(rep.get("next_best")), "ready": [row(x) for x in rep.get("ready", [])[:3]],
+                "staleness": {"plan_behind": bool(stale.get("plan_behind")), "unknown": bool(stale.get("error"))}}
+        return {"state": "known", "source": source, "report": view}
+    except Exception as exc:  # noqa: BLE001 — отказ источника показывается, не скрывается
+        return {"state": "unavailable", "source": source, "report": None,
+                "reason": f"следующая работа не определена ({type(exc).__name__})"}
+
+
+def recent_changes(root: Path):
+    """Git-изменения, а не заявление измеренного продуктового эффекта."""
+    try:
+        result = subprocess.run(["git", "-C", str(root), "log", "-3", "--format=%H%x00%s%x00%cI"],
+                                capture_output=True, text=True, check=True, timeout=10)
+        rows = [line.split("\0", 2) for line in result.stdout.splitlines()]
+        return [{"sha": sha, "title": title, "date": date} for sha, title, date in rows]
+    except Exception:  # noqa: BLE001 — отсутствие Git не подменяется пустой успешной историей
+        return None
+
+
+def _plan(root: Path, rel="planning/plan.yaml"):
+    if not yaml or not rel:
         return None
     try:
-        return yaml.safe_load(_read(root, "planning/plan.yaml")) or {}
+        return yaml.safe_load(_read(root, rel)) or {}
     except Exception:  # noqa: BLE001
         return None
 
@@ -218,7 +255,8 @@ def goals(plan):
 
 def waiting_on_owner(plan):
     wk = (plan or {}).get("work", []) or []
-    return [{"id": w.get("id"), "title": w.get("title") or w.get("id")}
+    return [{"id": w.get("id"), "title": w.get("title") or w.get("id"),
+             "waiting_on": w.get("waiting_on"), "human_decision": w.get("human_decision"), "evidence": w.get("evidence")}
             for w in wk if w.get("status") == "waiting_on_owner"]
 
 
@@ -356,7 +394,7 @@ def tech_dimensions(root: Path):
     if yaml:
         try:
             ms = yaml.safe_load(_read(root, "packages/module-size-baseline.yaml")) or {}
-            n = len(ms.get("ceilings") or {})
+            n = len(ms["ceilings"]) if isinstance(ms.get("ceilings"), dict) else None
             thr = str(ms.get("threshold", thr))
         except Exception:  # noqa: BLE001
             n = None
@@ -567,7 +605,8 @@ def build_spine(root: Path, metrics_filled: bool):
 
 
 def build(root: Path) -> dict:
-    plan = _plan(root)
+    action = next_action(root)
+    plan = _plan(root, action.get("source"))
     psections = passport(root)
     pm = product_metrics_status(root)
     capmap = capability_map(root)
@@ -595,6 +634,7 @@ def build(root: Path) -> dict:
         },
         "goals": g,
         "current_focus": current_focus(plan),
+        "next_action": action, "recent_changes": recent_changes(root),
         "waiting_on_owner": waiting,
         "roadmap": road,
         "issues": open_issues(root),
@@ -616,7 +656,7 @@ def sync_snapshot(html_path: Path, data: dict) -> int:
     if not html_path.exists():
         return 0
     html = html_path.read_text(encoding="utf-8")
-    payload = "  const SNAPSHOT = " + json.dumps(data, ensure_ascii=False, indent=2) + ";"
+    payload = "  const SNAPSHOT = " + json.dumps(data, ensure_ascii=False, indent=2).replace("<", r"\u003c") + ";"
     new, n = re.subn(
         r"(/\* SNAPSHOT:BEGIN[^\n]*\*/\n).*?(\n\s*/\* SNAPSHOT:END \*/)",
         lambda m: m.group(1) + payload + m.group(2), html, flags=re.DOTALL)
