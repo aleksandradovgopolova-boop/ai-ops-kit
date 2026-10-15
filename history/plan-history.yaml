@@ -19,6 +19,25 @@ kind: delivery-plan-history
 
 
 work:
+  - id: runtime-qualification-boundaries
+    title: Человек видит подтверждённую степень автоматизации каждого исполнителя
+    type: quality
+    goal: first-hour-for-a-stranger
+    status: done
+    pr: 1282
+    owner_role: qa
+    value: medium
+    depends_on:
+    - first-hour-three-strangers-protocol
+    write_scope:
+    - README.md
+    - qualification/
+    rationale: 'P1. Свести текущие evidence в матрицу install/execute/review/hooks/parallel по исполнителям с версией, датой и источником каждой клетки. Unknown/unsupported/degraded не превращаются в pass; ручной PostToolUse не равен живой сессии. README описывает независимость процесса и различие автоматизации. Нет новых адаптеров или универсальных обещаний; архитектурная работа #611 остаётся отложенной. qualification/PRODUCT-REVIEW-NEXT-WAVE-2026-10-05.md'
+
+    closed_at: "2026-10-15"
+    evidence: qualification/RUNTIME-QUALIFICATION-MATRIX-2026-10-15.md
+    result: Матрица девяти runtime отделяет установку, исполнение, review, hooks и parallel; сохраняет версии, даты и неизвестность; README объясняет пределы автоматизации.
+
   - id: first-hour-three-strangers-protocol
     title: Владелец имеет измеримый сценарий первого часа в трёх репозиториях
     type: research
