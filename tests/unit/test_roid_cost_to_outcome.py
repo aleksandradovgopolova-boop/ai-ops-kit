@@ -128,3 +128,35 @@ def test_mixed_known_and_unknown_call_prices_do_not_become_complete_outcome(tmp_
     assert report["roid_outcome"]["human_attention_cost"] == 2.5
     assert report["roid_outcome"]["complete"] is False
     assert report["roid_outcome"]["cost_per_successful_outcome"] is None
+
+
+@pytest.mark.parametrize("ready", ["false", "true", 1, None])
+def test_lifecycle_rejects_nonboolean_success(tmp_path, ready):
+    rep = _finalize(tmp_path, ready_for_pr=ready, cost_usd_est=1)
+    assert rep["roid"]["delivered_verified"] is False
+    assert rep["roid"]["cost_per_successful_change"] is None
+    assert rep["roid"]["total_cost"] == 1
+    assert rep["roid_outcome"]["delivered_verified"] is False
+
+
+@pytest.mark.parametrize("costs", [[float("nan")], [float("inf")], [-1], [True],
+                                   ["1"], [1e308, 1e308], [10**400], [1, None]])
+def test_lifecycle_invalid_cost_is_unknown_in_report_and_journal(tmp_path, costs):
+    import json
+
+    journal = tmp_path / "lifecycle-journal.jsonl"
+    rep = {"ready_for_pr": True}
+    stats = [{"input_tokens": 1, "output_tokens": 1, "latency_s": 1,
+              "cost_usd_est": cost} for cost in costs]
+    _finalize_run_cost(
+        rep, _FakeOrchestrator(stats), model="test", jname=journal,
+        fid="invalid-cost", attempt_id="a1", signals={}, plan={},
+        model_resolution={}, child_root=tmp_path)
+    assert rep["cost"]["cost_usd_est"] is None
+    assert rep["roid"]["total_cost"] is None
+    assert rep["roid_outcome"]["cost_per_successful_outcome"] is None
+    json.dumps(rep, allow_nan=False)
+    records = [json.loads(line) for line in journal.read_text().splitlines()]
+    record = next(row for row in records if row["kind"] == "run_cost")
+    assert record["cost_usd_est"] is None
+    json.dumps(record, allow_nan=False)

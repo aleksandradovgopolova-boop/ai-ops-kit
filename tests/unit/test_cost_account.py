@@ -123,3 +123,82 @@ def test_unknown_price_cannot_win_configuration_ranking():
     assert result["cheapest_qualified"] == "known"
     assert [row["name"] for row in result["ranking"]] == ["known"]
     assert result["excluded_unknown_cost"] == ["unknown"]
+
+
+@pytest.mark.unit
+class TestEconomicInputsFailClosed:
+    @pytest.mark.parametrize("delivered", ["false", "true", "unknown", 1, 0, None, []])
+    def test_only_true_boolean_is_verified_delivery(self, delivered):
+        from ai_ops_kit.providers.cost_account import cost_per_successful_outcome
+        attempt = {"calls_cost": 1.0, "delivered_verified": delivered, "manual_interventions": 0}
+        change = cost_per_successful_change(attempt)
+        outcome = cost_per_successful_outcome(attempt, human_attention_cost_usd=0)
+        assert change["total_cost"] == 1.0
+        assert change["delivered_verified"] is False
+        assert change["cost_per_change"] is None
+        assert outcome["cost_per_outcome"] is None
+
+    def test_true_boolean_and_finite_cost_remain_measured(self):
+        from ai_ops_kit.providers.cost_account import estimate_vs_actual
+        assert cost_per_successful_change({"calls_cost": 2.0, "delivered_verified": True})["cost_per_change"] == 2.0
+        result = estimate_vs_actual({"estimate_status": "estimated", "cost_median": 1.0}, 2.0)
+        assert result["status"] == "measured" and result["delta_usd"] == 1.0
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), -1.0])
+    def test_invalid_actual_cost_is_not_measured(self, value):
+        from ai_ops_kit.providers.cost_account import estimate_vs_actual
+        result = estimate_vs_actual({"estimate_status": "estimated", "cost_median": 1.0}, value)
+        assert result["status"] == "unavailable"
+        assert result["actual_usd"] is None and result["delta_usd"] is None
+
+    @pytest.mark.parametrize("value", [float("nan"), float("inf"), -1.0])
+    def test_invalid_estimate_is_not_measured(self, value):
+        from ai_ops_kit.providers.cost_account import estimate_vs_actual
+        result = estimate_vs_actual({"estimate_status": "estimated", "cost_median": value}, 1.0)
+        assert result["status"] == "unavailable"
+        assert result["estimate_usd"] is None
+
+    @pytest.mark.parametrize("rate", [float("nan"), float("inf"), -1.0])
+    def test_invalid_human_rate_is_unavailable(self, rate):
+        from ai_ops_kit.providers.cost_account import cost_per_successful_outcome
+        result = cost_per_successful_outcome({"calls_cost": 1.0, "delivered_verified": True,
+                                              "manual_interventions": 0}, human_attention_cost_usd=rate)
+        assert result["human_attention_cost"] is None
+        assert result["complete"] is False
+
+    def test_report_file_keeps_failed_cost_without_accepted_price(self, tmp_path):
+        import json
+        from ai_ops_kit.providers.cost_account import estimate_vs_actual, roid_outcome_report
+        report = {"outcome": roid_outcome_report(1.0, 2.0, 0, "false", root=tmp_path),
+                  "comparison": estimate_vs_actual({"estimate_status": "estimated", "cost_median": 1.0}, float("nan"))}
+        target = tmp_path / "economic-report.json"
+        target.write_text(json.dumps(report, allow_nan=False))
+        written = json.loads(target.read_text())
+        assert written["outcome"]["ai_cost"] == 1.0
+        assert written["outcome"]["cost_per_successful_outcome"] is None
+        assert written["comparison"]["status"] == "unavailable"
+
+
+@pytest.mark.unit
+class TestCostOverflowIsUnknown:
+    def test_finite_components_cannot_produce_infinite_total(self):
+        result = cost_per_successful_change({"calls_cost": 1e308, "retry_cost": 1e308, "delivered_verified": True})
+        assert result["total_cost"] is None
+        assert result["cost_per_change"] is None
+
+    def test_finite_rate_overflow_is_not_complete(self):
+        from ai_ops_kit.providers.cost_account import cost_per_successful_outcome
+        result = cost_per_successful_outcome({"calls_cost": 1.0, "manual_interventions": 10,
+            "delivered_verified": True}, human_attention_cost_usd=1e308)
+        assert result["human_attention_cost"] is None
+        assert result["complete"] is False
+        assert result["loaded_cost"] == 1.0
+
+    def test_huge_integer_and_overflow_percentage_remain_serializable(self):
+        import json
+        from ai_ops_kit.providers.cost_account import estimate_vs_actual
+        huge = cost_per_successful_change({"calls_cost": 10**400, "delivered_verified": True})
+        result = estimate_vs_actual({"estimate_status": "estimated", "cost_median": 1e-308}, 1e308)
+        assert huge["total_cost"] is None
+        assert result["delta_pct"] is None
+        json.dumps({"change": huge, "comparison": result}, allow_nan=False)
