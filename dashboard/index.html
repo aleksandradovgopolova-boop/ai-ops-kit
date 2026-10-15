@@ -6,6 +6,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700&family=IBM+Plex+Mono:wght@500;600&family=IBM+Plex+Sans:wght@400;450;500;600&display=swap">
 <style>
+  [hidden]{display:none!important}
   :root{
     --bg:#0b0f1a; --panel:#141b2b; --panel-2:#0f1524; --ink:#eaeef7;
     --muted:#98a2ba; --faint:#697293; --line:#232f47; --line-2:#1a2337;
@@ -349,6 +350,15 @@
   <div class="north">
     <div class="txt"><b id="tagline">—</b><span id="tagsub" class="sub"></span></div>
   </div>
+
+  <section class="panel" aria-label="Следующая работа">
+    <div class="eyebrow"><span>Что делать дальше</span><span class="n">из текущего плана</span></div>
+    <div id="next-action"></div>
+  </section>
+  <section class="panel" aria-label="Последние изменения">
+    <div class="eyebrow"><span>Что изменилось</span><span class="n">история Git · эффект проверяется отдельно</span></div>
+    <div id="recent-changes"></div>
+  </section>
 
   <section class="panel" aria-label="Метрики продукта">
     <div class="eyebrow"><span>Метрики продукта · North Star</span>
@@ -1127,22 +1137,47 @@
       DATA=d;
       $("version").textContent=d.version||"—";
       $("channel").textContent=d.channel||"—";
-      const MRU={EXISTING_PRODUCT:"действующий продукт",NEW_PRODUCT:"новый продукт",
+      const MRU={EXISTING_PRODUCT:"существующая кодовая база",NEW_PRODUCT:"новая кодовая база",
         EARLY_PRODUCT:"ранний продукт",LIBRARY:"библиотека",EMPTY:"пустой репозиторий"};
       const CRU={high:"высокая",medium:"средняя",low:"низкая"};
       if(d.maturity&&d.maturity.cls){
         const cls=MRU[d.maturity.cls]||d.maturity.cls.replace(/_/g," ").toLowerCase();
         const conf=CRU[d.maturity.confidence]||d.maturity.confidence;
-        $("maturity").innerHTML=`<span class="lb">Зрелость</span><b>${esc(cls)}</b>`+
+        $("maturity").innerHTML=`<span class="lb">Тип кодовой базы</span><b>${esc(cls)}</b>`+
           (conf?`<span class="cf">· уверенность ${esc(conf)}</span>`:"");
         $("maturity").hidden=false;
-      } else $("maturity").hidden=true;
+      } else {$("maturity").innerHTML="";$("maturity").hidden=true;}
 
       const tg=d.product_tagline||{};
       const tgl=tg.tagline||d.north_star||"—";
       $("tagline").textContent=tgl;
       // длинное самодостаточное описание не дублируем подзаголовком
       $("tagsub").textContent=(tgl.length>90)?"":(tg.subtitle||"");
+
+      const action=d.next_action, rep=action&&action.report;
+      const best=rep&&rep.next_best, ready=(rep&&Array.isArray(rep.ready))?rep.ready:[];
+      const source=(action&&action.source)||null;
+      const sourceLink=!source?`<span>Источник плана неизвестен</span>`:action.state!=="known"?`<span>Недоступный источник: ${esc(source)}</span>`:d.repo?`<a href="${esc(link(d,source))}" target="_blank" rel="noopener">Источник: ${esc(source)} ↗</a>`:`<span>Источник: ${esc(source)} (локальный файл)</span>`;
+      const title=x=>esc((x&&x.title)||"Работа без названия");
+      const why=x=>(Array.isArray(x&&x.why)?x.why:[]).map(esc).join("; ");
+      if(action&&action.state==="known"&&rep){
+        const alts=ready.filter(x=>!best||x.id!==best.id).slice(0,2);
+        $("next-action").innerHTML=(best?`<div class="nexti"><div class="nt">${title(best)}</div>`+
+          `<p class="nowi">${why(best)||"Обоснование в текущем плане"}</p></div>`:
+          `<p class="nowi">Готовая следующая работа не определена; проверьте ожидания и зависимости.</p>`)+
+          (!LIVE?`<p class="nowi">Рекомендация из снимка — проверьте актуальный план перед началом.</p>`:"")+
+          (rep.staleness&&rep.staleness.unknown?`<p class="nowi">Проверка актуальности плана недоступна.</p>`:"")+
+          (rep.staleness&&rep.staleness.plan_behind?`<p class="nowi">План может отставать от истории Git; перепроверьте рекомендацию.</p>`:"")+
+          (alts.length?`<details><summary>Другие варианты (${alts.length})</summary><ul>`+
+            alts.map(x=>`<li>${title(x)} — ${why(x)}</li>`).join("")+`</ul></details>`:"")+sourceLink;
+      }else{
+        $("next-action").innerHTML=`<p class="nowi">Следующая работа неизвестна: ${esc(action&&action.reason||"источник плана недоступен")}.</p>`+sourceLink;
+      }
+      const changes=Array.isArray(d.recent_changes)?d.recent_changes:[];
+      $("recent-changes").innerHTML=changes.length?changes.slice(0,3).map(x=>
+        `<div class="nowi">${esc(x.title)} <span>${esc(ruDate(String(x.date||" ").slice(0,10)))}</span>`+
+        (/^[a-f0-9]{40}$/.test(x.sha)&&d.repo?` · <a href="${esc(blob(d).replace("/blob/main","/commit/"+x.sha))}" target="_blank" rel="noopener">${esc(x.sha.slice(0,7))} ↗</a>`:"")+`</div>`
+      ).join(""):`<p class="nowi">История изменений неизвестна — Git-данные недоступны.</p>`;
 
       // текущий фокус — прогресс активного направления по его исходам
       const cf=d.current_focus, fb=$("focus-block");
@@ -1184,7 +1219,7 @@
         : (h.product==="unknown"
            ? "Определяется по outcome-метрикам продукта (TTVO). Пока не измерены."
            : "Определяется по outcome-метрикам продукта (TTVO).");
-      const tipTech="«В норме» = в репозитории есть CI и автотесты (сигнал из паспорта продукта).";
+      const tipTech="Вердикт из паспорта. Наличие CI и тестов само по себе не подтверждает результаты прогонов.";
       const tipDelivery="«В норме» = есть история релизов (теги). Отклонение от плана считается отдельно.";
       $("health").innerHTML=
         hcell("Ценность для пользователя",prodState,prodVal,tipProduct)+
@@ -1202,7 +1237,7 @@
           return `<span class="td ${st}" title="${esc(tip)}"><span class="d"></span>${esc(x.label)}: ${esc(TDRU[x.state]||"—")}</span>`;
         }).join("");
         tdm.hidden=false;
-      } else tdm.hidden=true;
+      } else {tdm.innerHTML="";tdm.hidden=true;}
 
       // north-star metric — одна понятная цифра: идея → проверенный результат
       const obs=d.metrics&&d.metrics.observations;
@@ -1213,7 +1248,7 @@
           `<span class="dir">↓ меньше — лучше</span></div>`+
           `<div class="v">${esc(agg.median_intent_to_verified)}<span class="u">n=${agg.n||"—"} · разброс ${esc(agg.range||"—")} · ранний тренд</span></div>`;
         nsm.hidden=false;
-      } else nsm.hidden=true;
+      } else {nsm.innerHTML=`<div class="k">Наблюдения метрик недоступны</div>`;nsm.hidden=false;}
 
       // остальные метрики семейства TTVO — несколько плиток
       const tiles=$("metric-tiles");
@@ -1225,7 +1260,7 @@
           tile("Вмешательств человека",agg.human_intervention_rate,"меньше — лучше")+
           tile("Переделки · дефекты после релиза","окна открыты","guardrail · окно 7 дней",true);
         tiles.hidden=false;
-      } else tiles.hidden=true;
+      } else {tiles.innerHTML="";tiles.hidden=true;}
 
       // состояние продукта — продуктовые счётчики (без внутренних)
       const g=d.goals||{}; const pct=g.total?Math.round(100*g.achieved/g.total):0;
@@ -1252,7 +1287,10 @@
       const w=d.waiting_on_owner||[];
       $("wait-n").textContent=w.length?`${w.length} · нужен ты`:"";
       if(w.length){
-        $("wait").innerHTML=w.map(x=>`<div class="waiti">${esc(x.title)}</div>`).join("");
+        $("wait").innerHTML=w.map(x=>`<div class="waiti">${esc(x.title)}`+
+          (x.waiting_on?`<p>${esc(x.waiting_on)}</p>`:"")+
+          (x.human_decision?`<p>Нужно: ${esc(x.human_decision)}</p>`:"")+
+          (typeof x.evidence==="string"?(d.repo?`<a href="${esc(link(d,x.evidence))}" target="_blank" rel="noopener">Доказательство ↗</a>`:`<span>Доказательство: ${esc(x.evidence)} (локальный файл)</span>`):"")+`</div>`).join("");
       } else {
         const pend=cf&&(cf.outcomes||[]).find(o=>!o.done);
         const dirIss=(d.issues||[]).find(it=>it.kind==="dir");
@@ -1272,20 +1310,20 @@
       const iss=d.issues||[];
       const shownIss=iss.filter(it=>it.kind!=="work");
       const workN=iss.length-shownIss.length;
-      $("issue-count").textContent=shownIss.length;
+      $("issue-count").textContent=d.issues===null?"—":shownIss.length;
       const iurl=d.repo?`https://github.com/${d.repo.owner}/${d.repo.name}/issues/`:"#";
       const workNote=workN?`<div class="worknote">+ ${workN} work-item под направлениями</div>`:"";
       $("issues").innerHTML=(shownIss.length?shownIss.map(it=>
         `<a class="issue" href="${iurl}${it.id}" target="_blank" rel="noopener"><div class="top">`+
         `<span class="id">#${it.id}</span><span class="kind ${it.kind}">${esc(it.kind_ru||it.kind)}</span></div>`+
         `<div class="ti">${esc(it.title)}</div></a>`).join("")
-        :`<div class="nowi">нет открытых задач${d.issues===null?" (данные недоступны)":""}</div>`)+workNote;
+        :`<div class="nowi">${d.issues===null?"Список задач недоступен":"Нет открытых задач"}</div>`)+workNote;
 
       // source badge
       const when=d.generated_at?new Date(d.generated_at):null;
-      const stamp=when?`${when.getDate()}.${String(when.getMonth()+1).padStart(2,"0")}.${when.getFullYear()} ${String(when.getHours()).padStart(2,"0")}:${String(when.getMinutes()).padStart(2,"0")}`:"";
+      const stamp=when&&!Number.isNaN(when.getTime())?`${when.getDate()}.${String(when.getMonth()+1).padStart(2,"0")}.${when.getFullYear()} ${String(when.getHours()).padStart(2,"0")}:${String(when.getMinutes()).padStart(2,"0")}`:"";
       $("src").classList.toggle("live", !!LIVE);
-      $("src-text").textContent=(LIVE?"живые данные · ":"")+stamp;
+      $("src-text").textContent=(LIVE?"данные загружены · ":"снимок · свежие данные недоступны · ")+(stamp||"дата неизвестна");
     }
 
     // ── модальные окна разделов карты продукта ──────────────────────────────
@@ -1340,8 +1378,8 @@
     });
 
     let LIVE=false;
-    if(SNAPSHOT) try{render(SNAPSHOT);}catch(e){}
+    try{render(SNAPSHOT||{});}catch(e){}
     fetch("data.json",{cache:"no-store"}).then(r=>r.ok?r.json():Promise.reject())
-      .then(d=>{LIVE=true;render(d);}).catch(()=>{});
+      .then(d=>{LIVE=true;render(d);}).catch(()=>{LIVE=false;render(DATA||SNAPSHOT||{});});
   })();
 </script>
