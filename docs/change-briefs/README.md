@@ -26,3 +26,4 @@
 - [Цена принятой работы — #1276](1276-accepted-work-economics.md).
 
 - [Границы автоматизации — #1241](1241-runtime-qualification-boundaries.md).
+- [Здоровье паспорта требует результата прогонов — #1257](1257-passport-health-evidence.md).

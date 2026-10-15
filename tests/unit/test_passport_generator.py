@@ -50,7 +50,7 @@ class TestGeneratedPassport:
         secs = PG.sections(r)
         assert "2.3.0" in secs["Версия и последний релиз"]["value"]
         assert secs["Версия и последний релиз"]["state"] == PG.VERIFIED
-        assert "Green" in secs["Здоровье (продукт / технологии / delivery)"]["value"]
+        assert "Технологии: **unknown**" in secs["Здоровье (продукт / технологии / delivery)"]["value"]
 
 
 # ── fail-closed ─────────────────────────────────────────────────────────────────
@@ -306,3 +306,42 @@ class TestRepoName:
         d = tmp_path / "acme"
         d.mkdir()
         assert PG._repo_name(d) == "acme"
+
+
+@pytest.mark.unit
+class TestTechHealthNeedsExecution:
+    def test_inventory_preserved_without_health_verdict(self, tmp_path):
+        root = _repo(tmp_path)
+        found = PG.repo_audit.discover(root)
+        assert found["ci"] and found["test_files"] > 0
+        health = PG._tech_health(found)
+        assert health["state"] == PG.UNKNOWN
+        assert health["band"] == "unknown"
+        assert "CI и тесты" in health["reason"]
+        assert "не проверены" in health["reason"]
+
+    def test_broken_checks_cannot_become_green(self, tmp_path):
+        root = _repo(tmp_path)
+        (root / "tests/test_x.py").write_text("def test_x():\n    assert False\n")
+        (root / ".github/workflows/ci.yml").write_text("name: ci\non: [push]\njobs: {}\n")
+        assert "assert False" in (root / "tests/test_x.py").read_text()
+        value = PG.sections(root)["Здоровье (продукт / технологии / delivery)"]
+        assert value["state"] == PG.UNKNOWN
+        assert "Технологии: **unknown**" in value["value"]
+        assert "Green" not in value["value"]
+
+    def test_written_passport_keeps_unknown_health(self, tmp_path):
+        root = _repo(tmp_path)
+        output = root / "passport.md"
+        output.write_text(PG.generate(root, reg=REG), encoding="utf-8")
+        assert output.is_file() and output.stat().st_size > 0
+        text = output.read_text(encoding="utf-8")
+        assert "Технологии: **unknown**" in text
+        assert "CI и тесты" in text and "не проверены" in text
+        assert "Версия: **2.3.0**" in text
+
+    @pytest.mark.parametrize("ci,tests", [(False, 0), (True, 0), (False, 1)])
+    def test_incomplete_inventory_does_not_assert_health(self, ci, tests):
+        result = PG._tech_health({"tree_readable": True, "ci": ["ci.yml"] if ci else [], "test_files": tests})
+        assert result["state"] == PG.UNKNOWN
+        assert result["band"] == "unknown"
