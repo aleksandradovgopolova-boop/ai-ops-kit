@@ -202,3 +202,31 @@ class TestCostOverflowIsUnknown:
         assert huge["total_cost"] is None
         assert result["delta_pct"] is None
         json.dumps({"change": huge, "comparison": result}, allow_nan=False)
+
+
+def test_integer_cost_does_not_silently_lose_a_dollar():
+    from ai_ops_kit.providers.cost_account import cost_per_successful_change
+
+    result = cost_per_successful_change({"calls_cost": 2**53 + 1, "delivered_verified": True})
+    assert result["total_cost"] is None
+    assert result["cost_per_change"] is None
+
+
+def test_precision_loss_is_unknown_in_run_cost_and_components():
+    from ai_ops_kit.providers.cost_account import total_call_cost, cost_per_successful_change
+
+    assert total_call_cost([1e308, 1]) is None
+    assert total_call_cost([1, 1e308]) is None
+    assert cost_per_successful_change({"calls_cost": 1e308, "retry_cost": 1,
+                                       "delivered_verified": True})["total_cost"] is None
+
+
+def test_loaded_cost_cannot_absorb_human_expense():
+    from ai_ops_kit.providers.cost_account import cost_per_successful_outcome
+
+    result = cost_per_successful_outcome(
+        {"calls_cost": 1e308, "manual_interventions": 1, "delivered_verified": True},
+        human_attention_cost_usd=1)
+    assert result["loaded_cost"] is None
+    assert result["complete"] is False
+    assert result["cost_per_outcome"] is None

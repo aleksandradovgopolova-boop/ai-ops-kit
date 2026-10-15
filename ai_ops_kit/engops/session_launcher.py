@@ -130,7 +130,8 @@ def suggest_ceiling(child_root, subsessions=SUGGESTED_SUBSESSIONS, reference_roo
     `no_measurement` и тогда числа НЕТ. Выдуманного числа под видом расчёта не будет.
     """
     def _measured(root):
-        return [float(r["cost"]) for r in usage_ledger.load_product(root)
+        records = (usage_ledger.normalize(r) for r in usage_ledger.load_product(root))
+        return [r["cost"] for r in records
                 if r.get("cost") is not None and r.get("cost_status") == "measured"]
 
     own = _measured(child_root)
@@ -151,7 +152,11 @@ def suggest_ceiling(child_root, subsessions=SUGGESTED_SUBSESSIONS, reference_roo
                           f"{MIN_SAMPLE_FOR_SUGGESTION}, поэтому предлагать сумму было бы гаданием."}
     ordered = sorted(costs)
     p90 = ordered[max(0, math.ceil(len(ordered) * 0.9) - 1)]
-    amount = math.ceil(p90 * subsessions * 100) / 100.0
+    scaled = p90 * subsessions * 100
+    if not math.isfinite(scaled):
+        return {"amount": None, "basis": "no_measurement", "sample": len(costs), "source": source,
+                "reason": "предложенная сумма не представима конечным числом; лимит не назначен"}
+    amount = math.ceil(scaled) / 100.0
     return {"amount": amount, "basis": basis, "sample": len(costs), "source": source,
             "p90": round(p90, 4), "subsessions": subsessions,
             "reason": f"{subsessions} подсессии по ${p90:.2f} — это p90 измеренной стоимости вызова "

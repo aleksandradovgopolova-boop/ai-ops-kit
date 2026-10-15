@@ -26,8 +26,14 @@ from pathlib import Path
 
 import yaml
 
+
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
+if str(PKG) not in sys.path:
+    sys.path.insert(0, str(PKG))
+
+from ai_ops_kit.shared.usage_ledger import complete_cost, cost_value  # noqa: E402
+
 _MAP = {
     "max_model_calls": "calls",
     "max_tokens": "_tokens",
@@ -39,22 +45,12 @@ _MAP = {
 
 def _money(value):
     """Конечная неотрицательная денежная величина; неизвестное не равно нулю."""
-    if not isinstance(value, (int, float)) or isinstance(value, bool):
-        return None
-    try:
-        number = float(value)
-    except (ValueError, OverflowError):
-        return None
-    return number if math.isfinite(number) and number >= 0 else None
+    return cost_value(value)
 
 
 def total_call_cost(values):
     """Полная цена вызовов известна только при конечной цене каждого вызова."""
-    prices = [_money(value) for value in values]
-    if not prices or any(price is None for price in prices):
-        return None
-    total = _money(sum(prices))
-    return round(total, 6) if total is not None else None
+    return complete_cost(values)
 
 
 def _measured(run_cost: dict, iterations):
@@ -102,8 +98,7 @@ def cost_per_successful_change(attempt: dict) -> dict:
     # по прежнему контракту по умолчанию нулевые; явный None означает неизвестность.
     components = [_money(attempt.get("calls_cost"))] + [
         _money(attempt.get(key, 0)) for key in ("retry_cost", "reviewer_cost", "escalation_cost")]
-    total = _money(sum(components)) if all(value is not None for value in components) else None
-    total = round(total, 6) if total is not None else None
+    total = total_call_cost(components)
     delivered = attempt.get("delivered_verified") is True
     return {"total_cost": total, "delivered_verified": delivered,
             "cost_per_change": (total if delivered else None),
@@ -164,8 +159,7 @@ def cost_per_successful_outcome(attempt: dict, *, human_attention_cost_usd=None)
     except OverflowError:
         human = None
     human = round(human, 6) if human is not None else None
-    loaded = _money(ai_total + (human or 0.0)) if ai_total is not None else None
-    loaded = round(loaded, 6) if loaded is not None else None
+    loaded = total_call_cost([ai_total, human if human is not None else 0])
     complete = loaded is not None and human is not None
     delivered = attempt.get("delivered_verified") is True
     if ai_total is None:

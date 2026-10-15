@@ -64,13 +64,14 @@ def _task_totals(records):
     by_wid = {}
     for r in records or ():
         wid = r.get("workitem_id") or r.get("run_id") or "—"
-        agg = by_wid.setdefault(wid, {"wid": wid, "cost": 0.0, "calls": 0, "complete": True})
-        agg["calls"] += 1
-        if r.get("cost_status") == "measured" and isinstance(r.get("cost"), (int, float)):
-            agg["cost"] += float(r["cost"])
-        else:
-            agg["complete"] = False        # неизвестную стоимость нулём не считаем
-    return [by_wid[k] for k in sorted(by_wid)]
+        by_wid.setdefault(wid, []).append(
+            r if r.get("cost_status") == "measured" else {**r, "cost": None})
+    out = []
+    for wid in sorted(by_wid):
+        agg = usage_ledger.aggregate(by_wid[wid])
+        out.append({"wid": wid, "cost": agg["cost"], "calls": agg["calls"],
+                    "complete": agg["cost_complete"]})
+    return out
 
 
 def estimate(child_root=None, records=None):
@@ -110,7 +111,8 @@ def estimate(child_root=None, records=None):
             f"ГРАНИЦА, фактическая стоимость выше — граница может НЕ сработать")
     return {
         "kind": "EconomicEstimate", "status": status,
-        "cost_median": round(statistics.median(costs), 6),
+        "cost_median": round((costs[n // 2] if n % 2 else
+                              costs[n // 2 - 1] / 2 + costs[n // 2] / 2), 6),
         "cost_max": round(costs[-1], 6), "cost_min": round(costs[0], 6),
         "calls_median": int(statistics.median(calls)), "calls_max": calls[-1],
         "sample_tasks": n, "partial_tasks": len(partial), "confidence": confidence, "note": note,
