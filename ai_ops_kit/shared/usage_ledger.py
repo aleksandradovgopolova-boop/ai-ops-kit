@@ -30,6 +30,7 @@ if _root is not None and str(_root) not in _sys.path:
     _sys.path.insert(0, str(_root))
 
 import json
+from collections.abc import Iterable
 import math
 import sys
 from pathlib import Path
@@ -45,7 +46,7 @@ USAGE_STATUS = ("measured", "estimated", "unavailable")
 TRIGGERS = ("initial", "retry", "review", "escalation", "fallback", "reevaluate")
 
 
-def cost_value(value):
+def cost_value(value: object) -> float | None:
     """Денежное число; bool/строка/переполнение не являются ценой."""
     if not isinstance(value, (int, float)) or isinstance(value, bool):
         return None
@@ -212,13 +213,13 @@ def aggregate(records: list[dict] | None) -> dict:
     return agg
 
 
-def complete_cost(values):
+def complete_cost(values: Iterable[object]) -> float | None:
     """Полная денежная сумма или None, если представима только нижняя граница."""
     values = list(values)
     if not values:
         return None
     result = aggregate([{"cost": value, "cost_status": "measured"} for value in values])
-    return result["cost"] if result["cost_complete"] else None
+    return cast(float, result["cost"]) if result["cost_complete"] else None
 
 
 def merge_ledgers(child_root: str | Path, source_roots: list) -> int:

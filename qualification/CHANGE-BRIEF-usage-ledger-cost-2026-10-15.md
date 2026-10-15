@@ -32,8 +32,16 @@ no_measurement, а не выдаёт новое право/бюджет. Мед�
 также unknown; один общий валидатор используется журналом и cost_account.
 Standalone-входы cost_account и outcome_analytics сохраняют запуск без PYTHONPATH.
 
-Финальная проверка после коррекций: **9117 passed, 35 skipped, 2 warnings**,
+Промежуточная проверка после коррекций: **9117 passed, 35 skipped, 2 warnings**,
 877.50s, full-current-python, CPython3.14.7/darwin, exit0. Это не compatibility-matrix.
-Точечный набор до full:175 passed; последняя регрессия loaded-cost включена в full.
+Точечный набор до промежуточного full:175 passed; последняя регрессия loaded-cost отдельно passed. Финальный полный прогон ниже включает её.
 Свежий независимый review + одна коррекция выполнены; названный P1 поглощения
 положительного расхода исправлен в общем агрегате и итоговом отчёте расходов.
+
+Первый CI #1290: mypy отказал из-за двух новых функций без аннотаций.
+Добавлены object/Iterable[object] → float|None и cast существующей суммы;
+алгоритм не изменён. mypy: 23 source files clean; 82 focused passed (0.96s).
+Выполняется финальная повторная full-проверка перед корректирующим коммитом.
+
+Финальный повторный full после typing correction: **9118 passed, 35 skipped,
+2 warnings**, 741.94s, full-current-python CPython3.14.7/darwin, exit0.
