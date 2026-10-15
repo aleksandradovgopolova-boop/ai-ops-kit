@@ -2,9 +2,12 @@
 (лента №5), чтобы движок (pipeline_helpers) звал её ВНИЗ, без восходящего ребра engine -> validation.
 
 Форма: work_packages — непустой список {id (строка, уникальный), summary, depends_on (список id,
-может быть пустым; ссылки резолвятся)}; write_scope — непустой список путей. Только stdlib.
+может быть пустым; ссылки резолвятся)}; write_scope — непустой список путей.
+Проверка формы — stdlib; чтение сохранённого RunPlan ниже использует PyYAML лениво.
 """
 from __future__ import annotations
+
+from pathlib import Path
 
 REQUIRED_EVIDENCE = ["work_packages", "dependencies", "write_scope"]
 
@@ -60,3 +63,45 @@ def check(data):
 
 def provided_evidence(data):
     return list(REQUIRED_EVIDENCE) if not check(data) else []
+
+
+def load_run_plan_gates(feature_dir: str | Path, fid: str, workflow: str) -> list[str] | None:
+    """Сохранённый план обязателен, если присутствует; отсутствие — legacy-путь."""
+    import yaml
+    path = Path(feature_dir) / "run-plan.yaml"
+    if not path.exists() and not path.is_symlink():
+        return None
+    try:
+        plan = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, yaml.YAMLError) as exc:
+        raise ValueError(f"RunPlan не прочитан: {exc}; статус не изменён") from exc
+    if (not isinstance(plan, dict) or type(plan.get("schema_version")) is not int
+            or plan["schema_version"] != 1 or plan.get("kind") != "run-plan"
+            or plan.get("workitem_id") != fid or plan.get("base_workflow") != workflow):
+        raise ValueError("RunPlan не соответствует WorkItem; статус не изменён")
+    gates, tracks = plan.get("gates"), plan.get("required_tracks")
+    conditional = plan.get("conditional_tracks", [])
+    if (not isinstance(gates, list) or not gates
+            or any(not isinstance(g, str) or not g.strip() for g in gates)
+            or not isinstance(tracks, list) or not isinstance(conditional, list)):
+        raise ValueError("RunPlan: невалидные gates/required_tracks; статус не изменён")
+    try:
+        registry = yaml.safe_load((Path(__file__).resolve().parents[2] / "quality/gates.yaml").read_text(encoding="utf-8"))
+        known = registry["gates"]
+        workflows = yaml.safe_load((Path(__file__).resolve().parents[2] / "registry/workflows.yaml").read_text(encoding="utf-8"))["workflows"]
+        base = workflows[workflow]["quality_gates"]
+        if not isinstance(known, dict):
+            raise ValueError("не объект")
+    except (OSError, UnicodeError, yaml.YAMLError, KeyError, TypeError, ValueError) as exc:
+        raise ValueError("RunPlan: реестр гейтов не прочитан; статус не изменён") from exc
+    if not set(base).issubset(gates):
+        raise ValueError("RunPlan: отсутствуют базовые гейты workflow; статус не изменён")
+    if any(g not in known for g in gates):
+        raise ValueError("RunPlan: неизвестный гейт; статус не изменён")
+    for track in tracks + conditional:
+        if (not isinstance(track, dict) or not isinstance(track.get("track"), str)
+                or not track["track"].strip() or not isinstance(track.get("reason"), str)
+                or not track["reason"].strip() or not isinstance(track.get("gates", []), list)
+                or any(not isinstance(g, str) or g not in gates for g in track.get("gates", []))):
+            raise ValueError("RunPlan: обязательный трек не согласован с gates; статус не изменён")
+    return list(gates)

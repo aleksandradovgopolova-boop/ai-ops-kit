@@ -45,6 +45,7 @@ import yaml
 from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401 — кладёт validation/ в sys.path
                                          # ДО плоских импортов ниже; повторный импорт того же
                                          # модуля ниже удалён ревизией 2026-08-11 как дубль
+from ai_ops_kit.checks.plan_artifact import load_run_plan_gates  # noqa: E402
 from ai_ops_kit.gates import gate_executor          # noqa: E402
 from ai_ops_kit.lifecycle import run_report             # noqa: E402
 # v3.38 (K5): ai_route загружается лениво — lifecycle не импортирует engine.
@@ -100,10 +101,11 @@ def start(features_dir, fid, task, task_type=None, risk=None):
     return wi
 
 
-def derive_status(workflow, feature_dir, evidence):
+
+def derive_status(workflow, feature_dir, evidence, *, gate_ids=None):
     """Единый статус из gate_executor (гейты) + run_report (здоровье blueprint).
     v3.27.0 WP1: также вычисляет lifecycle_intent детерминированно из состояния."""
-    gates = gate_executor.evaluate(workflow, evidence or {})
+    gates = gate_executor.evaluate(workflow, evidence or {}, gate_ids=gate_ids)
     kinds = gates["gate_kinds"]
     unmet = gates["unmet_gates"]
     human_unmet = [g for g in unmet if kinds.get(g) == "human-approval"]
@@ -157,12 +159,16 @@ def status_cmd(features_dir, fid, run_dir=None, evidence_file=None):
     wi = yaml.safe_load(p.read_text(encoding="utf-8"))
     wf = wi["workflow"]
     feature_dir = Path(features_dir) / fid
+    try:
+        gate_ids = load_run_plan_gates(feature_dir, fid, wf)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     evidence = {}
     if run_dir:
         evidence.update(gate_executor.collect_evidence(wf, Path(run_dir)))
     if evidence_file:
         evidence.update(gate_executor.load_evidence(evidence_file))  # явный evidence — приоритет
-    res = derive_status(wf, feature_dir, evidence)
+    res = derive_status(wf, feature_dir, evidence, gate_ids=gate_ids)
     wi["status"] = res["status"]
     wi["lifecycle_intent"] = res["lifecycle_intent"]  # v3.27.0 WP1
     p.write_text(yaml.safe_dump(wi, allow_unicode=True, sort_keys=False), encoding="utf-8")
