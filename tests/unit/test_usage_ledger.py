@@ -117,3 +117,70 @@ class TestRoundTrip:
     def test_normalization_includes_run_id(self, ledger_dir, records):
         append(ledger_dir, "w1", records, run_id="r1")
         assert load_task(ledger_dir, "w1")[0].get("run_id") == "r1"
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -1, True, "0.1", 10**400])
+def test_invalid_cost_survives_as_unknown_call_not_invalid_json(tmp_path, good_record, bad):
+    import json
+
+    assert check({**good_record, "cost": bad})
+    raw = {**good_record, "cost": None, "cost_usd_est": bad}
+    assert append(tmp_path, "invalid", [raw, good_record]) == 2
+    for records in (load_task(tmp_path, "invalid"), load_product(tmp_path)):
+        assert len(records) == 2
+        assert records[0]["cost"] is None
+        assert records[0]["cost_status"] == "unavailable"
+        json.dumps(records, allow_nan=False)
+        agg = aggregate(records)
+        assert agg["calls"] == 2
+        assert agg["cost"] == pytest.approx(0.07)
+        assert agg["cost_unavailable"] == 1
+        assert agg["cost_complete"] is False
+        json.dumps(agg, allow_nan=False)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -1, True, "0.1", None])
+def test_old_malformed_ledger_does_not_become_complete(good_record, bad):
+    import json
+
+    agg = aggregate([{**good_record, "cost": bad}, good_record])
+    assert agg["cost"] == pytest.approx(0.07)
+    assert agg["cost_complete"] is False
+    assert agg["cost_unavailable"] == 1
+    json.dumps(agg, allow_nan=False)
+
+
+def test_overflow_is_finite_lower_bound_not_complete(good_record):
+    import json
+
+    agg = aggregate([{**good_record, "cost": 1e308}] * 2)
+    assert agg["calls"] == 2
+    assert agg["cost"] == 1e308
+    assert agg["cost_overflow"] is True
+    assert agg["cost_complete"] is False
+    json.dumps(agg, allow_nan=False)
+
+
+def test_measured_missing_cost_is_normalized_unavailable(tmp_path, good_record):
+    append(tmp_path, "missing", [{**good_record, "cost": None}])
+    record = load_task(tmp_path, "missing")[0]
+    assert record["cost"] is None
+    assert record["cost_status"] == "unavailable"
+    assert aggregate([record])["cost_complete"] is False
+
+
+@pytest.mark.parametrize("prices", [[1e308, 1], [1, 1e308]])
+def test_absorbed_positive_expense_is_incomplete_lower_bound(good_record, prices):
+    result = aggregate([{**good_record, "cost": price} for price in prices])
+    assert result["calls"] == 2
+    assert result["cost"] == 1e308
+    assert result["cost_precision_lost"] is True
+    assert result["cost_complete"] is False
+
+
+def test_unrepresentable_integer_cost_is_unknown(good_record):
+    from ai_ops_kit.shared.usage_ledger import normalize
+
+    result = normalize({**good_record, "cost": 2**53 + 1})
+    assert result["cost"] is None
+    assert result["cost_status"] == "unavailable"

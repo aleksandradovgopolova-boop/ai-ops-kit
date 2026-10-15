@@ -30,6 +30,7 @@ if _root is not None and str(_root) not in _sys.path:
     _sys.path.insert(0, str(_root))
 
 import json
+import math
 import sys
 from pathlib import Path
 from typing import Any, cast
@@ -42,6 +43,19 @@ FIELDS = ("run_id", "workitem_id", "package_id", "role", "provider", "model", "r
           "task_type", "workflow", "risk", "size", "writer_tier", "execution_mode", "stack", "architecture_impact")
 USAGE_STATUS = ("measured", "estimated", "unavailable")
 TRIGGERS = ("initial", "retry", "review", "escalation", "fallback", "reevaluate")
+
+
+def cost_value(value):
+    """Денежное число; bool/строка/переполнение не являются ценой."""
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except OverflowError:
+        return None
+    if isinstance(value, int) and number != value:
+        return None
+    return number if math.isfinite(number) and number >= 0 else None
 
 
 def check(rec: UsageRecord) -> list[str]:
@@ -68,6 +82,8 @@ def check(rec: UsageRecord) -> list[str]:
         e.append(f"cost_status ∉ {USAGE_STATUS} (got {cs!r})")
     if rec.get("cost") is None and cs == "measured":
         e.append("cost_status=measured, но cost=None")
+    if rec.get("cost") is not None and cost_value(rec["cost"]) is None:
+        e.append("cost должен быть конечным неотрицательным числом или None")
     tr = rec.get("trigger")
     if tr is not None and tr not in TRIGGERS:
         e.append(f"trigger ∉ {TRIGGERS} (got {tr!r})")
@@ -84,6 +100,9 @@ def normalize(rec: dict, run_id: str | None = None, workitem_id: str | None = No
     # cost может прийти как cost_usd_est (назад-совместимость)
     if out.get("cost") is None and rec.get("cost_usd_est") is not None:
         out["cost"] = rec.get("cost_usd_est")
+    out["cost"] = cost_value(out.get("cost"))
+    if out["cost"] is None:
+        out["cost_status"] = "unavailable"
     # out собран по ключам FIELDS (== поля UsageRecord); comprehension теряет TypedDict-тип — cast
     # возвращает его: функция для того и есть, чтобы привести сырую запись к форме UsageRecord.
     return cast(UsageRecord, out)
@@ -126,7 +145,11 @@ def _load(path: Path) -> list[dict]:
         ln = ln.strip()
         if ln:
             try:
-                out.append(json.loads(ln))
+                record = json.loads(ln)
+                if isinstance(record, dict):
+                    clean = normalize(record)
+                    record.update(cost=clean["cost"], cost_status=clean["cost_status"])
+                out.append(record)
             except json.JSONDecodeError:
                 continue
     return out
@@ -147,6 +170,7 @@ def aggregate(records: list[dict] | None) -> dict:
     agg: dict[str, Any] = {"calls": 0, "usage_measured": 0, "usage_unavailable": 0,
            "input_tokens": 0, "output_tokens": 0, "cost": 0.0,
            "cost_measured": 0, "cost_estimated": 0, "cost_unavailable": 0,
+           "cost_overflow": False, "cost_precision_lost": False,
            "by_role": {}, "by_trigger": {}, "by_provider": {},
            # v3.24.0: новые измерения для economic alternatives и cost-per-decision
            "by_task_type": {}, "by_workflow": {}, "by_writer_tier": {}}
@@ -159,15 +183,23 @@ def aggregate(records: list[dict] | None) -> dict:
             agg["usage_measured"] += 1
             agg["input_tokens"] += int(r.get("input_tokens") or 0)
             agg["output_tokens"] += int(r.get("output_tokens") or 0)
-        cs = r.get("cost_status")
+        price = cost_value(r.get("cost"))
+        cs = r.get("cost_status") if price is not None else "unavailable"
         if cs == "measured":
             agg["cost_measured"] += 1
         elif cs == "estimated":
             agg["cost_estimated"] += 1
         else:
             agg["cost_unavailable"] += 1
-        if r.get("cost") is not None:
-            agg["cost"] += float(r["cost"])
+        if price is not None:
+            total = agg["cost"] + price
+            if math.isfinite(total):
+                if price > 0 and agg["cost"] > 0 and total in (price, agg["cost"]):
+                    agg["cost_precision_lost"] = True
+                agg["cost"] = total
+            else:
+                # Уже учтённая цена остаётся нижней границей, полная недоступна.
+                agg["cost_overflow"] = True
         for dim, key in (("by_role", "role"), ("by_trigger", "trigger"), ("by_provider", "provider"),
                          ("by_task_type", "task_type"), ("by_workflow", "workflow"),
                          ("by_writer_tier", "writer_tier")):
@@ -175,8 +207,18 @@ def aggregate(records: list[dict] | None) -> dict:
             agg[dim][k] = agg[dim].get(k, 0) + 1
     agg["cost"] = round(agg["cost"], 6)
     # ЧЕСТНОСТЬ: стоимость ПОЛНАЯ только если ни одного вызова с неизвестной стоимостью.
-    agg["cost_complete"] = agg["cost_unavailable"] == 0
+    agg["cost_complete"] = (agg["cost_unavailable"] == 0 and not agg["cost_overflow"]
+                            and not agg["cost_precision_lost"])
     return agg
+
+
+def complete_cost(values):
+    """Полная денежная сумма или None, если представима только нижняя граница."""
+    values = list(values)
+    if not values:
+        return None
+    result = aggregate([{"cost": value, "cost_status": "measured"} for value in values])
+    return result["cost"] if result["cost_complete"] else None
 
 
 def merge_ledgers(child_root: str | Path, source_roots: list) -> int:

@@ -25,23 +25,16 @@ import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
+_root = next((p for p in Path(__file__).resolve().parents if (p / "VERSION").is_file()), None)
+if _root is not None and str(_root) not in sys.path:
+    sys.path.insert(0, str(_root))
+
+from ai_ops_kit.shared import usage_ledger  # noqa: E402
+
 
 def _load_usage_ledger(root: Path) -> list[dict]:
     """Load all usage records from product ledger."""
-    ledger_path = root / ".ai" / "usage" / "product-ledger.jsonl"
-    if not ledger_path.exists():
-        return []
-
-    records = []
-    for line in ledger_path.read_text(encoding="utf-8").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            records.append(json.loads(line))
-        except json.JSONDecodeError:
-            continue
-    return records
+    return usage_ledger.load_product(root)
 
 
 def _load_effect_metrics(root: Path) -> dict:
@@ -93,22 +86,16 @@ def _filter_by_period(records: list[dict], period: str) -> list[dict]:
 
 def _aggregate_costs(records: list[dict]) -> dict:
     """Aggregate cost metrics from usage records."""
-    total_cost = 0.0
+    money = usage_ledger.aggregate([
+        r if r.get("cost_status") == "measured" else {**r, "cost": None} for r in records])
     total_input_tokens = 0
     total_output_tokens = 0
-    measured_costs = 0
     measured_tokens = 0
 
     for r in records:
-        cost = r.get("cost")
-        cost_status = r.get("cost_status")
         input_tokens = r.get("input_tokens")
         output_tokens = r.get("output_tokens")
         usage_status = r.get("usage_status")
-
-        if cost is not None and cost_status == "measured":
-            total_cost += float(cost)
-            measured_costs += 1
 
         if usage_status == "measured":
             if input_tokens is not None:
@@ -118,8 +105,12 @@ def _aggregate_costs(records: list[dict]) -> dict:
                 total_output_tokens += int(output_tokens)
 
     return {
-        "total_cost_usd": round(total_cost, 4),
-        "measured_costs": measured_costs,
+        "total_cost_usd": round(money["cost"], 4),
+        "measured_costs": money["cost_measured"],
+        "cost_complete": money["cost_complete"],
+        "cost_unavailable": money["cost_unavailable"],
+        "cost_overflow": money["cost_overflow"],
+        "cost_precision_lost": money["cost_precision_lost"],
         "total_input_tokens": total_input_tokens,
         "total_output_tokens": total_output_tokens,
         "total_tokens": total_input_tokens + total_output_tokens,
@@ -129,36 +120,31 @@ def _aggregate_costs(records: list[dict]) -> dict:
 
 def _top_tasks(records: list[dict], limit: int = 5) -> list[dict]:
     """Get top tasks by cost."""
-    task_costs = {}
-    for r in records:
-        wid = r.get("workitem_id") or "unknown"
-        cost = r.get("cost") or 0
-        task_costs[wid] = task_costs.get(wid, 0) + float(cost)
+    groups = _cost_groups(records, "workitem_id")
+    ordered = sorted(groups.items(), key=lambda item: item[1]["cost"], reverse=True)
+    return [{"workitem_id": wid, "cost_usd": round(agg["cost"], 4),
+             "cost_complete": agg["cost_complete"]} for wid, agg in ordered[:limit]]
 
-    sorted_tasks = sorted(task_costs.items(), key=lambda x: x[1], reverse=True)
-    return [{"workitem_id": wid, "cost_usd": round(cost, 4)} for wid, cost in sorted_tasks[:limit]]
+
+def _cost_groups(records, key):
+    groups = {}
+    for r in records:
+        groups.setdefault(r.get(key) or "unknown", []).append(r)
+    return {key: usage_ledger.aggregate(rows) for key, rows in groups.items()}
+
+
+def _distribution(records, key):
+    groups = _cost_groups(records, key)
+    return {key: round(agg["cost"], 4) for key, agg in
+            sorted(groups.items(), key=lambda item: item[1]["cost"], reverse=True)}
 
 
 def _provider_distribution(records: list[dict]) -> dict:
-    """Get cost distribution by provider."""
-    providers = {}
-    for r in records:
-        provider = r.get("provider") or "unknown"
-        cost = r.get("cost") or 0
-        providers[provider] = providers.get(provider, 0) + float(cost)
-
-    return {k: round(v, 4) for k, v in sorted(providers.items(), key=lambda x: x[1], reverse=True)}
+    return _distribution(records, "provider")
 
 
 def _model_distribution(records: list[dict]) -> dict:
-    """Get cost distribution by model."""
-    models = {}
-    for r in records:
-        model = r.get("model") or "unknown"
-        cost = r.get("cost") or 0
-        models[model] = models.get(model, 0) + float(cost)
-
-    return {k: round(v, 4) for k, v in sorted(models.items(), key=lambda x: x[1], reverse=True)}
+    return _distribution(records, "model")
 
 
 def collect_analytics(root: Path, period: str = "all") -> dict:
@@ -185,6 +171,7 @@ def collect_analytics(root: Path, period: str = "all") -> dict:
             "total_tasks": num_tasks,
             "total_runs": len(records),
             "total_cost_usd": costs["total_cost_usd"],
+            "cost_complete": costs["cost_complete"],
             "avg_cost_per_task_usd": round(avg_cost, 4),
             "total_tokens": costs["total_tokens"],
         },
@@ -210,6 +197,8 @@ def format_report(analytics: dict) -> str:
     lines.append(f"**Generated:** {analytics.get('generated_at', '?')}\n")
 
     lines.append("\n## Summary\n")
+    if summary.get("cost_complete") is False:
+        lines.append("Стоимость неполная: все денежные суммы ниже — нижняя граница, не полная цена.\n")
     lines.append(f"- **Total tasks:** {summary.get('total_tasks', 0)}")
     lines.append(f"- **Total runs:** {summary.get('total_runs', 0)}")
     lines.append(f"- **Total cost:** ${summary.get('total_cost_usd', 0):.4f}")
