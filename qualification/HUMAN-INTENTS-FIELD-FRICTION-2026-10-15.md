@@ -59,3 +59,8 @@ spec.yaml. Это технический справочник, но выгляд
 full-current-python на текущей ветке от 9cab0d43, CPython 3.14.7 / darwin:
 9038 passed, 35 skipped, 2 warnings, exit0, 849.15 s. Это не compatibility-matrix.
 Изменения паспорта #1283 проверены отдельно и будут также в merge-проверке CI.
+
+Первый CI #1285: docs-site build отказал на relative ссылке из docs/ наружу
+в qualification; файл существует в Git, но не входит в MkDocs site. Исправлено
+ссылкой на канонический файл GitHub, без копирования второй матрицы в docs.
+Это один CI return/fix; прежний локальный full не объявляется покрытием MkDocs.
