@@ -1136,19 +1136,6 @@ work:
     - qualification/
     - dashboard/README.md
     rationale: 'P1. Проверить существующий пульт кита на вопросы где/зачем/что мешает/что изменилось/что дальше; записать разрывы и конкретный brief до реализации. Три сценария показывают одну рекомендацию и не более двух альтернатив, источники и unknown/degraded сохранены; ручное дублирование плана не требуется. Это доработка спецификации существующего пульта, не новый dashboard; распространение в дочки #1201 остаётся после доработки кита. qualification/PRODUCT-REVIEW-NEXT-WAVE-2026-10-05.md'
-  - id: runtime-qualification-boundaries
-    title: Человек видит подтверждённую степень автоматизации каждого исполнителя
-    type: quality
-    goal: first-hour-for-a-stranger
-    status: todo
-    owner_role: qa
-    value: medium
-    depends_on:
-    - first-hour-three-strangers-protocol
-    write_scope:
-    - README.md
-    - qualification/
-    rationale: 'P1. Свести текущие evidence в матрицу install/execute/review/hooks/parallel по исполнителям с версией, датой и источником каждой клетки. Unknown/unsupported/degraded не превращаются в pass; ручной PostToolUse не равен живой сессии. README описывает независимость процесса и различие автоматизации. Нет новых адаптеров или универсальных обещаний; архитектурная работа #611 остаётся отложенной. qualification/PRODUCT-REVIEW-NEXT-WAVE-2026-10-05.md'
 
   # ── Направление one-feature-end-to-end ДОСТИГНУТО 2026-09-16 (засчёт владельца, 5/5) ───────────
   # Хронология: продуктовое ревью (ep-2026-09-16) держало product-freeze до живого внешнего прогона;
