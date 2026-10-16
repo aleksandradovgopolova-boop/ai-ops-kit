@@ -209,7 +209,8 @@ def _readout(value, *, measured_at="2026-09-16", target_met="no", guardrails=Non
             "contract": "features/x/outcome-contract.yaml",
             "measured": {"metric": "activation_rate", "value": value, "measured_at": measured_at},
             "target_met": target_met, "hypothesis": "inconclusive",
-            "guardrails_observed": guardrails if guardrails is not None else [],
+            "guardrails_observed": (guardrails if guardrails is not None else
+                                    [{"name": "error_rate", "value": 1, "within": True}]),
             "unexpected_effects": [], "next_decision": "по правилу решения",
             "back_to_discovery": "—"}
 
