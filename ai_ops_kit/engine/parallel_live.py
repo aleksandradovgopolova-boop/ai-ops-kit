@@ -287,7 +287,8 @@ def run_live(wg, child_root, base_sha, task_map, signals, run_fn, open_pr=False,
     return rec
 
 
-def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones):
+def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones,
+                                 run_options=None):
     """v3.8.3 TRUE CONCURRENT: каждый пакет — в СВОЁМ disposable-клоне (git clone) на base_sha -> безопасно
     конкурентно (нет гонок git-worktree одного репо). Заполняет clones[pid]={path,branch}.
     v3.8.3-rc2: (#1) package-specific signals; (#7) fail-closed clone/checkout; (#2) post-commit
@@ -307,8 +308,17 @@ def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn
             clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}", "error": "checkout-failed"}
             return {"status": "error", "sha": None, "gate_report": {"all_pass": False},
                     "error": f"checkout {base_sha[:12]}: {co.stderr.strip()[:160]}", "clone": str(cpath)}
-        rep = run_fn(task_map[pid], _pkg_signals(signals, pkg), Path(cpath), engine="pipeline",
-                     provider_name="openai-compatible", feature=pid, execute=True, author=True, review=True)
+        options = dict(run_options or {})
+        if options.get("base"):
+            _git(cpath, "checkout", "-q", "-B", options["base"], base_sha)
+        options.setdefault("provider_name", "openai-compatible")
+        options.setdefault("author", True)
+        options.setdefault("review", True)
+        options.update(engine="pipeline", feature=pid, execute=True, open_pr=False,
+                       write_scope=pkg.get("write_scope"))
+        pkg_signals = _pkg_signals(signals, pkg)
+        pkg_signals.update(work_package_id=pid, _sequence_plan_ids=list(task_map))
+        rep = run_fn(task_map[pid], pkg_signals, Path(cpath), **options)
         clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}"}
         res = package_result_from_rep(rep)
         res["clone"] = str(cpath)
@@ -372,7 +382,7 @@ def make_isolated_integration_runner(child_root, base_sha, clones, integration_b
 
 def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clones_dir=None,
                         repo_slug=None, integration_branch="ai-ops/integration", max_parallel=None,
-                        contract_shas=None):
+                        contract_shas=None, run_options=None):
     """v3.8.3 НАСТОЯЩИЙ concurrent parallel-2: отдельный disposable-клон+ветка+прогон на пакет, КОНКУРЕНТНО;
     integration-клон -> fetch package-ветки -> merge -> stack-aware aggregate. Честные поля:
     execution_concurrency=concurrent, isolation=per-package-clone. Основной checkout НЕ трогается.
@@ -384,10 +394,15 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
       (#5b) delivery_plan несёт РЕАЛЬНЫЙ github_remote исходного репо (клон интеграции имеет origin =
             локальный путь — доставка в него не попала бы на GitHub);
       (#7) fail-closed при сбое клона интеграции;
-      (#8) run-scoped уникальный каталог клонов + гарантированная очистка (self-created)."""
+      (#8) run-scoped каталог в git common dir: неготовый удаляется, готовая integration
+           сохраняется для канонической доставки/повтора; package clones очищаются."""
     _self_clones = clones_dir is None
+    retain_integration = False
     if _self_clones:
-        clones_dir = tempfile.mkdtemp(prefix="ai-ops-parallel-")
+        common = _git(child_root, "rev-parse", "--git-common-dir").stdout.strip()
+        store = (Path(child_root) / common).resolve() / "ai-ops-parallel"
+        store.mkdir(parents=True, exist_ok=True)
+        clones_dir = tempfile.mkdtemp(prefix="run-", dir=store)
     try:
         clones = {}
         iroot = Path(clones_dir) / "_integration"
@@ -399,7 +414,8 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
                     "delivery": {"open_pr": False}, "delivery_plan": None, "pr": None}
         _ensure_identity(iroot)  # merge fan-in — это КОММИТ; клон не унаследовал идентичность
         clones["_integration"] = {"path": str(iroot)}
-        pr = make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn, clones_dir, clones)
+        pr = make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn,
+                                          clones_dir, clones, run_options)
         ir = make_isolated_integration_runner(child_root, base_sha, clones, integration_branch)
         n = max_parallel or min(len(wg.get("packages", []) or [1]), getattr(pe.pp, "MAX_PARALLEL", 2))
         rec = pe.execute_parallel(wg, pr, ir, contract_shas=contract_shas, max_parallel=max(2, n))
@@ -422,10 +438,18 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
             "packages": list(task_map),
             "note": "доставка через канонический DeliveryIntent/Receipt controller; parallel_live не пушит сам",
         }
+        retain_integration = _ready
+        if _self_clones and _ready:
+            rec["delivery_plan"]["owned_clones_dir"] = str(clones_dir)
         return rec
     finally:
-        if _self_clones:  # #8 гарантированная очистка self-created каталога
-            shutil.rmtree(clones_dir, ignore_errors=True)
+        if _self_clones:
+            if retain_integration:  # проверенный source нужен контроллеру до durable Receipt
+                for path in Path(clones_dir).iterdir():
+                    if path.name != "_integration":
+                        shutil.rmtree(path, ignore_errors=True)
+            else:
+                shutil.rmtree(clones_dir, ignore_errors=True)
 
 
 def main(argv):
