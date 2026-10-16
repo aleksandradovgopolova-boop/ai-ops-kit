@@ -1,0 +1,49 @@
+{
+  "projection": "selected fields from actual resume stdout; no new measurements inferred",
+  "phases": [
+    {
+      "phase": 0,
+      "overall_status": "delivered",
+      "ready_for_pr": true,
+      "resume": {
+        "requested": true,
+        "resumed": true,
+        "reused_worktree": true,
+        "reused_branch": true,
+        "preflight_reasons": [
+          "состояние актуально: ветка на месте, base не двигался — можно продолжить с последнего подтверждённого шага"
+        ],
+        "revalidation_needed": false,
+        "revalidation_overridden": false
+      },
+      "delivery_status": "opened",
+      "delivery_id": "771af572265c9419",
+      "head_sha": "3d7a643a5274a74d916ce052f2e435e68392152b",
+      "sha_verified": true,
+      "cost": null,
+      "run_cost": null
+    },
+    {
+      "phase": 1,
+      "overall_status": "delivered",
+      "ready_for_pr": true,
+      "resume": {
+        "requested": true,
+        "resumed": true,
+        "reused_worktree": true,
+        "reused_branch": true,
+        "preflight_reasons": [
+          "состояние актуально: ветка на месте, base не двигался — можно продолжить с последнего подтверждённого шага"
+        ],
+        "revalidation_needed": false,
+        "revalidation_overridden": false
+      },
+      "delivery_status": "updated",
+      "delivery_id": "771af572265c9419",
+      "head_sha": "3d7a643a5274a74d916ce052f2e435e68392152b",
+      "sha_verified": true,
+      "cost": null,
+      "run_cost": null
+    }
+  ]
+}

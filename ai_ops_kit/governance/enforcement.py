@@ -60,12 +60,14 @@ def enforcement_mode(root) -> str:
 def is_approved(root, *, action: str, target: str) -> bool:
     """Одобрено ли действие человеком — по ЗАПИСАННОМУ сигналу human_override, а не по флагу.
 
-    Совпадение по цели: сигнал с target == `{action}:{target}` или ровно `target`, и решением из
-    множества одобрения. Отсутствие сигнала — «не одобрено» (fail-closed), не «не знаю = можно»."""
+    Последняя запись для target == `{action}:{target}` или ровно `target` определяет решение.
+    Журнал append-only: дата без времени не заменяет порядок записи. Последующий отзыв или
+    неизвестное решение снимает старое approve; только новое явное одобрение возвращает его.
+    Отсутствие сигнала — «не одобрено» (fail-closed), не «не знаю = можно»."""
     want = {f"{action}:{target}", target}
-    for sig in human_override.override_signals(root):
-        if sig.get("target") in want and str(sig.get("human_decision", "")).lower() in _APPROVE_DECISIONS:
-            return True
+    for sig in reversed(human_override.override_signals(root)):
+        if sig.get("target") in want:
+            return str(sig.get("human_decision", "")).strip().lower() in _APPROVE_DECISIONS
     return False
 
 

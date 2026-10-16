@@ -1,0 +1,46 @@
+from pathlib import Path
+import datetime,json,subprocess,os,threading
+from http.server import HTTPServer,BaseHTTPRequestHandler
+from ai_ops_kit.delivery import pr_open
+from ai_ops_kit.engine.ai_ops_run_lifecycle_stages import _deliver
+from types import SimpleNamespace
+root=Path('work/delivery-fault-qualification-20261016').resolve();root.mkdir(exist_ok=False)
+record={'issue':1278,'executor':'AI / Codex controlled qualification','registered_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'budget':'one local qualification, no models, no external network, <=180seconds','runtime':'CPython and actual Kit delivery APIs','policy':'isolated fixture block/require_approval; no real owner acceptance','acceptance':'barrier prevents requests; ambiguous POST reconciles; retry produces no second POST','compensation':'local fixture files reversible; a real already-created PR cannot be atomically undone by client rollback','limits':'loopback GitHub-shaped API and push=False; not GitHub reliability, native agent execution, or accepted child work','counts_toward_child_cohort':False,'usd':None}
+(root/'preregistration.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
+for args in [('init','-q'),('config','user.email','fixture@example.invalid'),('config','user.name','AI fixture'),('remote','add','origin','https://github.com/fixture/controlled.git')]:subprocess.run(['git','-C',str(root),*args],check=True)
+(root/'source.txt').write_text('actual local fixture\n');subprocess.run(['git','-C',str(root),'add','source.txt'],check=True);subprocess.run(['git','-C',str(root),'commit','-qm','chore: local qualification'],check=True)
+sha=subprocess.check_output(['git','-C',str(root),'rev-parse','HEAD'],text=True).strip()
+state={'requests':[],'created':[]}
+class Handler(BaseHTTPRequestHandler):
+ def log_message(self,*args):pass
+ def respond(self,data):
+  self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(json.dumps(data).encode())
+ def do_GET(self):
+  state['requests'].append({'method':'GET','path':self.path})
+  if '/pulls?' in self.path:self.respond(state['created'])
+  elif '/check-runs' in self.path:self.respond({'check_runs':[]})
+  elif self.path.endswith('/status'):self.respond({'state':'pending','statuses':[]})
+  else:self.respond({'full_name':'fixture/controlled','owner':{'login':'fixture'},'name':'controlled','default_branch':'main'})
+ def do_POST(self):
+  payload=json.loads(self.rfile.read(int(self.headers['Content-Length'])));state['requests'].append({'method':'POST','path':self.path})
+  state['created'].append({'number':1,'html_url':'https://example.invalid/fixture/pr/1','draft':True,'state':'open','merged_at':None,'head':{'sha':sha},'base':{'ref':'main'},'body':payload['body']})
+  # Реальное локальное действие произошло; клиент получает непарсируемый ответ.
+  self.send_response(201);self.end_headers();self.wfile.write(b'{broken-json')
+server=HTTPServer(('127.0.0.1',0),Handler);thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+os.environ['GITHUB_TOKEN']='fixture-local-only';os.environ['GH_TOKEN']='fixture-local-only';os.environ['GITHUB_API_URL']=f'http://127.0.0.1:{server.server_port}'
+try:
+ features=root/'features';(features/'fault-case').mkdir(parents=True)
+ report={};_deliver(SimpleNamespace(child_root=root,features_dir=features),report,plan={'exists':True},handoff_ok=False,report_ok=True,jname=str(features/'fault-case/lifecycle-journal.jsonl'),fid='fault-case')
+ assert state['requests']==[], 'failed durable barrier reached network'
+ record['interruption_barrier']=report.get('delivery')
+ first=pr_open.open_draft_pr(root,'ai-ops/fault-case','fixture',base='main',push=False,delivery_id='controlled-fault-case')
+ assert first['status']=='outcome_unknown' and len(state['created'])==1
+ found=pr_open.reconcile_delivery(root,'ai-ops/fault-case')
+ assert found['status']=='found' and found['head_sha']==sha
+ again=pr_open.open_draft_pr(root,'ai-ops/fault-case','fixture retry',base='main',push=False,delivery_id='controlled-fault-case')
+ assert again['status']=='updated' and len(state['created'])==1
+ assert sum(e['method']=='POST' for e in state['requests'])==1
+ assert 'ai-ops-delivery-id: controlled-fault-case' in state['created'][0]['body']
+ record.update(first=first,reconciled=found,retry=again,created_count=len(state['created']),requests=state['requests'],source_commit=sha,finished_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+ (root/'result.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n');print(json.dumps({k:record[k] for k in ['interruption_barrier','first','reconciled','retry','created_count']},ensure_ascii=False,indent=2))
+finally:server.shutdown();server.server_close()
