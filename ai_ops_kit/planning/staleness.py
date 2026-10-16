@@ -78,9 +78,12 @@ def dead_references(root, limit=5) -> list:
     # `ai_ops_kit/ui/storybook_adapter.py`. Сокращение — не ложь, и объявлять его мёртвой ссылкой
     # значит превратить проверку в шум, а шумную проверку отключают первой.
     tails = set()
+    prefix = root.as_posix().rstrip("/") + "/" if root != Path(".") else ""
     for f in root.rglob("*"):
         if f.is_file() and ".git/" not in f.as_posix():
-            rel = f.relative_to(root).as_posix()
+            # rglob уже выдаёт пути с тем же лексическим корнем: не строим Path.parents
+            # для десятков тысяч файлов зависимостей; '.' не добавляет префикс к результатам.
+            rel = f.as_posix()[len(prefix):]
             parts = rel.split("/")
             for i in range(len(parts)):
                 tails.add("/".join(parts[i:]))

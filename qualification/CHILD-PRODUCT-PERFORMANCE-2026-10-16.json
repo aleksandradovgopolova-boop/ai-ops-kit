@@ -1,0 +1,113 @@
+{
+  "executor": "AI",
+  "date": "2026-10-16",
+  "base_sha": "a692967ac94579713f272d55681e11bf6efe5622",
+  "hook": {
+    "before_median_seconds": 10.234287666040473,
+    "after_median_seconds": 3.9037645420758054,
+    "before_processes": [
+      8,
+      8,
+      8
+    ],
+    "after_processes": [
+      2,
+      2,
+      2
+    ],
+    "real_negative_exit": 2,
+    "restored_exit": 0,
+    "protected_hashes_unchanged": true,
+    "trials_per_variant": 3,
+    "first_trial_profiled": true
+  },
+  "next": {
+    "completed_at": "2026-10-16T16:09:51.982146+00:00",
+    "sequence": [
+      "before",
+      "after",
+      "after",
+      "before",
+      "before",
+      "after"
+    ],
+    "summary": {
+      "before": {
+        "n": 3,
+        "seconds": [
+          13.184372375020757,
+          7.359642458963208,
+          7.960981082986109
+        ],
+        "median_seconds": 7.960981082986109
+      },
+      "after": {
+        "n": 3,
+        "seconds": [
+          5.191056791925803,
+          4.5230348750483245,
+          4.050515334005468
+        ],
+        "median_seconds": 4.5230348750483245
+      }
+    },
+    "speedup_median_ratio": 1.7600972141301592,
+    "median_wall_reduction_fraction": 0.4318495637786687,
+    "p95": null,
+    "all6_complete_json_equal": true,
+    "after_profile_json_equal": true,
+    "all6_stdout_bytes_hash_equal": true,
+    "child_protected_hashes_unchanged": true,
+    "parent_gates_registry_hashes_equal": true,
+    "child_git_status": "",
+    "elapsed_measurement_seconds": 49.94281033298466,
+    "source_after_sha256": "7c2a6d1edc7d0e461dfa12f38ef4ca858f978a39d746bcb19dfc49f657890bd3",
+    "quality_note": "No dropped findings/fields; exact fullnextprojection equivalence on this real installedtree. Targeted invariants + CI are root-owned, not replaced by timingproof."
+  },
+  "source_sha256": {
+    "templates/runtime/lint_hook.py": "e14e0585496b0837261cfabcf0f983e2b04ba51fe5c2bb362cb377fd6316704c",
+    "ai_ops_kit/planning/staleness.py": "7c2a6d1edc7d0e461dfa12f38ef4ca858f978a39d746bcb19dfc49f657890bd3"
+  },
+  "receipt_sha256": {
+    "hook-before.json": "556f32450392eb630de129f6ef78c480f87bc5438f4f48f6968cc5e129991de4",
+    "hook-after.json": "c4000f1a3304c59c1888e649c4c6df78ef7a4ed387371ae78cdc191e11a4f43b",
+    "hook-real-rejection-result.json": "d2ff34801e114030f9094fcd3a7a2006e5cabb746f216c2ad5174de3ab0bec99",
+    "independent-review.jsonl": "e3c670589855c91d27c67a31cccc0c861d9823794d5d07b628da58cf27549979",
+    "core-lint-profile.log": "20b0b01459890e3ce55f9d270e262fc15a9941dd297d7c3cc0c9917205db22fe",
+    "registration.json": "3e30634f8b81123f279d932f5351f3df39714b4505b34653797ad5207d8b5ada",
+    "result.json": "98796e2e57425ba5c4ac585b3f85552182a12fcc68304122355815541a84b337",
+    "runs.json": "df81a0f3a608002a4f3aa8ef3891943ce09942259179aee5cfbc8d2798ad7dcb",
+    "profile-after.json": "ae6c893778128755ac1d49d31e64a6f0239e4605485f7bb6b11587a4397abbf2"
+  },
+  "review": {
+    "findings": 0,
+    "fresh": true,
+    "seconds": 150.41459133301396,
+    "usage": {
+      "input_tokens": 337998,
+      "cached_input_tokens": 270592,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3675,
+      "reasoning_output_tokens": 2522,
+      "convention": "cached input is subset of input; reasoning output is subset of output"
+    },
+    "usd": null
+  },
+  "tests": {
+    "targeted": 87,
+    "extended": 164,
+    "extended_seconds": 24.78,
+    "local_full": "pending shared lock",
+    "github_ci": "pending PR"
+  },
+  "owner_acceptance": null,
+  "primary_cohort": false,
+  "usd": null,
+  "human_active_minutes": null,
+  "limits": [
+    "n3 pervariant; busy sharedmachine",
+    "controlledcopiedchild, notowneracceptedproductdelivery",
+    "next20s initialattempt timedout; preservedexcluded",
+    "no p95/SLA/productleadtime/ROI claim"
+  ]
+}

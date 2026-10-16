@@ -259,6 +259,41 @@ def test_hook_passes_an_existing_file_within_its_frozen_line(lh, tmp_path):
     assert lh.run_hook(_event(root / "src" / "old.ts"), root) == (0, "", "")
 
 
+def test_patch_profile_checks_each_file_ceiling_once_without_rewriting_it(lh, tmp_path):
+    root = _child(tmp_path)
+    baseline = root / lint_profile_js.SUPPRESSIONS
+    before = baseline.read_bytes()
+    (root / "src/old.ts").write_text("const old = 1;\n")
+    (root / "src/clean.ts").write_text("const ИМЯ = 1;\n")
+    patch = "*** Begin Patch\n*** Update File: src/old.ts\n@@\n+const old = 1;\n*** Update File: src/clean.ts\n@@\n+const ИМЯ = 1;\n*** End Patch"
+    event = {"tool_name": "apply_patch", "cwd": str(root), "tool_input": {"command": patch}}
+    code, err, _ = lh.run_hook(event, root)
+    assert code == 2 and "src/clean.ts:1" in err and "было 0, стало 1" in err
+    assert baseline.read_bytes() == before, "уменьшение долга одного файла не разрешает рост другого"
+    assert len(_profile_calls(tmp_path)) == 1
+    assert "src/old.ts" in _profile_calls(tmp_path)[0] and "src/clean.ts" in _profile_calls(tmp_path)[0]
+
+
+def test_profile_deadline_is_shared_between_tools(lh, tmp_path, monkeypatch):
+    root = _child(tmp_path)
+    (root / lint_profile.RUFF_OUT).write_text("[lint]\n")
+    (root / lint_profile.IMPORTLINTER_OUT).write_text("[importlinter]\n")
+    lint_baseline.save(root, {"ruff": {}, "import-linter": {}})
+    clock, calls = [0.0], []
+    from ai_ops_kit.cli import lint_profile_cli
+
+    def measure(r, spec, extra=(), targets=None, timeout=None):
+        calls.append((spec["tool"], targets, timeout))
+        clock[0] += 6
+        return [], {}, None
+
+    monkeypatch.setattr(lh.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(lint_profile_cli, "measure", measure)
+    kind, text = lh._style_profile(root, "src/a.py", 5)
+    assert kind == "note" and "import-linter" in text
+    assert len(calls) == 1 and calls[0][0] == "ruff", "исчерпанный бюджет не выдаётся заново каждому tool"
+
+
 def test_hook_blocks_growth_inside_an_existing_file(lh, tmp_path):
     root = _child(tmp_path)
     f = root / "src" / "old.ts"

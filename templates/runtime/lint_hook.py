@@ -258,6 +258,11 @@ def _project_lint(root: Path, rel: str, lang: str, timeout: float) -> tuple:
     argv, cwd, why = per_file_command(root, rel, lang, lint_cmd)
     if argv is None:
         return "note", why
+    return _execute_lint(argv, cwd, rel, timeout)
+
+
+def _execute_lint(argv, cwd: Path, rel: str, timeout: float) -> tuple:
+    """Один запуск совместимого линтера; rel называет все проверяемые файлы."""
     try:
         r = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True, timeout=timeout)
     except subprocess.TimeoutExpired:
@@ -295,7 +300,7 @@ def _kit(root: Path):
     return None
 
 
-def _style_profile(root: Path, rel: str, timeout: float) -> tuple:
+def _style_profile(root: Path, rel: str | list, timeout: float) -> tuple:
     """Профиль стиля на одном файле -> ("ok" | "violation" | "note" | "off", текст).
 
     "off" — профиль в дочке не включён (или этот файл он не судит): поведение хука прежнее."""
@@ -303,17 +308,35 @@ def _style_profile(root: Path, rel: str, timeout: float) -> tuple:
     if kit is None:
         return "off", ""
     lp, lb, cli = kit
-    tools = lp.tools_for_file(lp.applied_tools(root), rel)
-    if not tools:
+    files = [rel] if isinstance(rel, str) else rel
+    selected = [(spec, [f for f in files if lp.tools_for_file([spec], f)])
+                for spec in lp.applied_tools(root)]
+    selected = [(spec, targets) for spec, targets in selected if targets]
+    if not selected:
         return "off", ""
-    if timeout < 3:
-        return "note", "профиль стиля AI Ops не успел — время хука вышло на линтере проекта"
-    res = lb.check(root, tools, lambda r, spec, extra=(), targets=None:
-                   cli.measure(r, spec, extra, targets=targets, timeout=timeout), files=[rel])
+    deadline, rows = time.monotonic() + timeout, []
+
+    def measure(r, spec, extra=(), targets=None):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return None, {}, "время хука исчерпано; инструмент не запускался"
+        return cli.measure(r, spec, extra, targets=targets, timeout=remaining)
+
+    for spec, targets in selected:
+        if deadline - time.monotonic() < 3:
+            rows.append({"tool": spec["tool"], "status": lb.NOT_CHECKED,
+                         "reason": "профиль не успел: время хука исчерпано на предыдущих проверках"})
+            continue
+        checked = lb.check(root, [spec], measure, files=targets)["tools"]
+        if len(targets) > 1 and any(row["status"] == lb.NOT_CHECKED for row in checked):
+            checked = [row for target in targets
+                       for row in lb.check(root, [spec], measure, files=[target])["tools"]]
+        rows.extend(checked)
+    res = {"tools": rows}
     grown = lb.grown(res)
     if grown:
         lines = "\n".join("  " + lb.address(g) for g in grown[:MAX_LINES])
-        return "violation", (f"Профиль стиля AI Ops: новое расхождение в {rel} сверх замороженного "
+        return "violation", (f"Профиль стиля AI Ops: новое расхождение в {', '.join(files)} сверх замороженного "
                              f"(существующее не в счёт, новое не проходит). Исправь:\n{lines}")
     missed = [f"{r['tool']}: {r['reason']}" for r in res["tools"] if r["status"] == lb.NOT_CHECKED]
     return ("note", "профиль стиля AI Ops проверен не весь (" + "; ".join(missed) + ")") if missed \
@@ -335,52 +358,96 @@ def run_hook(event: dict, root: Path | None = None) -> tuple:
                                           command, re.MULTILINE)))
     if not paths and not re.search(r"^\*\*\* Delete File: .+$", command, re.MULTILINE):
         return _note("Codex apply_patch не содержит распознаваемых файлов")
-    deadline = time.monotonic() + TIMEOUT_S
-    errors, notes = [], []
-    for path in paths:
-        remaining = deadline - time.monotonic()
-        if remaining <= 0:
-            notes.append("общий бюджет проверки patch исчерпан; оставшиеся файлы не проверены")
-            break
-        code, err, out = _run_file_hook({**event, "tool_input": {"file_path": path}}, root, remaining)
-        if code == 2:
-            errors.append(err)
-        if out:
-            notes.append(json.loads(out)["hookSpecificOutput"]["additionalContext"])
-    if errors:
-        return 2, "\n\n".join(errors + notes), ""
-    return _note("; ".join(notes)) if notes else (0, "", "")
+    if not paths:
+        return 0, "", ""
+    if len(paths) == 1:
+        return _run_file_hook({**event, "tool_input": {"file_path": paths[0]}}, root)
+    return _run_batch_hook(event, root, paths, time.monotonic() + TIMEOUT_S)
 
 
 def _run_file_hook(event: dict, root: Path | None = None, timeout=None) -> tuple:
     """Одна правка агента -> (код выхода, stderr, stdout). Код 2 = нарушения линта или профиля."""
     timeout = TIMEOUT_S if timeout is None else timeout
     root = Path(root or _root_from_env(event)).resolve()
+    target = _file_target(event, root)
+    if target is None or not hook_enabled(root):
+        return 0, "", ""
+    rel, lang = target
+    started = time.monotonic()
+    project = _project_lint(root, rel, lang, timeout)
+    style = _style_profile(root, rel, timeout - (time.monotonic() - started))
+    return _hook_result([project, style])
+
+
+def _file_target(event: dict, root: Path):
+    """Только существующее назначение в дочке; одинаково для single и batch."""
     raw = ((event.get("tool_input") or {}).get("file_path")) or ""
     if not raw:
-        return 0, "", ""
+        return None
     path = Path(raw)
     if not path.is_absolute():
         path = Path(event.get("cwd") or root) / path
     path = path.resolve()
     if root not in path.parents or not path.is_file():
-        return 0, "", ""                          # вне дочки или файла уже нет — не наше
+        return None
     rel = path.relative_to(root).as_posix()
     if SKIP_PARTS.intersection(Path(rel).parts[:-1]):
-        return 0, "", ""                          # служебное / зависимости / сгенерированное
+        return None
     lang = LANG_BY_EXT.get(path.suffix.lower())
-    if lang is None or not hook_enabled(root):
-        return 0, "", ""                          # не код знакомого языка или хук выключен
-    started = time.monotonic()
-    project = _project_lint(root, rel, lang, timeout)
-    style = _style_profile(root, rel, timeout - (time.monotonic() - started))
-    blocks = [text for kind, text in (project, style) if kind == "violation"]
-    notes = [text for kind, text in (project, style) if kind == "note"]
+    return (rel, lang) if lang else None
+
+
+def _hook_result(results: list) -> tuple:
+    """Нарушение сохраняет отказ, непроверенное сохраняет явную причину."""
+    blocks = [text for kind, text in results if kind == "violation"]
+    notes = [text for kind, text in results if kind == "note"]
     if blocks:
         return 2, "\n\n".join(blocks + [f"(также: {n})" for n in notes]), ""
     if notes:
-        return _note("; ".join(notes), "линтером" if project[0] == "note" else "профилем стиля целиком")
+        return _note("; ".join(notes), "линтером или профилем стиля целиком")
     return 0, "", ""
+
+
+def _run_batch_hook(event: dict, root, paths: list, deadline: float) -> tuple:
+    """Один процесс на совместимый exe/cwd/argv; разные пакеты и профили не смешиваются."""
+    root = Path(root or _root_from_env(event)).resolve()
+    if not hook_enabled(root):
+        return 0, "", ""
+    targets = list(dict.fromkeys(target for path in paths
+                   if (target := _file_target({**event, "tool_input": {"file_path": path}}, root))))
+    if not targets:
+        return 0, "", ""
+    profile, why = load_profile(root)
+    results, groups = [], {}
+    for rel, lang in targets:
+        lint_cmd = ((_stack(profile, lang) or {}).get("commands") or {}).get("lint")
+        if not lint_cmd:
+            results.append(("note", f"{rel}: {why or f'нет команды линта для {lang}'}"))
+            continue
+        argv, cwd, why = per_file_command(root, rel, lang, lint_cmd)
+        if argv is None:
+            results.append(("note", f"{rel}: {why}"))
+            continue
+        group = groups.setdefault((tuple(argv[:-1]), cwd), {"args": [], "files": [], "commands": []})
+        if argv[-1] not in group["args"]:
+            group["args"].append(argv[-1])
+        group["files"].append(rel)
+        group["commands"].append((argv, rel))
+    for (prefix, cwd), group in groups.items():
+        remaining, label = deadline - time.monotonic(), ", ".join(group["files"])
+        if remaining <= 0:
+            results.append(("note", f"{label}: общий бюджет проверки patch исчерпан; файлы не проверены"))
+            continue
+        result = _execute_lint([*prefix, *group["args"]], cwd, label, remaining)
+        if result[0] == "note" and len(group["commands"]) > 1:
+            for argv, rel in group["commands"]:
+                remaining = deadline - time.monotonic()
+                results.append(_execute_lint(argv, cwd, rel, remaining) if remaining > 0 else
+                               ("note", f"{rel}: время хука исчерпано; файл не проверен"))
+        else:
+            results.append(result)
+    results.append(_style_profile(root, [rel for rel, _ in targets], deadline - time.monotonic()))
+    return _hook_result(results)
 
 
 # ── вход `ci` ────────────────────────────────────────────────────────────────────────────────────

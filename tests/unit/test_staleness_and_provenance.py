@@ -76,6 +76,35 @@ def test_a_shorthand_path_is_not_called_dead(tmp_path):
     assert staleness.dead_references(root) == []
 
 
+@pytest.mark.parametrize("root_form", ["absolute", "dot", "relative"])
+def test_vendor_shorthand_and_missing_path_keep_the_same_results(tmp_path, monkeypatch, root_form):
+    from ai_ops_kit.planning import staleness
+
+    root = _repo(tmp_path / "child", {"README.md": "`ui/adapter.py` и `ui/missing.py`\n",
+                "ui/marker.py": "", "node_modules/pkg/ui/adapter.py": "x = 1\n"})
+    monkeypatch.chdir(root if root_form == "dot" else root.parent)
+    argument = root if root_form == "absolute" else Path("." if root_form == "dot" else root.name)
+    assert staleness.dead_references(argument) == [
+        {"doc": "README.md", "line": 1, "ref": "ui/missing.py", "kind": "путь"}]
+
+
+def test_index_does_not_build_path_parent_objects_per_dependency_file(tmp_path, monkeypatch):
+    from ai_ops_kit.planning import staleness
+
+    root = _repo(tmp_path, {"README.md": "`ui/adapter.py`\n", "ui/marker.py": "",
+                           "node_modules/pkg/ui/adapter.py": "x = 1\n"})
+    original, calls = Path.relative_to, []
+
+    def observed(path, *args, **kwargs):
+        if "node_modules" in path.parts:
+            calls.append(path)
+        return original(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "relative_to", observed)
+    assert staleness.dead_references(root) == []
+    assert calls == [], "индекс всех зависимостей не должен строить цепочку Path.parents для каждого файла"
+
+
 def test_absolute_paths_and_urls_are_not_our_business(tmp_path):
     """`/Users/runner`, `/tmp/...` и ссылки — примеры чужих машин, а не ссылки на этот репозиторий."""
     from ai_ops_kit.planning import staleness
