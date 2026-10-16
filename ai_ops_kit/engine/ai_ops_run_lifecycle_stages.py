@@ -69,7 +69,7 @@ def _start_lifecycle(features_dir, fid, task_text, signals, plan, engine, base, 
     """Durable lifecycle-start: workitem.start + RunPlan/run-settings (write-barrier) + journal
     run_start + per-run снимок. K6: вынесено из run(). -> (attempt_id, error|None)."""
     workitem.start(str(features_dir), fid, task_text,
-                   task_type=signals.get("task_type"), risk=signals.get("risk"))
+                   task_type=signals.get("task_type"), risk=signals.get("risk"), signals=signals)
     # v3.0.15 (finding аудита P1): RunPlan — write BARRIER. Сбой durable-записи -> прогон НЕ начат
     # (0 вызовов модели): без надёжного плана нельзя доказать routing/гейты/resume.
     _pw = _ls.durable_write(features_dir / fid / "run-plan.yaml", plan, require_keys=("workitem_id",))

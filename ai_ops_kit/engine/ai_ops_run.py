@@ -87,7 +87,7 @@ def _run_controller_path(task_text, signals, child_root, features_dir, feature,
 
     # 3. WorkItem
     workitem.start(str(features_dir), fid, task_text,
-                   task_type=signals.get("task_type"), risk=signals.get("risk"))
+                   task_type=signals.get("task_type"), risk=signals.get("risk"), signals=signals)
 
     # 4. RunPlan на диск — v3.0.16 Phase A (аудит #3): барьер, сбой durable-записи -> 0 исполнения.
     _pw2 = _ls.durable_write(features_dir / fid / "run-plan.yaml", plan)
