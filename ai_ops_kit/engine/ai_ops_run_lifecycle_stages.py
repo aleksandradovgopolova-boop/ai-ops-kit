@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import contextlib
+import math
 import sys
 
 from ai_ops_kit.engine.pipeline_helpers import work_produced, delivery_pending  # noqa: E402
@@ -183,6 +184,22 @@ def _resume_gate(child_root, fid, base, force_resume, resume):
     return pf, resume_ctx, None
 
 
+def _total_call_latency(stats):
+    """Сумма измеренных секунд; отсутствие хотя бы одного замера не превращается в ноль."""
+    total = 0.0
+    for record in stats:
+        value = record.get("latency", record.get("latency_s"))  # legacy raw stats до UsageRecord
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        try:
+            total += float(value)
+        except OverflowError:
+            return None
+        if value < 0 or not math.isfinite(total):
+            return None
+    return round(total, 3)
+
+
 def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals, plan,
                        model_resolution, child_root):
     """Агрегат run_cost (tokens/latency/cost) из вызовов модели + usage-ledger + очистка
@@ -202,7 +219,7 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
     if _stats:
         _in = sum(s.get("input_tokens") or 0 for s in _stats)
         _out = sum(s.get("output_tokens") or 0 for s in _stats)
-        _lat = round(sum(s.get("latency_s") or 0 for s in _stats), 3)
+        _lat = _total_call_latency(_stats)
         from ai_ops_kit.providers import cost_account
         _costs = [s.get("cost_usd_est") for s in _stats]
         # Частичный учёт не становится полной ценой прогона: отдельные

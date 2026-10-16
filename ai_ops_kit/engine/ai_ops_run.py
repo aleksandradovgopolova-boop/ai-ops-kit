@@ -255,6 +255,13 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             review_fix_attempts=review_fix_attempts, reviewer_proposer=reviewer_proposer,
             author_proposer=author_proposer)
         if _exerr is not None:
+            _failure_journal = features_dir / fid / "lifecycle-journal.jsonl"
+            _finalize_run_cost(_exerr, orchestrator, model, str(_failure_journal), fid,
+                               _attempt_id, signals, plan, _model_resolution, child_root)
+            _error_write = _ls.durable_write_json(features_dir / fid / "run-report.json", _exerr)
+            if not _error_write.get("ok"):
+                _note_bookkeeping_error(_exerr, "failure_usage_report.write",
+                                        RuntimeError(_error_write.get("error")))
             return _exerr
         _enrich_run_report(rep, runtime=runtime, provider_name=provider_name,
                            provider_resolution=provider_resolution, child_root=child_root,
