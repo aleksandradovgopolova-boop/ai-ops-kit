@@ -219,12 +219,12 @@ goals:
       # влить изменение (CI дочки); существующие нарушения зафиксированы базой и не растут.
       new_non_latin_identifier_is_refused_at_edit_and_in_ci: false
       # Новое пересечение объявленных слоёв (у ии-среды — FSD) блокируется; существующие — базой.
-      layer_crossing_is_refused_with_existing_frozen: false
+      layer_crossing_is_refused_with_existing_frozen: true
       # Дочка без линтера слышит об этом простыми словами с готовым профилем, а не молчаливое
       # «освобождено (нет инструмента в стеке)».
-      child_without_linter_is_told_not_exempted: false
+      child_without_linter_is_told_not_exempted: true
       # Ревьюер получает применимые статьи конституции, а не только «подтверди revision».
-      reviewer_judges_against_the_constitution: false
+      reviewer_judges_against_the_constitution: true
       # Кит сам держит своё правило: `PLC2401` в его ruff с базой 630, счётчик вниз.
       # ДОСТИГНУТО 2026-09-29 (PR #1185): `PLC2401`/`PLC2403` в блокирующем наборе ruff кита; 630
       # существующих имён заморожены ПОФАЙЛОВЫМИ потолками числа находок (`tests/contracts/
@@ -1184,15 +1184,16 @@ work:
     - child-without-linter-is-a-finding
     write_scope:
     - qualification/
-    rationale: Полевой прогон 05.10 подтвердил отказ CI на новом имени/пересечении слоёв, зелёный CI после
-      исправления и независимое ревью по ARCH-002/CODE-011. У дочки собственный более строгий ESLint; второй
-      профиль с базой не включался. Живая реакция агента остаётся неизвестной, доступ организации отключён.
-      Направление не засчитано.
-    waiting_on: Настоящий CI и ревьюер проверены; живая сессия Claude Code отказала из-за политики организации.
-      Нужен разрешённый доступ или API-ключ вне репозитория.
-    human_decision: Предоставить среду для живой сессии агента; ручное событие PostToolUse не подменяет
-      это наблюдение.
-    evidence: qualification/CODE-STYLE-FIELD-RUN-2026-10-05.md
+    rationale: Полевой прогон 16.10 подтвердил настоящий released hook, frozen baseline и отказ нового
+      пересечения слоёв, сообщение при отсутствии линтера на восстановленном контролируемом варианте,
+      статьи конституции в настоящем prompt reviewer и правило идентификаторов самого Kit. Достигнуты
+      4 из 5 исходов; combined hook/невозможность merge не засчитан. PR1193 обновления дочки ещё ожидает
+      подтверждения доставки; это не критерий выполненного server merge-block.
+    waiting_on: GitHub private repository protection/rules API403 не позволяет доказать обязательный
+      server merge-block. Настоящий native hook уже квалифицирован; прежний Claude auth blocker устарел.
+    human_decision: Решить способ подтверждения обязательной серверной защиты приватного репозитория;
+      покупка тарифа или публикация репозитория автоматически не разрешены.
+    evidence: qualification/COORDINATION-SESSION04-2026-10-16.md
 
   - id: measure-first-hour-with-a-stranger
     # Исторический id; текущая приёмка изменена прямым решением владельца 05.10.
