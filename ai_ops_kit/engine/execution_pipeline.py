@@ -189,6 +189,7 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
         # видно, ЧЕМ подтверждена правка (или почему не подтверждена).
         "regression": regression_proof,
         "checks": coll["checks"],
+        "verification": coll.get("verification"),
         "exemptions": sorted(exempt),          # флаги, освобождённые как неприменимые (видно, не тихо)
         "tests_warn": tests_warn,              # громкий сигнал об отсутствии тестов (если есть)
         "gates": {"evaluated": gates["evaluated_gates"], "unmet": gates["unmet_gates"],
@@ -272,7 +273,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  calibrated_enforcement=False, ui_evidence=None,   # v3.1.8 калиброванное UI-enforcement
                  strict_judge_qualified=True,   # v3.7.1: есть ли QUALIFIED security/integration судья
                  security_reviewer_proposer=None,   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
-                 reevaluate_only=False):   # v3.8.4: переоценить гейты существующего HEAD БЕЗ переавторинга
+                 reevaluate_only=False, verification_intent="merge_candidate"):   # v3.8.4: переоценить гейты существующего HEAD БЕЗ переавторинга
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -288,6 +289,13 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     v2.94 (One Run Transaction): если plan передан контроллером — используем ЕГО (не строим второй),
     чтобы pipeline и lifecycle жили в одной транзакции с общим WorkItem/RunPlan."""
+    from ai_ops_kit.gates import verification_tiers
+    if verification_intent is None:
+        verification_intent = "merge_candidate"
+    try:
+        verification_tiers.decide_tier([], lifecycle_intent=verification_intent)
+    except ValueError as exc:
+        return {"kind": "execution-pipeline", "status": "error", "ready_for_pr": False, "error": str(exc)}
     # K0-проводка: сверка параметров прогона с контрактом ядра (страж дрейфа kernel/ports).
     _pipeline_check_spec_drift(task, signals, child_root, feature, write_scope,
                                max_steps=max_steps, commit=commit, baseline_diff=baseline_diff,
@@ -353,7 +361,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence,
         review=review, reviewer_proposer=reviewer_proposer, budget=budget,
         strict_judge_qualified=strict_judge_qualified,
-        security_reviewer_proposer=security_reviewer_proposer, reevaluate_only=reevaluate_only)
+        security_reviewer_proposer=security_reviewer_proposer, reevaluate_only=reevaluate_only,
+        verification_intent=verification_intent)
     # распаковываем только то, что нужно ФАЗАМ ниже (gates/readiness); поля, идущие лишь в отчёт,
     # проецируются прямо из _ev в _pipeline_build_report — не плодим неиспользуемые локали.
     coll = _ev["coll"]

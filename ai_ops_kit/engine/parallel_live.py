@@ -179,7 +179,7 @@ def make_package_runner(child_root, base_sha, task_map, signals, run_fn, feature
         _git(child_root, "clean", "-fdq", "-e", ".ai", check=False)
         rep = run_fn(task, dict(signals), Path(child_root), engine="pipeline",
                      provider_name="openai-compatible", feature=pid, execute=True,
-                     author=True, review=True, features_dir=features_dir)
+                     author=True, review=True, features_dir=features_dir, verification_intent="draft")
         return package_result_from_rep(rep)
     return runner
 
@@ -202,20 +202,27 @@ def make_integration_runner(child_root, base_sha, integration_branch="ai-ops/int
         # v3.8.2 STACK-AWARE aggregate на integration-SHA: детект стека (project_detector) + повтор
         # evidence_collector (backend pytest/lint/typecheck; frontend build/lint/test; ...) — НЕ хардкод
         # pytest. Как у sequential-executor'а (_aggregate_verify). Fail-closed при сбое коллектора.
+        tested_revision, postcheck_revision, revision_ok, tree_clean = None, None, False, False
         try:
             from ai_ops_kit.shared import project_detector as _pd
             from ai_ops_kit.gates import evidence_collector as _ec
             from ai_ops_kit.engine import tool_broker as _tb
+            from ai_ops_kit.engine.pipeline_git import _tree_clean_after_checks
             _pol = _tb.sandbox_policy(child_root=str(child_root))
-            _coll = _ec.collect(_pd.detect(child_root), child_root, _pol, broker=_tb)
+            _coll = _ec.collect(_pd.detect(child_root), child_root, _pol, broker=_tb, lifecycle_intent="merge_candidate")
             _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
-            stack_ok = _iv.get("status") == "pass"
+            tested_revision = _coll.get("revision")
+            postcheck_revision = _git(child_root, "rev-parse", "HEAD").stdout.strip()
+            revision_ok = tested_revision == integration_sha == postcheck_revision
+            tree_clean = _tree_clean_after_checks(child_root)
+            stack_ok = _iv.get("status") == "pass" and revision_ok and tree_clean
             stack_checks = {k: (v.get("status") if isinstance(v, dict) else v) for k, v in (_coll.get("checks") or {}).items()}
         except Exception as _e:  # noqa: BLE001 — сбой коллектора -> fail-closed
             stack_ok = False
             stack_checks = {"error": f"{type(_e).__name__}: {_e}"[:160]}
         all_pass = conflicts == 0 and stack_ok
-        aggregate = {"all_pass": all_pass, "tested_revision": integration_sha, "conflicts": conflicts,
+        aggregate = {"all_pass": all_pass, "tested_revision": tested_revision, "conflicts": conflicts,
+                     "postcheck_revision": postcheck_revision, "revision_ok": revision_ok, "tree_clean": tree_clean,
                      "stack_aware": True, "stack_checks": stack_checks}
         return integration_sha, aggregate, conflicts, False
     return runner
@@ -317,7 +324,7 @@ def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn
         options.setdefault("author", True)
         options.setdefault("review", True)
         options.update(engine="pipeline", feature=pid, execute=True, open_pr=False,
-                       write_scope=pkg.get("write_scope"))
+                       write_scope=pkg.get("write_scope"), verification_intent="draft")
         pkg_signals = _pkg_signals(signals, pkg)
         pkg_signals.update(work_package_id=pid, _sequence_plan_ids=list(task_map))
         clones[pid] = {"path": str(cpath), "branch": f"ai-ops/{pid}"}
@@ -371,18 +378,26 @@ def make_isolated_integration_runner(child_root, base_sha, clones, integration_b
             if m.returncode != 0:
                 conflicts += 1; _git(iroot, "merge", "--abort", check=False)
         integration_sha = _git(iroot, "rev-parse", "HEAD").stdout.strip()
+        tested_revision, postcheck_revision, revision_ok, tree_clean = None, None, False, False
         try:
             from ai_ops_kit.shared import project_detector as _pd
             from ai_ops_kit.gates import evidence_collector as _ec
             from ai_ops_kit.engine import tool_broker as _tb
-            _coll = _ec.collect(_pd.detect(iroot), iroot, _tb.sandbox_policy(child_root=str(iroot)), broker=_tb)
+            from ai_ops_kit.engine.pipeline_git import _tree_clean_after_checks
+            _coll = _ec.collect(_pd.detect(iroot), iroot, _tb.sandbox_policy(child_root=str(iroot)), broker=_tb,
+                                lifecycle_intent="merge_candidate")
             _iv = (_coll.get("gate_evidence") or {}).get("implementation_verification") or {}
-            stack_ok = _iv.get("status") == "pass"
+            tested_revision = _coll.get("revision")
+            postcheck_revision = _git(iroot, "rev-parse", "HEAD").stdout.strip()
+            revision_ok = tested_revision == integration_sha == postcheck_revision
+            tree_clean = _tree_clean_after_checks(iroot)
+            stack_ok = _iv.get("status") == "pass" and revision_ok and tree_clean
             stack_checks = {k: (v.get("status") if isinstance(v, dict) else v) for k, v in (_coll.get("checks") or {}).items()}
         except Exception as _e:  # noqa: BLE001
             stack_ok = False; stack_checks = {"error": f"{type(_e).__name__}: {_e}"[:160]}
         all_pass = conflicts == 0 and stack_ok
-        return integration_sha, {"all_pass": all_pass, "tested_revision": integration_sha, "conflicts": conflicts,
+        return integration_sha, {"all_pass": all_pass, "tested_revision": tested_revision, "conflicts": conflicts,
+                                 "postcheck_revision": postcheck_revision, "revision_ok": revision_ok, "tree_clean": tree_clean,
                                  "stack_aware": True, "stack_checks": stack_checks,
                                  "isolation": "per-package-clone"}, conflicts, False
     return runner
