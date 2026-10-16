@@ -275,7 +275,7 @@ def _source_rows(root: Path, path: Path, identity: str, baseline: dict | None = 
                 raise ValueError("source usage record не объект")
             row = dict(normalize(raw))  # только UsageRecord, не config/prompts/произвольные поля
             numeric = {"input_tokens", "output_tokens", "cost", "latency"}
-            if check(row) or any(v is not None and not isinstance(v, str)
+            if check(cast(UsageRecord, row)) or any(v is not None and not isinstance(v, str)
                                  for k, v in row.items() if k not in numeric):
                 raise ValueError("source UsageRecord не соответствует объявленному контракту")
             if any(isinstance(row.get(k), bool) for k in numeric):
@@ -329,7 +329,8 @@ def _merge_ledgers(child_root: str | Path, source_roots: list, source_ids: dict 
     canonical source path. Возврат — новые product calls. Сбой -> ValueError: source удалять НЕЛЬЗЯ.
     Ledger без provenance сохраняется, его старые импорты ретроспективно не угадываются.
     """
-    snapshots, batches = {}, {}
+    snapshots: dict[Path, str] = {}
+    batches: dict[Path, list[dict]] = {}
     if source_ids is not None and not isinstance(source_ids, dict):
         raise ValueError("source usage identities должны быть словарём")
     if source_baselines is not None and not isinstance(source_baselines, dict):
