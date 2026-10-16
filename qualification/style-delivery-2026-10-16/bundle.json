@@ -1,0 +1,430 @@
+{
+  "executor": "AI / Codex",
+  "recorded_at": "2026-10-16T13:01:54.347356+00:00",
+  "status": "profilemain/deployment qualified; installed release native qualified; updaterPR1193 pendingnewheadCI/merge/deploy",
+  "issues": [
+    1183,
+    1193
+  ],
+  "counts_toward_1243": false,
+  "owner_acceptance": null,
+  "human_active_minutes": null,
+  "usd": null,
+  "root_model_usage": null,
+  "release": {
+    "version": "4.11.0",
+    "tag_sha": "b7c64dd978fae2a525a0e4ed4a6c2396a07e6f8c",
+    "run": 38897020952,
+    "conclusion": "success",
+    "job_started_at": "2026-10-16T11:55:41Z",
+    "job_completed_at": "2026-10-16T12:00:59Z",
+    "full_current_python": "9183 passed,35 skipped,2 warnings,801.85s; CPython3.14.7/darwin",
+    "channel": "qualification; no stable field_evidence claimed"
+  },
+  "existing_child_profile": {
+    "executor": "AI",
+    "registered_at": "2026-10-16T11:11:26.018866+00:00",
+    "package": "installed4.10.1, no managed edits",
+    "scope": "local real child profile semantics, no source execution; temporary probes deleted",
+    "acceptance": "within-slice import passes; new identifier/cross-slice/upward reject; repeat apply cannot expand frozen baseline; restored whole profile passes",
+    "owner_acceptance": null,
+    "usd": null,
+    "counts_toward_child_cohort": false,
+    "within-slice": "ok",
+    "identifier": "grew",
+    "repeat_apply_preserves_both_baselines": true,
+    "cross-slice": "grew",
+    "upward": "grew",
+    "restored_exit": 0,
+    "baseline_sha256": {
+      "eslint-suppressions.json": "e4530c9c6874149bed152525ba076dd64b3d34bbd004e28678405e42dcc6ce27",
+      "baseline.json": "32008eec8ad842cc18aef19a5569d740b7bc945b5c4ffffad9d02f968598d536"
+    },
+    "finished_at": "2026-10-16T11:11:56.477146+00:00"
+  },
+  "negative_real_ci": {
+    "head": "f900b516ee49a45b9fac5b1b60283ff3d4b6efa3",
+    "run": 38894733520,
+    "conclusion": "failure",
+    "expected_failure": true,
+    "observed_causes": [
+      "identifier ai-ops/id-match",
+      "sibling and upward ai-ops/no-restricted-imports",
+      "own ESLint local rules"
+    ],
+    "job_started_at": "2026-10-16T11:44:13Z",
+    "job_completed_at": "2026-10-16T11:45:07Z",
+    "pr_or_merge": false
+  },
+  "postgres_readiness": {
+    "broken": {
+      "executor": "AI",
+      "registered_at": "2026-10-16T11:43:38.073183+00:00",
+      "scope": "real CI helper and real Docker, injected3s init only to expose temporary-server phase; dedicated local test DB",
+      "mode": "broken",
+      "budget": "one container <=90s, no app/production DB or model calls",
+      "expected": "broken reports ready before host SQL; fixed waits for final TCP server, host SQL passes",
+      "helper_exit": 0,
+      "host_sql_exit": 1,
+      "host_sql_result": "Connection terminated unexpectedly",
+      "cleanup_exit": 0,
+      "elapsed_seconds": 4.044048
+    },
+    "fixed": {
+      "executor": "AI",
+      "registered_at": "2026-10-16T11:44:14.919927+00:00",
+      "scope": "real CI helper and real Docker, injected3s init only to expose temporary-server phase; dedicated local test DB",
+      "mode": "fixed",
+      "budget": "one container <=90s, no app/production DB or model calls",
+      "expected": "broken reports ready before host SQL; fixed waits for final TCP server, host SQL passes",
+      "helper_exit": 0,
+      "host_sql_exit": 0,
+      "host_sql_result": "sql-ready",
+      "cleanup_exit": 0,
+      "elapsed_seconds": 5.892301
+    },
+    "independent_review": "NO FINDINGS"
+  },
+  "dashboard_test": {
+    "failed_ci_runs": [
+      38896519358,
+      38896588737
+    ],
+    "diagnostic": "17 passed,1 failed; TITLE_MATCHES[]; obsolete duplicate object header absent",
+    "correction": "actual POST material.title and opened id; visible list/reload/embed checks retained; no UI or timeout changes",
+    "focused_after": "18 passed0 failed",
+    "full_after": "12 of12 real local E2E scenarios passed",
+    "independent_review": "NO FINDINGS",
+    "review_failed_attempt": "default model400unsupported before review; retained; one isolatedofficialCLI retry succeeded"
+  },
+  "no_linter": {
+    "registered_at": "2026-10-16T11:59:24.312340+00:00",
+    "executor": "AI",
+    "scope": "controlled minimal Python child, synthetic onboarding qualification only, no real-repo claim",
+    "acceptance": "actual CLI onboard names lack of linter and proposes profile",
+    "owner_acceptance": null,
+    "usd": null,
+    "counts_toward_child_cohort": false,
+    "exit_code": 0,
+    "finished_at": "2026-10-16T11:59:54.079321+00:00",
+    "attempt_1": "not qualified: root package wrapper targets itself; no actual synthetic child onboarding",
+    "retry_registered_at": "2026-10-16T11:59:53.954473+00:00",
+    "retry": "use actual CLI entry with explicit child_root; no model calls",
+    "names_missing_linter": true,
+    "proposes_rules_and_ruff": true,
+    "qualification": "pass for controlled minimal Python child; no actual production onboarding claim"
+  },
+  "native_released_hook": {
+    "result": "qualified: actual installed4.11.0 controller run, saved WorkItem/Plan read, native apply_patch -> canonical hook real ESLint and Kit profile reject2 -> corrected0; no full pipeline or owner-accepted work claim",
+    "elapsed_seconds": 37.59276908298489,
+    "usage": [
+      {
+        "input_tokens": 92962,
+        "cached_input_tokens": 73728,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 696,
+        "reasoning_output_tokens": 100
+      }
+    ],
+    "hook_exit_codes": [
+      2,
+      0
+    ],
+    "canonical_hook_definition_unchanged": true,
+    "permission_modes_observed": [
+      "bypassPermissions",
+      "bypassPermissions"
+    ],
+    "scope": "standalone clone of real pending childphase1head139f, generated updatercommit08a8 from publishedtagb7; not yet main/deployed",
+    "checks": [
+      {
+        "check": "typecheck",
+        "exit_code": 0,
+        "elapsed_seconds": 15.845442416029982
+      },
+      {
+        "check": "build",
+        "exit_code": 0,
+        "elapsed_seconds": 2.617717458982952
+      },
+      {
+        "check": "profile-restored",
+        "exit_code": 0,
+        "elapsed_seconds": 10.867852790979668
+      }
+    ],
+    "before_hashes": {
+      "features/kit-released-hook-1183-20261016/workitem.yaml": "d4ae55ae323d279d542475b72be0a3e3dbef7b89ab23518496b8b0ab5e9fce36",
+      "features/kit-released-hook-1183-20261016/run-plan.yaml": "899e3e72f4d4165a5437a5e87678329c629441690b5650672eac01c5e505526e",
+      ".codex/hooks.json": "22e2b62c882729e9c36997e26bd2e2bdf3e267c8d2702acb9e719db0fffa1c2f",
+      "planning/plan.yaml": "a36d23551e45de0e31827aa004cb666e1459c1dc3549532b4496f03820e42f66",
+      ".ai-ops.yaml": "9c46e60b5e70f1cfe82e568db853d21d296137565cba0590e1aae21e147f495b"
+    },
+    "after_hashes": {
+      "features/kit-released-hook-1183-20261016/workitem.yaml": "d4ae55ae323d279d542475b72be0a3e3dbef7b89ab23518496b8b0ab5e9fce36",
+      "features/kit-released-hook-1183-20261016/run-plan.yaml": "899e3e72f4d4165a5437a5e87678329c629441690b5650672eac01c5e505526e",
+      ".codex/hooks.json": "22e2b62c882729e9c36997e26bd2e2bdf3e267c8d2702acb9e719db0fffa1c2f",
+      "planning/plan.yaml": "a36d23551e45de0e31827aa004cb666e1459c1dc3549532b4496f03820e42f66",
+      ".ai-ops.yaml": "9c46e60b5e70f1cfe82e568db853d21d296137565cba0590e1aae21e147f495b"
+    },
+    "raw_sha256": {
+      "events.jsonl": "0e9579a67445e7928847ff82e80ee5321c7d796534bd14a0ba44000b0bcfc953",
+      "hook-receipts.jsonl": "5e1e8d6d92d6b3baea3259fb9ea8d0b905ebe9b76ad91ff3b038076bfe53531d",
+      "controller-registration.txt": "56c4ba97b3b7a13cd114b8decf1fd9fe3fa2d920077210f47aaa7c1569fa7fb4",
+      "delivered-hooks.json": "22e2b62c882729e9c36997e26bd2e2bdf3e267c8d2702acb9e719db0fffa1c2f",
+      "update-report.json": "c003d673b646f4712b159452e1017d5d70f98f0a32f1f8fbd55836db93a57e12",
+      "typecheck.log": "af862cf0db80f1e86f0be0471da61216778ddcbfe5814918f1c5586c646f489d",
+      "build.log": "9b0d44a3e12365efda61294f5fb95bd9e79f446646749af792776600bb08b9b0",
+      "profile-restored.log": "6d21d03b23b754577fdd7c2089749b054746e084bb8a7234961987b761811c1c"
+    },
+    "native_trust": {
+      "actor": "AI",
+      "at": "2026-10-16T12:15:33.462087+00:00",
+      "mechanism": "ordinary Folder access Trust and continue; Review hooks→PostToolUse→exact canonical project hook→t Trusted; no bypassflags"
+    },
+    "receipts": [
+      {
+        "at": "2026-10-16T12:16:24.701950+00:00",
+        "argv": [
+          "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016/.ai/managed/templates/runtime/lint_hook.py",
+          "hook"
+        ],
+        "event": {
+          "session_id": "01a144a4-11be-7cb3-9787-74407c7fbf0d",
+          "turn_id": "01a144a4-1950-7261-9514-7b5ecde05516",
+          "transcript_path": null,
+          "cwd": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016",
+          "hook_event_name": "PostToolUse",
+          "model": "gpt-5.6-terra",
+          "permission_mode": "bypassPermissions",
+          "tool_name": "apply_patch",
+          "tool_input": {
+            "command": "*** Begin Patch\n*** Add File: /Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016/src/shared/lib/kit-released-lint-qualification.ts\n+export const число = 1;\n*** End Patch"
+          },
+          "tool_response": "Exit code: 0\nWall time: 0 seconds\nOutput:\nSuccess. Updated the following files:\nA /Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016/src/shared/lib/kit-released-lint-qualification.ts\n",
+          "tool_use_id": "exec-0816d18a-43f2-41e2-86d5-33d5e5cb23ad"
+        },
+        "exit_code": 2,
+        "stdout": "",
+        "stderr": "Линтер проекта (eslint) нашёл нарушения в src/shared/lib/kit-released-lint-qualification.ts. Исправь их, прежде чем продолжать (правило проекта, а не кита):\n/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016/src/shared/lib/kit-released-lint-qualification.ts\n  1:14  error  Имя «число» не латиницей. Имена в коде пишем по-английски; русский — в строках и комментариях, ключ-данное — строкой в кавычках  local/latin-identifiers\n✖ 1 problem (1 error, 0 warnings)\n\nПрофиль стиля AI Ops: новое расхождение в src/shared/lib/kit-released-lint-qualification.ts сверх замороженного (существующее не в счёт, новое не проходит). Исправь:\n  src/shared/lib/kit-released-lint-qualification.ts:1 — имя не латиницей (было 0, стало 1)\n"
+      },
+      {
+        "at": "2026-10-16T12:16:31.022674+00:00",
+        "argv": [
+          "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016/.ai/managed/templates/runtime/lint_hook.py",
+          "hook"
+        ],
+        "event": {
+          "session_id": "01a144a4-11be-7cb3-9787-74407c7fbf0d",
+          "turn_id": "01a144a4-1950-7261-9514-7b5ecde05516",
+          "transcript_path": null,
+          "cwd": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016",
+          "hook_event_name": "PostToolUse",
+          "model": "gpt-5.6-terra",
+          "permission_mode": "bypassPermissions",
+          "tool_name": "apply_patch",
+          "tool_input": {
+            "command": "*** Begin Patch\n*** Update File: /Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016/src/shared/lib/kit-released-lint-qualification.ts\n@@\n-export const число = 1;\n+export const kitReleasedLintQualification = 1;\n*** End Patch"
+          },
+          "tool_response": "Exit code: 0\nWall time: 0 seconds\nOutput:\nSuccess. Updated the following files:\nM /Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-released-hook-20261016/src/shared/lib/kit-released-lint-qualification.ts\n",
+          "tool_use_id": "exec-8982f77b-6838-4c91-97bb-784b756fa4a6"
+        },
+        "exit_code": 0,
+        "stdout": "",
+        "stderr": ""
+      }
+    ],
+    "permission_note": "CLI requested workspace-write and ordinary trust; actual receipt label preserved. No sandbox/isolation claim.",
+    "saved_work_model_read": true
+  },
+  "known_limits": [
+    "Native Git worktree project-hook discovery not qualified; standalone clone only in prior probe",
+    "PostToolUse checks after write; cannot undo; Bash writes outside matcher",
+    "No human-first-hour, owner acceptance, primary cohort or USD inferred"
+  ],
+  "updater": {
+    "generated_commit": "08a8fedbcf57c817a8618424ce0a0c27a1ef68b1",
+    "policy": "pr; no force or refresh-ci",
+    "managed_integrity": "OK, actual installed status",
+    "provenance": {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/kit-tag-4-11-0",
+      "sha": "b7c64dd978fa",
+      "branch": "HEAD",
+      "tag": "v4.11.0",
+      "is_release": true,
+      "origin": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git"
+    },
+    "before": {
+      ".github/workflows/ai-ops-lint.yml": "c334512b0b0053ebefaedb19264cb8bfd06e1be53baaca88947f836a6f700bfe",
+      "planning/plan.yaml": "a36d23551e45de0e31827aa004cb666e1459c1dc3549532b4496f03820e42f66",
+      "POLICY.yaml": null,
+      ".ai-ops.yaml": "81ac30fa25e5d15383dfdcb520f85ba2f85023c92abd741ccdf1e17f387860a1",
+      "architecture-invariants.yaml": "a04ed568aa7fc004dd7caa7fff960bf9543414c318e054a0086d38dc81c4e37c",
+      ".ai/project/lint/baseline.json": "32008eec8ad842cc18aef19a5569d740b7bc945b5c4ffffad9d02f968598d536",
+      ".ai/project/lint/eslint-suppressions.json": "e4530c9c6874149bed152525ba076dd64b3d34bbd004e28678405e42dcc6ce27"
+    },
+    "after": {
+      ".github/workflows/ai-ops-lint.yml": "c334512b0b0053ebefaedb19264cb8bfd06e1be53baaca88947f836a6f700bfe",
+      "planning/plan.yaml": "a36d23551e45de0e31827aa004cb666e1459c1dc3549532b4496f03820e42f66",
+      "POLICY.yaml": null,
+      ".ai-ops.yaml": "9c46e60b5e70f1cfe82e568db853d21d296137565cba0590e1aae21e147f495b",
+      "architecture-invariants.yaml": "a04ed568aa7fc004dd7caa7fff960bf9543414c318e054a0086d38dc81c4e37c",
+      ".ai/project/lint/baseline.json": "32008eec8ad842cc18aef19a5569d740b7bc945b5c4ffffad9d02f968598d536",
+      ".ai/project/lint/eslint-suppressions.json": "e4530c9c6874149bed152525ba076dd64b3d34bbd004e28678405e42dcc6ce27"
+    },
+    "child_config_diff": "installed_version4.10.1→4.11.0 only",
+    "legacy_tracked_report": "last-update-report.json already ignored by child policy but historically tracked. Caller own generated change preserved to control then restored. Plan/config/base hashes retained.",
+    "pr": 1193,
+    "rebased_delivery": {
+      "head": "9a055f5be5a53c3ec9493118df92ca0388a5e22d",
+      "base": "0d7c8160b20872b1226f6a90a3f6c4e0b780e322",
+      "managed_trees": {
+        "08a8fedbcf57c817a8618424ce0a0c27a1ef68b1": "2f40fb62e1077ab610669f76d0849f3651adb18a",
+        "HEAD": "2f40fb62e1077ab610669f76d0849f3651adb18a"
+      },
+      "protected_hashes": {
+        ".github/workflows/ai-ops-lint.yml": "c334512b0b0053ebefaedb19264cb8bfd06e1be53baaca88947f836a6f700bfe",
+        "planning/plan.yaml": "a36d23551e45de0e31827aa004cb666e1459c1dc3549532b4496f03820e42f66",
+        "POLICY.yaml": null,
+        ".ai-ops.yaml": "9c46e60b5e70f1cfe82e568db853d21d296137565cba0590e1aae21e147f495b",
+        "architecture-invariants.yaml": "a04ed568aa7fc004dd7caa7fff960bf9543414c318e054a0086d38dc81c4e37c",
+        ".ai/project/lint/baseline.json": "32008eec8ad842cc18aef19a5569d740b7bc945b5c4ffffad9d02f968598d536",
+        ".ai/project/lint/eslint-suppressions.json": "e4530c9c6874149bed152525ba076dd64b3d34bbd004e28678405e42dcc6ce27"
+      },
+      "canonical_hook_unchanged": true,
+      "working_tree_clean": true
+    },
+    "additional_owner_workflow_correction": {
+      "registered_at": "2026-10-16T12:38:54.478742+00:00",
+      "executor": "AI",
+      "finding": "real currentPR1193 Storybook productive build12s/upload5s, post cache save>8min blocks soleci-pool runner and14checks; actual ~/.npm10098948KiB",
+      "scope": "owner CI workflow only; network npm cache onlywhen both dedicatedrunner varsunset, consistent otherCI; package managedtree unchanged",
+      "prior_run": 38900622500,
+      "prior_head": "9a055f5be5a53c3ec9493118df92ca0388a5e22d",
+      "prior_state": "not a failure claimed: still postcache in progress; cancel superseded own run only after replacement push",
+      "counts_toward_primary_cohort": false,
+      "owner_acceptance": null,
+      "usd": null,
+      "head": "79ac539b3b6231ecb5a146afd83e686d198cdb4d",
+      "scoped_review": "NO FINDINGS",
+      "old_run_final": "cancelled, not successful",
+      "acceptance_required": "workflow parses, hostedwithlockpath unchanged; configured dedicatedrunner skips only redundant cache; actual newhead allchecks inspected"
+    },
+    "current_head": "79ac539b3b6231ecb5a146afd83e686d198cdb4d",
+    "status": "pending actual newheadCI, merge and deploy",
+    "cache_field": {
+      "executor": "AI",
+      "old_run": 38900622500,
+      "old_conclusion": "cancelled",
+      "old_post_cache_started_at": "2026-10-16T12:29:14Z",
+      "old_job_completed_at": "2026-10-16T12:43:52Z",
+      "post_cache_to_cancellation_seconds": 878.0,
+      "old_run_was_not_a_success": true,
+      "new_run": 38902443491,
+      "new_conclusion": "success",
+      "new_job_started_at": "2026-10-16T12:50:03Z",
+      "new_job_completed_at": "2026-10-16T12:52:09Z",
+      "new_job_elapsed_seconds": 126.0,
+      "network_cache_conclusion": "skipped",
+      "limits": "observed childMacCI; cancelled oldrun not a completed comparativebenchmark; USDunknown; parent template preserves its ownLinuxonlyrunnerselector",
+      "usd": null,
+      "counts_toward_primary_cohort": false
+    }
+  },
+  "no_linter_real_child": {
+    "executor": "AI",
+    "registered_at": "2026-10-16T12:28:38.266064+00:00",
+    "reason": "first variant still declared npm run lint in actual CI; detector correctly found that evidence, therefore was not a no-linter scenario",
+    "scope": "same real child, controlled absence of all ownlint declarations: package script/config + workflows temporarily outside child; production unchanged",
+    "acceptance": "warn missing lint and propose ESLint; restore every original file byte-for-byte",
+    "counts_toward_primary_cohort": false,
+    "owner_acceptance": null,
+    "usd": null,
+    "exit_code": 0,
+    "warning_observed": true,
+    "proposal_observed": true,
+    "originals_restored": true,
+    "finished_at": "2026-10-16T12:28:38.554320+00:00",
+    "working_tree": "",
+    "source_sha": "139fb9ba5f838f2841fe9e1a83b13be40480bc7b",
+    "qualification": "controlled missing-declarations variant of real ii-sreda; not actual production removal",
+    "first_attempt": "Not a no-linter scenario: CI still declared npm run lint, detector correctly found it; retained. Corrected controlled absence variant removed all declarations temporarily, restored every file and clean worktree."
+  },
+  "reviewer_current_prompt": {
+    "executor": "AI",
+    "registered_at": "2026-10-16T12:32:09.040718+00:00",
+    "scope": "actual installed4.11 reviewer prompt assembled for real native negative diff; capture at provider boundary only, no model call or new review verdict",
+    "release": "v4.11.0/b7c64dd978fa",
+    "counts_toward_primary_cohort": false,
+    "owner_acceptance": null,
+    "usd": null,
+    "result": "actual prompt contains delivered articles in criteria; no fresh judge verdict claimed",
+    "articles": [
+      "ARCH-002",
+      "CODE-004",
+      "CODE-011",
+      "CODE-012"
+    ],
+    "prompt_sha256": "0d096d335b17dd532b79420fbe6d924e14b479555461edfb7c93879364d3fff9",
+    "historical_actual_judge": "qualification/CODE-STYLE-CONSTITUTION-REVIEW-2026-10-05.md: reject ARCH-002/CODE-011; not rerun today",
+    "model_calls": 0
+  },
+  "reviewer_current_native": {
+    "executor": "AI",
+    "registered_at": "2026-10-16T12:34:10.087487+00:00",
+    "scope": "one independent native judge reads exact installed Kit-generated prompt and actual previously observed negative overlay; not review gate or acceptance of clean HEAD",
+    "budget": "one native prompt<=180s, gpt5.6terra; no source writes/models outside review",
+    "owner_acceptance": null,
+    "usd": null,
+    "counts_toward_primary_cohort": false,
+    "exit_code": 0,
+    "elapsed_seconds": 112.65893024997786,
+    "finished_at": "2026-10-16T12:36:02.818164+00:00",
+    "working_tree_unchanged": true,
+    "prompt_sha256": "0d096d335b17dd532b79420fbe6d924e14b479555461edfb7c93879364d3fff9",
+    "usage": [
+      {
+        "input_tokens": 465900,
+        "cached_input_tokens": 423424,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 3542,
+        "reasoning_output_tokens": 1460
+      }
+    ],
+    "actual_answer": "{\"kind\":\"reviewer-result\",\"gate\":\"code_review\",\"reviewed_revision\":\"08a8fedbcf57c817a8618424ce0a0c27a1ef68b1\",\"status\":\"pass\",\"checks\":[{\"id\":\"blockers_closed\",\"status\":\"pass\",\"evidence\":[{\"file\":\".ai/managed/templates/runtime/lint_hook.py\",\"lines\":\"323-352\"}]}],\"blockers\":[]}",
+    "qualification": "actual Kit-generated criteria delivered and independent judge ran; actual verdict pass refers clean updaterrevision, NOT rejection of historical negative overlay. No negative-judge claim from this attempt."
+  },
+  "phase1_delivery": {
+    "pr": 1192,
+    "head": "139fb9ba5f838f2841fe9e1a83b13be40480bc7b",
+    "all_checks": "14 SUCCESS",
+    "merge": "1b4e50598d8078285f0ef53e37dd931eb9f75c92",
+    "deployment": "canonical server script exit0",
+    "public_health": {
+      "status": "ok",
+      "database": "connected",
+      "version": "0d7c8160",
+      "timestamp": "2026-10-16T12:27:32.454Z"
+    },
+    "bundle": "index-CsgVMNt7.js"
+  },
+  "snapshot_note": "Updated evidence snapshot; final childupdater PR1193 CI/merge/deploy still pending. Cache preview alone succeeded; acceptance in preregistration is a requirement, not a completion claim.",
+  "parent_identifier_baseline": {
+    "executor": "AI",
+    "observed_at": "2026-10-16T12:57:48.385469+00:00",
+    "ruff_version": "ruff 0.16.2",
+    "frozen_files": 18,
+    "frozen_ceiling_total": 630,
+    "actual_total": 630,
+    "per_file_growth": false,
+    "ruff_exit": 1,
+    "meaning": "existing debt expected Ruff exit1; per-file bounds hold, no new allowance",
+    "raw_sha256": "a3d683d3ad61b549b6f26e292a16d427272b8f6d37a34ffd9b76d9a6c3264dc7"
+  },
+  "gate_reconciliation": {
+    "command": "python -m ai_ops_kit.devtools.arch_gate_reconciliation",
+    "exit_code": 0,
+    "dishonest_rows": 0,
+    "scope": "registry claims vs actual backing/root scanning; no new enforcement inferred"
+  }
+}

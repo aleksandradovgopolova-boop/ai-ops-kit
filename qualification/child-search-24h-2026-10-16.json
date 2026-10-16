@@ -1,0 +1,31 @@
+{
+  "executor": "AI",
+  "registered_at": "2026-10-16T12:24:43.935208+00:00",
+  "work": "ii-sreda#1143 / PR1188, later1146samework",
+  "delivery_at": "2026-10-15T12:23:16.870592+00:00",
+  "window_end": "2026-10-16T12:23:16.870592+00:00",
+  "scope": "bounded24h followup: public read-only health/source; no product generation, no production fixture writes, no human acceptance inference",
+  "counts_toward_primary_cohort": false,
+  "owner_acceptance": null,
+  "human_active_minutes": null,
+  "usd": null,
+  "functional_retention": "unknown; no observed owner followup and IAB navigation attempt timed out; authorization was present, no live browser verification obtained; local/currentCIchecks not substituted for productoutcome",
+  "causal_attribution": null,
+  "confounders": [
+    "subsequent1146UIcompact work sameunit",
+    "1189infra deployment",
+    "phase1style1192preparingdeployment"
+  ],
+  "observed_at": "2026-10-16T12:24:44.925255+00:00",
+  "window_mature": true,
+  "seconds_after_window_end": 88.054663,
+  "public_health": {
+    "status": "ok",
+    "database": "connected",
+    "version": "10110ab9",
+    "timestamp": "2026-10-16T12:24:44.636Z"
+  },
+  "health_scope": "actual database probe only; generation configured label is not generation verification; no user search usage metrics",
+  "verdict": "window matured; availability sample ok, product outcome remains unknown; neither passed nor failed owneroutcome; primarycohort unchanged",
+  "raw_sha256": "30fd54bbd465ac76ff060b3862e98957c8b224aafb856f1b19ac1a01c916e655"
+}
