@@ -274,6 +274,23 @@ def test_patch_profile_checks_each_file_ceiling_once_without_rewriting_it(lh, tm
     assert "src/old.ts" in _profile_calls(tmp_path)[0] and "src/clean.ts" in _profile_calls(tmp_path)[0]
 
 
+def test_profile_setup_consumes_shared_deadline(lh, tmp_path, monkeypatch):
+    root = _child(tmp_path)
+    original_kit = lh._kit
+    clock = [0.0]
+
+    def slow_kit(root):
+        loaded = original_kit(root)
+        clock[0] += 6
+        return loaded
+
+    monkeypatch.setattr(lh, "_kit", slow_kit)
+    monkeypatch.setattr(lh.time, "monotonic", lambda: clock[0])
+    kind, text = lh._style_profile(root, "src/clean.ts", 5)
+    assert kind == "note" and "время" in text
+    assert _profile_calls(tmp_path) == [], "истёкший setup-бюджет не даёт запустить процесс"
+
+
 def test_profile_deadline_is_shared_between_tools(lh, tmp_path, monkeypatch):
     root = _child(tmp_path)
     (root / lint_profile.RUFF_OUT).write_text("[lint]\n")

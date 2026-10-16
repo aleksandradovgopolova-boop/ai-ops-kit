@@ -304,6 +304,7 @@ def _style_profile(root: Path, rel: str | list, timeout: float) -> tuple:
     """Профиль стиля на одном файле -> ("ok" | "violation" | "note" | "off", текст).
 
     "off" — профиль в дочке не включён (или этот файл он не судит): поведение хука прежнее."""
+    deadline = time.monotonic() + timeout
     kit = _kit(root)
     if kit is None:
         return "off", ""
@@ -314,7 +315,7 @@ def _style_profile(root: Path, rel: str | list, timeout: float) -> tuple:
     selected = [(spec, targets) for spec, targets in selected if targets]
     if not selected:
         return "off", ""
-    deadline, rows = time.monotonic() + timeout, []
+    rows = []
 
     def measure(r, spec, extra=(), targets=None):
         remaining = deadline - time.monotonic()
