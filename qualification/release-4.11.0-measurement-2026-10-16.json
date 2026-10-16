@@ -1,0 +1,37 @@
+{
+  "executor": "AI / Codex",
+  "registered_at": "2026-10-16T11:04:57.820795+00:00",
+  "target_version": "4.11.0",
+  "channel": "qualification",
+  "pre_registration_research": "not timed",
+  "usd": null,
+  "human_active_minutes": null,
+  "counts_toward_child_cohort": false,
+  "source_sha": "7022f3e7196b19eeca4320bd667174883e89ba4e",
+  "assembly_started_at": "2026-10-16T11:20:11.578493+00:00",
+  "full_current_python": {
+    "scope": "CPython3.14.7/darwin",
+    "passed": 9183,
+    "skipped": 35,
+    "warnings": 2,
+    "elapsed_seconds": 801.85,
+    "exit_code": 0
+  },
+  "release_gate": {
+    "passed": 2,
+    "deselected": 41,
+    "elapsed_seconds": 0.18
+  },
+  "independent_review": {
+    "result": "NO FINDINGS",
+    "usage": {
+      "input_tokens": 210736,
+      "cached_input_tokens": 177664,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 660,
+      "reasoning_output_tokens": 20
+    },
+    "usd": null
+  },
+  "finished_at": "2026-10-16T11:41:47.659246+00:00"
+}
