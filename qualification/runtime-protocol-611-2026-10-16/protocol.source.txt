@@ -1,0 +1,7 @@
+import subprocess,os,json
+from pathlib import Path
+k=Path('/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/parallel-01'); root=Path(__file__).parent
+for intent in ['status','inbox','next','explain','do']:
+ args=['/Users/sasad/ai-ops-kit/.venv/bin/python','-m','ai_ops_kit.cli.ai_ops_cli',intent,str(root),'--feature','kit-runtime-handoff-611','--json']
+ p=subprocess.run(args,env={**os.environ,'PYTHONPATH':str(k)},capture_output=True,text=True,timeout=25)
+ print(json.dumps({'intent':intent,'exit_code':p.returncode,'stdout':p.stdout,'stderr':p.stderr},ensure_ascii=False),flush=True)
