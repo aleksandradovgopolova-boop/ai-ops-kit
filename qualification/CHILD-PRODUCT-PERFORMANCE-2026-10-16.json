@@ -1,0 +1,158 @@
+{
+  "executor": "AI",
+  "date": "2026-10-16",
+  "base_sha": "a692967ac94579713f272d55681e11bf6efe5622",
+  "hook": {
+    "before_median_seconds": 8.715682875015773,
+    "after_median_seconds": 2.0950489999959245,
+    "before_processes": [
+      8,
+      8,
+      8
+    ],
+    "after_processes": [
+      2,
+      2,
+      2
+    ],
+    "real_negative_exit": 2,
+    "restored_exit": 0,
+    "protected_hashes_unchanged": true,
+    "trials_per_variant": 3,
+    "first_trial_profiled": false,
+    "initial_pre_correction_median_seconds": {
+      "before": 10.234287666040473,
+      "after": 3.9037645420758054
+    },
+    "sequence": [
+      "before",
+      "after",
+      "after",
+      "before",
+      "before",
+      "after"
+    ],
+    "reduction_fraction": 0.7596230805962942,
+    "final_source_sha256": "2571798c5473c18a8c4a52d876724a950cafca7ef174382856952abcc8cfa81d",
+    "paired_final_receipt": "hook-final-ab-result.json"
+  },
+  "next": {
+    "completed_at": "2026-10-16T16:09:51.982146+00:00",
+    "sequence": [
+      "before",
+      "after",
+      "after",
+      "before",
+      "before",
+      "after"
+    ],
+    "summary": {
+      "before": {
+        "n": 3,
+        "seconds": [
+          13.184372375020757,
+          7.359642458963208,
+          7.960981082986109
+        ],
+        "median_seconds": 7.960981082986109
+      },
+      "after": {
+        "n": 3,
+        "seconds": [
+          5.191056791925803,
+          4.5230348750483245,
+          4.050515334005468
+        ],
+        "median_seconds": 4.5230348750483245
+      }
+    },
+    "speedup_median_ratio": 1.7600972141301592,
+    "median_wall_reduction_fraction": 0.4318495637786687,
+    "p95": null,
+    "all6_complete_json_equal": true,
+    "after_profile_json_equal": true,
+    "all6_stdout_bytes_hash_equal": true,
+    "child_protected_hashes_unchanged": true,
+    "parent_gates_registry_hashes_equal": true,
+    "child_git_status": "",
+    "elapsed_measurement_seconds": 49.94281033298466,
+    "source_after_sha256": "7c2a6d1edc7d0e461dfa12f38ef4ca858f978a39d746bcb19dfc49f657890bd3",
+    "quality_note": "No dropped findings/fields; exact fullnextprojection equivalence on this real installedtree. Targeted invariants + CI are root-owned, not replaced by timingproof."
+  },
+  "source_sha256": {
+    "templates/runtime/lint_hook.py": "2571798c5473c18a8c4a52d876724a950cafca7ef174382856952abcc8cfa81d",
+    "ai_ops_kit/planning/staleness.py": "7c2a6d1edc7d0e461dfa12f38ef4ca858f978a39d746bcb19dfc49f657890bd3"
+  },
+  "receipt_sha256": {
+    "hook-before.json": "556f32450392eb630de129f6ef78c480f87bc5438f4f48f6968cc5e129991de4",
+    "hook-after.json": "c4000f1a3304c59c1888e649c4c6df78ef7a4ed387371ae78cdc191e11a4f43b",
+    "hook-real-rejection-result.json": "d2ff34801e114030f9094fcd3a7a2006e5cabb746f216c2ad5174de3ab0bec99",
+    "independent-review.jsonl": "e3c670589855c91d27c67a31cccc0c861d9823794d5d07b628da58cf27549979",
+    "core-lint-profile.log": "20b0b01459890e3ce55f9d270e262fc15a9941dd297d7c3cc0c9917205db22fe",
+    "registration.json": "3e30634f8b81123f279d932f5351f3df39714b4505b34653797ad5207d8b5ada",
+    "result.json": "98796e2e57425ba5c4ac585b3f85552182a12fcc68304122355815541a84b337",
+    "runs.json": "df81a0f3a608002a4f3aa8ef3891943ce09942259179aee5cfbc8d2798ad7dcb",
+    "profile-after.json": "ae6c893778128755ac1d49d31e64a6f0239e4605485f7bb6b11587a4397abbf2",
+    "hook-final-ab-result.json": "22f044e9e8446719e1bec493bf628248343edbe436f567bf6c20c1a9582bd4c8",
+    "setup-deadline-reproduction.json": "c97db5dde62238ebae3b6d80e079c9bc7101bd8857ba5f03b6ee0e4e58b5df86",
+    "setup-deadline-review.jsonl": "73afb869bce7283f6188417bd23d5e30c9bb3188c43f1a304e1e4c2ec65e39ed",
+    "core-after-clock-correction.log": "b95ebea3b4c02ac854470839f2f4642e148f3cb5883e5c7b023fd37679e66c0a"
+  },
+  "review": {
+    "findings": 0,
+    "fresh": true,
+    "seconds": 150.41459133301396,
+    "usage": {
+      "input_tokens": 337998,
+      "cached_input_tokens": 270592,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 3675,
+      "reasoning_output_tokens": 2522,
+      "convention": "cached input is subset of input; reasoning output is subset of output"
+    },
+    "usd": null
+  },
+  "tests": {
+    "targeted": 87,
+    "extended": 165,
+    "extended_seconds": 18.75,
+    "local_full": {
+      "phase": "before final two-line setup deadline correction",
+      "source_commit": "e4586e74985ed635f084795658b28bee81b2563d",
+      "passed": 9195,
+      "skipped": 35,
+      "warnings": 2,
+      "pytest_seconds": 1519.97,
+      "wrapper_seconds": 1528.2787744170055,
+      "scope": "full-current-python CPython3.14.7/darwin",
+      "source_unchanged": true
+    },
+    "github_ci": "pending PR",
+    "setup_deadline_regression_before": "1 failed1.19s; actual external command after logical setup6s/budget5s",
+    "setup_deadline_correction": "entry deadline before setup; included in165pass; measured final exactsource; finalCIpending"
+  },
+  "owner_acceptance": null,
+  "primary_cohort": false,
+  "usd": null,
+  "human_active_minutes": null,
+  "limits": [
+    "n3 eachvariant busysharedmachine; finalhookABBAABwithoutprofile",
+    "controlledcopiedchild, notowneracceptedproductdelivery",
+    "next initial20s timeout preservedexcluded",
+    "localfull PRE final2line correction, newexactheadCIrequired",
+    "no p95/SLA/productleadtime/ROI claim"
+  ],
+  "correction_review": {
+    "findings": 0,
+    "seconds": 47.6540649170056,
+    "scope": "two-line deadline anchoring and meaningful external-call regression",
+    "usd": null,
+    "usage": {
+      "input_tokens": 135341,
+      "cached_input_tokens": 103424,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 1222,
+      "reasoning_output_tokens": 431
+    }
+  }
+}
