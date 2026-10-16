@@ -1,0 +1,39 @@
+{
+  "issue": 1277,
+  "executor": "AI / Codex",
+  "registered_at": "2026-10-16T08:48:27.661503+00:00",
+  "pre_registration_research": "not timed",
+  "usd": null,
+  "model_calls_total": null,
+  "human_active_minutes": null,
+  "counts_toward_child_cohort": false,
+  "independent_review": {
+    "executor": "AI / separate native Codex session",
+    "result": "NO FINDINGS",
+    "cli_reported_tokens": 88382,
+    "usd": null,
+    "model_calls": null,
+    "test_execution_in_review": "not run: interpreter or read-only temporary-files limitation"
+  },
+  "last_progress_at": "2026-10-16T09:02:15.872862+00:00",
+  "full_current_python": {
+    "scope": "CPython3.14.7/darwin",
+    "passed": 9154,
+    "skipped": 35,
+    "warnings": 2,
+    "elapsed_seconds": 1335.62,
+    "exit_code": 0
+  },
+  "failed_full_attempt": {
+    "failed": 2,
+    "passed": 9152,
+    "skipped": 35,
+    "elapsed_seconds": 975.66,
+    "reason": "positive fixtures missing numeric guardrail, corrected without production exception"
+  },
+  "focused_final": {
+    "passed": 147,
+    "elapsed_seconds": 57.75
+  },
+  "finished_at": "2026-10-16T10:13:04.020224+00:00"
+}

@@ -264,3 +264,23 @@ def test_loop_writes_nothing_to_child(tmp_path):
     before = set(root.rglob("*"))
     prl.run_post_release(None, root, contract=CONTRACT, readout=_readout(21))
     assert set(root.rglob("*")) == before
+
+
+def test_missing_guardrail_prevents_success_lesson_without_writing_child(tmp_path):
+    policy = tmp_path / ".ai-ops/POLICY.yaml"
+    policy.parent.mkdir()
+    policy.write_text("enforcement: block\ndefault: require_approval\n")
+    plan = tmp_path / "planning/plan.yaml"
+    plan.parent.mkdir()
+    plan.write_text("goals: []\n")
+    before = {str(p.relative_to(tmp_path)): p.read_bytes()
+              for p in tmp_path.rglob("*") if p.is_file()}
+    result = prl.run_post_release(None, tmp_path, contract=CONTRACT,
+                                  readout=_readout(40, guardrails=[]))
+    assert result["outcome_verdict"] == "unknown"
+    assert result["insight"] is None and result["candidate_work"] is None
+    assert result["outcome_flip_ready"] is False
+    assert "error_rate" in result["outcome"]["human_readout"]["needed_to_measure"]
+    after = {str(p.relative_to(tmp_path)): p.read_bytes()
+             for p in tmp_path.rglob("*") if p.is_file()}
+    assert after == before
