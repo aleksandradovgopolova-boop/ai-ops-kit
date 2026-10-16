@@ -109,7 +109,10 @@ def test_deliver_assets_registers_the_hook(ai_ops, tmp_path, monkeypatch):
                             (_cs, "_seed_planning_contour", lambda *a, **k: []),
                             (_cs, "_seed_product_layer", lambda *a, **k: [])):
         monkeypatch.setattr(mod, name, stub)
+    monkeypatch.setattr(ai_ops._core(), "_configured_runtimes", lambda: ["codex"])
     assets = ai_ops.deliver_assets(tmp_path)
+    assert assets["codex_lint_hook"]["action"] == "created"
+    assert "доверия" in ai_ops._assets_report_line(assets)
     assert assets["lint_hook"]["action"] == "created"
     assert "момент правки" in ai_ops._assets_report_line(assets)
 
@@ -271,3 +274,67 @@ def test_installed_workflow_steps_really_gate(tmp_path, bad):
     lint = _run_step(next(s for n, s in by_name.items() if n.startswith("Линт")), child, env)
     assert lint.returncode == (1 if bad else 0), lint.stdout + lint.stderr
     assert ("НЕ пройдено" in lint.stdout) is bad and "golangci-lint run" in lint.stdout
+
+
+def test_codex_configuration_is_project_local_and_preserves_owner(setup_mod, tmp_path):
+    path = tmp_path / ".codex/hooks.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps(OWNER))
+    result = setup_mod.ensure_lint_hook(tmp_path, runtime="codex")
+    assert result["action"] == "updated"
+    doc = json.loads(path.read_text())
+    assert doc["permissions"] == OWNER["permissions"]
+    assert doc["hooks"]["PreToolUse"] == OWNER["hooks"]["PreToolUse"]
+    assert OWNER["hooks"]["PostToolUse"][0] in doc["hooks"]["PostToolUse"]
+    group = next(g for g in doc["hooks"]["PostToolUse"] if g["matcher"] == "^apply_patch$")
+    assert setup_mod.DELIVERED in group["hooks"][0]["command"]
+    before = path.read_bytes()
+    assert setup_mod.ensure_lint_hook(tmp_path, runtime="codex")["action"] == "unchanged"
+    assert path.read_bytes() == before
+    assert not (tmp_path / ".claude/settings.json").exists()
+
+
+def test_codex_optout_removes_only_kit_hook(setup_mod, tmp_path):
+    path = tmp_path / ".codex/hooks.json"
+    path.parent.mkdir()
+    path.write_text(json.dumps(OWNER))
+    setup_mod.ensure_lint_hook(tmp_path, runtime="codex")
+    (tmp_path / ".ai-ops.yaml").write_text("standard:\n  lint_hook: off\n")
+    assert setup_mod.ensure_lint_hook(tmp_path, runtime="codex")["action"] == "removed"
+    assert json.loads(path.read_text()) == OWNER
+
+
+def test_unconfigured_codex_creates_no_settings(setup_mod, tmp_path):
+    result = setup_mod.ensure_lint_hook(tmp_path, runtime="codex", active=False)
+    assert result["action"] == "not-installed"
+    assert not (tmp_path / ".codex").exists()
+
+
+def test_codex_corrupt_owner_json_is_preserved(setup_mod, tmp_path):
+    path = tmp_path / ".codex/hooks.json"
+    path.parent.mkdir()
+    path.write_text("{not json}")
+    assert setup_mod.ensure_lint_hook(tmp_path, runtime="codex")["action"] == "skipped-unreadable"
+    assert path.read_text() == "{not json}"
+
+
+def test_codex_registered_command_runs_from_nested_directory(setup_mod, tmp_path):
+    root = tmp_path / "child with spaces"
+    nested = root / "nested"
+    nested.mkdir(parents=True)
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    setup_mod.ensure_lint_hook(root, runtime="codex")
+    script = root / setup_mod.DELIVERED
+    script.parent.mkdir(parents=True)
+    script.write_text("import sys; print('CODEX-HOOK-RAN'); sys.exit(2)\n")
+    group = json.loads((root / ".codex/hooks.json").read_text())["hooks"]["PostToolUse"][0]
+    result = subprocess.run(["sh", "-c", group["hooks"][0]["command"]], cwd=nested,
+                            input="{}", capture_output=True, text=True,
+                            env={**os.environ, "AI_OPS_PYTHON": sys.executable}, timeout=30)
+    assert result.returncode == 2 and "CODEX-HOOK-RAN" in result.stdout
+
+
+def test_codex_runtime_removal_removes_only_kit_group(setup_mod, tmp_path):
+    setup_mod.ensure_lint_hook(tmp_path, runtime="codex")
+    assert setup_mod.ensure_lint_hook(tmp_path, runtime="codex", active=False)["action"] == "removed"
+    assert json.loads((tmp_path / ".codex/hooks.json").read_text()) == {}

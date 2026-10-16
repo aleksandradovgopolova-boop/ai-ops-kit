@@ -75,7 +75,7 @@ STATES = ("normal", "attention", "over_ceiling", "code_started", "unknown")
 # `security/` добавлен в v7: установка сеет туда `security-policy.md` черновиком (обязательный
 # артефакт SEC-001), значит свежая поставка каталога НЕ должна читаться как правка кода — та же
 # категория, что `planning/` (тоже сидируется). Корневой `SECURITY.md` (архитектура, SEC-008) — ниже.
-_KIT_PREFIXES = (".ai/", ".ai-ops/", ".claude/", ".github/", "features/", "planning/", "history/",
+_KIT_PREFIXES = (".ai/", ".ai-ops/", ".claude/", ".codex/", ".github/", "features/", "planning/", "history/",
                  "security/")
 _KIT_FILES = (".ai-ops.yaml", "ai-ops", "AI-OPS-ONBOARDING.md", "CLAUDE.md", "ROADMAP.md",
               # ARCHITECTURE.md добавлен 07.09.2026 (SR-7): установка сеет его черновиком, значит
