@@ -20,6 +20,7 @@ from ai_ops_kit.engine.parallel_live import (
     _scope_ok,
     make_integration_runner,
     make_isolated_package_runner,
+    make_isolated_integration_runner,
     package_result_from_rep,
     pe,
     preflight_disposable,
@@ -285,6 +286,7 @@ class TestPostCommitScope:
             base = self._setup_repo(td)
 
             def commit_run(task, sig, root, **kw):
+                assert kw["verification_intent"] == "draft"  # пакет с SHA ещё не integration-final
                 pid = kw["feature"]
                 _git(root, "config", "user.email", "t@t")
                 _git(root, "config", "user.name", "t")
@@ -407,3 +409,73 @@ class TestSelfCleanClonesDir:
                 td, base, {"z": "t"}, {"task_type": "QUICK"}, commit_run)
             post = set(Path(tempfile.gettempdir()).glob("ai-ops-parallel-*"))
             assert post == pre
+
+
+def _integration_binding_repo(root, fault):
+    import shlex
+    import sys
+    import yaml
+    root.mkdir()
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.name", "AI integration fixture")
+    _git(root, "config", "user.email", "ci@example.invalid")
+    (root / "source.py").write_text("value = 1\n")
+    (root / ".gitignore").write_text("check-ran.txt\n")
+    (root / "pyproject.toml").write_text("[project]\nname='fixture'\nversion='0.1'\n")
+    code = "from pathlib import Path;Path('check-ran.txt').write_text('ran');"
+    if fault in ("tracked", "commit"):
+        code += "Path('source.py').write_text('mutated\\n');"
+    if fault == "commit":
+        code += ("import subprocess;subprocess.run(['git','add','source.py'],check=True);"
+                 "subprocess.run(['git','commit','-qm','mutated by check'],check=True)")
+    command = shlex.join([sys.executable, "-c", code])
+    (root / ".ai-ops.yaml").write_text(yaml.safe_dump({"verification": {
+        "commands": {"python": {"test": command}}}}))
+    _git(root, "add", "-A"); _git(root, "commit", "-qm", "baseline")
+    base = _git(root, "rev-parse", "HEAD").stdout.strip()
+    _git(root, "checkout", "-qb", "ai-ops/pkg")
+    (root / "package.py").write_text("package_value = 2\n")
+    _git(root, "add", "-A"); _git(root, "commit", "-qm", "package")
+    _git(root, "checkout", "-q", "main")
+    return base
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("isolated", [False, True])
+@pytest.mark.parametrize("fault", ["clean", "tracked", "commit", "receipt"])
+def test_parallel_aggregate_binds_real_revision_and_postcheck_tree(tmp_path, monkeypatch, isolated, fault):
+    from ai_ops_kit.engine import tool_broker
+    from ai_ops_kit.gates import evidence_collector
+    root = tmp_path / "repo"
+    base = _integration_binding_repo(root, fault)
+    # Проверяем binding в локальной контролируемой среде, не работу Docker-песочницы.
+    monkeypatch.setattr(tool_broker, "sandbox_policy", lambda **kw: tool_broker.Policy(
+        level="execution", child_root=kw["child_root"]))
+    if fault == "receipt":
+        original = evidence_collector.collect
+        def wrong_revision(*args, **kwargs):
+            result = original(*args, **kwargs)
+            return {**result, "revision": "f" * 40}
+        monkeypatch.setattr(evidence_collector, "collect", wrong_revision)
+    work_root = root
+    if isolated:
+        work_root = tmp_path / "integration"
+        _git(tmp_path, "clone", "-q", str(root), str(work_root))
+        _git(work_root, "config", "user.name", "AI integration fixture")
+        _git(work_root, "config", "user.email", "ci@example.invalid")
+        clones = {"_integration": {"path": str(work_root)},
+                  "pkg": {"path": str(root), "branch": "ai-ops/pkg"}}
+        runner = make_isolated_integration_runner(root, base, clones)
+    else:
+        runner = make_integration_runner(root, base)
+    sha, aggregate, conflicts, moved = runner({"pkg": {"status": "pass"}})
+    assert sha != base and conflicts == 0 and moved is False  # fan-in реально создал commit
+    assert (work_root / "check-ran.txt").read_text() == "ran"  # команда РЕАЛЬНО исполнилась с exit0
+    post_sha = _git(work_root, "rev-parse", "HEAD").stdout.strip()
+    if fault == "tracked":
+        assert _git(work_root, "diff", "--name-only").stdout.strip() == "source.py"
+        assert post_sha == sha
+    elif fault == "commit":
+        assert post_sha != sha and not _git(work_root, "status", "--porcelain").stdout.strip()
+    assert aggregate["all_pass"] is (fault == "clean")
+    assert aggregate["tested_revision"] == ("f" * 40 if fault == "receipt" else sha)

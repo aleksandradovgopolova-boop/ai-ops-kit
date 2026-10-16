@@ -236,6 +236,7 @@ def collect(profile, root, policy, changed_files=None, broker=None, lifecycle_in
     """
     if broker is None:
         raise TypeError("collect() requires broker parameter (tool_broker module)")
+    verification_tiers.decide_tier([], lifecycle_intent=lifecycle_intent)  # unknown intent: до запуска процессов
     root = Path(root)
     by_check = _commands_by_check(profile)
     revision = broker._revision(root)
@@ -244,7 +245,7 @@ def collect(profile, root, policy, changed_files=None, broker=None, lifecycle_in
 
     # v3.27.3 WP4: Progressive Verification — определяем verification tier и targeted command
     verification_info = None
-    if changed_files:
+    if changed_files or lifecycle_intent in ("merge_candidate", "release_candidate", "merge", "release"):
         verification_info = verification_tiers.select_tests(changed_files, str(root), lifecycle_intent=lifecycle_intent, profile=profile)
         tier = verification_info.get("tier", "affected")
         impact_status = verification_info.get("impact_status")

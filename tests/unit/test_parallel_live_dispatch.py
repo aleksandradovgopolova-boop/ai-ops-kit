@@ -167,7 +167,8 @@ def _real_repo(tmp_path, monkeypatch):
     monkeypatch.setattr(dsp, "build_work_graph", lambda *a: (wg, {"aa": "A", "bb": "B"}))
     from ai_ops_kit.gates import evidence_collector
     monkeypatch.setattr(evidence_collector, "collect", lambda *a, **k: {
-        "gate_evidence": {"implementation_verification": {"status": "pass"}}, "checks": {}})
+        "gate_evidence": {"implementation_verification": {"status": "pass"}}, "checks": {},
+        "revision": live._git(a[1], "rev-parse", "HEAD").stdout.strip()})
     return root, base, wg
 
 
@@ -226,10 +227,10 @@ def test_selected_policy_and_real_integration_survive_until_canonical_receipt(tm
     assert len(options_seen) == 2
     for options in options_seen:
         assert {k: options[k] for k in ("provider_name", "model", "base", "max_steps", "author",
-            "review", "sandbox", "baseline_diff", "install_deps", "open_pr")} == {
+            "review", "sandbox", "baseline_diff", "install_deps", "open_pr", "verification_intent")} == {
             "provider_name": "openai", "model": "selected-model", "base": "release", "max_steps": 7,
             "author": False, "review": True, "sandbox": True, "baseline_diff": True,
-            "install_deps": False, "open_pr": False}
+            "install_deps": False, "open_pr": False, "verification_intent": "draft"}
     assert Path(external[0][0]).is_dir(), "ready integration source must survive return"
     assert rec["delivery"]["sha_verified"] is True
     assert len(list((root / "features/WG/delivery-outbox").glob("*.receipt.yaml"))) == 1

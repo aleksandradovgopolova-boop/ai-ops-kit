@@ -244,3 +244,118 @@ def test_nested_initializer_effect_reaches_descendant_consumer(tmp_path):
     result = tiers.select_tests(["pkg/sub/__init__.py"], tmp_path, profile=PROFILE)
     assert not result["full_command"]
     assert result["affected_tests"] == ["tests/test_direct.py", "tests/test_worker.py"]
+
+
+def _final_pipeline_repo(root, run_log, unrelated_passes, unrelated_reads_source=False):
+    """Реальные unittest-классы, Git и явно объявленная команда — без fake exit codes."""
+    import yaml
+    from _pipeline_helpers import _init_python_repo
+    _init_python_repo(root)
+    write(root, ".ai-ops.yaml", yaml.safe_dump({"verification": {"commands": {
+        "python": {"test": shlex.join([sys.executable, "-m", "pytest", "-q", "tests"])}}}}))
+    write(root, ".gitignore", "__pycache__/\n.pytest_cache/\n")
+    write(root, "src/a.py", "def value(): return 1\n")
+    write(root, "tests/test_a.py", "import unittest\nfrom src.a import value\n"
+          "class Direct(unittest.TestCase):\n def test_direct(self):\n"
+          f"  with open({str(run_log)!r}, 'a') as log: log.write('direct\\n')\n"
+          "  self.assertEqual(value(), 1)\n")
+    condition = "'EXTRA' not in open('src/a.py').read()" if unrelated_reads_source else repr(unrelated_passes)
+    write(root, "tests/test_unrelated.py", "import unittest\nclass Unrelated(unittest.TestCase):\n"
+          " def test_unrelated(self):\n"
+          f"  with open({str(run_log)!r}, 'a') as log: log.write('unrelated\\n')\n"
+          f"  self.assertTrue({condition})\n")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True, capture_output=True)
+    subprocess.run(["git", "commit", "-qm", "test baseline"], cwd=root, check=True, capture_output=True)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("unrelated_passes", [False, True])
+def test_final_pipeline_runs_full_suite_without_requiring_open_pr(tmp_path, unrelated_passes):
+    from ai_ops_kit.engine import execution_pipeline
+    from _pipeline_helpers import _QUICK_SIG
+    root, log = tmp_path / "repo", tmp_path / "tests-ran.log"
+    root.mkdir()
+    _final_pipeline_repo(root, log, unrelated_passes)
+    steps = iter([{"op": "write", "path": "src/a.py", "content": "def value(): return 1\nEXTRA = 2\n"},
+                  {"done": True}])
+    report = execution_pipeline.run_pipeline("добавить константу", _QUICK_SIG, root,
+        lambda ctx: next(steps), feature="final-floor", commit=True, install_deps=False, open_pr=False)
+    # Сначала сам факт: появился коммит, а вне-графовый тест ДЕЙСТВИТЕЛЬНО исполнился.
+    assert report["commit"]["sha"]
+    assert report["commit"]["changed_files"] == ["src/a.py"]
+    assert report["commit"]["evidence_on_exact_sha"] is True
+    assert log.read_text().splitlines() == ["direct", "unrelated"]
+    assert report["checks"]["test"]["status"] == ("pass" if unrelated_passes else "fail")
+    assert report["ready_for_pr"] is unrelated_passes
+    if not unrelated_passes:
+        assert "implementation_verification" in report["gates"]["unmet"]
+
+
+@pytest.mark.unit
+def test_draft_collector_keeps_targeted_execution_for_same_real_repo(tmp_path):
+    from ai_ops_kit.engine import tool_broker
+    from ai_ops_kit.gates import evidence_collector
+    from ai_ops_kit.shared import project_detector
+    root, log = tmp_path / "repo", tmp_path / "tests-ran.log"
+    root.mkdir()
+    _final_pipeline_repo(root, log, False)
+    result = evidence_collector.collect(project_detector.detect(root), root,
+        tool_broker.Policy(level="execution", child_root=str(root)), changed_files=["src/a.py"],
+        broker=tool_broker, lifecycle_intent="draft")
+    assert result["verification"]["tier"] == "affected"
+    assert result["verification"]["affected_tests"] == ["tests/test_a.py"]
+    assert result["checks"]["test"]["status"] == "pass"
+    assert log.read_text().splitlines() == ["direct"]
+
+
+@pytest.mark.unit
+def test_immutable_package_draft_then_final_aggregate_runs_actual_full_suite(tmp_path):
+    from ai_ops_kit.engine import execution_pipeline, sequence_aggregate, tool_broker
+    from ai_ops_kit.gates import evidence_collector
+    from ai_ops_kit.shared import project_detector
+    from _pipeline_helpers import _QUICK_SIG
+    root, log = tmp_path / "repo", tmp_path / "tests-ran.log"
+    root.mkdir()
+    _final_pipeline_repo(root, log, True, unrelated_reads_source=True)
+    base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    baseline = evidence_collector.collect(project_detector.detect(root), root,
+        tool_broker.Policy(level="execution", child_root=str(root)), broker=tool_broker)
+    assert baseline["revision"] == base and baseline["checks"]["test"]["status"] == "pass"
+    assert log.read_text().splitlines() == ["direct", "unrelated"]
+    log.write_text("")
+    steps = iter([{"op": "write", "path": "src/a.py", "content": "def value(): return 1\nEXTRA = 2\n"},
+                  {"done": True}])
+    report = execution_pipeline.run_pipeline("пакет", _QUICK_SIG, root, lambda ctx: next(steps),
+        feature="package-floor", commit=True, install_deps=False, verification_intent="draft")
+    sha = report["commit"]["sha"]
+    assert sha and sha != base and report["commit"]["evidence_on_exact_sha"] is True
+    assert report["verification"]["tier"] == "affected"
+    assert report["ready_for_pr"] is True  # готовность ПАКЕТА, не интеграции
+    assert log.read_text().splitlines() == ["direct"]
+    log.write_text("")
+    aggregate = sequence_aggregate._aggregate_verify(root, "package-floor", False, sha,
+        baseline["checks"], base, _QUICK_SIG, None, False, True)
+    assert log.read_text().splitlines() == ["direct", "unrelated"]
+    assert aggregate["evidence_revision"] == sha and aggregate["revision_ok"] is True
+    assert aggregate["checks"]["test"] == "fail"
+    assert aggregate["no_regressions"] is False
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("entry", ["pipeline", "controller", "collector"])
+def test_unknown_verification_intent_refuses_before_execution(tmp_path, entry):
+    from ai_ops_kit.engine import ai_ops_run, execution_pipeline
+    from ai_ops_kit.gates import evidence_collector
+    def forbidden(*args, **kwargs):
+        pytest.fail("unknown intent executed a model or command")
+    if entry == "collector":
+        class Broker:
+            execute = forbidden
+        with pytest.raises(ValueError, match="unknown verification intent"):
+            evidence_collector.collect({}, tmp_path, None, broker=Broker(), lifecycle_intent="drafft")
+    else:
+        fn = ai_ops_run.run if entry == "controller" else execution_pipeline.run_pipeline
+        result = fn("task", {}, tmp_path, proposer=forbidden, verification_intent="drafft")
+        assert result["status"] == "error" and result["ready_for_pr"] is False
+        assert "unknown verification intent" in result["error"]
+    assert not (tmp_path / "features").exists()
