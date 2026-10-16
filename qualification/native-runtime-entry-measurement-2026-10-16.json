@@ -1,0 +1,38 @@
+{
+  "issue": 611,
+  "executor": "AI / Codex",
+  "registered_at": "2026-10-16T10:28:05.107783+00:00",
+  "pre_registration_research": "not timed",
+  "usd": null,
+  "human_active_minutes": null,
+  "counts_toward_child_cohort": false,
+  "before": {
+    "failed": 3,
+    "passed": 12,
+    "elapsed_seconds": 10.01
+  },
+  "focused": {
+    "passed": 22,
+    "elapsed_seconds": 7.81
+  },
+  "independent_review": {
+    "result": "NO FINDINGS",
+    "usage": {
+      "input_tokens": 191279,
+      "cached_input_tokens": 164864,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 645,
+      "reasoning_output_tokens": 34
+    },
+    "usd": null
+  },
+  "full_current_python": {
+    "scope": "CPython3.14.7/darwin",
+    "passed": 9171,
+    "skipped": 35,
+    "warnings": 2,
+    "elapsed_seconds": 1004.41,
+    "exit_code": 0
+  },
+  "completed_code_checks_at": "2026-10-16T10:59:21.319673+00:00"
+}
