@@ -1,0 +1,102 @@
+# run-native-lint-live.py
+from pathlib import Path
+import subprocess,json,os,datetime,hashlib
+base=Path.cwd();control=base/'work/native-lint-live-20261016';child=base/'work/ii-sreda-native-lint-clone';binary=base/'work/codex-0.163.0-package/bin/codex'
+state=json.loads((control/'preregistration.json').read_text());state.update(native_version='0.163.0 isolated official full package',project_kind='standalone local clone at original child SHA',trust_confirmed_at=datetime.datetime.now(datetime.timezone.utc).isoformat(),trust_actor='AI: ordinary Folder access Trust and continue, then /hooks exact project observer definition reviewed and trusted; no bypass flags',native_test_started_at=datetime.datetime.now(datetime.timezone.utc).isoformat());plan=child/'features/kit-native-lint-probe-20261016/run-plan.yaml';state['plan_sha256_before']=hashlib.sha256(plan.read_bytes()).hexdigest();(control/'pre-native-state.json').write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n')
+prompt='''Исполнитель AI. Это контролируемая отрицательная проба lint-hook в изолированной копии реального репозитория, не продуктовая задача и не owner acceptance. Намеренное не-ASCII имя разрешено только для этой временной пробы; правило латиницы не меняй. Используй только apply_patch и только файл src/shared/lib/kit-lint-qualification.ts. Сначала создай его с одной строкой: export const число = 1; . Не вызывай линтер вручную. Дождись автоматического замечания PostToolUse. Только если замечание действительно пришло, исправь строку тем же apply_patch на export const kitLintQualification = 1; . Если замечания нет, остановись и честно напиши что доставка не подтверждена, не симулируй её. Не удаляй файл, не читай другие файлы, не меняй настройки, не коммить, не запускай другие агенты, приложения или shell. В финале сообщи фактически полученное замечание и был ли проверен исправленный вариант. Не объявляй принятой продуктовой работой.'''
+(control/'prompt.txt').write_text(prompt)
+args=[str(binary),'exec','--ephemeral','--json','--sandbox','workspace-write','--disable','multi_agent','--disable','apps','--disable','remote_plugin','--disable','memories','-m','gpt-5.6-terra','-C',str(child),'--output-last-message',str(control/'answer.txt'),prompt]
+env={**os.environ,'AI_OPS_PYTHON':'/Users/sasad/ai-ops-kit/.venv/bin/python'};start=datetime.datetime.now(datetime.timezone.utc)
+try:
+ result=subprocess.run(args,env=env,capture_output=True,text=True,timeout=180);(control/'events.jsonl').write_text(result.stdout);(control/'stderr.txt').write_text(result.stderr);state['exit_code']=result.returncode
+except subprocess.TimeoutExpired as exc:
+ state['result']='timeout, not qualified';(control/'timeout.txt').write_text(str(exc))
+state['native_test_finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();state['native_elapsed_seconds']=(datetime.datetime.now(datetime.timezone.utc)-start).total_seconds();state['plan_sha256_after']=hashlib.sha256(plan.read_bytes()).hexdigest();(control/'measurement.json').write_text(json.dumps(state,ensure_ascii=False,indent=2)+'\n');print(json.dumps({k:state.get(k) for k in ['exit_code','native_elapsed_seconds','plan_sha256_before','plan_sha256_after','result']},indent=2))
+
+
+# qualify-real-js-profile.py
+from pathlib import Path
+import json,datetime,hashlib,contextlib,io,yaml
+from ai_ops_kit.cli.lint_profile_cli import run_lint_profile
+root=Path('work/ii-sreda-native-lint-clone').resolve();control=Path('work/native-lint-live-20261016');p=control/'profile-preregistration.json'
+record={'issue':1183,'executor':'AI / controlled profile qualification','registered_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'same isolated real child clone; temporary machine declaration translates documented AGENTS FSD directions; not owner-approved production rollout','acceptance':'apply freezes existing style debt, check passes; new Cyrillic identifier and upward import reject; restore passes; repeat apply cannot absorb growth','budget':'local ESLint only, up to900s/tool; no native model calls','counts_toward_child_cohort':False,'owner_acceptance':None};p.write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
+# Existing product architecture source AGENTS.md: app→pages→widgets→features→entities→shared.
+levels=['app','pages','widgets','features','entities','shared'];rules=[{'id':f'{lower}-not-{upper}','forbid':{'from':lower,'to':upper},'reason':'existing documented FSD: dependencies downward'} for i,lower in enumerate(levels) for upper in levels[:i]];rules += [{'id':f'{zone}-slices','forbid':{'from':zone,'to':zone},'reason':'existing documented FSD: no sibling slice import'} for zone in ['pages','widgets','features']]
+decl={'schema_version':1,'kind':'architecture-invariants','zones':{n:[f'src/{n}/**'] for n in levels},'aliases':{'@/':'src/'},'rules':rules};declpath=root/'architecture-invariants.yaml';assert not declpath.exists();declpath.write_text(yaml.safe_dump(decl,allow_unicode=True,sort_keys=False))
+def run(label,**kwargs):
+ out=io.StringIO()
+ with contextlib.redirect_stdout(out):rc=run_lint_profile(root,js=True,**kwargs)
+ (control/f'profile-{label}.json').write_text(out.getvalue());record[label]=rc;return rc
+rc=run('apply',apply=True)
+record['finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();(control/'profile-result.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n');print(json.dumps(record,ensure_ascii=False,indent=2))
+
+
+# continue-real-js-profile.py
+from pathlib import Path
+import json,io,contextlib,hashlib,datetime
+from ai_ops_kit.cli.lint_profile_cli import run_lint_profile,measure
+from ai_ops_kit.checks import lint_profile as lp,lint_baseline as lb
+from ai_ops_kit.planning.architecture_invariants import load_declaration
+root=Path('work/ii-sreda-native-lint-clone').resolve();control=Path('work/native-lint-live-20261016');record=json.loads((control/'profile-result.json').read_text());probe=root/'src/shared/lib/kit-lint-qualification.ts';original=probe.read_bytes();baseline=root/'.ai/project/lint/eslint-suppressions.json';frozen=baseline.read_bytes();profile=lp.render(root,load_declaration(root));eslint=[t for t in profile['tools'] if t['tool']=='eslint']
+def whole(label,**kwargs):
+ buf=io.StringIO()
+ with contextlib.redirect_stdout(buf):rc=run_lint_profile(root,js=True,**kwargs)
+ (control/f'profile-{label}.json').write_text(buf.getvalue());record[label]=rc;return rc
+try:
+ assert whole('baseline',verb='check')==0
+ probe.write_text('export const число = 1;\n')
+ negative=lb.check(root,eslint,measure,files=[probe.relative_to(root).as_posix()]);(control/'profile-new-name.json').write_text(json.dumps(negative,ensure_ascii=False,indent=2)+'\n');assert negative['status']=='grew',negative;record['new_name']='grew'
+ assert whole('reapply',apply=True)==0
+ assert baseline.read_bytes()==frozen;record['repeat_apply_preserves_baseline']=True
+ target=next(p for p in sorted((root/'src/features').rglob('*.ts')) if not p.name.endswith('.test.ts'));module='@/'+target.relative_to(root/'src').with_suffix('').as_posix();probe.write_text(f'import "{module}";\nexport const kitLintQualification = 1;\n')
+ negative=lb.check(root,eslint,measure,files=[probe.relative_to(root).as_posix()]);(control/'profile-upward-import.json').write_text(json.dumps(negative,ensure_ascii=False,indent=2)+'\n');assert negative['status']=='grew',negative;assert any('no-restricted-imports' in g['rule'] for g in lb.grown(negative));record['upward_import']='grew'
+finally:probe.write_bytes(original)
+assert whole('restored',verb='check')==0
+record['baseline_sha256']=hashlib.sha256(frozen).hexdigest();record['finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();(control/'profile-result.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n');print(json.dumps(record,ensure_ascii=False,indent=2))
+
+
+# qualify-python-field.py
+from pathlib import Path
+import os,json,io,contextlib,hashlib,datetime,yaml,subprocess
+from ai_ops_kit.cli.lint_profile_cli import run_lint_profile
+base=Path.cwd();root=base/'work/msh-style-field';control=base/'work/python-style-field-20261016';control.mkdir(exist_ok=False)
+record={'issue':1183,'executor':'AI / controlled qualification','registered_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'source_commit':'671a814491b7424aa2a66cecd6952597e2cc8726','scope':'clean committed real Python repo clone; no source imports executed, no DB/app/server; original dirty checkout untouched','declaration':'temporary core must not depend on collectors, translated from AGENTS pure-core/I-O separation; no claim of owner-approved production rollout','budget':'local Ruff and import-linter only, <=900s/tool, no native models','acceptance':'real repo profile baseline passes, new Cyrillic name/upward import rejected, repeat apply preserves baseline, restoration passes','owner_acceptance':None,'usd':None,'counts_toward_child_cohort':False};(control/'preregistration.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
+assert (root/'core/__init__.py').is_file() and (root/'collectors/__init__.py').is_file();assert not (root/'architecture-invariants.yaml').exists()
+decl={'schema_version':1,'kind':'architecture-invariants','zones':{'core':['core/**'],'collectors':['collectors/**']},'rules':[{'id':'pure-core','forbid':{'from':'core','to':'collectors'},'reason':'documented pure core must not depend on I/O collectors'}]};(root/'architecture-invariants.yaml').write_text(yaml.safe_dump(decl,sort_keys=False))
+os.environ['PATH']=str(base/'work/venv-style-qualification/bin')+os.pathsep+'/Users/sasad/ai-ops-kit/.venv/bin'+os.pathsep+os.environ['PATH'];os.environ['PYTHONPATH']=str(root)+os.pathsep+str(base/'work/kit-codex-lint')
+def run(label,**kwargs):
+ out=io.StringIO()
+ with contextlib.redirect_stdout(out):rc=run_lint_profile(root,js=True,**kwargs)
+ (control/f'{label}.json').write_text(out.getvalue());record[label]=rc;return rc
+assert run('apply',apply=True)==0
+baseline=root/'.ai/project/lint/baseline.json';frozen=baseline.read_bytes();assert run('baseline',verb='check')==0
+probe=root/'core/kit_lint_qualification_probe.py';assert not probe.exists()
+try:
+ probe.write_text('число = 1\n');assert run('new_name',verb='check')==1
+ assert run('repeat_apply',apply=True)==0;assert baseline.read_bytes()==frozen
+ probe.write_text('import collectors.base\n');assert run('upward_import',verb='check')==1
+finally:probe.unlink(missing_ok=True)
+assert run('restored',verb='check')==0
+record['baseline_sha256']=hashlib.sha256(frozen).hexdigest();record['finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();record['ruff_version']=subprocess.check_output(['ruff','--version'],text=True).strip();record['import_linter_version']=subprocess.check_output(['lint-imports','--version'],text=True).strip();(control/'result.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n');print(json.dumps(record,ensure_ascii=False,indent=2))
+
+
+# qualify-style-ci-entry.py
+from pathlib import Path
+import json,subprocess,datetime,os
+base=Path.cwd(); root=base/'work/ii-sreda-native-lint-clone'; ctl=base/'work/native-lint-live-20261016'; probe=root/'src/shared/lib/kit-lint-qualification.ts'; original=probe.read_bytes(); state={'executor':'AI','registered_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'local actual CI command, existing locked dependencies; no fresh install or GitHub run claimed','budget':'two local CI commands <=300s each; no model calls','owner_acceptance':None};(ctl/'ci-preregistration.json').write_text(json.dumps(state,indent=2)+'\n')
+args=['/Users/sasad/ai-ops-kit/.venv/bin/python',str(base/'work/kit-codex-lint/templates/runtime/lint_hook.py'),'ci','--root',str(root),'--profile',str(ctl/'ci-repository-profile.json')]
+try:
+ probe.write_text('export const число = 1;\n'); r=subprocess.run(args,capture_output=True,text=True,timeout=300);(ctl/'ci-negative.log').write_text(r.stdout+r.stderr);state['negative_exit']=r.returncode;assert r.returncode==1;assert 'latin-identifiers' in r.stdout+r.stderr
+finally:probe.write_bytes(original)
+r=subprocess.run(args,capture_output=True,text=True,timeout=300);(ctl/'ci-restored.log').write_text(r.stdout+r.stderr);state['restored_exit']=r.returncode;assert r.returncode==0
+state['finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();(ctl/'ci-result.json').write_text(json.dumps(state,indent=2)+'\n');print(json.dumps(state,indent=2))
+
+
+# native-lint-observer.py
+import sys,json,subprocess,datetime
+from pathlib import Path
+base=Path(__file__).resolve().parent
+raw=sys.stdin.read()
+proc=subprocess.run(["sh","-c",(base/"native-lint-command.txt").read_text()],input=raw,capture_output=True,text=True)
+with (base/"native-lint-events.jsonl").open("a") as stream: stream.write(json.dumps({"at":datetime.datetime.now(datetime.timezone.utc).isoformat(),"event":json.loads(raw),"exit_code":proc.returncode,"stdout":proc.stdout,"stderr":proc.stderr},ensure_ascii=False)+"\n")
+sys.stdout.write(proc.stdout);sys.stderr.write(proc.stderr);sys.exit(proc.returncode)

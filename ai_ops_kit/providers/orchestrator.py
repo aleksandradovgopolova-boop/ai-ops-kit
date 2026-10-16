@@ -186,6 +186,21 @@ def _finish_run_state(state, gates, skill_failure, budget_exceeded):
         state.pop("unmet_gates", None)
 
 
+def _run_identity(child_root, workitem_id, task_text, workflow_id, gate_ids):
+    """Разрешить идентичность и сохранённые требования до побочных эффектов."""
+    task_hash = hashlib.sha256(task_text.encode("utf-8")).hexdigest()[:12]
+    wid = workitem_id or f"wi-{task_hash}"
+    from ai_ops_kit.checks.plan_artifact import load_run_plan_gates
+    try:
+        planned = load_run_plan_gates(Path(child_root) / "features" / wid, wid, workflow_id)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
+    if planned is not None:
+        gate_ids = list(dict.fromkeys(list(gate_ids or []) + planned))
+    run_dir = child_root / ".ai" / "runtime" / "workitems" / wid
+    return task_hash, wid, run_dir, gate_ids
+
+
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                  provider=mock_provider, verbose=True, gate_evidence=None,
                  collect=False, fresh=False, provider_name="mock", workitem_id=None,
@@ -199,9 +214,8 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
 
     # Per-WorkItem состояние (Ф0): путь по id задачи, не по workflow — иначе две задачи
     # одного workflow делят состояние. Без явного id — детерминированный из хэша задачи.
-    task_hash = hashlib.sha256(task_text.encode("utf-8")).hexdigest()[:12]
-    wid = workitem_id or f"wi-{task_hash}"
-    run_dir = child_root / ".ai" / "runtime" / "workitems" / wid
+    task_hash, wid, run_dir, gate_ids = _run_identity(
+        child_root, workitem_id, task_text, workflow_id, gate_ids)
     if fresh and run_dir.exists():        # --fresh: начать с чистого состояния (иначе — resume)
         shutil.rmtree(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)

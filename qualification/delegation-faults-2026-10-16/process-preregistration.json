@@ -1,0 +1,12 @@
+{
+  "issue": 1278,
+  "executor": "AI / controlled process qualification",
+  "registered_at": "2026-10-16T09:13:08.742929+00:00",
+  "scope": "actual Kit pipeline with deterministic mock proposer, local bare Git and loopback REST; no accepted child work",
+  "policy": "fixture block/create_pr:execute; no human signals fabricated",
+  "acceptance": "SIGTERM after durable intent before external call; zero POST before kill; resume safely delivers once or stops with explicit reason; repeated resume creates no duplicate",
+  "budget": "no model calls; start <=90seconds, each of two resumes <=120seconds",
+  "compensation": "local bare-Git refs and local REST fixture only; actual remote effects are not promised atomically reversible",
+  "counts_toward_child_cohort": false,
+  "usd": null
+}

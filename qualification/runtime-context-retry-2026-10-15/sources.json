@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-15",
+  "runtime": "Claude Code 2.1.300",
+  "kit_commit": "b45f7de8",
+  "harness_source": "qualification/runtime-context-live/product-harness.source.txt",
+  "source_sha256": "cd309e0b502b6457d5b340473cb5d0a7ddd3ec778094ce039d41df3f8ff7b2ef",
+  "executed_source_sha256": "d2ed11c2218418c07935063072fa61497a7c16bbf784b0eb6929dce837166e10",
+  "adaptations": [
+    "ROOT points to current isolated worktree",
+    "private diagnostics use unique work/ directory"
+  ],
+  "max_calls": 2,
+  "actual_calls_attempted": 1,
+  "completed_model_calls": 0,
+  "max_budget_usd_per_launch": 0.3,
+  "wall_timeout_s": 120,
+  "executor": "AI",
+  "cost_scope": "native reported only; account and subscription allocation unknown",
+  "executed_source": "qualification/runtime-context-retry-2026-10-15/harness.source.txt",
+  "invocation": "python harness.py claude-code context --out context.json"
+}

@@ -344,3 +344,55 @@ def test_evaluate_numeric_guardrail_threshold_from_string_units():
                "guardrails_observed": [{"name": "время до первого агента", "value": "86 сек"}]}
     r = vpo.evaluate_outcome(contract, readout)
     assert r["guardrail_breaches"] == [] and r["verdict"] == "met"
+
+
+def _reached_readout(**extra):
+    return {**READOUT, "measured": {"metric": "completion_rate", "value": 0.9,
+                                     "measured_at": "2026-10-16"}, **extra}
+
+
+def test_reached_primary_without_declared_guardrail_stays_unknown():
+    result = vpo.evaluate_outcome(CONTRACT, _reached_readout(guardrails_observed=[]))
+    assert result["verdict"] == "unknown"
+    assert "время до первого агента" in result["reason"]
+
+
+def test_within_true_does_not_hide_a_numeric_guardrail_breach():
+    result = vpo.evaluate_outcome(CONTRACT, _reached_readout(guardrails_observed=[
+        {"name": "время до первого агента", "value": "120 сек", "within": True}]))
+    assert result["verdict"] == "failed"
+    assert result["guardrail_breaches"] == ["время до первого агента"]
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf"), 10**400, "1e309 сек"],
+                         ids=["nan", "infinity", "negative-infinity", "huge-int", "overflow-string"])
+def test_nonfinite_measurements_do_not_produce_a_real_verdict(value):
+    import json
+    readout = _reached_readout()
+    readout["measured"]["value"] = value
+    result = vpo.evaluate_outcome(CONTRACT, readout)
+    assert result["verdict"] == "unknown"
+    assert result["is_real_measurement"] is False
+    json.dumps(result, allow_nan=False)
+
+
+@pytest.mark.parametrize("key", ["baseline", "target"])
+def test_nonfinite_baseline_or_target_is_unknown(key):
+    contract = {**CONTRACT, key: {"value": float("inf")}}
+    assert vpo.evaluate_outcome(contract, _reached_readout())["verdict"] == "unknown"
+
+
+def test_unmeasured_numeric_guardrail_is_not_held_by_within_true():
+    result = vpo.evaluate_outcome(CONTRACT, _reached_readout(guardrails_observed=[
+        {"name": "время до первого агента", "value": "unknown", "within": True}]))
+    assert result["verdict"] == "unknown"
+
+
+def test_scientific_notation_retains_its_exponent():
+    contract = {**CONTRACT, "baseline": {"value": "1e2"}, "target": {"value": "2e2"},
+                "guardrails": []}
+    readout = _reached_readout(guardrails_observed=[])
+    readout["measured"]["value"] = "1.5e2 units"
+    result = vpo.evaluate_outcome(contract, readout)
+    assert result["baseline"] == 100 and result["target"] == 200
+    assert result["measured"] == 150 and result["verdict"] == "failed"

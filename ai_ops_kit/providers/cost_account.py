@@ -20,13 +20,20 @@ CLI:  cost_account.py <budget.(yaml|json)> <run_cost.(json|yaml)> [--iterations 
 """
 from __future__ import annotations
 import json
+import math
 import sys
 from pathlib import Path
 
 import yaml
 
+
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
+if str(PKG) not in sys.path:
+    sys.path.insert(0, str(PKG))
+
+from ai_ops_kit.shared.usage_ledger import complete_cost, cost_value  # noqa: E402
+
 _MAP = {
     "max_model_calls": "calls",
     "max_tokens": "_tokens",
@@ -34,6 +41,16 @@ _MAP = {
     "max_wall_seconds": "latency_s",
     "max_iterations": "_iterations",
 }
+
+
+def _money(value):
+    """Конечная неотрицательная денежная величина; неизвестное не равно нулю."""
+    return cost_value(value)
+
+
+def total_call_cost(values):
+    """Полная цена вызовов известна только при конечной цене каждого вызова."""
+    return complete_cost(values)
 
 
 def _measured(run_cost: dict, iterations):
@@ -77,13 +94,17 @@ def cost_per_successful_change(attempt: dict) -> dict:
     ручное вмешательство. attempt: {calls_cost, retry_cost, reviewer_cost, escalation_cost, latency_s,
     manual_interventions, delivered_verified: bool}. Не доставлено+проверено -> cost_per_change=None
     (стоимость без результата = чистые потери, не «дёшево»)."""
-    total = round(sum(float(attempt.get(k, 0) or 0)
-                      for k in ("calls_cost", "retry_cost", "reviewer_cost", "escalation_cost")), 6)
-    delivered = bool(attempt.get("delivered_verified"))
+    # Основная цена обязательна для известной суммы. Дополнительные компоненты
+    # по прежнему контракту по умолчанию нулевые; явный None означает неизвестность.
+    components = [_money(attempt.get("calls_cost"))] + [
+        _money(attempt.get(key, 0)) for key in ("retry_cost", "reviewer_cost", "escalation_cost")]
+    total = total_call_cost(components)
+    delivered = attempt.get("delivered_verified") is True
     return {"total_cost": total, "delivered_verified": delivered,
             "cost_per_change": (total if delivered else None),
             "latency_s": attempt.get("latency_s"), "manual_interventions": attempt.get("manual_interventions", 0),
-            "note": ("успешное проверенное изменение" if delivered
+            "note": ("AI-цена unavailable -> стоимость неизвестна, не 0" if total is None
+                     else "успешное проверенное изменение" if delivered
                      else "нет успешного проверенного изменения -> стоимость = потери (не экономия)")}
 
 
@@ -107,7 +128,7 @@ def human_attention_cost(root=None) -> "float | None":
             return None
         econ = ((data.get("engineering_operating_model") or {}).get("economics") or {})
         rate = econ.get("human_attention_cost_per_intervention_usd")
-        return float(rate) if isinstance(rate, (int, float)) and not isinstance(rate, bool) else None
+        return _money(rate)
     return None
 
 
@@ -122,26 +143,38 @@ def cost_per_successful_outcome(attempt: dict, *, human_attention_cost_usd=None)
       * ставка не задана ИЛИ число вмешательств неизвестно -> человеческий компонент `None`
         (unavailable), нагруженная стоимость помечена нижней границей (`lower_bound=True`),
         но AI-часть не обнуляется и не выдаётся за полную;
+      * основная AI-цена отсутствует/None либо компонент неизвестен/недопустим ->
+        AI и нагруженная стоимость None (unavailable), complete=False;
       * инвариант «провал = чистые потери» сохранён: не доставлено+проверено -> `cost_per_outcome=None`.
     latency несётся сырьём у AI-метрики (наблюдаемость), в деньги здесь НЕ конвертируется —
     машинное время стены не равно вниманию человека.
     """
-    ai = cost_per_successful_change(attempt)
-    ai_total = ai["total_cost"]
+    ai_total = cost_per_successful_change(attempt)["total_cost"]
     mi = attempt.get("manual_interventions")
     mi = mi if isinstance(mi, int) and not isinstance(mi, bool) and mi >= 0 else None
     rate = human_attention_cost_usd
-    rate = float(rate) if isinstance(rate, (int, float)) and not isinstance(rate, bool) and rate >= 0 else None
-    human = round(mi * rate, 6) if (mi is not None and rate is not None) else None
-    complete = human is not None
-    loaded = round(ai_total + (human or 0.0), 6)
-    delivered = bool(attempt.get("delivered_verified"))
-    if not delivered:
+    rate = _money(rate)
+    try:
+        human = _money(mi * rate) if (mi is not None and rate is not None) else None
+    except OverflowError:
+        human = None
+    human = round(human, 6) if human is not None else None
+    loaded = total_call_cost([ai_total, human if human is not None else 0])
+    complete = loaded is not None and human is not None
+    delivered = attempt.get("delivered_verified") is True
+    if ai_total is None:
+        note = "AI-цена unavailable -> полная стоимость неизвестна, не 0"
+        if not delivered:
+            note += "; нет успешного проверенного исхода — затраты не объявляются экономией"
+    elif loaded is None:
+        note = "итоговая стоимость unavailable — результат не представим конечным числом"
+    elif not delivered:
         note = "нет успешного проверенного исхода -> нагруженная стоимость = потери (не экономия)"
     elif complete:
         note = f"нагруженная стоимость исхода: AI {ai_total:g}$ + внимание человека {human:g}$"
     else:
-        why = "ставка внимания не задана" if rate is None else "число вмешательств неизвестно"
+        why = ("ставка внимания не задана" if rate is None else "число вмешательств неизвестно"
+               if mi is None else "стоимость внимания не представима конечным числом")
         note = f"нижняя граница (только AI {ai_total:g}$): {why} -> внимание человека unavailable, не 0"
     return {"ai_cost": ai_total, "human_attention_cost": human,
             "manual_interventions": mi, "loaded_cost": loaded,
@@ -158,11 +191,12 @@ def roid_outcome_report(cost, latency, manual_interventions, delivered, root=Non
     движке прогона (монолит lifecycle не растёт содержательно)."""
     o = cost_per_successful_outcome(
         {"calls_cost": cost, "latency_s": latency,
-         "manual_interventions": manual_interventions, "delivered_verified": bool(delivered)},
+         "manual_interventions": manual_interventions, "delivered_verified": delivered},
         human_attention_cost_usd=human_attention_cost(root))
     return {"cost_per_successful_outcome": o["cost_per_outcome"], "loaded_cost": o["loaded_cost"],
             "ai_cost": o["ai_cost"], "human_attention_cost": o["human_attention_cost"],
-            "complete": o["complete"], "lower_bound": o["lower_bound"], "note": o["note"]}
+            "complete": o["complete"], "lower_bound": o["lower_bound"],
+            "delivered_verified": o["delivered_verified"], "note": o["note"]}
 
 
 def estimate_vs_actual(estimate: dict, actual) -> dict:
@@ -178,17 +212,18 @@ def estimate_vs_actual(estimate: dict, actual) -> dict:
     est = None
     if (estimate or {}).get("estimate_status") not in (None, "unavailable"):
         m = (estimate or {}).get("cost_median")
-        est = float(m) if isinstance(m, (int, float)) and not isinstance(m, bool) else None
+        est = _money(m)
     act = actual.get("cost_usd_est") if isinstance(actual, dict) else actual
-    act = float(act) if isinstance(act, (int, float)) and not isinstance(act, bool) else None
+    act = _money(act)
     if est is None or act is None:
         why = "оценки до прогона не было (нет истории)" if est is None else "факт неизвестен"
         return {"estimate_usd": est, "actual_usd": act, "delta_usd": None, "delta_pct": None,
                 "status": "unavailable", "note": f"дельта не считается: {why} — unavailable, не 0"}
     delta = round(act - est, 6)
     pct = round(delta / est * 100, 1) if est else None
+    pct = pct if pct is None or math.isfinite(pct) else None
     cmax = (estimate or {}).get("cost_max")
-    cmax = float(cmax) if isinstance(cmax, (int, float)) and not isinstance(cmax, bool) else None
+    cmax = _money(cmax)
     over_max = bool(cmax is not None and act > cmax)
     note = (f"работа стоила ${act:g} вместо ожидаемых ${est:g} "
             f"(дельта {'+' if delta >= 0 else ''}{delta:g}$"
@@ -203,10 +238,12 @@ def compare_configs(configs) -> dict:
     cost_per_change (безопасность важнее экономии — не-доставившие исключаются, не считаются «дешёвыми»).
     configs: [{name, attempt}]. -> {ranking, cheapest_qualified, excluded}."""
     rows = [{"name": c.get("name"), **cost_per_successful_change(c.get("attempt") or {})} for c in configs]
-    qualified = sorted((r for r in rows if r["delivered_verified"]), key=lambda r: r["cost_per_change"])
+    qualified = sorted((r for r in rows if r["delivered_verified"] and r["cost_per_change"] is not None), key=lambda r: r["cost_per_change"])
     excluded = [r["name"] for r in rows if not r["delivered_verified"]]
     return {"ranking": qualified, "cheapest_qualified": (qualified[0]["name"] if qualified else None),
-            "excluded_no_verified_change": excluded}
+            "excluded_no_verified_change": excluded,
+            "excluded_unknown_cost": [r["name"] for r in rows
+                                      if r["delivered_verified"] and r["cost_per_change"] is None]}
 
 
 def _load(p: Path):

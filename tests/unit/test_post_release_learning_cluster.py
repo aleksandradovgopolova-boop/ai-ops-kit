@@ -31,7 +31,8 @@ CONTRACT = {
 def _readout(value, *, target_met="yes"):
     return {"schema_version": 1, "kind": "OutcomeReadout",
             "measured": {"metric": "activation_rate", "value": value, "measured_at": "2026-09-16"},
-            "target_met": target_met, "hypothesis": "confirmed"}
+            "target_met": target_met, "hypothesis": "confirmed",
+            "guardrails_observed": [{"name": "error_rate", "value": 1, "within": True}]}
 
 
 def _child(tmp_path):

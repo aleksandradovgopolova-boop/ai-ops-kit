@@ -143,3 +143,5 @@ python3 <path-to-ai-ops-kit>/installer/ai_ops.py init .
 объявлен: `stable` требует полевых доказательств на живых дочках и проверяется машиной.
 
 - [Skills, обязательная policy и происхождение решений](decision-plane-runtime.md) — #1251/#1252/#1254.
+
+- [Одна PRODUCT specification через Codex](codex-product-stage.md) — внутренний opt-in native stage, контекст, аудит и ограничения.

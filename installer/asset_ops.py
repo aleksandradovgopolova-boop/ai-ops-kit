@@ -188,6 +188,8 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         # #1183: линт дочки в момент правки агента — своя запись в `.claude/settings.json`
         # (чужие ключи не трогаются; опт-аут `standard.lint_hook: off`).
         "lint_hook": _ao()._lint_hook_setup().ensure_lint_hook(root),
+        "codex_lint_hook": _ao()._lint_hook_setup().ensure_lint_hook(
+            root, runtime="codex", active="codex" in (_core()._configured_runtimes() or [])),
         # ДО посева планирования (SR-2): перенести заполненный уходящий `.ai-ops/ROADMAP.md` в
         # канонический корень, иначе посев дал бы пустой корневой поверх заполненного уходящего.
         "roadmap_migrated": _ao()._child_scaffolding()._migrate_legacy_roadmap(root),
@@ -232,6 +234,7 @@ def _assets_report_line(assets: dict) -> str:
         out += ("\nПолитика общения подключена к runtime (блок в CLAUDE.md между маркерами; "
                 "текст вне них не тронут).")
     out += _ao()._lint_hook_setup().lint_hook_report_line(assets.get("lint_hook"))
+    out += _ao()._lint_hook_setup().lint_hook_report_line(assets.get("codex_lint_hook"))
     migrated = [x["artifact"] for x in (assets.get("roadmap_migrated") or [])
                 if x.get("action") == "migrated-from-legacy"]
     if migrated:

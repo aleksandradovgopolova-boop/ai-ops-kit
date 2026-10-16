@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Линт дочки: в момент правки агента (хук Claude Code) и шагом её CI.
+"""Линт дочки: после правки Claude Code/Codex и шагом её CI.
 
 ЗАЧЕМ (#1183, работа `lint-runs-at-edit-and-in-child-ci`). Правило в CLAUDE.md агент исполнять не
 обязан — это контекст, а не принуждение. А CI-шаблон дочки гонял только валидаторы кита: всё, что
@@ -29,7 +29,8 @@
 В CI профиль передаётся файлом (`--profile`): кеш в git дочки не хранится.
 
 Файл едет в дочку в managed-слое (`.ai/managed/templates/runtime/lint_hook.py`) и регистрируется
-установщиком в `.claude/settings.json` (installer/lint_hook_setup.py). Только stdlib; pyyaml — если
+установщиком в `.claude/settings.json`, для явно выбранного Codex — `.codex/hooks.json`
+(installer/lint_hook_setup.py; доверие runtime требуется отдельно). Только stdlib; pyyaml — если
 есть (он и так единственная зависимость кита).
 """
 from __future__ import annotations
@@ -38,6 +39,7 @@ import contextlib
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -319,7 +321,40 @@ def _style_profile(root: Path, rel: str, timeout: float) -> tuple:
 
 
 def run_hook(event: dict, root: Path | None = None) -> tuple:
+    """Claude file_path или Codex apply_patch: один линтер и общий бюджет для всех файлов."""
+    if event.get("tool_name") != "apply_patch":
+        return _run_file_hook(event, root)
+    tool_input = event.get("tool_input")
+    command = tool_input.get("command") if isinstance(tool_input, dict) else None
+    if isinstance(command, str):
+        command = command.replace("\r\n", "\n")
+    if (not isinstance(command, str) or not command.strip().startswith("*** Begin Patch\n")
+            or not command.strip().endswith("*** End Patch")):
+        return _note("Codex apply_patch не содержит распознаваемый patch payload")
+    paths = list(dict.fromkeys(re.findall(r"^\*\*\* (?:Add File|Update File|Move to): (.+)$",
+                                          command, re.MULTILINE)))
+    if not paths and not re.search(r"^\*\*\* Delete File: .+$", command, re.MULTILINE):
+        return _note("Codex apply_patch не содержит распознаваемых файлов")
+    deadline = time.monotonic() + TIMEOUT_S
+    errors, notes = [], []
+    for path in paths:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            notes.append("общий бюджет проверки patch исчерпан; оставшиеся файлы не проверены")
+            break
+        code, err, out = _run_file_hook({**event, "tool_input": {"file_path": path}}, root, remaining)
+        if code == 2:
+            errors.append(err)
+        if out:
+            notes.append(json.loads(out)["hookSpecificOutput"]["additionalContext"])
+    if errors:
+        return 2, "\n\n".join(errors + notes), ""
+    return _note("; ".join(notes)) if notes else (0, "", "")
+
+
+def _run_file_hook(event: dict, root: Path | None = None, timeout=None) -> tuple:
     """Одна правка агента -> (код выхода, stderr, stdout). Код 2 = нарушения линта или профиля."""
+    timeout = TIMEOUT_S if timeout is None else timeout
     root = Path(root or _root_from_env(event)).resolve()
     raw = ((event.get("tool_input") or {}).get("file_path")) or ""
     if not raw:
@@ -337,8 +372,8 @@ def run_hook(event: dict, root: Path | None = None) -> tuple:
     if lang is None or not hook_enabled(root):
         return 0, "", ""                          # не код знакомого языка или хук выключен
     started = time.monotonic()
-    project = _project_lint(root, rel, lang, TIMEOUT_S)
-    style = _style_profile(root, rel, TIMEOUT_S - (time.monotonic() - started))
+    project = _project_lint(root, rel, lang, timeout)
+    style = _style_profile(root, rel, timeout - (time.monotonic() - started))
     blocks = [text for kind, text in (project, style) if kind == "violation"]
     notes = [text for kind, text in (project, style) if kind == "note"]
     if blocks:

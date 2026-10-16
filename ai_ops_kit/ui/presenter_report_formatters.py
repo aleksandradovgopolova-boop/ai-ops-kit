@@ -272,6 +272,9 @@ def from_first_hour(res: dict) -> dict:
     else:
         steps.append("спроси «что дальше» — предложу работу по собранному плану")
     steps.append("детали по любой работе — по запросу")
+    offer = res.get("dashboard_offer")
+    if isinstance(offer, dict) and isinstance(offer.get("message"), str):
+        steps.append(offer["message"])
     return message(
         status="ok", headline="Первый час пройден",
         summary=f"Понял проект, собрал направление и план ({n_work} "

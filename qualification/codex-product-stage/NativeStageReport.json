@@ -1,0 +1,60 @@
+{
+  "scope": "bounded-native-stage",
+  "workflow": "PRODUCT",
+  "stage": "specification",
+  "stage_status": "artifact_created",
+  "workflow_status": "blocked",
+  "context_receipt": {
+    "kind": "FACT",
+    "claim": "context_serialized",
+    "runtime": "codex",
+    "binding": {
+      "stage": "specification",
+      "owner": "solution-architect",
+      "review_mode": "writer",
+      "skills": {
+        "contradiction-resolution": "c2ceaf7f8e7cbbbfae6dc41e28f8a8d22a292745b6fa7ade6e95825aafc65eeb"
+      }
+    },
+    "context_sha256": "9b3c06cd1f0194b120737eeccb51721a6defdc7fafdc241b016c73246d303d9c",
+    "context_bytes": 5629,
+    "output_sha256": "37c1ea8a30cd7c95f7bdc920512bbf6c8dec4809d91acca4b8ba62cf6af25d9e",
+    "runtime_delivery_verified": false
+  },
+  "audit": {
+    "status": "observed",
+    "records": [
+      {
+        "sequence": 1,
+        "kind": "FACT",
+        "claim": "payload_observed",
+        "event": "SessionStart",
+        "session_id": "01a11108-545c-7170-9980-1f9b62a007b3",
+        "turn_id": null,
+        "call_id": null,
+        "payload_sha256": "e209635acb619c73efac23f188ff2a72796db5c3cc9381659b13500d2b1871f9"
+      }
+    ],
+    "gaps": [],
+    "paired_calls": 0,
+    "native_coverage_verified": false,
+    "side_effect_verified": false
+  },
+  "usage": [
+    {
+      "input_tokens": 10015,
+      "cached_input_tokens": 0,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 437,
+      "reasoning_output_tokens": 36
+    }
+  ],
+  "model": "gpt-5.6-terra",
+  "gate_report": "GateReport.json",
+  "prompt_sha256": "8cc40567c55782a29b5a4fff85bd706c6ecb716b63063dfe5b20c75fd814e8a2",
+  "provenance": {
+    "kind": "REASONING",
+    "actor": "solution-architect",
+    "sha256": "355b8b809de30eff0e87e7d986c6cab2d8f8cb33e6717eda715839ee7e563c6e"
+  }
+}

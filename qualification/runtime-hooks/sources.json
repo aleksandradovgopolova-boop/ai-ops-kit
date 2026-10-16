@@ -1,0 +1,121 @@
+[
+  {
+    "id": "claude-hooks",
+    "url": "https://code.claude.com/docs/en/hooks",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "read_via_web",
+    "sha256": null
+  },
+  {
+    "id": "claude-mods-overview",
+    "url": "https://code.claude.com/docs/en/plugins/mods/overview",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "read_via_web",
+    "sha256": null
+  },
+  {
+    "id": "claude-mods-events",
+    "url": "https://code.claude.com/docs/en/plugins/mods/events",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "read_via_web",
+    "sha256": null
+  },
+  {
+    "id": "claude-mods-reference",
+    "url": "https://code.claude.com/docs/en/plugins/mods/reference",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "read_via_web",
+    "sha256": null
+  },
+  {
+    "id": "claude-sdk-hooks",
+    "url": "https://code.claude.com/docs/en/agent-sdk/hooks",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "read_via_web",
+    "sha256": null
+  },
+  {
+    "id": "codex-hooks",
+    "url": "https://learn.chatgpt.com/docs/hooks.md",
+    "resolved_url": "https://learn.chatgpt.com/docs/hooks.md",
+    "sha256": "724881d81f1a9fdb35ea42d4851a11b1f6606bbc6e9d2d05c1e8c466fc25c630",
+    "bytes": 46965,
+    "content_type": "text/markdown; charset=utf-8",
+    "status": "fetched",
+    "retrieved_date": "2026-10-06"
+  },
+  {
+    "id": "codex-app-server",
+    "url": "https://learn.chatgpt.com/docs/app-server.md",
+    "resolved_url": "https://learn.chatgpt.com/docs/app-server.md",
+    "sha256": "14c29f997cffff66125e710c1746425c53262eb4e636eb0bbcd5c8b4ec7e4464",
+    "bytes": 100675,
+    "content_type": "text/markdown; charset=utf-8",
+    "status": "fetched",
+    "retrieved_date": "2026-10-06"
+  },
+  {
+    "id": "gemini-hooks",
+    "url": "https://geminicli.com/docs/hooks/",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "read_via_web",
+    "sha256": null
+  },
+  {
+    "id": "gemini-hooks-reference",
+    "url": "https://geminicli.com/docs/hooks/reference/",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "read_via_web",
+    "sha256": null
+  },
+  {
+    "id": "aitmpl-mod",
+    "url": "https://www.aitmpl.com/component/mods/productivity/aitmpl",
+    "error_type": "HTTPError",
+    "retrieved_date": "2026-10-06",
+    "download_status": "unavailable",
+    "status": "not_used",
+    "sha256": null
+  },
+  {
+    "id": "claude-mods-types",
+    "url": "https://github.com/anthropics/claude-code/blob/8e60c4cac989c0e0cc6d2c49407a5c67f5a4a8e6/mods/types/claude-code.d.ts",
+    "revision": "8e60c4cac989c0e0cc6d2c49407a5c67f5a4a8e6",
+    "status": "fetched_pinned",
+    "retrieved_date": "2026-10-06",
+    "sha256": "8ae1244d19d4b393261605fe72d517b66be0d7e1c214c378cdec5107e8b0b46c",
+    "bytes": 507444
+  },
+  {
+    "id": "claude-sec-default",
+    "url": "https://github.com/anthropics/claude-code/blob/8e60c4cac989c0e0cc6d2c49407a5c67f5a4a8e6/mods/sec-default/README.md",
+    "revision": "8e60c4cac989c0e0cc6d2c49407a5c67f5a4a8e6",
+    "status": "fetched_pinned",
+    "retrieved_date": "2026-10-06",
+    "sha256": "479f547c93f0f91e83a4d4553ee84f2625ca01ddd2c11f02cc111d87f59f088e",
+    "bytes": 11712
+  },
+  {
+    "id": "aitmpl-register",
+    "url": "https://github.com/davila7/claude-code-templates/blob/375af9018a40e330e81542f59054daaa088c21aa/cli-tool/components/mods/productivity/aitmpl/hooks/register.tsx",
+    "revision": "375af9018a40e330e81542f59054daaa088c21aa",
+    "status": "fetched_pinned",
+    "retrieved_date": "2026-10-06",
+    "sha256": "5a7792f67b695d9f7caa766f7f461c9493305aed3d5907eec2e3e16bb618417f",
+    "bytes": 25802
+  }
+]

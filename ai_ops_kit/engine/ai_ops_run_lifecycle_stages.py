@@ -69,7 +69,7 @@ def _start_lifecycle(features_dir, fid, task_text, signals, plan, engine, base, 
     """Durable lifecycle-start: workitem.start + RunPlan/run-settings (write-barrier) + journal
     run_start + per-run снимок. K6: вынесено из run(). -> (attempt_id, error|None)."""
     workitem.start(str(features_dir), fid, task_text,
-                   task_type=signals.get("task_type"), risk=signals.get("risk"))
+                   task_type=signals.get("task_type"), risk=signals.get("risk"), signals=signals)
     # v3.0.15 (finding аудита P1): RunPlan — write BARRIER. Сбой durable-записи -> прогон НЕ начат
     # (0 вызовов модели): без надёжного плана нельзя доказать routing/гейты/resume.
     _pw = _ls.durable_write(features_dir / fid / "run-plan.yaml", plan, require_keys=("workitem_id",))
@@ -203,8 +203,11 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
         _in = sum(s.get("input_tokens") or 0 for s in _stats)
         _out = sum(s.get("output_tokens") or 0 for s in _stats)
         _lat = round(sum(s.get("latency_s") or 0 for s in _stats), 3)
-        _costs = [s.get("cost_usd_est") for s in _stats if s.get("cost_usd_est") is not None]
-        _cost = round(sum(_costs), 6) if _costs else None
+        from ai_ops_kit.providers import cost_account
+        _costs = [s.get("cost_usd_est") for s in _stats]
+        # Частичный учёт не становится полной ценой прогона: отдельные
+        # известные вызовы сохраняются в ledger, итог при пропуске unavailable.
+        _cost = cost_account.total_call_cost(_costs)
         _cost_rep = {"calls": len(_stats), "input_tokens": _in, "output_tokens": _out,
                      "latency_s": _lat, "cost_usd_est": _cost, "model": model}
         rep["cost"] = _cost_rep
@@ -214,9 +217,8 @@ def _finalize_run_cost(rep, orchestrator, model, jname, fid, attempt_id, signals
         # с фактическими данными прогона: успешное ПРОВЕРЕННОЕ изменение = ready_for_pr (приёмка/доставка
         # пройдены к этому моменту). Не проверено -> cost_per_change=None: стоимость есть, успешных
         # изменений нет — честные потери, а не деление на ноль (честность держит сам cost_account).
-        from ai_ops_kit.providers import cost_account
         _roid = cost_account.cost_per_successful_change(
-            {"calls_cost": _cost, "latency_s": _lat, "delivered_verified": bool(rep.get("ready_for_pr"))})
+            {"calls_cost": _cost, "latency_s": _lat, "delivered_verified": rep.get("ready_for_pr")})
         rep["roid"] = {"cost_per_successful_change": _roid["cost_per_change"],
                        "total_cost": _roid["total_cost"], "delivered_verified": _roid["delivered_verified"],
                        "note": _roid["note"]}

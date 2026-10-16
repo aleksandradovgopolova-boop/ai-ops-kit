@@ -818,3 +818,31 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `docs/decision-plane-runtime.md` — границы skills binding, обязательной policy и происхождения (#1251/#1252/#1254)
 - `ai_ops_kit/devtools/skills_qualification.py` — offline/live квалификация объявленных skills, контекста и обязательного floor (#1251/#1252)
 - `qualification/skills-safety/` — фиксированные корпуса, before/after evidence и измерения контекста без Jev
+
+### DecisionProvider (#1248)
+
+- `ai_ops_kit/devtools/decision_provider.py` — внутренний контракт bounded decision, проверка ответа, изоляция state и аудит primary/fallback; фактический потребитель — offline baseline.
+- `tests/unit/test_decision_provider.py` — взаимозаменяемость, реальные вызовы, fail-closed и независимый policy floor.
+- `qualification/CHANGE-BRIEF-decision-provider-2026-10-06.md` — границы реализации контракта до кода.
+- `qualification/decision-provider/` — actual CLI audit proof и границы квалификации контракта.
+
+### Runtime hooks research (#1255)
+
+- `docs/runtime-hooks-research.md` — первичные источники, lifecycle mapping, проект минимального adapter contract и research verdict.
+- `qualification/runtime-hooks/` — source metadata и offline schema evidence без model turns.
+- `qualification/CHANGE-BRIEF-runtime-hooks-2026-10-06.md` — границы read-only исследования до артефактов.
+
+- `ai_ops_kit/devtools/runtime_context_probe.py` — непоставляемый offline prototype контекста и аудита command hooks.
+- `qualification/runtime-context-prototype/` — synthetic native-shape inputs и actual CLI capture, границы доказательств.
+- `qualification/CHANGE-BRIEF-runtime-context-2026-10-06.md` — brief перед prototype #1267.
+
+- `qualification/runtime-context-live/` — actual native CLI evidence, controls, source data и ограничения live qualification #1269.
+- `qualification/CHANGE-BRIEF-runtime-context-live-2026-10-06.md` — brief перед native экспериментом.
+
+- `docs/codex-product-stage.md` — opt-in одна PRODUCT specification, ограничения native context/audit.
+- `qualification/CHANGE-BRIEF-codex-product-stage-2026-10-06.md` — инварианты интеграции native стадии.
+- `ai_ops_kit/providers/skill_context.py` — общий serializer и hash-only audit native hook shapes.
+- `ai_ops_kit/devtools/codex_stage.py` — bounded Codex stage и kit-owned публикация/гейты.
+- `ai_ops_kit/devtools/codex_stage_hook.py` — private SessionStart/deny-all tool hook.
+- `ai_ops_kit/devtools/codex_stage_cli.py` — внутренний opt-in вход, не shipped CLI intent.
+- `qualification/codex-product-stage/` — настоящий CLI capture одной стадии, вход, артефакт, gate report и source hashes.

@@ -1,0 +1,27 @@
+{
+  "issue": 1278,
+  "executor": "AI / Codex",
+  "registered_at": "2026-10-16T08:44:32.985076+00:00",
+  "pre_registration_research": "not timed",
+  "scope": "parent defect fix + isolated fixture; not accepted child work",
+  "usd": null,
+  "human_active_minutes": null,
+  "model_calls_total": null,
+  "counts_toward_child_cohort": false,
+  "independent_review": {
+    "executor": "AI / separate native Codex session",
+    "result": "NO FINDINGS",
+    "cli_reported_tokens": 51816,
+    "usd": null,
+    "model_calls": null,
+    "test_execution_in_review": "not run: interpreter or read-only temporary-files limitation"
+  },
+  "last_progress_at": "2026-10-16T09:02:15.870526+00:00",
+  "validation_finished_at": "2026-10-16T09:14:40.024020+00:00",
+  "full_current_python": {
+    "passed": 9151,
+    "skipped": 35,
+    "warnings": 2,
+    "seconds": 1630.49
+  }
+}

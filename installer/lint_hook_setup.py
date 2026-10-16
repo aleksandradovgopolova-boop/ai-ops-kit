@@ -35,10 +35,15 @@ COMMAND = (f'f="${{CLAUDE_PROJECT_DIR:-.}}/{DELIVERED}"; [ -f "$f" ] || exit 0; 
 OFF_VALUES = (False, 0, "off", "false", "no", "disabled")
 
 
-def kit_group() -> dict:
+def kit_group(runtime="claude-code") -> dict:
     """Своя запись PostToolUse — ровно в той форме, что описана в документации Claude Code."""
-    return {"matcher": MATCHER,
-            "hooks": [{"type": "command", "command": COMMAND, "timeout": TIMEOUT_S}]}
+    if runtime not in ("claude-code", "codex"):
+        raise ValueError(f"неизвестный runtime: {runtime}")
+    command = COMMAND if runtime == "claude-code" else (
+        f'f="$(git rev-parse --show-toplevel 2>/dev/null)/{DELIVERED}"; '
+        f'[ -f "$f" ] || exit 0; exec "${{AI_OPS_PYTHON:-python3}}" "$f" hook  # {MARKER}')
+    return {"matcher": MATCHER if runtime == "claude-code" else "^apply_patch$",
+            "hooks": [{"type": "command", "command": command, "timeout": TIMEOUT_S}]}
 
 
 def lint_hook_enabled(root) -> bool:
@@ -77,20 +82,21 @@ def _without_ours(groups: list) -> tuple:
     return out, first
 
 
-def merge_settings(doc: dict, enabled: bool) -> dict:
+def merge_settings(doc: dict, enabled: bool, *, group=None) -> dict:
     """Чистое слияние: вернуть настройки со своей записью (или без неё). Вход не мутируется."""
+    group = kit_group() if group is None else group
     doc = json.loads(json.dumps(doc))
     hooks = doc.get("hooks")
     groups = list((hooks or {}).get("PostToolUse") or [])
     ours = [g for g in groups if isinstance(g, dict) and any(_is_ours(h) for h in g.get("hooks") or [])]
     if not ours and not enabled:
         return doc                                        # выключен и своей записи нет — не наше
-    if enabled and ours == [kit_group()] and sum(
+    if enabled and ours == [group] and sum(
             _is_ours(h) for g in groups if isinstance(g, dict) for h in g.get("hooks") or []) == 1:
         return doc                                        # своя запись уже ровно такая — не трогаем
     groups, first = _without_ours(groups)
     if enabled:
-        groups.insert(len(groups) if first is None else first, kit_group())
+        groups.insert(len(groups) if first is None else first, group)
     if groups:
         doc.setdefault("hooks", {})["PostToolUse"] = groups
     elif isinstance(hooks, dict) and "PostToolUse" in hooks:
@@ -111,20 +117,21 @@ def _shape_problem(doc) -> str | None:
     return None
 
 
-def ensure_lint_hook(root, dry: bool = False) -> dict:
+def ensure_lint_hook(root, dry: bool = False, *, runtime="claude-code", active=True) -> dict:
     """Привести свою запись в `.claude/settings.json` к `standard.lint_hook`. -> {action, path, detail}.
 
     action: created | updated | unchanged | removed | not-installed (выключен и записи нет) |
     skipped-unreadable (JSON с комментариями/битый/не той формы — файл НЕ тронут)."""
     root = Path(root)
-    path = root / SETTINGS_REL
-    enabled = lint_hook_enabled(root)
+    group = kit_group(runtime)
+    path = root / (".codex/hooks.json" if runtime == "codex" else SETTINGS_REL)
+    enabled = bool(active and lint_hook_enabled(root))
     if not path.is_file():
         if not enabled:
             return {"action": "not-installed", "path": str(path), "detail": "выключен в .ai-ops.yaml"}
         if not dry:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(json.dumps(merge_settings({}, True), ensure_ascii=False, indent=2) + "\n",
+            path.write_text(json.dumps(merge_settings({}, True, group=group), ensure_ascii=False, indent=2) + "\n",
                             encoding="utf-8")
         return {"action": "created", "path": str(path), "detail": ""}
     text = path.read_text(encoding="utf-8")
@@ -136,7 +143,7 @@ def ensure_lint_hook(root, dry: bool = False) -> dict:
     problem = _shape_problem(doc)
     if problem:
         return {"action": "skipped-unreadable", "path": str(path), "detail": problem}
-    new = merge_settings(doc, enabled)
+    new = merge_settings(doc, enabled, group=group)
     if new == doc:
         return {"action": "unchanged" if enabled else "not-installed", "path": str(path), "detail": ""}
     if not dry:
@@ -147,6 +154,15 @@ def ensure_lint_hook(root, dry: bool = False) -> dict:
 def lint_hook_report_line(res) -> str:
     """Строка отчёта установщика. -> str (пустая, если ничего не произошло)."""
     action = (res or {}).get("action")
+    if str((res or {}).get("path", "")).endswith(".codex/hooks.json"):
+        if action in ("created", "updated"):
+            return ("\nХук проверки apply_patch добавлен в .codex/hooks.json. Codex требует доверия "
+                    "к точному определению хука; пока runtime его не подтвердил, проверка не запускается.")
+        if action == "removed":
+            return "\nСобственная запись хука Codex снята; чужие хуки сохранены."
+        if action == "skipped-unreadable":
+            return "\nХук Codex НЕ прописан: .codex/hooks.json не разобран; файл не изменён."
+        return ""
     if action in ("created", "updated"):
         return ("\nЛинт проекта теперь запускается в момент правки агента: хук после записи файла "
                 "прописан в .claude/settings.json (ваши настройки не тронуты; выключить — "

@@ -89,3 +89,36 @@ class TestRuntimeFilter:
                             command_filter={"ai-run", "ai-quick"})
         names = {p.stem for p in filtered}
         assert names == {"ai-run", "ai-quick"}
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("runtime", RUNTIMES)
+def test_generated_native_entry_runs_the_documented_controller(tmp_path, runtime):
+    import json
+    import os
+    import re
+    import shlex
+    import subprocess
+    import sys
+
+    from ai_ops_kit.shared.generate_runtime import PKG, render_ai_run
+
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    text = render_ai_run(runtime, {})
+    command = text.split("```", 2)[1].replace("\\\n", " ")
+    command = re.sub(r"\[[^\]]*\]", "", command)
+    command = command.replace('"<задача>"', '"Controlled native entry"')
+    command = command.replace("<child_root>", shlex.quote(str(tmp_path)))
+    command = command.replace("<json сигналов>", '{"task_type":"quality","size":"small","risk":"low"}')
+    args = shlex.split(command)[2:]  # shell env assignment + python3; use this interpreter
+    result = subprocess.run([sys.executable, *args, "--feature", "native-entry", "--json"],
+                            cwd=tmp_path, env={**os.environ, "PYTHONPATH": str(PKG)},
+                            capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stdout + result.stderr
+    report = json.loads(result.stdout[result.stdout.index("{"):])
+    assert report["execution"] == "planned" and report["delivery"]["requested"] is False
+    assert report["runtime"] == runtime
+    assert report["status"] == "planned" and report["run_state_materialized"] is False
+    assert (tmp_path / "features/native-entry/workitem.yaml").is_file()
+    assert (tmp_path / "features/native-entry/run-plan.yaml").is_file()
+    assert report["gates"] and not (tmp_path / report["run_state"]).exists()

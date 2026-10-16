@@ -1,0 +1,45 @@
+{
+  "stage": {
+    "id": "specification",
+    "owner": "solution-architect",
+    "writer": "solution-architect",
+    "review_mode": "writer",
+    "uses_skills": [
+      "contradiction-resolution"
+    ]
+  },
+  "events": [
+    {
+      "session_id": "offline-fixture-session",
+      "cwd": "/fixture",
+      "permission_mode": "default",
+      "hook_event_name": "SessionStart",
+      "source": "startup"
+    },
+    {
+      "session_id": "offline-fixture-session",
+      "cwd": "/fixture",
+      "permission_mode": "default",
+      "tool_use_id": "fixture-call",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "printf fixture"
+      },
+      "hook_event_name": "PreToolUse"
+    },
+    {
+      "session_id": "offline-fixture-session",
+      "cwd": "/fixture",
+      "permission_mode": "default",
+      "tool_use_id": "fixture-call",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "printf fixture"
+      },
+      "hook_event_name": "PostToolUse",
+      "tool_response": {
+        "stdout": "fixture"
+      }
+    }
+  ]
+}

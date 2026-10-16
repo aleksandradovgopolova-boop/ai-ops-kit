@@ -1,0 +1,127 @@
+"""Ограниченная live qualification; не устанавливает hooks в пользовательскую конфигурацию."""
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import secrets
+import shlex
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import yaml
+
+ROOT = Path('/Users/sasad/.codex/worktrees/skills-safety-qualification/ai-ops-kit')
+sys.path.insert(0, str(ROOT))
+from ai_ops_kit.devtools.runtime_context_probe import context_response, audit_events, digest
+
+HOOK = '''import json,sys,os
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+from ai_ops_kit.devtools.runtime_context_probe import context_response
+control=Path(sys.argv[2]); runtime=sys.argv[3]; mode=sys.argv[4]
+p=json.load(sys.stdin)
+with (control/'events.jsonl').open('a') as f: f.write(json.dumps(p)+'\\n')
+e=p.get('hook_event_name')
+if e=='SessionStart' and mode=='context':
+ output,receipt=context_response(runtime,json.loads((control/'stage.json').read_text()),control)
+ (control/'receipt.json').write_text(json.dumps(receipt))
+ print(json.dumps(output))
+elif e=='PreToolUse':
+ cmd=p.get('tool_input',{}).get('command') or p.get('tool_input',{}).get('cmd')
+ if cmd != "printf 'native-fixture' > proof.txt":
+  print(json.dumps({'hookSpecificOutput':{'hookEventName':'PreToolUse','permissionDecision':'deny','permissionDecisionReason':'qualification permits only the exact fixture command'}}))
+ else: print('{}')
+else: print('{}')
+'''
+PROMPT = "Run exactly this shell command once: printf 'native-fixture' > proof.txt . Do not read any files or call other tools. Then reply with JSON containing delivery_nonce (the value from the delivery-proof skill, or null if no such skill was provided), stage_owner and review_mode from that context (or null if absent). Do not invent a nonce."
+
+
+def run(runtime, mode):
+    with tempfile.TemporaryDirectory(prefix='aiops-native-qualification-') as temp:
+        base=Path(temp);control=base/'control';workspace=base/'workspace';home=base/'codex-home'
+        for directory in (control,workspace,home):directory.mkdir(mode=0o700)
+        (control/'manifest').mkdir();(control/'skills/delivery-proof').mkdir(parents=True)
+        nonce=secrets.token_hex(16)
+        (control/'skills/delivery-proof/SKILL.md').write_text('# delivery-proof\nDelivery nonce: '+nonce+'\nReturn this exact nonce in delivery_nonce.\n')
+        (control/'manifest/ai-ops-manifest.yaml').write_text('skills:\n  shipped:\n    - id: delivery-proof\n      path: skills/delivery-proof/SKILL.md\n')
+        stage=next(s for s in yaml.safe_load((ROOT/'registry/workflows.yaml').read_text())['workflows']['PRODUCT']['stages'] if s['id']=='specification').copy()
+        stage['uses_skills']=stage['uses_skills']+['delivery-proof']
+        (control/'skills/contradiction-resolution').mkdir()
+        shutil.copyfile(ROOT/'skills/contradiction-resolution/SKILL.md',control/'skills/contradiction-resolution/SKILL.md')
+        with (control/'manifest/ai-ops-manifest.yaml').open('a') as f:
+            f.write('    - id: contradiction-resolution\n      path: skills/contradiction-resolution/SKILL.md\n')
+        (control/'stage.json').write_text(json.dumps(stage))
+        if mode=='missing-skill':
+            (control/'skills/contradiction-resolution/SKILL.md').unlink()
+            try: context_response(runtime,stage,control)
+            except ValueError as exc:
+                return {'runtime':runtime,'mode':mode,'scope':'preflight-real-skill-refusal','native_launch_started':False,'error_type':type(exc).__name__,'stage':stage['id'],'owner':stage['owner'],'missing_skill':'contradiction-resolution'}
+            raise AssertionError('missing skill was accepted')
+        context_response(runtime,stage,control)  # Required body/budget verified before native launch.
+        (control/'hook.py').write_text(HOOK)
+        hook=shlex.join([sys.executable,str(control/'hook.py'),str(ROOT),str(control),runtime,mode])
+        hooks={event:[{'hooks':[{'type':'command','command':hook,'timeout':10}]}]
+               for event in ('SessionStart','PreToolUse','PostToolUse')}
+        env=os.environ.copy()
+        # Official CLI state root only for this child, not a task variable/global mutation.
+        if runtime=='codex':
+            auth=Path('/Users/sasad/.codex/auth.json')
+            if auth.exists():
+                shutil.copyfile(auth,home/'auth.json');(home/'auth.json').chmod(0o600)
+            env['CODEX_HOME']=str(home)
+            (home/'hooks.json').write_text(json.dumps({'hooks':hooks}))
+            cmd=['/Users/sasad/.local/bin/codex','exec','--ignore-user-config','--ephemeral',
+                 '--dangerously-bypass-hook-trust','--skip-git-repo-check','--sandbox','workspace-write',
+                 '--json','--model','gpt-5.6-terra','-c','model_reasoning_effort="low"',
+                 '-c','shell_environment_policy.inherit="none"','--output-last-message',str(control/'answer.txt'),PROMPT]
+        else:
+            (control/'settings.json').write_text(json.dumps({'hooks':hooks}))
+            cmd=['/opt/homebrew/bin/claude','-p','--setting-sources','',
+                 '--settings',str(control/'settings.json'),'--strict-mcp-config','--mcp-config','{"mcpServers":{}}',
+                 '--restricted','--tools','Bash','--allowedTools','Bash',
+                 '--no-session-persistence','--output-format','stream-json','--verbose',
+                 '--include-hook-events','--max-budget-usd','0.30','--effort','low',PROMPT]
+        start=time.monotonic()
+        try:
+            process=subprocess.run(cmd,cwd=workspace,env=env,capture_output=True,text=True,timeout=120)
+            stdout,stderr,code=process.stdout,process.stderr,process.returncode
+        except subprocess.TimeoutExpired as exc:
+            stdout=exc.stdout or b'';stderr=exc.stderr or b'';code='timeout'
+            stdout=stdout.decode(errors='replace') if isinstance(stdout,bytes) else stdout
+            stderr=stderr.decode(errors='replace') if isinstance(stderr,bytes) else stderr
+        payloads=[json.loads(line) for line in (control/'events.jsonl').read_text().splitlines()] if (control/'events.jsonl').exists() else []
+        stream=[]
+        for line in stdout.splitlines():
+            try:stream.append(json.loads(line))
+            except ValueError:pass
+        answer=(control/'answer.txt').read_text() if (control/'answer.txt').exists() else '\n'.join(str(x.get('result','')) for x in stream if x.get('type')=='result')
+        receipt=json.loads((control/'receipt.json').read_text()) if (control/'receipt.json').exists() else None
+        proof=workspace/'proof.txt'
+        row={'runtime':runtime,'mode':mode,'exit_code':code,'latency_ms':round((time.monotonic()-start)*1000),
+             'nonce_sha256':hashlib.sha256(nonce.encode()).hexdigest(),'nonce_returned':nonce in answer,
+             'owner_returned':stage['owner'] in answer,'review_mode_returned':'writer' in answer,
+             'answer':answer,'stdout_sha256':hashlib.sha256(stdout.encode()).hexdigest(),
+             'stderr_sha256':hashlib.sha256(stderr.encode()).hexdigest(),'stderr_tail':stderr[-1200:],
+             'context_receipt':receipt,'fixture_exists':proof.exists(),
+             'fixture_exact':proof.exists() and proof.read_text()=='native-fixture',
+             'fixture_sha256':hashlib.sha256(proof.read_bytes()).hexdigest() if proof.exists() else None,
+             'audit':audit_events(runtime,payloads) if payloads else None,
+             'events':[{k:v for k,v in p.items() if k in ('hook_event_name','session_id','turn_id','tool_use_id','tool_name')} for p in payloads],
+             'stream_types':sorted({x.get('type','unknown') for x in stream}),
+             'usage':[x.get('usage') for x in stream if x.get('usage')],
+             'cost_usd':[x['total_cost_usd'] for x in stream if 'total_cost_usd' in x]}
+        # Private diagnostics stay outside exported evidence; no auth material retained.
+        diag=Path('/tmp/runtime-live-'+runtime+'-'+mode);diag.mkdir(exist_ok=True,mode=0o700)
+        (diag/'stdout.txt').write_text(stdout);(diag/'stderr.txt').write_text(stderr)
+        (diag/'events.json').write_text(json.dumps(payloads))
+        return row
+
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser();parser.add_argument('runtime',choices=['codex','claude-code']);parser.add_argument('mode',choices=['context','control','missing-skill']);parser.add_argument('--out',required=True)
+    args=parser.parse_args();result=run(args.runtime,args.mode)
+    Path(args.out).write_text(json.dumps(result,ensure_ascii=False,indent=2)+'\n')
+    print(json.dumps({k:v for k,v in result.items() if k in ('runtime','mode','exit_code','nonce_returned','fixture_exact','native_launch_started')}))

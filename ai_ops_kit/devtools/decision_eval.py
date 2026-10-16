@@ -2,7 +2,7 @@
 
 CLI: python3 -m ai_ops_kit.devtools.decision_eval --dataset PATH --out DIR
 Внешние ответы: --responses PATH (JSON); запросы без эталонов пишутся в requests.json.
-Это измеритель, а не production-контракт DecisionProvider.
+Это измеритель; current baseline использует внутренний контракт DecisionProvider.
 """
 from __future__ import annotations
 
@@ -16,6 +16,7 @@ from pathlib import Path
 
 from ai_ops_kit.gates import spec_levels
 from ai_ops_kit.providers import model_router
+from ai_ops_kit.devtools import decision_provider
 from ai_ops_kit.shared import ai_route
 
 
@@ -62,7 +63,7 @@ def request(case):
     return public
 
 
-def current(req):
+def _current_rules(req):
     signals = req['signals']
     if req['point'] == 'ceremony':
         decision = str(spec_levels.classify(signals)['level'])
@@ -76,6 +77,25 @@ def current(req):
         stage = next((s for s in stages if s['id'] == signals.get('stage')), None)
         decision = stage['owner'] if stage else None
     return {'decision': decision, 'confidence': None, 'abstain': decision is None}
+
+
+def current(req):
+    """Рабочий R&D-потребитель контракта; workflow runtime не изменён."""
+    def invoke(request, budget_ms):
+        raw = _current_rules({'signals': request.state, 'point': request.decision_type})
+        if raw['abstain']:
+            return decision_provider.DecisionReply('abstain', reason=raw.get('reason') or 'unsupported_stage')
+        return decision_provider.DecisionReply('selected', decision=raw['decision'])
+
+    adapter = decision_provider.CallbackDecisionProvider('current', 'current-rules-v1', 'deterministic', invoke)
+    result = decision_provider.run_decision(
+        decision_provider.DecisionRequest(req['signals'], req['task'], tuple(req['options']), req['point']),
+        adapter, budget_ms=10000)
+    last = result.attempts[-1]
+    return {'decision': result.decision, 'confidence': result.confidence,
+            'abstain': result.status != 'selected', 'fallback': result.fallback,
+            'reason': last.reason, 'error': last.reason if result.status == 'error' else None,
+            'decision_audit': result.to_dict()}
 
 
 def heuristic(req):
@@ -197,7 +217,7 @@ def summarize(rows):
 
 def source_identity():
     root = Path(__file__).resolve().parents[2]
-    files = [Path(__file__), Path(spec_levels.__file__), Path(model_router.__file__), Path(ai_route.__file__)]
+    files = [Path(__file__), Path(spec_levels.__file__), Path(model_router.__file__), Path(ai_route.__file__), Path(decision_provider.__file__)]
     files.extend(sorted((root / "registry").glob("*.yaml")))
     try:
         revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True, timeout=10).strip()

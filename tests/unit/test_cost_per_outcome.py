@@ -137,3 +137,45 @@ def test_run_report_carries_outcome_kpi_and_delta_wiring():
     assert "roid_outcome_report" in life and 'rep["roid_outcome"]' in life
     assert "estimate_vs_actual" in rep and 'rep["cost_delta"]' in rep
     ast.parse(life); ast.parse(rep)          # правки синтаксически валидны
+
+
+@pytest.mark.unit
+def test_explicit_zero_ai_cost_remains_complete_with_known_human_cost():
+    result = ca.cost_per_successful_outcome(
+        {"calls_cost": 0.0, "manual_interventions": 0, "delivered_verified": True},
+        human_attention_cost_usd=0.5)
+    assert result["ai_cost"] == 0.0
+    assert result["cost_per_outcome"] == 0.0
+    assert result["complete"] is True
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("costs", [{}, {"calls_cost": None},
+                                  {"calls_cost": 2.0, "reviewer_cost": None},
+                                  {"calls_cost": float("nan")}, {"calls_cost": float("inf")},
+                                  {"calls_cost": -1.0}, {"calls_cost": True}])
+def test_unknown_ai_cost_is_unavailable_even_when_human_cost_is_known(costs):
+    result = ca.cost_per_successful_outcome(
+        {**costs, "manual_interventions": 0, "delivered_verified": True},
+        human_attention_cost_usd=0.5)
+    assert result["ai_cost"] is None
+    assert result["loaded_cost"] is None
+    assert result["cost_per_outcome"] is None
+    assert result["complete"] is False
+    assert "unavailable" in result["note"]
+
+
+@pytest.mark.unit
+def test_runtime_report_reads_written_rate_without_inventing_unknown_ai_price(tmp_path):
+    config = tmp_path / ".ai-ops.yaml"
+    config.write_text(
+        "engineering_operating_model:\n  economics:\n"
+        "    human_attention_cost_per_intervention_usd: 1.25\n", encoding="utf-8")
+    assert config.is_file()
+    assert ca.human_attention_cost(tmp_path) == 1.25
+    result = ca.roid_outcome_report(None, 10, 2, True, root=tmp_path)
+    assert result["human_attention_cost"] == 2.5
+    assert result["ai_cost"] is None
+    assert result["loaded_cost"] is None
+    assert result["cost_per_successful_outcome"] is None
+    assert result["complete"] is False

@@ -352,3 +352,54 @@ def test_ci_writes_step_summary(lh, tmp_path, monkeypatch):
     lh._summary(["python: lint `ruff check .` — пройдено", "    деталь не в сводку"])
     text = summary.read_text(encoding="utf-8")
     assert "Линт дочки" in text and "пройдено" in text and "деталь" not in text
+
+
+def _codex_event(root, patch):
+    return {"tool_name": "apply_patch", "cwd": str(root), "tool_input": {"command": patch}}
+
+
+def test_codex_patch_checks_the_changed_file(lh, py_child):
+    root, log = py_child
+    file = root / "src/changed.py"
+    file.write_text("BAD\n")
+    event = _codex_event(root, "*** Begin Patch\n*** Add File: src/changed.py\n+BAD\n*** End Patch")
+    rc, err, _ = lh.run_hook(event, root)
+    assert rc == 2 and "E001" in err
+    assert len(_calls(log)) == 1 and "src/changed.py" in _calls(log)[0]
+
+
+def test_codex_patch_checks_every_existing_destination(lh, py_child):
+    root, log = py_child
+    (root / "src/clean.py").write_text("OK\n")
+    (root / "src/moved.py").write_text("BAD\n")
+    event = _codex_event(root, "*** Begin Patch\n*** Update File: src/clean.py\n@@\n+OK\n"
+                        "*** Update File: src/old.py\n*** Move to: src/moved.py\n@@\n+BAD\n*** End Patch")
+    assert lh.run_hook(event, root)[0] == 2
+    assert len(_calls(log)) == 2
+    assert any("src/moved.py" in call for call in _calls(log))
+
+
+def test_codex_malformed_payload_is_explicitly_not_checked(lh, py_child):
+    root, log = py_child
+    rc, _, out = lh.run_hook(_codex_event(root, "not a patch"), root)
+    assert rc == 0 and "НЕ проверена" in out
+    assert not _calls(log)
+
+
+def test_codex_deleted_file_does_not_lint_another_file(lh, py_child):
+    root, log = py_child
+    event = _codex_event(root, "*** Begin Patch\n*** Delete File: src/deleted.py\n*** End Patch")
+    assert lh.run_hook(event, root) == (0, "", "")
+    assert not _calls(log)
+
+
+def test_codex_batch_deadline_reports_unchecked_tail(lh, py_child, monkeypatch):
+    root, _ = py_child
+    clock = iter([0, 0, 10000])
+    monkeypatch.setattr(lh.time, "monotonic", lambda: next(clock))
+    called = []
+    monkeypatch.setattr(lh, "_run_file_hook", lambda event, *a: (called.append(event) or (0, "", "")))
+    event = _codex_event(root, "*** Begin Patch\n*** Add File: a.py\n+x=1\n"
+                        "*** Add File: b.py\n+y=1\n*** End Patch")
+    code, _, out = lh.run_hook(event, root)
+    assert code == 0 and "НЕ проверена" in out and len(called) == 1

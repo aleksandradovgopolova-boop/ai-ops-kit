@@ -1,0 +1,13 @@
+{
+  "issue": 1278,
+  "executor": "AI / Codex controlled qualification",
+  "registered_at": "2026-10-16T08:52:33.118111+00:00",
+  "budget": "one local qualification, no models, no external network, <=180seconds",
+  "runtime": "CPython and actual Kit delivery APIs",
+  "policy": "isolated fixture block/require_approval; no real owner acceptance",
+  "acceptance": "barrier prevents requests; ambiguous POST reconciles; retry produces no second POST",
+  "compensation": "local fixture files reversible; a real already-created PR cannot be atomically undone by client rollback",
+  "limits": "loopback GitHub-shaped API and push=False; not GitHub reliability, native agent execution, or accepted child work",
+  "counts_toward_child_cohort": false,
+  "usd": null
+}

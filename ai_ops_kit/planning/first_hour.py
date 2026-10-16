@@ -48,7 +48,8 @@ def run(child_root, *, apply=False, budget_left=None, understanding=None) -> dic
 
     out = {"schema_version": 1, "kind": "first-hour", "classification": cls,
            "understanding": und, "questions": questions, "blocking_questions": blocking,
-           "conflicts": conflicts, "bootstrap": None, "bootstrap_applied": False, "next": None}
+           "conflicts": conflicts, "bootstrap": None, "bootstrap_applied": False, "next": None,
+           "dashboard_offer": None}
 
     # Дерево не прочиталось — останавливаемся раньше всего: bootstrap на выдумке был бы вреден.
     if cls == "UNKNOWN":
@@ -72,6 +73,16 @@ def run(child_root, *, apply=False, budget_left=None, understanding=None) -> dic
         out["next"] = _nw.compute(child_root, budget_left=budget_left)
 
     out["stage"] = READY
+    nxt = out.get("next") or {}
+    if (apply is True and not (out["bootstrap"] or {}).get("error")
+            and nxt.get("plan_present") is True and not nxt.get("plan_is_template")
+            and not nxt.get("plan_errors") and not (nxt.get("roadmap") or {}).get("errors")
+            and not nxt.get("error")):
+        out["dashboard_offer"] = {
+            "request": "Создай пульт продукта",
+            "message": "Можно собрать или дополнить пульт продукта из его целей, плана и метрик. "
+                       "Скажи: «Создай пульт продукта». Неизмеренное останется неизвестным.",
+        }
     return out
 
 
@@ -174,6 +185,9 @@ def _render_ready(res: dict, cls: str) -> str:
     lines += ["## Как продолжить", "",
               "Очередь работ и рекомендация:", "", "    ai-ops next", "",
               "Или попроси кит начать первую работу.", ""]
+    offer = res.get("dashboard_offer")
+    if isinstance(offer, dict) and isinstance(offer.get("message"), str):
+        lines += ["## Пульт продукта", "", offer["message"], ""]
     return _join(lines)
 
 

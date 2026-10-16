@@ -1,0 +1,92 @@
+{
+  "runtime": "claude-code",
+  "mode": "context",
+  "exit_code": 1,
+  "latency_ms": 4121,
+  "nonce_sha256": "db3981f9c771ed92451e5625a31e4185980e2f55e20fe5d1139fd1a50f042dd5",
+  "nonce_returned": false,
+  "owner_returned": false,
+  "review_mode_returned": false,
+  "answer": "Failed to authenticate: OAuth session expired and could not be refreshed",
+  "stdout_sha256": "6fddc9a47479c6addf3e25535a04912ccfc41f35117656eb6fd950edbbfeb600",
+  "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "stderr_tail": "",
+  "context_receipt": {
+    "kind": "FACT",
+    "claim": "context_serialized",
+    "runtime": "claude-code",
+    "binding": {
+      "stage": "specification",
+      "owner": "solution-architect",
+      "review_mode": "writer",
+      "skills": {
+        "contradiction-resolution": "c2ceaf7f8e7cbbbfae6dc41e28f8a8d22a292745b6fa7ade6e95825aafc65eeb",
+        "delivery-proof": "ee8bebb93e881baae5996f1dbc20e96f2ccab89acaf3c6d342e6214c6aa8bbdd"
+      }
+    },
+    "context_sha256": "df40d8443147430d89010a2170b873c02298e0913c86104ab2de29015468e81b",
+    "context_bytes": 5850,
+    "output_sha256": "6957a1d42e3bfb973b4c7ce50eb88b5541b1a6d41d6ebc0f8e596857d902c940",
+    "runtime_delivery_verified": false
+  },
+  "fixture_exists": false,
+  "fixture_exact": false,
+  "fixture_sha256": null,
+  "audit": {
+    "status": "observed",
+    "records": [
+      {
+        "sequence": 1,
+        "kind": "FACT",
+        "claim": "payload_observed",
+        "event": "SessionStart",
+        "session_id": "2dd214ae-9bc7-47e1-9cf0-31d14d734522",
+        "turn_id": null,
+        "call_id": null,
+        "payload_sha256": "945b471bad5f0e78c9e561438bbdfc1ce2e68dc25a02d4070ac6a5e9675a276e"
+      }
+    ],
+    "gaps": [],
+    "paired_calls": 0,
+    "native_coverage_verified": false,
+    "side_effect_verified": false
+  },
+  "events": [
+    {
+      "session_id": "2dd214ae-9bc7-47e1-9cf0-31d14d734522",
+      "hook_event_name": "SessionStart"
+    }
+  ],
+  "stream_types": [
+    "assistant",
+    "result",
+    "system"
+  ],
+  "usage": [
+    {
+      "output_tokens_details": {
+        "thinking_tokens": 0
+      },
+      "input_tokens": 0,
+      "cache_creation_input_tokens": 0,
+      "cache_read_input_tokens": 0,
+      "output_tokens": 0,
+      "server_tool_use": {
+        "web_search_requests": 0,
+        "web_fetch_requests": 0
+      },
+      "service_tier": "standard",
+      "cache_creation": {
+        "ephemeral_1h_input_tokens": 0,
+        "ephemeral_5m_input_tokens": 0
+      },
+      "inference_geo": "",
+      "iterations": [],
+      "speed": "standard",
+      "fallback_credit": null
+    }
+  ],
+  "cost_usd": [
+    0
+  ]
+}

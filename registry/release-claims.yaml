@@ -5,7 +5,7 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 4.10.1
+version: 4.11.0
 # Поле `phase` УБРАНО (04.09.2026, лента release-metadata). Это была свободная проза релиза, которая
 # дублировала заголовок раздела CHANGELOG. `release_bump` бампает ЧИСЛО версии по всем поверхностям и
 # пишет заголовок CHANGELOG из `--title`, но `phase` не трогал, а `validate_release_claims` проверяет
@@ -28,7 +28,7 @@ version: 4.10.1
 # зелёный, в дочки не обкатан). Минор 4.3 остаётся заработанным stable по своим тегам (cockpit +
 # live-587, ниже), и дочки на stable-политике продолжают резолвиться на 4.3.x. Промоут 4.4 в stable —
 # после живого внешнего прогона (P0 №7 направления one-feature-end-to-end), который и даст field_evidence.
-channel: stable
+channel: qualification
 channels:
   edge:
     what: "то, что влито в main; лучший известный код, но без гарантий"

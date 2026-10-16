@@ -1,0 +1,292 @@
+{
+  "executor": "AI",
+  "scope": "controlled qualification, not accepted product work",
+  "native": {
+    "issue": 1183,
+    "related_issue": 611,
+    "executor": "AI / native Codex controlled qualification",
+    "registered_at": "2026-10-16T09:20:53.694977+00:00",
+    "child_repo": "Proektnyy-ofis/ii-sreda",
+    "child_sha": "9f36ae3bcdc194ab62683737015efcff90f7d186",
+    "scope": "isolated real child worktree; intentional probe only, no business feature or deployment",
+    "acceptance": "native apply_patch -> automatic real ESLint feedback -> corrected Latin identifier; source Plan unchanged; no other source edits",
+    "budget": "one native test prompt <=180s after normal hook review/trust; no live product model calls",
+    "model": "gpt-5.6-terra",
+    "owner_acceptance": null,
+    "human_active_minutes": null,
+    "usd": null,
+    "model_calls_total": null,
+    "counts_toward_child_cohort": false,
+    "candidate_diff_sha256": "acf77262f29bc961aad1f8d214b87c8d5e070745d50d29648cc732d05cee843a",
+    "candidate_hook_sha256": "89083bd18ed67c094ea8ec616379e904df5eeb41435ee0e91c92674623f88541",
+    "observer_sha256": "76bdd43b33428bbc1bf07345593751340287f6b9863f086035c2f88b4ccb78d5",
+    "settings_sha256": "c16be0e4d992f7a96964810f54a3201b50b23a43b7400b4ff6d2a50510e61a36",
+    "trust_actor": "AI: ordinary Folder access Trust and continue, then /hooks exact project observer definition reviewed and trusted; no bypass flags",
+    "native_version": "0.163.0 isolated official full package",
+    "project_kind": "standalone local clone at original child SHA",
+    "trust_confirmed_at": "2026-10-16T09:35:24.878333+00:00",
+    "native_test_started_at": "2026-10-16T09:35:24.879419+00:00",
+    "plan_sha256_before": "ba0a696f93165cdf44dcac0cd10384b09bda710e2db8d0a134fa8a37c977fc13",
+    "exit_code": 0,
+    "native_test_finished_at": "2026-10-16T09:36:00.907500+00:00",
+    "native_elapsed_seconds": 36.026665,
+    "plan_sha256_after": "ba0a696f93165cdf44dcac0cd10384b09bda710e2db8d0a134fa8a37c977fc13",
+    "cli_usage_summaries": [
+      {
+        "input_tokens": 66814,
+        "cached_input_tokens": 49408,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 418,
+        "reasoning_output_tokens": 90
+      }
+    ],
+    "result": "qualified for apply_patch feedback on isolated real child clone: real ESLint reject2 then corrected0",
+    "hook_receipt_exit_codes": [
+      2,
+      0
+    ],
+    "permission_mode_observed": "bypassPermissions",
+    "permission_mode_note": "receipt label preserved; CLI requested workspace-write and ordinary hook trust was reviewed through UI; no isolation/reliability claim",
+    "plan_unchanged": true,
+    "failed_attempt_retained": "attempt-1",
+    "official_full_package_archive_sha256": "04812ee956115e3003eabf98601e8bc41c6d01ca6517f5161a8fa2376eb3402c",
+    "recorded_at": "2026-10-16T09:39:26.851795+00:00"
+  },
+  "failed_attempt": {
+    "registered_at": "2026-10-16T09:20:53.694977+00:00",
+    "human_active_minutes": null,
+    "usd": null,
+    "model_calls_total": null,
+    "native_version": "0.163.0 isolated official binary",
+    "native_test_started_at": "2026-10-16T09:32:12.449785+00:00",
+    "plan_sha256_before": "ba0a696f93165cdf44dcac0cd10384b09bda710e2db8d0a134fa8a37c977fc13",
+    "exit_code": 0,
+    "native_test_finished_at": "2026-10-16T09:32:40.352259+00:00",
+    "native_elapsed_seconds": 27.901335,
+    "plan_sha256_after": "ba0a696f93165cdf44dcac0cd10384b09bda710e2db8d0a134fa8a37c977fc13",
+    "cli_usage_summaries": [
+      {
+        "input_tokens": 41433,
+        "cached_input_tokens": 23040,
+        "cache_write_input_tokens": 0,
+        "output_tokens": 262,
+        "reasoning_output_tokens": 116
+      }
+    ],
+    "result": "not qualified: official standalone CLI binary lacked sibling codex-code-mode-host; no apply_patch/file writes occurred"
+  },
+  "retry_preregistration": {
+    "registered_at": "2026-10-16T09:34:02.805305+00:00",
+    "reason": "observed missing official code-mode host before any probe tool call; repair isolated runtime package",
+    "budget": "one additional native prompt <=180s; no further retries without new observed failure diagnosis",
+    "previous_attempt": "retained in attempt-1 with41433input/23040cachedsubset/262output, USDunknown",
+    "acceptance": "unchanged; real hook feedback then corrected file, Plan hash preserved",
+    "executor": "AI",
+    "owner_acceptance": null,
+    "counts_toward_child_cohort": false,
+    "official_full_package_archive_sha256": "04812ee956115e3003eabf98601e8bc41c6d01ca6517f5161a8fa2376eb3402c",
+    "retry_harness_sha256": "1e0632059a568f51658fc20e18e6425230cd21961b86ea257cad182e3618b3f6",
+    "repair_recorded_at": "2026-10-16T09:35:18.185793+00:00"
+  },
+  "setup_variants": {
+    "observed_at": "2026-10-16T09:29:35.723189+00:00",
+    "native_model_test_prompts_submitted": 0,
+    "observations": [
+      {
+        "kind": "Git worktree",
+        "codex_versions": [
+          "0.147.0",
+          "0.163.0 isolated official release"
+        ],
+        "project_hooks_in_hooks_ui": false,
+        "only_post_tool_hook_source": "user config petdex, inspected; not changed",
+        "variants": [
+          "hooks.json alone",
+          "empty project config.toml",
+          "per-invocation project trust setting"
+        ],
+        "conclusion": "project hook discovery not qualified; do not infer cause or unsupported versions"
+      }
+    ],
+    "next_variant": "standalone local clone at same child commit; same copied RunPlan, no model prompt yet",
+    "plan_sha256": "ba0a696f93165cdf44dcac0cd10384b09bda710e2db8d0a134fa8a37c977fc13",
+    "global_codex_version_unchanged": "0.147.0",
+    "isolated_codex_archive_sha256": "61c4d9a92521bdb42b0c1d9f87c673f6da628a06de5945cbdd9a0010632f6d10"
+  },
+  "receipts": [
+    {
+      "at": "2026-10-16T09:35:39.262257+00:00",
+      "event": {
+        "session_id": "01a14410-f852-7823-ab99-99c28336ef5e",
+        "turn_id": "01a14411-0016-7f42-abad-5267b6f245e7",
+        "transcript_path": null,
+        "cwd": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-native-lint-clone",
+        "hook_event_name": "PostToolUse",
+        "model": "gpt-5.6-terra",
+        "permission_mode": "bypassPermissions",
+        "tool_name": "apply_patch",
+        "tool_input": {
+          "command": "*** Begin Patch\n*** Add File: src/shared/lib/kit-lint-qualification.ts\n+export const число = 1;\n*** End Patch"
+        },
+        "tool_response": "Exit code: 0\nWall time: 0.1 seconds\nOutput:\nSuccess. Updated the following files:\nA src/shared/lib/kit-lint-qualification.ts\n",
+        "tool_use_id": "exec-5cf98eb0-bbab-4d5a-ab33-73d559a2d0cc"
+      },
+      "exit_code": 2,
+      "stdout": "",
+      "stderr": "Линтер проекта (eslint) нашёл нарушения в src/shared/lib/kit-lint-qualification.ts. Исправь их, прежде чем продолжать (правило проекта, а не кита):\n/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-native-lint-clone/src/shared/lib/kit-lint-qualification.ts\n  1:14  error  Имя «число» не латиницей. Имена в коде пишем по-английски; русский — в строках и комментариях, ключ-данное — строкой в кавычках  local/latin-identifiers\n✖ 1 problem (1 error, 0 warnings)\n"
+    },
+    {
+      "at": "2026-10-16T09:35:47.801716+00:00",
+      "event": {
+        "session_id": "01a14410-f852-7823-ab99-99c28336ef5e",
+        "turn_id": "01a14411-0016-7f42-abad-5267b6f245e7",
+        "transcript_path": null,
+        "cwd": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/ii-sreda-native-lint-clone",
+        "hook_event_name": "PostToolUse",
+        "model": "gpt-5.6-terra",
+        "permission_mode": "bypassPermissions",
+        "tool_name": "apply_patch",
+        "tool_input": {
+          "command": "*** Begin Patch\n*** Update File: src/shared/lib/kit-lint-qualification.ts\n@@\n-export const число = 1;\n+export const kitLintQualification = 1;\n*** End Patch"
+        },
+        "tool_response": "Exit code: 0\nWall time: 0.1 seconds\nOutput:\nSuccess. Updated the following files:\nM src/shared/lib/kit-lint-qualification.ts\n",
+        "tool_use_id": "exec-7f7acabd-6bda-42df-93c7-d194160a70f1"
+      },
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "js_profile": {
+    "issue": 1183,
+    "executor": "AI / controlled profile qualification",
+    "registered_at": "2026-10-16T09:41:23.352372+00:00",
+    "scope": "same isolated real child clone; temporary machine declaration translates documented AGENTS FSD directions; not owner-approved production rollout",
+    "acceptance": "apply freezes existing style debt, check passes; new Cyrillic identifier and upward import reject; restore passes; repeat apply cannot absorb growth",
+    "budget": "local ESLint only, up to900s/tool; no native model calls",
+    "counts_toward_child_cohort": false,
+    "owner_acceptance": null,
+    "apply": 0,
+    "finished_at": "2026-10-16T09:47:10.829885+00:00",
+    "baseline": 0,
+    "new_name": "grew",
+    "reapply": 0,
+    "repeat_apply_preserves_baseline": true,
+    "upward_import": "grew",
+    "restored": 0,
+    "baseline_sha256": "e4530c9c6874149bed152525ba076dd64b3d34bbd004e28678405e42dcc6ce27"
+  },
+  "python_profile": {
+    "issue": 1183,
+    "executor": "AI / controlled qualification",
+    "registered_at": "2026-10-16T09:52:33.317948+00:00",
+    "source_commit": "671a814491b7424aa2a66cecd6952597e2cc8726",
+    "scope": "clean committed real Python repo clone; no source imports executed, no DB/app/server; original dirty checkout untouched",
+    "declaration": "temporary core must not depend on collectors, translated from AGENTS pure-core/I-O separation; no claim of owner-approved production rollout",
+    "budget": "local Ruff and import-linter only, <=900s/tool, no native models",
+    "acceptance": "real repo profile baseline passes, new Cyrillic name/upward import rejected, repeat apply preserves baseline, restoration passes",
+    "owner_acceptance": null,
+    "usd": null,
+    "counts_toward_child_cohort": false,
+    "apply": 0,
+    "baseline": 0,
+    "new_name": 1,
+    "repeat_apply": 0,
+    "upward_import": 1,
+    "restored": 0,
+    "baseline_sha256": "be870b1dae7ed636c7eb8aa6d8d637ab39ddcd4ecef73733e523fcf110180c8e",
+    "finished_at": "2026-10-16T09:52:35.662073+00:00",
+    "ruff_version": "ruff 0.16.2",
+    "import_linter_version": "import-linter 2.15"
+  },
+  "local_ci_entry": {
+    "executor": "AI",
+    "registered_at": "2026-10-16T10:02:09.546293+00:00",
+    "scope": "local actual CI command, existing locked dependencies; no fresh install or GitHub run claimed",
+    "budget": "two local CI commands <=300s each; no model calls",
+    "owner_acceptance": null,
+    "negative_exit": 1,
+    "restored_exit": 0,
+    "finished_at": "2026-10-16T10:04:35.183196+00:00"
+  },
+  "negative_rule_evidence": {
+    "js_identifier": {
+      "source": "profile-new-name.json",
+      "expected_rule_fragment": "id-match",
+      "present": true,
+      "result": "grew",
+      "grown": [
+        {
+          "file": "src/shared/lib/kit-lint-qualification.ts",
+          "rule": "ai-ops/id-match",
+          "was": 0,
+          "now": 1,
+          "lines": [
+            1
+          ]
+        }
+      ]
+    },
+    "js_import": {
+      "source": "profile-upward-import.json",
+      "expected_rule_fragment": "no-restricted-imports",
+      "present": true,
+      "result": "grew",
+      "grown": [
+        {
+          "file": "src/shared/lib/kit-lint-qualification.ts",
+          "rule": "ai-ops/no-restricted-imports",
+          "was": 0,
+          "now": 1,
+          "lines": [
+            1
+          ]
+        }
+      ]
+    },
+    "python_identifier": {
+      "source": "new_name.json",
+      "expected_rule_fragment": "PLC2401",
+      "present": true,
+      "result": "grew",
+      "grown": [
+        {
+          "file": "core/kit_lint_qualification_probe.py",
+          "rule": "PLC2401",
+          "was": 0,
+          "now": 1,
+          "lines": [
+            1
+          ]
+        }
+      ]
+    },
+    "python_import": {
+      "source": "upward_import.json",
+      "expected_rule_fragment": "import-linter:core->collectors",
+      "present": true,
+      "result": "grew",
+      "grown": [
+        {
+          "file": "core.kit_lint_qualification_probe",
+          "rule": "import-linter:core->collectors",
+          "was": 0,
+          "now": 1,
+          "lines": [
+            1
+          ]
+        }
+      ]
+    }
+  },
+  "raw_sha256": {
+    "attempt-1/measurement.json": "240a8c0b36fb3c2f1f1c3914c40c739619c111b6b407fede56511e020e7cb3f3",
+    "attempt-1/harness.source.txt": "5c42887e0dcdcedeeeef9ceda73c3fb0bf6c4f39c9a6cf6c13f9577147494952",
+    "events.jsonl": "c76e59ba6e7009e63168990223d0903482cb4c523a4d12c452c7eda3ed3b7fb8",
+    "hook-receipts.jsonl": "5d7e28ddee488f9b6c05956415f5d988bf8e52a22953c1c6648597bc5c948cc9",
+    "child-typecheck.log": "af862cf0db80f1e86f0be0471da61216778ddcbfe5814918f1c5586c646f489d",
+    "child-build.log": "567af1162658de78d1bb619025f775d7ec321f1d6d7385212c28955c8b263060",
+    "ci-entry.log": "1dd3698f7095f47ce69bc7a4915fdd2df2b84530c80859b9cf858771b495f750",
+    "codex-lint-review-events.jsonl": "2d79bd4ad387255295d22197522211cc7aabc103c51cc32bd3aa7b854a7d6a7c"
+  }
+}

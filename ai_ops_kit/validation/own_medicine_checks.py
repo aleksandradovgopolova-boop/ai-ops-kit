@@ -405,17 +405,18 @@ def check_architecture_migrated(root, mod):
             "переноса: миграция в ARCHITECTURE.md касается дочек, заполнивших прежние файлы (SR-7)", "")
 
 
-def check_lint_hook(root, mod):
-    """Хук линта в `.claude/settings.json` (#1183, доставляется `ensure_lint_hook`).
+def check_lint_hook(root, mod, *, runtime="claude-code"):
+    """Хук линта Claude/Codex (#1183, доставляется `ensure_lint_hook`).
 
     Записан у кита — выполнено. Иначе `not_applicable`: запись зовёт ДОСТАВЛЕННЫЙ путь
     `.ai/managed/templates/runtime/lint_hook.py`, а кит в себя не устанавливается (managed-слоя у него
     нет, та же граница, что у сверки managed). Замену подтверждаем фактом, а не словом: линт кита
     исполняют `ruff check .` в `scripts/check-fast.sh` и `scripts/check-full.sh` (и джоба `lint` CI)."""
-    settings = Path(root) / ".claude" / "settings.json"
+    rel = ".codex/hooks.json" if runtime == "codex" else ".claude/settings.json"
+    settings = Path(root) / rel
     marker = "ai-ops-kit:lint-hook"
     if settings.is_file() and marker in settings.read_text(encoding="utf-8"):
-        return APPLIED, "хук линта прописан в .claude/settings.json этого репозитория", ""
+        return APPLIED, f"хук линта прописан в {rel} этого репозитория (не проверка native trust)", ""
     runners = [n for n in ("check-fast.sh", "check-full.sh")
                if "ruff check" in _read(Path(root) / "scripts" / n)]
     if not runners:
@@ -429,6 +430,10 @@ def check_lint_hook(root, mod):
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8") if path.is_file() else ""
+
+
+def check_codex_lint_hook(root, mod):
+    return check_lint_hook(root, mod, runtime="codex")
 
 
 DELIVERY_CHECKS = {
@@ -445,4 +450,5 @@ DELIVERY_CHECKS = {
     "planning_seeded": check_planning_seeded,
     "product_layer_seeded": check_product_layer_seeded,
     "lint_hook": check_lint_hook,
+    "codex_lint_hook": check_codex_lint_hook,
 }

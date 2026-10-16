@@ -1,0 +1,19 @@
+{
+  "issue": 611,
+  "executor": "AI / Codex desktop",
+  "registered_at": "2026-10-15T16:39:58.712500+00:00",
+  "pre_registration_research": "not timed",
+  "native_review_invocations_limit": 2,
+  "model_calls_total": null,
+  "usd": null,
+  "human_active_minutes": null,
+  "owner_acceptance": "not inferred",
+  "counts_toward_child_cohort": false,
+  "validation_finished_at": "2026-10-15T17:36:24.541216+00:00",
+  "full_current_python": {
+    "passed": 9107,
+    "skipped": 35,
+    "warnings": 2,
+    "seconds": 746.18
+  }
+}

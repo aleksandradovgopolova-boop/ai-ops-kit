@@ -33,6 +33,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -205,16 +206,16 @@ def _num(v):
     требуем чистый numeric. bool числом НЕ считается. -> float | None (не число — None, не ноль)."""
     if isinstance(v, bool):
         return None
-    if isinstance(v, (int, float)):
-        return float(v)
-    s = _text(v)
-    m = re.search(r"-?\d+(?:[.,]\d+)?", s) if s else None
-    if not m:
-        return None
+    if not isinstance(v, (int, float)):
+        match = re.search(r"[-+]?(?:\d+(?:[.,]\d*)?|[.,]\d+)(?:[eE][-+]?\d+)?", _text(v))
+        if not match:
+            return None
+        v = match.group(0).replace(",", ".")
     try:
-        return float(m.group(0).replace(",", "."))
-    except ValueError:
+        number = float(v)
+    except (ValueError, OverflowError):
         return None
+    return number if math.isfinite(number) else None
 
 
 def _direction(baseline: float, target: float) -> str:
@@ -238,9 +239,9 @@ def _primary_met(direction: str, target: float, measured: float) -> bool:
 def _guardrail_breaches(contract: dict, readout: dict) -> list:
     """Список пробитых guardrail'ов по observed-значениям отчёта.
 
-    within=False в отчёте — прямой сигнал пробоя (сильнее нашего парсинга единиц). Если within не
-    проставлен — сверяем численно против порога контракта (`must_not_exceed`/`must_not_drop_below`),
-    но только когда обе стороны парсятся как числа; иначе тихо пропускаем (не выдумываем пробой)."""
+    within=False — прямой сигнал пробоя. Численный порог проверяется и при within=True:
+    положительная декларация не скрывает измеренное нарушение. Нечисловой пробой не
+    выдумываем; неполноту отдельно учитывает _guardrail_gaps до положительного вердикта."""
     declared = {_text(g.get("name")): g for g in (contract.get("guardrails") or [])
                 if isinstance(g, dict) and _text(g.get("name"))}
     breaches: list[str] = []
@@ -253,8 +254,6 @@ def _guardrail_breaches(contract: dict, readout: dict) -> list:
         if obs.get("within") is False:
             breaches.append(name)
             continue
-        if obs.get("within") is True:
-            continue
         decl = declared.get(name)
         ov = _num(obs.get("value"))
         if not decl or ov is None:
@@ -265,6 +264,23 @@ def _guardrail_breaches(contract: dict, readout: dict) -> list:
         elif lo is not None and ov < lo:
             breaches.append(name)
     return breaches
+
+
+def _guardrail_gaps(contract: dict, readout: dict) -> list[str]:
+    """Объявленные защитные метрики без достаточного подтверждения (не утверждение пробоя)."""
+    gaps = []
+    observed = [o for o in readout.get("guardrails_observed") or [] if isinstance(o, dict)]
+    for guard in contract.get("guardrails") or []:
+        if not isinstance(guard, dict) or not _text(guard.get("name")):
+            continue
+        name = _text(guard["name"])
+        matches = [o for o in observed if _text(o.get("name")) == name]
+        numeric = any(_num(guard.get(key)) is not None
+                      for key in ("must_not_exceed", "must_not_drop_below"))
+        if not matches or any((_num(o.get("value")) is None if numeric else
+                               not isinstance(o.get("within"), bool)) for o in matches):
+            gaps.append(name)
+    return gaps
 
 
 def evaluate_outcome(contract: dict | None, readout: dict | None) -> dict:
@@ -323,6 +339,9 @@ def evaluate_outcome(contract: dict | None, readout: dict | None) -> dict:
         result["verdict"] = "failed"
         result["reason"] = (f"защитная метрика просела: {', '.join(breaches)} — цель не считается "
                             f"достигнутой, даже если основная метрика дотянула")
+    elif primary_met and (gaps := _guardrail_gaps(contract, readout)):
+        result["guardrail_gaps"] = gaps
+        result["reason"] = "не подтверждены защитные метрики: " + ", ".join(gaps)
     elif primary_met:
         result["verdict"] = "met"
         result["reason"] = (f"основная метрика достигла цели ({measured} к цели {target} "
