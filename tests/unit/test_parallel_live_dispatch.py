@@ -410,3 +410,150 @@ def test_unknown_delivery_is_reconciled_before_new_package_calls(tmp_path, monke
     else:
         assert dsp.exit_code(second) == 2 and len(runs) == 2 and len(posts) == 1
     assert Path(first["integration_source"]["integration_clone"]).is_dir()
+
+@pytest.mark.parametrize("outcome", ["pass", "failed-package", "exception"])
+def test_package_usage_and_safe_evidence_survive_cleanup(tmp_path, monkeypatch, outcome):
+    import json
+    from ai_ops_kit.engine import parallel_live as live
+    from ai_ops_kit.shared import usage_ledger as ledger
+    root, base, wg = _real_repo(tmp_path, monkeypatch)
+    before = live._git(root, "status", "--porcelain").stdout
+    paths = []
+    def run(task, signals, clone, **options):
+        paths.append(clone)
+        record = {"run_id": options["feature"], "role": "implementation", "usage_status": "measured",
+                  "input_tokens": 9, "output_tokens": 3, "cost": None, "cost_status": "unavailable",
+                  "api_key": "do-not-copy", "prompt": "do-not-copy"}
+        ledger.append(clone, options["feature"], [record, record])
+        (clone / "secret-config.txt").write_text("do-not-copy")
+        if outcome == "exception":
+            raise RuntimeError("do-not-copy")
+        result = _real_commit(task, signals, clone, **options)
+        result["ready_for_pr"] = outcome == "pass"
+        return result
+    rec = live.run_live_concurrent(wg, root, base, {"aa": "A", "bb": "B"}, {}, run)
+    artifact = rec["package_artifacts"]
+    assert artifact["status"] == "preserved" and artifact["new_product_calls"] == 4
+    receipt = json.loads(Path(artifact["receipt"]).read_text())
+    assert len(receipt["packages"]) == 2 and receipt["base_sha"] == base
+    assert all(item["source_head"] and item["usage_streams"] for item in receipt["packages"])
+    assert all(not path.exists() for path in paths), "cleanup follows durable retention"
+    assert len(ledger.load_product(root)) == 4
+    assert len(ledger.load_task(root, "aa")) == len(ledger.load_task(root, "bb")) == 2
+    assert all(row["cost"] is None for row in ledger.load_product(root))
+    assert "do-not-copy" not in Path(artifact["receipt"]).read_text()
+    assert all("prompt" not in row and "api_key" not in row for row in ledger.load_product(root))
+    assert live._git(root, "status", "--porcelain").stdout == before
+    if outcome != "pass":
+        assert rec["delivery_plan"]["ready"] is False
+
+
+@pytest.mark.parametrize("failure", ["corrupt", "receipt"])
+def test_artifact_failure_keeps_last_source_and_blocks_delivery(tmp_path, monkeypatch, failure):
+    from ai_ops_kit.engine import parallel_live as live, execution_pipeline
+    from ai_ops_kit.shared import usage_ledger as ledger, lifecycle_store
+    root, _, _ = _real_repo(tmp_path, monkeypatch)
+    paths, external = [], []
+    original = lifecycle_store.durable_write_json
+    def durable(path, *args, **kwargs):
+        if failure == "receipt" and Path(path).name == "package-receipt.json":
+            return {"ok": False, "error": "controlled fault"}
+        return original(path, *args, **kwargs)
+    monkeypatch.setattr(lifecycle_store, "durable_write_json", durable)
+    monkeypatch.setattr(execution_pipeline, "_deliver_pr", lambda *a, **k: external.append("PR"))
+    def run(task, signals, clone, **options):
+        paths.append(clone)
+        ledger.append(clone, options["feature"], [{"role": "implementation", "usage_status": "measured",
+            "input_tokens": 2, "output_tokens": 1, "cost": None, "cost_status": "unavailable"}])
+        if failure == "corrupt":
+            (clone / ".ai/usage/product-ledger.jsonl").write_text("corrupt\n")
+        return _real_commit(task, signals, clone, **options)
+    rec = dsp.run_parallel_live("T", {}, root, feature="WG", provider="mock", open_pr=True, run_fn=run)
+    assert rec["package_artifacts"]["status"] == "blocked" and dsp.exit_code(rec) != 0
+    assert rec["delivery_plan"]["ready"] is False and external == []
+    assert len(paths) == 2 and all((path / ".ai/usage/product-ledger.jsonl").exists() for path in paths)
+    assert all(path.exists() for path in paths), "last owned source must survive failed durability"
+
+
+def test_retained_sources_retry_uses_durable_baseline_without_double_count(tmp_path, monkeypatch):
+    from ai_ops_kit.engine import parallel_live as live
+    from ai_ops_kit.shared import usage_ledger as ledger, lifecycle_store
+    root, base, wg = _real_repo(tmp_path, monkeypatch)
+    row = {"role": "implementation", "usage_status": "measured", "input_tokens": 2,
+           "output_tokens": 1, "cost": None, "cost_status": "unavailable"}
+    # This history is actually tracked and therefore inherited by git clone.
+    ledger.append(root, "old", [row])
+    live._git(root, "add", "-f", "features/old/usage-ledger.jsonl")
+    live._git(root, "commit", "-qm", "tracked history")
+    base = live._git(root, "rev-parse", "HEAD").stdout.strip()
+    original = lifecycle_store.durable_write_json
+    paths = {}
+    def fault(path, *args, **kwargs):
+        return {"ok": False} if Path(path).name == "package-receipt.json" else original(path, *args, **kwargs)
+    def run(task, signals, clone, **options):
+        paths[options["feature"]] = {"path": str(clone)}
+        ledger.append(clone, options["feature"], [row, row])
+        return _real_commit(task, signals, clone, **options)
+    with monkeypatch.context() as patch:
+        patch.setattr(lifecycle_store, "durable_write_json", fault)
+        rec = live.run_live_concurrent(wg, root, base, {"aa": "A", "bb": "B"}, {}, run)
+    assert rec["package_artifacts"]["status"] == "blocked"
+    assert len(ledger.load_task(root, "old")) == 1, "clone history is not new spend"
+    assert len(ledger.load_product(root)) == 5, "one local history + four genuine new calls"
+    run_dir = Path(rec["package_artifacts"]["retained_source"])
+    proof = live._preserve_package_artifacts(root, base, paths, run_dir, rec["package_results"])
+    assert proof["status"] == "preserved" and proof["new_product_calls"] == 0
+    assert Path(proof["receipt"]).is_file() and len(ledger.load_product(root)) == 5
+    assert len(ledger.load_task(root, "old")) == 1
+
+
+@pytest.mark.parametrize("failure", ["missing-git", "missing-baseline", "invalid-latency"])
+def test_usage_source_validation_never_deletes_last_copy(tmp_path, monkeypatch, failure):
+    import hashlib
+    import shutil
+    from ai_ops_kit.engine import parallel_live as live
+    from ai_ops_kit.shared import usage_ledger as ledger
+    root, base, wg = _real_repo(tmp_path, monkeypatch)
+    sources = []
+    def run(task, signals, clone, **options):
+        sources.append(clone)
+        row = {"role": "implementation", "usage_status": "measured", "input_tokens": 2,
+               "output_tokens": 1, "cost": None, "cost_status": "unavailable"}
+        if failure == "invalid-latency":
+            row["latency"] = {"api_key": "do-not-copy"}
+        ledger.append(clone, options["feature"], [row])
+        result = _real_commit(task, signals, clone, **options)
+        if failure == "missing-git":
+            shutil.rmtree(clone / ".git")
+        elif failure == "missing-baseline":
+            (clone.parent / "_package-baselines" / (hashlib.sha256(options["feature"].encode()).hexdigest() + ".json")).unlink()
+        return result
+    rec = live.run_live_concurrent(wg, root, base, {"aa": "A", "bb": "B"}, {}, run)
+    assert rec["package_artifacts"]["status"] == "blocked" and not rec["delivery_plan"]["ready"]
+    assert sources and all((path / ".ai/usage/product-ledger.jsonl").exists() for path in sources)
+    assert ledger.load_product(root) == [], "invalid metadata cannot copy secrets or lose source calls"
+
+
+@pytest.mark.parametrize("stage", ["rmtree", "listing"])
+def test_cleanup_io_failure_reports_retained_clones(tmp_path, monkeypatch, stage):
+    import shutil
+    from ai_ops_kit.engine import parallel_live as live
+    root, base, wg = _real_repo(tmp_path, monkeypatch)
+    original = shutil.rmtree
+    def refuse(path, *args, **kwargs):
+        if Path(path).name == "aa":
+            raise OSError("controlled cleanup failure")
+        return original(path, *args, **kwargs)
+    original_list = Path.iterdir
+    def refuse_listing(path):
+        if path.name.startswith("run-"):
+            raise OSError("controlled listing failure")
+        return original_list(path)
+    if stage == "rmtree":
+        monkeypatch.setattr(shutil, "rmtree", refuse)
+    else:
+        monkeypatch.setattr(Path, "iterdir", refuse_listing)
+    rec = live.run_live_concurrent(wg, root, base, {"aa": "A", "bb": "B"}, {}, _real_commit)
+    assert rec["package_artifacts"]["status"] == "preserved"
+    assert rec["cleanup"]["status"] == "partial" and rec["cleanup"]["retained_paths"]
+    assert all(Path(path).exists() for path in rec["cleanup"]["retained_paths"])

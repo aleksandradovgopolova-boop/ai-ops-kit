@@ -30,6 +30,7 @@ if _root is not None and str(_root) not in _sys.path:
     _sys.path.insert(0, str(_root))
 
 import json
+import hashlib
 from collections.abc import Iterable
 import math
 import sys
@@ -37,6 +38,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from ai_ops_kit.shared.contracts import UsageRecord  # noqa: E402
+from ai_ops_kit.shared import lifecycle_store
 
 FIELDS = ("run_id", "workitem_id", "package_id", "role", "provider", "model", "runtime",
           "input_tokens", "output_tokens", "usage_status", "cost", "cost_status", "latency", "trigger",
@@ -130,11 +132,12 @@ def append(child_root: str | Path, workitem_id: str, records: list[dict] | None,
                     rec[k] = v
     if not recs:
         return 0
-    for p in (_task_path(child_root, workitem_id), _product_path(child_root)):
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as f:
-            for r in recs:
-                f.write(json.dumps(r, ensure_ascii=False) + "\n")
+    with lifecycle_store._journal_lock(_product_path(child_root)):
+        for p in (_task_path(child_root, workitem_id), _product_path(child_root)):
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a", encoding="utf-8") as f:
+                for r in recs:
+                    f.write(json.dumps(r, ensure_ascii=False) + "\n")
     return len(recs)
 
 
@@ -222,51 +225,168 @@ def complete_cost(values: Iterable[object]) -> float | None:
     return cast(float, result["cost"]) if result["cost_complete"] else None
 
 
-def merge_ledgers(child_root: str | Path, source_roots: list) -> int:
-    """v3.24.0 Parallel Ledger Fan-In: свести usage-ledger из нескольких клонов (source_roots) в основной
-    child_root. Читает features/*/usage-ledger.jsonl и .ai/usage/product-ledger.jsonl из каждого клона,
-    дедуплицирует по (run_id, role, latency, input_tokens, output_tokens), дозаписывает в основной.
-    Возвращает число добавленных записей."""
-    import json as _json
+def _strict_rows(path: Path) -> list:
+    """Не путать повреждённый JSONL с отсутствующими вызовами."""
+    if not path.exists():
+        return []
+    rows = [json.loads(s) for s in path.read_text(encoding="utf-8").splitlines() if s.strip()]
+    if any(not isinstance(row, dict) for row in rows):
+        raise ValueError("usage ledger содержит не объект")
+    return rows
+
+
+def _no_symlink(root: Path, path: Path) -> None:
+    rel = path.relative_to(root)
+    if any((root.joinpath(*rel.parts[:i])).is_symlink() for i in range(1, len(rel.parts) + 1)):
+        raise ValueError("usage ledger содержит symlink")
+
+
+def snapshot_ledgers(root: str | Path) -> dict:
+    """Граница унаследованной clone history ДО вызовов пакета, без копирования её записей."""
+    root = Path(root).resolve()
+    snapshot = {}
+    for path in [root / ".ai/usage/product-ledger.jsonl", *sorted(root.glob("features/*/usage-ledger.jsonl"))]:
+        if path.exists() or path.is_symlink():
+            _no_symlink(root, path)
+            content = path.read_bytes()
+            if content and not content.endswith(b"\n"):
+                raise ValueError("source usage baseline не заканчивается полной строкой")
+            snapshot[str(path.relative_to(root))] = {"offset": len(content),
+                                                    "digest": hashlib.sha256(content).hexdigest()}
+    return snapshot
+
+
+def _source_rows(root: Path, path: Path, identity: str, baseline: dict | None = None) -> tuple:
+    _no_symlink(root, path)
+    rel = path.relative_to(root)
+    content = path.read_bytes()
+    if baseline is not None and not isinstance(baseline, dict):
+        raise ValueError("source usage baseline невалидна")
+    baseline = baseline if baseline is not None else {"offset": 0, "digest": hashlib.sha256(b"").hexdigest()}
+    offset = baseline.get("offset")
+    if (not isinstance(offset, int) or isinstance(offset, bool) or offset < 0 or offset > len(content)
+            or hashlib.sha256(content[:offset]).hexdigest() != baseline.get("digest")):
+        raise ValueError("source usage baseline изменён; cleanup запрещён")
+    rows = []
+    for line in content[offset:].splitlines(keepends=True):
+        if line.strip():
+            raw = json.loads(line)
+            if not isinstance(raw, dict):
+                raise ValueError("source usage record не объект")
+            row = dict(normalize(raw))  # только UsageRecord, не config/prompts/произвольные поля
+            numeric = {"input_tokens", "output_tokens", "cost", "latency"}
+            if check(cast(UsageRecord, row)) or any(v is not None and not isinstance(v, str)
+                                 for k, v in row.items() if k not in numeric):
+                raise ValueError("source UsageRecord не соответствует объявленному контракту")
+            if any(isinstance(row.get(k), bool) for k in numeric):
+                raise ValueError("boolean не является числом usage")
+            if row.get("latency") is not None and cost_value(row["latency"]) is None:
+                raise ValueError("latency должна быть конечным неотрицательным числом или None")
+            row["_ai_ops_source"] = {"id": identity, "stream": rel.as_posix(), "offset": offset,
+                                      "digest": hashlib.sha256(line).hexdigest()}
+            rows.append(row)
+        offset += len(line)
+    return rows, hashlib.sha256(content).hexdigest()
+
+
+def _origin_key(origin: dict) -> tuple:
+    if (not all(isinstance(origin.get(k), str) and origin[k] for k in ("id", "stream", "digest"))
+            or not isinstance(origin.get("offset"), int) or isinstance(origin["offset"], bool)
+            or origin["offset"] < 0):
+        raise ValueError("usage provenance не соответствует контракту")
+    return tuple(origin[k] for k in ("id", "stream", "offset"))
+
+
+def _merge_rows(existing: list, incoming: list) -> tuple:
+    seen = {}
+    for row in existing:
+        origin = row.get("_ai_ops_source")
+        if origin is not None and not isinstance(origin, dict):
+            raise ValueError("destination usage provenance повреждён")
+        if isinstance(origin, dict):
+            key = _origin_key(origin)
+            if key in seen:
+                raise ValueError("destination usage provenance collision")
+            seen[key] = origin.get("digest")
     added = 0
-    seen = set()
-    # Загружаем существующие записи из основного для дедупликации
-    main_product = _product_path(child_root)
-    if main_product.exists():
-        for rec in _load(main_product):
-            key: tuple = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"), rec.get("output_tokens"), rec.get("latency"))
-            seen.add(key)
-    # Собираем из клонов
-    for src in source_roots:
-        src_path = Path(src)
-        # Product ledger
-        src_product = src_path / ".ai" / "usage" / "product-ledger.jsonl"
-        if src_product.exists():
-            for rec in _load(src_product):
-                key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"), rec.get("output_tokens"), rec.get("latency"))
-                if key not in seen:
-                    seen.add(key)
-                    main_product.parent.mkdir(parents=True, exist_ok=True)
-                    with main_product.open("a", encoding="utf-8") as f:
-                        f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
-                    added += 1
-        # Task ledgers (features/*/usage-ledger.jsonl)
-        for task_ledger in src_path.glob("features/*/usage-ledger.jsonl"):
-            wid = task_ledger.parent.name
-            main_task = _task_path(child_root, wid)
-            main_task.parent.mkdir(parents=True, exist_ok=True)
-            task_seen = set()
-            if main_task.exists():
-                for rec in _load(main_task):
-                    key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"))
-                    task_seen.add(key)
-            for rec in _load(task_ledger):
-                key = (rec.get("run_id"), rec.get("role"), rec.get("input_tokens"))
-                if key not in task_seen:
-                    task_seen.add(key)
-                    with main_task.open("a", encoding="utf-8") as f:
-                        f.write(_json.dumps(rec, ensure_ascii=False) + "\n")
+    merged = list(existing)
+    for row in incoming:
+        origin = row["_ai_ops_source"]
+        key = _origin_key(origin)
+        if key in seen:
+            if seen[key] != origin["digest"]:
+                raise ValueError("source usage stream изменён на уже импортированном offset")
+            continue
+        merged.append(row)
+        seen[key], added = origin["digest"], added + 1
+    return merged, added
+
+
+def _merge_ledgers(child_root: str | Path, source_roots: list, source_ids: dict | None, source_baselines: dict | None) -> int:
+    """Durable fan-in UsageRecord. Identity = source/run + stream + byte offset, НЕ содержимое.
+
+    source_ids задаёт стабильный coordinator-owned id при перемещении source в архив; по умолчанию
+    canonical source path. Возврат — новые product calls. Сбой -> ValueError: source удалять НЕЛЬЗЯ.
+    Ledger без provenance сохраняется, его старые импорты ретроспективно не угадываются.
+    """
+    snapshots: dict[Path, str] = {}
+    batches: dict[Path, list[dict]] = {}
+    if source_ids is not None and not isinstance(source_ids, dict):
+        raise ValueError("source usage identities должны быть словарём")
+    if source_baselines is not None and not isinstance(source_baselines, dict):
+        raise ValueError("source usage baselines должны быть словарём")
+    child_root = Path(child_root).resolve()
+    _no_symlink(child_root, Path(str(_product_path(child_root)) + ".lock"))
+    for source in source_roots:
+        root = Path(source).resolve()
+        if not root.is_dir():
+            raise ValueError("source usage root отсутствует")
+        identity = (source_ids or {}).get(str(source), (source_ids or {}).get(str(root), str(root)))
+        if not isinstance(identity, str) or not identity:
+            raise ValueError("source usage identity отсутствует")
+        baseline = (source_baselines or {}).get(str(source), (source_baselines or {}).get(str(root), {}))
+        if not isinstance(baseline, dict):
+            raise ValueError("source usage baseline не словарь")
+        paths = [root / ".ai/usage/product-ledger.jsonl", *sorted(root.glob("features/*/usage-ledger.jsonl"))]
+        if any(not isinstance(rel, str) or Path(rel).is_absolute() or ".." in Path(rel).parts
+               or not isinstance(value, dict) for rel, value in baseline.items()):
+            raise ValueError("source usage baseline невалидна")
+        if any(not (root / rel).is_file() for rel in baseline):
+            raise ValueError("source usage baseline исчез; cleanup запрещён")
+        for path in paths:
+            if path.is_symlink() or path.exists():
+                rows, digest = _source_rows(root, path, identity, baseline.get(str(path.relative_to(root))))
+                snapshots[path] = digest
+                dst = child_root / path.relative_to(root)
+                _no_symlink(child_root, dst)
+                batches.setdefault(dst, []).extend(rows)
+    if not batches:
+        return 0
+    added, writes = 0, {}
+    with lifecycle_store._journal_lock(_product_path(child_root), required=True):
+        # Сначала ВЕСЬ prospective merge: corrupt/collision не приводит к частичной записи.
+        for path, rows in batches.items():
+            merged, count = _merge_rows(_strict_rows(path), rows)
+            if count:
+                writes[path] = merged
+            if path == _product_path(child_root):
+                added += count
+        for path, rows in writes.items():
+            result = lifecycle_store.durable_write_jsonl(path, rows)
+            if not result.get("ok") or _strict_rows(path) != rows:
+                raise ValueError("usage ledger durable write/readback не подтверждён")
+        if any(hashlib.sha256(path.read_bytes()).hexdigest() != digest for path, digest in snapshots.items()):
+            raise ValueError("source usage ledger изменился во время сохранения; cleanup запрещён")
     return added
+
+
+def merge_ledgers(child_root: str | Path, source_roots: list, *, source_ids: dict | None = None,
+                  source_baselines: dict | None = None) -> int:
+    """Свести подтверждённые streams один раз; ValueError означает: source копию удалять НЕЛЬЗЯ."""
+    try:
+        return _merge_ledgers(child_root, source_roots, source_ids, source_baselines)
+    except (OSError, TypeError) as exc:
+        raise ValueError(f"usage archive недоступен ({type(exc).__name__}); cleanup запрещён") from exc
 
 
 def _fmt_agg(title: str, a: dict) -> str:
