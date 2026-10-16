@@ -1,0 +1,187 @@
+{
+  "registration": {
+    "registered_at": "2026-10-16T13:40:26.690954+00:00",
+    "executor": "AI",
+    "issue": 611,
+    "scope": "same saved model; native Codex invokes common status/inbox/next/explain/do; do may legitimately refuse before inference",
+    "budget_seconds": 180,
+    "attempts": 1,
+    "usd": null,
+    "human_active_minutes": null,
+    "owner_acceptance": null,
+    "primary_cohort": false,
+    "kit_sha": "23768068a1783f967783da8b5451295a7819f617",
+    "hashes_before": {
+      "planning/plan.yaml": "a36d23551e45de0e31827aa004cb666e1459c1dc3549532b4496f03820e42f66",
+      "features/kit-runtime-handoff-611/workitem.yaml": "f098de74e11548053a1b5149c9a1761f2b9632176d9e4badb4369917c544b64d",
+      "features/kit-runtime-handoff-611/run-plan.yaml": "46f8ba0b6da98fb0c1eb24ab0277b453df61c87e6401d4bfcb3a01bac51d84ff"
+    }
+  },
+  "failed_native_attempt": {
+    "started_at": "2026-10-16T13:40:40.218873+00:00",
+    "version": "codex-cli 0.147.0",
+    "usd": null,
+    "human_active_minutes": null,
+    "exit_code": 1,
+    "elapsed_seconds": 16.803004959016107,
+    "finished_at": "2026-10-16T13:40:57.022242+00:00"
+  },
+  "budget_amendment": {
+    "registered_at": "2026-10-16T13:42:53.777697+00:00",
+    "authorization": "coordinator source thread explicit corrective single attempt",
+    "reason": "previous configured model rejected before tools; known working isolated official binary/model",
+    "binary": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/codex-0.163.0-package/bin/codex",
+    "version": "codex-cli 0.163.0",
+    "model": "gpt-5.6-terra",
+    "budget_seconds": 180,
+    "attempts": 1,
+    "prompt_sha256": "ad9af3035ea51888b58f6cf2d80fb4dc8d8d270deea6107c120fe505e06e1e61",
+    "adapter_path_verified": true,
+    "adapter_path_note": "double generated prefix is actual existing output of earlier generate(output_dir) call, not assumed path",
+    "account_changed": false,
+    "credentials_changed": false,
+    "global_config_changed": false,
+    "usd": null,
+    "human_active_minutes": null
+  },
+  "correcting_native_result": {
+    "registered_at": "2026-10-16T13:42:53.777697+00:00",
+    "authorization": "coordinator source thread explicit corrective single attempt",
+    "reason": "previous configured model rejected before tools; known working isolated official binary/model",
+    "binary": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/codex-0.163.0-package/bin/codex",
+    "version": "codex-cli 0.163.0",
+    "model": "gpt-5.6-terra",
+    "budget_seconds": 180,
+    "attempts": 1,
+    "prompt_sha256": "ad9af3035ea51888b58f6cf2d80fb4dc8d8d270deea6107c120fe505e06e1e61",
+    "adapter_path_verified": true,
+    "adapter_path_note": "double generated prefix is actual existing output of earlier generate(output_dir) call, not assumed path",
+    "account_changed": false,
+    "credentials_changed": false,
+    "global_config_changed": false,
+    "usd": null,
+    "human_active_minutes": null,
+    "exit_code": 0,
+    "elapsed_seconds": 40.690128833055496,
+    "finished_at": "2026-10-16T13:43:34.756478+00:00"
+  },
+  "proof": {
+    "observed_at": "2026-10-16T13:44:24.189142+00:00",
+    "kind": "native-protocol-qualification",
+    "native": "official isolated Codex 0.163.0 / gpt-5.6-terra",
+    "native_exit_code": 0,
+    "elapsed_seconds": 40.690128833055496,
+    "usage": {
+      "input_tokens": 91480,
+      "cached_input_tokens": 60672,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 773,
+      "reasoning_output_tokens": 79
+    },
+    "cached_input_is_subset_of_input": true,
+    "usd": null,
+    "human_active_minutes": null,
+    "owner_acceptance": null,
+    "primary_cohort": false,
+    "hashes_after": {
+      "planning/plan.yaml": "a36d23551e45de0e31827aa004cb666e1459c1dc3549532b4496f03820e42f66",
+      "features/kit-runtime-handoff-611/workitem.yaml": "f098de74e11548053a1b5149c9a1761f2b9632176d9e4badb4369917c544b64d",
+      "features/kit-runtime-handoff-611/run-plan.yaml": "46f8ba0b6da98fb0c1eb24ab0277b453df61c87e6401d4bfcb3a01bac51d84ff"
+    },
+    "saved_sources_unchanged": true,
+    "native_protocol_command": "/bin/zsh -lc '/Users/sasad/ai-ops-kit/.venv/bin/python session01-protocol.py .'",
+    "native_protocol_command_exit_code": 0,
+    "intent_exit_codes": {
+      "status": 0,
+      "inbox": 0,
+      "next": 0,
+      "explain": 0,
+      "do": 2
+    },
+    "do_effect": "not executed: intake-incomplete size/risk before inner provider inference",
+    "protocol_qualified": true,
+    "product_execution_qualified": false,
+    "two_native_harness_success_claim": false,
+    "prior_plan_runtime": "qwen-code controller/planned, not successful Qwen inference",
+    "read_plan_native": true,
+    "adapter_generated_path_verified": true,
+    "limits": [
+      "status copied historical claim is not current live work",
+      "explain project-wide; product outcome_failed not feature-specific",
+      "full delivery / all-three-runtime support not proven; not required to test 4+1 protocol",
+      "Claude qualification remains blocked"
+    ]
+  },
+  "completed_native_command_events": [
+    {
+      "command": "/bin/zsh -lc \"pwd && sed -n '1,240p' AGENTS.md && sed -n '1,240p' features/kit-runtime-handoff-611/workitem.yaml && sed -n '1,260p' features/kit-runtime-handoff-611/run-plan.yaml && sed -n '1,260p' planning/plan.yaml && sed -n '1,300p' .ai/generated/codex-qualification/.ai/generated/codex/prompts/ai-run.md\"",
+      "exit_code": 0,
+      "status": "completed",
+      "aggregated_output_sha256": "658842411b63b08c5c1f808b97a27e4067cdf471c3b44382fef47c8e9b8a8a0a",
+      "output_selection": "Full private product-plan content omitted; intent outcomes extracted below"
+    },
+    {
+      "command": "/bin/zsh -lc '/Users/sasad/ai-ops-kit/.venv/bin/python session01-protocol.py .'",
+      "exit_code": 0,
+      "status": "completed",
+      "aggregated_output_sha256": "a116bf9687e9782a9bd4b9280774133c2e50577e00430ad8de5ad3c0776315a5",
+      "output_selection": "Full private product-plan content omitted; intent outcomes extracted below"
+    }
+  ],
+  "intent_results": [
+    {
+      "intent": "status",
+      "exit_code": 0,
+      "stdout_sha256": "5d41544233d9a9423bd3f524229bf6ab228775010b14d916f8208e2722611181",
+      "stderr": ""
+    },
+    {
+      "intent": "inbox",
+      "exit_code": 0,
+      "stdout_sha256": "033abea96e30072d67da15e7940f1b44424a5805ad5e43580471360a583eb7dd",
+      "stderr": ""
+    },
+    {
+      "intent": "next",
+      "exit_code": 0,
+      "stdout_sha256": "7eb246c682e75d5b3993e0762c880f36554f7250a20d44038f3d4bb0f4a83ad5",
+      "stderr": ""
+    },
+    {
+      "intent": "explain",
+      "exit_code": 0,
+      "stdout_sha256": "a9eea3a30046a81cf6ed08951397b9cf0de298699df201d092ce4b37947a8369",
+      "stderr": ""
+    },
+    {
+      "intent": "do",
+      "exit_code": 2,
+      "stdout_sha256": "c321fdce479cbd94c7a0ef546a3a4d598d7fbc08f494eee166642364c59eb26c",
+      "stderr": ""
+    }
+  ],
+  "source_sha256": {
+    "budget-amendment.json": "d4bc9630fee0f29566fd9a223ccc87d931d32774efb69c8caf0da60350263351",
+    "qualification.md": "30298562e316ef950f43e1734cec61c4b3ec5fcaf97a68ef09d0e5bbc032faaf",
+    "native-prompt.txt": "660dd6e0d818b655ddf065547c864272fc9fa61b491d208981ba6fce271234e0",
+    "handoff.json": "7987410bdec2e5756292cfe71a365f6217efa0704a749f27e3e8f17d6969ee66",
+    "claude-blocker-comment.md": "2d335a2cd85aeae270b3ab269619cc6ee9c809287f832dfdc9d085d3206deae7",
+    "claude-auth-status.json": "87c0ac156655fde6350f7acafed98ac5938c69d6db7e74d93b942c10efce93c6",
+    "correction-proof.json": "430d51b7880b361da6aa17544bde118d53aef5f83ca908ef6c3a4b0be4df7f0c",
+    "native-events.jsonl": "058a57678261bc8ad039bdb8c239b2a6803c997f02f33fd1250b3e5f4836df55",
+    "correction-events.jsonl": "214ed3c0011df1ceb1a6ea43c30e2d3fa39dd0624cc5b9a88542d5d6dc009e4b",
+    "correction-answer.txt": "3943a5766cb57fd57251007087b67bef7870b2ca3dc0b3f44fe8cc96fa2f1cd1",
+    "closure-comment.md": "f46268ca076ad38029454588e73d35a0c2337edcf8b016371e32905bc46664c8",
+    "correction-stderr.txt": "d961fd167f32dcdde3d5c042bfe90875dd5f0b3f782bb3a70e7d435116d62551",
+    "protocol-result.json": "65ea4097b1f3a1d14e0cc07d958bc17667870f3455a7a3f94e9be9d1ea0dcccb",
+    "correction-result.json": "ddaf7aee8f004165df37cb8dda342b636563f8a590b9701b2409ad880da5e742",
+    "protocol-registration.json": "2cc41eac8589e86726562400e69a2ab2f355471df8f81c50191db69f61d10d89",
+    "closure-review.json": "3383560f6ba40b56e03045157d5791cfbef546458ad5c83b7ba94b853a79379b",
+    "native-result.json": "999caf91d13986e56678dda0f1705e3ec5e11ffb75e47c71958c9b3ac4d12080",
+    "correction-prompt.txt": "ad9af3035ea51888b58f6cf2d80fb4dc8d8d270deea6107c120fe505e06e1e61",
+    "direct-protocol.jsonl": "a116bf9687e9782a9bd4b9280774133c2e50577e00430ad8de5ad3c0776315a5",
+    "closure-state.json": "3d60cd40458771530026c71b60422ee48896fe883334d29bbc6cdf3476f30250",
+    "native-stderr.txt": "1760847068be0837f6f56dd82409f8feee2993b0df54184a0d75080d5783fef4"
+  },
+  "published_scope": "Selected command evidence; raw private product-plan stdout not copied; no product delivery claim"
+}
