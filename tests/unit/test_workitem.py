@@ -273,3 +273,53 @@ def test_incomplete_base_plan_refused_before_provider(tmp_path):
     assert calls == []
     assert path.read_bytes() == before
     assert not (tmp_path / ".ai/runtime/workitems/external").exists()
+
+
+@pytest.mark.parametrize("task_type", ["bug", "refactor"])
+def test_complete_routing_signals_match_saved_plan(tmp_path, task_type):
+    from ai_ops_kit.engine import run_plan
+    signals = {"task_type": task_type, "size": "large", "risk": "low"}
+    before = dict(signals)
+    plan = run_plan.build_plan(signals, workitem_id="route-probe")
+    item = workitem.start(tmp_path, "route-probe", "routing qualification", signals=signals)
+    assert item["workflow"] == plan["base_workflow"] == "ENGINEERING"
+    assert item["route_reasons"] == plan["route_reasons"]
+    assert signals == before
+
+
+def test_explicit_legacy_arguments_override_added_signals(tmp_path):
+    item = workitem.start(tmp_path, "route-probe", "routing qualification", task_type="QUICK",
+                          risk="low", signals={"task_type": "feature", "size": "large"})
+    assert item["workflow"] == "QUICK"
+
+
+@pytest.mark.parametrize("entry", ["controller", "pipeline-lifecycle"])
+def test_actual_run_entries_save_consistent_workitem_and_plan(tmp_path, entry):
+    import subprocess
+    from ai_ops_kit.engine import ai_ops_run, run_plan
+    from ai_ops_kit.engine.ai_ops_run_lifecycle_stages import _start_lifecycle
+    root = tmp_path / "child"
+    root.mkdir()
+    for args in (("init", "-q"), ("config", "user.email", "fixture@example.invalid"),
+                 ("config", "user.name", "AI fixture"), ("commit", "--allow-empty", "-qm", "init")):
+        subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True)
+    signals = {"task_type": "bug", "size": "large", "risk": "low"}
+    features, fid = root / "features", "route-probe"
+    if entry == "controller":
+        report = ai_ops_run.run(task_text="routing qualification", signals=signals,
+                                child_root=root, feature=fid, engine="controller", runtime="codex")
+        assert report["status"] == "planned" and report["run_state_materialized"] is False
+    else:
+        plan = run_plan.build_plan(signals, workitem_id=fid)
+        _, error = _start_lifecycle(features, fid, "routing qualification", signals, plan,
+                                   engine="pipeline", base="main", resume=False, execute=False,
+                                   saved_task=None, sandbox=False, baseline_diff=False,
+                                   require_fix=False, author=False, review=False, open_pr=False,
+                                   write_scope=[], max_steps=1, base_binding={})
+        assert error is None
+    item = yaml.safe_load((features / fid / "workitem.yaml").read_text())
+    plan = yaml.safe_load((features / fid / "run-plan.yaml").read_text())
+    assert item["workflow"] == plan["base_workflow"] == "ENGINEERING"
+    result = workitem.status_cmd(features, fid)
+    assert result["status"] != "done"
+    assert result["workflow"] == "ENGINEERING" and result["unmet_gates"]

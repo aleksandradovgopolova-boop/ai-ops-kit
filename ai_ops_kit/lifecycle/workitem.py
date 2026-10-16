@@ -64,8 +64,9 @@ def wi_path(features_dir, fid):
     return Path(features_dir) / fid / "workitem.yaml"
 
 
-def start(features_dir, fid, task, task_type=None, risk=None):
-    inp = {}
+def start(features_dir, fid, task, task_type=None, risk=None, *, signals=None):
+    """Создать WorkItem по полным routing-сигналам; прежние явные аргументы приоритетны."""
+    inp = dict(signals or {})
     if task_type:
         inp["task_type"] = task_type
     if risk:
