@@ -1,0 +1,169 @@
+{
+  "executor": "AI",
+  "scope": "partial real native Codex consumption, not qualified two-native handoff",
+  "preregistered_handoff": {
+    "executor": "AI",
+    "issue": 611,
+    "registered_at": "2026-10-16T10:32:32.819780+00:00",
+    "scope": "controlled real ii-sreda clone; same WorkItem/RunPlan read by two native harnesses; shared CLI candidate, not stable auto dispatch",
+    "child_sha": "9f36ae3bcdc194ab62683737015efcff90f7d186",
+    "budget": "one Qwen prompt <=60s <=6 tools, one Codex prompt <=90s; no fallback/auth repair, no subagents, no product generation/deploy",
+    "acceptance": [
+      "both native harnesses read same WorkItem and RunPlan and common protocol projections",
+      "Qwen creates only controlled fixture, Codex extends it",
+      "Plan and WorkItem hashes unchanged",
+      "common status retains unmet gates; no planned to done mislabel"
+    ],
+    "usd": null,
+    "owner_acceptance": null,
+    "human_active_minutes": null,
+    "counts_toward_child_cohort": false
+  },
+  "qwen": {
+    "native": "Qwen Code0.21.13",
+    "started_at": "2026-10-16T10:34:16.019163+00:00",
+    "usd": null,
+    "owner_acceptance": null,
+    "approval_mode": "auto-edit, no isolation claim",
+    "budget": "one prompt <=60s <=6 tools",
+    "exit_code": 0,
+    "finished_at": "2026-10-16T10:34:25.206283+00:00",
+    "elapsed_seconds": 9.187181,
+    "hashes_after": {
+      "features/kit-runtime-handoff-611/workitem.yaml": "ca454f8b46204896e47c04b5bfbe26f49daf7845aad1512cce8e173266e203bc",
+      "features/kit-runtime-handoff-611/run-plan.yaml": "46f8ba0b6da98fb0c1eb24ab0277b453df61c87e6401d4bfcb3a01bac51d84ff"
+    },
+    "probe_exists": false,
+    "probe_text": null,
+    "result": "not qualified: configured model access denied403 before tools; CLI exit0 does not prove success",
+    "reported_usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_input_tokens": 0
+    },
+    "configured_model_observed": "qwen3.7-plus",
+    "two_native_handoff": "not qualified"
+  },
+  "codex": {
+    "executor": "AI / native Codex",
+    "registered_at": "2026-10-16T10:36:05.320511+00:00",
+    "scope": "separate partial qualification after Qwen403; not successful two-native handoff",
+    "budget": "one native Codex prompt <=90s; no subagents, commits, live product generation or deployment",
+    "owner_acceptance": null,
+    "usd": null,
+    "human_active_minutes": null,
+    "counts_toward_child_cohort": false,
+    "acceptance": "consume existing WorkItem/RunPlan and common views, only controlled fixture write; hashes unchanged, no completion claim",
+    "hashes_before": {
+      "features/kit-runtime-handoff-611/workitem.yaml": "ca454f8b46204896e47c04b5bfbe26f49daf7845aad1512cce8e173266e203bc",
+      "features/kit-runtime-handoff-611/run-plan.yaml": "46f8ba0b6da98fb0c1eb24ab0277b453df61c87e6401d4bfcb3a01bac51d84ff"
+    },
+    "exit_code": 0,
+    "elapsed_seconds": 48.505339,
+    "hashes_after": {
+      "features/kit-runtime-handoff-611/workitem.yaml": "ca454f8b46204896e47c04b5bfbe26f49daf7845aad1512cce8e173266e203bc",
+      "features/kit-runtime-handoff-611/run-plan.yaml": "46f8ba0b6da98fb0c1eb24ab0277b453df61c87e6401d4bfcb3a01bac51d84ff"
+    },
+    "finished_at": "2026-10-16T10:36:53.829792+00:00",
+    "probe_exists": true,
+    "probe_text": "export const nativeHarnesses = [\"codex\"];\n"
+  },
+  "qwen_separate_configured_model": {
+    "executor": "AI / Qwen Code0.21.13",
+    "registered_at": "2026-10-16T10:58:41.469362+00:00",
+    "scope": "new bounded continuation; original qwen3.7-plus403 remains failed; not a retroactive successful original handoff",
+    "model": "qwen3.6-plus",
+    "selection_source": "normal /model TUI listed configured qwen3.6-plus; eligibility unknown until request; TUI quit without selection, kept qwen3.7-plus,0tools0APItime",
+    "budget": "one additional prompt <=90s <=10tool calls; same configured provider, no credential changes, no further fallback",
+    "acceptance": "read existing saved model, append only qwen-code to actual Codex fixture, preserve YAML; no claim all gates passed",
+    "usd": null,
+    "owner_acceptance": null,
+    "counts_toward_child_cohort": false,
+    "hashes_before": {
+      "features/kit-runtime-handoff-611/workitem.yaml": "f098de74e11548053a1b5149c9a1761f2b9632176d9e4badb4369917c544b64d",
+      "features/kit-runtime-handoff-611/run-plan.yaml": "46f8ba0b6da98fb0c1eb24ab0277b453df61c87e6401d4bfcb3a01bac51d84ff"
+    },
+    "exit_code": 0,
+    "finished_at": "2026-10-16T10:58:50.594999+00:00",
+    "elapsed_seconds": 9.124885,
+    "hashes_after": {
+      "features/kit-runtime-handoff-611/workitem.yaml": "f098de74e11548053a1b5149c9a1761f2b9632176d9e4badb4369917c544b64d",
+      "features/kit-runtime-handoff-611/run-plan.yaml": "46f8ba0b6da98fb0c1eb24ab0277b453df61c87e6401d4bfcb3a01bac51d84ff"
+    },
+    "probe_text": "export const nativeHarnesses = [\"codex\"];\n",
+    "result": "not qualified: configured qwen3.6-plus also403 beforetools; no further model attempts",
+    "reported_usage": {
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cache_read_input_tokens": 0
+    }
+  },
+  "codex_usage": {
+    "input_tokens": 342807,
+    "cached_input_tokens": 287360,
+    "cache_write_input_tokens": 0,
+    "output_tokens": 1079,
+    "reasoning_output_tokens": 100
+  },
+  "native_read_receipts": [
+    {
+      "command": "/bin/zsh -lc 'ls -la .ai/generated/codex-qualification; cat .ai/generated/codex-qualification/codex/prompts/ai-run.md .ai/generated/codex-qualification/codex/prompts/ai-start-task.md features/kit-runtime-handoff-611/workitem.yaml features/kit-runtime-handoff-611/run-plan.yaml .ai/runtime/qualification-protocol-views.json'",
+      "exit_code": 1
+    },
+    {
+      "command": "/bin/zsh -lc 'cat .ai/generated/codex-qualification/.ai/generated/codex/prompts/ai-run.md .ai/generated/codex-qualification/.ai/generated/codex/prompts/ai-start-task.md'",
+      "exit_code": 0
+    },
+    {
+      "command": "/bin/zsh -lc 'cat .ai/runtime/qualification-protocol-views.json'",
+      "exit_code": 0
+    }
+  ],
+  "native_file_effects": [
+    {
+      "id": "item_12",
+      "type": "file_change",
+      "changes": [
+        {
+          "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/runtime-handoff-child-20261016/src/shared/lib/kit-runtime-qualification.ts",
+          "kind": "add"
+        }
+      ],
+      "status": "completed"
+    }
+  ],
+  "common_status_after_native": {
+    "schema_version": 1,
+    "kind": "workitem-status",
+    "workflow": "QUICK",
+    "status": "needs_more_evidence",
+    "action": "требуется доказательство (evidence для гейта)",
+    "lifecycle_intent": "implementation",
+    "blocked": true,
+    "unmet_gates": [
+      "intake_completeness",
+      "implementation_verification"
+    ],
+    "real_fail": [],
+    "human_unmet": [],
+    "evidence_missing": [
+      "intake_completeness",
+      "implementation_verification"
+    ],
+    "blueprint_verdict": null
+  },
+  "limits": [
+    "Both individually registered Qwen attempts403 before tools; no auth changes or further model retries",
+    "native WorkItem/RunPlan hashes measured before/after native, before status_cmd writes derived status",
+    "common status/inbox/next/explain snapshots are project-wide; explain had focus null and unrelated product outcome, not a complete per-work4+1 qualification",
+    "candidate adapters/common CLI, not stable tag auto-dispatch",
+    "USD/owner acceptance/human active minutes unknown; controlled fixtures excluded from1243"
+  ],
+  "raw_sha256": {
+    "qwen-events.jsonl": "702568f1529894a63194bab746bc3a26df51f08316045a82da58888e21586bb5",
+    "codex-consumer-events.jsonl": "ff5284dfedb055aafa936c4331ad5aa283a997234614155ef16eb634018bdf40",
+    "codex-consumer-answer.txt": "441a4540f21c2b2ea022502501afb21983e121d942cf34ea0cc751e45661a9bb",
+    "controller-registration.txt": "7e2e98065a89257843f714585ed4d4f4db5e1019a6d5094dc482e86a9cc903d2",
+    "qwen-configured-model-events.jsonl": "3c2c19b57d55074055b91fda6768f977c05e33ce1b8b0082f3288b136f3a99e3"
+  }
+}

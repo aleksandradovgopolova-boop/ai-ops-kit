@@ -33,18 +33,23 @@ WorkItem → регистрация в реестре активных рабо�
 ```
 PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engine.ai_ops_run run "<задача>" <child_root> \
     --signals '<json сигналов>' \
-    [--runtime claude-code|generic-orchestrator] [--provider mock] [--execute]
+    --engine controller --runtime <native-runtime-id>
 ```
+
+Это вход для рантайма со своим tool loop: `native-runtime-id` — `claude-code`,
+`codex` или `qwen-code` по фактическому исполнителю. Для автоматического
+provider-пайплайна явно выбери `--engine pipeline --execute` и провайдера;
+флаг runtime сам по себе native CLI не запускает.
 
 1. Построить RunPlan по сигналам (ui_changed, measurable_behavior, security_surface_changed,
    events_changed, ai_component, deploy_touched, user_facing_change, affected_areas).
 2. Создать WorkItem и записать RunPlan (`features/<id>/run-plan.yaml`).
 3. Зарегистрировать активную работу (ветка/зоны/сессия) — для conflict forecast.
 4. Исполнение:
-   - **claude-code** (и рантаймы со своим tool loop): контроллер готовит план и каркас
+   - **Рантайм со своим tool loop** (`--engine controller`): контроллер готовит план и каркас
      состояния; стадии/патчи/тесты исполняет **рантайм**, следуя плану. status = `planned`.
-   - **generic-orchestrator**: контроллер реально прогоняет стадии и гейты; status =
-     `done`/`blocked` по evidence.
+   - **generic-orchestrator** (`--engine controller`): контроллер реально прогоняет стадии
+     и гейты; status = `done`/`blocked` по evidence, без delivery-гарантий pipeline.
 5. Записать компактный `features/<id>/run-report.json` и показать резюме.
 
 ## Границы (честно)
@@ -54,7 +59,7 @@ PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engine.ai_ops_run run "<задач�
 и исполняет стадии самостоятельно; генерация каркаса не доказывает выполнение.
 
 
-Кит не притворяется, что исполнил за рантайм: для claude-code «сделал» = evidence
+Кит не притворяется, что исполнил за рантайм: для внешнего рантайма «сделал» = evidence
 (commit SHA, exit codes, структурный reviewer-result), а не факт вызова. `ai-run` —
 канонический вход (3.0-срез 1); сплит на пакеты — оставшиеся срезы 3.0 (см.
 `docs/3.0-design.md`).

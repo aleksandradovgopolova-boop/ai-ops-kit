@@ -19,7 +19,7 @@
 
 Использование:
   ai_ops_run.py run "<задача>" <child_root> [--signals '<json>'] [--features-dir dir]
-       [--runtime claude-code|generic-orchestrator] [--provider mock] [--model ID]
+       [--runtime <id>] [--engine pipeline|controller] [--provider mock] [--model ID]
        [--engine pipeline|controller] [--execute] [--open-pr] [--json]  # pipeline — по умолчанию
   ai_ops_run.py --selftest
 Код возврата: 0 — успех/ready; 1 — blocked или pipeline не готов к PR; 2 — ошибка прогона.
