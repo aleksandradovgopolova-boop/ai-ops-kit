@@ -405,3 +405,20 @@ def test_every_field_lesson_is_grounded_in_this_repository():
             assert target.is_file(), f"{les['id']}: нет файла основания {g['file']}"
             assert g["contains"] in target.read_text(encoding="utf-8"), (
                 f"{les['id']}: цитата не найдена в {g['file']}")
+
+
+@pytest.mark.unit
+def test_codex_hook_own_medicine_requires_delivery_or_real_lint_replacement(tmp_path):
+    from ai_ops_kit.validation import own_medicine_checks as checks
+    check = checks.DELIVERY_CHECKS["codex_lint_hook"]
+    assert check(tmp_path, None)[0] == checks.NOT_APPLIED
+    runners = tmp_path / "scripts"
+    runners.mkdir()
+    (runners / "check-full.sh").write_text("ruff check .\n")
+    outcome, reason, replacement = check(tmp_path, None)
+    assert outcome == checks.NOT_APPLICABLE and "managed" in reason
+    assert "check-full.sh" in replacement
+    settings = tmp_path / ".codex/hooks.json"
+    settings.parent.mkdir()
+    settings.write_text('{"command":"ai-ops-kit:lint-hook"}')
+    assert check(tmp_path, None)[0] == checks.APPLIED

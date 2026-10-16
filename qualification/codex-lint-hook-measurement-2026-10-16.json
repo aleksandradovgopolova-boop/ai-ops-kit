@@ -1,0 +1,59 @@
+{
+  "issue": 1183,
+  "related_issue": 611,
+  "executor": "AI / Codex",
+  "registered_at": "2026-10-16T09:05:02.393497+00:00",
+  "pre_registration_research": "not timed",
+  "usd": null,
+  "human_active_minutes": null,
+  "model_calls_total": null,
+  "counts_toward_child_cohort": false,
+  "independent_review": {
+    "executor": "AI / separate native Codex read-only review",
+    "result": "NO FINDINGS",
+    "usage": {
+      "input_tokens": 525415,
+      "cached_input_tokens": 443136,
+      "output_tokens": 2998,
+      "reasoning_output_tokens": 1423
+    },
+    "usd": null
+  },
+  "focused": {
+    "passed": 91,
+    "elapsed_seconds": 14.31
+  },
+  "field_bundle": "native-lint-field-2026-10-16/bundle.json",
+  "last_progress_at": "2026-10-16T10:01:29.524618+00:00",
+  "correction_review": {
+    "result": "NO FINDINGS",
+    "usage": {
+      "input_tokens": 83615,
+      "cached_input_tokens": 67072,
+      "output_tokens": 213,
+      "reasoning_output_tokens": 0
+    }
+  },
+  "interrupted_full_attempt": {
+    "failed": 1,
+    "passed": 1853,
+    "skipped": 28,
+    "elapsed_seconds": 143.29,
+    "reason": "new delivery key missing own-medicine mapping; interrupted for correction"
+  },
+  "focused_correction": {
+    "passed": 293,
+    "elapsed_seconds": 184.1
+  },
+  "full_attempt_2": "1failed/9153passed/35skipped/2warnings1236.27s: fresh Codex metadata counted as product code; classifier corrected",
+  "classification_focused": "38passed81.41s; fresh Codex install not product code, real source edit remains detected",
+  "full_current_python": {
+    "scope": "CPython3.14.7/darwin",
+    "passed": 9154,
+    "skipped": 35,
+    "warnings": 2,
+    "elapsed_seconds": 853.5,
+    "exit_code": 0
+  },
+  "finished_at": "2026-10-16T11:13:58.513320+00:00"
+}
