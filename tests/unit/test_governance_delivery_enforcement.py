@@ -132,3 +132,93 @@ def test_delivery_seam_calls_the_gate():
            ).read_text(encoding="utf-8")
     assert "enforcement" in src and "gate_delivery" in src, (
         "шов доставки не зовёт governance — находка аудита «декоративна» не закрыта")
+
+
+# Решения ниже — fixture, а не свидетельство реальной человеческой приёмки.
+def _approval_event(root, target, decision, index):
+    human_override.record_override(
+        root, target=target, ai_recommendation="fixture delivery",
+        human_decision=decision, reason="controlled revocation qualification",
+        date="2026-10-16", override_id=f"fixture-override-{index}")
+
+
+@pytest.mark.parametrize("last", ["revoke", "deny", "unclear"])
+def test_latest_nonapproval_revokes_historical_approval(tmp_path, last):
+    root = _child(tmp_path, policy="default: require_approval\nenforcement: block\n")
+    _approval_event(root, "create_pr:w1", "approve", 1)
+    _approval_event(root, "create_pr:w1", last, 2)
+    gate = enforcement.gate_delivery(root, target="w1")
+    assert gate["approved"] is False
+    assert gate["blocked"] is True
+
+
+@pytest.mark.parametrize("first,last", [("w1", "create_pr:w1"), ("create_pr:w1", "w1")])
+def test_latest_decision_applies_across_existing_target_aliases(tmp_path, first, last):
+    root = _child(tmp_path, policy="default: require_approval\nenforcement: block\n")
+    _approval_event(root, first, "approve", 1)
+    _approval_event(root, last, "revoke", 2)
+    assert enforcement.gate_delivery(root, target="w1")["blocked"] is True
+
+
+def test_explicit_reapproval_after_revocation_allows_delivery(tmp_path):
+    root = _child(tmp_path, policy="default: require_approval\nenforcement: block\n")
+    for index, decision in enumerate(("approve", "revoke", "approve")):
+        _approval_event(root, "create_pr:w1", decision, index)
+    gate = enforcement.gate_delivery(root, target="w1")
+    assert gate["approved"] is True and gate["blocked"] is False
+
+
+def test_revoking_another_work_does_not_revoke_this_work(tmp_path):
+    root = _child(tmp_path, policy="default: require_approval\nenforcement: block\n")
+    _approval_event(root, "create_pr:w1", "approve", 1)
+    _approval_event(root, "create_pr:other", "revoke", 2)
+    assert enforcement.gate_delivery(root, target="w1")["approved"] is True
+
+
+def test_revocation_stays_observational_in_observe_mode(tmp_path):
+    root = _child(tmp_path, policy="default: require_approval\nenforcement: observe\n")
+    _approval_event(root, "create_pr:w1", "approve", 1)
+    _approval_event(root, "create_pr:w1", "revoke", 2)
+    gate = enforcement.gate_delivery(root, target="w1")
+    assert gate["approved"] is False
+    assert gate["outcome"] == "would_block" and gate["blocked"] is False
+
+
+def test_revoked_delivery_never_reaches_external_effect(tmp_path, monkeypatch):
+    import subprocess
+    from types import SimpleNamespace
+    from ai_ops_kit.engine import execution_pipeline
+    from ai_ops_kit.engine.ai_ops_run_lifecycle_stages import _deliver
+
+    root = _child(tmp_path, policy="default: require_approval\nenforcement: block\n")
+    subprocess.run(["git", "init", "-q", str(root)], check=True)
+    subprocess.run(["git", "-C", str(root), "remote", "add", "origin",
+                    "https://github.com/fixture/controlled.git"], check=True)
+    features = root / "features"
+    (features / "w1").mkdir(parents=True)
+    marker = root / "external-effect.txt"
+
+    def deliver(*args, **kwargs):
+        marker.write_text("external call occurred")
+        return {"status": "opened", "pr": {"head_sha": "commit-fixture"}}
+
+    monkeypatch.setattr(execution_pipeline, "_deliver_pr", deliver)
+    monkeypatch.setattr(execution_pipeline, "_reverify_against_current_target",
+                        lambda *args: {"stale": False, "verdict": "verified-equal"})
+    plan = {"work_root": str(root), "work_branch": "ai-ops/w1", "committed_sha": "commit-fixture",
+            "base_ref": "main", "base_sha": "base-fixture", "base_binding": {"resolved": True},
+            "wid": "w1", "task": "controlled qualification"}
+    ctx = SimpleNamespace(child_root=root, features_dir=features)
+    kwargs = {"plan": plan, "handoff_ok": True, "report_ok": True,
+              "jname": str(features / "w1/lifecycle-journal.jsonl"), "fid": "w1"}
+    _approval_event(root, "create_pr:w1", "approve", 1)
+    positive = {}
+    _deliver(ctx, positive, **kwargs)
+    assert marker.is_file() and positive["overall_status"] == "delivered"
+    marker.unlink()
+    _approval_event(root, "create_pr:w1", "revoke", 2)
+    for _ in range(2):
+        report = {}
+        _deliver(ctx, report, **kwargs)
+        assert not marker.exists(), "revoked retry performed the external action"
+        assert report["delivery"]["status"] == "blocked-by-policy"

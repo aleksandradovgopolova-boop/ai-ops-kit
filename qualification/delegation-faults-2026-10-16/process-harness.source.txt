@@ -1,0 +1,57 @@
+from pathlib import Path
+import sys,os,subprocess,json,time,signal,threading,datetime
+from http.server import HTTPServer,BaseHTTPRequestHandler
+ROOT=Path(os.environ.get('QUAL_ROOT','work/process-resume-qualification-20261016')).resolve()
+if len(sys.argv)>1:
+ from ai_ops_kit.engine import ai_ops_run,execution_pipeline
+ child=ROOT/'child';fid='interrupt-probe'
+ if sys.argv[1]=='start':
+  def pause(*args,**kwargs):
+   p=ROOT/'before-external.json';p.write_text(json.dumps({'arguments':list(args),'delivery_id':kwargs.get('delivery_id')}))
+   with p.open('rb') as f:os.fsync(f.fileno())
+   while True:time.sleep(.1)
+  execution_pipeline._deliver_pr=pause
+  actions=iter([{'op':'write','path':'src/value.py','content':'VALUE = 1\n'},{'done':True}])
+  result=ai_ops_run.run(task_text='controlled constant module qualification',signals={'task_type':'QUICK','size':'small','risk':'low'},child_root=child,engine='pipeline',provider_name='mock',proposer=lambda c:next(actions),execute=True,open_pr=True,base='main',feature=fid,install_deps=False,session='controlled-interrupt-session')
+  (ROOT/'start-report.json').write_text(json.dumps(result,ensure_ascii=False,indent=2));sys.exit(0)
+ sys.exit(ai_ops_run.main(['resume',str(child),fid,'--reevaluate-only','--open-pr','--execute','--provider','mock','--session','controlled-interrupt-session','--json']))
+ROOT.mkdir(exist_ok=False);child=ROOT/'child';child.mkdir();remote=ROOT/'fixture/controlled.git';remote.parent.mkdir()
+record={'issue':1278,'executor':'AI / controlled process qualification','registered_at':datetime.datetime.now(datetime.timezone.utc).isoformat(),'scope':'actual Kit pipeline with deterministic mock proposer, local bare Git and loopback REST; no accepted child work','policy':'fixture block/create_pr:execute; no human signals fabricated','acceptance':'SIGTERM after durable intent before external call; zero POST before kill; resume safely delivers once or stops with explicit reason; repeated resume creates no duplicate','budget':'no model calls; start <=90seconds, each of two resumes <=120seconds','compensation':'local bare-Git refs and local REST fixture only; actual remote effects are not promised atomically reversible','counts_toward_child_cohort':False,'usd':None}
+(ROOT/'preregistration.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n')
+def git(root,*args):return subprocess.check_output(['git','-C',str(root),*args],stderr=subprocess.STDOUT,text=True).strip()
+subprocess.run(['git','init','--bare','-q',str(remote)],check=True);git(child,'init','-q','-b','main');git(child,'config','user.email','fixture@example.invalid');git(child,'config','user.name','AI fixture');(child/'src').mkdir();(child/'src/__init__.py').write_text('');(child/'.gitignore').write_text('.ai/\nfeatures/\n__pycache__/\n');(child/'.ai-ops').mkdir();(child/'.ai-ops/POLICY.yaml').write_text('enforcement: block\nautonomy:\n  create_pr: execute\n');git(child,'add','-A');git(child,'commit','-qm','chore: controlled fixture');git(child,'remote','add','origin',str(remote));git(child,'push','-qu','origin','main')
+state={'requests':[],'created':[]}
+class Handler(BaseHTTPRequestHandler):
+ def log_message(self,*args):pass
+ def respond(self,data):self.send_response(200);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(json.dumps(data).encode())
+ def do_GET(self):
+  state['requests'].append({'method':'GET','path':self.path})
+  if '/pulls' in self.path:self.respond(state['created'])
+  elif '/check-runs' in self.path:self.respond({'check_runs':[]})
+  elif self.path.endswith('/status'):self.respond({'state':'pending','statuses':[]})
+  else:self.respond({'full_name':'fixture/controlled','owner':{'login':'fixture'},'name':'controlled','default_branch':'main'})
+ def do_POST(self):
+  payload=json.loads(self.rfile.read(int(self.headers['Content-Length'])));state['requests'].append({'method':'POST','path':self.path})
+  sha=git(remote,'rev-parse',payload['head']);pr={'number':1,'html_url':'https://example.invalid/controlled/pr/1','draft':True,'state':'open','merged_at':None,'head':{'sha':sha},'base':{'ref':payload['base']},'body':payload['body']};state['created'].append(pr);self.respond(pr)
+server=HTTPServer(('127.0.0.1',0),Handler);threading.Thread(target=server.serve_forever,daemon=True).start()
+env={**os.environ,'QUAL_ROOT':str(ROOT),'GITHUB_TOKEN':'fixture-local-only','GH_TOKEN':'fixture-local-only','GITHUB_API_URL':f'http://127.0.0.1:{server.server_port}','PATH':'/usr/bin:/bin:/Users/sasad/ai-ops-kit/.venv/bin'}
+script=Path(__file__).resolve();proc=None
+try:
+ proc=subprocess.Popen([sys.executable,str(script),'start'],env=env,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+ deadline=time.monotonic()+90
+ while not (ROOT/'before-external.json').exists() and proc.poll() is None and time.monotonic()<deadline:time.sleep(.1)
+ if (ROOT/'before-external.json').exists():
+  assert not state['created'];proc.send_signal(signal.SIGTERM);output,_=proc.communicate(timeout=10);record['interrupted_exit']=proc.returncode;assert proc.returncode==-signal.SIGTERM
+  intent=list((child/'features/interrupt-probe/delivery-outbox').glob('*.intent.yaml'));record['durable_intent_files']=[p.name for p in intent];assert len(intent)==1
+  record['posts_before_interrupt']=sum(r['method']=='POST' for r in state['requests'])
+  for index in range(2):
+   r=subprocess.run([sys.executable,str(script),'resume'],env=env,capture_output=True,text=True,timeout=120);(ROOT/f'resume-{index}.log').write_text(r.stdout+r.stderr);record[f'resume_{index}_exit']=r.returncode
+  assert len(state['created'])<=1
+  record['created_count']=len(state['created']);record['result']='process interrupted and common resume exercised; inspect logs for delivery or named stop'
+ else:
+  if proc.poll() is None:proc.terminate()
+  output,_=proc.communicate(timeout=10);record['result']='pre-external seam not reached; no process-resume qualification claim';record['start_exit']=proc.returncode
+ (ROOT/'start.log').write_text(output);record['requests']=state['requests'];record['finished_at']=datetime.datetime.now(datetime.timezone.utc).isoformat();(ROOT/'result.json').write_text(json.dumps(record,ensure_ascii=False,indent=2)+'\n');print(json.dumps(record,ensure_ascii=False,indent=2))
+finally:
+ if proc is not None and proc.poll() is None:proc.terminate();proc.wait(timeout=10)
+ server.shutdown();server.server_close()

@@ -1,0 +1,92 @@
+{
+  "issue": 1278,
+  "executor": "AI / Codex controlled qualification",
+  "registered_at": "2026-10-16T08:52:33.118111+00:00",
+  "budget": "one local qualification, no models, no external network, <=180seconds",
+  "runtime": "CPython and actual Kit delivery APIs",
+  "policy": "isolated fixture block/require_approval; no real owner acceptance",
+  "acceptance": "barrier prevents requests; ambiguous POST reconciles; retry produces no second POST",
+  "compensation": "local fixture files reversible; a real already-created PR cannot be atomically undone by client rollback",
+  "limits": "loopback GitHub-shaped API and push=False; not GitHub reliability, native agent execution, or accepted child work",
+  "counts_toward_child_cohort": false,
+  "usd": null,
+  "interruption_barrier": {
+    "requested": true,
+    "status": "blocked-lifecycle",
+    "reason": "durable RunHandoff/final report не зафиксированы — доставка запрещена до надёжной фиксации доказательств и состояния"
+  },
+  "first": {
+    "status": "outcome_unknown",
+    "repository": "fixture/controlled",
+    "base": "main",
+    "note": "GitHub API POST дал неоднозначный результат (JSONDecodeError) — исход доставки неизвестен, нужна сверка с remote (reconciliation)"
+  },
+  "reconciled": {
+    "status": "found",
+    "repository": "fixture/controlled",
+    "url": "https://example.invalid/fixture/pr/1",
+    "number": 1,
+    "head_sha": "926325aea9b93d231896e4bde40703b8f04b6c0b",
+    "base_ref": "main",
+    "pr_state": "open",
+    "merged": false,
+    "checks": {
+      "status": "absent",
+      "total": 0,
+      "failed": 0,
+      "pending": 0,
+      "success": 0
+    }
+  },
+  "retry": {
+    "status": "updated",
+    "url": "https://example.invalid/fixture/pr/1",
+    "number": 1,
+    "draft": true,
+    "repository": "fixture/controlled",
+    "head_sha": "926325aea9b93d231896e4bde40703b8f04b6c0b",
+    "base": "main",
+    "note": "PR для ветки уже открыт — ветка обновлена push'ем (идемпотентно)"
+  },
+  "created_count": 1,
+  "requests": [
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled/pulls?head=fixture:ai-ops/fault-case&state=open"
+    },
+    {
+      "method": "POST",
+      "path": "/repos/fixture/controlled/pulls"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled/pulls?head=fixture:ai-ops/fault-case&state=all"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled/commits/926325aea9b93d231896e4bde40703b8f04b6c0b/check-runs"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled/commits/926325aea9b93d231896e4bde40703b8f04b6c0b/status"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled"
+    },
+    {
+      "method": "GET",
+      "path": "/repos/fixture/controlled/pulls?head=fixture:ai-ops/fault-case&state=open"
+    }
+  ],
+  "source_commit": "926325aea9b93d231896e4bde40703b8f04b6c0b",
+  "finished_at": "2026-10-16T08:52:33.415962+00:00"
+}
