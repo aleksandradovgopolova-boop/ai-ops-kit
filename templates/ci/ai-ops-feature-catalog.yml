@@ -40,25 +40,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}   # нужна история для git diff и коммита обновления на push
-      # Python и pyyaml ставим только на раннерах GitHub (на своём раннере — PEP 668, см. ai-ops-validate.yml).
-      - uses: actions/setup-python@v5
-        if: ${{ !vars.CI_RUNNER_LINUX }}
-        with: {python-version: "3.12"}
-      - run: pip install pyyaml
-        if: ${{ !vars.CI_RUNNER_LINUX }}
-      - name: Проверить python и pyyaml (свой раннер)
-        if: ${{ vars.CI_RUNNER_LINUX }}
-        run: |
-          python3 -c 'import sys, yaml; print("python", sys.version.split()[0], "· pyyaml", yaml.__version__)' \
-            || { echo "на раннере '${{ vars.CI_RUNNER_LINUX }}' нет python3 с pyyaml — поставьте их на машину раннера (кит ставить их в системный python не будет: PEP 668)"; exit 1; }
-      - name: Клонировать kit на пин = installed_version (.ai-ops.yaml)
-        run: |
-          SRC=$(python3 -c "import yaml;s=yaml.safe_load(open('.ai-ops.yaml'))['parent']['source'];print(s[4:] if s.startswith('git+') else s)")
-          VER=$(python3 -c "import yaml;print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
-          echo "kit pin = v$VER (из .ai-ops.yaml, не protected)"
-          # Клон в $RUNNER_TEMP (не /tmp): $RUNNER_TEMP раннер чистит на каждую джобу — и у GitHub, и на своей машине.
-          git clone --depth 1 --branch "v$VER" "$SRC" "$RUNNER_TEMP/ai-ops-kit" \
-            || { echo "не удалось клонировать kit v$VER из $SRC — нет тега v$VER, нет доступа или каталог занят"; exit 1; }
       # РЕЕСТР ФИЧ ДОЧКИ. Каталог собирается из СОБСТВЕННОГО реестра дочки по ЕДИНОМУ пути
       # registry/features.yaml — тот же, что у контура охвата (ai-ops-feature-coverage.yml), чтобы каталог
       # и охват читали ОДИН реестр. Его нет — каталог собирать не из чего (honest skip, не ошибка).
@@ -75,6 +56,26 @@ jobs:
             echo "реестр фич дочки: $FOUND"
           fi
           echo "path=$FOUND" >> "$GITHUB_OUTPUT"
+      # Python и pyyaml ставим только на раннерах GitHub (на своём раннере — PEP 668, см. ai-ops-validate.yml).
+      - uses: actions/setup-python@v5
+        if: ${{ !vars.CI_RUNNER_LINUX && steps.reg.outputs.path != '' }}
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+        if: ${{ !vars.CI_RUNNER_LINUX && steps.reg.outputs.path != '' }}
+      - name: Проверить python и pyyaml (свой раннер)
+        if: ${{ vars.CI_RUNNER_LINUX && steps.reg.outputs.path != '' }}
+        run: |
+          python3 -c 'import sys, yaml; print("python", sys.version.split()[0], "· pyyaml", yaml.__version__)' \
+            || { echo "на раннере '${{ vars.CI_RUNNER_LINUX }}' нет python3 с pyyaml — поставьте их на машину раннера (кит ставить их в системный python не будет: PEP 668)"; exit 1; }
+      - name: Клонировать kit на пин = installed_version (.ai-ops.yaml)
+        if: steps.reg.outputs.path != ''
+        run: |
+          SRC=$(python3 -c "import yaml;s=yaml.safe_load(open('.ai-ops.yaml'))['parent']['source'];print(s[4:] if s.startswith('git+') else s)")
+          VER=$(python3 -c "import yaml;print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
+          echo "kit pin = v$VER (из .ai-ops.yaml, не protected)"
+          # Клон в $RUNNER_TEMP (не /tmp): $RUNNER_TEMP раннер чистит на каждую джобу — и у GitHub, и на своей машине.
+          git clone --depth 1 --branch "v$VER" "$SRC" "$RUNNER_TEMP/ai-ops-kit" \
+            || { echo "не удалось клонировать kit v$VER из $SRC — нет тега v$VER, нет доступа или каталог занят"; exit 1; }
       # ГЕНЕРАЦИЯ ИЗ КЛОНА. Зовём поставляемый рендер через обёртку из клона над реестром ДОЧКИ,
       # пишем в её собственный docs/feature-catalog.md, шапку подписываем командой перегенерации
       # самой дочки (workflow), а не devtools-обёрткой кита, которой у дочки нет.
