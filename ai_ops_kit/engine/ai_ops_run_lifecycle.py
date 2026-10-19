@@ -326,8 +326,8 @@ def _resolve_models(ctx):
 
     K6: вынесено из run() без изменения поведения. Мутирует `ctx` (writer/reviewer model+prov,
     model_resolution, sec_qualified, klp_by_env/trust_cache/trust_now/trust_env). Явный --model =
-    override (записывается). Всё под fail-safe: нет резолва/ключа/endpoint -> прежнее поведение
-    (passthrough --model) + честная запись в отчёт. JIT provider-preflight PRIMARY не пройден ->
+    override (записывается). Без явного model в API-пути нет допущенного доступного кандидата/сбой назначения ->
+    blocked-preflight; явный override и остальные providers сохраняют прежний путь. JIT provider-preflight PRIMARY не пройден ->
     возвращает blocked-preflight-отчёт (fail-closed, provider не строится). -> error-dict | None.
     """
     from ai_ops_kit.providers import orchestrator
@@ -339,9 +339,17 @@ def _resolve_models(ctx):
     try:
         from ai_ops_kit.providers import model_router as _mr
         from ai_ops_kit.providers import provider_endpoints as _pe
-        _plan = _mr.plan_run(signals=ctx.signals)   # v3.9.0-rc3: signals -> preferred_writer_tier
+        available = None
+        if ctx.model is None and ctx.provider_name == "openai-compatible":
+            available = {p for p in _pe.PROVIDER_ENDPOINTS if _pe.key_available(p)}
+        _plan = (_mr.plan_run(signals=ctx.signals, available_providers=available) if available is not None
+                 else _mr.plan_run(signals=ctx.signals))
         ctx.model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
                                 "mode": "explicit-override" if ctx.model else "router", "notes": []}
+        if available is not None:
+            ctx.model_resolution["provider_availability"] = {
+                "basis": "local-api-key-presence", "available_providers": sorted(available),
+                "unavailable_providers": sorted(set(_pe.PROVIDER_ENDPOINTS) - available), "online_health": None}
         # v3.8.3-rc3 Dynamic Model Trust: JIT provider-preflight для КАЖДОЙ реально вызываемой модели
         # (primary/reviewer/fallback/escalation), а не только primary+reviewer. Trust-переменные видны
         # и в fix-loop (эскалация проверяет trust там).
@@ -462,10 +470,15 @@ def _resolve_models(ctx):
                             "reason": _fpt.get("reason"),
                             "note": "необязательный fallback ИСКЛЮЧЁН по JIT-trust (не блокирует primary)"}
             else:
-                ctx.model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
+                ctx.model_resolution["preflight_blocked"] = True
+                ctx.model_resolution["key_preflight"] = {"ready": False, "blocks": [
+                    "нет допущенной API-модели с локальным ключом (или ключ исчез до применения)"]}
     except Exception as _e:  # noqa: BLE001
         ctx.model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
                                 "mode": "explicit-override" if ctx.model else "router"}
+        if ctx.model is None and ctx.provider_name == "openai-compatible":
+            ctx.model_resolution.update(preflight_blocked=True, key_preflight={"ready": False,
+                "blocks": [f"назначение API-модели недостоверно: {type(_e).__name__}"]})
     # v3.7.3 (#5 flip): security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ security-судья
     # (security_review.resolved в plan_run) ЛИБО человек (ApprovalRecord). Общий code reviewer — НЕТ.
     # Пока qualified security-судьи нет (до Bench v2) -> security needs_review -> pending_human до
