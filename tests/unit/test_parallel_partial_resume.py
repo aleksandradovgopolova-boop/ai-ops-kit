@@ -38,6 +38,8 @@ def test_resume_reuses_actual_deleted_clone_commit_and_only_retries_failed_packa
         return _commit(*args, **options)
     result = _retry(tmp_path, signals, auto, callback)
     assert starts == ['bb'] and result['proceed']
+    assert result['automatic_attempt']['id'] != original['automatic_attempt']['id']
+    assert result['automatic_attempt']['identity'] == original['automatic_attempt']['identity']
     assert result['package_results']['aa']['sha'] == sha
     assert result['package_results']['aa']['reused_from'] == original['package_artifacts']['receipt']
     assert result['package_resume'] == {'reused_packages': ['aa'], 'executed_packages': ['bb']}
@@ -113,7 +115,9 @@ def test_resume_damage_never_runs_new_callbacks_or_resets_budget(tmp_path, monke
         path = tmp_path / 'features/aa/run-settings.yaml';path.write_text(path.read_text() + '\n# drift\n')
     elif damage == 'ledger-missing':ledger.unlink()
     elif damage == 'conflicting-work':
-        assert aw.register(registry, 'other', 'ai-ops/other', ['aa.txt'], 'other', child_root=tmp_path) == 0
+        assert aw.register(registry, 'other', 'ai-ops/other', ['aa.txt'], 'other', child_root=tmp_path,
+                           takeover=True, takeover_reason='controlled overlap fixture') == 0
+        assert {w['id'] for w in aw.load(registry)['active']} == {'work', 'other'}
     else:
         outbox = tmp_path / 'features/work/delivery-outbox';outbox.mkdir()
         (outbox / 'unresolved.intent.yaml').write_text('kind: DeliveryIntent\n')
@@ -170,7 +174,7 @@ def test_fresh_aggregate_failure_is_never_delivery_success(tmp_path, monkeypatch
     def callback(*args, **options):
         options['budget'].charge_call();calls.append(options['feature']);return _commit(*args, **options)
     result = _retry(tmp_path, signals, auto, callback)
-    assert calls == ['bb'] and not result['proceed'] and not result['aggregate']['all_pass']
+    assert calls == ['bb'] and dsp.exit_code(result) == 1 and not result['aggregate']['all_pass']
     assert result['delivery']['status'] == 'not-requested' and not result['delivery_plan']['ready']
     # Both packages are now pass; exhausted budget still permits zero-callback integration recheck.
     from test_parallel_package_admission import _aggregate

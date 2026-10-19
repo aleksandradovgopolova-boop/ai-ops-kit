@@ -515,7 +515,10 @@ def _load_package_resume(root, wid, admission, wg, task, binding):
     origin, artifacts = saved.get('automatic_attempt'), saved.get('package_artifacts')
     results = saved.get('package_results')
     ids = {p['id'] for p in wg['packages']}
-    if (saved.get('parallel') is not True or saved.get('proceed') is not False
+    aggregate, source = saved.get('aggregate'), saved.get('integration_source')
+    failed_aggregate = (saved.get('stage') == 'fan-in' and isinstance(aggregate, dict)
+        and aggregate.get('all_pass') is False and isinstance(source, dict) and source.get('ready') is False)
+    if (saved.get('parallel') is not True or (saved.get('proceed') is not False and not failed_aggregate)
             or saved.get('stage') not in ('pre-fan-in', 'fan-in') or saved.get('task') != task
             or saved.get('base_binding') != binding or not isinstance(origin, dict) or not origin.get('id')
             or not isinstance(results, dict) or set(results) != ids
