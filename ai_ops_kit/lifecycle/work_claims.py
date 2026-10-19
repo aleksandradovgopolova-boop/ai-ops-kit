@@ -473,3 +473,54 @@ def retry_package_claim(root, wid, admission, origin, check):
         aw._project_claim(legacy, entry)
         claim_to_copies(root, entry)
         return admitted
+
+
+class PackageCapacityUnavailable(ValueError):
+    """Known NOT_STARTED local callback admission, not an uncertain model result."""
+
+
+@contextlib.contextmanager
+def automatic_package_slot(root, wid, admission):
+    """Two kernel-held local callback slots per Git-common store; no TTL/reclaim scheduler."""
+    import os
+    import stat
+    from ai_ops_kit.lifecycle import active_work as aw
+    stream, closers = None, contextlib.ExitStack()
+    try:
+        import fcntl
+        with aw.claimed_attempt(root, wid, admission):
+            aw.validate_admission(root, admission)
+        directory = shared_registry_path(root).parent / 'package-slots'
+        if any(p.is_symlink() for p in (directory, *directory.parents)):
+            raise PackageCapacityUnavailable('unsafe resource directory')
+        directory.mkdir(parents=True, exist_ok=True)
+        for index in range(2):
+            path = directory / f'callback-{index}.lock'
+            fd = os.open(path, os.O_RDWR | os.O_CREAT | os.O_NOFOLLOW, 0o600)
+            candidate = closers.enter_context(os.fdopen(fd, 'a+'))
+            try:
+                fcntl.flock(candidate, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError:
+                candidate.close()
+                continue
+            stream = candidate
+            held, current = os.fstat(stream.fileno()), path.stat(follow_symlinks=False)
+            if (not stat.S_ISREG(held.st_mode) or held.st_nlink != 1
+                    or (held.st_dev, held.st_ino) != (current.st_dev, current.st_ino)):
+                raise PackageCapacityUnavailable('resource lock identity changed')
+            break
+        if stream is None:
+            raise PackageCapacityUnavailable('local package capacity busy')
+        with aw.claimed_attempt(root, wid, admission):
+            aw.validate_admission(root, admission)
+    except (ImportError, OSError, AttributeError) as exc:
+        closers.close()
+        raise PackageCapacityUnavailable('local package capacity unavailable') from exc
+    except BaseException:
+        closers.close()
+        raise
+    try:
+        yield {'status': 'admitted', 'limit': 2, 'slot': index, 'attempt_id': admission['attempt_id'],
+               'unit': 'local-package-callback', 'scope': 'git-common-store'}
+    finally:
+        closers.close()  # releases only our fds, including on callback error
