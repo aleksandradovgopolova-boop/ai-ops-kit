@@ -730,6 +730,9 @@ def test_ordinary_do_runs_real_isolated_packages_and_exact_fan_in(tmp_path, monk
     rec = json.loads((tmp_path / "features/work/parallel-report.json").read_text())
     assert rc == 0, rec
     assert maximum == [2] and sorted(seen) == ["aa", "bb"]
+    assert {row["pkg"] for row in rec["trace"]} == {"aa", "bb"}
+    assert all(row["runner_started_at"] and row["runner_finished_at"]
+               and row["queue_seconds"] >= 0 and row["execution_seconds"] >= 0 for row in rec["trace"])
     assert rec["aggregate"]["tested_revision"] == rec["integration_sha"] and rec["aggregate"]["tree_clean"]
     integration = Path(rec["integration_source"]["integration_clone"])
     assert all((integration / f"{p}.txt").read_text() == "verified\n" for p in ("aa", "bb"))
