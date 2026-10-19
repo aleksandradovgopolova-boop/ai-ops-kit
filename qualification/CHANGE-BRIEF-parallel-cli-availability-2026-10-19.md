@@ -1,6 +1,6 @@
 # Доступность локального CLI до параллельного запуска
 
-Результат: явный parallel provider claude-cli с отсутствующим/неисполняемым бинарём останавливается в preflight ДО clone, нового claim и model callbacks. Используется только существующий orchestrator_providers.claude_binary: тот же AI_OPS_CLAUDE_BIN/PATH и без повторной реализации поиска.
+Результат: явный parallel provider claude-cli (включая поддержанный alias claude-code-local) с отсутствующим/неисполняемым бинарём останавливается в preflight ДО clone, нового claim и model callbacks. Используется только существующий orchestrator_providers.claude_binary: тот же AI_OPS_CLAUDE_BIN/PATH и без повторной реализации поиска.
 
 Пути: run_parallel_live → _policy_refusal → canonical claude_binary; затем неизменённые admission/claim, isolated executor, fan-in и delivery. Для атомарного single-path и остальных providers изменений нет. Явный provider не заменяется mock/fallback. Existing auth/approvals/budget/generation fencing не ослабляются.
 
@@ -9,3 +9,5 @@
 Пруф: missing и non-executable filesystem fixtures; positive с real executable и реальными package commits/fan-in без native вызова; early refusal перед durable admission validation; повтор той же работы после восстановления fixture CLI запускает каждый пакет ровно один раз (без расходов первой попытки, не crash recovery); existing parallel/claim/provider-resolution tests. Review и все17 exact-head CI до normal merge.
 
 Не входит: новый scheduler/resolver, generic provider health, native/paid probes, автоматическое переназначение или завершение всего1322. Восстановление и перенос на другого исполнителя требуют существующего ownership/lease протокола; неподдерживаемые шаги не объявляются реализованными.
+
+Review-исправление: проверяются оба имени, которые принимает существующий make_provider; lookup остаётся единственным. Alias воспроизведён четырьмя RED, оба имени проходят все отрицательные/positive/retry cases.
