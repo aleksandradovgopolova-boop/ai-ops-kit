@@ -197,6 +197,10 @@ def _policy_refusal(signals, wg, root, wid, provider, model, max_steps):
         return "--parallel требует явно разрешённый provider; скрытого fallback нет"
     try:
         orchestrator.make_provider(provider, model)  # создаёт adapter, НЕ вызывает модель
+        if provider in ("claude-cli", "claude-code-local"):
+            from ai_ops_kit.providers import orchestrator_providers
+            if not orchestrator_providers.claude_binary():
+                return "parallel provider unavailable: claude-cli executable missing/non-executable (0 model calls)"
     except (SystemExit, ValueError) as exc:
         return f"parallel provider unsupported: {exc}"
     if not isinstance(max_steps, int) or isinstance(max_steps, bool) or max_steps < 1:
