@@ -85,13 +85,21 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
     from ai_ops_kit.shared import budget as budget_mod
     try:
         budget = budget_mod.resolve_budget(budget, signals.get("execution_budget"))
-        budget.ensure_execution_supported()
+        if admission is None:
+            budget.ensure_execution_supported()
+        elif budget.max_cost is not None or budget.max_duration is not None:
+            raise budget_mod.BudgetExceeded('automatic durable budget supports logical calls only')
     except (ValueError, budget_mod.BudgetExceeded) as exc:
         return {"proceed": False, "stage": "preflight", "parallel": True,
                 "reason": f"parallel budget unsupported: {exc}"}
     reason = _policy_refusal(signals, wg, child_root, wid, provider, model, max_steps)
     if reason:
         return {"proceed": False, "stage": "preflight", "parallel": True, "reason": reason}
+    if open_pr and admission is not None:
+        try:
+            _load_package_resume(child_root, wid, admission, wg, task, binding)
+        except (ValueError, OSError, RuntimeError, TypeError, KeyError) as exc:
+            return {'proceed': False, 'stage': 'preflight', 'parallel': True, 'reason': str(exc)}
     reconciled = None
     if open_pr:
         from ai_ops_kit.engine.ai_ops_run import _reconcile_pending_delivery, _unresolved_intents
@@ -111,7 +119,7 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
         run_fn = ai_ops_run.run
     dispatch = runner or parallel_live.run_live_concurrent
     from ai_ops_kit.lifecycle import active_work
-    claim_path, rec = None, None
+    claim_path, rec, reused = None, None, {}
     if admission is not None:
         admission = dict(admission, attempt_id=uuid4().hex)
         try:
@@ -122,10 +130,16 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
                 raise active_work.ActiveWorkCorrupt("automatic saved graph/base changed")
             claim_path = active_work.shared_registry_path(child_root)
             areas = [scope for p in wg["packages"] for scope in p["write_scope"]]
-            if active_work.register(claim_path, wid, f"ai-ops/{wid}", areas, admission["identity"],
-                                    child_root=child_root, admission=admission):
+            prior = _load_package_resume(child_root, wid, admission, wg, task, binding)
+            if prior is not None:
+                from ai_ops_kit.lifecycle import work_claims
+                saved, reused, check = prior
+                admission = work_claims.retry_package_claim(child_root, wid, admission,
+                                                            saved['automatic_attempt'], check)
+            elif active_work.register(claim_path, wid, f"ai-ops/{wid}", areas, admission["identity"],
+                                      child_root=child_root, admission=admission):
                 return {"proceed": False, "stage": "preflight", "parallel": True, "reason": "automatic active claim refused"}
-        except (active_work.ActiveWorkCorrupt, KeyError, OSError, ValueError) as exc:
+        except (active_work.ActiveWorkCorrupt, KeyError, OSError, ValueError, TypeError, RuntimeError) as exc:
             return {"proceed": False, "stage": "preflight", "parallel": True, "reason": str(exc)}
     package_run = run_fn
     if admission is not None:
@@ -143,14 +157,15 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
             from ai_ops_kit.lifecycle import work_claims
             work_claims.bind_attempt_budget(child_root, wid, admission, budget,
                 lambda: _retry_guard(child_root, wid, admission))
-            budget.ensure_execution_supported()
+            if len(reused) != len(task_map):
+                budget.ensure_execution_supported()
         rec = dispatch(wg, str(child_root), base_sha, task_map, signals, package_run,
                        repo_slug=repo_slug, contract_shas=contract_shas, integration_branch=f"ai-ops/{wid}",
                        run_options={"provider_name": provider, "model": model, "base": binding["base_ref"],
                                     "max_steps": max_steps, "author": author, "review": review,
                                     "sandbox": sandbox, "baseline_diff": baseline_diff,
                                     "install_deps": install_deps, "require_fix": require_fix,
-                                    "review_fix_attempts": review_fix_attempts, "budget": budget})
+                                    "review_fix_attempts": review_fix_attempts, "budget": budget, "reused_packages": reused})
         if admission is not None:
             with active_work.claimed_attempt(child_root, wid, admission):
                 pass
@@ -168,8 +183,10 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
             rec["integration_source"] = rec.get("delivery_plan")
             if admission is not None:
                 rec["automatic_attempt"] = {"id": admission["attempt_id"], "identity": admission["identity"]}
+                rec['package_resume'] = {'reused_packages': sorted(reused),
+                    'executed_packages': sorted(set(task_map) - set(reused))}
             if open_pr:
-                _deliver_parallel(rec, child_root, wid, task, binding)
+                _deliver_parallel(rec, child_root, wid, task, binding, admission=admission)
             else:
                 rec["delivery"] = {"requested": False, "status": "not-requested"}
             from ai_ops_kit.shared import lifecycle_store
@@ -479,3 +496,87 @@ def resume_parallel_delivery(child_root, wid, *, session, base=None, execute=Fal
     finally:
         if admission is not None:
             _finish_automatic_claim(root, wid, active_work.shared_registry_path(root), admission, rec)
+
+
+def _load_package_resume(root, wid, admission, wg, task, binding):
+    """Saved automatic independent roots only; unknown outcomes never become pass or fresh callbacks."""
+    import hashlib
+    import json
+    from ai_ops_kit.shared import lifecycle_store
+    root = root.resolve()
+    report = _safe_retry_path(root, root / 'features' / wid / 'parallel-report.json')
+    if not report.exists():
+        return None
+    raw = report.read_bytes()
+    loaded = lifecycle_store.load_guarded(report)
+    if loaded['state'] != 'ok':
+        raise ValueError('package resume corrupt report')
+    saved = loaded['data']
+    origin, artifacts = saved.get('automatic_attempt'), saved.get('package_artifacts')
+    results = saved.get('package_results')
+    ids = {p['id'] for p in wg['packages']}
+    aggregate, source = saved.get('aggregate'), saved.get('integration_source')
+    failed_aggregate = (saved.get('stage') == 'fan-in' and isinstance(aggregate, dict)
+        and aggregate.get('all_pass') is False and isinstance(source, dict) and source.get('ready') is False)
+    if (saved.get('parallel') is not True or (saved.get('proceed') is not False and not failed_aggregate)
+            or saved.get('stage') not in ('pre-fan-in', 'fan-in') or saved.get('task') != task
+            or saved.get('base_binding') != binding or not isinstance(origin, dict) or not origin.get('id')
+            or not isinstance(results, dict) or set(results) != ids
+            or not isinstance(artifacts, dict) or artifacts.get('status') != 'preserved'
+            or any(p.get('depends_on') for p in wg['packages'])):
+        raise ValueError('package resume requires terminal preserved automatic results; ready work uses deliver-only')
+    # Any previous external transaction is handled by existing delivery reconciliation first.
+    if any(_retry_outbox(root, wid).glob('*')):
+        raise ValueError('package resume has delivery outbox; reconcile external outcome before package retry')
+    receipt = _safe_retry_path(root, Path(artifacts.get('receipt', '')))
+    directory = root / '.ai/usage/parallel'
+    if receipt.name != 'package-receipt.json' or receipt.parent.parent != directory:
+        raise ValueError('package resume receipt outside canonical store')
+    receipt_raw = receipt.read_bytes()
+    data = json.loads(receipt_raw)
+    run_id = receipt.parent.name
+    if (not isinstance(data, dict) or len(run_id) != 64 or any(c not in '0123456789abcdef' for c in run_id)
+            or data.get('kind') != 'ParallelPackageReceipt' or data.get('run_id') != run_id
+            or data.get('base_sha') != admission['base_sha'] or not isinstance(data.get('packages'), list)):
+        raise ValueError('package resume receipt identity mismatch')
+    entries = {p.get('package_id'): p for p in data['packages'] if isinstance(p, dict)}
+    if set(entries) != ids or len(data['packages']) != len(ids):
+        raise ValueError('package resume incomplete/duplicate package receipt')
+    reused = {}
+    for pkg in wg['packages']:
+        pid, result, item = pkg['id'], results[pkg['id']], entries[pkg['id']]
+        if not isinstance(result, dict) or result.get('status') not in ('pass', 'fail'):
+            raise ValueError('package resume unknown package outcome; no blind retry')
+        sha = parallel_live._artifact_sha(result.get('sha'))
+        if result.get('sha') is not None and sha is None:
+            raise ValueError('package resume invalid reported commit')
+        if not isinstance(result.get('gate_report'), dict) or not isinstance(item.get('gate_report'), dict):
+            raise ValueError('package resume malformed package gates')
+        if (item.get('status') != result['status'] or item.get('base_sha') != admission['base_sha']
+                or item.get('reported_package_sha') != sha or item.get('package_sha') != sha):
+            raise ValueError('package resume result/receipt mismatch')
+        if sha:
+            ref = f"refs/ai-ops/parallel/{run_id}/{hashlib.sha256(pid.encode()).hexdigest()}"
+            parallel_live._require_direct_checkpoint_ref(root, ref)
+            if (item.get('retained_ref') != ref or gitio.git(root, 'rev-parse', '--verify', ref)[1] != sha
+                    or gitio.git(root, 'cat-file', '-e', f'{sha}^{{tree}}')[0]
+                    or gitio.git(root, 'merge-base', '--is-ancestor', admission['base_sha'], sha)[0]):
+                raise ValueError('package resume retained commit missing/changed/unrelated')
+            rc, changed, _ = gitio.git(root, 'diff', '--name-only', admission['base_sha'], sha)
+            if rc or not parallel_live._scope_ok(changed.splitlines(), pkg['write_scope'])[0]:
+                raise ValueError('package resume retained commit scope mismatch')
+        if result['status'] == 'pass':
+            expected = {'all_pass': True, 'tested_revision': sha}
+            gate = result.get('gate_report')
+            if not sha or not isinstance(gate, dict) or any(gate.get(k) != v for k, v in expected.items()) or item.get('gate_report') != expected:
+                raise ValueError('package resume pass lacks exact-tested commit')
+            reused[pid] = {'result': result, 'ref': item['retained_ref'], 'receipt': str(receipt)}
+        elif (result.get('gate_report') or {}).get('all_pass') is not False or item.get('gate_report', {}).get('all_pass') is not False:
+            raise ValueError('package resume failed outcome is ambiguous')
+    def check():
+        if report.read_bytes() != raw or receipt.read_bytes() != receipt_raw:
+            raise ValueError('package resume evidence changed during admission')
+        # Repeat ref/object/scope admission under the canonical claim lock before replacing owner.
+        if _load_package_resume(root, wid, admission, wg, task, binding)[1] != reused:
+            raise ValueError('package resume retained evidence changed')
+    return saved, reused, check

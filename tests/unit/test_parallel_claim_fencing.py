@@ -68,24 +68,24 @@ def test_late_parallel_completion_preserves_replacement_and_never_delivers(tmp_p
     assert _owned_bytes(tmp_path) == expected, "canonical/projected/carrier/report bytes belong to replacement"
 
 
-def test_unchanged_attempt_finishes_and_next_same_session_has_new_identity(tmp_path):
+def test_unchanged_attempt_finishes_but_ready_repeat_does_not_start_new_generation(tmp_path):
     signals, auto = _automatic(tmp_path)
     original_admission = copy.deepcopy(auto["admission"])
     registry = aw.shared_registry_path(tmp_path)
     attempts = []
-
     def runner(*args, **kwargs):
         attempts.append(copy.deepcopy(aw.load(registry)["active"][0]["auto_admission"]))
         return _passed(tmp_path)
-
-    for _ in range(2):
-        result = dsp.run_parallel_live("write work", signals, tmp_path, feature="work", provider="mock",
-                                       runner=runner, **auto)
-        assert dsp.exit_code(result) == 0
-        assert aw.load(registry)["active"][0]["status"] == "done"
-        assert json.loads((tmp_path / "features/work/parallel-report.json").read_text())["proceed"] is True
-    assert attempts[0]["identity"] == attempts[1]["identity"]
-    assert attempts[0]["attempt_id"] != attempts[1]["attempt_id"]
+    result = dsp.run_parallel_live("write work", signals, tmp_path, feature="work", provider="mock",
+                                   runner=runner, **auto)
+    assert dsp.exit_code(result) == 0
+    assert aw.load(registry)["active"][0]["status"] == "done"
+    assert json.loads((tmp_path / "features/work/parallel-report.json").read_text())["proceed"] is True
+    before = _owned_bytes(tmp_path)
+    repeated = dsp.run_parallel_live("write work", signals, tmp_path, feature="work", provider="mock",
+                                     runner=runner, **auto)
+    assert dsp.exit_code(repeated) == 2 and "deliver-only" in repeated["reason"]
+    assert len(attempts) == 1 and _owned_bytes(tmp_path) == before
     assert auto["admission"] == original_admission, "saved admission inputs stay unchanged"
 
 
@@ -119,7 +119,7 @@ def test_takeover_during_already_admitted_delivery_keeps_receipt_and_new_report(
     registry = aw.shared_registry_path(tmp_path)
     expected, delivered = {}, []
 
-    def deliver(rec, *args):
+    def deliver(rec, *args, **kwargs):
         delivered.append(rec["integration_sha"])
         rec["delivery"] = {"status": "opened", "sha_verified": True, "receipt": {"already_executed": True}}
         assert aw.register(registry, "work", "ai-ops/work", ["aa.txt", "bb.txt"], "rescue",

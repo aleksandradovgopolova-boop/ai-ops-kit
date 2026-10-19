@@ -49,3 +49,27 @@
 мис-файрила: `write_scope` задаётся каталогом (`registry/`), а координационный файл — один файл
 внутри (`registry/release-claims.yaml`); широкая территория законно охватывает его, не собираясь
 править. «Мог бы тронуть» ≠ «трогает». Поэтому смотрим ДИФФ — что PR реально изменил.
+
+
+## Повтор сохранённых independent roots
+
+При включённом `session_economy.auto_parallel_independent_roots` повтор того же
+`./ai-ops run "<исходная задача>" --feature <id> --execute` автоматически продолжает
+**завершённую blocked попытку своей сессии** на прежней базе и неизменных saved inputs.
+Успешный пакет восстанавливается из retained Git commit без нового package/model callback;
+явный `fail` выполняется заново с остатком прежнего durable logical-call budget.
+История reservations не обнуляется. Это резервирование logical slots, не лимит USD
+или физических transport retries.
+
+Перед повтором проверяются canonical owner/generation/machine/worktree, receipt,
+прямой checkpoint ref, существование commit/tree, ancestry, scope и точный tested SHA.
+Повреждение, неизвестный outcome (`error`/недописанный отчёт), active/foreign/replaced
+claim, изменённая база/план и несверенная delivery transaction дают объяснённый отказ
+до новых callbacks. Автоматического takeover/leases здесь нет. Готовая интеграция
+повторно доставляется существующим `resume --deliver-only`, без повторов пакетов.
+
+После восстановления fan-in и aggregate выполняются заново; конфликт или красный
+aggregate не становится delivery success. В `parallel-report.json` перечислены
+`package_resume.reused_packages`/`executed_packages`, а trace отличает восстановление
+`reused-checkpoint` от выполнения пакета. Успешная техническая регрессия не является
+полевым доказательством стоимости, p95 или полного закрытия #1322.
