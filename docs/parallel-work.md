@@ -73,3 +73,13 @@ aggregate не становится delivery success. В `parallel-report.json` 
 `package_resume.reused_packages`/`executed_packages`, а trace отличает восстановление
 `reused-checkpoint` от выполнения пакета. Успешная техническая регрессия не является
 полевым доказательством стоимости, p95 или полного закрытия #1322.
+
+Automatic independent-root callbacks одного локального Git-common store используют
+общий pool из двух kernel-held slots, поверх per-run bounded scheduler. Занятость
+или недоступность resource lock даёт `package_capacity.status: not-started` до
+входа в run_fn и без списания logical budget; существующий terminal retry может
+повторить эту работу после освобождения. Успешный callback получает receipt с
+`unit: local-package-callback`, slot и attempt_id. Callback exception остаётся
+error, даже если его тип похож на resource refusal. Reuse готовых commits не
+занимает slots. Это local capacity admission, не physical-request/native-session
+лимит, distributed lease, автоматический takeover или обещание отмены сети.

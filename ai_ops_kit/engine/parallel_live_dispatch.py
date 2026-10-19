@@ -19,7 +19,7 @@ governed fan-in на СВЕЖЕМ integration-SHA) был построен и п
 """
 from __future__ import annotations
 
-from contextlib import nullcontext
+from contextlib import nullcontext, ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from uuid import uuid4
@@ -147,8 +147,16 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
             # После ожидания слота: новая generation/дрейф входов запрещают новый run.
             with active_work.claimed_attempt(child_root, wid, admission):
                 active_work.validate_admission(child_root, admission)
-            # Сеть/уже допущенный callback не держат canonical lock.
-            return run_fn(*args, **options)
+            # Shared local capacity spans automatic jobs, but never holds the canonical lock over network.
+            from ai_ops_kit.lifecycle import work_claims
+            with ExitStack() as slots:
+                try:
+                    capacity = slots.enter_context(work_claims.automatic_package_slot(child_root, wid, admission))
+                except work_claims.PackageCapacityUnavailable as exc:
+                    return {'ready_for_pr': False, 'package_capacity': {'status': 'not-started',
+                        'limit': 2, 'unit': 'local-package-callback', 'reason': str(exc)}}
+                result = run_fn(*args, **options)
+                return dict(result, package_capacity=dict(capacity, callback_returned=True)) if isinstance(result, dict) else result
     try:
         if admission is not None:
             with active_work.claimed_attempt(child_root, wid, admission):

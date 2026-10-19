@@ -167,7 +167,7 @@ def package_result_from_rep(rep):
     ok = bool(rep.get("ready_for_pr"))
     return {"status": "pass" if ok else "fail", "sha": sha,
             "gate_report": {"all_pass": ok, "tested_revision": sha},
-            "model_resolution": rep.get("model_resolution")}
+            "model_resolution": rep.get("model_resolution"), "package_capacity": rep.get("package_capacity")}
 
 
 def make_package_runner(child_root, base_sha, task_map, signals, run_fn, features_dir=None):
@@ -498,6 +498,7 @@ def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
         gate = result.get("gate_report") if isinstance(result.get("gate_report"), dict) else {}
         item["gate_report"] = {"all_pass": gate.get("all_pass") is True,
                                "tested_revision": _artifact_sha(gate.get("tested_revision"))}
+        item['package_capacity'] = result.get('package_capacity')
         item["usage_status"] = "available" if item["usage_streams"] else "unavailable"
         packages.append(item)
     count = usage_ledger.merge_ledgers(child_root, sources, source_ids=identities, source_baselines=baselines)
