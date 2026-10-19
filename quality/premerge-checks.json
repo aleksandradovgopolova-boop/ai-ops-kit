@@ -1,0 +1,25 @@
+{
+  "docs.yml": [
+    "build"
+  ],
+  "pr-smoke.yml": [
+    "smoke",
+    "parallel-safety",
+    "pr-size"
+  ],
+  "package-quality.yml": [
+    "clean-install",
+    "delivered-footprint",
+    "lint",
+    "pipeline-e2e (3.12)",
+    "pipeline-e2e (3.13)",
+    "quality (contracts, .github/ci-groups/contracts.sh)",
+    "quality (fast-1, .github/ci-groups/fast-1.sh)",
+    "quality (fast-2, .github/ci-groups/fast-2.sh)",
+    "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+    "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+    "security-scan",
+    "smoke-macos",
+    "upgrade-path"
+  ]
+}
