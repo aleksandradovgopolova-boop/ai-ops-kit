@@ -516,6 +516,14 @@ def _intent_discuss(task, child_root, signals, a):
 
 
 
+def _prepare_automatic_roots(root, wid, signals, base, *, session_identity=None, execution_policy=None):
+    """Ordinary automatic route can compile a bounded fresh goal without model calls."""
+    from ai_ops_kit.engine import atomic_planner
+    options = dict(session_identity=session_identity, execution_policy=execution_policy)
+    atomic_planner.prepare_literal_goal(root, wid, signals, base, **options)
+    return _automatic_roots(root, wid, signals, base, **options)
+
+
 def _automatic_roots(root, wid, signals, base, *, session_identity=None, execution_policy=None):
     """Opt-in saved, independent roots only. No model/clone/write during admission."""
     import hashlib
@@ -523,7 +531,7 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
     import itertools
     import re
     import yaml
-    from ai_ops_kit.engine import parallel_planner, parallel_live, run_plan
+    from ai_ops_kit.engine import parallel_planner, parallel_live, run_plan, atomic_planner
     from ai_ops_kit.shared import budget as budgets, gitio
     root = Path(root).resolve()
     snapshots = {}
@@ -581,9 +589,7 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
             raise ValueError("automatic supports independent roots only; dependencies retained")
         if len(pkgs) < 2:
             return None
-        supported = {"auto_parallel_independent_roots", "target_context_tokens", "compact_recommended_at",
-                     "new_session_recommended_at", "one_task_per_session", "allow_cross_task_session"}
-        if any(k not in supported and v is not None for k, v in economy.items()):
+        if any(k not in atomic_planner.AUTOMATIC_ECONOMY_KEYS and v is not None for k, v in economy.items()):
             raise ValueError("automatic unsupported global/session/USD hard ceiling")
         binding = gitio.resolve_base(root, base)
         if not binding.get("resolved") or gitio.git(root, "rev-parse", "HEAD")[1] != binding["base_sha"]:

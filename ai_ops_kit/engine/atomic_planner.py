@@ -34,6 +34,129 @@ from pathlib import Path
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 MAX_SUBSYSTEMS = 2          # больше системных границ на пакет -> кандидат на разбиение
 SIZE_FILES = {"small": 3, "medium": 8, "large": 20, "xl": 40}
+AUTOMATIC_ECONOMY_KEYS = {"auto_parallel_independent_roots", "target_context_tokens", "compact_recommended_at",
+                          "new_session_recommended_at", "one_task_per_session", "allow_cross_task_session"}
+
+
+def prepare_literal_goal(root, wid, signals, base, *, session_identity=None, execution_policy=None):
+    """Bounded goal compiler: explicit identical replacement in2–8 tracked plain-text files.
+
+    No model/proposer call. Unknown families leave the ordinary route intact; recognized
+    but unsafe contracts refuse. Existing saved graphs are never regenerated or overwritten.
+    """
+    import hashlib
+    import os
+    import re
+    import yaml
+    from ai_ops_kit.engine import run_plan
+    from ai_ops_kit.lifecycle import active_work as aw, workitem
+    from ai_ops_kit.shared import budget as budgets, gitio, lifecycle_store
+    root = Path(root).resolve()
+    task = signals.get('task_text') or ''
+    targets = r'(`[^`\r\n]+`(?:\s*,\s*`[^`\r\n]+`){1,7})'
+    literal = r'`([^`\r\n]{1,120})`'
+    match = next((m for pattern in [rf'Replace {literal} with {literal} in {targets}\.?',
+                                    rf'Заменить {literal} на {literal} в {targets}\.?']
+                  if (m := re.fullmatch(pattern, task.strip(), re.IGNORECASE))), None)
+    if match is None:
+        return False
+    try:
+        run_plan.validate_workitem_id(wid)
+        candidates = ('work-graph.yaml', '.ai/runtime/work-graph.yaml', f'features/{wid}/work-graph.yaml')
+        if any((root / p).exists() or (root / p).is_symlink() for p in candidates):
+            return False
+        cfg_path = root / '.ai-ops.yaml'
+        if not cfg_path.exists():
+            return False
+        if cfg_path.is_symlink():
+            raise ValueError('literal goal unsafe config')
+        config_raw = cfg_path.read_bytes()
+        cfg = yaml.safe_load(config_raw)
+        economy = cfg.get('session_economy') or {}
+        enabled = economy.get('auto_parallel_independent_roots', False)
+        if type(enabled) is not bool:
+            raise ValueError('automatic opt-in must be boolean')
+        if not enabled:
+            return False
+        if any(k not in AUTOMATIC_ECONOMY_KEYS and v is not None for k, v in economy.items()):
+            raise ValueError('literal goal unsupported global/session/USD hard ceiling')
+        if (signals.get('task_type') != 'typo' or signals.get('risk') != 'low'
+                or signals.get('destructive') or any(signals.get(k) is not None for k in ('budget', 'budget_contract'))):
+            raise ValueError('literal goal requires typo/low risk and supported execution budget')
+        budget = budgets.resolve_budget(None, signals.get('execution_budget'))
+        if budget.max_model_calls is None:
+            raise ValueError('literal goal requires declared shared max_model_calls')
+        budget.ensure_execution_supported()
+        old, new, named = match.groups()
+        files = re.findall(r'`([^`]+)`', named)
+        if old == new or len(files) != len(set(files)) or any(ord(c) < 32 for c in old + new):
+            raise ValueError('literal goal ambiguous replacement/targets')
+        if any(not re.fullmatch(r'[A-Za-z0-9_][A-Za-z0-9_./-]*\.txt', f)
+               or Path(f).as_posix() != f or '..' in Path(f).parts for f in files):
+            raise ValueError('literal goal requires concrete contained plain .txt targets')
+        binding = gitio.resolve_base(root, base)
+        if not binding.get('resolved') or gitio.git(root, 'rev-parse', 'HEAD')[1] != binding['base_sha']:
+            raise ValueError('literal goal requires current immutable base SHA')
+
+        def source_check():
+            if cfg_path.is_symlink() or cfg_path.read_bytes() != config_raw:
+                raise ValueError('literal goal config changed')
+            if gitio.git(root, 'rev-parse', 'HEAD')[1] != binding['base_sha']:
+                raise ValueError('literal goal base changed')
+            for name in ['.ai-ops.yaml', *files]:
+                p = root / name
+                if (any(q.is_symlink() for q in (p, *p.parents) if q.is_relative_to(root))
+                        or not p.is_file() or p.stat().st_size > 131072):
+                    raise ValueError('literal goal unsafe/missing/oversized source')
+                entry = gitio.git(root, 'ls-tree', binding['base_sha'], '--', name)[1].split()
+                blob = gitio.git(root, 'hash-object', '--no-filters', name)[1]
+                mode = '100755' if p.stat().st_mode & 0o111 else '100644'
+                if entry[:3] != [mode, 'blob', blob] or (name != '.ai-ops.yaml' and mode != '100644'):
+                    raise ValueError('literal goal source/config must match tracked base bytes/mode')
+                if name != '.ai-ops.yaml':
+                    content = p.read_text(encoding='utf-8')
+                    if '\0' in content or old not in content:
+                        raise ValueError('literal goal source is not applicable UTF8 text')
+
+        source_check()
+        prefix = hashlib.sha256((wid + '\0' + task).encode()).hexdigest()[:16]
+        tasks = {f'wp-{prefix}-{i:02d}': f'Replace `{old}` with `{new}` in `{name}`.'
+                 for i, name in enumerate(files, 1)}
+        graph = dict(schema_version=1, kind='WorkGraph', id=f'WG-{int(prefix[:8], 16):010d}', feature=wid,
+                     execution_mode='parallel', packages=[dict(id=pid, write_scope=[name], depends_on=[])
+                         for pid, name in zip(tasks, files)], integration_order=list(tasks),
+                     aggregate_verification=['implementation_verification'])
+        documents = {}
+        policy = dict(execution_policy or {})
+        for pid, goal in [(wid, task), *tasks.items()]:
+            wi = workitem.build(pid, goal, signals=signals)
+            if wi['human_approval_required']:
+                raise ValueError('literal goal cannot bypass human approval')
+            plan = run_plan.build_plan(dict(signals, task_text=goal), pid)
+            settings = dict(schema_version=1, kind='run-settings', workitem_id=pid, task=goal,
+                            signals={k: v for k, v in signals.items() if k != 'task_text'}, policy=policy)
+            for leaf, data in [('workitem.yaml', wi), ('run-plan.yaml', plan), ('run-settings.yaml', settings)]:
+                documents[f'features/{pid}/{leaf}'] = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
+        documents[f'features/{wid}/work-graph.yaml'] = yaml.safe_dump(graph, allow_unicode=True, sort_keys=False)
+        registry = aw.shared_registry_path(root)
+        if aw._git_common_dir(root) is None:
+            raise ValueError('literal goal requires canonical Git store')
+        with aw._claim_lock(registry, root) as legacy:
+            active = aw.load(registry)['active'] + (aw.load(legacy)['active'] if legacy is not None else [])
+            against = aw.team_view(root, active, aw.publication_enabled(root))
+            probe = dict(id=wid, branch=f'ai-ops/{wid}', affected_areas=files,
+                         owner_session=session_identity or f'pid:{os.getpid()}', machine=aw._machine())
+            if (any(w.get('id') in {wid, *tasks} and w.get('status') not in aw._CLOSED_STATUSES for w in against)
+                    or aw.classify(against, probe)):
+                raise ValueError('literal goal active claim conflicts; no takeover')
+            source_check()
+            result = lifecycle_store.durable_create_batch(root, documents)
+            if not result['ok']:
+                raise ValueError(f"literal goal plan barrier unavailable: {result['error']}")
+        return True
+    except (OSError, KeyError, TypeError, AttributeError, yaml.YAMLError, budgets.BudgetExceeded,
+            aw.ActiveWorkCorrupt) as exc:
+        raise ValueError(f'literal goal planning unavailable: {exc}') from exc
 
 
 def estimate(signals, child_root=None, bundle=None):
