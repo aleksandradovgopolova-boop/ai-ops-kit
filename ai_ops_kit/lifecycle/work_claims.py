@@ -403,3 +403,35 @@ def retry_delivery_claim(root, wid, identity, origin, sha, check, *, execute):
         aw._project_claim(legacy, entry)
         claim_to_copies(root, entry)
         return admission
+
+
+def _budget_origin(active, wid):
+    old = [w.get('budget_origin', 'legacy') for w in active if w.get('id') == wid]
+    return 'fresh' if not old else old[0] if len(old) == 1 and old[0] in ('fresh', 'durable') else 'legacy'
+
+
+def bind_attempt_budget(root, wid, admission, budget, guard):
+    """Claim carries provenance only; the existing Budget ledger is the sole counter."""
+    import hashlib
+    from ai_ops_kit.lifecycle import active_work as aw
+    from ai_ops_kit.shared.budget import BudgetExceeded
+    root, path = Path(root).resolve(), shared_registry_path(root)
+    with aw._claim_lock(path, root):
+        entry = _require_attempt(load(path), wid, admission, root)
+        aw.validate_admission(root, admission)
+        origin = entry.get('budget_origin')
+        report = root / 'features' / wid / 'parallel-report.json'
+        if origin not in ('fresh', 'durable') or (origin == 'fresh' and (report.exists() or report.is_symlink())):
+            raise BudgetExceeded('budget prior attempt spend unknown; no zero migration')
+    ledger = path.parent / 'budgets' / (hashlib.sha256(wid.encode()).hexdigest() + '.json')
+    binding = {'workitem_id': wid, 'base_sha': admission['base_sha'], 'inputs': admission['inputs']}
+    budget.bind_durable(ledger, binding, create=origin == 'fresh', guard=guard)
+    with aw._claim_lock(path, root) as legacy:
+        data = load(path)
+        entry = _require_attempt(data, wid, admission, root)
+        aw.validate_admission(root, admission)
+        entry['budget_origin'] = 'durable'
+        aw.save(path, data)
+        aw._project_claim(legacy, entry)
+        claim_to_copies(root, entry)
+    return ledger

@@ -139,6 +139,11 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
         if admission is not None:
             with active_work.claimed_attempt(child_root, wid, admission):
                 pass  # граница допуска; общую блокировку не держим во время пакетов/сети
+        if admission is not None:
+            from ai_ops_kit.lifecycle import work_claims
+            work_claims.bind_attempt_budget(child_root, wid, admission, budget,
+                lambda: _retry_guard(child_root, wid, admission))
+            budget.ensure_execution_supported()
         rec = dispatch(wg, str(child_root), base_sha, task_map, signals, package_run,
                        repo_slug=repo_slug, contract_shas=contract_shas, integration_branch=f"ai-ops/{wid}",
                        run_options={"provider_name": provider, "model": model, "base": binding["base_ref"],
@@ -175,7 +180,7 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
                 rec["stage"] = "lifecycle"
                 rec["reason"] = "parallel report не сохранён durable; integration source сохранён в результате"
         return rec
-    except (active_work.ActiveWorkCorrupt, OSError) as exc:
+    except (active_work.ActiveWorkCorrupt, OSError, ValueError, budget_mod.BudgetExceeded) as exc:
         rec = rec if isinstance(rec, dict) else {}
         rec.update(proceed=False, stage="preflight", parallel=True, reason=str(exc))
         return rec
