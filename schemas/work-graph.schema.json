@@ -12,6 +12,8 @@
     "kind": { "const": "WorkGraph" },
     "id": { "type": "string", "pattern": "^WG-[0-9]{3,}$" },
     "feature": { "type": "string", "minLength": 1 },
+    "goal_plan_intent": { "type": "string", "minLength": 1,
+      "description": "Опциональный frozen GoalPlanIntent bounded compiler; normal CLI подтверждает durable barrier до первого canonical admission." },
     "execution_mode": { "type": "string", "enum": ["single", "sequential", "parallel", "hybrid"] },
     "packages": {
       "type": "array",

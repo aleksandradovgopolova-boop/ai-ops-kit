@@ -66,6 +66,15 @@ def wi_path(features_dir, fid):
 
 def start(features_dir, fid, task, task_type=None, risk=None, *, signals=None):
     """Создать WorkItem по полным routing-сигналам; прежние явные аргументы приоритетны."""
+    wi = build(fid, task, task_type, risk, signals=signals)
+    wi_path(features_dir, fid).parent.mkdir(parents=True, exist_ok=True)
+    wi_path(features_dir, fid).write_text(
+        yaml.safe_dump(wi, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    return wi
+
+
+def build(fid, task, task_type=None, risk=None, *, signals=None):
+    """Pure WorkItem factory, shared by lifecycle start and create-only goal planning."""
     inp = dict(signals or {})
     if task_type:
         inp["task_type"] = task_type
@@ -74,8 +83,6 @@ def start(features_dir, fid, task, task_type=None, risk=None, *, signals=None):
     from ai_ops_kit.shared import ai_route as _ar   # foundation (K5): маршрутизатор — чистая классификация
     r = _ar.route(inp)
     wf = r["workflow"]
-    fdir = Path(features_dir) / fid
-    fdir.mkdir(parents=True, exist_ok=True)
     wi = {
         "schema_version": 1,
         "kind": "workitem",
@@ -97,8 +104,6 @@ def start(features_dir, fid, task, task_type=None, risk=None, *, signals=None):
         # либо человеком; сверку делает `contours.reconcile`.
         "affects": {},
     }
-    wi_path(features_dir, fid).write_text(
-        yaml.safe_dump(wi, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return wi
 
 

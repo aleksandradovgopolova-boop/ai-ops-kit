@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from ai_ops_kit.cli.ai_ops_cli_lifecycle import _automatic_roots
+from ai_ops_kit.cli.ai_ops_cli_lifecycle import _prepare_automatic_roots as _automatic_roots
 
 def _wid_for(task, signals, feature):
     from ai_ops_kit.engine import run_plan

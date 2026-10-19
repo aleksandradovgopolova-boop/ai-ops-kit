@@ -84,6 +84,96 @@ def _durable(path: str | Path, data: dict, serialize: Callable, parse: Callable,
                 pass
 
 
+def durable_create_batch(root: str | Path, documents: dict[str, str]) -> dict:
+    """Create-only plan barrier. Existing exact bytes reused; conflicting/unknown files never replaced.
+
+    Preflight all documents before creating any; graph can be last in insertion order.
+    A partial failed batch remains explicit evidence, reusable only when its bytes match.
+    POSIX dirfds/O_NOFOLLOW prohibit traversal through symlink ancestors, including races.
+    """
+    import contextlib
+    import stat
+    from collections.abc import Iterator
+    created = []
+    try:
+        if not documents or any(not isinstance(k, str) or not isinstance(v, str)
+                                or Path(k).is_absolute() or Path(k).as_posix() != k
+                                or any(p in ('.', '..') for p in k.split('/')) for k, v in documents.items()):
+            raise ValueError('invalid create-only documents')
+        flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW
+        with contextlib.ExitStack() as roots:
+            rootfd = os.open(root, flags)
+            roots.callback(os.close, rootfd)
+
+            @contextlib.contextmanager
+            def parent(name: str, create: bool) -> Iterator[int | None]:
+                with contextlib.ExitStack() as dirs:
+                    fd = rootfd
+                    for part in name.split('/')[:-1]:
+                        try:
+                            child = os.open(part, flags, dir_fd=fd)
+                        except FileNotFoundError:
+                            if not create:
+                                yield None
+                                return
+                            try:
+                                os.mkdir(part, dir_fd=fd)
+                            except FileExistsError:
+                                if not stat.S_ISDIR(os.stat(part, dir_fd=fd, follow_symlinks=False).st_mode):
+                                    raise ValueError('create-only directory collision is not a directory') from None
+                            child = os.open(part, flags, dir_fd=fd)
+                        dirs.callback(os.close, child)
+                        if create:
+                            os.fsync(fd)  # also confirm a directory left by an uncertain prior mkdir/sync
+                        fd = child
+                    yield fd
+
+            def read(fd: int, name: str, size: int, durable: bool = False) -> bytes | None:
+                try:
+                    opened = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=fd)
+                except FileNotFoundError:
+                    return None
+                with os.fdopen(opened, 'rb') as stream:
+                    st = os.fstat(stream.fileno())
+                    if not stat.S_ISREG(st.st_mode) or st.st_nlink != 1:
+                        raise ValueError('unsafe create-only artifact type/links')
+                    data = stream.read(size + 1)
+                    current = os.stat(name, dir_fd=fd, follow_symlinks=False)
+                    if (st.st_dev, st.st_ino) != (current.st_dev, current.st_ino):
+                        raise ValueError('create-only artifact replaced during readback')
+                    if durable:
+                        os.fsync(stream.fileno())
+                    return data
+
+            payloads = {k: v.encode('utf-8') for k, v in documents.items()}
+            for name, payload in payloads.items():
+                with parent(name, False) as fd:
+                    old = read(fd, name.split('/')[-1], len(payload)) if fd is not None else None
+                    if old is not None and old != payload:
+                        raise ValueError(f'conflicting saved goal artifact: {name}')
+            for name, payload in payloads.items():
+                with parent(name, True) as fd:
+                    if fd is None:
+                        raise ValueError('create-only parent unavailable')
+                    leaf = name.split('/')[-1]
+                    try:
+                        opened = os.open(leaf, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600, dir_fd=fd)
+                    except FileExistsError:
+                        opened = None
+                    if opened is not None:
+                        created.append(name)
+                        with os.fdopen(opened, 'wb') as stream:
+                            stream.write(payload)
+                            stream.flush()
+                            os.fsync(stream.fileno())
+                    if read(fd, leaf, len(payload), durable=opened is None) != payload:
+                        raise ValueError(f'create-only artifact readback mismatch: {name}')
+                    os.fsync(fd)
+        return {'ok': True, 'created': created}
+    except (OSError, ValueError, TypeError, AttributeError) as exc:
+        return {'ok': False, 'created': created, 'error': str(exc)}
+
+
 def durable_write(path: str | Path, data: dict, require_keys: tuple = (), keep_backup: bool = False) -> dict:
     """АТОМАРНАЯ + FAIL-CLOSED запись YAML-артефакта (LifecycleStore v1.1: validate-before-replace,
     unique temp, cleanup, opt-in backup). -> {ok} | {ok: False, error}. Вызывающий ОБЯЗАН остановиться

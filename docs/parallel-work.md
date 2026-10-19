@@ -53,6 +53,27 @@
 
 ## Повтор сохранённых independent roots
 
+При включённом `session_economy.auto_parallel_independent_roots` обычный `run --execute`
+или `do` умеет сам построить план для ограниченной текстовой цели, например:
+`Replace ` + литералы в backticks + ` in ` + список файлов в backticks через запятую.
+Полный пример: «Replace `teh` with `the` in `aa.txt`, `bb.txt`.»;
+также поддерживается «Заменить `teh` на `the` в `aa.txt`, `bb.txt`.».
+Требуются `task_type: typo`, `risk: low`, конечный `execution_budget.max_model_calls`
+и 2–8 разных существующих tracked UTF-8 `.txt` файлов, совпадающих с текущей Git-базой.
+Compiler не вызывает модель: одна явная замена разбивается по непересекающимся файлам.
+Он сохраняет исходную цель, root/package WorkItems, RunPlans/RunSettings и WorkGraph;
+дальше действуют прежние provider/author/review, shared budget/capacity и fan-in gates.
+Другие формулировки сохраняют обычный маршрут; распознанные unsafe цели отказываются
+до package callback. Сохранённые графы не генерируются заново; default opt-in выключен.
+Артефакты создаются только при отсутствии или точном совпадении bytes, с durable
+readback и без перехода через symlink. Конфликт проверяется для всей группы до записи,
+граф создаётся последним; частичную запись можно завершить только с прежними bytes.
+Compiler помечает граф ссылкой `goal_plan_intent` на frozen manifest hashes.
+Пока canonical admission не подтвердил полный barrier, даже существующий граф требует
+повторной синхронизации всей группы. Ошибка финального fsync не превращается в успех
+через проверку exists; сохранённая canonical admission допускает только прежний snapshot.
+Этот bounded compiler не доказывает произвольную semantic decomposition или field acceptance.
+
 Исполнимый WorkGraph может находиться в `features/<workitem_id>/work-graph.yaml`:
 каждая цель хранит свой план, а admission фиксирует hash именно этого файла.
 Существующие `work-graph.yaml` и `.ai/runtime/work-graph.yaml` поддерживаются.
