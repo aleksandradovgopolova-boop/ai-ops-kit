@@ -175,7 +175,8 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
         revision_ok = (head_sha == final_sha)
         _vpol = (_tb2.sandbox_policy(child_root=str(vroot)) if sandbox
                  else _tb2.Policy(level="execution", child_root=str(vroot), block_push=True))
-        coll = _ec2.collect(_pd2.detect(vroot), vroot, _vpol, broker=_tb2)
+        coll = _ec2.collect(_pd2.detect(vroot), vroot, _vpol, broker=_tb2,
+                            lifecycle_intent="merge_candidate")
         final_checks = coll["checks"]
         _is_git = _git(vroot, "rev-parse", "--is-inside-work-tree")[0] == 0
         tree_clean = _ep._tree_clean_after_checks(vroot) if _is_git else True

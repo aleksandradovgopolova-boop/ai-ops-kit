@@ -58,6 +58,7 @@ class RunContext:
     # наблюдаемым расходом, а не магический оптимум (см. #602).
     max_steps: int
     base: Any
+    verification_intent: str = "merge_candidate"  # transient: пакет draft / финальная проверка
     replan: bool = False
     saved_task: Optional[str] = None       # F-027: продуктовая задача исходного прогона
     base_binding: Optional[dict] = None    # BaseBinding (ref+sha+mode+source)
@@ -82,7 +83,7 @@ class RunContext:
     @classmethod
     def from_run_args(cls, *, task_text, signals, child_root, features_dir, feature,
                       provider_name, model, runtime, sandbox, baseline_diff, require_fix,
-                      author, review, open_pr, write_scope, max_steps, base, replan=False):
+                      author, review, open_pr, write_scope, max_steps, base, replan=False, verification_intent="merge_candidate"):
         """Собрать ctx из аргументов `run()`.
 
         Идемпотентная нормализация: `signals` копируется (не мутируем чужой dict) и
@@ -100,4 +101,5 @@ class RunContext:
             task_text=task_text, signals=_sig, sandbox=sandbox, baseline_diff=baseline_diff,
             require_fix=require_fix, author=author, review=review, open_pr=open_pr,
             write_scope=write_scope, max_steps=max_steps, base=base, replan=replan,
+            verification_intent=verification_intent,
         )

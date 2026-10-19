@@ -93,6 +93,9 @@ def decide_tier(changed_files: list, force_tier: str = None, lifecycle_intent: s
     force_tier — принудительный уровень (если задан).
     lifecycle_intent — стадия жизненного цикла (explore/draft/ready_for_review/merge_candidate).
     -> 'skip' | 'affected' | 'module' | 'full'"""
+    if lifecycle_intent is not None and (not isinstance(lifecycle_intent, str) or
+            lifecycle_intent not in INTENT_TO_TIER and lifecycle_intent not in ("merge", "release")):
+        raise ValueError(f"unknown verification intent: {lifecycle_intent!r}")
     # Risk floors precede explicit tiers and lifecycle: draft/explore cannot exempt infra.
     if lifecycle_intent in ("merge_candidate", "release_candidate", "merge", "release"):
         return "full"

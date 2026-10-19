@@ -61,3 +61,20 @@
 9038 passed, 35 skipped, 2 warnings, exit 0 (955.19 s). Это не compatibility-matrix.
 Цена основной AI-сессии и независимых reviews unknown; native retry сообщил $0
 только для отказавшего запуска Claude, не для всей работы.
+
+## Дополнение 16.10: новые ограниченные live доказательства
+
+Исходная таблица выше сохраняет срез 15.10 и его неудачные попытки. Следующие
+наблюдения не переписывают историю и не повышают всю строку runtime до verified.
+
+| Исполнитель / опыт | Новый факт | Что не доказано |
+|---|---|---|
+| Codex0.163.0 / gpt-5.6-terra, #611 | Прежние plan/WorkItem/RunPlan + adapter прочитаны; native 4+1 = 0/0/0/0/2, три SHA256 неизменны, [пакет](runtime-protocol-611-2026-10-16/README.md) | do отказал до inference из-за size/risk; нет delivery, успешного Qwen inference или all-three qualification |
+| Claude Code2.1.301 / claude-opus-4-8, #1269 | После восстановления доступа nonce/owner/mode в context, null в control; native Pre/Post pairs и exact fixture; missing skill до launch, [пакет](claude-context-1269-2026-10-16/README.md) | Whole PRODUCT, production adapter, general mandatory enforcement и полное покрытие audit |
+
+#611 [закрыта по сверке критериев](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/611#issuecomment-6216994446)
+16.10 в13:52:31UTC; #1269 [закрыта после context/control](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1269#issuecomment-6217234772)
+в14:05:21UTC. Auth blockers выше относятся к прошлым попыткам, не к текущему
+состоянию. Независимое review роли/parallel и другие столбцы автоматически не
+становятся квалифицированными. USD subscription allocation/owner minutes unknown;
+Claude native list estimate не фактический счёт. Основная продуктовая когорта не растёт.

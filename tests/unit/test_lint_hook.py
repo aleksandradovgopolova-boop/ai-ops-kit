@@ -43,12 +43,16 @@ def lh():
 # кодом 2 — на слове CRASH (так ruff/eslint сообщают о сбое конфигурации, а не о нарушениях).
 _FAKE = """#!/bin/sh
 echo "$@" >> "{log}"
-for a in "$@"; do f="$a"; done
-if grep -q CRASH "$f" 2>/dev/null; then echo "config error: boom" >&2; exit 2; fi
-if grep -q BAD "$f" 2>/dev/null; then
-  i=0; while [ $i -lt {lines} ]; do echo "$f:$i:1: E001 плохое имя"; i=$((i+1)); done; exit 1
-fi
-exit 0
+failed=0
+for f in "$@"; do
+  [ -f "$f" ] || continue
+  if grep -q CRASH "$f" 2>/dev/null; then echo "config error: boom" >&2; exit 2; fi
+  if grep -q BAD "$f" 2>/dev/null; then
+    i=0; while [ $i -lt {lines} ]; do echo "$f:$i:1: E001 плохое имя"; i=$((i+1)); done
+    failed=1
+  fi
+done
+exit $failed
 """
 
 
@@ -375,7 +379,8 @@ def test_codex_patch_checks_every_existing_destination(lh, py_child):
     event = _codex_event(root, "*** Begin Patch\n*** Update File: src/clean.py\n@@\n+OK\n"
                         "*** Update File: src/old.py\n*** Move to: src/moved.py\n@@\n+BAD\n*** End Patch")
     assert lh.run_hook(event, root)[0] == 2
-    assert len(_calls(log)) == 2
+    assert len(_calls(log)) == 1
+    assert "src/clean.py" in _calls(log)[0]
     assert any("src/moved.py" in call for call in _calls(log))
 
 
@@ -394,12 +399,87 @@ def test_codex_deleted_file_does_not_lint_another_file(lh, py_child):
 
 
 def test_codex_batch_deadline_reports_unchecked_tail(lh, py_child, monkeypatch):
-    root, _ = py_child
-    clock = iter([0, 0, 10000])
-    monkeypatch.setattr(lh.time, "monotonic", lambda: next(clock))
-    called = []
-    monkeypatch.setattr(lh, "_run_file_hook", lambda event, *a: (called.append(event) or (0, "", "")))
-    event = _codex_event(root, "*** Begin Patch\n*** Add File: a.py\n+x=1\n"
-                        "*** Add File: b.py\n+y=1\n*** End Patch")
+    root, log = py_child
+    for name in ("a", "b"):
+        (root / f"src/{name}.py").write_text("OK\n")
+    clock, execute, command = [0], lh._execute_lint, lh.per_file_command
+
+    def separate_commands(*args):
+        argv, cwd, why = command(*args)
+        argv.insert(-1, "--group=" + args[1])
+        return argv, cwd, why
+
+    def run_then_exhaust(*args):
+        result = execute(*args)
+        clock[0] = 10000
+        return result
+
+    monkeypatch.setattr(lh.time, "monotonic", lambda: clock[0])
+    monkeypatch.setattr(lh, "per_file_command", separate_commands)
+    monkeypatch.setattr(lh, "_execute_lint", run_then_exhaust)
+    event = _codex_event(root, "*** Begin Patch\n*** Add File: src/a.py\n+OK\n"
+                        "*** Add File: src/b.py\n+OK\n*** End Patch")
     code, _, out = lh.run_hook(event, root)
-    assert code == 0 and "НЕ проверена" in out and len(called) == 1
+    assert code == 0 and "НЕ проверена" in out and "src/b.py" in out
+    assert len(_calls(log)) == 1 and "src/a.py" in _calls(log)[0]
+
+
+def test_patch_batches_compatible_files_without_hiding_bad_first_target(lh, py_child):
+    root, log = py_child
+    (root / "src/bad.py").write_text("BAD\n")
+    (root / "src/clean.py").write_text("OK\n")
+    patch = "*** Begin Patch\n*** Add File: src/bad.py\n+BAD\n*** Add File: src/clean.py\n+OK\n*** End Patch"
+    code, err, _ = lh.run_hook(_codex_event(root, patch), root)
+    assert code == 2 and "src/bad.py" in err
+    assert len(_calls(log)) == 1, "один совместимый линтер не должен стартовать на каждый файл"
+    assert "src/bad.py" in _calls(log)[0] and "src/clean.py" in _calls(log)[0]
+
+
+def test_patch_keeps_monorepo_linters_and_working_directories_separate(lh, tmp_path):
+    root, log = tmp_path / "child", tmp_path / "calls.log"
+    root.mkdir()
+    (root / "package.json").write_text(json.dumps({"scripts": {"lint": "eslint ."}}))
+    _profile(root, [{"language": "node", "commands": {"lint": "npm run lint"}}])
+    for name, content in [("a", "BAD"), ("b", "OK")]:
+        package = root / "packages" / name
+        (package / "src").mkdir(parents=True)
+        (package / "src/file.ts").write_text(content)
+        _fake_linter(package / "node_modules/.bin/eslint", log)
+    patch = "*** Begin Patch\n*** Update File: packages/a/src/file.ts\n@@\n+BAD\n*** Update File: packages/b/src/file.ts\n@@\n+OK\n*** End Patch"
+    code, err, _ = lh.run_hook(_codex_event(root, patch), root)
+    assert code == 2 and "packages/a/src/file.ts" in err
+    assert _calls(log) == ["src/file.ts", "src/file.ts"], "оба отдельных package cwd должны проверяться"
+
+
+def test_patch_preserves_dash_and_space_targets(lh, py_child):
+    root, log = py_child
+    (root / "--fix.py").write_text("BAD\n")
+    (root / "src/space name.py").write_text("OK\n")
+    patch = "*** Begin Patch\n*** Add File: --fix.py\n+BAD\n*** Add File: src/space name.py\n+OK\n*** End Patch"
+    code, err, _ = lh.run_hook(_codex_event(root, patch), root)
+    assert code == 2 and "--fix.py" in err
+    assert len(_calls(log)) == 1 and "./--fix.py" in _calls(log)[0]
+
+
+def test_failed_batch_does_not_hide_an_individual_violation(lh, py_child):
+    root, log = py_child
+    (root / "src/bad.py").write_text("BAD\n")
+    (root / "src/crash.py").write_text("CRASH\n")
+    patch = "*** Begin Patch\n*** Add File: src/bad.py\n+BAD\n*** Add File: src/crash.py\n+CRASH\n*** End Patch"
+    code, err, _ = lh.run_hook(_codex_event(root, patch), root)
+    assert code == 2 and "src/bad.py" in err and "не отработал (код 2" in err
+    assert len(_calls(log)) == 3, "после отказа batch нужны отдельные результаты в оставшемся бюджете"
+
+
+def test_patch_deduplicates_go_package_targets(lh, py_child):
+    root, log = py_child
+    _fake_linter(root / ".venv/bin/golangci-lint", log)
+    _profile(root, [{"language": "go", "commands": {"lint": "golangci-lint run"}}])
+    paths = ["internal/a/one.go", "internal/a/two.go", "internal/b/main.go"]
+    for path in paths:
+        target = root / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text("package sample\n")
+    patch = "*** Begin Patch\n" + "".join(f"*** Add File: {p}\n+package sample\n" for p in paths) + "*** End Patch"
+    assert lh.run_hook(_codex_event(root, patch), root) == (0, "", "")
+    assert _calls(log) == ["run ./internal/a ./internal/b"]

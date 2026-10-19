@@ -11,6 +11,8 @@ W4b доставил ДВИЖОК каталога (`ai_ops_kit/checks/feature_c
 from __future__ import annotations
 
 import importlib.util
+import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -167,3 +169,39 @@ def test_template_skips_honestly_without_a_registry():
     src = (KIT / "templates" / "ci" / TEMPLATE).read_text(encoding="utf-8")
     assert "steps.reg.outputs.path != ''" in src, "генерация не гейтится наличием реестра"
     assert "не генерируется (это не ошибка)" in src, "нет честного сообщения о пропуске без реестра"
+
+
+@pytest.mark.parametrize("present", [False, True])
+def test_catalog_registry_is_checked_before_setup_or_network(tmp_path, present):
+    """Исполняем поставляемый shell; отсутствие реестра не требует даже Python."""
+    doc = yaml.safe_load((KIT / "templates/ci" / TEMPLATE).read_text())
+    steps = doc["jobs"]["feature-catalog"]["steps"]
+    assert steps[1].get("id") == "reg", "поиск реестра должен предшествовать setup/pip/clone"
+    if present:
+        (tmp_path / "registry").mkdir()
+        (tmp_path / "registry/features.yaml").write_text("features: []\n")
+    output = tmp_path / "output"
+    result = subprocess.run(["bash", "-eo", "pipefail", "-c", steps[1]["run"]], cwd=tmp_path,
+                            env={**os.environ, "GITHUB_OUTPUT": str(output)},
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert output.read_text().strip() == ("path=registry/features.yaml" if present else "path=")
+    # Каждая последующая операция (включая setup/install/clone) требует найденного реестра.
+    for step in steps[2:]:
+        assert "steps.reg.outputs.path != ''" in step.get("if", ""), step
+    assert "git clone" not in steps[1]["run"] and "python" not in steps[1]["run"]
+    if not present:
+        assert "не генерируется (это не ошибка)" in result.stdout
+
+
+def test_applicability_optimization_keeps_workflow_events_and_check_names():
+    """Проверка остаётся на каждом прежнем событии; skip — внутри job, без pending checks."""
+    record = yaml.load((KIT / "templates/ci/ai-ops-record.yml").read_text(), Loader=yaml.BaseLoader)
+    catalog = yaml.load((KIT / "templates/ci" / TEMPLATE).read_text(), Loader=yaml.BaseLoader)
+    assert record["name"] == "ai-ops-record" and set(record["jobs"]) == {"record"}
+    assert record["on"] == {"push": {}, "workflow_dispatch": {}}
+    assert catalog["name"] == "ai-ops-feature-catalog" and set(catalog["jobs"]) == {"feature-catalog"}
+    assert catalog["on"] == {"pull_request": {}, "push": {"branches": ["main"]}, "workflow_dispatch": {}}
+    assert record["permissions"] == catalog["permissions"] == {"contents": "write"}
+    assert record["concurrency"]["cancel-in-progress"] == "${{ github.event_name == 'pull_request' }}"
+    assert catalog["concurrency"] == record["concurrency"]

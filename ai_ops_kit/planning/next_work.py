@@ -158,13 +158,10 @@ def _parallel_set(candidates, by_id, anchor=None):
     без объявленного `write_scope` в набор НЕ попадает: недоказанная безопасность — не
     безопасность, и молчаливое «наверное, не пересекаются» здесь стоило бы двух потерянных сессий.
     """
-    def _pref(g):
-        return (str(g) or "").split("*")[0].rstrip("/")
-
     def _overlap(a, b):
-        for x in [_pref(s) for s in (a or []) if _pref(s)]:
-            for y in [_pref(s) for s in (b or []) if _pref(s)]:
-                if x == y or x.startswith(y + "/") or y.startswith(x + "/"):
+        for x in map(_plan.scope_prefix, a or []):
+            for y in map(_plan.scope_prefix, b or []):
+                if _plan.scopes_overlap(x, y):
                     return True
         return False
 

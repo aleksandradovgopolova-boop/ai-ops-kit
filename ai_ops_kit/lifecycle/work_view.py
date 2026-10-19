@@ -100,10 +100,9 @@ def _read_work_graph(child_root: Path, work_id: str) -> dict | None:
     return None
 
 
-def _read_plan_item(child_root: Path, work_id: str) -> dict | None:
-    """work[]-item этого id из planning/plan.yaml. -> dict|None. Заготовку (`template: true`) НЕ
-    читаем как план: иначе пример кита выдавался бы за работу продукта."""
-    data = _load_yaml(child_root / "planning" / "plan.yaml")
+def _read_plan_item(data: dict | None, work_id: str) -> dict | None:
+    """work[]-item из уже прочитанного plan_doc. Цель и работа относятся к одному снимку файла;
+    повторное чтение/разбор для той же карточки не нужны. Заготовка не считается планом."""
     if not isinstance(data, dict) or data.get("template"):
         return None
     for item in data.get("work") or []:
@@ -397,7 +396,7 @@ def project_work(work_id, child_root) -> dict:
     workitem = _read_workitem(root, wid)
     active = _read_active_entry(root, wid)
     plan_doc = _read_plan_doc(root)
-    plan_item = _read_plan_item(root, wid)
+    plan_item = _read_plan_item(plan_doc, wid)
     work_graph = _read_work_graph(root, wid)
 
     # #565: Work — хребет, а не витрина. Три раньше отсутствовавших поля читаются из РЕАЛЬНЫХ

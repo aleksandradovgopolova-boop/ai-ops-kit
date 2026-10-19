@@ -533,3 +533,76 @@ class TestPipelineRunCost:
         """Пустой drain_call_stats -> rep['cost'] не проставляется (нет вызовов — нечего агрегировать)."""
         rp = self._run_with_stats(tmp_path / "r", [])
         assert "cost" not in rp
+
+    @pytest.mark.parametrize("values,expected", [([1.25, 0.75], 2.0), ([0.0], 0.0),
+                                                ([None], None), ([0.75, None], None)])
+    def test_real_usage_record_latency_reaches_report_journal_and_ledger(self, tmp_path, values, expected):
+        from ai_ops_kit.engine.ai_ops_run_lifecycle_stages import _finalize_run_cost
+        from ai_ops_kit.providers import orchestrator, orchestrator_usage
+        from ai_ops_kit.shared import usage_ledger
+        orchestrator_usage.drain_call_stats()
+        orchestrator_usage.clear_call_context()
+        try:
+            for latency in values:
+                orchestrator_usage._record_call("controlled-unpriced", 10, 5, latency)
+            report, journal = {}, tmp_path / "journal.jsonl"
+            _finalize_run_cost(report, orchestrator, "controlled-unpriced", str(journal),
+                               "actual-record", "actual-record#a1", {}, {}, {}, tmp_path)
+            assert report["cost"]["latency_s"] == expected
+            assert report["cost"]["cost_usd_est"] is None
+            assert report["cost"]["calls"] == len(values)
+            event = json.loads(journal.read_text().splitlines()[0])
+            assert event["latency_s"] == expected
+            rows = usage_ledger.load_task(tmp_path, "actual-record")
+            assert [row["latency"] for row in rows] == values
+            assert rows == usage_ledger.load_product(tmp_path)
+        finally:
+            orchestrator_usage.drain_call_stats()
+            orchestrator_usage.clear_call_context()
+
+    def test_real_error_run_finalizes_usage_before_next_run_reuses_worker(self, tmp_path):
+        import concurrent.futures
+        import threading
+        from ai_ops_kit.providers import orchestrator_usage
+        from ai_ops_kit.shared import usage_ledger
+        roots = {name: tmp_path / name for name in ("failed", "next")}
+        for root in roots.values():
+            root.mkdir()
+            _git_init_commit(root)
+
+        def run(wid):
+            actions = iter([{"op": "write", "path": "src/a.py", "content": "a = 1\n"}, {"done": True}])
+            recorded = False
+
+            def proposer(_):
+                nonlocal recorded
+                if not recorded:
+                    orchestrator_usage.set_call_context(workitem_id=wid, run_id=wid)
+                    orchestrator_usage._record_call("controlled-unpriced", 11 if wid == "failed" else 22, 1, 0.25)
+                    recorded = True
+                if wid == "failed":
+                    raise ConnectionResetError("controlled failure after recorded request")
+                return next(actions)
+
+            report = ai_ops_run.run("add a", {"task_type": "QUICK", "size": "small", "risk": "low",
+                                              "affected_areas": ["src"]}, roots[wid],
+                                    engine="pipeline", execute=True, proposer=proposer, feature=wid)
+            return threading.get_ident(), report
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            failed_thread, failed = pool.submit(run, "failed").result(timeout=20)
+            next_thread, following = pool.submit(run, "next").result(timeout=20)
+        assert failed_thread == next_thread
+        assert failed["status"] == "error"
+        assert failed["ready_for_pr"] is False
+        for wid, report, tokens in (("failed", failed, 11), ("next", following, 22)):
+            rows = usage_ledger.load_task(roots[wid], wid)
+            assert len(rows) == report["cost"]["calls"] == 1
+            assert rows[0]["workitem_id"] == wid
+            assert rows[0]["input_tokens"] == tokens
+            assert report["cost"]["input_tokens"] == tokens
+            assert report["cost"]["latency_s"] == 0.25
+            assert report["cost"]["cost_usd_est"] is None
+        persisted_error = json.loads((roots["failed"] / "features/failed/run-report.json").read_text())
+        assert persisted_error["status"] == "error"
+        assert persisted_error["cost"] == failed["cost"]

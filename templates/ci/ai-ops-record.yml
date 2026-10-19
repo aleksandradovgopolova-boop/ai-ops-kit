@@ -47,40 +47,62 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with: {fetch-depth: 0}
+      # Применимость проверяется Git/shell ДО установки инструментов и сетевого клона.
+      # Пустой список означает отсутствие срезов, а не пройденную проверку продукта.
+      - name: Найти затронутые фичи с blueprint
+        id: changed
+        run: |
+          set -euo pipefail
+          BEFORE="${{ github.event.before }}"
+          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+            if ! BEFORE=$(git rev-parse --verify HEAD~1 2>/dev/null); then
+              echo "::error::нет предыдущей ревизии — scope срезов не определён; это не отсутствие работы"
+              exit 1
+            fi
+          fi
+          CHANGED=$(git diff --name-only "$BEFORE" HEAD -- 'features/*' | cut -d/ -f2 | sort -u)
+          : > "$RUNNER_TEMP/ai-ops-record-features.txt"
+          [ -n "$CHANGED" ] || echo "фичи не затронуты — срезы не нужны"
+          for fid in $CHANGED; do
+            [ -f "features/$fid/blueprint.yaml" ] || { echo "features/$fid: нет blueprint — пропуск"; continue; }
+            printf '%s\n' "$fid" >> "$RUNNER_TEMP/ai-ops-record-features.txt"
+          done
+          if [ -s "$RUNNER_TEMP/ai-ops-record-features.txt" ]; then
+            echo "applicable=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "applicable=false" >> "$GITHUB_OUTPUT"
+            echo "нет применимых фич — установка инструментов и запись срезов не нужны"
+          fi
       # Python ставим ТОЛЬКО на раннерах GitHub. На своей машине `setup-python` уходит в
       # tool cache по пути раннеров GitHub (`/Users/runner`), которого там нет, а `pip install`
       # в системный python Ubuntu 24.04 запрещён (PEP 668, externally-managed-environment).
       - uses: actions/setup-python@v5
-        if: ${{ !vars.CI_RUNNER_LINUX }}
+        if: ${{ !vars.CI_RUNNER_LINUX && steps.changed.outputs.applicable == 'true' }}
         with: {python-version: "3.12"}
       - run: pip install pyyaml
-        if: ${{ !vars.CI_RUNNER_LINUX }}
+        if: ${{ !vars.CI_RUNNER_LINUX && steps.changed.outputs.applicable == 'true' }}
       # На своём раннере предустановку не молчим, а ПРОВЕРЯЕМ: иначе первое падение случится
       # глубже и невнятнее — так у ии-среды `net::ERR_CONNECTION_REFUSED` прятал отсутствие
       # утилиты. Здесь причина названа сразу.
       - name: Проверить python и pyyaml (свой раннер)
-        if: ${{ vars.CI_RUNNER_LINUX }}
+        if: ${{ vars.CI_RUNNER_LINUX && steps.changed.outputs.applicable == 'true' }}
         run: |
           python3 -c 'import sys, yaml; print("python", sys.version.split()[0], "· pyyaml", yaml.__version__)' \
             || { echo "на раннере '${{ vars.CI_RUNNER_LINUX }}' нет python3 с pyyaml — поставьте их на машину раннера (кит ставить их в системный python не будет: PEP 668)"; exit 1; }
       - name: Клонировать parent-кит (инструменты)
+        if: steps.changed.outputs.applicable == 'true'
         run: |
           PARENT=$(python3 -c "import yaml; s=yaml.safe_load(open('.ai-ops.yaml'))['parent']['source']; print(s[4:] if s.startswith('git+') else s)")
           git clone --depth 1 "$PARENT" "$RUNNER_TEMP/ai-ops-kit"
       - name: Записать срезы по затронутым фичам
+        if: steps.changed.outputs.applicable == 'true'
         run: |
-          BEFORE="${{ github.event.before }}"
-          if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
-            BEFORE=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
-          fi
-          CHANGED=$(git diff --name-only "$BEFORE" HEAD -- 'features/*' | cut -d/ -f2 | sort -u)
-          [ -z "$CHANGED" ] && { echo "фичи не затронуты — срезы не нужны"; exit 0; }
-          for fid in $CHANGED; do
-            [ -f "features/$fid/blueprint.yaml" ] || { echo "features/$fid: нет blueprint — пропуск"; continue; }
+          while IFS= read -r fid; do
             echo "срез: features/$fid"
             PYTHONPATH="$RUNNER_TEMP/ai-ops-kit" python3 -m ai_ops_kit.lifecycle.run_report "features/$fid" --record || echo "features/$fid: run_report не смог — пропуск"
-          done
+          done < "$RUNNER_TEMP/ai-ops-record-features.txt"
       - name: Закоммитить снимки
+        if: steps.changed.outputs.applicable == 'true'
         run: |
           if [ -z "$(git status --porcelain .ai/project/report-history 2>/dev/null)" ]; then
             echo "новых срезов нет"; exit 0

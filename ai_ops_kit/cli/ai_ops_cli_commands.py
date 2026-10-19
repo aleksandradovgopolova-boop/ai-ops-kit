@@ -519,6 +519,13 @@ def _process_gate(intent, task, child_root, signals, a, preview_mode):
     return None
 
 
+def _parallel_policy(flags, intent, args):
+    """Не терять policy при переходе из общего CLI в пакетный исполнитель."""
+    return {**{k: flags[k] for k in ("author", "review", "sandbox", "baseline_diff")},
+            "require_fix": flags.get("require_fix", False),
+            "review_fix_attempts": 2 if intent == "do" else getattr(args, "review_fix_attempts", 0)}
+
+
 def _main_run_execute(intent, task, child_root, signals, a, pv):
     """Единственный путь, реально запускающий движок: `run --execute` и `do` (v3.22: `do` — alias
     с авторазрешением блокировщиков review_fix_attempts/author/open_pr). Возвращает код возврата."""
@@ -586,8 +593,8 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
             from ai_ops_kit.engine import parallel_live_dispatch
             _pwid = a.feature or _wid_for(task, signals, a.feature)
             _prec = parallel_live_dispatch.run_parallel_live(
-                task, signals, Path(child_root), feature=_pwid, provider=provider, model=a.model,
-                base=a.base, open_pr=a.open_pr, max_steps=a.max_steps, repo_slug=getattr(a, "repo", None))
+                task, signals, Path(child_root), feature=_pwid, provider=provider, model=a.model, base=a.base,
+                open_pr=a.open_pr, max_steps=a.max_steps, repo_slug=getattr(a, "repo", None), **_parallel_policy(flags, intent, a))
             if _prec is not None:
                 parallel_live_dispatch.print_parallel(_prec)
                 return parallel_live_dispatch.exit_code(_prec)

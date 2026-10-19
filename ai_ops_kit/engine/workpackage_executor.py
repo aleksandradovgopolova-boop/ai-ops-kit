@@ -575,7 +575,7 @@ def execute_sequence(task, signals, child_root, packages, proposer_for, feature,
                                  # v2.124 (P0.4): пакеты НИКОГДА не открывают PR — доставка отдельным шагом
                                  # ПОСЛЕ агрегатного вердикта (ready_all). Иначе готовый финальный пакет открыл
                                  # бы PR, пока ранний пакет awaiting-evidence -> PR при ready_all=false.
-                                 sandbox=sandbox, max_steps=max_steps, open_pr=False,
+                                 sandbox=sandbox, max_steps=max_steps, open_pr=False, verification_intent="draft",
                                  write_scope=(write_scope_for(pkg) if write_scope_for else None))
         except (KeyboardInterrupt, SystemExit):
             raise                                       # намеренное прерывание/честный fail ключа — не глотаем

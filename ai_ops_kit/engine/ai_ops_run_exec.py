@@ -110,6 +110,7 @@ def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, instal
             base=ctx.base,   # v3.0.1/v3.0.7 (P0): base сквозной; None -> auto-резолв (не хардкод main)
             defer_delivery=True,   # v3.0.15 (P0): PR открывает КОНТРОЛЛЕР после durable-фиксации lifecycle
             calibrated_enforcement=calib, ui_evidence=ui_evidence,
+            verification_intent=ctx.verification_intent,
             reevaluate_only=reevaluate_only,   # v3.8.3-rc: переоценка гейтов после человеко-approval БЕЗ переавторинга
             strict_judge_qualified=ctx.sec_qualified)   # v3.7.1: нет qualified судьи -> security pending_human
     try:

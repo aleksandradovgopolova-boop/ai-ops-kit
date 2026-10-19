@@ -1,0 +1,219 @@
+{
+  "snapshot_at": "2026-10-16T13:39:54.553610+00:00",
+  "status": "insufficient_observations",
+  "primary": {
+    "registered": 0,
+    "accepted": 0,
+    "ii-sreda": 0,
+    "ai-ops-cockpit": 0,
+    "target": 24,
+    "minimum": 20,
+    "minimum_per_child": 10,
+    "recruitment_started_at": null,
+    "recruitment_deadline": null
+  },
+  "exploratory_observed": [
+    {
+      "work_id": "Proektnyy-ofis/ii-sreda#1143",
+      "related_same_work": [
+        1146
+      ],
+      "child": "ii-sreda",
+      "type": "fix",
+      "complexity": "extended",
+      "actor": "AI/Codex",
+      "kit_version": "4.10.1",
+      "stratum": "AI-led-exploratory",
+      "counts_toward_primary_cohort": false,
+      "registration_t0": "2026-10-15T12:05:22.960483+00:00",
+      "earlier_planning_event": "2026-10-15T12:04:20+00:00",
+      "t0_complete": false,
+      "historical_match": "unmatched",
+      "estimate_elapsed_seconds": [
+        1800,
+        5400
+      ],
+      "estimate_usd": null,
+      "technical_ready_elapsed_seconds": 793.64491,
+      "technical_delivery_elapsed_seconds": 1073.910109,
+      "owner_accepted": null,
+      "owner_acceptance_source": null,
+      "time_to_owner_useful_seconds": null,
+      "interventions_observed_registration_to_ready": 0,
+      "intervention_log_complete_for_entire_work": false,
+      "human_active_minutes": null,
+      "ci_wait_seconds": null,
+      "rework_after_ready_count": null,
+      "evidence": {
+        "request": "present",
+        "change": "present",
+        "check": "present",
+        "independent_review": "present",
+        "owner_decision": "unknown"
+      },
+      "review_attempts": {
+        "total": 3,
+        "executed": 2,
+        "account_rejected": 1
+      },
+      "input_tokens": null,
+      "cached_input_tokens_subset": null,
+      "output_tokens": null,
+      "ai_cost_usd": null,
+      "subscription_allocated_usd": null,
+      "subscription_allocation_method": "unavailable: bill, period and allocation denominator absent; no imputation",
+      "human_hourly_rate_usd": null,
+      "estimate_vs_actual_delta_usd": null,
+      "outcome_window": "matured",
+      "outcome_closed": false,
+      "outcome_measurement": "unknown: availability only; no product-use observation",
+      "outcome_source": "qualification/child-search-24h-2026-10-16.json",
+      "source": "qualification/CHILD-VALUE-AI-EXPLORATORY-2026-10-15.md"
+    }
+  ],
+  "prospective_registrations": [
+    {
+      "work_id": "aleksandradovgopolova-boop/ai-ops-cockpit#84",
+      "registration_id": "session03-cockpit-84-review",
+      "registration_status": "registered",
+      "registered_at": "2026-10-16T13:39:47.017503+00:00",
+      "candidate_sha256": "a7cd75a24c44916b489cbd2b9b082895493625cd114e66e5382466d7a4f9abd4",
+      "candidate_source": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session03/candidate.json",
+      "candidate": {
+        "id": "session03-cockpit-84-review",
+        "created_at": "2026-10-16T13:39:10.188286+00:00",
+        "status": "proposed_not_started",
+        "repository": "aleksandradovgopolova-boop/ai-ops-cockpit",
+        "request": "Issue84 existing PR87: qualify real music-widget candidate without duplicating author work",
+        "source_issue": "https://github.com/aleksandradovgopolova-boop/ai-ops-cockpit/issues/84",
+        "source_pr": "https://github.com/aleksandradovgopolova-boop/ai-ops-cockpit/pull/87",
+        "head": "d5f8cbb66c2a7d3edbe010ef75b61721f84784b5",
+        "actor": "AI",
+        "owner_acceptance": null,
+        "complexity": "small review; implementation only if reproduced defect and separate own branch",
+        "acceptance": [
+          "exact-head review and controlled no-token/network failures",
+          "no real credentials, playback control, production writes or duplicate PR",
+          "actual findings recorded; independent owner acceptance remains unknown"
+        ],
+        "budget": {
+          "elapsed_minutes": 45,
+          "paid_runtime_attempts": 0,
+          "usd": null,
+          "human_active_minutes": null
+        },
+        "policy": {
+          "allow": [
+            "isolated clone",
+            "read-only existing PR",
+            "local controlled tests",
+            "own-branch fix for reproduced defect"
+          ],
+          "deny": [
+            "owner impersonation",
+            "reading owner token",
+            "changing original checkout",
+            "merge or deployment without verified scope",
+            "policy expansion"
+          ]
+        },
+        "recovery": "Local disposable branch can be discarded; no external product effect planned. Remote PR if needed is reversible by closure; never promise rollback of owner decisions.",
+        "cohort_eligibility": "session04 decides prospectively; AI review is not owner-accepted product work",
+        "registration_required_before_execution": true,
+        "work_id": "session03-cockpit-84-review",
+        "kit_version": "4.11.0",
+        "kit_source": "23768068a1783f967783da8b5451295a7819f617",
+        "outcome_window": "45 minutes from prospective registered execution start; owner verdict separately pending, no assumed deadline acceptance",
+        "t0": null,
+        "stratum_requested": "exploratory_ai_led",
+        "not_primary_reason": "AI-led review of pre-existing implementation; no owner-led protocol or owner acceptance"
+      },
+      "stratum": "AI-review-existing-work-exploratory",
+      "counts_toward_primary_cohort": false,
+      "reason": "Реальный продуктовый запрос, но реализация уже начата автором PR87. До T0 регистрируется только новый AI review/qualification, не исходная работа; AI review не отдельная единица основной когорты.",
+      "execution_registration": "prospective for bounded review only",
+      "type": "feature",
+      "complexity": "extended original request (Electron integration); review scope bounded",
+      "historical_match": "unmatched",
+      "kit_version": null,
+      "kit_version_note": "Снять установленную версию/digest до выполнения; её отсутствие не подменять v4.11.0. Версия не делает review первичной работой.",
+      "owner_acceptance": null,
+      "outcome": {
+        "applicable_to_this_review": false,
+        "reason_before_t0": "Нет новой доставки; окно исходной feature не начинается от AI review. Функциональный исход исходного запроса остаётся unknown."
+      },
+      "economics": {
+        "estimate_elapsed_minutes": 45,
+        "estimate_usd": null,
+        "human_active_minutes": null,
+        "subscription_allocation": "unavailable: no bill/period/eligible allocation source; no zero imputation",
+        "hourly_rate": null,
+        "failed_attempts": "retain all",
+        "ci_wait": "record separately",
+        "cached_input": "subset of input, never additive"
+      },
+      "authorized_scope": {
+        "allow": [
+          "isolated clone",
+          "read-only existing PR",
+          "local controlled tests",
+          "own-branch fix for reproduced defect"
+        ],
+        "deny": [
+          "owner impersonation",
+          "reading owner token",
+          "changing original checkout",
+          "merge or deployment without verified scope",
+          "policy expansion"
+        ]
+      },
+      "condition": "Если требуется новая продуктовая правка: сохранить воспроизведение и новый brief/границы до кода; не считать отдельной работой request84. Не merge/deploy и не owner acceptance."
+    }
+  ],
+  "accepted_owner_confirmed_all_strata": 0,
+  "economics": {
+    "full_ai_cost_usd": null,
+    "measured_nonoverlapping_cost_lower_bound_usd": null,
+    "human_active_minutes": null,
+    "ci_wait_seconds": null,
+    "ai_cost_per_accepted_work_usd": null,
+    "human_minutes_per_accepted_work": null,
+    "full_cost_per_accepted_work_usd": null,
+    "unit_price_reason": "accepted_owner=0; full costs and human minutes unavailable"
+  },
+  "excluded": [
+    {
+      "request": "ii-sreda#962",
+      "reason": "infrastructure"
+    },
+    {
+      "request": "ii-sreda#1189",
+      "reason": "runner infrastructure"
+    },
+    {
+      "request": "ii-sreda#1192/#1193",
+      "reason": "Kit style/update delivery"
+    },
+    {
+      "request": "parent runtime/style/delegation controlled qualification",
+      "reason": "parent/control; not child product request"
+    }
+  ],
+  "source_sha256": {
+    "qualification/CHILD-VALUE-PROTOCOL-2026-10-05.md": "83651423b3cbcf3ce089a17b6f7277a731cbd2a535532e319914be3701f7d3f8",
+    "qualification/CHILD-VALUE-BASELINE-2026-10-05.md": "d860a2b41af23091def7494729d0d0622e2880cc5da034bfd93677866aeb536b",
+    "qualification/ACCEPTED-WORK-ECONOMICS-PROTOCOL-2026-10-09.md": "dcbcc65107c022b3930e3289722a9cdf60ade64b3c74744bec8673a6c71b5f94",
+    "qualification/CHILD-VALUE-AI-EXPLORATORY-2026-10-15.md": "eded757bbda157a754d734ea24252c7682637c267834a47e1ebfb4c4e340d4b6",
+    "qualification/child-search-24h-2026-10-16.json": "89aba6148f4a1755fbb7091a13fe0420e90825bd6d4deb30327d718fbc7a0ed5"
+  },
+  "handoffs_available": {
+    "session02": "76ef2c04bca80615350526c1a859f682965d7ef7adda826a8f13b7f0e776b698"
+  },
+  "claim_limits": [
+    "No causal ROI",
+    "No owner acceptance inferred from merge",
+    "Historical pool 12+12 is not 24 matched works",
+    "Health is not functional outcome",
+    "Cached input is subset, never added to input"
+  ]
+}

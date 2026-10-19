@@ -21,6 +21,7 @@ CLI: parallel_planner.py [examples/work-graph-demo] [--json] | --selftest
 from __future__ import annotations
 
 import json
+import posixpath
 import sys
 from pathlib import Path
 
@@ -36,8 +37,17 @@ def _prefix(glob):
     """Нормализованный каталог-префикс write-scope глоба. ПУСТАЯ строка означает ГЛОБАЛЬНЫЙ scope
     (`**`, `*`, `.`, `/`) — покрывает ВЕСЬ репозиторий. Раньше `**` давал prefix '' -> 'aa=/',
     и `'src/b/'.startswith('/')` == False -> глобальный scope НЕ ловился как пересечение (баг v3.6.5)."""
-    p = (glob or "").split("*")[0].strip().rstrip("/")
-    return "" if p in ("", ".") else p
+    if not isinstance(glob, str):
+        return ""
+    p = glob.replace("\\", "/").strip()
+    if ".." in p.split("/"):
+        return ""
+    head = p[:min((p.index(c) for c in "*?[" if c in p), default=len(p))]
+    if len(head) < len(p) and not head.endswith("/"):
+        head = head.rsplit("/", 1)[0] if "/" in head else ""
+    p = head
+    p = posixpath.normpath(p)
+    return "" if p in ("", ".", "..") or p.startswith(("/", "../")) or ":" in p else p
 
 
 def _overlap(a_scopes, b_scopes):
@@ -209,8 +219,8 @@ def integration_gate(expected_packages, package_results, shared_contracts=None, 
         if not isinstance(r, dict):
             errors.append(f"{pid}: результат не доказательный (нет SHA/gate_report, голое '{r}')")
             continue
-        if not r.get("sha"):
-            errors.append(f"{pid}: нет package SHA")
+        if not _sha_like(r.get("sha")):
+            errors.append(f"{pid}: нет настоящего package SHA (нужен hex SHA длиной не меньше 7)")
         gr = r.get("gate_report")
         if not (isinstance(gr, dict) and "all_pass" in gr):
             errors.append(f"{pid}: нет gate_report(all_pass)")

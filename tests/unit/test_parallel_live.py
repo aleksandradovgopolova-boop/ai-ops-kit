@@ -4,6 +4,9 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 import importlib.util as _ilu
 import os as _os
 import subprocess
@@ -20,6 +23,7 @@ from ai_ops_kit.engine.parallel_live import (
     _scope_ok,
     make_integration_runner,
     make_isolated_package_runner,
+    make_isolated_integration_runner,
     package_result_from_rep,
     pe,
     preflight_disposable,
@@ -58,7 +62,7 @@ def simple_wg():
 
 
 def _fake_run(task, sig, root, **kw):
-    return {"ready_for_pr": True, "commit": {"sha": kw["feature"].ljust(40, "0")}}
+    return {"ready_for_pr": True, "commit": {"sha": hashlib.sha256(kw["feature"].encode()).hexdigest()[:40]}}
 
 
 def _pr_runner(pkg):
@@ -239,6 +243,54 @@ class TestRunLiveConcurrent:
             assert dp.get("ready") is True
             assert bool(dp.get("integration_sha"))
 
+    @pytest.mark.parametrize("poison_baseline", [False, True])
+    def test_root_alias_preserves_real_ledgers_but_baseline_symlink_blocks(self, tmp_path, poison_baseline):
+        from ai_ops_kit.shared import usage_ledger
+        root = tmp_path / "product"
+        root.mkdir()
+        base = self._setup_repo(root)
+        owned = tmp_path / "owned-run"
+        owned.mkdir()
+        alias = tmp_path / "run-alias"
+        alias.symlink_to(owned, target_is_directory=True)
+        outside = tmp_path / "outside-baseline.json"
+
+        def run(task, signals, clone, **options):
+            report = self._commit_run(task, signals, clone, **options)
+            pid = options["feature"]
+            usage_ledger.append(clone, pid, [{"model": "controlled-unpriced", "usage_status": "measured", "input_tokens": 1,
+                                            "output_tokens": 1, "latency": 0.25}], run_id=pid)
+            if poison_baseline and pid == "aa":
+                baseline = alias / "_package-baselines" / (hashlib.sha256(pid.encode()).hexdigest() + ".json")
+                outside.write_bytes(baseline.read_bytes())
+                baseline.unlink()
+                baseline.symlink_to(outside)
+                assert baseline.is_symlink() and baseline.resolve() == outside
+            return report
+
+        wg = {"schema_version": 1, "kind": "WorkGraph", "id": "WG-C", "feature": "f",
+              "execution_mode": "parallel", "packages": [
+                  {"id": pid, "depends_on": [], "write_scope": [pid + ".py"]} for pid in ("aa", "bb")]}
+        rec = run_live_concurrent(wg, root, base, {"aa": "A", "bb": "B"}, {"task_type": "QUICK"}, run, alias)
+        for pid in ("aa", "bb"):
+            assert (owned / pid / (pid + ".py")).is_file()
+            assert len(usage_ledger.load_task(owned / pid, pid)) == 1
+        if poison_baseline:
+            assert rec["stage"] == "artifact-preservation" and rec["proceed"] is False
+            assert rec["delivery"]["open_pr"] is False
+            assert (alias / "_package-baselines" / (hashlib.sha256(b"aa").hexdigest() + ".json")).is_symlink()
+            assert json.loads(outside.read_text())["package_id"] == "aa"
+            assert usage_ledger.load_product(root) == []
+        else:
+            proof = rec["package_artifacts"]
+            assert proof["status"] == "preserved" and proof["new_product_calls"] == 2
+            assert rec["proceed"] is True and rec["delivery"]["open_pr"] is True
+            receipt = json.loads(Path(proof["receipt"]).read_text())
+            assert {p["package_id"] for p in receipt["packages"]} == {"aa", "bb"}
+            assert all(p["package_sha"] == rec["package_results"][p["package_id"]]["sha"] for p in receipt["packages"])
+            assert len(usage_ledger.load_product(root)) == 2
+            assert all(row["cost"] is None for row in usage_ledger.load_product(root))
+
 
 # ── post-commit scope ───────────────────────────────────────────────────────────
 
@@ -285,6 +337,7 @@ class TestPostCommitScope:
             base = self._setup_repo(td)
 
             def commit_run(task, sig, root, **kw):
+                assert kw["verification_intent"] == "draft"  # пакет с SHA ещё не integration-final
                 pid = kw["feature"]
                 _git(root, "config", "user.email", "t@t")
                 _git(root, "config", "user.name", "t")
@@ -407,3 +460,73 @@ class TestSelfCleanClonesDir:
                 td, base, {"z": "t"}, {"task_type": "QUICK"}, commit_run)
             post = set(Path(tempfile.gettempdir()).glob("ai-ops-parallel-*"))
             assert post == pre
+
+
+def _integration_binding_repo(root, fault):
+    import shlex
+    import sys
+    import yaml
+    root.mkdir()
+    _git(root, "init", "-q", "-b", "main")
+    _git(root, "config", "user.name", "AI integration fixture")
+    _git(root, "config", "user.email", "ci@example.invalid")
+    (root / "source.py").write_text("value = 1\n")
+    (root / ".gitignore").write_text("check-ran.txt\n")
+    (root / "pyproject.toml").write_text("[project]\nname='fixture'\nversion='0.1'\n")
+    code = "from pathlib import Path;Path('check-ran.txt').write_text('ran');"
+    if fault in ("tracked", "commit"):
+        code += "Path('source.py').write_text('mutated\\n');"
+    if fault == "commit":
+        code += ("import subprocess;subprocess.run(['git','add','source.py'],check=True);"
+                 "subprocess.run(['git','commit','-qm','mutated by check'],check=True)")
+    command = shlex.join([sys.executable, "-c", code])
+    (root / ".ai-ops.yaml").write_text(yaml.safe_dump({"verification": {
+        "commands": {"python": {"test": command}}}}))
+    _git(root, "add", "-A"); _git(root, "commit", "-qm", "baseline")
+    base = _git(root, "rev-parse", "HEAD").stdout.strip()
+    _git(root, "checkout", "-qb", "ai-ops/pkg")
+    (root / "package.py").write_text("package_value = 2\n")
+    _git(root, "add", "-A"); _git(root, "commit", "-qm", "package")
+    _git(root, "checkout", "-q", "main")
+    return base
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("isolated", [False, True])
+@pytest.mark.parametrize("fault", ["clean", "tracked", "commit", "receipt"])
+def test_parallel_aggregate_binds_real_revision_and_postcheck_tree(tmp_path, monkeypatch, isolated, fault):
+    from ai_ops_kit.engine import tool_broker
+    from ai_ops_kit.gates import evidence_collector
+    root = tmp_path / "repo"
+    base = _integration_binding_repo(root, fault)
+    # Проверяем binding в локальной контролируемой среде, не работу Docker-песочницы.
+    monkeypatch.setattr(tool_broker, "sandbox_policy", lambda **kw: tool_broker.Policy(
+        level="execution", child_root=kw["child_root"]))
+    if fault == "receipt":
+        original = evidence_collector.collect
+        def wrong_revision(*args, **kwargs):
+            result = original(*args, **kwargs)
+            return {**result, "revision": "f" * 40}
+        monkeypatch.setattr(evidence_collector, "collect", wrong_revision)
+    work_root = root
+    if isolated:
+        work_root = tmp_path / "integration"
+        _git(tmp_path, "clone", "-q", str(root), str(work_root))
+        _git(work_root, "config", "user.name", "AI integration fixture")
+        _git(work_root, "config", "user.email", "ci@example.invalid")
+        clones = {"_integration": {"path": str(work_root)},
+                  "pkg": {"path": str(root), "branch": "ai-ops/pkg"}}
+        runner = make_isolated_integration_runner(root, base, clones)
+    else:
+        runner = make_integration_runner(root, base)
+    sha, aggregate, conflicts, moved = runner({"pkg": {"status": "pass"}})
+    assert sha != base and conflicts == 0 and moved is False  # fan-in реально создал commit
+    assert (work_root / "check-ran.txt").read_text() == "ran"  # команда РЕАЛЬНО исполнилась с exit0
+    post_sha = _git(work_root, "rev-parse", "HEAD").stdout.strip()
+    if fault == "tracked":
+        assert _git(work_root, "diff", "--name-only").stdout.strip() == "source.py"
+        assert post_sha == sha
+    elif fault == "commit":
+        assert post_sha != sha and not _git(work_root, "status", "--porcelain").stdout.strip()
+    assert aggregate["all_pass"] is (fault == "clean")
+    assert aggregate["tested_revision"] == ("f" * 40 if fault == "receipt" else sha)

@@ -11,10 +11,43 @@ from __future__ import annotations
 
 import pathlib
 
+import pytest
 import yaml
 
 from ai_ops_kit.planning import next_work as N
 from ai_ops_kit.planning import roadmap as R
+
+
+@pytest.mark.parametrize("left,right", [
+    (["**"], ["src/ui/"]), (["src/api/"], ["*"]),
+    (["."], ["src/ui/"]), (["/"], ["src/ui/"]),
+    ([""], ["src/ui/"]), ([None], ["src/ui/"]),
+    (["./src/api/"], ["src/api/child/"]),
+    (["src\\api\\"], ["src/api/child/"]),
+    (["src/../shared/"], ["shared/child/"]),
+    (["src//api/"], ["src/api/child/"]),
+    (["src/?/"], ["src/api/child/"]),
+    (["src/[ab]/"], ["src/a/child/"]),
+    (["../outside/"], ["src/ui/"]),
+    (["/absolute/path/"], ["src/ui/"]),
+    (["src/api*"], ["src/api-v2/"]),
+    (["src/a?"], ["src/ab/"]),
+    (["src/*/../../elsewhere/"], ["src/ui/"]),
+    ([], ["src/ui/"]), (None, ["src/ui/"]),
+])
+def test_parallel_recommendation_rejects_global_unknown_and_normalized_overlap(left, right):
+    by_id = {"a": {"write_scope": left}, "b": {"write_scope": right}}
+    chosen, skipped = N._parallel_set([{"id": "b"}], by_id, anchor={"id": "a"})
+    assert chosen == []
+    assert [row["id"] for row in skipped] == ["b"]
+
+
+def test_parallel_recommendation_preserves_disjoint_normalized_scopes():
+    by_id = {"a": {"write_scope": ["./src/api/"]},
+             "b": {"write_scope": ["src/ui/"]}}
+    chosen, skipped = N._parallel_set([{"id": "b"}], by_id, anchor={"id": "a"})
+    assert chosen == [{"id": "b"}]
+    assert skipped == []
 
 
 def _repo(tmp_path, work, goals=None, roadmap_goals=("g1",)):

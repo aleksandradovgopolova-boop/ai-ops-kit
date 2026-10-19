@@ -101,6 +101,18 @@ def durable_write_json(path: str | Path, data: dict, require_keys: tuple = (), k
                     _json.loads, require_keys, keep_backup)
 
 
+def durable_write_jsonl(path: str | Path, records: list[dict]) -> dict:
+    """JSONL по тому же atomic/fsync/readback-контракту; неполная запись не разрешает cleanup."""
+    import json
+    if not isinstance(records, list) or any(not isinstance(row, dict) for row in records):
+        return {"ok": False, "error": "JSONL records должны быть списком объектов"}
+    return _durable(path, {"records": records},
+                    lambda d: "".join(json.dumps(r, ensure_ascii=False, allow_nan=False) + "\n"
+                                      for r in d["records"]),
+                    lambda text: {"records": [json.loads(s) for s in text.splitlines() if s.strip()]},
+                    ("records",), False)
+
+
 def _event_checksum(payload_str: str) -> str:
     import hashlib
     return hashlib.sha256(payload_str.encode("utf-8")).hexdigest()[:16]
@@ -111,14 +123,16 @@ from typing import Callable, Iterator
 
 
 @contextlib.contextmanager
-def _journal_lock(journal_path: Path) -> Iterator[None]:
+def _journal_lock(journal_path: Path, required: bool = False) -> Iterator[None]:
     """v3.1 (trace v0.2): межпроцессная блокировка вокруг append — конкурентные писатели не получают
     одинаковые seq/prev_checksum (устранён v0.1-разрыв). best-effort: без fcntl (Windows) — no-op."""
     lock_path = Path(str(journal_path) + ".lock")
     try:
         lock_path.parent.mkdir(parents=True, exist_ok=True)
         import fcntl
-    except (ImportError, OSError):
+    except (ImportError, OSError) as exc:
+        if required:
+            raise ValueError("обязательная блокировка ledger недоступна") from exc
         yield
         return
     f = open(lock_path, "w", encoding="utf-8")

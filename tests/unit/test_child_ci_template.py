@@ -17,6 +17,9 @@ child, установленный с 3.34, получал workflow, падающ
 from __future__ import annotations
 
 import re
+import os
+import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -341,3 +344,165 @@ def test_recorder_still_commits_and_pushes():
     assert "GITHUB_TOKEN" in text, (
         "исчезло упоминание GITHUB_TOKEN: именно на нём держится защита от петли после снятия "
         "[skip ci], и эта граница обязана быть названа в шаблоне")
+
+
+def _record_steps():
+    import yaml
+    return yaml.safe_load((TEMPLATES / "ai-ops-record.yml").read_text())["jobs"]["record"]["steps"]
+
+
+def _record_repo(root):
+    _git(root, "init", "-q")
+    _git(root, "config", "user.name", "AI CI fixture")
+    _git(root, "config", "user.email", "ci@example.invalid")
+    for rel in ("features/a/blueprint.yaml", "features/a/spec.md",
+                "features/b/blueprint.yaml", "src/code.py"):
+        path = root / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("original\n")
+    _git(root, "add", ".")
+    _git(root, "commit", "-qm", "initial")
+    return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+
+
+def _record_shell(step, root, before, runtime, env_extra=None):
+    env = {**os.environ, "RUNNER_TEMP": str(runtime), "GITHUB_OUTPUT": str(runtime / "output")}
+    env.update(env_extra or {})
+    return subprocess.run(["bash", "-eo", "pipefail", "-c",
+                           step["run"].replace("${{ github.event.before }}", before)],
+                          cwd=root, env=env, capture_output=True, text=True)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("scenario", ["source", "feature", "multiple", "rename", "delete-file", "delete-feature",
+                                      "missing-blueprint", "manual", "unknown-before", "zero-before"])
+def test_recorder_early_applicability_keeps_old_git_selection(tmp_path, scenario):
+    """Реальные diff/rename/delete и fallback дают прежний набор, до install/сети."""
+    root, runtime = tmp_path / "repo", tmp_path / "runtime"
+    root.mkdir(); runtime.mkdir()
+    before = _record_repo(root)
+    if scenario == "source":
+        (root / "src/code.py").write_text("changed\n")
+    elif scenario == "rename":
+        _git(root, "mv", "features/a/spec.md", "features/b/spec.md")
+    elif scenario == "delete-file":
+        (root / "features/a/spec.md").unlink()
+    elif scenario == "delete-feature":
+        shutil.rmtree(root / "features/a")
+    elif scenario == "missing-blueprint":
+        (root / "features/a/blueprint.yaml").unlink()
+        (root / "features/a/spec.md").write_text("changed\n")
+    else:
+        (root / "features/a/spec.md").write_text("changed\n")
+        if scenario == "multiple":
+            (root / "features/b/spec.md").write_text("changed\n")
+    _git(root, "add", "-A"); _git(root, "commit", "-qm", "event")
+    before = {"manual": "", "unknown-before": "unavailable", "zero-before": "0" * 40}.get(scenario, before)
+    legacy = '''BEFORE="$EVENT_BEFORE"
+if [ -z "$BEFORE" ] || ! git cat-file -e "$BEFORE" 2>/dev/null; then
+  BEFORE=$(git rev-parse HEAD~1 2>/dev/null || git rev-parse HEAD)
+fi
+CHANGED=$(git diff --name-only "$BEFORE" HEAD -- 'features/*' | cut -d/ -f2 | sort -u)
+for fid in $CHANGED; do
+  [ -f "features/$fid/blueprint.yaml" ] && printf '%s\\n' "$fid"
+done
+true
+'''
+    old = subprocess.run(["bash", "-eo", "pipefail", "-c", legacy], cwd=root,
+                         env={**os.environ, "EVENT_BEFORE": before}, text=True, capture_output=True)
+    assert old.returncode == 0, old.stderr
+    detection = next(s for s in _record_steps() if s.get("id") == "changed")
+    new = _record_shell(detection, root, before, runtime)
+    assert new.returncode == 0, new.stderr
+    selected = (runtime / "ai-ops-record-features.txt").read_text().splitlines()
+    assert selected == old.stdout.splitlines()
+    assert ("applicable=true" in (runtime / "output").read_text()) == bool(selected)
+    assert bool(selected) == (scenario not in ("source", "delete-feature", "missing-blueprint"))
+    if scenario == "multiple":
+        assert selected == ["a", "b"]
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("quiet_failed_parse", [False, True])
+def test_recorder_first_revision_and_bad_git_are_not_green_absence(tmp_path, quiet_failed_parse):
+    """Неразрешимый diff не объявляется отсутствием работы; исходный fallback сохранён."""
+    root, runtime = tmp_path / "repo", tmp_path / "runtime"
+    root.mkdir(); runtime.mkdir()
+    _record_repo(root)
+    env_extra = {}
+    if quiet_failed_parse:
+        # Некоторые git не печатают неразрешённый ref: старый fallback получал чистый HEAD
+        # и превращал первый push в diff HEAD HEAD. Такой вариант тоже обязан быть красным.
+        binaries = tmp_path / "bin"
+        binaries.mkdir()
+        real_git = shlex.quote(shutil.which("git"))
+        spy = binaries / "git"
+        spy.write_text(f'''#!/bin/sh
+if [ "$1" = rev-parse ]; then
+  value=$({real_git} "$@" 2>/dev/null)
+  status=$?
+  [ "$status" -ne 0 ] || printf '%s\\n' "$value"
+  exit "$status"
+fi
+exec {real_git} "$@"
+''')
+        spy.chmod(0o755)
+        env_extra["PATH"] = str(binaries) + os.pathsep + os.environ["PATH"]
+    detection = next(s for s in _record_steps() if s.get("id") == "changed")
+    first = _record_shell(detection, root, "", runtime, env_extra)
+    assert first.returncode != 0, first.stdout
+    if (runtime / "output").exists():
+        assert "applicable=false" not in (runtime / "output").read_text()
+    shutil.rmtree(root / ".git")
+    broken = _record_shell(detection, root, "unavailable", runtime, env_extra)
+    assert broken.returncode != 0
+
+
+def _record_condition(condition, applicable, self_hosted):
+    values = {"vars.CI_RUNNER_LINUX": self_hosted,
+              "!vars.CI_RUNNER_LINUX": not self_hosted,
+              "steps.changed.outputs.applicable == 'true'": applicable}
+    terms = str(condition).removeprefix("${{").removesuffix("}}").strip().split(" && ")
+    assert all(term in values for term in terms), terms
+    return all(values[term] for term in terms)
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("self_hosted", [False, True])
+def test_recorder_no_work_does_not_start_setup_install_clone_or_record(tmp_path, self_hosted):
+    """Исполняем shell определения scope; каждый дальнейший шаг выключен до запуска."""
+    root, runtime = tmp_path / "repo", tmp_path / "runtime"
+    root.mkdir(); runtime.mkdir()
+    _record_repo(root)
+    (root / "src/code.py").write_text("source-only change\n")
+    _git(root, "add", "."); _git(root, "commit", "-qm", "source-only")
+    steps = _record_steps()
+    assert steps[1].get("id") == "changed", "определение scope должно идти сразу после checkout"
+    result = _record_shell(steps[1], root, "", runtime)
+    assert result.returncode == 0, result.stderr
+    assert "applicable=false" in (runtime / "output").read_text()
+    for step in steps[2:]:
+        assert not _record_condition(step.get("if", ""), False, self_hosted), step
+    assert not (runtime / "ai-ops-kit").exists()
+
+
+@pytest.mark.unit
+def test_recorder_applicable_feature_reaches_real_record_step(tmp_path):
+    """После раннего фильтра ровно тот же feature передаётся recorder, не просто флаг true."""
+    root, runtime, binaries = tmp_path / "repo", tmp_path / "runtime", tmp_path / "bin"
+    root.mkdir(); runtime.mkdir(); binaries.mkdir()
+    _record_repo(root)
+    (root / "features/a/spec.md").write_text("changed\n")
+    _git(root, "add", "."); _git(root, "commit", "-qm", "feature")
+    steps = _record_steps()
+    assert _record_shell(next(s for s in steps if s.get("id") == "changed"), root, "", runtime).returncode == 0
+    recorder = next(s for s in steps if "run_report" in s.get("run", ""))
+    spy, receipt = binaries / "python3", runtime / "recorded"
+    spy.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {shlex.quote(str(receipt))}\n")
+    spy.chmod(0o755)
+    result = subprocess.run(["bash", "-eo", "pipefail", "-c", recorder["run"]], cwd=root,
+                            env={**os.environ, "RUNNER_TEMP": str(runtime),
+                                 "PATH": str(binaries) + os.pathsep + os.environ["PATH"]},
+                            text=True, capture_output=True)
+    assert result.returncode == 0, result.stderr
+    assert receipt.read_text().splitlines() == ["-m ai_ops_kit.lifecycle.run_report features/a --record"]

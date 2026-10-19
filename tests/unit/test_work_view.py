@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import yaml
 import pytest
+from pathlib import Path
 
 from ai_ops_kit.lifecycle import work_view
 from ai_ops_kit.ui import presenter
@@ -18,6 +19,63 @@ from ai_ops_kit.ui import presenter
 def _write(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(data, allow_unicode=True), encoding="utf-8")
+
+
+@pytest.mark.unit
+class TestPlanReadBoundary:
+    def test_work_and_goal_share_one_real_plan_read(self, tmp_path, monkeypatch):
+        plan = tmp_path / "planning" / "plan.yaml"
+        _write(plan, {"work": [{"id": "w", "title": "Задача", "goal": "g"}],
+                      "goals": [{"id": "g", "outcome": {"observed": True}}]})
+        reads = []
+        original = Path.read_text
+
+        def read(path, *args, **kwargs):
+            value = original(path, *args, **kwargs)
+            if path == plan:
+                reads.append(value)
+            return value
+
+        monkeypatch.setattr(Path, "read_text", read)
+        view = work_view.project_work("w", tmp_path)
+        assert view["title"] == "Задача"
+        assert view["outcome"]["goal_outcome"] == {"observed": True}
+        assert len(reads) == 1
+
+    def test_corrupt_snapshot_is_not_replaced_with_a_second_read(self, tmp_path, monkeypatch):
+        plan = tmp_path / "planning" / "plan.yaml"
+        plan.parent.mkdir()
+        plan.write_text("work: [", encoding="utf-8")
+        original = Path.read_text
+        reads = []
+
+        def read(path, *args, **kwargs):
+            value = original(path, *args, **kwargs)
+            if path == plan:
+                reads.append(value)
+                _write(plan, {"work": [{"id": "w", "title": "Новый план"}]})
+            return value
+
+        monkeypatch.setattr(Path, "read_text", read)
+        view = work_view.project_work("w", tmp_path)
+        assert "plan" not in view["sources"]
+        assert view["title"] == "w"
+        assert view["outcome"] is None
+        assert len(reads) == 1
+        assert work_view.project_work("w", tmp_path)["title"] == "Новый план"
+
+    def test_next_projection_reads_actual_rewritten_plan(self, tmp_path):
+        plan = tmp_path / "planning" / "plan.yaml"
+        _write(plan, {"work": [{"id": "w", "title": "До", "status": "todo"}]})
+        first_bytes = plan.read_bytes()
+        first = work_view.project_work("w", tmp_path)
+        assert first["title"] == "До" and first["status"] == "todo"
+        assert plan.read_bytes() == first_bytes
+        _write(plan, {"work": [{"id": "w", "title": "После", "status": "done"}]})
+        second_bytes = plan.read_bytes()
+        second = work_view.project_work("w", tmp_path)
+        assert second["title"] == "После" and second["status"] == "done"
+        assert plan.read_bytes() == second_bytes and second_bytes != first_bytes
 
 
 def _four_source_repo(root, wid="arch-01"):

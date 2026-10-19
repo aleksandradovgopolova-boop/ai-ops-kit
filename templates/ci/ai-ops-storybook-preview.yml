@@ -107,7 +107,8 @@ jobs:
       - name: Кэш npm (ускоряет установку зависимостей)
         # Кэшируем только когда есть lock-файл (иначе ключ нестабилен, а setup-node cache вовсе падает
         # без lock). Гейт на script != '' — кэш нужен лишь на пути СБОРКИ, не для готовой статики.
-        if: steps.detect.outputs.script != '' && hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json') != ''
+        # На своём runner npm-кэш уже локален; не архивируем общий каталог в сеть.
+        if: ${{ !vars.CI_RUNNER_LINUX && steps.detect.outputs.script != '' && hashFiles('**/package-lock.json', '**/npm-shrinkwrap.json') != '' }}
         uses: actions/cache@v4
         with:
           path: ~/.npm
