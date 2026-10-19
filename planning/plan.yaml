@@ -1187,20 +1187,21 @@ work:
     rationale: Полевой прогон 16.10 подтвердил настоящий released hook, frozen baseline и отказ нового
       пересечения слоёв, сообщение при отсутствии линтера на восстановленном контролируемом варианте,
       статьи конституции в настоящем prompt reviewer и правило идентификаторов самого Kit. Достигнуты
-      4 из 5 исходов; combined hook/невозможность merge не засчитан. PR1193 обновления дочки ещё ожидает
-      подтверждения доставки; это не критерий выполненного server merge-block.
+      4 из 5 исходов; combined hook/невозможность merge не засчитан. PR1193 обновления Kit 4.11.0
+      влит и выложен 19.10; коммит, health и байты публичной сборки независимо сверены.
+      Доставка не заменяет доказательство обязательного server merge-block.
     waiting_on: GitHub private repository protection/rules API403 не позволяет доказать обязательный
       server merge-block. Настоящий native hook уже квалифицирован; прежний Claude auth blocker устарел.
     human_decision: Решить способ подтверждения обязательной серверной защиты приватного репозитория;
       покупка тарифа или публикация репозитория автоматически не разрешены.
-    evidence: qualification/COORDINATION-SESSION04-2026-10-16.md
+    evidence: qualification/COORDINATION-SESSION04-2026-10-19.md
 
   - id: measure-first-hour-with-a-stranger
     # Исторический id; текущая приёмка изменена прямым решением владельца 05.10.
     title: Владелец завершает первые работы в трёх разных репозиториях с измеренным сопровождением
     type: research
     goal: first-hour-for-a-stranger
-    status: todo
+    status: in_progress
     owner_role: product
     value: high
     write_scope:
@@ -1208,6 +1209,10 @@ work:
     rationale: 'P0. Решение владельца 05.10 «засчитывать будем на мне»: выполнить три owner-led сессии в разных репозиториях без Kit на старте. Результат ≤5 минут, готовность ≤15 минут, принятый PR отдельно; измерить вопросы, CLI, тупики, помощь и ручные решения, 0 внутренних YAML/выбора роли. Прежнее знакомство владельца явно записано; опыт независимых новичков не объявляется. qualification/FIRST-HOUR-PROTOCOL-2026-10-05.md'
     depends_on:
     - first-hour-three-strangers-protocol
+    evidence: qualification/COORDINATION-SESSION04-2026-10-19.md
+    note: Локальная правка школы принята владельцем и опубликована session05; это одна отдельная работа.
+      Полезное объяснение и doctor дали ограниченные временные сигналы, setup timeout сохранён;
+      три полных first-hour исхода не доказаны, primary двух экономических дочек не пополняется.
 
   # ══ Направление prove-the-loop-not-add-capabilities — взято 2026-09-23 (мандат ревью) ════════════
 
