@@ -19,8 +19,10 @@ governed fan-in на СВЕЖЕМ integration-SHA) был построен и п
 """
 from __future__ import annotations
 
+from contextlib import nullcontext
 from pathlib import Path
 from types import SimpleNamespace
+from uuid import uuid4
 
 from ai_ops_kit.shared import gitio                       # noqa: E402
 from ai_ops_kit.engine import atomic_planner              # noqa: E402
@@ -111,6 +113,7 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
     from ai_ops_kit.lifecycle import active_work
     claim_path, rec = None, None
     if admission is not None:
+        admission = dict(admission, attempt_id=uuid4().hex)
         try:
             import yaml
             active_work.validate_admission(child_root, admission)
@@ -125,6 +128,9 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
         except (active_work.ActiveWorkCorrupt, KeyError, OSError, ValueError) as exc:
             return {"proceed": False, "stage": "preflight", "parallel": True, "reason": str(exc)}
     try:
+        if admission is not None:
+            with active_work.claimed_attempt(child_root, wid, admission):
+                pass  # граница допуска; общую блокировку не держим во время пакетов/сети
         rec = dispatch(wg, str(child_root), base_sha, task_map, signals, run_fn,
                        repo_slug=repo_slug, contract_shas=contract_shas, integration_branch=f"ai-ops/{wid}",
                        run_options={"provider_name": provider, "model": model, "base": binding["base_ref"],
@@ -133,6 +139,8 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
                                     "install_deps": install_deps, "require_fix": require_fix,
                                     "review_fix_attempts": review_fix_attempts, "budget": budget})
         if admission is not None:
+            with active_work.claimed_attempt(child_root, wid, admission):
+                pass
             try:
                 active_work.validate_admission(child_root, admission)
             except active_work.ActiveWorkCorrupt as exc:
@@ -144,21 +152,40 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
             rec["delivery_requested"] = bool(open_pr)
             rec["reconciliation"] = reconciled
             rec["integration_source"] = rec.get("delivery_plan")
+            if admission is not None:
+                rec["automatic_attempt"] = {"id": admission["attempt_id"], "identity": admission["identity"]}
             if open_pr:
                 _deliver_parallel(rec, child_root, wid, task, binding)
             else:
                 rec["delivery"] = {"requested": False, "status": "not-requested"}
             from ai_ops_kit.shared import lifecycle_store
-            saved = lifecycle_store.durable_write_json(child_root / "features" / wid / "parallel-report.json", rec)
+            with active_work.claimed_attempt(child_root, wid, admission) if admission is not None else nullcontext():
+                saved = lifecycle_store.durable_write_json(child_root / "features" / wid / "parallel-report.json", rec)
             if not saved.get("ok"):
                 rec["proceed"] = False
                 rec["stage"] = "lifecycle"
                 rec["reason"] = "parallel report не сохранён durable; integration source сохранён в результате"
         return rec
+    except (active_work.ActiveWorkCorrupt, OSError) as exc:
+        rec = rec if isinstance(rec, dict) else {}
+        rec.update(proceed=False, stage="preflight", parallel=True, reason=str(exc))
+        return rec
     finally:
         if claim_path is not None and rec is not None:
-            active_work.finish_cmd(claim_path, wid, status="done" if exit_code(rec) == 0 else "blocked",
-                                   child_root=child_root)
+            _finish_automatic_claim(child_root, wid, claim_path, admission, rec)
+
+
+def _finish_automatic_claim(root, wid, path, admission, rec):
+    """Поздний finally не завершает новую generation, включая ту же session identity."""
+    from ai_ops_kit.lifecycle import active_work
+    try:
+        refused = active_work.finish_cmd(path, wid, status="done" if exit_code(rec) == 0 else "blocked",
+                                         child_root=root, expected_admission=admission)
+        reason = "automatic active claim completion refused"
+    except (active_work.ActiveWorkCorrupt, OSError) as exc:
+        refused, reason = True, str(exc)
+    if refused:
+        rec.update(proceed=False, stage="preflight", reason=rec.get("reason") or reason)
 
 
 def _policy_refusal(signals, wg, root, wid, provider, model, max_steps):

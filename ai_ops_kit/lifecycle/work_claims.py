@@ -291,6 +291,27 @@ def shared_registry_path(start=None):
     return common / "ai-ops" / "active-work.yaml"
 
 
+def _require_attempt(data, wid, admission, root):
+    """Сверить generation; session identity сама по себе не различает два запуска."""
+    entries = [w for w in data["active"] if w.get("id") == wid]
+    if (root is None or not isinstance(admission, dict) or not admission.get("attempt_id") or len(entries) != 1
+            or entries[0].get("status") != "in-progress"
+            or entries[0].get("owner_session") != admission.get("identity")
+            or entries[0].get("auto_admission") != admission
+            or entries[0].get("worktree") != str(Path(root).resolve())):
+        raise ActiveWorkCorrupt("automatic active claim changed/missing; прежняя попытка остановлена")
+    return entries[0]
+
+
+@contextlib.contextmanager
+def claimed_attempt(root, wid, admission):
+    """Короткая проверка/FS-запись под canonical lock; сеть под этим lock не выполняется."""
+    path = shared_registry_path(root)
+    with _locked(path):
+        _require_attempt(load(path), wid, admission, root)
+        yield
+
+
 class ActiveWorkCorrupt(Exception):
     """Реестр active-work недостоверен (повреждён/не сохранён) — координация сессий небезопасна."""
 
