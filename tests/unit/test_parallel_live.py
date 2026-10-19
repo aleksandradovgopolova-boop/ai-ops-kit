@@ -4,6 +4,9 @@
 """
 from __future__ import annotations
 
+import hashlib
+import json
+
 import importlib.util as _ilu
 import os as _os
 import subprocess
@@ -59,7 +62,7 @@ def simple_wg():
 
 
 def _fake_run(task, sig, root, **kw):
-    return {"ready_for_pr": True, "commit": {"sha": kw["feature"].ljust(40, "0")}}
+    return {"ready_for_pr": True, "commit": {"sha": hashlib.sha256(kw["feature"].encode()).hexdigest()[:40]}}
 
 
 def _pr_runner(pkg):
@@ -239,6 +242,54 @@ class TestRunLiveConcurrent:
             dp = rec.get("delivery_plan") or {}
             assert dp.get("ready") is True
             assert bool(dp.get("integration_sha"))
+
+    @pytest.mark.parametrize("poison_baseline", [False, True])
+    def test_root_alias_preserves_real_ledgers_but_baseline_symlink_blocks(self, tmp_path, poison_baseline):
+        from ai_ops_kit.shared import usage_ledger
+        root = tmp_path / "product"
+        root.mkdir()
+        base = self._setup_repo(root)
+        owned = tmp_path / "owned-run"
+        owned.mkdir()
+        alias = tmp_path / "run-alias"
+        alias.symlink_to(owned, target_is_directory=True)
+        outside = tmp_path / "outside-baseline.json"
+
+        def run(task, signals, clone, **options):
+            report = self._commit_run(task, signals, clone, **options)
+            pid = options["feature"]
+            usage_ledger.append(clone, pid, [{"model": "controlled-unpriced", "usage_status": "measured", "input_tokens": 1,
+                                            "output_tokens": 1, "latency": 0.25}], run_id=pid)
+            if poison_baseline and pid == "aa":
+                baseline = alias / "_package-baselines" / (hashlib.sha256(pid.encode()).hexdigest() + ".json")
+                outside.write_bytes(baseline.read_bytes())
+                baseline.unlink()
+                baseline.symlink_to(outside)
+                assert baseline.is_symlink() and baseline.resolve() == outside
+            return report
+
+        wg = {"schema_version": 1, "kind": "WorkGraph", "id": "WG-C", "feature": "f",
+              "execution_mode": "parallel", "packages": [
+                  {"id": pid, "depends_on": [], "write_scope": [pid + ".py"]} for pid in ("aa", "bb")]}
+        rec = run_live_concurrent(wg, root, base, {"aa": "A", "bb": "B"}, {"task_type": "QUICK"}, run, alias)
+        for pid in ("aa", "bb"):
+            assert (owned / pid / (pid + ".py")).is_file()
+            assert len(usage_ledger.load_task(owned / pid, pid)) == 1
+        if poison_baseline:
+            assert rec["stage"] == "artifact-preservation" and rec["proceed"] is False
+            assert rec["delivery"]["open_pr"] is False
+            assert (alias / "_package-baselines" / (hashlib.sha256(b"aa").hexdigest() + ".json")).is_symlink()
+            assert json.loads(outside.read_text())["package_id"] == "aa"
+            assert usage_ledger.load_product(root) == []
+        else:
+            proof = rec["package_artifacts"]
+            assert proof["status"] == "preserved" and proof["new_product_calls"] == 2
+            assert rec["proceed"] is True and rec["delivery"]["open_pr"] is True
+            receipt = json.loads(Path(proof["receipt"]).read_text())
+            assert {p["package_id"] for p in receipt["packages"]} == {"aa", "bb"}
+            assert all(p["package_sha"] == rec["package_results"][p["package_id"]]["sha"] for p in receipt["packages"])
+            assert len(usage_ledger.load_product(root)) == 2
+            assert all(row["cost"] is None for row in usage_ledger.load_product(root))
 
 
 # ── post-commit scope ───────────────────────────────────────────────────────────

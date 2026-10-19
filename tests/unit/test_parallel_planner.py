@@ -20,6 +20,14 @@ from ai_ops_kit.engine.parallel_planner import (
 
 @pytest.mark.unit
 class TestCanParallel:
+    @pytest.mark.parametrize("scope", ["./src/a/", "src\\a\\", "**", ".", "/", "", None,
+                                      "src/../src/a/", "src//a/", "src/?/", "src/[ab]/", "../elsewhere/",
+                                      "src/a*", "src/a?", "src/*/../../elsewhere/"])
+    def test_alias_global_and_unknown_scope_not_parallel_with_same_tree(self, scope):
+        ok, _ = can_parallel({"id": "a", "write_scope": [scope]},
+                             {"id": "b", "write_scope": ["src/a/child/"]})
+        assert ok is False
+
     def test_disjoint_independent_are_parallel(self):
         ok, _ = can_parallel(
             {"id": "a", "write_scope": ["src/a/**"]},
