@@ -5,7 +5,7 @@
 schema_version: 1
 registry_type: release-claims
 
-version: 4.11.0
+version: 4.11.1
 # Поле `phase` УБРАНО (04.09.2026, лента release-metadata). Это была свободная проза релиза, которая
 # дублировала заголовок раздела CHANGELOG. `release_bump` бампает ЧИСЛО версии по всем поверхностям и
 # пишет заголовок CHANGELOG из `--title`, но `phase` не трогал, а `validate_release_claims` проверяет
@@ -318,11 +318,21 @@ evidence_scopes:
   full-current-python:
     obtained_by: "./scripts/check-full.sh"
     covers: >
-      весь pytest на ОДНОМ интерпретаторе — том, что стоит у запускающего. Это охват разработчика:
+      весь pytest, кроме release_gate, на ОДНОМ интерпретаторе — том, что стоит у запускающего.
+      Включает nightly; release_gate исполняется только CI выпуска. Это охват разработчика:
       быстрый, локальный, и он ничего не знает о версиях, кроме своей.
     does_not_cover: >
       объявленный пол requires-python, установку в чистое окружение, другие ОС. Ни один дефект
       совместимости здесь не виден в принципе — не потому что их нет, а потому что не с чем сравнить.
+  pr-current-python:
+    obtained_by: "./scripts/check-full.sh --pr"
+    covers: >
+      все обычные fast/slow/contracts на ОДНОМ локальном интерпретаторе; ruff и pytest.
+      Явный PR-профиль без пользовательских selectors; не заменяет обязательный CI.
+    does_not_cover: >
+      nightly (весь мутационный корпус и агрегатный bench), release_gate, compatibility-matrix.
+      Выпуск требует actual mutation CI на точном release SHA до тега и все release gates;
+      обычный зелёный PR или локальный профиль не подтверждают готовность выпуска.
   compatibility-matrix:
     obtained_by: "CI: джобы python39-compat, pipeline-e2e (3.9/3.12), clean-install"
     covers: >

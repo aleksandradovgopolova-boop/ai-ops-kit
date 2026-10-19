@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Полный контур перед коммитом (~4.5 мин). Единственная точка входа: всё, что раньше
+# Локальные профили: default — full-current-python; --pr — без nightly/release_gate.
+# Единственная точка входа: всё, что раньше
 # перечислялось в пре-коммит-чеклисте построчно (201 команда на пике), — это тесты.
 #
 # v3.34: скрипт называет СВОЙ охват сам. «Полный» здесь значит «весь pytest», а не «вся
@@ -9,6 +10,33 @@
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 cd "$(dirname "$0")/.."
+
+# --pr обещает конкретный набор: пользовательский selector не может сузить его молча.
+PROFILE=full-current-python
+if [[ "${1:-}" == "--pr" ]]; then PROFILE=pr-current-python; shift; fi
+CUSTOM=0
+COLLECTION=0
+if [[ -n "${PYTEST_ADDOPTS:-}" ]]; then CUSTOM=1; fi
+ARGS=("$@")
+for ((i=0; i<${#ARGS[@]}; i++)); do
+  case "${ARGS[i]}" in
+    -n|--numprocesses|--dist|--durations|--durations-min|--tb|--capture|--color)
+      if ((i+1 < ${#ARGS[@]})) && [[ "${ARGS[i+1]}" != -* ]]; then
+        i=$((i+1))
+      else CUSTOM=1; fi ;;
+    --numprocesses=*|--dist=*|--durations=*|--durations-min=*|--tb=*|--capture=*|--color=*|-n[0-9]*|-nauto|-nlogical)
+      ;;
+    -q|-v|-vv|-s|--disable-warnings|--strict-markers|--strict-config) ;;
+    --collect-only|--co) COLLECTION=1; CUSTOM=1 ;;
+    *) CUSTOM=1 ;;
+  esac
+done
+if [[ "$PROFILE" == pr-current-python && "$CUSTOM" == 1 ]]; then
+  echo "ОТКАЗ: --pr не допускает selectors, collect-only, неизвестные аргументы или PYTEST_ADDOPTS." >&2
+  exit 2
+fi
+if [[ "$CUSTOM" == 1 ]]; then PROFILE=custom-current-python; fi
+if [[ "$COLLECTION" == 1 ]]; then PROFILE=collection-only; fi
 
 # Порядок не случаен: сперва честность ОКРУЖЕНИЯ (v3.33.3 — пояс в site-packages делает любой
 # зелёный результат недоказательным), затем честность ОХВАТА (v3.34). Оба предупреждения — ДО
@@ -32,7 +60,12 @@ fi
 FLOOR=$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' pyproject.toml | head -1)
 CURRENT=$("$PYTHON" -c 'import platform, sys; print(f"{platform.python_implementation()} {platform.python_version()} / {sys.platform}")')
 
-echo "ОХВАТ: full-current-python — ${CURRENT}."
+echo "ОХВАТ: ${PROFILE} — ${CURRENT}."
+case "$PROFILE" in
+  pr-current-python) echo "Все обычные fast/slow/contracts; НЕ входят nightly и release_gate." ;;
+  full-current-python) echo "Весь локальный pytest, включая nightly; НЕ входит release_gate (отдельный CI выпуска)." ;;
+  *) echo "Запрошена база full-current-python с пользовательским выбором/сбором: полнота НЕ подтверждается." ;;
+esac
 echo "НЕ входит: объявленный пол requires-python ${FLOOR:-?} и установка в чистое окружение —"
 echo "это compatibility-matrix, её дают только джобы CI pipeline-e2e / clean-install / upgrade-path."
 echo
@@ -60,8 +93,16 @@ fi
 
 # -n auto: параллель по ядрам. Набор параллель-безопасен (проверено: 3343 passed под -n auto).
 # 665с -> ~283с на 10 ядрах. Переопределить числом воркеров: PYTEST_XDIST_AUTO_NUM_WORKERS или -n N в "$@".
-"$PYTHON" -m pytest tests/ -q -n auto --dist loadfile "$@"
+if [[ "$PROFILE" == pr-current-python ]]; then
+  "$PYTHON" -m pytest tests/ -q -n auto --dist loadfile -m "not nightly and not release_gate" "$@"
+else
+  "$PYTHON" -m pytest tests/ -q -n auto --dist loadfile "$@"
+fi
 
 echo
-echo "ЗЕЛЁНЫЙ ОХВАТ: full-current-python (${CURRENT}). Формулируя результат, назови охват:"
-echo "«полный контур зелёный» без имени охвата — заявление шире полученного."
+case "$PROFILE" in
+  full-current-python|pr-current-python)
+    echo "ЗЕЛЁНЫЙ ОХВАТ: ${PROFILE} (${CURRENT}). Совместимость и release gates подтверждает отдельный CI." ;;
+  collection-only) echo "СБОР ЗАВЕРШЁН: collection-only; тесты НЕ исполнялись, зелёного evidence нет." ;;
+  *) echo "КОД 0: custom-current-python; пользовательский выбор НЕ подтверждает полный охват." ;;
+esac
