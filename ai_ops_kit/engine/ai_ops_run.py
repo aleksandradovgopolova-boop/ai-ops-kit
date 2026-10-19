@@ -201,11 +201,19 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         _rrerr = _restore_resume_policy(ctx, resume)
         if _rrerr:
             return _rrerr
+        # base -> конкретная ветка + полный BaseBinding (0 model calls на явной несуществующей базе).
+        base, base_binding, _brerr = _resolve_run_base(ctx, ctx.base)
+        if _brerr is not None:
+            return _brerr
         try:
             saved_limits = None
             if resume and ctx.feature and not ctx.signals.get("_sequence_internal"):
                 saved = _ls.load_guarded(ctx.features_dir / ctx.feature / "run-plan.yaml",
                                          required_keys=("kind", "execution_budget"), kind="run-plan")
+                if saved["state"] == "absent":
+                    _, _, prior_error = _resume_gate(child_root, ctx.feature, base, force_resume, True)
+                    if prior_error is not None:
+                        return prior_error  # canonical no-prior/base-drift diagnosis, still 0 callbacks
                 if saved["state"] != "ok":
                     raise ValueError("saved RunPlan budget отсутствует/повреждён; implicit unlimited запрещён")
                 saved_limits = (saved.get("data") or {}).get("execution_budget")
@@ -218,11 +226,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         signals, task_text, _saved_task = ctx.signals, ctx.task_text, ctx.saved_task
         sandbox, baseline_diff, require_fix = ctx.sandbox, ctx.baseline_diff, ctx.require_fix
         author, review, open_pr = ctx.author, ctx.review, ctx.open_pr
-        write_scope, max_steps, base = ctx.write_scope, ctx.max_steps, ctx.base
-        # base -> конкретная ветка + полный BaseBinding (0 model calls на явной несуществующей базе).
-        base, base_binding, _brerr = _resolve_run_base(ctx, base)
-        if _brerr is not None:
-            return _brerr
+        write_scope, max_steps = ctx.write_scope, ctx.max_steps
         # v3.7.12 Router->runtime + JIT-trust + complexity-aware + provider-fallback -> _resolve_models
         # (K6). Мутирует ctx; preflight PRIMARY не пройден -> blocked-preflight (fail-closed).
         _mrerr = _resolve_models(ctx)
