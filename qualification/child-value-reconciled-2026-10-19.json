@@ -1,0 +1,397 @@
+{
+  "as_of": "2026-10-19T08:20:38.393361+00:00",
+  "source_base_commit": "749904217e5c7c9ac4eb9642bd4faf759cb8051f",
+  "grain": "one original product request/WorkItem; PRs and ledger events are not work units",
+  "ledger": {
+    "historical_events": 11,
+    "events": 14,
+    "new_observational_events": 3,
+    "historical_prefix_sha256": "4daadb64858c5ee468d8e2bd26086d89472a2d5256aadc08e19d39d23a0e286b",
+    "after_sha256": "d685c5b669afb9d2f1d5f367f53c5e69511fd50cef6667e8020edb6820f890a6",
+    "historical_prefix_unchanged": true
+  },
+  "product_works": [
+    {
+      "counts_toward_primary_cohort": false,
+      "owner_accepted": null,
+      "ai_cost_usd": null,
+      "estimate_usd": null,
+      "subscription_allocated_usd": null,
+      "human_active_minutes": null,
+      "human_hourly_rate_usd": null,
+      "full_cost_status": "unknown/unavailable; not zero",
+      "historical_pair": "unmatched",
+      "full_elapsed_seconds": null,
+      "ci_wait_seconds": null,
+      "work_id": "Proektnyy-ofis/ii-sreda#1143",
+      "child": "ii-sreda",
+      "description": "Серверный поиск бесед, найденный фрагмент и переход",
+      "stratum": "AI-led exploratory",
+      "type": "fix",
+      "complexity": "extended",
+      "registered_t0": "2026-10-15T12:05:22.960483+00:00",
+      "t0_complete": false,
+      "technical_ready_elapsed_seconds": 793.64491,
+      "technical_delivery_elapsed_seconds": 1073.910109,
+      "estimate_elapsed_seconds": [
+        1800,
+        5400
+      ],
+      "technical_pr": {
+        "number": 1188,
+        "title": "fix(search): находить беседы на сервере и открывать найденную реплику",
+        "state": "MERGED",
+        "url": "https://github.com/Proektnyy-ofis/ii-sreda/pull/1188",
+        "mergedAt": "2026-10-15T12:20:49Z",
+        "headRefOid": "e96dc97f403ae7cde052a8f79863f26476943a79",
+        "mergeCommit": {
+          "oid": "7ec52666eb4632ba1b82e8d56017caa9666d4cd9"
+        }
+      },
+      "included_in_verified_19oct_deployment": true,
+      "related_same_work": [],
+      "identity_correction": "1146 is a separate independent UI request, not a continuation of search.",
+      "outcome_window": "matured",
+      "outcome_closed": false,
+      "outcome_measurement": "unknown; availability check is not search use or owner outcome",
+      "source": "qualification/CHILD-VALUE-AI-EXPLORATORY-2026-10-15.md"
+    },
+    {
+      "counts_toward_primary_cohort": false,
+      "owner_accepted": null,
+      "ai_cost_usd": null,
+      "estimate_usd": null,
+      "subscription_allocated_usd": null,
+      "human_active_minutes": null,
+      "human_hourly_rate_usd": null,
+      "full_cost_status": "unknown/unavailable; not zero",
+      "historical_pair": "unmatched",
+      "full_elapsed_seconds": null,
+      "ci_wait_seconds": null,
+      "work_id": "Proektnyy-ofis/ii-sreda#1146",
+      "child": "ii-sreda",
+      "description": "Компактные действия и доступность узкой раскладки",
+      "stratum": "AI-led exploratory, existing card 9 October",
+      "type": "fix",
+      "complexity": "small",
+      "registered_t0": null,
+      "t0_complete": false,
+      "legacy_work_id": "ii-sreda-1146-20261009",
+      "technical_pr": {
+        "number": 1148,
+        "title": "fix(home): компактные действия доступны с клавиатуры и на узком экране",
+        "state": "MERGED",
+        "url": "https://github.com/Proektnyy-ofis/ii-sreda/pull/1148",
+        "mergedAt": "2026-10-09T13:55:39Z",
+        "headRefOid": "c82f84bdac3b18b48d549274f6fa2a3a8d78bb52",
+        "mergeCommit": {
+          "oid": "796bb3881da464aa4365a518b8ee73b07924e489"
+        }
+      },
+      "included_in_verified_19oct_deployment": true,
+      "outcome_window": "exact delivery time unavailable",
+      "outcome_closed": null,
+      "outcome_measurement": "unknown; no owner measurement imported",
+      "source": "qualification/ECONOMICS-OBSERVATION-ii-sreda-1146-2026-10-09.md"
+    },
+    {
+      "counts_toward_primary_cohort": false,
+      "owner_accepted": false,
+      "ai_cost_usd": null,
+      "estimate_usd": null,
+      "subscription_allocated_usd": null,
+      "human_active_minutes": null,
+      "human_hourly_rate_usd": null,
+      "full_cost_status": "unknown/unavailable; not zero",
+      "historical_pair": "unmatched",
+      "full_elapsed_seconds": null,
+      "ci_wait_seconds": null,
+      "work_id": "Proektnyy-ofis/ii-sreda#1139",
+      "child": "ii-sreda",
+      "description": "Предложения правок документа перед сохранением",
+      "stratum": "owner-directed existing-Kit exploratory",
+      "type": "feature",
+      "complexity": null,
+      "registered_t0": "2026-10-16T17:00:36+03:00",
+      "t0_complete": false,
+      "baseline_before_t0": false,
+      "owner_product_decision": "rejected proposed feature; stopped",
+      "owner_product_decision_at": "2026-10-16T15:26:16.073108+00:00",
+      "owner_useful_acknowledgement": "Да, понятно и полезно",
+      "owner_useful_seconds_upper_bound": 188,
+      "acknowledgement_scope": "understanding was useful, not product acceptance",
+      "include_failed_rejected_work_costs": true,
+      "outcome_window": "not_started; no delivery",
+      "outcome_closed": null,
+      "source": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session05/owner-led-sreda-20261016T140036Z/card.json",
+      "source_sha256": "e9c6643105eb5e9cf522890e8ddb7a58f51c784293ce82ab4f0a0b5223c5f8bb",
+      "restart_authorized_by_this_reconciliation": false
+    },
+    {
+      "counts_toward_primary_cohort": false,
+      "owner_accepted": null,
+      "ai_cost_usd": null,
+      "estimate_usd": null,
+      "subscription_allocated_usd": null,
+      "human_active_minutes": null,
+      "human_hourly_rate_usd": null,
+      "full_cost_status": "unknown/unavailable; not zero",
+      "historical_pair": "unmatched",
+      "full_elapsed_seconds": null,
+      "ci_wait_seconds": null,
+      "work_id": "aleksandradovgopolova-boop/ai-ops-cockpit#84",
+      "child": "cockpit",
+      "description": "Яндекс Музыка: реальный трек и управление выбранным плеером",
+      "stratum": "owner-directed AI execution; existing-work exploratory",
+      "type": "feature",
+      "complexity": null,
+      "registered_t0": null,
+      "t0_complete": false,
+      "prior_stage_pr": {
+        "number": 87,
+        "title": "feat(widgets): «Сейчас играет» — реальный трек из Яндекс Музыки (#84)",
+        "state": "MERGED",
+        "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-cockpit/pull/87",
+        "mergedAt": "2026-10-16T15:46:47Z",
+        "headRefOid": "bb3b7c6031b923500cbc7cb5091a436529ac820c",
+        "mergeCommit": {
+          "oid": "2770e2837d3451f41368d9f03291e369ec00a6dc"
+        }
+      },
+      "technical_delivery": "read-track stage merged; new controls continuation in progress",
+      "continuation_turn": "01a1532a-d0fc-7882-9ab4-c4b4f20c3851",
+      "continuation_turn_started_at_unix": 1792396677,
+      "new_owner_scope_observed_after_first_actions": true,
+      "observed_intake_answers": 2,
+      "interventions_after_t0": null,
+      "outcome_window": "missing pre-T0 whole-work contract",
+      "outcome_closed": null,
+      "source": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/session03-scope-source.json",
+      "source_sha256": "6202edaf6bd297562cc85b2de989a20bf002421af03cfc4f71e62b5ca7e5f435",
+      "pr_and_review_are_not_new_work_units": true
+    }
+  ],
+  "summary": {
+    "existing_unique_exploratory_product_works": 4,
+    "by_child": {
+      "ii-sreda": 3,
+      "cockpit": 1
+    },
+    "primary_registered": 0,
+    "primary_t0": null,
+    "primary_collection_window_started": false,
+    "owner_accepted_confirmed": 0,
+    "owner_rejected_proposal_confirmed": 1,
+    "owner_acceptance_unknown": 3,
+    "full_ai_cost_missing": 4,
+    "human_active_minutes_missing": 4,
+    "unit_price_usd": null,
+    "unit_price_reason": "accepted denominator is zero; no division",
+    "primary_target": 24,
+    "primary_minimum": 20,
+    "minimum_per_child": 10,
+    "historical_reference_candidates": 24,
+    "historical_matched_pairs": 0,
+    "newly_launched_product_works": 0
+  },
+  "controls_separate_from_product_denominator": {
+    "claude1269_list_estimate_usd": 0.0838515,
+    "actual_subscription_price_usd": null,
+    "native_usage_subsets_source": "controls-economics-20261016T135753152532Z.json",
+    "native_usage_is_not_full_session_or_product_cost": true,
+    "cache_categories_preserved_without_double_addition": true
+  },
+  "identity_corrections": [
+    {
+      "old_snapshot": "qualification/child-value-interim-2026-10-16.json",
+      "old_snapshot_sha256": "c158a985d2f3f86b7cd6f8760b38086f239180e72c43e15778db1d79cc5f9d82",
+      "old_claim": "1146 related_same_work of 1143",
+      "current_claim": "1143 and 1146 are distinct independent requests",
+      "primary_or_acceptance_increment": 0,
+      "source": "child-work-sources.json; 1146 original card 9 October and PR1148"
+    }
+  ],
+  "issue_states": [
+    {
+      "number": 611,
+      "title": "runtime-agnostic-core: кит исполняется любым харнессом (Claude Code / Codex / Qwen), не привязан к одному",
+      "state": "CLOSED",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/611",
+      "updatedAt": "2026-10-16T13:52:31Z"
+    },
+    {
+      "number": 1269,
+      "title": "runtime-context-live: проверить доставку skills и native события на реальном запуске",
+      "state": "CLOSED",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1269",
+      "updatedAt": "2026-10-16T14:05:21Z"
+    },
+    {
+      "number": 1183,
+      "title": "Стиль кода в дочках держит машина, а не проза: единые имена, слои и линтер в петле агента",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1183",
+      "updatedAt": "2026-10-05T08:27:50Z"
+    },
+    {
+      "number": 1193,
+      "title": "[roadmap:child-code-style-held-by-machine] child-code-style-held-by-machine",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1193",
+      "updatedAt": "2026-10-16T15:35:27Z"
+    },
+    {
+      "number": 1278,
+      "title": "bounded-delegation-field-proof: Кит завершает разрешённую работу и надёжно передаёт исключения владельцу",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1278",
+      "updatedAt": "2026-10-09T12:31:05Z"
+    },
+    {
+      "number": 1277,
+      "title": "learning-changes-next-decision: Прошлый результат помогает киту принять следующее продуктовое решение",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1277",
+      "updatedAt": "2026-10-09T12:31:04Z"
+    },
+    {
+      "number": 1243,
+      "title": "child-value-twenty-real-works: На двадцати–тридцати настоящих работах измерены результат и цена сопровождения",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1243",
+      "updatedAt": "2026-10-05T09:21:52Z"
+    },
+    {
+      "number": 1276,
+      "title": "accepted-work-economics: Владелец видит реальную цену принятой работы и затраты своего времени",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1276",
+      "updatedAt": "2026-10-09T12:31:03Z"
+    },
+    {
+      "number": 1244,
+      "title": "child-value-pilot-verdict: Польза кита оценена сравнением с исходной базой и её ограничениями",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1244",
+      "updatedAt": "2026-10-05T09:21:54Z"
+    },
+    {
+      "number": 1116,
+      "title": "prove-the-loop-not-add-capabilities — доказать ценность построенного вместо роста вширь",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1116",
+      "updatedAt": "2026-10-05T09:32:17Z"
+    },
+    {
+      "number": 1145,
+      "title": "[roadmap:prove-the-loop-not-add-capabilities] prove-the-loop-not-add-capabilities",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1145",
+      "updatedAt": "2026-10-05T10:20:46Z"
+    },
+    {
+      "number": 1256,
+      "title": "measure-first-hour-with-a-stranger: Владелец завершает первые работы в трёх разных репозиториях с измеренным…",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1256",
+      "updatedAt": "2026-10-05T12:22:20Z"
+    },
+    {
+      "number": 1115,
+      "title": "first-hour-for-a-stranger: владелец проходит первый час и завершает реальные работы",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1115",
+      "updatedAt": "2026-10-05T10:21:34Z"
+    },
+    {
+      "number": 1144,
+      "title": "first-hour-for-a-stranger: владелец проходит первый час в трёх репозиториях",
+      "state": "OPEN",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1144",
+      "updatedAt": "2026-10-16T08:23:39Z"
+    }
+  ],
+  "closure": {
+    "closed_original_scope": [
+      611,
+      1269
+    ],
+    "open_original_scope": [
+      1183,
+      1193,
+      1278,
+      1277,
+      1243,
+      1276,
+      1244,
+      1116,
+      1145,
+      1256,
+      1115,
+      1144
+    ],
+    "additional_closure_proof_for_1243_1276_1244_1116_1145": [],
+    "documentary_umbrellas_not_extra_implementations": [
+      1116,
+      1145,
+      1115,
+      1144
+    ]
+  },
+  "prospective_candidate": {
+    "work_id": null,
+    "registration_status": "not_registered",
+    "condition": "Concrete immutable contract and budget/admission from integrator before first execution; screen existing implementation and protocol eligibility.",
+    "known_discussed_1142_is_not_an_enrolled_observation": true
+  },
+  "sources": [
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/issues-current.json",
+      "sha256": "d6e48ba37825ff3566b6605823be3f8a0b5e2d39d1a4c9e144c61d125de82c34"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/child-work-sources.json",
+      "sha256": "7017e3791410641c47ac2e8371f19b01d4fdfe2d24985eaafea5ca8d11e2f2a8"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/session03-scope-source.json",
+      "sha256": "6202edaf6bd297562cc85b2de989a20bf002421af03cfc4f71e62b5ca7e5f435"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/ledger-before.jsonl",
+      "sha256": "4daadb64858c5ee468d8e2bd26086d89472a2d5256aadc08e19d39d23a0e286b"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/ledger-after.jsonl",
+      "sha256": "d685c5b669afb9d2f1d5f367f53c5e69511fd50cef6667e8020edb6820f890a6"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/interim-before.json",
+      "sha256": "c158a985d2f3f86b7cd6f8760b38086f239180e72c43e15778db1d79cc5f9d82"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/delivery1193-followthrough/completion-2026-10-19.json",
+      "sha256": "78b507a2240c845db3b48b5ae84c609c23b0f76cda1c459ba9e5506bb033b361"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/controls-economics-20261016T135753152532Z.json",
+      "sha256": "9fc03460709d41e03cf17e72fd7c05e28fd8ca48cbf97c3cb7ae0e4fab4cce9a"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/parallel-session04-coordination/qualification/CHILD-VALUE-PROTOCOL-2026-10-05.md",
+      "sha256": "83651423b3cbcf3ce089a17b6f7277a731cbd2a535532e319914be3701f7d3f8"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/work/parallel-session04-coordination/qualification/ECONOMICS-OBSERVATION-ii-sreda-1146-2026-10-09.md",
+      "sha256": "2ac2ce334199ae7ef9bcb26a8c4be7ab25735b932799ccbd4f1195ecc05c7461"
+    }
+  ],
+  "limits": [
+    "No causal ROI or savings claim",
+    "AI review/merge/deploy is not human product acceptance",
+    "Known rejected work retained with unknown costs",
+    "No stopped work restarted",
+    "No new native/model/product/broad/full execution",
+    "Source snapshots are dated; later facts require append-only amendments"
+  ]
+}

@@ -1,0 +1,144 @@
+{
+  "recorded_at": "2026-10-19T09:22:10.022369+00:00",
+  "kind": "dated_delivery_amendment_after_frozen_0820_projection",
+  "release": {
+    "version": "4.11.1",
+    "published_at": "2026-10-19T09:17:53Z",
+    "release_url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/releases/tag/v4.11.1",
+    "tag_commit": "99b254425e3760aaf4a7ca6e58f727a73a134f4c",
+    "workflow_run": 39228423756,
+    "workflow_url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/39228423756",
+    "workflow_conclusion": "success",
+    "stock_mutation_and_release_gates": "success; exact release source before tag",
+    "child_adoption_status": "not asserted by release publication"
+  },
+  "school": {
+    "work_id": "owner-led-school-20261019T081713Z",
+    "classification": "separate owner-led first-hour school request; outside the two economic target children",
+    "owner_local_result_accepted": true,
+    "owner_verdict_verbatim": "принимаю правку - на публичном сайте тоже поменяй",
+    "owner_verdict_source_ref": "Sentinel_1a4967735478819181e2b2649f14a76c",
+    "exact_owner_message_timestamp": null,
+    "publication_authorized": true,
+    "publication_executor": "session05",
+    "status": "accepted_published_verified",
+    "source_commit": "03d60fc14b18fea0c729048211d01123717c7c89",
+    "merge_commit": "7264b26aed8b9f41f12f8e7a10173afd0cc6c490",
+    "pr": "https://github.com/aleksandradovgopolova-boop/severnayatraektoriya/pull/1",
+    "deployment_id": 7169389719,
+    "public_url": "https://severnayatraektoriya.ru/#trainers",
+    "production_at": "2026-10-19T08:42:50Z",
+    "public_verified_by": "2026-10-19T08:46:40Z",
+    "public_browser": {
+      "observed_by": "2026-10-19T08:46:40Z",
+      "public_url": "https://severnayatraektoriya.ru/#trainers",
+      "coach_cards": 1,
+      "coach": "Всеволод Довгополов",
+      "deleted_names_absent_from_full_AX": true,
+      "new_FAQ_opened_and_visible": true,
+      "trainer_screenshot": "public-trainer.png",
+      "FAQ_screenshot": "public-faq.png",
+      "browser_intervention": "Playwright FAQ click did not expand it; native exposed Expand action succeeded; fresh AX confirmed answer",
+      "human_active_minutes": null,
+      "USD": null,
+      "tokens": null
+    },
+    "public_artifact": {
+      "checked_at": "2026-10-19T08:43:44.467197+00:00",
+      "page": {
+        "url": "https://severnayatraektoriya.ru/",
+        "status": 200,
+        "sha256": "a6d8a24a62212ea215202a9753eadfb04a618ac3e51a9d9e6f5a350f3fcb43df",
+        "cache": "MISS"
+      },
+      "assets": [
+        {
+          "url": "https://severnayatraektoriya.ru/assets/index-CSuQfTEi.js",
+          "sha256": "5d168b578d57acdd73dfed72947f9e4247982b59b974f739344e72e1ead7a7e7",
+          "bytes": 344863,
+          "has_Dovgopolov": true,
+          "has_Lupik": false,
+          "has_invited": false,
+          "has_new_FAQ": true
+        }
+      ],
+      "accepted_local_build_byte_identical": true,
+      "deployment_id": 7169389719,
+      "deployment_sha": "7264b26aed8b9f41f12f8e7a10173afd0cc6c490",
+      "environment": "Production",
+      "deployment_status": "success",
+      "deployment_url": "https://severnayatraektoriya-5mhg6vmn1-sasha-dovgopolovas-projects.vercel.app",
+      "PR": "https://github.com/aleksandradovgopolova-boop/severnayatraektoriya/pull/1"
+    },
+    "T0_reported_by_session05": "2026-10-19T08:17:13Z",
+    "exact_human_request_arrival": null,
+    "useful_explanation_ack_seconds_upper_bound_from_thread_start": 251,
+    "ready_seconds_from_thread_start": 387.239564,
+    "setup_status": "timeout >180s; standalone doctor exit0 afterwards, whole setup not claimed complete",
+    "whole_first_hour_criteria_completed": false,
+    "strict_completed_first_hour_case_increment": 0,
+    "primary_1243_eligible": false,
+    "primary_1243_registered_increment": 0,
+    "old_four_work_economic_projection_modified": false,
+    "new_work_unit_from_acceptance_or_deployment": false,
+    "human_active_minutes": null,
+    "actual_ai_cost_usd": null,
+    "tokens": null,
+    "open_original_issue_closures": []
+  },
+  "candidate_1142": {
+    "status": "NOT_STARTED",
+    "T0": null,
+    "primary_registered": false,
+    "owner_accepted": null,
+    "execution_admitted": false,
+    "source": "session04/candidates/ii-sreda-1142-20261019/candidate-v1.json",
+    "pending": [
+      "session01 final execution packet",
+      "session03 case-specific floor",
+      "root scope/budget admission",
+      "verified4.11.1 adoption sequencing",
+      "prospective registration before first product execution"
+    ]
+  },
+  "sources": [
+    {
+      "original_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session05/owner-led-school-20261019T081713Z/release-20261019T083556Z/final-release-receipt.json",
+      "snapshot_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-delivery-2026-10-19/school-final-release-receipt.json",
+      "sha256": "62b450054e49882482973b55943d9ba3ee4020e4d2e307b7dc6cf42ba6e263d5"
+    },
+    {
+      "original_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session05/owner-led-school-20261019T081713Z/release-20261019T083556Z/owner-acceptance.json",
+      "snapshot_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-delivery-2026-10-19/school-owner-acceptance.json",
+      "sha256": "1b5650d5d9274974a72084ceb65bdfafb1a15741cb33307b7b68ba4eb9f56ba7"
+    },
+    {
+      "original_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session05/owner-led-school-20261019T081713Z/release-20261019T083556Z/public-browser-proof.json",
+      "snapshot_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-delivery-2026-10-19/school-public-browser-proof.json",
+      "sha256": "d4a953e24948309d11d0580d7e6614af63c7c775348541855593189fabcc1a0e"
+    },
+    {
+      "original_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session05/owner-led-school-20261019T081713Z/release-20261019T083556Z/public-artifact-proof.json",
+      "snapshot_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-delivery-2026-10-19/school-public-artifact-proof.json",
+      "sha256": "5fdf174c36778081c8f958676966d1ec88752132612bffd716cacbac87380f36"
+    },
+    {
+      "snapshot_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-delivery-2026-10-19/release-run.json",
+      "sha256": "8003c2d5fd96cc0442d8f664b5a6cf64df9606855b6a3640c3605e8bdb7d3022"
+    },
+    {
+      "snapshot_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-delivery-2026-10-19/published-release.json",
+      "sha256": "f0b2c24a1f94cc59ea4798917dbde7d874dca184d5572b89aaee84756c423fa0"
+    },
+    {
+      "snapshot_path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-delivery-2026-10-19/release-tag-ref.json",
+      "sha256": "dea9338150900d9646510b2d83d6b85b821a03f2e251340e591d8f75d5e43f81"
+    }
+  ],
+  "limits": [
+    "Frozen economic projection as of08:20 still has4 existing exploratory works,0 primary and0 confirmed accepted within that projection. Later accepted school is a separate work, never an added economic-cohort success.",
+    "Publication and local acceptance are different events of the same school work_id.",
+    "No model or product execution performed by this amendment.",
+    "Historical ledger, original failed attempts and first review P2 remain unchanged."
+  ]
+}
