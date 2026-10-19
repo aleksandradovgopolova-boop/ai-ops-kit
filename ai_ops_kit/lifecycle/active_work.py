@@ -126,7 +126,8 @@ def validate_admission(root, admission):
     for name, digest in admission["inputs"].items():
         p = root / name
         if (not isinstance(name, str) or Path(name).is_absolute() or ".." in Path(name).parts
-                or p.resolve().is_relative_to(root) is False or p.is_symlink()
+                or p.resolve().is_relative_to(root) is False
+                or any(q.is_symlink() for q in (p, *p.parents) if q.is_relative_to(root))
                 or not p.is_file() or hashlib.sha256(p.read_bytes()).hexdigest() != digest):
             raise ActiveWorkCorrupt("automatic admission: changed/unsafe saved input")
 

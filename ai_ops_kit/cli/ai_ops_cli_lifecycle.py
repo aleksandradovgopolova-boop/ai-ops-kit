@@ -530,7 +530,8 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
 
     def read(name):
         p = root / name
-        if p.is_symlink() or not p.resolve().is_relative_to(root):
+        if (any(q.is_symlink() for q in (p, *p.parents) if q.is_relative_to(root))
+                or not p.resolve().is_relative_to(root)):
             raise ValueError("automatic unsafe saved input")
         raw = p.read_bytes()
         snapshots[name] = hashlib.sha256(raw).hexdigest()
@@ -547,7 +548,11 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
             raise ValueError("automatic opt-in must be boolean")
         if not enabled:
             return None
-        paths = [p for p in ("work-graph.yaml", ".ai/runtime/work-graph.yaml") if (root / p).exists()]
+        if not isinstance(wid, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", wid):
+            raise ValueError("automatic unsafe goal identity")
+        candidates = ("work-graph.yaml", ".ai/runtime/work-graph.yaml", f"features/{wid}/work-graph.yaml")
+        paths = [p for p in candidates if (root / p).exists()
+                 or any(q.is_symlink() for q in (root / p, *(root / p).parents) if q.is_relative_to(root))]
         if not paths:
             return None
         if len(paths) != 1:
