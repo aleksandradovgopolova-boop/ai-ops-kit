@@ -175,6 +175,8 @@ def test_fresh_aggregate_failure_is_never_delivery_success(tmp_path, monkeypatch
     # Both packages are now pass; exhausted budget still permits zero-callback integration recheck.
     from test_parallel_package_admission import _aggregate
     _aggregate(monkeypatch)
-    retried = _retry(tmp_path, signals, auto, lambda *a, **k: calls.append('must-not-run'))
+    assert auto['budget'].to_dict()['remaining_calls'] == 0
+    retried = dsp.run_parallel_live('write work', signals, tmp_path, feature='work', provider='mock',
+        run_fn=lambda *a, **k: calls.append('must-not-run'), **auto)
     assert retried['proceed'] and calls == ['bb'] and retried['budget']['remaining_calls'] == 0
     assert retried['package_resume']['reused_packages'] == ['aa', 'bb']

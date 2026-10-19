@@ -85,7 +85,10 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
     from ai_ops_kit.shared import budget as budget_mod
     try:
         budget = budget_mod.resolve_budget(budget, signals.get("execution_budget"))
-        budget.ensure_execution_supported()
+        if admission is None:
+            budget.ensure_execution_supported()
+        elif budget.max_cost is not None or budget.max_duration is not None:
+            raise budget_mod.BudgetExceeded('automatic durable budget supports logical calls only')
     except (ValueError, budget_mod.BudgetExceeded) as exc:
         return {"proceed": False, "stage": "preflight", "parallel": True,
                 "reason": f"parallel budget unsupported: {exc}"}
