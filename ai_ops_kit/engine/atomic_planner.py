@@ -62,9 +62,18 @@ def prepare_literal_goal(root, wid, signals, base, *, session_identity=None, exe
         return False
     try:
         run_plan.validate_workitem_id(wid)
-        candidates = ('work-graph.yaml', '.ai/runtime/work-graph.yaml', f'features/{wid}/work-graph.yaml')
-        if any((root / p).exists() or (root / p).is_symlink() for p in candidates):
-            return False
+        graph_name, intent_name = f'features/{wid}/work-graph.yaml', f'features/{wid}/goal-plan-intent.yaml'
+        candidates = ('work-graph.yaml', '.ai/runtime/work-graph.yaml', graph_name)
+        present = [p for p in candidates if (root / p).exists() or (root / p).is_symlink()]
+        if present:
+            if present != [graph_name]:
+                return False  # legacy/ambiguous saved admission retains its existing policy
+            p = root / graph_name
+            if any(q.is_symlink() for q in (p, *p.parents) if q.is_relative_to(root)):
+                raise ValueError('literal goal unsafe saved graph')
+            saved_graph = yaml.safe_load(p.read_bytes())
+            if not isinstance(saved_graph, dict) or saved_graph.get('goal_plan_intent') != intent_name:
+                return False  # manual/legacy graph is never regenerated
         cfg_path = root / '.ai-ops.yaml'
         if not cfg_path.exists():
             return False
@@ -121,11 +130,12 @@ def prepare_literal_goal(root, wid, signals, base, *, session_identity=None, exe
         source_check()
         prefix = hashlib.sha256((wid + '\0' + task).encode()).hexdigest()[:16]
         tasks = {f'wp-{prefix}-{i:02d}': f'Replace `{old}` with `{new}` in `{name}`.'
+                 '\nPerform only this literal replacement; preserve every other byte.'
                  for i, name in enumerate(files, 1)}
         graph = dict(schema_version=1, kind='WorkGraph', id=f'WG-{int(prefix[:8], 16):010d}', feature=wid,
                      execution_mode='parallel', packages=[dict(id=pid, write_scope=[name], depends_on=[])
                          for pid, name in zip(tasks, files)], integration_order=list(tasks),
-                     aggregate_verification=['implementation_verification'])
+                     aggregate_verification=['implementation_verification'], goal_plan_intent=intent_name)
         documents = {}
         policy = dict(execution_policy or {})
         for pid, goal in [(wid, task), *tasks.items()]:
@@ -137,12 +147,27 @@ def prepare_literal_goal(root, wid, signals, base, *, session_identity=None, exe
                             signals={k: v for k, v in signals.items() if k != 'task_text'}, policy=policy)
             for leaf, data in [('workitem.yaml', wi), ('run-plan.yaml', plan), ('run-settings.yaml', settings)]:
                 documents[f'features/{pid}/{leaf}'] = yaml.safe_dump(data, allow_unicode=True, sort_keys=False)
-        documents[f'features/{wid}/work-graph.yaml'] = yaml.safe_dump(graph, allow_unicode=True, sort_keys=False)
+        documents[graph_name] = yaml.safe_dump(graph, allow_unicode=True, sort_keys=False)
+        intent = dict(schema_version=1, kind='GoalPlanIntent', feature=wid, base_sha=binding['base_sha'],
+                      files={name: hashlib.sha256(text.encode()).hexdigest() for name, text in documents.items()})
+        documents = {intent_name: yaml.safe_dump(intent, allow_unicode=True, sort_keys=False), **documents}
         registry = aw.shared_registry_path(root)
         if aw._git_common_dir(root) is None:
             raise ValueError('literal goal requires canonical Git store')
         with aw._claim_lock(registry, root) as legacy:
-            active = aw.load(registry)['active'] + (aw.load(legacy)['active'] if legacy is not None else [])
+            canonical = aw.load(registry)['active']
+            prior = [w for w in canonical if w.get('id') == wid]
+            if prior:
+                entry = prior[0]
+                admission = entry.get('auto_admission') or {}
+                if (len(prior) != 1 or entry.get('machine') != aw._machine()
+                        or entry.get('worktree') != str(root)
+                        or entry.get('owner_session') != (session_identity or f'pid:{os.getpid()}')
+                        or not {intent_name, graph_name} <= set(admission.get('inputs') or {})):
+                    raise ValueError('literal goal prior plan barrier/owner unproven')
+                aw.validate_admission(root, admission)
+                return False  # canonical admission proves prior complete barrier; never rewrite a frozen plan
+            active = canonical + (aw.load(legacy)['active'] if legacy is not None else [])
             against = aw.team_view(root, active, aw.publication_enabled(root))
             probe = dict(id=wid, branch=f'ai-ops/{wid}', affected_areas=files,
                          owner_session=session_identity or f'pid:{os.getpid()}', machine=aw._machine())

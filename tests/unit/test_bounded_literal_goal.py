@@ -58,7 +58,7 @@ def test_goal_compiler_builds_actual_admissible_plan_without_model_or_manual_gra
     assert auto['budget'].model_calls == 0 and len(auto['task_map']) == 2
     assert gitio.git(tmp_path, 'rev-parse', 'HEAD')[1] == original
     frozen = {p: p.read_bytes() for p in tmp_path.glob('features/*/*.yaml')}
-    assert not _prepare(tmp_path, sig), 'existing versioned plan is never regenerated'
+    assert _prepare(tmp_path, sig), 'without canonical admission, existing files must pass the durable barrier again'
     assert {p: p.read_bytes() for p in frozen} == frozen
 
 
@@ -118,6 +118,42 @@ def test_partial_plan_persistence_resumes_only_matching_files_without_overwrite(
     assert saved[0][0].stat().st_ino == saved[0][1]
 
 
+def test_last_graph_sync_failure_cannot_be_admitted_by_exists_shortcut(tmp_path, monkeypatch):
+    sig = _repo(tmp_path)
+    graph = tmp_path / 'features/work/work-graph.yaml'
+    sync = lifecycle_store.os.fsync
+    def fail_after_graph(fd):
+        if graph.exists():raise OSError('controlled final graph sync failure')
+        return sync(fd)
+    with monkeypatch.context() as patch:
+        patch.setattr(lifecycle_store.os, 'fsync', fail_after_graph)
+        with pytest.raises(ValueError, match='plan barrier'):_prepare(tmp_path, sig)
+        assert graph.exists() and yaml.safe_load(graph.read_text())['goal_plan_intent']
+        # Real CLI admission wrapper must retry the barrier and refuse, not accept exists().
+        with pytest.raises(ValueError, match='plan barrier'):
+            cmd._automatic_roots(tmp_path, 'work', sig, None,
+                session_identity='fixed-session', execution_policy={'author': True, 'review': True, 'max_steps': 40})
+    assert not aw.load(aw.shared_registry_path(tmp_path))['active']
+    assert not (aw.shared_registry_path(tmp_path).parent / 'budgets').exists()
+    assert _prepare(tmp_path, sig)
+    assert cmd._automatic_roots(tmp_path, 'work', sig, None,
+        session_identity='fixed-session', execution_policy={'author': True, 'review': True, 'max_steps': 40})
+
+
+@pytest.mark.parametrize('damage', ['missing', 'corrupt', 'hash'])
+def test_compiler_intent_is_required_frozen_source_not_optional_success_hint(tmp_path, damage):
+    from ai_ops_kit.cli.ai_ops_cli_lifecycle import _automatic_roots
+    sig = _repo(tmp_path)
+    assert _prepare(tmp_path, sig)
+    p = tmp_path / 'features/work/goal-plan-intent.yaml'
+    if damage == 'missing':p.unlink()
+    elif damage == 'corrupt':p.write_text('not an object')
+    else:
+        value = yaml.safe_load(p.read_text());value['files']['features/work/workitem.yaml'] = '0' * 64
+        p.write_text(yaml.safe_dump(value))
+    with pytest.raises(ValueError):_automatic_roots(tmp_path, 'work', sig, None)
+
+
 def test_ordinary_cli_goal_builds_and_executes_isolated_plan_with_exact_fan_in(tmp_path, monkeypatch):
     from ai_ops_kit.providers import orchestrator
     from ai_ops_kit.engine import execution_pipeline
@@ -168,3 +204,9 @@ def test_ordinary_cli_goal_builds_and_executes_isolated_plan_with_exact_fan_in(t
     assert entry['budget_binding']['kind'] == 'GoalBudgetBinding'
     assert entry['auto_admission']['graph_path'] == 'features/work/work-graph.yaml'
     assert all(r['runner_started_at'] and r['runner_finished_at'] for r in rep['trace'])
+    # A canonical frozen admission already proved the complete barrier: never rewrite it,
+    # including when a later retry asks for a stronger execution policy.
+    def forbidden_batch(*a, **k):raise AssertionError('canonical plan must remain immutable')
+    monkeypatch.setattr(lifecycle_store, 'durable_create_batch', forbidden_batch)
+    assert cmd._automatic_roots(tmp_path, 'work', sig, None, session_identity=entry['owner_session'],
+        execution_policy={'author': True, 'review': True, 'require_fix': True, 'max_steps': 40})

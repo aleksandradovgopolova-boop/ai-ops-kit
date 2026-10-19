@@ -68,6 +68,10 @@ Compiler не вызывает модель: одна явная замена р
 Артефакты создаются только при отсутствии или точном совпадении bytes, с durable
 readback и без перехода через symlink. Конфликт проверяется для всей группы до записи,
 граф создаётся последним; частичную запись можно завершить только с прежними bytes.
+Compiler помечает граф ссылкой `goal_plan_intent` на frozen manifest hashes.
+Пока canonical admission не подтвердил полный barrier, даже существующий граф требует
+повторной синхронизации всей группы. Ошибка финального fsync не превращается в успех
+через проверку exists; сохранённая canonical admission допускает только прежний snapshot.
 Этот bounded compiler не доказывает произвольную semantic decomposition или field acceptance.
 
 Исполнимый WorkGraph может находиться в `features/<workitem_id>/work-graph.yaml`:

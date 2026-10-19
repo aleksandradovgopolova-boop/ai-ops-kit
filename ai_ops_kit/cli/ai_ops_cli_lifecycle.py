@@ -568,10 +568,16 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
         wg = read(paths[0])
         shape = {"schema_version": int, "kind": str, "id": str, "feature": str, "execution_mode": str,
                  "packages": list, "integration_order": list, "aggregate_verification": list}
-        if (set(wg) != set(shape) or any(type(wg[k]) is not t for k, t in shape.items())
+        if (set(wg) - {'goal_plan_intent'} != set(shape) or any(type(wg[k]) is not t for k, t in shape.items())
                 or wg["schema_version"] != 1 or wg["kind"] != "WorkGraph"
                 or not re.fullmatch(r"WG-[0-9]{3,}", wg["id"]) or wg["feature"] != wid):
             raise ValueError("automatic invalid/wrong-feature WorkGraph")
+        intent_name = wg.get('goal_plan_intent')
+        intent = None
+        if 'goal_plan_intent' in wg:
+            if intent_name != f'features/{wid}/goal-plan-intent.yaml':
+                raise ValueError('automatic invalid goal plan intent path')
+            intent = read(intent_name)
         pkgs = wg["packages"]
         for p in pkgs:
             if (not isinstance(p, dict) or set(p) - {"id", "write_scope", "depends_on", "shared_contracts"}
@@ -647,6 +653,11 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
                 contracts[contract] = sha
         if any(not parallel_planner.can_parallel(a, b)[0] for a, b in itertools.combinations(pkgs, 2)):
             raise ValueError("automatic scopes are not disjoint")
+        if intent is not None and (set(intent) != {'schema_version', 'kind', 'feature', 'base_sha', 'files'}
+                or type(intent.get('schema_version')) is not int or intent['schema_version'] != 1
+                or intent['kind'] != 'GoalPlanIntent' or intent['feature'] != wid or intent['base_sha'] != binding['base_sha']
+                or intent['files'] != {k: v for k, v in snapshots.items() if k not in ('.ai-ops.yaml', intent_name)}):
+            raise ValueError('automatic goal plan intent/source mismatch')
         budget = budgets.resolve_budget(None, *declarations)
         if budget.max_model_calls is None:
             raise ValueError("automatic requires declared shared max_model_calls")
