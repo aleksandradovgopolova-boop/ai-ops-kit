@@ -191,6 +191,8 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
             rec["integration_source"] = rec.get("delivery_plan")
             if admission is not None:
                 rec["automatic_attempt"] = {"id": admission["attempt_id"], "identity": admission["identity"]}
+                if admission.get('recovered_from'):
+                    rec['owner_recovery'] = admission['recovered_from']
                 rec['package_resume'] = {'reused_packages': sorted(reused),
                     'executed_packages': sorted(set(task_map) - set(reused))}
             if open_pr:
@@ -481,6 +483,8 @@ def resume_parallel_delivery(child_root, wid, *, session, base=None, execute=Fal
         if not execute:
             return rec
         admission = admitted
+        if admission.get('recovered_from'):
+            rec['owner_recovery'] = admission['recovered_from']
         rec['delivery_retry'] = {'attempt_id': admission['attempt_id'], 'origin_attempt_id': origin['id'],
                                  'new_package_calls': 0, 'new_model_calls': 0}
         with _retry_guard(root, wid, admission):
