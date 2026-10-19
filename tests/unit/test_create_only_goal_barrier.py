@@ -65,6 +65,7 @@ def test_partial_failed_sync_can_complete_only_matching_already_written_bytes(tm
     assert (tmp_path / 'graph.yaml').read_text() == 'last'
 
 
+@pytest.mark.critical_path
 def test_parent_replaced_by_symlink_between_preflight_and_create_is_refused(tmp_path, monkeypatch):
     parent = tmp_path / 'features'
     parent.mkdir()
@@ -83,6 +84,7 @@ def test_parent_replaced_by_symlink_between_preflight_and_create_is_refused(tmp_
     assert not result['ok'] and list(target.iterdir()) == []
 
 
+@pytest.mark.critical_path
 def test_retry_syncs_reused_directory_parent_after_uncertain_mkdir_sync(tmp_path, monkeypatch):
     documents = {'features/work/value.yaml': 'confirmed'}
     root_inode = tmp_path.stat().st_ino
@@ -103,3 +105,21 @@ def test_retry_syncs_reused_directory_parent_after_uncertain_mkdir_sync(tmp_path
     monkeypatch.setattr(store.os, 'fsync', confirmed)
     assert store.durable_create_batch(tmp_path, documents)['ok']
     assert root_inode in observed, 'reuse must reconfirm the ancestor directory entry'
+
+
+@pytest.mark.parametrize('unsafe', [False, True])
+def test_concurrent_mkdir_collision_is_reconciled_only_as_real_directory(tmp_path, monkeypatch, unsafe):
+    mkdir = store.os.mkdir
+    raced = []
+    def collide(name, *args, **kwargs):
+        if name == 'features' and not raced:
+            raced.append(name)
+            if unsafe:(tmp_path / name).symlink_to(tmp_path / 'absent')
+            else:mkdir(name, *args, **kwargs)
+            raise FileExistsError('controlled concurrent creator')
+        return mkdir(name, *args, **kwargs)
+    monkeypatch.setattr(store.os, 'mkdir', collide)
+    result = store.durable_create_batch(tmp_path, {'features/value.yaml': 'confirmed'})
+    assert result['ok'] is (not unsafe)
+    if unsafe:assert not (tmp_path / 'absent').exists()
+    else:assert (tmp_path / 'features/value.yaml').read_text() == 'confirmed'

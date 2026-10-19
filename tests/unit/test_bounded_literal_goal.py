@@ -154,6 +154,7 @@ def test_compiler_intent_is_required_frozen_source_not_optional_success_hint(tmp
     with pytest.raises(ValueError):_automatic_roots(tmp_path, 'work', sig, None)
 
 
+@pytest.mark.critical_path
 def test_ordinary_cli_goal_builds_and_executes_isolated_plan_with_exact_fan_in(tmp_path, monkeypatch):
     from ai_ops_kit.providers import orchestrator
     from ai_ops_kit.engine import execution_pipeline
@@ -208,5 +209,6 @@ def test_ordinary_cli_goal_builds_and_executes_isolated_plan_with_exact_fan_in(t
     # including when a later retry asks for a stronger execution policy.
     def forbidden_batch(*a, **k):raise AssertionError('canonical plan must remain immutable')
     monkeypatch.setattr(lifecycle_store, 'durable_create_batch', forbidden_batch)
+    saved_policy = yaml.safe_load((tmp_path / 'features/work/run-settings.yaml').read_text())['policy']
     assert cmd._automatic_roots(tmp_path, 'work', sig, None, session_identity=entry['owner_session'],
-        execution_policy={'author': True, 'review': True, 'require_fix': True, 'max_steps': 40})
+        execution_policy=dict(saved_policy, require_fix=True))
