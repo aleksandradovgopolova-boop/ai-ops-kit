@@ -1,0 +1,1 @@
+Повтор terminal automatic independent-root работы восстанавливает точные успешные package commits из checkpoints и запускает только явные failed пакеты с сохранённым durable logical budget; неизвестные исходы, чужое владение и повреждённые checkpoints блокируют повтор, aggregate проверяется заново.

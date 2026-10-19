@@ -435,3 +435,41 @@ def bind_attempt_budget(root, wid, admission, budget, guard):
         aw._project_claim(legacy, entry)
         claim_to_copies(root, entry)
     return ledger
+
+
+def retry_package_claim(root, wid, admission, origin, check):
+    """Terminal own package retry: compare original generation before replacing it, never takeover."""
+    import os
+    from uuid import uuid4
+    from ai_ops_kit.lifecycle import active_work as aw
+    root, path = Path(root).resolve(), shared_registry_path(root)
+    with aw._claim_lock(path, root) as legacy:
+        data = load(path)
+        entries = [w for w in data['active'] if isinstance(w, dict) and w.get('id') == wid]
+        if len(entries) != 1:
+            raise ActiveWorkCorrupt('package resume canonical claim missing/ambiguous')
+        old = entries[0]
+        saved = old.get('auto_admission') or {}
+        if (old.get('status') != 'blocked' or old.get('budget_origin') != 'durable'
+                or old.get('owner_session') != admission['identity']
+                or old.get('machine') != aw._machine() or old.get('worktree') != str(root)
+                or old.get('branch') != f'ai-ops/{wid}' or not isinstance(saved, dict)
+                or saved.get('attempt_id') != origin.get('id')
+                or origin.get('identity') != admission['identity']
+                or any(saved.get(k) != admission.get(k) for k in ('identity', 'base_sha', 'graph_path', 'inputs'))):
+            raise ActiveWorkCorrupt('package resume active/replaced/foreign or changed admission/budget provenance')
+        aw.validate_admission(root, saved)
+        other = [w for w in aw.team_view(root, data['active'] + (load(legacy)['active'] if legacy else []),
+                                         aw.publication_enabled(root))
+                 if not (w.get('id') == wid and w.get('machine') == old.get('machine')
+                         and w.get('worktree') == str(root))]
+        if aw.classify(other, dict(old, owner_session=None)):
+            raise ActiveWorkCorrupt('package resume conflicts with another work')
+        check()  # local evidence only, no network/model inside claim lock
+        admitted = dict(admission, attempt_id=uuid4().hex)
+        entry = dict(old, status='in-progress', auto_admission=admitted, owner_pid=os.getpid(), started_at=aw._now_iso())
+        data['active'] = [w for w in data['active'] if w.get('id') != wid] + [entry]
+        aw.save(path, data)
+        aw._project_claim(legacy, entry)
+        claim_to_copies(root, entry)
+        return admitted

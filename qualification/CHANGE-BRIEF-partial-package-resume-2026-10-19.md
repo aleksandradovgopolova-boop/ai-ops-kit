@@ -1,0 +1,8 @@
+# Частичное возобновление independent roots — #1322
+
+Результат: повтор существующего automatic run после terminal собственной попытки использует сохранённые успешные package commits; заново запускает только доказанно неуспешные пакеты, с прежним durable logical budget.
+Затрагиваемые пути: automatic saved admission → canonical registration → сохранённый parallel report/package receipt/ref → изолированные package clones → общий Budget → fan-in/aggregate → delivery/report → cleanup/usage.
+Инварианты: owner/machine/worktree/frozen inputs/base совпадают; active/replaced/foreign/unknown attempt не возобновляется. Pass принимается только при точном tested SHA, retained direct ref и commit/tree ancestry/scope. Неизвестный исход не pass и не основание слепого повторного callback. Aggregate всегда новый; delivery-only остаётся существующим путём. Default manual route прежний.
+Failure modes: missing/corrupt/подменённый checkpoint; конкурирующая generation/изменение inputs; неизвестный результат callback; исчерпанный/пропавший budget; конфликт повторной интеграции.
+Доказательство: реальные Git commits/удалённые package clones → новая попытка/процесс повторяет только failed package; budget сохраняет оба первоначальных вызова, новый вызывает только остаток. Corrupt/missing/ref/owner/base/input/unknown cases дают 0 новых callbacks. Конфликт/failing aggregate не зелёный и не доставка. Sequential independent review + exact-head17CI; локальные тесты только после ресурсного допуска, без paid/native моделей.
+Не входит: восстановление незавершённых активных попыток/автоматические leases/takeover, unreported/crashed callbacks, изменённый план/base, distributed budget, hardUSD, закрытие #1321/#1322 или field evidence.

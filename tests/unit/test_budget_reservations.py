@@ -152,7 +152,7 @@ def test_unbound_prior_expenditure_cannot_be_migrated_to_zero(tmp_path):
     assert budget.model_calls == 1 and not path.exists()
 
 
-def _runtime(root, monkeypatch, *, cap=3):
+def _runtime(root, monkeypatch, *, cap=3, partial=False):
     signals, auto = _automatic(root)
     # Saved declared budgets are part of the frozen plan: change them prospectively before admission.
     if cap != 30:
@@ -175,16 +175,19 @@ def _runtime(root, monkeypatch, *, cap=3):
     def callback(*args, **kwargs):
         kwargs['budget'].charge_call()
         calls.append(kwargs['feature'])
-        return _commit(*args, **kwargs)
+        result = _commit(*args, **kwargs)
+        if partial and kwargs['feature'] == 'bb':
+            result['ready_for_pr'] = False
+        return result
     report = dsp.run_parallel_live('write work', signals, root, feature='work', provider='mock', run_fn=callback, **auto)
-    assert report['proceed'] and sorted(calls) == ['aa', 'bb']
+    assert report['proceed'] is not partial and sorted(calls) == ['aa', 'bb']
     path = aw.shared_registry_path(root).parent / 'budgets' / (hashlib.sha256(b'work').hexdigest() + '.json')
     assert json.loads(path.read_text())['model_calls'] == 2
     return signals, auto, report, path
 
 
 def test_real_automatic_attempt_in_fresh_process_spends_only_remaining_slot(tmp_path, monkeypatch):
-    signals, auto, original, path = _runtime(tmp_path, monkeypatch)
+    signals, auto, original, path = _runtime(tmp_path, monkeypatch, partial=True)
     code = """import contextlib,io,json,sys
 from pathlib import Path
 from ai_ops_kit.cli import ai_ops_cli_commands as cmd
@@ -192,7 +195,7 @@ from ai_ops_kit.engine import parallel_live_dispatch as dsp
 from test_parallel_package_admission import _aggregate,_commit
 from ai_ops_kit.gates import evidence_collector
 from ai_ops_kit.shared import gitio
-root=Path(sys.argv[1]);signals=json.loads(sys.argv[2]);auto=cmd._automatic_roots(root,'work',signals,None,session_identity='new-process')
+root=Path(sys.argv[1]);signals=json.loads(sys.argv[2]);auto=cmd._automatic_roots(root,'work',signals,None,session_identity=sys.argv[3])
 signals['_auto_package_signals']=auto.pop('package_signals');calls=[]
 evidence_collector.collect=lambda *a,**k:{'gate_evidence':{'implementation_verification':{'status':'pass'}},'checks':{},'revision':gitio.git(a[1],'rev-parse','HEAD')[1]}
 def callback(*args,**kwargs):
@@ -201,10 +204,10 @@ with contextlib.redirect_stdout(io.StringIO()):
  report=dsp.run_parallel_live('write work',signals,root,feature='work',provider='mock',run_fn=callback,**auto)
 print(json.dumps({'calls':calls,'proceed':report['proceed'],'budget':report['budget']}))
 """
-    result = _child(code, tmp_path, json.dumps({k: v for k, v in signals.items() if k != '_auto_package_signals'}))
+    result = _child(code, tmp_path, json.dumps({k: v for k, v in signals.items() if k != '_auto_package_signals'}), auto['admission']['identity'])
     assert result.returncode == 0, result.stderr
     recovered = json.loads(result.stdout)
-    assert len(recovered['calls']) == 1 and not recovered['proceed']
+    assert recovered['calls'] == ['bb'] and recovered['proceed']
     assert recovered['budget']['model_calls'] == 3 and recovered['budget']['remaining_calls'] == 0
     assert recovered['budget']['cost'] is None and not recovered['budget']['cost_complete']
     assert json.loads(path.read_text())['model_calls'] == 3
@@ -213,7 +216,7 @@ print(json.dumps({'calls':calls,'proceed':report['proceed'],'budget':report['bud
 
 @pytest.mark.parametrize('damage', ['missing-ledger', 'legacy-claim'])
 def test_new_automatic_attempt_refuses_missing_or_legacy_spend_before_clones(tmp_path, monkeypatch, damage):
-    signals, auto, original, path = _runtime(tmp_path, monkeypatch)
+    signals, auto, original, path = _runtime(tmp_path, monkeypatch, partial=True)
     if damage == 'missing-ledger':path.unlink()
     else:
         data = aw.load(aw.shared_registry_path(tmp_path));data['active'][0].pop('budget_origin')
@@ -257,7 +260,7 @@ def test_changed_limit_cannot_rebind_existing_job_or_refund_spend(tmp_path, cap)
 
 
 def test_new_base_binding_does_not_silently_start_fresh_budget(tmp_path, monkeypatch):
-    signals, auto, original, path = _runtime(tmp_path, monkeypatch)
+    signals, auto, original, path = _runtime(tmp_path, monkeypatch, partial=True)
     (tmp_path / 'new-base.txt').write_text('new base\n')
     assert gitio.git(tmp_path, 'add', 'new-base.txt')[0] == 0
     assert gitio.git(tmp_path, 'commit', '-qm', 'new base')[0] == 0
@@ -267,7 +270,7 @@ def test_new_base_binding_does_not_silently_start_fresh_budget(tmp_path, monkeyp
     before, calls = path.read_bytes(), []
     report = dsp.run_parallel_live('write work', signals, tmp_path, feature='work', provider='mock',
                                    run_fn=lambda *a, **k: calls.append('model'), **fresh)
-    assert calls == [] and dsp.exit_code(report) == 2 and 'budget' in report['reason']
+    assert calls == [] and dsp.exit_code(report) == 2 and 'resume' in report['reason']
     assert path.read_bytes() == before
 
 

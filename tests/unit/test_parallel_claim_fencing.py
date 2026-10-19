@@ -119,7 +119,7 @@ def test_takeover_during_already_admitted_delivery_keeps_receipt_and_new_report(
     registry = aw.shared_registry_path(tmp_path)
     expected, delivered = {}, []
 
-    def deliver(rec, *args):
+    def deliver(rec, *args, **kwargs):
         delivered.append(rec["integration_sha"])
         rec["delivery"] = {"status": "opened", "sha_verified": True, "receipt": {"already_executed": True}}
         assert aw.register(registry, "work", "ai-ops/work", ["aa.txt", "bb.txt"], "rescue",

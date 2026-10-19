@@ -337,6 +337,9 @@ def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn
                                                    "streams": clones[pid]["usage_baseline"]})
         if not saved.get("ok"):
             raise ValueError("package usage baseline не зафиксирована до вызовов")
+        reused = options.pop('reused_packages', {}).get(pid)
+        if reused:
+            return _restore_package_checkpoint(child_root, cpath, pid, reused)
         rep = run_fn(task_map[pid], pkg_signals, Path(cpath), **options)
         res = package_result_from_rep(rep)
         res["clone"] = str(cpath)
@@ -573,6 +576,9 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
         ir = make_isolated_integration_runner(child_root, base_sha, clones, integration_branch)
         n = max_parallel or min(len(wg.get("packages", []) or [1]), getattr(pe.pp, "MAX_PARALLEL", 2))
         rec = pe.execute_parallel(wg, pr, ir, contract_shas=contract_shas, max_parallel=max(2, n))
+        for row in rec.get('trace', []):
+            if (rec.get('package_results', {}).get(row['pkg']) or {}).get('reused_from'):
+                row['mode'] = 'reused-checkpoint'
         rec["execution_concurrency"] = "concurrent"
         rec["isolation"] = "per-package-clone"
         rec["parallel_safe"] = True
@@ -624,3 +630,20 @@ def main(argv):
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
+
+
+def _restore_package_checkpoint(root, clone, pid, checkpoint):
+    """Fresh owned clone, exact retained SHA; never invokes package/provider callback."""
+    result = json.loads(json.dumps(checkpoint['result']))
+    sha, ref = result['sha'], checkpoint['ref']
+    _require_direct_checkpoint_ref(root, ref)
+    if _git(root, 'rev-parse', '--verify', ref).stdout.strip() != sha:
+        raise _CheckpointFailure('resume-ref-changed')
+    _checkpoint_git(clone, 'resume-fetch', '-c', 'core.fsync=objects,reference', 'fetch',
+        '--no-tags', '--no-write-fetch-head', '--no-recurse-submodules', '--no-auto-maintenance',
+        '--no-write-commit-graph', str(Path(root).resolve()), sha)
+    _checkpoint_git(clone, 'resume-checkout', 'checkout', '-q', '-B', f'ai-ops/{pid}', sha)
+    if _git(clone, 'rev-parse', 'HEAD').stdout.strip() != sha:
+        raise _CheckpointFailure('resume-head')
+    result.update(clone=str(clone), reused_from=checkpoint['receipt'])
+    return result
