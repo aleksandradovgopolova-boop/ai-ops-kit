@@ -51,7 +51,7 @@ from ai_ops_kit.lifecycle.work_claims import (          # noqa: F401 — ре-э
     _claim_slug, publish_claim, unpublish_claim, load_published_claims,
     _git_common_dir, copies_claims_dir, working_copies, copies_reach_note,
     _copies_line, claim_to_copies, withdraw_claim_from_copies, load_copy_claims,
-    team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path,
+    team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt,
 )
 from ai_ops_kit.lifecycle.work_reconcile import (        # noqa: F401 — ре-экспорт для совместимости
     _machine, _now_iso, _CLAIM_STALE_HOURS, _claim_age_hours, _pid_is_dead,
@@ -537,7 +537,7 @@ def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_jso
 
 
 def finish_cmd(path, wid, status="done", reason=None, child_root=None, published=False,
-               audience="technical"):
+               audience="technical", expected_admission=None):
     """Снять работу с учёта. status — из STATUS; 'done' ТОЛЬКО когда работа действительно закончена.
 
     v3.28.x (F-012, находка живой квалификации на niti): прогон помечал работу `done` независимо
@@ -551,6 +551,12 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
     # v3.0.12: read-modify-write под блокировкой (симметрично register — без гонки на общем реестре)
     with _claim_lock(path, child_root) as legacy:
         data = load(path)
+        if expected_admission is not None:
+            try:
+                _require_attempt(data, wid, expected_admission, child_root)
+            except ActiveWorkCorrupt as exc:
+                logging.warning("ОТКАЗ: %s", exc)
+                return 1
         found = False
         for w in data["active"]:
             if w.get("id") == wid:
