@@ -54,7 +54,7 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
                       base=None, open_pr=False, max_steps=40, repo_slug=None,
                       contract_shas=None, run_fn=None, runner=None, author=True, review=True,
                       sandbox=False, baseline_diff=False, install_deps=True, require_fix=False,
-                      review_fix_attempts=0):
+                      review_fix_attempts=0, budget=None):
     """ЯВНЫЙ opt-in `--parallel`: декомпозировать задачу и провести мультипакетный план через
     `parallel_live.run_live_concurrent` (настоящая конкурентность, disposable-клон на пакет).
 
@@ -75,6 +75,13 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
     if not binding.get("resolved"):
         return {"proceed": False, "stage": "preflight", "parallel": True,
                 "reason": f"base-preflight: {binding.get('reason')}"}
+    from ai_ops_kit.shared import budget as budget_mod
+    try:
+        budget = budget_mod.resolve_budget(budget, signals.get("execution_budget"))
+        budget.ensure_execution_supported()
+    except (ValueError, budget_mod.BudgetExceeded) as exc:
+        return {"proceed": False, "stage": "preflight", "parallel": True,
+                "reason": f"parallel budget unsupported: {exc}"}
     reason = _policy_refusal(signals, wg, child_root, wid, provider, model, max_steps)
     if reason:
         return {"proceed": False, "stage": "preflight", "parallel": True, "reason": reason}
@@ -102,9 +109,10 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
                                 "max_steps": max_steps, "author": author, "review": review,
                                 "sandbox": sandbox, "baseline_diff": baseline_diff,
                                 "install_deps": install_deps, "require_fix": require_fix,
-                                "review_fix_attempts": review_fix_attempts})
+                                "review_fix_attempts": review_fix_attempts, "budget": budget})
     if isinstance(rec, dict):
         rec["parallel"] = True
+        rec["budget"] = budget.to_dict()
         rec["base_binding"] = binding
         rec["delivery_requested"] = bool(open_pr)
         rec["reconciliation"] = reconciled
@@ -138,7 +146,7 @@ def _policy_refusal(signals, wg, root, wid, provider, model, max_steps):
     for identity in [wid, *[p.get("id") for p in wg["packages"]]]:
         if not isinstance(identity, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", identity):
             return "parallel feature/package id должен быть одним безопасным сегментом пути"
-    budgets = [signals.get(k) for k in ("execution_budget", "budget_contract", "budget")]
+    budgets = [signals.get(k) for k in ("budget_contract", "budget")]
     budgets += [p.get("budget") for p in wg["packages"]]
     if any(b is not None and (not isinstance(b, dict) or any(v is not None for v in b.values()))
            for b in budgets):

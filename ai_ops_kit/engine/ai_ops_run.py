@@ -76,12 +76,21 @@ from ai_ops_kit.engine.ai_ops_run_exec import (   # noqa: F401,E402
 
 
 def _run_controller_path(task_text, signals, child_root, features_dir, feature,
-                         runtime, provider_name, execute, session, write_scope):
+                         runtime, provider_name, execute, session, write_scope, budget=None):
     """controller/planning-путь (engine=controller): RunPlan + каркас состояния, БЕЗ внешней доставки;
     стадии исполняет рантайм/generic-orchestrator, execution+delivery-гарантии — только pipeline."""
+    from ai_ops_kit.shared import budget as budget_mod
+    try:
+        budget = budget_mod.resolve_budget(budget, signals.get("execution_budget"))
+        if execute or runtime == "generic-orchestrator":
+            budget.ensure_execution_supported()
+    except (ValueError, budget_mod.BudgetExceeded) as exc:
+        return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked", "ready_for_pr": False,
+                "blocked_by": "execution-budget", "error": str(exc)}
     # 1-2. RunPlan (route + треки + гейты). feature (v2.51): привязка WorkItem к ИМЕНОВАННОЙ фиче —
     # иначе wid=wi-<hash>, и срезы истории падают на новую фичу с 1 срезом (finding обкатки 5).
     plan = run_plan.build_plan(signals, workitem_id=feature)
+    plan["execution_budget"] = budget.limits()
     fid = plan["workitem_id"]
     base_wf = plan["base_workflow"]
 
@@ -118,7 +127,7 @@ def _run_controller_path(task_text, signals, child_root, features_dir, feature,
             base_wf, task_text, child_root,
             provider=orchestrator.make_provider(provider_name),
             provider_name=provider_name, verbose=False, workitem_id=fid,
-            budget=plan.get("execution_budget"),   # v2.38: потолок вызовов из RunPlan
+            budget=budget,   # тот же logical admission object, не новый counter из dict
             gate_ids=plan.get("gates"),            # v2.54: прогон оценивает ГЕЙТЫ RUNPLAN (base+треки)
             signals=signals)                       # v2.55: условный human_approval по сигналам задачи
         status = st["status"]
@@ -162,7 +171,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
         context_shadow=False, context_hybrid=False, reevaluate_only=False,
-        progressive_escalation=False, provider_resolution=None, verification_intent="merge_candidate"):
+        progressive_escalation=False, provider_resolution=None, verification_intent="merge_candidate", budget=None):
     from ai_ops_kit.gates import verification_tiers
     if verification_intent is None:
         verification_intent = "merge_candidate"
@@ -172,6 +181,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         return {"kind": "run-report", "status": "error", "ready_for_pr": False, "error": str(exc)}
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
+    from ai_ops_kit.shared import budget as budget_mod
     child_root = Path(child_root)
     features_dir = Path(features_dir) if features_dir else child_root / "features"
 
@@ -191,14 +201,32 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         _rrerr = _restore_resume_policy(ctx, resume)
         if _rrerr:
             return _rrerr
+        # base -> конкретная ветка + полный BaseBinding (0 model calls на явной несуществующей базе).
+        base, base_binding, _brerr = _resolve_run_base(ctx, ctx.base)
+        if _brerr is not None:
+            return _brerr
+        try:
+            saved_limits = None
+            if resume and ctx.feature and not ctx.signals.get("_sequence_internal"):
+                saved = _ls.load_guarded(ctx.features_dir / ctx.feature / "run-plan.yaml",
+                                         required_keys=("kind", "execution_budget"), kind="run-plan")
+                if saved["state"] == "absent":
+                    _, _, prior_error = _resume_gate(child_root, ctx.feature, base, force_resume, True)
+                    if prior_error is not None:
+                        return prior_error  # canonical no-prior/base-drift diagnosis, still 0 callbacks
+                if saved["state"] != "ok":
+                    raise ValueError("saved RunPlan budget отсутствует/повреждён; implicit unlimited запрещён")
+                saved_limits = (saved.get("data") or {}).get("execution_budget")
+            budget = budget_mod.resolve_budget(budget, signals.get("execution_budget"),
+                                               ctx.signals.get("execution_budget"), saved_limits)
+            budget.ensure_execution_supported()
+        except (ValueError, budget_mod.BudgetExceeded) as exc:
+            return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked",
+                    "ready_for_pr": False, "blocked_by": "execution-budget", "error": str(exc)}
         signals, task_text, _saved_task = ctx.signals, ctx.task_text, ctx.saved_task
         sandbox, baseline_diff, require_fix = ctx.sandbox, ctx.baseline_diff, ctx.require_fix
         author, review, open_pr = ctx.author, ctx.review, ctx.open_pr
-        write_scope, max_steps, base = ctx.write_scope, ctx.max_steps, ctx.base
-        # base -> конкретная ветка + полный BaseBinding (0 model calls на явной несуществующей базе).
-        base, base_binding, _brerr = _resolve_run_base(ctx, base)
-        if _brerr is not None:
-            return _brerr
+        write_scope, max_steps = ctx.write_scope, ctx.max_steps
         # v3.7.12 Router->runtime + JIT-trust + complexity-aware + provider-fallback -> _resolve_models
         # (K6). Мутирует ctx; preflight PRIMARY не пройден -> blocked-preflight (fail-closed).
         _mrerr = _resolve_models(ctx)
@@ -212,6 +240,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         # v2.94 (One Run Transaction, аудит #2): pipeline НЕ обходит lifecycle — один план строится здесь
         # и передаётся в движок; WorkItem/RunPlan/active-work/run-report как в controller-пути.
         plan = run_plan.build_plan(signals, workitem_id=feature)
+        plan["execution_budget"] = budget.limits()
         fid = plan["workitem_id"]
 
         # v3.0.16 Phase A (аудит #2): реконсиляция незавершённой доставки прошлого прогона ДО новой
@@ -260,8 +289,9 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             ui_evidence=ui_evidence, reevaluate_only=reevaluate_only, resume=resume,
             resume_ctx=resume_ctx, attempt_id=_attempt_id, fid=fid, aw_path=aw_path,
             review_fix_attempts=review_fix_attempts, reviewer_proposer=reviewer_proposer,
-            author_proposer=author_proposer)
+            author_proposer=author_proposer, budget=budget)
         if _exerr is not None:
+            _exerr["budget"] = budget.to_dict()
             _failure_journal = features_dir / fid / "lifecycle-journal.jsonl"
             _finalize_run_cost(_exerr, orchestrator, model, str(_failure_journal), fid,
                                _attempt_id, signals, plan, _model_resolution, child_root)
@@ -270,6 +300,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                 _note_bookkeeping_error(_exerr, "failure_usage_report.write",
                                         RuntimeError(_error_write.get("error")))
             return _exerr
+        rep["budget"] = budget.to_dict()
         _enrich_run_report(rep, runtime=runtime, provider_name=provider_name,
                            provider_resolution=provider_resolution, child_root=child_root,
                            base_binding=base_binding, model_resolution=_model_resolution,
@@ -298,7 +329,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
 
     # engine=controller: RunPlan + каркас состояния (без внешней доставки) -> _run_controller_path.
     return _run_controller_path(task_text, signals, child_root, features_dir, feature,
-                                runtime, provider_name, execute, session, write_scope)
+                                runtime, provider_name, execute, session, write_scope, budget)
 
 
 def main(argv):
