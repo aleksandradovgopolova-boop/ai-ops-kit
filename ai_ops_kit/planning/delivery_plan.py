@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import posixpath
 import re
 import sys
 from pathlib import Path
@@ -286,11 +287,16 @@ def scope_prefix(glob) -> str:
     «пересечений нет». Этот же fail-closed уже был потерян и починен в
     `engine/parallel_planner.py` (баг v3.6.5) — здесь он повторился в новом коде.
     """
-    s = str(glob or "").replace("\\", "/").strip()
-    while s.startswith("./"):
-        s = s[2:]
-    head = s.split("*")[0].strip("/")
-    if not head:
+    if not isinstance(glob, str):
+        return GLOBAL_SCOPE
+    s = glob.replace("\\", "/").strip()
+    if ".." in s.split("/"):
+        return GLOBAL_SCOPE
+    head = s[:min((s.index(c) for c in "*?[" if c in s), default=len(s))]
+    if len(head) < len(s) and not head.endswith("/"):
+        head = head.rsplit("/", 1)[0] if "/" in head else ""
+    head = posixpath.normpath(head)
+    if head in ("", ".", "..") or head.startswith(("/", "../")) or ":" in head:
         return GLOBAL_SCOPE
     return head
 

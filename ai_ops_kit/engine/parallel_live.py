@@ -409,7 +409,8 @@ def _artifact_sha(value):
 
 def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
     """Whitelist evidence + call streams до удаления последней package source копии."""
-    run_id = hashlib.sha256(str(Path(run_dir).resolve()).encode()).hexdigest()
+    run_root = Path(run_dir).resolve()
+    run_id = hashlib.sha256(str(run_root).encode()).hexdigest()
     sources, identities, baselines, packages = [], {}, {}, []
     for pid, clone in sorted(clones.items()):
         if pid == "_integration":
@@ -432,8 +433,8 @@ def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
             item["source_id"] = identity
             sources.append(source)
             identities[str(source)] = identity
-            baseline_path = Path(run_dir) / "_package-baselines" / (hashlib.sha256(pid.encode()).hexdigest() + ".json")
-            usage_ledger._no_symlink(Path(run_dir).resolve(), baseline_path)
+            baseline_path = run_root / "_package-baselines" / (hashlib.sha256(pid.encode()).hexdigest() + ".json")
+            usage_ledger._no_symlink(run_root, baseline_path)
             if not baseline_path.is_file():
                 raise ValueError("package durable baseline отсутствует; cleanup запрещён")
             saved = json.loads(baseline_path.read_text(encoding="utf-8"))

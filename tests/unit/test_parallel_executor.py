@@ -4,8 +4,12 @@
 """
 from __future__ import annotations
 
+import concurrent.futures
+import threading
+
 import pytest
 
+from ai_ops_kit.engine import parallel_executor as executor
 from ai_ops_kit.engine.parallel_executor import (
     execute_parallel,
 )
@@ -37,6 +41,157 @@ def _good_runner(pkg, shas):
 
 def _good_integration(results):
     return ("1234567", {"all_pass": True, "tested_revision": "1234567"}, 0, False)
+
+
+def _proof(pid):
+    sha = {"a": "aaa1110", "b": "bbb2220", "c": "ccc3330", "d": "ddd4440"}[pid]
+    return {"status": "pass", "sha": sha,
+            "gate_report": {"all_pass": True, "tested_revision": sha}}
+
+
+def test_ready_dependency_uses_free_slot_before_unrelated_root_finishes(tmp_path):
+    """C реально пишет файл, пока B ждёт C; старый общий барьер создавал взаимное ожидание."""
+    b_started, c_wrote = threading.Event(), threading.Event()
+    graph = {"packages": [
+        {"id": "a", "write_scope": ["a/"]},
+        {"id": "b", "write_scope": ["b/"]},
+        {"id": "c", "write_scope": ["c/"], "depends_on": ["a"]},
+    ]}
+
+    def runner(pkg):
+        pid = pkg["id"]
+        if pid == "a":
+            assert b_started.wait(2), "B не стартовал вместе с A"
+        if pid == "b":
+            b_started.set()
+            assert c_wrote.wait(2), "готовый C ждёт посторонний B"
+        (tmp_path / pid).write_text(pid)
+        if pid == "c":
+            assert not (tmp_path / "b").exists()
+            c_wrote.set()
+        return _proof(pid)
+
+    def integrate(results):
+        assert list(results) == ["a", "b", "c"]
+        assert {p.name: p.read_text() for p in tmp_path.iterdir()} == {"a": "a", "b": "b", "c": "c"}
+        return _good_integration(results)
+
+    result = execute_parallel(graph, runner, integrate)
+    assert result["proceed"] is True
+    assert result["delivery"]["intents"] == 1
+
+
+@pytest.mark.parametrize("bad", [
+    {"status": "fail"},
+    {"status": "pass", "sha": "aaa1110", "gate_report": {"all_pass": False, "tested_revision": "aaa1110"}},
+    {"status": "pass", "sha": "aaa1110", "gate_report": {"all_pass": True, "tested_revision": "wrong"}},
+    {"status": "pass", "sha": "not-a-sha", "gate_report": {"all_pass": True, "tested_revision": "not-a-sha"}},
+])
+def test_unproven_dependency_never_launches_child(tmp_path, bad):
+    graph = {"packages": [{"id": "a", "write_scope": ["a/"]},
+                           {"id": "c", "write_scope": ["c/"], "depends_on": ["a"]}]}
+
+    def runner(pkg):
+        (tmp_path / pkg["id"]).write_text("actually ran")
+        return bad if pkg["id"] == "a" else _proof("c")
+
+    def integrate(_):
+        pytest.fail("fan-in запущен после недоказанной зависимости")
+
+    result = execute_parallel(graph, runner, integrate)
+    assert (tmp_path / "a").read_text() == "actually ran"
+    assert not (tmp_path / "c").exists()
+    assert result["package_results"]["c"]["status"] == "blocked-dependency"
+    assert result["delivery"]["intents"] == 0
+
+
+def test_cancelled_future_cannot_start_dependents_or_fan_in(monkeypatch, tmp_path):
+    real_executor = concurrent.futures.ThreadPoolExecutor
+
+    class CancelFirst(real_executor):
+        def submit(self, fn, *args, **kwargs):
+            pkg = args[-1]
+            if pkg["id"] == "a":
+                future = concurrent.futures.Future()
+                assert future.cancel()
+                assert not future.set_running_or_notify_cancel()
+                return future
+            return super().submit(fn, *args, **kwargs)
+
+    monkeypatch.setattr(executor._cf, "ThreadPoolExecutor", CancelFirst)
+    graph = {"packages": [{"id": "a", "write_scope": ["a/"]},
+                           {"id": "c", "write_scope": ["c/"], "depends_on": ["a"]}]}
+
+    def runner(pkg):
+        (tmp_path / pkg["id"]).write_text("ran")
+        return _proof(pkg["id"])
+
+    result = execute_parallel(graph, runner, lambda _: pytest.fail("cancelled fan-in"))
+    assert list(tmp_path.iterdir()) == []
+    assert result["package_results"]["a"]["status"] == "error"
+    assert "CancelledError" in result["package_results"]["a"]["error"]
+    assert result["package_results"]["c"]["status"] == "blocked-dependency"
+    assert result["delivery"]["open_pr"] is False
+
+
+@pytest.mark.parametrize("limit", [1, 2, 8])
+def test_ready_scheduler_never_exceeds_two_or_requested_lower_limit(tmp_path, limit):
+    started, release = threading.Event(), threading.Event()
+    lock, active, peak = threading.Lock(), set(), []
+    expected = min(2, limit)
+    graph = {"packages": [{"id": pid, "write_scope": [f"{pid}/"]} for pid in "abcd"]}
+
+    def runner(pkg):
+        pid = pkg["id"]
+        with lock:
+            active.add(pid)
+            peak.append(len(active))
+            if len(active) == expected:
+                started.set()
+        assert release.wait(2), "контроллер не освободил исполнителей"
+        (tmp_path / pid).write_text(pid)
+        with lock:
+            active.remove(pid)
+        return _proof(pid)
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as controller:
+        future = controller.submit(execute_parallel, graph, runner, _good_integration, max_parallel=limit)
+        try:
+            assert started.wait(2)
+        finally:
+            release.set()
+        result = future.result(timeout=5)
+    assert max(peak) == expected
+    assert {p.name for p in tmp_path.iterdir()} == set("abcd")
+    assert result["proceed"] is True
+
+
+@pytest.mark.parametrize("scope", [["shared/**"], ["./shared/"], ["shared\\"], ["**"], [], None, [None]])
+def test_ready_dependent_waits_for_conflicting_active_writer(tmp_path, scope):
+    b_started, a_finished = threading.Event(), threading.Event()
+    graph = {"packages": [
+        {"id": "a", "write_scope": ["a/"]},
+        {"id": "b", "write_scope": ["shared/child/"]},
+        {"id": "c", "write_scope": scope, "depends_on": ["a"]},
+    ]}
+
+    def runner(pkg):
+        pid = pkg["id"]
+        if pid == "a":
+            assert b_started.wait(2)
+            a_finished.set()
+        elif pid == "b":
+            b_started.set()
+            assert a_finished.wait(2)
+            (tmp_path / "shared").write_text("b")
+        else:
+            assert (tmp_path / "shared").read_text() == "b"
+            (tmp_path / "shared").write_text("bc")
+        return _proof(pid)
+
+    result = execute_parallel(graph, runner, _good_integration)
+    assert result["proceed"] is True
+    assert (tmp_path / "shared").read_text() == "bc"
 
 
 @pytest.mark.unit
