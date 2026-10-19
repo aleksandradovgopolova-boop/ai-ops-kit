@@ -11,3 +11,5 @@
 Не входит: новый scheduler/resolver, generic provider health, native/paid probes, автоматическое переназначение или завершение всего1322. Восстановление и перенос на другого исполнителя требуют существующего ownership/lease протокола; неподдерживаемые шаги не объявляются реализованными.
 
 Review-исправление: проверяются оба имени, которые принимает существующий make_provider; lookup остаётся единственным. Alias воспроизведён четырьмя RED, оба имени проходят все отрицательные/positive/retry cases.
+
+CI-исправление структуры тестов: первый запуск на 194899f5 обнаружил превышение лимита850 строк (889) в test_parallel_live_dispatch.py. Новые availability/retry cases вынесены в test_parallel_provider_availability.py, существующие Git fixtures — в _parallel_dispatch_helpers.py без изменения тел. До/после одинаковые84 test cases; лимит и CI остаются прежними. Итоговые размеры764/96/37 строк. Полный applicable CI выполняется заново для итогового SHA.
