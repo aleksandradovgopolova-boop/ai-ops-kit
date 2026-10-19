@@ -16,6 +16,7 @@ import json
 import os
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
+from typing import Any, Callable, ContextManager, Iterator
 
 from ai_ops_kit.shared import lifecycle_store
 import sys
@@ -67,8 +68,8 @@ class Budget:
         self.max_duration = limits["max_duration"]
         self.model_calls, self.cost, self._unknown_cost = 0, 0.0, 0
         self._lock = RLock()
-        self._ledger = None
-        self._admission_guard = nullcontext
+        self._ledger: tuple[Path, dict] | None = None
+        self._admission_guard: Callable[[], ContextManager[Any]] = nullcontext
 
     @classmethod
     def from_dict(cls, d: dict | None) -> "Budget":
@@ -87,7 +88,7 @@ class Budget:
             if self.max_model_calls is not None and self.model_calls >= self.max_model_calls:
                 raise BudgetExceeded("budget exhausted: max_model_calls")
 
-    def _charge_values(self, known):
+    def _charge_values(self, known: float | None) -> tuple[int, float, int]:
         if self.max_duration is not None:
             raise BudgetExceeded("budget unsupported: max_duration не обеспечивается")
         if self.max_cost is not None and known is None:
@@ -124,13 +125,13 @@ class Budget:
             except Exception as exc:
                 raise BudgetExceeded("budget durable admission unavailable; callback refused") from exc
 
-    def _record(self, binding, calls, subtotal, unknown):
+    def _record(self, binding: dict, calls: int, subtotal: float, unknown: int) -> dict:
         return {"schema_version": 1, "kind": "LogicalCallBudget", "binding": binding,
                 "limits": self.limits(), "model_calls": calls,
                 "known_cost_lower_bound": subtotal, "unknown_cost_calls": unknown,
                 "call_unit": "logical-proposer-invocation", "reservation_mode": "durable-before-callback"}
 
-    def _adopt_record(self, record, binding):
+    def _adopt_record(self, record: dict, binding: dict) -> None:
         if (type(record.get("schema_version")) is not int or record["schema_version"] != 1
                 or record.get("kind") != "LogicalCallBudget"
                 or record.get("call_unit") != "logical-proposer-invocation"
@@ -150,7 +151,8 @@ class Budget:
             raise BudgetExceeded("budget durable mode cannot certify a known USD subtotal")
         self.model_calls, self.cost, self._unknown_cost = calls, subtotal, unknown
 
-    def bind_durable(self, path, binding, *, create=False, guard=nullcontext):
+    def bind_durable(self, path: str | Path, binding: dict, *, create: bool = False,
+                     guard: Callable[[], ContextManager[Any]] = nullcontext) -> None:
         """Attach existing job reservations; only proven fresh jobs may create zero state."""
         path, binding = Path(path).absolute(), json.loads(_budget_json(binding))
         with self._lock:
@@ -176,7 +178,7 @@ class Budget:
             except Exception as exc:
                 raise BudgetExceeded("budget durable binding unavailable") from exc
 
-    def _refresh_durable(self):
+    def _refresh_durable(self) -> None:
         if self._ledger is not None:
             path, binding = self._ledger
             with _reservation_lock(path):
@@ -199,7 +201,7 @@ class Budget:
 
 
 
-def _budget_json(value):
+def _budget_json(value: Any) -> str:
     try:
         return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False)
     except (TypeError, ValueError) as exc:
@@ -207,7 +209,7 @@ def _budget_json(value):
 
 
 @contextmanager
-def _reservation_lock(path):
+def _reservation_lock(path: Path) -> Iterator[None]:
     try:
         import fcntl
         if ".." in path.parts or any(p.is_symlink() for p in (path, *path.parents)):
@@ -224,14 +226,14 @@ def _reservation_lock(path):
         raise BudgetExceeded("budget durable lock/read unavailable") from exc
 
 
-def _reservation_read(path):
+def _reservation_read(path: Path) -> dict:
     loaded = lifecycle_store.load_guarded(path, kind="LogicalCallBudget")
     if loaded["state"] != "ok":
         raise BudgetExceeded("budget durable ledger missing/corrupt; no fresh fallback")
     return loaded["data"]
 
 
-def _reservation_write(path, record):
+def _reservation_write(path: Path, record: dict) -> None:
     saved = lifecycle_store.durable_write_json(path, record)
     if not saved.get("ok"):
         raise BudgetExceeded("budget reservation not confirmed durable; callback refused")
