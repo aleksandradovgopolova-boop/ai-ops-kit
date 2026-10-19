@@ -525,7 +525,6 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
     import yaml
     from ai_ops_kit.engine import parallel_planner, parallel_live, run_plan
     from ai_ops_kit.shared import budget as budgets, gitio
-    from ai_ops_kit.validation import validate_research_artifacts as schema, validate_work_graph
     root = Path(root).resolve()
     snapshots = {}
 
@@ -554,17 +553,29 @@ def _automatic_roots(root, wid, signals, base, *, session_identity=None, executi
         if len(paths) != 1:
             raise ValueError("automatic ambiguous saved WorkGraph")
         wg = read(paths[0])
-        errors = schema.check_schema(wg, json.loads((parallel_planner.PKG / "schemas/work-graph.schema.json").read_text()))
-        errors += validate_work_graph.check_wg(wg)
-        if errors or wg.get("feature") != wid or wid in [p.get("id") for p in wg.get("packages", [])]:
-            raise ValueError("automatic invalid/wrong-feature WorkGraph: " + "; ".join(errors))
-        if set(wg["aggregate_verification"]) - {"implementation_verification"}:
+        shape = {"schema_version": int, "kind": str, "id": str, "feature": str, "execution_mode": str,
+                 "packages": list, "integration_order": list, "aggregate_verification": list}
+        if (set(wg) != set(shape) or any(type(wg[k]) is not t for k, t in shape.items())
+                or wg["schema_version"] != 1 or wg["kind"] != "WorkGraph"
+                or not re.fullmatch(r"WG-[0-9]{3,}", wg["id"]) or wg["feature"] != wid):
+            raise ValueError("automatic invalid/wrong-feature WorkGraph")
+        pkgs = wg["packages"]
+        for p in pkgs:
+            if (not isinstance(p, dict) or set(p) - {"id", "write_scope", "depends_on", "shared_contracts"}
+                    or not isinstance(p.get("id"), str) or not p.get("id") or p["id"] == wid
+                    or any(not isinstance(p.get(k, []), list) or any(not isinstance(x, str) or not x for x in p.get(k, []))
+                           for k in ("write_scope", "depends_on", "shared_contracts")) or not p.get("write_scope")):
+                raise ValueError("automatic invalid saved package")
+        ids = [p["id"] for p in pkgs]
+        if not ids or len(set(ids)) != len(ids) or sorted(wg["integration_order"]) != sorted(ids):
+            raise ValueError("automatic invalid package identity/integration order")
+        if wg["aggregate_verification"] != ["implementation_verification"]:
             raise ValueError("automatic unsupported aggregate verification")
         pkgs = wg["packages"]
-        if len(pkgs) < 2:
-            return None
         if wg["execution_mode"] not in ("parallel", "hybrid") or any(p.get("depends_on") for p in pkgs):
             raise ValueError("automatic supports independent roots only; dependencies retained")
+        if len(pkgs) < 2:
+            return None
         supported = {"auto_parallel_independent_roots", "target_context_tokens", "compact_recommended_at",
                      "new_session_recommended_at", "one_task_per_session", "allow_cross_task_session"}
         if any(k not in supported and v is not None for k, v in economy.items()):

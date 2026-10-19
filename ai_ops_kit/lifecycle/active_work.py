@@ -33,6 +33,7 @@ import os
 import contextlib
 import json
 import hashlib
+import logging
 import sys
 from pathlib import Path
 
@@ -136,7 +137,7 @@ def _claim_lock(path, child_root):
     path = Path(path)
     legacy = Path(child_root) / ".ai/runtime/active-work.yaml" if child_root else path
     with _locked(path):
-        if child_root and path != legacy and path == shared_registry_path(child_root):
+        if child_root and path != legacy and _git_common_dir(child_root) and path == shared_registry_path(child_root):
             with _locked(legacy):
                 yield legacy
         else:
@@ -361,7 +362,7 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
             reason = _automatic_claim_refusal(path, child_root, admission, session, takeover,
                                               wid, branch, areas, data["active"] + old, published)
             if reason:
-                print(f"ОТКАЗ: {reason}")
+                logging.warning("ОТКАЗ: %s", reason)
                 return 1
         # Заявка = кто (сессия) + где (машина) + когда (время) + что (ветка/зоны). Машина и время
         # добавлены 18.08.2026: без «где» и «когда» инцидент параллельных сессий не разобрать
@@ -404,7 +405,7 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
         if child_root:
             protected = [w for w in against if w.get("auto_admission")]
             against = reconcile_with_base([w for w in against if not w.get("auto_admission")], child_root) + protected
-        confs = classify(against, entry)
+        confs = classify(against, entry) + classify([w for w in against if w.get("auto_admission")], dict(entry, owner_session=None))
         # ОТКАЗ, А НЕ ПРЕДУПРЕЖДЕНИЕ (замер 18.08.2026, заявка потребителя #150). Прежде на «ту же
         # работу» и «ту же ветку» кит печатал `⚠ это ДУБЛЬ, не начинайте второй раз`, ВОЗВРАЩАЛ 0 и
         # ЗАТИРАЛ чужую заявку своей: держателя больше нет ни в реестре, ни в предупреждении, и
@@ -421,7 +422,7 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
         released = []
         for c in list(blocking):
             w = _by_id.get(c.get("id")) or {}
-            if not w.get("auto_admission") and holder_is_gone(w, entry.get("machine")):
+            if not (w.get("auto_admission") or w.get("worktree")) and holder_is_gone(w, entry.get("machine")):
                 blocking.remove(c)
                 released.append(c)
         for c in released:

@@ -152,10 +152,8 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
     """Регистрация active-work + concurrency-preflight (координация параллельных сессий).
     K6: вынесено из run() без изменения поведения. -> (aw_path, preflight, error|None)."""
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
-    try:
+    if active_work._git_common_dir(child_root):
         aw_path = active_work.shared_registry_path(child_root)
-    except active_work.ActiveWorkCorrupt:
-        pass  # non-Git legacy/offline lifecycle; automatic admission requires Git
     # v3.0.12 (finding аудита блок B): общий реестр координации повреждён -> FAIL-CLOSED (не стартуем
     # вслепую: пустая карта скрыла бы чужую активную работу и две сессии столкнулись бы). Проверяем
     # ДО preflight/register, чтобы register не наткнулся на corrupt-raise без обработки.

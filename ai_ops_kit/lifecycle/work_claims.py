@@ -282,23 +282,7 @@ def team_view(child_root, local_active: list, published: bool) -> list:
 
 
 def shared_registry_path(start=None):
-    """Путь к реестру, ОБЩЕМУ для всех worktree одного репозитория. -> Path.
-
-    ЗАЧЕМ ЭТО ПОЯВИЛОСЬ (замер 12.08.2026). Протокол параллельной работы
-    (`docs/parallel-sessions.md`) требует двух вещей одновременно: сессия работает в своём
-    `git worktree` (иначе чужой `checkout` уводит незакоммиченные правки) И заявляет область записи
-    в общем реестре (иначе две сессии берут одну работу). В таком виде правила ПРОТИВОРЕЧИЛИ друг
-    другу: `.ai/runtime/active-work.yaml` лежит внутри рабочего дерева, то есть у каждого worktree
-    свой — проверено, файл, созданный в одном, из другого не виден вовсе. Реестр, невидимый другой
-    сессии, — это не координация, а её видимость.
-
-    Поэтому путь берётся из `git rev-parse --git-common-dir`: этот каталог ОДИН на репозиторий и
-    все его worktree (у worktree свой `--git-dir`, но общий `--git-common-dir`). Реестр там же не
-    попадает в историю — он состояние машины, а не факт о продукте.
-
-    Путь `.ai/runtime/active-work.yaml` остаётся проекцией для читателей;
-    controller single/automatic writes используют этот общий Git store.
-    """
+    """Один Git-common store для register/finish всех worktrees; runtime — проекция читателей."""
     common = _git_common_dir(start)
     if common is None:
         raise ActiveWorkCorrupt(
@@ -312,9 +296,7 @@ class ActiveWorkCorrupt(Exception):
 
 
 def load(path: Path):
-    """v3.0.12 (finding аудита блок B): FAIL-CLOSED. Прежде safe_load(...) or {} на битом/пустом реестре
-    возвращал ПУСТУЮ карту -> concurrency forecast «пересечений нет» на потерянных записях (две сессии
-    сталкивались). Теперь: отсутствует -> fresh; повреждён -> raise (не тихая пустая карта)."""
+    """Fail-closed: отсутствует → fresh; повреждён → raise, без ложной пустой карты."""
     g = _ls.load_guarded(Path(path), kind="active-work")
     if g["state"] == "absent":
         return {"schema_version": 1, "kind": "active-work", "active": []}
@@ -330,9 +312,7 @@ def load(path: Path):
 
 @contextlib.contextmanager
 def _locked(path: Path):
-    """v3.0.12 (finding аудита блок B): межпроцессная блокировка вокруг read-modify-write общего реестра,
-    чтобы конкурентные register/finish не теряли записи друг друга (last-writer-wins TOCTOU). best-effort:
-    на платформах без fcntl (Windows) деградирует до no-op — не хуже прежнего поведения."""
+    """flock вокруг read-modify-write; legacy Windows no-op, auto отдельно требует fcntl."""
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     lock_path = path.with_suffix(path.suffix + ".lock")

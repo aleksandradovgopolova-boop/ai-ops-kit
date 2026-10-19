@@ -168,10 +168,12 @@ def test_automatic_claim_blocks_single_and_preserves_frozen_admission(tmp_path):
     assert aw.register(path, "work", "ai-ops/work", ["aa.py"], "auto-owner", child_root=tmp_path,
                        admission=admission) == 0
     assert aw.load(path)["active"][0]["auto_admission"] == admission
-    _, _, err = _register_active_work(tmp_path, {}, ["aa.py"], "work", "single-owner", [])
-    assert err and err.get("blocked_by") == "active-work"
-    _, _, err = _register_active_work(tmp_path, {}, ["aa.py"], "different-work", "single-owner", [])
-    assert err and err.get("blocked_by") == "active-work"
+    for owner in ("single-owner", "auto-owner"):
+        _, _, err = _register_active_work(tmp_path, {}, ["aa.py"], "work", owner, [])
+        assert err and err.get("blocked_by") == "active-work"
+    for scope, blocked in (("aa.py", True), ("bb.py", False)):
+        _, _, err = _register_active_work(tmp_path, {}, [scope], "different-work", "single-owner", [])
+        assert bool(err) == blocked
     from ai_ops_kit.shared import gitio
     sibling = tmp_path.parent / (tmp_path.name + "-sibling")
     assert gitio.git(tmp_path, "worktree", "add", "-qb", "sibling", str(sibling))[0] == 0
@@ -179,5 +181,9 @@ def test_automatic_claim_blocks_single_and_preserves_frozen_admission(tmp_path):
                        "legacy-sibling", child_root=sibling) == 1
     assert not (sibling / ".ai/runtime/active-work.yaml").exists()
     assert aw.finish_cmd(path, "work", child_root=tmp_path) == 0
-    projected = aw.load(tmp_path / ".ai/runtime/active-work.yaml")["active"][0]
+    projected = next(w for w in aw.load(tmp_path / ".ai/runtime/active-work.yaml")["active"] if w["id"] == "work")
     assert projected["status"] == "done" and projected["auto_admission"] == admission
+    assert aw.register(path, "work", "ai-ops/work", ["aa.py"], "auto-owner", child_root=tmp_path) == 0
+    assert aw.register(path, "takeover", "ai-ops/takeover", ["cc.py"], "auto-owner", child_root=tmp_path, admission=admission) == 0
+    assert aw.register(path, "takeover", "ai-ops/takeover", ["cc.py"], "rescue", child_root=tmp_path, takeover=True, takeover_reason="explicit recovery") == 0
+    assert aw.load(path)["active"][-1]["taken_over_from"]["owner_session"] == "auto-owner"

@@ -622,7 +622,7 @@ def _saved_auto(root):
     return signals, wg
 
 
-@pytest.mark.parametrize("mutation", ["deps", "scope", "feature", "unknown", "ceiling", "budget", "approval", "policy", "aggregate", "legacy-budget", "alias", "config", "mode", "tests-passed"])
+@pytest.mark.parametrize("mutation", ["deps", "scope", "feature", "unknown", "ceiling", "budget", "approval", "policy", "aggregate", "legacy-budget", "alias", "config", "mode", "tests-passed", "types", "order", "null-scope"])
 def test_saved_auto_refuses_before_dispatch(tmp_path, mutation):
     import yaml
     from ai_ops_kit.cli import ai_ops_cli_commands as cmd
@@ -633,6 +633,12 @@ def test_saved_auto_refuses_before_dispatch(tmp_path, mutation):
         wg["packages"][1]["write_scope"] = ["../escape"]
     elif mutation == "alias":
         (tmp_path / "aa.txt").symlink_to("bb.txt")
+    elif mutation == "types":
+        wg["schema_version"] = True
+    elif mutation == "order":
+        wg["integration_order"] = ["aa"]
+    elif mutation == "null-scope":
+        wg["packages"][0]["write_scope"] = [None]
     elif mutation == "feature":
         wg["feature"] = "other"
     elif mutation == "unknown":
