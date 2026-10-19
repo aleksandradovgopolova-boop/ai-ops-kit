@@ -5,6 +5,7 @@ import pytest
 
 from validate_release_claims import (  # noqa: F401
     DEFAULT,
+    REQUIRED_SCOPES,
     PKG,
     _runtime_status,
     check,
@@ -29,7 +30,7 @@ def base_claims():
     _g, _m = derived_gate_counts()
     _vt, _vc = derived_verification_counts()
     scopes = {n: {"obtained_by": "CI", "covers": "x", "does_not_cover": "y"}
-              for n in ("full-current-python", "compatibility-matrix")}
+              for n in REQUIRED_SCOPES}
     return {
         "registry_type": "release-claims", "version": vf,
         "checks_count": checks, "agents_count": agents,

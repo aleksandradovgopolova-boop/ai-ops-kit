@@ -176,7 +176,7 @@ def _runtime_status(pkg, runtime, capability):
     return (((runtimes.get(runtime) or {}).get("capabilities") or {}).get(capability) or {}).get("status")
 
 
-REQUIRED_SCOPES = ("full-current-python", "compatibility-matrix")
+REQUIRED_SCOPES = ("full-current-python", "pr-current-python", "compatibility-matrix")
 # Заявление о полноте проверки. Ищется в тексте релиза; допустимо только с именем охвата.
 _FULL_CLAIM = ("полный контур", "полного контура", "полный набор проверок", "все проверки зелен")
 
@@ -345,7 +345,7 @@ def evidence_scope_errors(data, pkg=PKG):
     3.9 в том же PR. Слово «полный» без величины охвата — не преувеличение, а другое утверждение.
 
     Проверяется:
-      * оба охвата объявлены, у каждого сказано, чем получен и чего НЕ покрывает (охват без
+      * все обязательные охваты объявлены, у каждого сказано, чем получен и чего НЕ покрывает (охват без
         границы — снова «полный»);
       * obtained_by, ссылающийся на файл репозитория, указывает на существующий файл;
       * заявление о полноте в patch_note называет охват.
