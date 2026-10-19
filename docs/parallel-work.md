@@ -53,6 +53,15 @@
 
 ## Повтор сохранённых independent roots
 
+Исполнимый WorkGraph может находиться в `features/<workitem_id>/work-graph.yaml`:
+каждая цель хранит свой план, а admission фиксирует hash именно этого файла.
+Существующие `work-graph.yaml` и `.ai/runtime/work-graph.yaml` поддерживаются.
+Одновременно допускается ровно один из трёх путей, даже если копии одинаковы;
+unsafe identity, symlink (включая dangling) и чужая feature дают отказ до запуска.
+Изменение выбранного графа после admission закрывает следующий callback прежним
+frozen-input guard. Это хранение и проверка исполнимого плана, не автоматическая
+декомпозиция произвольной цели.
+
 При включённом `session_economy.auto_parallel_independent_roots` повтор того же
 `./ai-ops run "<исходная задача>" --feature <id> --execute` автоматически продолжает
 **завершённую blocked попытку своей сессии** на прежней базе и неизменных saved inputs.
