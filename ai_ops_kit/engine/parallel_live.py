@@ -26,6 +26,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -409,6 +410,41 @@ def _artifact_sha(value):
     return value if isinstance(value, str) and len(value) == 40 and all(c in "0123456789abcdef" for c in value) else None
 
 
+class _CheckpointFailure(ValueError):
+    """Только фиксированный stage code; Git stderr/модельные данные не уходят в receipt."""
+
+
+def _checkpoint_git(root, stage, *args, **options):
+    try:
+        return _git(root, *args, **options)
+    except (RuntimeError, OSError) as exc:
+        raise _CheckpointFailure(stage) from exc
+
+
+def _retain_package_commit(child_root, source, sha, run_id, pid):
+    """Git objects+CAS ref до удаления source; local checkpoint, не доставка/ready."""
+    version = _checkpoint_git(child_root, "version", "--version").stdout
+    parsed = re.search(r"\b(\d+)\.(\d+)", version)
+    if not parsed or tuple(map(int, parsed.groups())) < (2, 36):
+        raise _CheckpointFailure("unsupported-git")
+    ref = f"refs/ai-ops/parallel/{run_id}/{hashlib.sha256(pid.encode()).hexdigest()}"
+    old = _checkpoint_git(child_root, "ref-read", "rev-parse", "--verify", "--quiet", ref, check=False)
+    if old.returncode not in (0, 1) or (old.returncode == 0 and old.stdout.strip() != sha):
+        raise _CheckpointFailure("ref-conflict")
+    harden = ("-c", "core.fsync=objects,reference", "-c", "core.fsyncMethod=fsync")
+    if old.returncode == 1:
+        _checkpoint_git(child_root, "fetch", *harden, "fetch", "--no-tags", "--no-write-fetch-head",
+             "--no-recurse-submodules", "--no-auto-maintenance", "--no-write-commit-graph",
+                        "--no-prune", "--no-prune-tags", str(source.resolve()), sha)
+    # Same SHA retry тоже проходит CAS/hardened write, но никогда не перезаписывает другую generation.
+    _checkpoint_git(child_root, "ref-write", *harden, "update-ref", ref, sha, sha if old.returncode == 0 else "0" * 40)
+    if _checkpoint_git(child_root, "ref-readback", "rev-parse", "--verify", ref).stdout.strip() != sha:
+        raise _CheckpointFailure("ref-readback")
+    _checkpoint_git(child_root, "objects", "cat-file", "-e", f"{sha}^{{commit}}")
+    _checkpoint_git(child_root, "objects", "cat-file", "-e", f"{sha}^{{tree}}")
+    return ref
+
+
 def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
     """Whitelist evidence + call streams до удаления последней package source копии."""
     run_root = Path(run_dir).resolve()
@@ -430,6 +466,7 @@ def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
             sha = item["reported_package_sha"]
             if sha and _git(source, "cat-file", "-e", f"{sha}^{{commit}}", check=False).returncode == 0:
                 item["package_sha"] = sha
+                item["retained_ref"] = _retain_package_commit(child_root, source, sha, run_id, pid)
             item["usage_streams"] = usage_ledger.snapshot_ledgers(source)
             identity = f"{run_id}/{pid}"
             item["source_id"] = identity
@@ -540,6 +577,8 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
         except Exception as exc:  # noqa: BLE001 — потерю usage нельзя выдать за доставленный результат
             rec["package_artifacts"] = {"status": "blocked", "reason": type(exc).__name__,
                                         "retained_source": str(clones_dir)}
+            if isinstance(exc, _CheckpointFailure):
+                rec["package_artifacts"]["checkpoint_failure"] = str(exc)
             rec.update(proceed=False, stage="artifact-preservation")
             rec["delivery"] = {"intents": 0, "open_pr": False}
         _ready = bool(rec.get("delivery", {}).get("open_pr") and rec.get("integration_sha"))
