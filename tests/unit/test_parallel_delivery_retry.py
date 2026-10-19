@@ -21,6 +21,7 @@ def _ready(root, monkeypatch, *, open_pr=False):
     _aggregate(monkeypatch)
     calls, posts = [], []
     def package(*args, **kwargs):
+        kwargs['budget'].charge_call()  # controlled prior logical expenditure, no actual provider
         calls.append(kwargs['feature'])
         return _commit(*args, **kwargs)
     def post(clone, branch, **kwargs):
@@ -55,6 +56,8 @@ def test_engine_cli_delivers_saved_real_integration_and_reuses_receipt_without_n
     original, identity, posts = _ready(tmp_path, monkeypatch)
     before_head = gitio.git(tmp_path, 'rev-parse', 'HEAD')[1]
     before_budget = copy.deepcopy(original['budget'])
+    assert before_budget['model_calls'] == 2 and before_budget['remaining_calls'] == 28
+    assert before_budget['cost'] is None and before_budget['cost_complete'] is False
     capsys.readouterr()
     args = ['resume', str(tmp_path), 'work', '--session', identity, '--execute', '--open-pr', '--reevaluate-only', '--json']
     assert ai_ops_run.main(args) == 0
