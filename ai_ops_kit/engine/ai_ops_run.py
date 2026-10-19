@@ -332,6 +332,10 @@ def run(task_text, signals, child_root: Path, features_dir=None,
                                 runtime, provider_name, execute, session, write_scope, budget)
 
 
+def _print_json_report(report):
+    print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+
+
 def main(argv):
     ap = _build_run_arg_parser()
     a = ap.parse_args(argv)
@@ -359,6 +363,20 @@ def main(argv):
             else:
                 print(f"ai-ops resume {a.feature}: ОТКАЗ — {_msg}")
             return 2
+        if getattr(a, "reevaluate_only", False):
+            from ai_ops_kit.engine import parallel_live_dispatch as parallel
+            from contextlib import nullcontext, redirect_stdout
+            from io import StringIO
+            with redirect_stdout(StringIO()) if a.json else nullcontext():
+                retried = parallel.resume_parallel_delivery(a.child_root, a.feature, session=a.session,
+                    base=a.base, execute=a.execute, open_pr=a.open_pr, task=a.task,
+                    replan=a.replan, takeover=a.takeover)
+            if retried is not None:
+                if a.json:
+                    _print_json_report(retried)
+                else:
+                    parallel.print_parallel(retried)
+                return parallel.exit_code(retried) if a.execute else (0 if retried['resume']['can_resume'] else 2)
         pf = run_handoff.resume_preflight(a.child_root, a.feature, base=a.base)
         if not a.execute:
             if a.json:
@@ -428,7 +446,7 @@ def main(argv):
                                           ("provider", "source", "reason", "warning")})
         rinfo = report.get("resume") or {}
         if a.json:
-            print(json.dumps(report, ensure_ascii=False, indent=2, default=str))
+            _print_json_report(report)
         else:
             print(f"ai-ops resume {a.feature}: status={report.get('status') or report.get('overall_status')} · "
                   f"resumed={rinfo.get('resumed')} · reused_branch={rinfo.get('reused_branch')} · "
