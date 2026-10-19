@@ -162,7 +162,14 @@ def run(task_text, signals, child_root: Path, features_dir=None,
         resume=False, force_resume=False, base=None, write_scope=None, replan=False,
         review_fix_attempts=0, calibrated_enforcement=True, ui_evidence=None,
         context_shadow=False, context_hybrid=False, reevaluate_only=False,
-        progressive_escalation=False, provider_resolution=None):
+        progressive_escalation=False, provider_resolution=None, verification_intent="merge_candidate"):
+    from ai_ops_kit.gates import verification_tiers
+    if verification_intent is None:
+        verification_intent = "merge_candidate"
+    try:
+        verification_tiers.decide_tier([], lifecycle_intent=verification_intent)
+    except ValueError as exc:
+        return {"kind": "run-report", "status": "error", "ready_for_pr": False, "error": str(exc)}
     signals = dict(signals or {})
     signals.setdefault("task_text", task_text)
     child_root = Path(child_root)
@@ -180,7 +187,7 @@ def run(task_text, signals, child_root: Path, features_dir=None,
             feature=feature, provider_name=provider_name, model=model, runtime=runtime,
             sandbox=sandbox, baseline_diff=baseline_diff, require_fix=require_fix, author=author,
             review=review, open_pr=open_pr, write_scope=write_scope, max_steps=max_steps,
-            base=base, replan=replan)
+            base=base, replan=replan, verification_intent=verification_intent)
         _rrerr = _restore_resume_policy(ctx, resume)
         if _rrerr:
             return _rrerr

@@ -344,7 +344,7 @@ def _commit_work(work_root, wid, task, is_git, applied, authored, shell_changed,
 def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, loop, *,
                        commit, is_git, committed_sha, base_sha, authored_ev, allow_missing_tests,
                        calibrated_enforcement, ui_evidence, review, reviewer_proposer, budget,
-                       strict_judge_qualified, security_reviewer_proposer, reevaluate_only):
+                       strict_judge_qualified, security_reviewer_proposer, reevaluate_only, verification_intent="merge_candidate"):
     """Сбор evidence на зафиксированном SHA и наполнение gate_ev: реальный прогон проверок профиля
     через Broker, intake/regression/authored/reevaluate-seed, освобождения по неприменимым проверкам,
     UI-evidence на точном SHA, seam-scan advisory, независимые ревью и доменный security-вердикт.
@@ -356,7 +356,10 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
     """
     # v3.26.1 Progressive Verification: передаём changed_files для targeted test execution
     _changed_for_verification = _committed_changed_files(work_root, committed_sha) if (commit and is_git and committed_sha) else None
-    coll = evidence_collector.collect(profile, work_root, pol, changed_files=_changed_for_verification, broker=tool_broker)
+    # Явная стадия проверки: пакет/checkpoint может иметь SHA и оставаться draft.
+    # Финальный whole-work/aggregate объявляет merge_candidate независимо от open_pr.
+    coll = evidence_collector.collect(profile, work_root, pol, changed_files=_changed_for_verification,
+        broker=tool_broker, lifecycle_intent=verification_intent)
 
     # 6a. finding аудита (P0.5): проверки могли намутить дерево (build-артефакты, lock-файлы) —
     #     тогда собранный evidence уже не отражает закоммиченный SHA. Фиксируем факт, не скрываем.
