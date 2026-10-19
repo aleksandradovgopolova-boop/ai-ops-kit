@@ -118,11 +118,12 @@ def durable_create_batch(root: str | Path, documents: dict[str, str]) -> dict:
                                 return
                             try:
                                 os.mkdir(part, dir_fd=fd)
-                                os.fsync(fd)
                             except FileExistsError:
                                 pass
                             child = os.open(part, flags, dir_fd=fd)
                         dirs.callback(os.close, child)
+                        if create:
+                            os.fsync(fd)  # also confirm a directory left by an uncertain prior mkdir/sync
                         fd = child
                     yield fd
 

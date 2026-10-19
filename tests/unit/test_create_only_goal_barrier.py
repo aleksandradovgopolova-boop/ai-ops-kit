@@ -81,3 +81,25 @@ def test_parent_replaced_by_symlink_between_preflight_and_create_is_refused(tmp_
     monkeypatch.setattr(store.os, 'open', raced)
     result = store.durable_create_batch(tmp_path, {'features/value.yaml': 'must not escape'})
     assert not result['ok'] and list(target.iterdir()) == []
+
+
+def test_retry_syncs_reused_directory_parent_after_uncertain_mkdir_sync(tmp_path, monkeypatch):
+    documents = {'features/work/value.yaml': 'confirmed'}
+    root_inode = tmp_path.stat().st_ino
+    sync = store.os.fsync
+    def fail_parent(fd):
+        if os.fstat(fd).st_ino == root_inode and (tmp_path / 'features').exists():
+            raise OSError('controlled mkdir parent sync unavailable')
+        return sync(fd)
+    with monkeypatch.context() as patch:
+        patch.setattr(store.os, 'fsync', fail_parent)
+        assert not store.durable_create_batch(tmp_path, documents)['ok']
+    assert (tmp_path / 'features').is_dir()
+    assert not (tmp_path / 'features/work/value.yaml').exists()
+    observed = []
+    def confirmed(fd):
+        observed.append(os.fstat(fd).st_ino)
+        return sync(fd)
+    monkeypatch.setattr(store.os, 'fsync', confirmed)
+    assert store.durable_create_batch(tmp_path, documents)['ok']
+    assert root_inode in observed, 'reuse must reconfirm the ancestor directory entry'
