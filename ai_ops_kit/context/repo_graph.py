@@ -50,14 +50,33 @@ PY_SKIP_DIRS = (".git", "node_modules", "venv", ".venv", "__pycache__", ".ai", "
 JS_SKIP_DIRS = ("node_modules", "dist", "build", ".next", "coverage", ".ai", ".git", ".venv", "venv", ".claude")
 
 
-def _source_files(root: Path, subdirs, extensions, skip_dirs, path_filter):
+def _source_files(root: Path, subdirs, extensions, skip_dirs, path_filter, uncertainties=None):
     """Prune generated/dependency trees BEFORE traversal; never follow directory symlinks."""
     out = []
+    def uncertain(path):
+        if uncertainties is not None:
+            uncertainties.append(str(path.relative_to(root)))
+    def walk_error(exc):
+        uncertain(Path(exc.filename) if exc.filename else root)
     for base in ([root / sd for sd in subdirs] if subdirs else [root]):
-        if not base.is_dir() or any(part in skip_dirs for part in base.relative_to(root).parts):
+        if any(part in skip_dirs for part in base.relative_to(root).parts):
             continue
-        for directory, dirs, names in os.walk(base, followlinks=False):
-            dirs[:] = sorted(d for d in dirs if d not in skip_dirs)
+        if base != root and base.is_symlink():
+            uncertain(base)
+            continue
+        if not base.is_dir():
+            continue
+        for directory, dirs, names in os.walk(base, followlinks=False, onerror=walk_error):
+            kept = []
+            for d in sorted(dirs):
+                if d in skip_dirs:
+                    continue
+                path = Path(directory) / d
+                if path.is_symlink():
+                    uncertain(path)
+                else:
+                    kept.append(d)
+            dirs[:] = kept
             for name in names:
                 path = Path(directory) / name
                 if path.suffix not in extensions:
@@ -67,12 +86,12 @@ def _source_files(root: Path, subdirs, extensions, skip_dirs, path_filter):
     return sorted(set(out))
 
 
-def _py_files(root: Path, subdirs=None, path_filter=None):
-    return _source_files(root, subdirs, (".py",), PY_SKIP_DIRS, path_filter)
+def _py_files(root: Path, subdirs=None, path_filter=None, uncertainties=None):
+    return _source_files(root, subdirs, (".py",), PY_SKIP_DIRS, path_filter, uncertainties)
 
 
-def _js_ts_files(root: Path, subdirs=None, path_filter=None):
-    return _source_files(root, subdirs, JS_TS_EXTENSIONS, JS_SKIP_DIRS, path_filter)
+def _js_ts_files(root: Path, subdirs=None, path_filter=None, uncertainties=None):
+    return _source_files(root, subdirs, JS_TS_EXTENSIONS, JS_SKIP_DIRS, path_filter, uncertainties)
 
 
 def _analyze(path: Path):
@@ -180,8 +199,9 @@ def _uncertain_dependency(path: Path) -> bool:
 def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=True) -> dict:
     """Построить граф зависимостей. v3.26.0: include_js=True добавляет JS/TS файлы."""
     root = Path(root)
-    py_files = _py_files(root, subdirs, path_filter=path_filter)
-    js_files = _js_ts_files(root, subdirs, path_filter=path_filter) if include_js else []
+    uncertainties = []
+    py_files = _py_files(root, subdirs, path_filter=path_filter, uncertainties=uncertainties)
+    js_files = _js_ts_files(root, subdirs, path_filter=path_filter, uncertainties=uncertainties) if include_js else []
     all_files = py_files + js_files
 
     stem_to_rels = {}
@@ -221,7 +241,7 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
     return {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs) if subdirs else ["*"],
             "file_count": len(rels), "files": file_info, "symbol_index": symbol_index,
             "import_edges": import_edges, "tests": tests,
-            "uncertainties": [rel for f, rel in rels if _uncertain_dependency(f)],
+            "uncertainties": sorted(set(uncertainties + [rel for f, rel in rels if _uncertain_dependency(f)])),
             "languages": {"python": len(py_files), "javascript": len(js_files)}}
 
 
