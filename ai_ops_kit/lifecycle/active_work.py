@@ -51,7 +51,7 @@ from ai_ops_kit.lifecycle.work_claims import (          # noqa: F401 — ре-э
     _claim_slug, publish_claim, unpublish_claim, load_published_claims,
     _git_common_dir, copies_claims_dir, working_copies, copies_reach_note,
     _copies_line, claim_to_copies, withdraw_claim_from_copies, load_copy_claims,
-    team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin,
+    team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin, _budget_binding,
 )
 from ai_ops_kit.lifecycle.work_reconcile import (        # noqa: F401 — ре-экспорт для совместимости
     _machine, _now_iso, _CLAIM_STALE_HOURS, _claim_age_hours, _pid_is_dead,
@@ -376,7 +376,7 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
                  "machine": _machine(), "started_at": at or _now_iso(),
                  "owner_pid": os.getpid()}
         if admission is not None:
-            entry.update(auto_admission=admission, budget_origin=_budget_origin(data["active"], wid))
+            entry.update(auto_admission=admission, budget_origin=_budget_origin(data["active"], wid), budget_binding=_budget_binding(data["active"], wid))
         # В КАКОЙ копии сидит держатель: без этого отказ называл бы «машину», то есть саму себя.
         # Наружу поле НЕ уезжает — `PUBLISHED_FIELDS` его не содержит.
         if child_root is not None:
