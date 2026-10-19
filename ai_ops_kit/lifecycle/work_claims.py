@@ -358,3 +358,48 @@ def _canonical_path(path, root):
     if root and Path(path) == Path(root) / ".ai/runtime/active-work.yaml" and _git_common_dir(root):
         return shared_registry_path(root)
     return Path(path)
+
+
+def retry_delivery_claim(root, wid, identity, origin, sha, check, *, execute):
+    """Новая generation только terminal own automatic delivery; никогда не takeover."""
+    import os
+    from uuid import uuid4
+    from ai_ops_kit.lifecycle import active_work as aw
+    root = Path(root).resolve()
+    path = shared_registry_path(root)
+    with aw._claim_lock(path, root) as legacy:
+        data = load(path)
+        if not isinstance(data.get('active'), list) or any(not isinstance(w, dict) for w in data['active']):
+            raise ActiveWorkCorrupt('parallel delivery corrupt canonical claims')
+        entries = [w for w in data['active'] if w.get('id') == wid]
+        if len(entries) != 1:
+            raise ActiveWorkCorrupt('parallel delivery claim missing/ambiguous')
+        old = entries[0]
+        admission = old.get('auto_admission') or {}
+        if not isinstance(admission, dict) or not isinstance(admission.get('inputs'), dict):
+            raise ActiveWorkCorrupt('parallel delivery corrupt frozen admission')
+        same_origin = admission.get('attempt_id') == origin or (
+            old.get('delivery_retry_origin') == origin and old.get('delivery_retry_sha') == sha)
+        if (not isinstance(admission.get('attempt_id'), str) or not admission['attempt_id'] or not origin or not same_origin or old.get('status') not in ('done', 'blocked')
+                or old.get('owner_session') != identity or admission.get('identity') != identity
+                or old.get('machine') != aw._machine() or old.get('worktree') != str(root)
+                or old.get('branch') != f'ai-ops/{wid}'):
+            raise ActiveWorkCorrupt('parallel delivery claim active/replaced/foreign')
+        aw.validate_admission(root, admission)
+        other = [w for w in aw.team_view(root, data['active'] + (load(legacy)['active'] if legacy else []),
+                                         aw.publication_enabled(root))
+                 if not (w.get('id') == wid and w.get('machine') == old.get('machine')
+                         and w.get('worktree') == str(root))]
+        if aw.classify(other, dict(old, owner_session=None)):
+            raise ActiveWorkCorrupt('parallel delivery claim conflicts with another work')
+        check()  # local report/source/input barrier; no network/model under canonical lock
+        if not execute:
+            return admission
+        admission = dict(admission, attempt_id=uuid4().hex)
+        entry = dict(old, status='in-progress', auto_admission=admission, owner_pid=os.getpid(),
+                     started_at=aw._now_iso(), delivery_retry_origin=origin, delivery_retry_sha=sha)
+        data['active'] = [w for w in data['active'] if w.get('id') != wid] + [entry]
+        aw.save(path, data)
+        aw._project_claim(legacy, entry)
+        claim_to_copies(root, entry)
+        return admission

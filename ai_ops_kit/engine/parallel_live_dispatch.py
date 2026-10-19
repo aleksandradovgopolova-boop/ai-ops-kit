@@ -154,6 +154,7 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
             except active_work.ActiveWorkCorrupt as exc:
                 rec.update(proceed=False, stage="preflight", reason=str(exc))
         if isinstance(rec, dict):
+            rec["task"] = task
             rec["parallel"] = True
             rec["budget"] = budget.to_dict()
             rec["base_binding"] = binding
@@ -229,7 +230,7 @@ def _policy_refusal(signals, wg, root, wid, provider, model, max_steps):
     return None
 
 
-def _deliver_parallel(rec, child_root, wid, task, binding):
+def _deliver_parallel(rec, child_root, wid, task, binding, admission=None):
     """Готовая интеграция -> существующий durable lifecycle/Intent/Receipt controller."""
     from ai_ops_kit.engine import ai_ops_run_lifecycle_stages as stages
     dp, agg = rec.get("delivery_plan") or {}, rec.get("aggregate") or {}
@@ -254,8 +255,11 @@ def _deliver_parallel(rec, child_root, wid, task, binding):
     rec.update(workitem_id=wid, ready_for_pr=True, commit={"sha": sha,
                "branch": dp["integration_branch"], "evidence_on_exact_sha": True}, delivery_plan=plan)
     ctx = SimpleNamespace(child_root=child_root, features_dir=child_root / "features")
-    jname, handoff_ok, report_ok, saved_plan = stages._commit_barrier(
-        rec, work_root, ctx.features_dir, wid, [])
+    if admission is not None:
+        ctx.delivery_guard = lambda: _retry_guard(child_root, wid, admission)
+    with ctx.delivery_guard() if admission is not None else nullcontext():
+        jname, handoff_ok, report_ok, saved_plan = stages._commit_barrier(
+            rec, work_root, ctx.features_dir, wid, [])
     stages._deliver(ctx, rec, plan=saved_plan, handoff_ok=handoff_ok, report_ok=report_ok,
                     jname=jname, fid=wid)
     # Source остаётся доступен и после Receipt: повтор/reconciliation может читать тот же commit.
@@ -288,8 +292,185 @@ def exit_code(rec) -> int:
         return 2
     if rec.get("delivery_requested"):
         dv = rec.get("delivery") or {}
-        return 0 if (dv.get("status") in ("opened", "updated") and dv.get("sha_verified") is True
+        return 0 if (dv.get("status") in ("opened", "updated", "reconciled") and dv.get("sha_verified") is True
                      and dv.get("receipt")) else (2 if _blocked(rec) else 1)
     agg = rec.get("aggregate") or {}
     return 0 if (rec.get("proceed") and agg.get("all_pass")
                  and agg.get("tested_revision") == rec.get("integration_sha")) else 1
+
+
+def _safe_retry_path(root, path):
+    path = Path(path)
+    if (not path.is_absolute() or not path.resolve().is_relative_to(root)
+            or any(p.is_symlink() for p in (path, *path.parents) if p.is_relative_to(root))):
+        raise ValueError('parallel delivery unsafe artifact/source path')
+    return path
+
+
+def _retry_source(root, wid, rec, base):
+    from ai_ops_kit.lifecycle import work_claims
+    from ai_ops_kit.gates import concurrency_preflight
+    binding, dp, agg = rec.get('base_binding') or {}, rec.get('integration_source') or {}, rec.get('aggregate') or {}
+    if not all(isinstance(item, dict) for item in (binding, dp, agg, rec.get('package_artifacts'))):
+        raise ValueError('parallel delivery malformed saved evidence')
+    sha = parallel_live._artifact_sha(rec.get('integration_sha'))
+    if not (rec.get('parallel') is True and rec.get('proceed') is True and sha
+            and dp.get('ready') is True and dp.get('integration_sha') == sha
+            and agg.get('all_pass') is True and agg.get('tested_revision') == sha
+            and agg.get('postcheck_revision') == sha and agg.get('revision_ok') is True
+            and agg.get('tree_clean') is True and rec.get('package_artifacts', {}).get('status') == 'preserved'
+            and dp.get('integration_branch') == f'ai-ops/{wid}' and dp.get('base_sha') == binding.get('base_sha')):
+        raise ValueError('parallel delivery requires preserved exact-tested ready integration')
+    current = gitio.resolve_base(root, base or binding.get('base_ref'))
+    if not (current.get('resolved') and current['base_sha'] == binding.get('base_sha')
+            and current['base_ref'] == binding.get('base_ref')):
+        raise ValueError('parallel delivery stale base binding')
+    owned = work_claims._git_common_dir(root) / 'ai-ops-parallel'
+    source = _safe_retry_path(owned, dp.get('integration_clone', ''))
+    if source.name != '_integration' or source.parent.parent != owned or not source.parent.name.startswith('run-'):
+        raise ValueError('parallel delivery source is not an owned run clone')
+    if (not (source / '.git').is_dir() or (source / '.git').is_symlink()
+            or gitio.git(source, 'rev-parse', '--show-toplevel')[1] != str(source)
+            or gitio.git(source, 'rev-parse', 'HEAD')[1] != sha
+            or gitio.git(source, 'symbolic-ref', '--short', 'HEAD')[1] != dp['integration_branch']
+            or gitio.git(source, 'status', '--porcelain')[:2] != (0, '')
+            or gitio.git(source, 'merge-base', '--is-ancestor', binding['base_sha'], sha)[0]):
+        raise ValueError('parallel delivery source changed/missing/dirty')
+    remote = parallel_live._github_remote(root)
+    repo = concurrency_preflight._parse_owner_repo(remote or '')
+    if not repo or dp.get('github_remote') != remote:
+        raise ValueError('parallel delivery remote changed/unavailable')
+    from ai_ops_kit.engine.run_exec_context import product_task_for_resume
+    task = rec.get('task') or product_task_for_resume(root, wid).get('task')
+    if not isinstance(task, str) or not task.strip():
+        raise ValueError('parallel delivery original task missing')
+    return binding, dp, task, '/'.join(repo)
+
+
+def _retry_outbox(root, wid):
+    from ai_ops_kit.shared import lifecycle_store
+    outbox = _safe_retry_path(root, root / 'features' / wid / 'delivery-outbox')
+    for suffix, kind in (('intent', 'DeliveryIntent'), ('receipt', 'DeliveryReceipt')):
+        for path in sorted(outbox.glob(f'*.{suffix}.yaml')):
+            _safe_retry_path(root, path)
+            loaded = lifecycle_store.load_guarded(path, kind=kind,
+                required_keys=('delivery_id', 'workitem_id', 'repository', 'branch', 'commit_sha', 'base_ref', 'status'))
+            if (loaded['state'] != 'ok' or loaded['data']['workitem_id'] != wid
+                    or loaded['data'].get('schema_version') != 1
+                    or loaded['data'].get('branch') != f'ai-ops/{wid}'
+                    or not parallel_live._artifact_sha(loaded['data'].get('commit_sha'))
+                    or path.name != f"{loaded['data']['delivery_id']}.{suffix}.yaml"):
+                raise ValueError('parallel delivery corrupt outbox artifact')
+    return outbox
+
+
+def _retry_guard(root, wid, admission):
+    from contextlib import contextmanager
+    from ai_ops_kit.lifecycle import active_work
+    @contextmanager
+    def guard():
+        with active_work.claimed_attempt(root, wid, admission):
+            active_work.validate_admission(root, admission)
+            yield
+    return guard()
+
+
+def _reuse_retry_receipt(root, wid, rec, repo, reconciled):
+    import hashlib
+    from ai_ops_kit.shared import lifecycle_store
+    from ai_ops_kit.delivery import pr_open
+    binding, sha = rec['base_binding'], rec['integration_sha']
+    branch = f'ai-ops/{wid}'
+    did = hashlib.sha256(f'{repo}:{wid}:{branch}:{sha}'.encode()).hexdigest()[:16]
+    path = _retry_outbox(root, wid) / f'{did}.receipt.yaml'
+    loaded = lifecycle_store.load_guarded(path, kind='DeliveryReceipt')
+    if loaded['state'] == 'absent':
+        return False
+    if loaded['state'] != 'ok':
+        raise ValueError('parallel delivery corrupt receipt')
+    receipt = loaded['data']
+    expected = dict(delivery_id=did, workitem_id=wid, repository=repo, branch=branch,
+                    commit_sha=sha, base_ref=binding['base_ref'])
+    if any(receipt.get(k) != v for k, v in expected.items()):
+        raise ValueError('parallel delivery receipt identity mismatch')
+    if receipt.get('sha_verified') is not True:
+        if not any(r['delivery_id'] == did and r['status'] == 'reconciled-absent' for r in reconciled or []):
+            raise ValueError('parallel delivery receipt remains unconfirmed')
+        return False
+    if receipt.get('remote_sha') != sha:
+        raise ValueError('parallel delivery receipt SHA mismatch')
+    if not any(r['delivery_id'] == did and r['status'] == 'reconciled' for r in reconciled or []):
+        remote = pr_open.reconcile_delivery(root, branch)
+        if (remote.get('status') != 'found' or remote.get('repository') != repo
+                or remote.get('head_sha') != sha or remote.get('base_ref') != binding['base_ref']):
+            raise ValueError('parallel delivery previous receipt not confirmed by current remote')
+    rec['delivery'] = {'requested': True, 'status': 'reconciled', 'sha_verified': True,
+        'remote_sha': sha, 'delivery_id': did, 'receipt': str(path.relative_to(root)),
+        'reused_receipt': True, 'pr': {'url': receipt.get('pr_url'), 'number': receipt.get('pr_number')}}
+    return True
+
+
+def resume_parallel_delivery(child_root, wid, *, session, base=None, execute=False, open_pr=False,
+                             task=None, replan=False, takeover=False):
+    """Existing deliver-only CLI; automatic terminal own integration only, no provider selection."""
+    import hashlib
+    from ai_ops_kit.shared import lifecycle_store
+    from ai_ops_kit.lifecycle import active_work, work_claims
+    root = Path(child_root).resolve()
+    rec = {'parallel': True, 'proceed': False, 'stage': 'preflight',
+           'resume': {'requested': True, 'can_resume': False, 'resumed': False, 'deliver_only': True}}
+    admission = None
+    try:
+        if not isinstance(wid, str) or wid in ('', '.', '..') or '/' in wid or '\\' in wid:
+            raise ValueError('parallel delivery invalid work item')
+        report = _safe_retry_path(root, root / 'features' / wid / 'parallel-report.json')
+        if not report.exists():
+            return None
+        if replan or takeover or (execute and not open_pr):
+            raise ValueError('parallel delivery requires --open-pr; replan/takeover unsupported')
+        raw = report.read_bytes()
+        loaded = lifecycle_store.load_guarded(report)
+        if loaded['state'] != 'ok':
+            raise ValueError('parallel delivery corrupt saved report')
+        saved = loaded['data']
+        binding, dp, original_task, repo = _retry_source(root, wid, saved, base)
+        if task and task != original_task:
+            raise ValueError('parallel delivery cannot replace original task')
+        origin = saved.get('automatic_attempt') or {}
+        if not isinstance(origin, dict) or not isinstance(origin.get('id'), str) or origin.get('identity') != session:
+            raise ValueError('parallel delivery identity does not own original attempt')
+        def check():
+            if hashlib.sha256(report.read_bytes()).digest() != hashlib.sha256(raw).digest():
+                raise ValueError('parallel delivery saved report changed during admission')
+            _retry_source(root, wid, saved, base)
+            _retry_outbox(root, wid)
+        admitted = work_claims.retry_delivery_claim(root, wid, session, origin.get('id'),
+                                                   saved['integration_sha'], check, execute=execute)
+        rec = dict(saved, delivery_plan=dp, delivery_requested=bool(execute),
+            resume={'requested': True, 'can_resume': True, 'resumed': bool(execute), 'deliver_only': True})
+        if not execute:
+            return rec
+        admission = admitted
+        rec['delivery_retry'] = {'attempt_id': admission['attempt_id'], 'origin_attempt_id': origin['id'],
+                                 'new_package_calls': 0, 'new_model_calls': 0}
+        with _retry_guard(root, wid, admission):
+            if not lifecycle_store.durable_write_json(report, rec).get('ok'):
+                raise ValueError('parallel delivery retry checkpoint not durable')
+        from ai_ops_kit.engine.ai_ops_run import _reconcile_pending_delivery
+        rec['reconciliation'] = _reconcile_pending_delivery(root / 'features', wid, root,
+            delivery_guard=lambda: _retry_guard(root, wid, admission))
+        if any(r['status'] not in ('reconciled', 'reconciled-absent') for r in rec['reconciliation'] or []):
+            raise ValueError('parallel delivery unresolved external outcome')
+        if not _reuse_retry_receipt(root, wid, rec, repo, rec['reconciliation']):
+            _deliver_parallel(rec, root, wid, original_task, binding, admission=admission)
+        with _retry_guard(root, wid, admission):
+            if not lifecycle_store.durable_write_json(report, rec).get('ok'):
+                raise ValueError('parallel delivery final report not durable; source retained')
+        return rec
+    except (OSError, RuntimeError, ValueError, TypeError, KeyError, active_work.ActiveWorkCorrupt) as exc:
+        rec.update(proceed=False, stage='preflight', reason=str(exc))
+        rec['resume'].update(can_resume=False, resumed=False)
+        return rec
+    finally:
+        if admission is not None:
+            _finish_automatic_claim(root, wid, active_work.shared_registry_path(root), admission, rec)

@@ -68,13 +68,17 @@ def live_provider_refusal(res, explicit):
               "`--provider mock`.")
 
 
-def _reconcile_pending_delivery(features_dir, fid, child_root):
+def _reconcile_pending_delivery(features_dir, fid, child_root, *, delivery_guard=None):
     """v3.0.16/v3.0.17 (finding аудита #2/P0): сверить с remote КАЖДУЮ незавершённую доставку (Intent без
     Receipt) и дописать DeliveryReceipt — но ТОЛЬКО при СТРОГОМ совпадении идентичности PR с Intent
     (repository + head.sha == commit_sha + base.ref). PR той же ветки, но с ДРУГИМ коммитом НЕ
     засчитывается за подтверждение старой доставки. Все записи — обязательные барьеры (реконсиляция НЕ
     рапортует успех, если Receipt фактически не сохранился). Идемпотентно, ничего не создаёт на remote.
     -> список исходов по delivery_id | None (нечего сверять)."""
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    from ai_ops_kit.engine.ai_ops_run_lifecycle_stages import _delivery_write
+    owned = SimpleNamespace(delivery_guard=delivery_guard or nullcontext)
     from pathlib import Path as _P
     # _outbox_dir/_unresolved_intents/_nonfinal_receipt_intents остаются в ai_ops_run (первые два
     # нужны и forbidden-функции/тестам) — ленивый импорт, чтобы не замкнуть импорт-граф.
@@ -105,7 +109,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
             results.append({"delivery_id": did, "status": "unavailable"})   # оставляем на следующий прогон
             continue
         if rc.get("status") == "absent":
-            _w = _ls.durable_write(rp, {**_base, "status": "not-delivered", "remote_sha": None},
+            _w = _delivery_write(owned, "durable_write", rp, {**_base, "status": "not-delivered", "remote_sha": None},
                                    require_keys=("kind", "delivery_id", "status"))
             results.append({"delivery_id": did, "status": "reconciled-absent" if _w.get("ok")
                             else "receipt-write-failed"})
@@ -116,7 +120,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
                 and rc.get("base_ref") == intent.get("base_ref"))
         if not _idn:
             # PR ветки есть, но это НЕ та доставка (другой SHA/base/repo) -> НЕ подтверждаем старую.
-            _w = _ls.durable_write(rp, {**_base, "status": "mismatch", "remote_sha": rc.get("head_sha"),
+            _w = _delivery_write(owned, "durable_write", rp, {**_base, "status": "mismatch", "remote_sha": rc.get("head_sha"),
                                         "remote_base_ref": rc.get("base_ref"),
                                         "remote_repository": rc.get("repository"), "sha_verified": False,
                                         "pr_url": rc.get("url"), "pr_number": rc.get("number")},
@@ -129,7 +133,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
         # Поля-факты (`checks_status`/`total`/`failed`) и поле-вердикт (`checks_verified`) пишутся из
         # одного источника — `pr_open.checks_verified()`, чтобы вердикт нельзя было проставить мимо фактов.
         _chk = rc.get("checks") or {"status": "unavailable"}
-        _w = _ls.durable_write(rp, {**_base, "status": "reconciled", "remote_sha": rc.get("head_sha"),
+        _w = _delivery_write(owned, "durable_write", rp, {**_base, "status": "reconciled", "remote_sha": rc.get("head_sha"),
                                     "sha_verified": True, "pr_url": rc.get("url"),
                                     "pr_number": rc.get("number"), "pr_state": rc.get("pr_state"),
                                     "merged": rc.get("merged"),
@@ -141,7 +145,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
         if not _w.get("ok"):
             results.append({"delivery_id": did, "status": "receipt-write-failed"})   # НЕ рапортуем успех
             continue
-        _ls.journal_append(jn, {"kind": "delivery_reconciled", "run_id": fid, "workitem_id": fid,
+        _delivery_write(owned, "journal_append", jn, {"kind": "delivery_reconciled", "run_id": fid, "workitem_id": fid,
                                 "delivery_id": did, "pr_url": rc.get("url"), "remote_sha": rc.get("head_sha")})
         results.append({"delivery_id": did, "status": "reconciled", "pr_url": rc.get("url")})
     return results
