@@ -62,7 +62,7 @@ def test_retention_fault_never_deletes_last_package_source(tmp_path, monkeypatch
             assert gitio.git(root, 'update-ref', ref, base)[0] == 0
             touched.append((ref, base))
         if fault == 'cas-race' and 'update-ref' in argv and 'core.fsync=objects,reference' in argv:
-            ref = argv[argv.index('update-ref') + 1]
+            ref = argv[-3]
             base = gitio.git(root, 'rev-parse', 'HEAD')[1]
             assert gitio.git(root, 'update-ref', ref, base)[0] == 0
             touched.append((ref, base))
@@ -125,3 +125,75 @@ def test_checkpoint_fetch_is_local_hardened_and_never_runs_auto_maintenance(tmp_
             '--no-recurse-submodules', '--no-auto-maintenance', '--no-write-commit-graph', '--no-prune', '--no-prune-tags'))
         assert Path(args[-2]).is_absolute()
     assert gitio.git(root, 'config', '--local', '--get', 'core.fsync')[0] == 1, 'per-command durability does not persist config'
+
+
+@pytest.mark.parametrize('target', ['dangling', 'same-sha'])
+def test_existing_symbolic_checkpoint_is_refused_without_touching_target(tmp_path, monkeypatch, target):
+    original, installed = live._git, []
+    def git(root, *args, **kw):
+        if not installed and 'symbolic-ref' in args and '--quiet' in args and str(args[-1]).startswith('refs/ai-ops/parallel/'):
+            ref = args[-1]
+            foreign = 'refs/heads/foreign-checkpoint-target'
+            expected = None
+            if target == 'same-sha':
+                source = next((Path(root) / '.git/ai-ops-parallel').glob('run-*/aa'))
+                expected = gitio.git(source, 'rev-parse', 'ai-ops/aa')[1]
+                assert gitio.git(root, 'fetch', '--no-auto-maintenance', str(source), expected)[0] == 0
+                assert gitio.git(root, 'update-ref', foreign, expected)[0] == 0
+            assert gitio.git(root, 'symbolic-ref', ref, foreign)[0] == 0
+            installed.append((ref, foreign, expected))
+        return original(root, *args, **kw)
+    monkeypatch.setattr(live, '_git', git)
+    root, base, result, clones = _run_partial(tmp_path, monkeypatch)
+    assert installed
+    ref, foreign, expected = installed[0]
+    target_state = gitio.git(root, 'rev-parse', '--verify', '--quiet', foreign)
+    assert target_state[1] == expected if expected else target_state[0] == 1
+    assert result['package_artifacts']['status'] == 'blocked'
+    assert result['package_artifacts']['checkpoint_failure'] == 'ref-symbolic'
+    assert all(p.exists() for p in clones.values())
+    assert gitio.git(root, 'symbolic-ref', '--quiet', ref)[1] == foreign
+
+
+@pytest.mark.parametrize('target', ['dangling', 'existing'])
+def test_symbolic_ref_write_race_never_modifies_foreign_branch(tmp_path, monkeypatch, target):
+    original, installed = live._git, []
+    def git(root, *args, **kw):
+        if not installed and 'update-ref' in args and 'core.fsync=objects,reference' in args:
+            ref, foreign = args[-3], 'refs/heads/foreign-race-target'
+            expected = gitio.git(root, 'rev-parse', 'HEAD')[1] if target == 'existing' else None
+            if expected:
+                assert gitio.git(root, 'update-ref', foreign, expected)[0] == 0
+            assert gitio.git(root, 'symbolic-ref', ref, foreign)[0] == 0
+            installed.append((ref, foreign, expected))
+        return original(root, *args, **kw)
+    monkeypatch.setattr(live, '_git', git)
+    root, base, result, clones = _run_partial(tmp_path, monkeypatch)
+    ref, foreign, expected = installed[0]
+    state = gitio.git(root, 'rev-parse', '--verify', '--quiet', foreign)
+    assert state[1] == expected if expected else state[0] == 1
+    if result['package_artifacts']['status'] == 'preserved':
+        assert gitio.git(root, 'symbolic-ref', '--quiet', ref)[0] == 1
+        assert gitio.git(root, 'rev-parse', ref)[1] == result['package_results']['aa']['sha']
+    else:
+        assert all(p.exists() for p in clones.values())
+
+
+def test_symbolic_ref_after_write_is_refused_at_verification_barrier(tmp_path, monkeypatch):
+    original, checks, installed = live._git, [], []
+    def git(root, *args, **kw):
+        if 'symbolic-ref' in args and '--quiet' in args and str(args[-1]).startswith('refs/ai-ops/parallel/'):
+            checks.append(args[-1])
+            if len(checks) == 2:
+                ref, foreign = args[-1], 'refs/heads/foreign-readback-target'
+                sha = gitio.git(root, 'rev-parse', ref)[1]
+                assert gitio.git(root, 'update-ref', foreign, sha)[0] == 0
+                assert gitio.git(root, 'symbolic-ref', ref, foreign)[0] == 0
+                installed.append((foreign, sha))
+        return original(root, *args, **kw)
+    monkeypatch.setattr(live, '_git', git)
+    root, base, result, clones = _run_partial(tmp_path, monkeypatch)
+    assert result['package_artifacts']['checkpoint_failure'] == 'ref-symbolic'
+    assert all(p.exists() for p in clones.values())
+    foreign, sha = installed[0]
+    assert gitio.git(root, 'rev-parse', foreign)[1] == sha

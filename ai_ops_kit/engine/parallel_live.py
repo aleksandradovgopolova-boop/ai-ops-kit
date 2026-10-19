@@ -421,6 +421,14 @@ def _checkpoint_git(root, stage, *args, **options):
         raise _CheckpointFailure(stage) from exc
 
 
+def _require_direct_checkpoint_ref(root, ref):
+    kind = _checkpoint_git(root, "ref-type", "symbolic-ref", "--quiet", ref, check=False)
+    if kind.returncode == 0:
+        raise _CheckpointFailure("ref-symbolic")
+    if kind.returncode != 1:
+        raise _CheckpointFailure("ref-type")
+
+
 def _retain_package_commit(child_root, source, sha, run_id, pid):
     """Git objects+CAS ref до удаления source; local checkpoint, не доставка/ready."""
     version = _checkpoint_git(child_root, "version", "--version").stdout
@@ -428,6 +436,7 @@ def _retain_package_commit(child_root, source, sha, run_id, pid):
     if not parsed or tuple(map(int, parsed.groups())) < (2, 36):
         raise _CheckpointFailure("unsupported-git")
     ref = f"refs/ai-ops/parallel/{run_id}/{hashlib.sha256(pid.encode()).hexdigest()}"
+    _require_direct_checkpoint_ref(child_root, ref)
     old = _checkpoint_git(child_root, "ref-read", "rev-parse", "--verify", "--quiet", ref, check=False)
     if old.returncode not in (0, 1) or (old.returncode == 0 and old.stdout.strip() != sha):
         raise _CheckpointFailure("ref-conflict")
@@ -437,7 +446,8 @@ def _retain_package_commit(child_root, source, sha, run_id, pid):
              "--no-recurse-submodules", "--no-auto-maintenance", "--no-write-commit-graph",
                         "--no-prune", "--no-prune-tags", str(source.resolve()), sha)
     # Same SHA retry тоже проходит CAS/hardened write, но никогда не перезаписывает другую generation.
-    _checkpoint_git(child_root, "ref-write", *harden, "update-ref", ref, sha, sha if old.returncode == 0 else "0" * 40)
+    _checkpoint_git(child_root, "ref-write", *harden, "update-ref", "--no-deref", ref, sha, sha if old.returncode == 0 else "0" * 40)
+    _require_direct_checkpoint_ref(child_root, ref)
     if _checkpoint_git(child_root, "ref-readback", "rev-parse", "--verify", ref).stdout.strip() != sha:
         raise _CheckpointFailure("ref-readback")
     _checkpoint_git(child_root, "objects", "cat-file", "-e", f"{sha}^{{commit}}")
