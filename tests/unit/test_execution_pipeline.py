@@ -742,3 +742,40 @@ class TestResume:
         assert rinfo3.get("resumed") is False
         assert bool(rinfo3.get("reason"))
         assert rep_r3.get("status") != "error"
+
+
+@pytest.mark.parametrize("cap,expected", [(3, ["author", "impl", "impl"]),
+                                          (4, ["author", "impl", "impl", "review"])])
+def test_one_declared_budget_covers_actual_author_impl_and_review(child_root, cap, expected):
+    from ai_ops_kit.engine import run_plan
+    _init_git(child_root)
+    events = []
+    def author(prompt):
+        events.append("author")
+        return ("schema_version: 1\nkind: requirements-artifact\nrequirements:\n"
+                "  - id: R1\n    statement: bounded actual task\n    acceptance:\n      - when x then y\n")
+    operations = iter([{"op": "write", "path": "result.txt", "content": "actual side effect\n"}, {"done": True}])
+    def proposer(_):
+        events.append("impl")
+        return next(operations)
+    def reviewer(_):
+        events.append("review")
+        return {"kind": "reviewer-result", "status": "fail", "summary": "controlled refusal"}
+    plan = run_plan.build_plan(_QUICK_SIG, workitem_id="shared-cap")
+    plan["gates"] = ["requirements", "implementation_verification", "code_review"]
+    report = execution_pipeline.run_pipeline("bounded", _QUICK_SIG, child_root, proposer,
+        plan=plan, budget={"max_model_calls": cap}, feature="shared-cap", author=True,
+        author_proposer=author, review=True, reviewer_proposer=reviewer,
+        commit=True, isolate=False, install_deps=False)
+    assert (child_root / "result.txt").read_text() == "actual side effect\n"
+    assert events == expected
+    assert report["ready_for_pr"] is False
+
+
+@pytest.mark.parametrize("declaration", [{"max_model_calls": 0}, {"max_cost": 1}, {"max_duration": "1m"}])
+def test_unsupported_or_exhausted_pipeline_budget_precedes_side_effects(tmp_path, declaration):
+    calls = []
+    report = execution_pipeline.run_pipeline("T", {}, tmp_path, lambda _: calls.append("model"),
+        budget=declaration, install_deps=True, commit=True, isolate=True)
+    assert not report["ready_for_pr"] and report.get("blocked_by") == "execution-budget"
+    assert calls == [] and list(tmp_path.iterdir()) == []

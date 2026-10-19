@@ -461,6 +461,14 @@
         },
         "allow_cross_task_session": {
           "type": "boolean"
+        },
+        "max_autonomous_spend_usd": {
+          "type": "number",
+          "minimum": 0
+        },
+        "max_subsessions_per_session": {
+          "type": "integer",
+          "minimum": 0
         }
       },
       "additionalProperties": false

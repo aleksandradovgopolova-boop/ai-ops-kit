@@ -296,6 +296,15 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         verification_tiers.decide_tier([], lifecycle_intent=verification_intent)
     except ValueError as exc:
         return {"kind": "execution-pipeline", "status": "error", "ready_for_pr": False, "error": str(exc)}
+    from ai_ops_kit.shared import budget as budget_mod
+    signals = dict(signals or {})
+    try:
+        budget = budget_mod.resolve_budget(budget, signals.get("execution_budget"),
+                                           (plan or {}).get("execution_budget"))
+        budget.ensure_execution_supported()
+    except (ValueError, budget_mod.BudgetExceeded) as exc:
+        return {"schema_version": 1, "kind": "execution-pipeline", "status": "blocked", "ready_for_pr": False,
+                "blocked_by": "execution-budget", "error": str(exc)}
     # K0-проводка: сверка параметров прогона с контрактом ядра (страж дрейфа kernel/ports).
     _pipeline_check_spec_drift(task, signals, child_root, feature, write_scope,
                                max_steps=max_steps, commit=commit, baseline_diff=baseline_diff,
@@ -308,6 +317,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     #    контроллера; иначе строим сами (обратная совместимость: прямой вызов run_pipeline).
     if plan is None:
         plan = run_plan.build_plan(signals, workitem_id=feature)
+    plan["execution_budget"] = budget.limits()
     wid = plan["workitem_id"]
 
     # 1b. изоляция + base-binding + resume -> _setup_isolation (K6). Прогон в отдельном worktree на
@@ -431,6 +441,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         spec_prestage_bad=spec_prestage_bad, ev=_ev, rd=rd, gates=gates, ready=ready,
         delivery=delivery, delivery_plan=delivery_plan, overall_status=overall_status,
         not_yet=not_yet)
+    report["budget"] = budget.to_dict()
     _pipeline_check_invariants(report)
     return report
 

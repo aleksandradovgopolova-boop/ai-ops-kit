@@ -558,3 +558,37 @@ def test_cleanup_io_failure_reports_retained_clones(tmp_path, monkeypatch, stage
     assert rec["package_artifacts"]["status"] == "preserved"
     assert rec["cleanup"]["status"] == "partial" and rec["cleanup"]["retained_paths"]
     assert all(Path(path).exists() for path in rec["cleanup"]["retained_paths"])
+
+
+@pytest.mark.parametrize("cap", [1, 2])
+def test_parallel_packages_share_exact_counter_and_real_commit_proof(tmp_path, monkeypatch, cap):
+    from ai_ops_kit.engine import parallel_live as live
+    from ai_ops_kit.shared.budget import Budget
+    root, _, _ = _real_repo(tmp_path, monkeypatch)
+    shared = Budget(max_model_calls=cap)
+    before = live._git(root, "rev-parse", "HEAD").stdout
+    executed, objects = [], []
+    def run(task, signals, clone, **options):
+        objects.append(options["budget"])
+        options["budget"].charge_call()
+        executed.append(options["feature"])
+        return _real_commit(task, signals, clone, **options)
+    rec = dsp.run_parallel_live("T", {}, root, feature="WG", provider="mock", budget=shared, run_fn=run)
+    assert len(executed) == shared.model_calls == cap
+    assert len(objects) == 2 and all(obj is shared for obj in objects)
+    assert live._git(root, "rev-parse", "HEAD").stdout == before
+    assert sum(bool(p.get("sha")) for p in rec["package_results"].values()) == cap
+    assert rec["delivery_plan"]["ready"] is (cap == 2)
+
+
+@pytest.mark.parametrize("limits", [{"max_model_calls": 0}, {"max_cost": 1},
+                                    {"max_duration": "1m"}, {"max_physical_calls": 2}])
+def test_budget_refusal_precedes_parallel_clones_and_models(tmp_path, monkeypatch, limits):
+    from ai_ops_kit.shared.budget import Budget
+    root, _, _ = _real_repo(tmp_path, monkeypatch)
+    calls = []
+    budget = limits if "max_physical_calls" in limits else Budget.from_dict(limits)
+    rec = dsp.run_parallel_live("T", {}, root, feature="WG", provider="mock", budget=budget,
+        runner=lambda *a, **kw: calls.append("clone"), run_fn=lambda *a, **kw: calls.append("model"))
+    assert dsp.exit_code(rec) == 2 and calls == []
+    assert not (root / ".git/ai-ops-parallel").exists()
