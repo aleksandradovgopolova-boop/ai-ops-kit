@@ -108,6 +108,8 @@ class Budget:
             if self._ledger is None:
                 self.model_calls, self.cost, self._unknown_cost = self._charge_values(known)
                 return
+            if cost is not None:
+                raise BudgetExceeded("budget durable mode reserves logical slots only; quoted cost unsupported")
             path, binding = self._ledger
             try:
                 with self._admission_guard():
@@ -137,13 +139,15 @@ class Budget:
                 or _budget_json(record.get("limits")) != _budget_json(self.limits())):
             raise BudgetExceeded("budget durable binding/limits mismatch")
         calls, unknown = record.get("model_calls"), record.get("unknown_cost_calls")
-        if (type(calls) is not int or type(unknown) is not int or not 0 <= unknown <= calls
+        if (type(calls) is not int or type(unknown) is not int or calls < 0 or unknown != calls
                 or self.max_model_calls is None or calls > self.max_model_calls):
             raise BudgetExceeded("budget durable counter corrupt")
         try:
             subtotal = _number(record.get("known_cost_lower_bound"))
         except ValueError as exc:
             raise BudgetExceeded("budget durable cost state corrupt") from exc
+        if subtotal != 0:
+            raise BudgetExceeded("budget durable mode cannot certify a known USD subtotal")
         self.model_calls, self.cost, self._unknown_cost = calls, subtotal, unknown
 
     def bind_durable(self, path, binding, *, create=False, guard=nullcontext):

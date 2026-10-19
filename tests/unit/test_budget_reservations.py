@@ -269,3 +269,13 @@ def test_new_base_binding_does_not_silently_start_fresh_budget(tmp_path, monkeyp
                                    run_fn=lambda *a, **k: calls.append('model'), **fresh)
     assert calls == [] and dsp.exit_code(report) == 2 and 'budget' in report['reason']
     assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize('quote', [0, 0.5])
+def test_durable_logical_only_mode_does_not_turn_quote_into_actual_cost(tmp_path, quote):
+    path = tmp_path / 'budget.json'
+    budget = _bound(path, create=True)
+    before = path.read_bytes()
+    with pytest.raises(BudgetExceeded):
+        budget.charge_call(cost=quote)
+    assert path.read_bytes() == before and budget.model_calls == 0
