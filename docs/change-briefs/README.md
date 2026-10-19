@@ -27,3 +27,5 @@
 
 - [Границы автоматизации — #1241](1241-runtime-qualification-boundaries.md).
 - [Здоровье паспорта требует результата прогонов — #1257](1257-passport-health-evidence.md).
+
+- [Запуск установки и сохраняемый журнал](setup-run-journal.md).
