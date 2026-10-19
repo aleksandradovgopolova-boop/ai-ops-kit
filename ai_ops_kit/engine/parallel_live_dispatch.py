@@ -127,11 +127,19 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
                 return {"proceed": False, "stage": "preflight", "parallel": True, "reason": "automatic active claim refused"}
         except (active_work.ActiveWorkCorrupt, KeyError, OSError, ValueError) as exc:
             return {"proceed": False, "stage": "preflight", "parallel": True, "reason": str(exc)}
+    package_run = run_fn
+    if admission is not None:
+        def package_run(*args, **options):
+            # После ожидания слота: новая generation/дрейф входов запрещают новый run.
+            with active_work.claimed_attempt(child_root, wid, admission):
+                active_work.validate_admission(child_root, admission)
+            # Сеть/уже допущенный callback не держат canonical lock.
+            return run_fn(*args, **options)
     try:
         if admission is not None:
             with active_work.claimed_attempt(child_root, wid, admission):
                 pass  # граница допуска; общую блокировку не держим во время пакетов/сети
-        rec = dispatch(wg, str(child_root), base_sha, task_map, signals, run_fn,
+        rec = dispatch(wg, str(child_root), base_sha, task_map, signals, package_run,
                        repo_slug=repo_slug, contract_shas=contract_shas, integration_branch=f"ai-ops/{wid}",
                        run_options={"provider_name": provider, "model": model, "base": binding["base_ref"],
                                     "max_steps": max_steps, "author": author, "review": review,
