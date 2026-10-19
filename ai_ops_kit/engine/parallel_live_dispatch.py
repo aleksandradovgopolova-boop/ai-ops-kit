@@ -54,7 +54,7 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
                       base=None, open_pr=False, max_steps=40, repo_slug=None,
                       contract_shas=None, run_fn=None, runner=None, author=True, review=True,
                       sandbox=False, baseline_diff=False, install_deps=True, require_fix=False,
-                      review_fix_attempts=0, budget=None):
+                      review_fix_attempts=0, budget=None, work_graph=None, task_map=None, admission=None):
     """ЯВНЫЙ opt-in `--parallel`: декомпозировать задачу и провести мультипакетный план через
     `parallel_live.run_live_concurrent` (настоящая конкурентность, disposable-клон на пакет).
 
@@ -68,7 +68,12 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
     signals = dict(signals or {})
     signals.setdefault("task_text", task)
     wid = feature or signals.get("feature") or "WG"
-    wg, task_map = build_work_graph(signals, wid, child_root)
+    if work_graph is not None:
+        if admission is None or not isinstance(task_map, dict) or work_graph.get("feature") != wid:
+            return {"proceed": False, "stage": "preflight", "parallel": True, "reason": "saved graph requires frozen automatic admission"}
+        wg = work_graph
+    else:
+        wg, task_map = build_work_graph(signals, wid, child_root)
     if wg is None:
         return None  # атомарна/один пакет -> обычный прогон (дефолт не меняется)
     binding = gitio.resolve_base(child_root, base)
@@ -103,31 +108,57 @@ def run_parallel_live(task, signals, child_root, *, feature=None, provider=None,
         from ai_ops_kit.engine import ai_ops_run
         run_fn = ai_ops_run.run
     dispatch = runner or parallel_live.run_live_concurrent
-    rec = dispatch(wg, str(child_root), base_sha, task_map, signals, run_fn,
-                   repo_slug=repo_slug, contract_shas=contract_shas, integration_branch=f"ai-ops/{wid}",
-                   run_options={"provider_name": provider, "model": model, "base": binding["base_ref"],
-                                "max_steps": max_steps, "author": author, "review": review,
-                                "sandbox": sandbox, "baseline_diff": baseline_diff,
-                                "install_deps": install_deps, "require_fix": require_fix,
-                                "review_fix_attempts": review_fix_attempts, "budget": budget})
-    if isinstance(rec, dict):
-        rec["parallel"] = True
-        rec["budget"] = budget.to_dict()
-        rec["base_binding"] = binding
-        rec["delivery_requested"] = bool(open_pr)
-        rec["reconciliation"] = reconciled
-        rec["integration_source"] = rec.get("delivery_plan")
-        if open_pr:
-            _deliver_parallel(rec, child_root, wid, task, binding)
-        else:
-            rec["delivery"] = {"requested": False, "status": "not-requested"}
-        from ai_ops_kit.shared import lifecycle_store
-        saved = lifecycle_store.durable_write_json(child_root / "features" / wid / "parallel-report.json", rec)
-        if not saved.get("ok"):
-            rec["proceed"] = False
-            rec["stage"] = "lifecycle"
-            rec["reason"] = "parallel report не сохранён durable; integration source сохранён в результате"
-    return rec
+    from ai_ops_kit.lifecycle import active_work
+    claim_path, rec = None, None
+    if admission is not None:
+        try:
+            import yaml
+            active_work.validate_admission(child_root, admission)
+            saved_graph = yaml.safe_load((child_root / admission["graph_path"]).read_text())
+            if saved_graph != wg or binding["base_sha"] != admission["base_sha"]:
+                raise active_work.ActiveWorkCorrupt("automatic saved graph/base changed")
+            claim_path = active_work.shared_registry_path(child_root)
+            areas = [scope for p in wg["packages"] for scope in p["write_scope"]]
+            if active_work.register(claim_path, wid, f"ai-ops/{wid}", areas, admission["identity"],
+                                    child_root=child_root, admission=admission):
+                return {"proceed": False, "stage": "preflight", "parallel": True, "reason": "automatic active claim refused"}
+        except (active_work.ActiveWorkCorrupt, KeyError, OSError, ValueError) as exc:
+            return {"proceed": False, "stage": "preflight", "parallel": True, "reason": str(exc)}
+    try:
+        rec = dispatch(wg, str(child_root), base_sha, task_map, signals, run_fn,
+                       repo_slug=repo_slug, contract_shas=contract_shas, integration_branch=f"ai-ops/{wid}",
+                       run_options={"provider_name": provider, "model": model, "base": binding["base_ref"],
+                                    "max_steps": max_steps, "author": author, "review": review,
+                                    "sandbox": sandbox, "baseline_diff": baseline_diff,
+                                    "install_deps": install_deps, "require_fix": require_fix,
+                                    "review_fix_attempts": review_fix_attempts, "budget": budget})
+        if admission is not None:
+            try:
+                active_work.validate_admission(child_root, admission)
+            except active_work.ActiveWorkCorrupt as exc:
+                rec.update(proceed=False, stage="preflight", reason=str(exc))
+        if isinstance(rec, dict):
+            rec["parallel"] = True
+            rec["budget"] = budget.to_dict()
+            rec["base_binding"] = binding
+            rec["delivery_requested"] = bool(open_pr)
+            rec["reconciliation"] = reconciled
+            rec["integration_source"] = rec.get("delivery_plan")
+            if open_pr:
+                _deliver_parallel(rec, child_root, wid, task, binding)
+            else:
+                rec["delivery"] = {"requested": False, "status": "not-requested"}
+            from ai_ops_kit.shared import lifecycle_store
+            saved = lifecycle_store.durable_write_json(child_root / "features" / wid / "parallel-report.json", rec)
+            if not saved.get("ok"):
+                rec["proceed"] = False
+                rec["stage"] = "lifecycle"
+                rec["reason"] = "parallel report не сохранён durable; integration source сохранён в результате"
+        return rec
+    finally:
+        if claim_path is not None and rec is not None:
+            active_work.finish_cmd(claim_path, wid, status="done" if exit_code(rec) == 0 else "blocked",
+                                   child_root=child_root)
 
 
 def _policy_refusal(signals, wg, root, wid, provider, model, max_steps):

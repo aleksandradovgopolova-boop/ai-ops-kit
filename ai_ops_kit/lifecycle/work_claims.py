@@ -16,6 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+import contextlib
+
+from ai_ops_kit.shared import lifecycle_store as _ls
 
 from ai_ops_kit.shared import gitio                    # единый вход к git с таймаутом (см. shared/gitio)
 
@@ -276,3 +279,81 @@ def team_view(child_root, local_active: list, published: bool) -> list:
             seen.add(key)
             view.append(r)
     return view
+
+
+def shared_registry_path(start=None):
+    """Путь к реестру, ОБЩЕМУ для всех worktree одного репозитория. -> Path.
+
+    ЗАЧЕМ ЭТО ПОЯВИЛОСЬ (замер 12.08.2026). Протокол параллельной работы
+    (`docs/parallel-sessions.md`) требует двух вещей одновременно: сессия работает в своём
+    `git worktree` (иначе чужой `checkout` уводит незакоммиченные правки) И заявляет область записи
+    в общем реестре (иначе две сессии берут одну работу). В таком виде правила ПРОТИВОРЕЧИЛИ друг
+    другу: `.ai/runtime/active-work.yaml` лежит внутри рабочего дерева, то есть у каждого worktree
+    свой — проверено, файл, созданный в одном, из другого не виден вовсе. Реестр, невидимый другой
+    сессии, — это не координация, а её видимость.
+
+    Поэтому путь берётся из `git rev-parse --git-common-dir`: этот каталог ОДИН на репозиторий и
+    все его worktree (у worktree свой `--git-dir`, но общий `--git-common-dir`). Реестр там же не
+    попадает в историю — он состояние машины, а не факт о продукте.
+
+    Путь `.ai/runtime/active-work.yaml` остаётся проекцией для читателей;
+    controller single/automatic writes используют этот общий Git store.
+    """
+    common = _git_common_dir(start)
+    if common is None:
+        raise ActiveWorkCorrupt(
+            f"не git-репозиторий или git недоступен ({start or Path.cwd()}): "
+            f"общий реестр сессий разместить негде")
+    return common / "ai-ops" / "active-work.yaml"
+
+
+class ActiveWorkCorrupt(Exception):
+    """Реестр active-work недостоверен (повреждён/не сохранён) — координация сессий небезопасна."""
+
+
+def load(path: Path):
+    """v3.0.12 (finding аудита блок B): FAIL-CLOSED. Прежде safe_load(...) or {} на битом/пустом реестре
+    возвращал ПУСТУЮ карту -> concurrency forecast «пересечений нет» на потерянных записях (две сессии
+    сталкивались). Теперь: отсутствует -> fresh; повреждён -> raise (не тихая пустая карта)."""
+    g = _ls.load_guarded(Path(path), kind="active-work")
+    if g["state"] == "absent":
+        return {"schema_version": 1, "kind": "active-work", "active": []}
+    if g["state"] == "corrupt":
+        raise ActiveWorkCorrupt(f"active-work реестр повреждён ({g['reason']}) — координация "
+                                "параллельных сессий недостоверна; нужна явная recovery")
+    data = g["data"]
+    data.setdefault("schema_version", 1)
+    data.setdefault("kind", "active-work")
+    data.setdefault("active", [])
+    return data
+
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    """v3.0.12 (finding аудита блок B): межпроцессная блокировка вокруг read-modify-write общего реестра,
+    чтобы конкурентные register/finish не теряли записи друг друга (last-writer-wins TOCTOU). best-effort:
+    на платформах без fcntl (Windows) деградирует до no-op — не хуже прежнего поведения."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    f = open(lock_path, "w", encoding="utf-8")
+    try:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
+
+
+def _canonical_path(path, root):
+    if root and Path(path) == Path(root) / ".ai/runtime/active-work.yaml" and _git_common_dir(root):
+        return shared_registry_path(root)
+    return Path(path)

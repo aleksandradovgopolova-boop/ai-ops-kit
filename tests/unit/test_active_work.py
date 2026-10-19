@@ -132,3 +132,52 @@ class TestFinishAndCorrupt:
     def test_missing_registry_returns_fresh(self, work_file):
         data = load(work_file)
         assert data["active"] == []
+
+
+def _automatic_claim_repo(tmp_path):
+    import hashlib
+    from ai_ops_kit.shared import gitio
+    gitio.run(["init", "-q", "-b", "main", str(tmp_path)])
+    gitio.git(tmp_path, "config", "user.email", "test@example.test")
+    gitio.git(tmp_path, "config", "user.name", "Test")
+    (tmp_path / "input.txt").write_text("frozen")
+    gitio.git(tmp_path, "add", ".")
+    gitio.git(tmp_path, "commit", "-qm", "base")
+    admission = {"base_sha": gitio.git(tmp_path, "rev-parse", "HEAD")[1],
+                 "identity": "auto-owner", "inputs": {"input.txt": hashlib.sha256(b"frozen").hexdigest()}}
+    return admission
+
+
+def test_single_claim_blocks_automatic_in_common_git_store(tmp_path):
+    from ai_ops_kit.lifecycle import active_work as aw
+    from ai_ops_kit.engine.ai_ops_run_lifecycle import _register_active_work
+    admission = _automatic_claim_repo(tmp_path)
+    path, _, err = _register_active_work(tmp_path, {}, ["aa.py"], "work", "single-owner", [])
+    assert err is None and path == aw.shared_registry_path(tmp_path)
+    assert aw.load(tmp_path / ".ai/runtime/active-work.yaml")["active"]
+    assert aw.register(path, "work", "ai-ops/work", ["aa.py"], "auto-owner", child_root=tmp_path,
+                       admission=admission) == 1
+    assert aw.load(path)["active"][0]["owner_session"] == "single-owner"
+
+
+def test_automatic_claim_blocks_single_and_preserves_frozen_admission(tmp_path):
+    from ai_ops_kit.lifecycle import active_work as aw
+    from ai_ops_kit.engine.ai_ops_run_lifecycle import _register_active_work
+    admission = _automatic_claim_repo(tmp_path)
+    path = aw.shared_registry_path(tmp_path)
+    assert aw.register(path, "work", "ai-ops/work", ["aa.py"], "auto-owner", child_root=tmp_path,
+                       admission=admission) == 0
+    assert aw.load(path)["active"][0]["auto_admission"] == admission
+    _, _, err = _register_active_work(tmp_path, {}, ["aa.py"], "work", "single-owner", [])
+    assert err and err.get("blocked_by") == "active-work"
+    _, _, err = _register_active_work(tmp_path, {}, ["aa.py"], "different-work", "single-owner", [])
+    assert err and err.get("blocked_by") == "active-work"
+    from ai_ops_kit.shared import gitio
+    sibling = tmp_path.parent / (tmp_path.name + "-sibling")
+    assert gitio.git(tmp_path, "worktree", "add", "-qb", "sibling", str(sibling))[0] == 0
+    assert aw.register(sibling / ".ai/runtime/active-work.yaml", "other", "ai-ops/other", ["aa.py"],
+                       "legacy-sibling", child_root=sibling) == 1
+    assert not (sibling / ".ai/runtime/active-work.yaml").exists()
+    assert aw.finish_cmd(path, "work", child_root=tmp_path) == 0
+    projected = aw.load(tmp_path / ".ai/runtime/active-work.yaml")["active"][0]
+    assert projected["status"] == "done" and projected["auto_admission"] == admission
