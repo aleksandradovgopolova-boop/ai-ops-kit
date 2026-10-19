@@ -120,7 +120,7 @@ def durable_create_batch(root: str | Path, documents: dict[str, str]) -> dict:
                                 os.mkdir(part, dir_fd=fd)
                             except FileExistsError:
                                 if not stat.S_ISDIR(os.stat(part, dir_fd=fd, follow_symlinks=False).st_mode):
-                                    raise ValueError('create-only directory collision is not a directory')
+                                    raise ValueError('create-only directory collision is not a directory') from None
                             child = os.open(part, flags, dir_fd=fd)
                         dirs.callback(os.close, child)
                         if create:
