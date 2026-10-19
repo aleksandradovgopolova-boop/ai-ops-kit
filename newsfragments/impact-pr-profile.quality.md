@@ -1,0 +1,1 @@
+Обычные локальные full-fallback проверки impact CLI используют существующий PR-профиль без повторения nightly; release-candidate сохраняет default с nightly. Профиль и исполнимая команда явно указаны в плане; обязательный exact-head CI не изменён.

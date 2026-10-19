@@ -41,11 +41,15 @@ def main(argv=None):
     profile = {"stacks": [{"language": "python", "commands": {
         "test": shlex.join([sys.executable, "-m", "pytest", "tests/", "-q"])}}]}
     result = verification_tiers.select_tests(changed, str(root), lifecycle_intent=args.intent, profile=profile)
+    if result["full_command"]:
+        release = args.intent == "release_candidate"
+        result["full_profile"] = "full-current-python" if release else "pr-current-python"
+        result["full_argv"] = ["bash", "scripts/check-full.sh", *([] if release else ["--pr"])]
     print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
     if args.plan_only or result["tier"] == "skip":
         return 0
     if result["full_command"]:
-        return subprocess.call(["bash", "scripts/check-full.sh"], cwd=root,
+        return subprocess.call(result["full_argv"], cwd=root,
                                env={**os.environ, "PYTHON": sys.executable, "PYTHONDONTWRITEBYTECODE": "1"})
     # Targeted commands here are generated solely by the simple pytest rewriter.
     return subprocess.call(shlex.split(result["targeted_command"]), cwd=root,
