@@ -141,6 +141,8 @@ def _pkg_signals(base_signals, pkg):
     """#1: package-specific view сигналов — write_scope/affected_areas/shared_contracts/capability/budget
     из объявления пакета WorkGraph. НЕ шлём одинаковые signals всем пакетам."""
     sig = dict(base_signals or {})
+    saved = sig.pop("_auto_package_signals", {})
+    sig.update(saved.get(pkg["id"], {}))
     ws = pkg.get("write_scope")
     if ws:
         sig["write_scope"] = ws

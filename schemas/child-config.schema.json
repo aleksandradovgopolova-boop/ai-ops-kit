@@ -444,6 +444,10 @@
       "type": "object",
       "description": "v3.16.0 Development Culture Guardrails: пороги гигиены контекста сессии (tools/session_guardrails.py). Стартовая политика, калибруется на реальных данных.",
       "properties": {
+        "auto_parallel_independent_roots": {
+          "type": "boolean", "default": false,
+          "description": "Saved independent roots only, shared max_model_calls and at most two active packages; hard global/session/USD quotas unsupported."
+        },
         "target_context_tokens": {
           "type": "integer",
           "minimum": 1

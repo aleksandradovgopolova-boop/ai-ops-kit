@@ -16,6 +16,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
+import contextlib
+
+from ai_ops_kit.shared import lifecycle_store as _ls
 
 from ai_ops_kit.shared import gitio                    # единый вход к git с таймаутом (см. shared/gitio)
 
@@ -276,3 +279,61 @@ def team_view(child_root, local_active: list, published: bool) -> list:
             seen.add(key)
             view.append(r)
     return view
+
+
+def shared_registry_path(start=None):
+    """Один Git-common store для register/finish всех worktrees; runtime — проекция читателей."""
+    common = _git_common_dir(start)
+    if common is None:
+        raise ActiveWorkCorrupt(
+            f"не git-репозиторий или git недоступен ({start or Path.cwd()}): "
+            f"общий реестр сессий разместить негде")
+    return common / "ai-ops" / "active-work.yaml"
+
+
+class ActiveWorkCorrupt(Exception):
+    """Реестр active-work недостоверен (повреждён/не сохранён) — координация сессий небезопасна."""
+
+
+def load(path: Path):
+    """Fail-closed: отсутствует → fresh; повреждён → raise, без ложной пустой карты."""
+    g = _ls.load_guarded(Path(path), kind="active-work")
+    if g["state"] == "absent":
+        return {"schema_version": 1, "kind": "active-work", "active": []}
+    if g["state"] == "corrupt":
+        raise ActiveWorkCorrupt(f"active-work реестр повреждён ({g['reason']}) — координация "
+                                "параллельных сессий недостоверна; нужна явная recovery")
+    data = g["data"]
+    data.setdefault("schema_version", 1)
+    data.setdefault("kind", "active-work")
+    data.setdefault("active", [])
+    return data
+
+
+@contextlib.contextmanager
+def _locked(path: Path):
+    """flock вокруг read-modify-write; legacy Windows no-op, auto отдельно требует fcntl."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    try:
+        import fcntl
+    except ImportError:
+        yield
+        return
+    f = open(lock_path, "w", encoding="utf-8")
+    try:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+        except OSError:
+            pass
+        f.close()
+
+
+def _canonical_path(path, root):
+    if root and Path(path) == Path(root) / ".ai/runtime/active-work.yaml" and _git_common_dir(root):
+        return shared_registry_path(root)
+    return Path(path)

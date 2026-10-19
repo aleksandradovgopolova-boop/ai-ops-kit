@@ -716,7 +716,7 @@ probes:
   covers:
   - ai_ops_kit/lifecycle/active_work.py
   file: ai_ops_kit/lifecycle/active_work.py
-  find: '            against = reconcile_with_base(against, child_root)'
+  find: '            against = reconcile_with_base([w for w in against if not w.get("auto_admission")], child_root) + protected'
   replace_with: '            against = list(against)'
   note: 'ПЕРВАЯ ВЕРСИЯ ЭТОЙ ПРОБЫ ВЫЖИЛА: названный тест звал `reconcile_with_base` сам и до
     `register` не доходил — то есть проверял функцию, а не ШОВ. Добавлены тесты через `register`
@@ -1419,8 +1419,8 @@ probes:
 - id: refusal-names-since-when
   kind: guard
   file: ai_ops_kit/lifecycle/active_work.py
-  find: '                since = c.get("since") or "время начала не записано"'
-  replace_with: '                since = ""'
+  find: '        since = c.get("since") or "время начала не записано"'
+  replace_with: '        since = ""'
   tests:
   - tests/unit/test_claim_reaches_other_copies.py
   why: 'Отказ без «с какого момента» не даёт решить, ждать держателя или перенимать заявку: заявка

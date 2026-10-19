@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from ai_ops_kit.cli.ai_ops_cli_lifecycle import _automatic_roots
 
 def _wid_for(task, signals, feature):
     from ai_ops_kit.engine import run_plan
@@ -526,6 +527,35 @@ def _parallel_policy(flags, intent, args):
             "review_fix_attempts": 2 if intent == "do" else getattr(args, "review_fix_attempts", 0)}
 
 
+def _dispatch_parallel(task, signals, child_root, a, flags, intent, provider):
+    from ai_ops_kit.engine import parallel_live_dispatch
+    explicit = getattr(a, "parallel", False)
+    if a.sequential and not explicit:
+        return None
+    wid = a.feature or _wid_for(task, signals, a.feature)
+    signals = dict(signals, task_text=task)
+    try:
+        auto = None if explicit else _automatic_roots(child_root, wid, signals, a.base,
+            session_identity=_session_identity(child_root), execution_policy={**_parallel_policy(flags, intent, a), "max_steps": a.max_steps})
+    except ValueError as exc:
+        print(f"ОТКАЗ: {exc}")
+        return 2
+    if not explicit and auto is None:
+        return None
+    options = dict(auto or {})
+    sig = dict(signals)
+    if auto:
+        sig["_auto_package_signals"] = options.pop("package_signals")
+    rec = parallel_live_dispatch.run_parallel_live(
+        task, sig, Path(child_root), feature=wid, provider=provider, model=a.model, base=a.base,
+        open_pr=a.open_pr, max_steps=a.max_steps, repo_slug=getattr(a, "repo", None),
+        **_parallel_policy(flags, intent, a), **options)
+    if rec is not None:
+        parallel_live_dispatch.print_parallel(rec)
+        return parallel_live_dispatch.exit_code(rec)
+    return None
+
+
 def _main_run_execute(intent, task, child_root, signals, a, pv):
     """Единственный путь, реально запускающий движок: `run --execute` и `do` (v3.22: `do` — alias
     с авторазрешением блокировщиков review_fix_attempts/author/open_pr). Возвращает код возврата."""
@@ -586,19 +616,9 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
             flags["author"] = True
             flags["review"] = True
             a.open_pr = True
-        # #542: --parallel — ЯВНЫЙ opt-in настоящей конкурентности (disposable-клон на пакет, governed
-        # fan-in). Дефолт НЕ трогаем: ветка входит только при явном флаге. Атомарная задача -> None ->
-        # проваливаемся в обычный прогон ниже. Основной checkout не трогается (работа на клонах).
-        if getattr(a, "parallel", False):
-            from ai_ops_kit.engine import parallel_live_dispatch
-            _pwid = a.feature or _wid_for(task, signals, a.feature)
-            _prec = parallel_live_dispatch.run_parallel_live(
-                task, signals, Path(child_root), feature=_pwid, provider=provider, model=a.model, base=a.base,
-                open_pr=a.open_pr, max_steps=a.max_steps, repo_slug=getattr(a, "repo", None), **_parallel_policy(flags, intent, a))
-            if _prec is not None:
-                parallel_live_dispatch.print_parallel(_prec)
-                return parallel_live_dispatch.exit_code(_prec)
-            print("— задача атомарна: конкурентный мультипакетный прогон не требуется, обычный прогон —")
+        parallel_exit = _dispatch_parallel(task, signals, Path(child_root), a, flags, intent, provider)
+        if parallel_exit is not None:
+            return parallel_exit
         # v3.1/v2.120: --sequential — неатомарную задачу исполнить по WorkPackages (пакет за пакетом);
         # sequential НАСЛЕДУЕТ провайдера/модель/sandbox/install/baseline/open-pr/budget (аудит P0.2).
         if a.sequential:

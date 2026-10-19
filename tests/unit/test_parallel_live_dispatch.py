@@ -592,3 +592,204 @@ def test_budget_refusal_precedes_parallel_clones_and_models(tmp_path, monkeypatc
         runner=lambda *a, **kw: calls.append("clone"), run_fn=lambda *a, **kw: calls.append("model"))
     assert dsp.exit_code(rec) == 2 and calls == []
     assert not (root / ".git/ai-ops-parallel").exists()
+
+
+def _saved_auto(root):
+    import yaml
+    from ai_ops_kit.shared import gitio
+    from ai_ops_kit.lifecycle import workitem
+    from ai_ops_kit.engine import run_plan
+    root.mkdir(exist_ok=True)
+    gitio.run(["init", "-q", "-b", "main", str(root)])
+    gitio.git(root, "config", "user.email", "test@example.test")
+    gitio.git(root, "config", "user.name", "Test")
+    signals = {"task_type": "typo", "risk": "low", "size": "small", "execution_budget": {"max_model_calls": 30}}
+    cfg = {"session_economy": {"auto_parallel_independent_roots": True}}
+    (root / ".ai-ops.yaml").write_text(yaml.safe_dump(cfg))
+    wg = {"schema_version": 1, "kind": "WorkGraph", "id": "WG-001", "feature": "work",
+          "execution_mode": "parallel", "packages": [{"id": x, "write_scope": [f"{x}.txt"], "depends_on": []}
+                                                        for x in ("aa", "bb")],
+          "integration_order": ["aa", "bb"], "aggregate_verification": ["implementation_verification"]}
+    (root / "work-graph.yaml").write_text(yaml.safe_dump(wg))
+    for pid in ("work", "aa", "bb"):
+        workitem.start(root / "features", pid, f"write {pid}", signals=signals)
+        d = root / "features" / pid
+        (d / "run-plan.yaml").write_text(yaml.safe_dump(run_plan.build_plan({**signals, "task_text": f"write {pid}"}, pid)))
+        (d / "run-settings.yaml").write_text(yaml.safe_dump({"kind": "run-settings", "workitem_id": pid,
+                                                           "signals": signals, "policy": {}}))
+    gitio.git(root, "add", ".")
+    gitio.git(root, "commit", "-qm", "base")
+    return signals, wg
+
+
+@pytest.mark.parametrize("mutation", ["deps", "scope", "feature", "unknown", "ceiling", "budget", "approval", "policy", "aggregate", "legacy-budget", "alias", "config", "mode", "tests-passed", "types", "order", "null-scope"])
+def test_saved_auto_refuses_before_dispatch(tmp_path, mutation):
+    import yaml
+    from ai_ops_kit.cli import ai_ops_cli_commands as cmd
+    signals, wg = _saved_auto(tmp_path)
+    if mutation == "deps":
+        wg["packages"][1]["depends_on"] = ["aa"]
+    elif mutation == "scope":
+        wg["packages"][1]["write_scope"] = ["../escape"]
+    elif mutation == "alias":
+        (tmp_path / "aa.txt").symlink_to("bb.txt")
+    elif mutation == "types":
+        wg["schema_version"] = True
+    elif mutation == "order":
+        wg["integration_order"] = ["aa"]
+    elif mutation == "null-scope":
+        wg["packages"][0]["write_scope"] = [None]
+    elif mutation == "feature":
+        wg["feature"] = "other"
+    elif mutation == "unknown":
+        wg["packages"][0]["task"] = "invented"
+    elif mutation == "ceiling":
+        (tmp_path / ".ai-ops.yaml").write_text(yaml.safe_dump({"session_economy": {
+            "auto_parallel_independent_roots": True, "max_subsessions_per_session": 4}}))
+    elif mutation == "budget":
+        signals["execution_budget"] = {"max_model_calls": 999}
+    elif mutation == "config":
+        (tmp_path / ".ai-ops.yaml").write_text((tmp_path / ".ai-ops.yaml").read_text() + "# uncommitted config\n")
+    elif mutation == "mode":
+        (tmp_path / ".ai-ops.yaml").chmod(0o755)
+    elif mutation == "tests-passed":
+        wg["aggregate_verification"] = ["tests_passed"]
+    elif mutation == "aggregate":
+        wg["aggregate_verification"] = ["unknown-gate"]
+    elif mutation in ("policy", "legacy-budget"):
+        p = tmp_path / "features/aa/run-settings.yaml"
+        saved = yaml.safe_load(p.read_text())
+        saved["policy"]["sandbox"] = mutation == "policy"
+        if mutation == "legacy-budget":
+            saved["signals"]["budget_contract"] = {"max_cost": 1}
+        p.write_text(yaml.safe_dump(saved))
+    else:
+        p = tmp_path / "features/aa/workitem.yaml"
+        wi = yaml.safe_load(p.read_text())
+        wi["workflow"] = "CRITICAL"
+        p.write_text(yaml.safe_dump(wi))
+    (tmp_path / "work-graph.yaml").write_text(yaml.safe_dump(wg))
+    with pytest.raises(ValueError):
+        cmd._automatic_roots(tmp_path, "work", signals, None)
+    assert not (tmp_path / ".git/ai-ops-parallel").exists()
+
+
+def test_ordinary_do_runs_real_isolated_packages_and_exact_fan_in(tmp_path, monkeypatch):
+    """Only the model text transport/external PR acknowledgement are controlled fixtures."""
+    import json
+    import threading
+    import yaml
+    from ai_ops_kit.cli import ai_ops_cli
+    from ai_ops_kit.providers import orchestrator
+    from ai_ops_kit.engine import execution_pipeline, parallel_live
+    from ai_ops_kit.delivery import pr_open
+    from ai_ops_kit.shared import gitio
+    from ai_ops_kit.lifecycle import active_work
+    signals, _ = _saved_auto(tmp_path)
+    (tmp_path / ".gitignore").write_text("features/\n.ai/\n")
+    gitio.git(tmp_path, "rm", "-r", "--cached", "-q", "features")
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='fixture'\nversion='0.0.1'\n")
+    cfg = yaml.safe_load((tmp_path / ".ai-ops.yaml").read_text())
+    log = tmp_path.parent / (tmp_path.name + "-checks.log")
+    (tmp_path / "check.py").write_text("from pathlib import Path\n"
+        "files=[p for p in (Path('aa.txt'),Path('bb.txt')) if p.exists()]\n"
+        "assert files and all(p.read_text()=='verified\\n' for p in files)\n"
+        f"with open({str(log)!r},'a') as f: f.write(str(Path.cwd())+'|'+','.join(p.name for p in files)+'\\n')\n")
+    cfg["verification"] = {"commands": {"test": "python3 check.py"}}
+    (tmp_path / ".ai-ops.yaml").write_text(yaml.safe_dump(cfg))
+    gitio.git(tmp_path, "add", ".")
+    gitio.git(tmp_path, "commit", "-qm", "fixture verification")
+    gitio.git(tmp_path, "remote", "add", "origin", "https://github.com/example/child.git")
+    original = gitio.git(tmp_path, "rev-parse", "HEAD")[1]
+    frozen = {str(p): p.read_bytes() for p in tmp_path.rglob("*.yaml") if ".git" not in p.parts}
+    barrier, lock, active, maximum, seen = threading.Barrier(2), threading.Lock(), set(), [0], []
+
+    def transport(prompt):
+        pid = next((x for x in ("aa", "bb") if f"write {x}" in prompt), None)
+        assert pid is not None, prompt[:200]
+        context = prompt.split("=== ЗАДАЧА И ЖУРНАЛ УЖЕ ВЫПОЛНЕННЫХ ШАГОВ ===\n", 1)[-1]
+        if f"{pid}.txt" not in context:
+            with lock:
+                active.add(pid)
+                maximum[0] = max(maximum[0], len(active))
+                seen.append(pid)
+            barrier.wait(timeout=30)
+            with lock:
+                active.remove(pid)
+            return json.dumps({"op": "write", "path": f"{pid}.txt", "content": "verified\n"})
+        return json.dumps({"done": True, "summary": "fixture rename", "behavior_unchanged": "controlled text-only fixture"})
+
+    monkeypatch.setattr(orchestrator, "make_provider", lambda *a, **k: transport)
+    monkeypatch.setattr(execution_pipeline, "_reverify_against_current_target", lambda *a: {
+        "stale": False, "verdict": "controlled-external-target"})
+    monkeypatch.setattr(pr_open, "open_draft_pr", lambda root, branch, **k: {
+        "status": "opened", "head_sha": gitio.git(root, "rev-parse", "HEAD")[1], "number": 7,
+        "url": "https://github.com/example/child/pull/7"})
+    rc = ai_ops_cli.main(["do", "write work", str(tmp_path), "--feature", "work",
+                          "--provider", "mock", "--signals", json.dumps(signals)])
+    rec = json.loads((tmp_path / "features/work/parallel-report.json").read_text())
+    assert rc == 0, rec
+    assert maximum == [2] and sorted(seen) == ["aa", "bb"]
+    assert rec["aggregate"]["tested_revision"] == rec["integration_sha"] and rec["aggregate"]["tree_clean"]
+    integration = Path(rec["integration_source"]["integration_clone"])
+    assert all((integration / f"{p}.txt").read_text() == "verified\n" for p in ("aa", "bb"))
+    assert gitio.git(integration, "rev-parse", "HEAD")[1] != original
+    assert any("aa.txt,bb.txt" in line for line in log.read_text().splitlines())
+    assert rec["budget"]["model_calls"] == 4
+    receipt = json.loads(Path(rec["package_artifacts"]["receipt"]).read_text())
+    assert {p["package_id"] for p in receipt["packages"]} == {"aa", "bb"}
+    assert all(p["package_sha"] and p["gate_report"]["all_pass"] for p in receipt["packages"])
+    assert all(not Path(p["clone"]).exists() for p in rec["package_results"].values())
+    entry = active_work.load(active_work.shared_registry_path(tmp_path))["active"][0]
+    assert entry["status"] == "done" and entry["auto_admission"]["base_sha"] == original
+    assert all(Path(p).read_bytes() == raw for p, raw in frozen.items())
+    assert gitio.git(tmp_path, "rev-parse", "HEAD")[1] == original
+
+
+@pytest.mark.parametrize("reason", ["claim", "stale", "approval", "budget", "input"])
+def test_saved_automatic_preflight_launches_no_forbidden_effects(tmp_path, monkeypatch, reason):
+    from ai_ops_kit.cli import ai_ops_cli_commands as cmd
+    from ai_ops_kit.lifecycle import active_work
+    from ai_ops_kit.shared import gitio
+    signals, _ = _saved_auto(tmp_path)
+    auto = cmd._automatic_roots(tmp_path, "work", signals, None)
+    sig = dict(signals, _auto_package_signals=auto.pop("package_signals"))
+    if reason == "claim":
+        import subprocess
+        import sys
+        path = active_work.shared_registry_path(tmp_path)
+        proc = subprocess.run([sys.executable, "-m", "ai_ops_kit.lifecycle.active_work", "register", str(path),
+            "work", "--branch", "ai-ops/work", "--areas", "aa.txt", "--session", "other", "--repo", str(tmp_path)],
+            capture_output=True, text=True)
+        assert proc.returncode == 0 and active_work.holder_is_gone(active_work.load(path)["active"][0], active_work._machine())
+    elif reason == "stale":
+        gitio.git(tmp_path, "commit", "--allow-empty", "-qm", "new base")
+    elif reason == "input":
+        (tmp_path / "features/aa/workitem.yaml").write_text("changed after admission")
+    elif reason == "approval":
+        sig["_auto_package_signals"]["aa"]["secret_boundary"] = True
+    else:
+        for _ in range(30):
+            auto["budget"].charge_call()
+    rec = dsp.run_parallel_live("write work", sig, tmp_path, feature="work", provider="mock",
+                                runner=lambda *a, **k: pytest.fail("clone/model runner was reached"), **auto)
+    assert rec["stage"] == "preflight" and rec["proceed"] is False
+    assert not (tmp_path / ".git/ai-ops-parallel").exists()
+
+
+def test_explicit_sequential_never_enters_automatic_admission(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    from ai_ops_kit.cli import ai_ops_cli_commands as cmd
+    monkeypatch.setattr(cmd, "_automatic_roots", lambda *a, **k: pytest.fail("auto admission reached"))
+    assert cmd._dispatch_parallel("T", {}, tmp_path, SimpleNamespace(parallel=False, sequential=True),
+                                  {}, "do", "mock") is None
+
+
+def test_actual_cli_task_drift_refuses_before_runner(tmp_path, monkeypatch):
+    import json
+    from ai_ops_kit.cli import ai_ops_cli
+    signals, _ = _saved_auto(tmp_path)
+    monkeypatch.setattr(dsp.parallel_live, "run_live_concurrent", lambda *a, **k: pytest.fail("runner reached"))
+    assert ai_ops_cli.main(["do", "DIFFERENT REQUESTED TASK", str(tmp_path), "--feature", "work",
+                           "--provider", "mock", "--signals", json.dumps(signals)]) == 2
+    assert not (tmp_path / ".git/ai-ops-parallel").exists()
