@@ -1,0 +1,1 @@
+Draft impact selection сохраняет full fallback при передаче или присвоении builtin loaders `__import__`, `eval`, `exec`: алиас не считается доказательством полной статической зависимости, даже если другой direct test найден.

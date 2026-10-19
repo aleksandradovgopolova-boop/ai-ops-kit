@@ -177,6 +177,10 @@ def _uncertain_dependency(path: Path) -> bool:
             tree = ast.parse(text, filename=str(path))
             dynamic_names = {"__import__", "eval", "exec", "import_module",
                              "spec_from_file_location", "run_path", "run_module"}
+            # A builtin loader is also dynamic when retained/passed under another name.
+            if any(isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
+                   and n.id in ("__import__", "eval", "exec") for n in ast.walk(tree)):
+                return True
             # Imported loaders may be aliased or passed to another function; the
             # presence of such a binding already makes this graph incomplete.
             if any(isinstance(n, ast.Attribute) and n.attr in dynamic_names
