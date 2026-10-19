@@ -415,20 +415,33 @@ def _budget_origin(active, wid):
 
 
 def bind_attempt_budget(root, wid, admission, budget, guard):
-    """Claim carries provenance only; the existing Budget ledger is the sole counter."""
+    """Claim carries provenance/binding only; the existing Budget ledger is the sole counter."""
     import hashlib
     from ai_ops_kit.lifecycle import active_work as aw
-    from ai_ops_kit.shared.budget import BudgetExceeded
+    from ai_ops_kit.shared.budget import BudgetExceeded, _budget_json
     root, path = Path(root).resolve(), shared_registry_path(root)
-    with aw._claim_lock(path, root):
-        entry = _require_attempt(load(path), wid, admission, root)
+    ledger = path.parent / 'budgets' / (hashlib.sha256(wid.encode()).hexdigest() + '.json')
+    with aw._claim_lock(path, root) as legacy:
+        data = load(path)
+        entry = _require_attempt(data, wid, admission, root)
         aw.validate_admission(root, admission)
         origin = entry.get('budget_origin')
         report = root / 'features' / wid / 'parallel-report.json'
         if origin not in ('fresh', 'durable') or (origin == 'fresh' and (report.exists() or report.is_symlink())):
             raise BudgetExceeded('budget prior attempt spend unknown; no zero migration')
-    ledger = path.parent / 'budgets' / (hashlib.sha256(wid.encode()).hexdigest() + '.json')
-    binding = {'workitem_id': wid, 'base_sha': admission['base_sha'], 'inputs': admission['inputs']}
+        binding = entry.get('budget_binding')
+        if binding is None and origin == 'fresh' and not ledger.exists() and not ledger.is_symlink():
+            binding = _goal_budget_binding(wid, admission)
+            entry['budget_binding'] = binding
+            aw.save(path, data)  # pin before ledger init; callback is still forbidden until full bind returns
+            aw._project_claim(legacy, entry)
+            claim_to_copies(root, entry)
+        if binding is not None:
+            if _budget_json(binding) != _budget_json(_goal_budget_binding(wid, admission)):
+                raise BudgetExceeded('budget immutable original goal/constraints binding mismatch')
+        else:
+            # Existing ledger/claim with no anchor retains its exact legacy full-input binding.
+            binding = {'workitem_id': wid, 'base_sha': admission['base_sha'], 'inputs': admission['inputs']}
     budget.bind_durable(ledger, binding, create=origin == 'fresh', guard=guard)
     with aw._claim_lock(path, root) as legacy:
         data = load(path)
@@ -439,6 +452,23 @@ def bind_attempt_budget(root, wid, admission, budget, guard):
         aw._project_claim(legacy, entry)
         claim_to_copies(root, entry)
     return ledger
+
+
+def _goal_budget_binding(wid, admission):
+    from ai_ops_kit.shared.budget import BudgetExceeded
+    names = ['.ai-ops.yaml', *[f'features/{wid}/{name}.yaml' for name in ('workitem', 'run-plan', 'run-settings')]]
+    inputs = admission.get('inputs') or {}
+    if any(not isinstance(inputs.get(name), str) or len(inputs[name]) != 64
+           or any(c not in '0123456789abcdef' for c in inputs[name]) for name in names):
+        raise BudgetExceeded('budget original goal anchor requires complete frozen root inputs')
+    return {'schema_version': 1, 'kind': 'GoalBudgetBinding', 'workitem_id': wid,
+            'base_sha': admission['base_sha'], 'inputs': {name: inputs[name] for name in names}}
+
+
+def _budget_binding(active, wid):
+    import copy
+    old = [w.get('budget_binding') for w in active if w.get('id') == wid]
+    return copy.deepcopy(old[0]) if len(old) == 1 else None
 
 
 def retry_package_claim(root, wid, admission, origin, check):

@@ -93,3 +93,12 @@ checkpoint, до finish_cmd**: canonical claim ещё `in-progress`, но точ
 PID не снимает ownership. Recovery получает новую generation и `owner_recovery`
 receipt, сохраняет budget и проходит обычный partial/delivery-only controller.
 Это не общий lease или автоматический takeover чужой сессии.
+
+Новые automatic jobs сохраняют в canonical claim `budget_binding` исходной цели:
+base и hashes `.ai-ops.yaml`, root WorkItem/RunPlan/RunSettings. Тот же единственный
+LogicalCallBudget хранит counter/limits; добавление будущих generated package inputs
+не должно превращать расход planning в fresh zero. Полный execution snapshot остаётся
+отдельным обязательным guard и не ослабляется. Изменение original goal/constraints,
+corrupt/missing anchor или ledger даёт отказ. Existing full-input ledger сохраняет
+старое binding без автоматической миграции. Это предпосылка goal→plan, не заявление
+о готовности compiler или разрешение нового model call.
