@@ -113,7 +113,6 @@ def save(path: Path, data: dict):
 
 _CLOSED_STATUSES = ("done", "superseded")   # #137: снятое сверкой — не идущая работа
 
-
 def validate_admission(root, admission):
     """Frozen automatic input binding; called under the shared claim lock and before delivery."""
     from ai_ops_kit.shared import gitio
