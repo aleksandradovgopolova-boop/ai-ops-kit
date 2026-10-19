@@ -83,3 +83,13 @@ Automatic independent-root callbacks одного локального Git-commo
 error, даже если его тип похож на resource refusal. Reuse готовых commits не
 занимает slots. Это local capacity admission, не physical-request/native-session
 лимит, distributed lease, автоматический takeover или обещание отмены сети.
+
+Узкое восстановление собственной попытки допускает также crash-окно **после полного
+checkpoint, до finish_cmd**: canonical claim ещё `in-progress`, но точный локальный
+`owner_pid` доказанно завершился. Нужны прежние same identity/machine/worktree,
+проверенные report/receipts/refs/base/frozen inputs и отсутствие конфликтов.
+Недописанный, неизвестный или относящийся к другой generation отчёт не разрешает
+повтор. Возраст заявки не доказательство; live/missing/invalid/permission-unknown
+PID не снимает ownership. Recovery получает новую generation и `owner_recovery`
+receipt, сохраняет budget и проходит обычный partial/delivery-only controller.
+Это не общий lease или автоматический takeover чужой сессии.

@@ -361,7 +361,7 @@ def _canonical_path(path, root):
 
 
 def retry_delivery_claim(root, wid, identity, origin, sha, check, *, execute):
-    """Новая generation только terminal own automatic delivery; никогда не takeover."""
+    """Own verified completed checkpoint: terminal or proven local process exit, never foreign takeover."""
     import os
     from uuid import uuid4
     from ai_ops_kit.lifecycle import active_work as aw
@@ -380,11 +380,12 @@ def retry_delivery_claim(root, wid, identity, origin, sha, check, *, execute):
             raise ActiveWorkCorrupt('parallel delivery corrupt frozen admission')
         same_origin = admission.get('attempt_id') == origin or (
             old.get('delivery_retry_origin') == origin and old.get('delivery_retry_sha') == sha)
-        if (not isinstance(admission.get('attempt_id'), str) or not admission['attempt_id'] or not origin or not same_origin or old.get('status') not in ('done', 'blocked')
+        if (not isinstance(admission.get('attempt_id'), str) or not admission['attempt_id'] or not origin or not same_origin
                 or old.get('owner_session') != identity or admission.get('identity') != identity
                 or old.get('machine') != aw._machine() or old.get('worktree') != str(root)
                 or old.get('branch') != f'ai-ops/{wid}'):
             raise ActiveWorkCorrupt('parallel delivery claim active/replaced/foreign')
+        recovery = _completed_retry_origin(old, ('done', 'blocked'))
         aw.validate_admission(root, admission)
         other = [w for w in aw.team_view(root, data['active'] + (load(legacy)['active'] if legacy else []),
                                          aw.publication_enabled(root))
@@ -396,6 +397,9 @@ def retry_delivery_claim(root, wid, identity, origin, sha, check, *, execute):
         if not execute:
             return admission
         admission = dict(admission, attempt_id=uuid4().hex)
+        admission.pop('recovered_from', None)
+        if recovery:
+            admission['recovered_from'] = recovery
         entry = dict(old, status='in-progress', auto_admission=admission, owner_pid=os.getpid(),
                      started_at=aw._now_iso(), delivery_retry_origin=origin, delivery_retry_sha=sha)
         data['active'] = [w for w in data['active'] if w.get('id') != wid] + [entry]
@@ -438,7 +442,7 @@ def bind_attempt_budget(root, wid, admission, budget, guard):
 
 
 def retry_package_claim(root, wid, admission, origin, check):
-    """Terminal own package retry: compare original generation before replacing it, never takeover."""
+    """Own completed package retry: compare original generation; only terminal/proven exited owner."""
     import os
     from uuid import uuid4
     from ai_ops_kit.lifecycle import active_work as aw
@@ -450,7 +454,7 @@ def retry_package_claim(root, wid, admission, origin, check):
             raise ActiveWorkCorrupt('package resume canonical claim missing/ambiguous')
         old = entries[0]
         saved = old.get('auto_admission') or {}
-        if (old.get('status') != 'blocked' or old.get('budget_origin') != 'durable'
+        if (old.get('budget_origin') != 'durable'
                 or old.get('owner_session') != admission['identity']
                 or old.get('machine') != aw._machine() or old.get('worktree') != str(root)
                 or old.get('branch') != f'ai-ops/{wid}' or not isinstance(saved, dict)
@@ -458,6 +462,7 @@ def retry_package_claim(root, wid, admission, origin, check):
                 or origin.get('identity') != admission['identity']
                 or any(saved.get(k) != admission.get(k) for k in ('identity', 'base_sha', 'graph_path', 'inputs'))):
             raise ActiveWorkCorrupt('package resume active/replaced/foreign or changed admission/budget provenance')
+        recovery = _completed_retry_origin(old, ('blocked',))
         aw.validate_admission(root, saved)
         other = [w for w in aw.team_view(root, data['active'] + (load(legacy)['active'] if legacy else []),
                                          aw.publication_enabled(root))
@@ -467,6 +472,9 @@ def retry_package_claim(root, wid, admission, origin, check):
             raise ActiveWorkCorrupt('package resume conflicts with another work')
         check()  # local evidence only, no network/model inside claim lock
         admitted = dict(admission, attempt_id=uuid4().hex)
+        admitted.pop('recovered_from', None)
+        if recovery:
+            admitted['recovered_from'] = recovery
         entry = dict(old, status='in-progress', auto_admission=admitted, owner_pid=os.getpid(), started_at=aw._now_iso())
         data['active'] = [w for w in data['active'] if w.get('id') != wid] + [entry]
         aw.save(path, data)
@@ -524,3 +532,16 @@ def automatic_package_slot(root, wid, admission):
                'unit': 'local-package-callback', 'scope': 'git-common-store'}
     finally:
         closers.close()  # releases only our fds, including on callback error
+
+
+def _completed_retry_origin(old, terminal):
+    """Only called after exact own identity binding; report/source check still required before save."""
+    from ai_ops_kit.lifecycle import active_work as aw
+    if old.get('status') in terminal:
+        return None
+    pid = old.get('owner_pid')
+    if (old.get('status') != 'in-progress' or old.get('machine') != aw._machine()
+            or type(pid) is not int or pid <= 0 or not aw._pid_is_dead(pid)):
+        raise ActiveWorkCorrupt('automatic retry claim active/unknown owner; completed-checkpoint recovery refused')
+    return {'attempt_id': (old.get('auto_admission') or {}).get('attempt_id'), 'owner_pid': pid,
+            'reason': 'completed-checkpoint-owner-process-gone'}
