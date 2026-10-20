@@ -424,7 +424,7 @@ def delivery_evidence(root: Path):
                               text=True, timeout=10, check=True).stdout.strip()
         if not re.fullmatch(r"[0-9a-f]{40}", head):
             raise ValueError("HEAD missing")
-        runs = _github(root, slug, f"actions/runs?head_sha={head}&event=push&per_page=100", "workflow_runs")
+        runs = _github(root, slug, f"actions/runs?head_sha={head}&per_page=100", "workflow_runs")
         policy = json.loads(_read(root, "quality/premerge-checks.json"))
         required = {k: list(policy[k]) for k in ("package-quality.yml", "docs.yml")}
         # Два PR-only jobs штатно skipped на push; это не успех и не применимый main-гейт.
@@ -438,7 +438,7 @@ def delivery_evidence(root: Path):
         passed, total, failures, pending, sources = 0, sum(map(len, required.values())), [], [], []
         for workflow, names in required.items():
             candidates = [r for r in runs if r["path"] == f".github/workflows/{workflow}"
-                          and r["head_sha"] == head and r["event"] == "push"
+                          and r["head_sha"] == head and r["event"] in {"push", "schedule", "workflow_dispatch"}
                           and r["head_branch"] == "main"
                           and r["repository"]["full_name"] == slug]
             if not candidates:

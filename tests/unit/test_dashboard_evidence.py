@@ -2,6 +2,7 @@
 import datetime as dt
 import importlib.util
 import json
+import re
 import subprocess
 from pathlib import Path
 
@@ -92,6 +93,16 @@ def test_latest_attempt_failure_overrides_earlier_success(evidence):
     assert mod.delivery_evidence(root)["tech"]["state"] == "red"
 
 
+@pytest.mark.parametrize("event", ["schedule", "workflow_dispatch"])
+def test_later_main_run_failure_overrides_green_push(evidence, event):
+    mod, root, runs, jobs = evidence
+    runs.append(dict(runs[2], id=20, event=event, conclusion="failure"))
+    jobs[20] = [dict(jobs[3][0], run_id=20, conclusion="failure")]
+    result = mod.delivery_evidence(root)["tech"]
+    assert result["state"] == "red"
+    assert result["passed"] == 3
+
+
 def test_api_error_does_not_erase_independent_release(evidence, monkeypatch):
     mod, root, _, _ = evidence
     api = mod._github
@@ -137,3 +148,11 @@ def test_actual_readout_and_written_snapshot_keep_cohorts_separate(tmp_path):
     written = page.read_text()
     assert '"repositories": 3' in written and '"n": 4' in written
     assert "итог не снят" in written
+
+
+def test_committed_json_and_embedded_snapshot_have_identical_facts():
+    html = (KIT / "dashboard/index.html").read_text()
+    payload = re.search(r"const SNAPSHOT = (.*?);\n\s*/\* SNAPSHOT:END", html, re.S).group(1)
+    assert json.loads(payload) == json.loads((KIT / "dashboard/data.json").read_text())
+    assert 'data-modal="panel:state"' not in html
+    assert 'id="state-full"' not in html
