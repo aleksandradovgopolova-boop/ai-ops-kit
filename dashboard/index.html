@@ -315,171 +315,118 @@
   button.rh{width:100%;text-align:left;font:inherit;cursor:pointer;color:inherit}
   button.rh:hover{border-color:var(--accent)}
 
-  /* Обзор: описание → метрики → работа и направление. DOM следует порядку чтения. */
-  html{scroll-padding-top:24px}
-  .app{max-width:1440px;padding:28px clamp(16px,3vw,40px);gap:24px}
-  .head{padding-bottom:18px;border-bottom:1px solid var(--line)}
-  .brand h1{font-size:25px;letter-spacing:-.04em}
-  .brand-label{color:var(--muted);font-size:11px;margin-bottom:5px}
+  /* Согласованный макет: общая граница колонок в обоих рядах. */
+  html{scroll-padding-top:20px}
+  .app{max-width:1680px;padding:14px 24px;gap:10px}
+  .head{padding-bottom:10px;border-bottom:1px solid var(--line);flex-wrap:nowrap}
+  .brand h1{font-size:24px;letter-spacing:-.035em}
+  .brand-label{color:var(--muted);font-size:10px;margin-bottom:5px}
   .chip{box-shadow:none}
-  .src{flex-basis:100%;justify-content:flex-end;color:var(--muted)}
-  .main{display:grid;grid-template-columns:minmax(0,7fr) minmax(0,5fr);gap:18px;align-items:start}
+  .head-right{flex-wrap:nowrap}
+  .section-nav{display:flex;gap:18px;margin-left:auto}
+  .text-button{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:4px 0;cursor:pointer;text-align:left}
+  .text-button:hover{text-decoration:underline}
+  summary{cursor:pointer;color:var(--accent);font-size:12px;padding:4px 0}
+  .main{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:12px;align-items:stretch}
   .main > *{min-width:0}
   .wide{grid-column:1/-1}
-  .north{display:block;padding:0 0 4px;border:0;border-radius:0;background:none;box-shadow:none}
-  .product-description{font-size:clamp(20px,2.1vw,26px);font-weight:500;line-height:1.3;
-    letter-spacing:-.025em;max-width:1040px;margin:0 0 12px;text-wrap:pretty}
-  .north details{max-width:960px}
-  summary{cursor:pointer;color:var(--accent);font-size:12px;width:fit-content;padding:4px 0}
-  .north .txt{margin-top:10px;padding:12px 16px;border-left:2px solid var(--accent)}
-  .section-nav{display:flex;flex-wrap:wrap;gap:6px;padding:0 0 4px}
-  .section-nav a{font-size:12px;color:var(--muted);border:1px solid var(--line);border-radius:8px;padding:7px 13px}
-  .section-nav a:hover{color:var(--ink);background:var(--accent-soft);border-color:var(--accent)}
-  .panel{padding:18px;box-shadow:0 4px 16px rgba(0,0,0,.12)}
-  .eyebrow{color:var(--muted);letter-spacing:.08em;flex-wrap:wrap;margin-bottom:14px}
-  .eyebrow .n{font-family:"IBM Plex Sans",sans-serif;letter-spacing:0;text-transform:none;font-size:11px}
-  .metrics-row{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(0,3fr);gap:10px}
-  .northstar-metric{margin:0;padding:14px;background:linear-gradient(120deg,var(--accent-soft),var(--panel-2));border-color:#343d65}
-  .northstar-metric .k{flex-wrap:wrap;line-height:1.4}
-  .northstar-metric .k .dir{margin-left:0}
-  .northstar-metric .v{font-size:30px;flex-wrap:wrap;line-height:1.15;margin-top:12px}
-  .northstar-metric .v .u{font-size:10px;line-height:1.5;color:var(--muted)}
-  .metric-tiles{grid-template-columns:repeat(3,minmax(0,1fr));margin:0;gap:10px}
-  .mtile{padding:14px;display:flex;flex-direction:column;justify-content:space-between;gap:8px}
-  .mtile .mk{font-size:12px;line-height:1.4}
+  .north{padding:2px 0;border:0;border-radius:0;background:none;box-shadow:none}
+  .product-description{font-size:15px;font-weight:450;line-height:1.4;margin:0}
+  .panel{padding:12px 14px;box-shadow:0 4px 16px rgba(0,0,0,.12)}
+  .eyebrow{color:var(--muted);font-size:9px;letter-spacing:.09em;margin-bottom:10px;flex-wrap:wrap}
+  .eyebrow .n{font-family:"IBM Plex Sans",sans-serif;letter-spacing:0;text-transform:none;font-size:10px}
+  .more{font-size:9px;padding:3px 6px;letter-spacing:0}
+  .card-health{grid-column:1}
+  .metrics-panel{grid-column:2}
+  .card-focus{grid-column:1}
+  .roadstrip{grid-column:2}
+  .card-health .preview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0}
+  .hp{min-width:0;padding:10px 8px}
+  .hp .hl{font-size:11px;line-height:1.4;padding-right:16px}
+  .hp .hv{font-size:14px;line-height:1.4;flex-wrap:wrap;align-items:baseline;margin-top:10px}
+  .hp-tip{z-index:10}
+  .metrics-row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,2.65fr);gap:7px;flex:1}
+  .northstar-metric{margin:0;padding:10px;background:linear-gradient(120deg,var(--accent-soft),var(--panel-2));border-color:#343d65}
+  .northstar-metric .k{font-size:10px;line-height:1.4;flex-wrap:wrap;gap:5px}
+  .northstar-metric .k .dir{margin-left:0;white-space:normal}
+  .northstar-metric .v{font-size:29px;line-height:1.1;flex-wrap:wrap;gap:5px;margin-top:8px}
+  .northstar-metric .v .u{color:var(--muted);font-size:9px;line-height:1.5}
+  .metric-tiles{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin:0}
+  .mtile{padding:10px;display:flex;flex-direction:column;justify-content:space-between;gap:8px}
+  .mtile .mk{font-size:10.5px;line-height:1.4}
   .mtile .mv{font-size:26px;margin:0}
-  .mtile .mv.soft{font-size:17px;line-height:1.3;color:var(--muted)}
-  .mtile .ms{color:var(--muted);line-height:1.5}
+  .mtile .mv.soft{font-size:14px;line-height:1.3;color:var(--muted)}
+  .mtile .ms{font-size:9px;line-height:1.4;color:var(--muted)}
+  .card-focus .preview{display:flex;flex-direction:column;gap:16px;padding:10px 2px}
+  .preview-title{font-family:"Bricolage Grotesque",sans-serif;font-size:19px;font-weight:600;line-height:1.4}
+  .preview-note{font-size:12px;color:var(--muted);line-height:1.5}
+  .warning{color:var(--hold)}
+  .card-focus .focus-prog{display:block;margin:0}
+  .card-focus .focus-prog .bar{height:8px;margin-top:10px}
+  .road{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;flex:1;min-height:0}
+  .rh{padding:9px;min-width:0;overflow-wrap:anywhere}
+  .rh-h{margin-bottom:10px}
+  .rh-h .lb{font-size:13px}
+  .rh-list{gap:6px}
+  .rh-list li{font-size:11px;line-height:1.4;padding-left:12px}
+  .rh-list li::before{left:1px;top:6px}
+  .mapstrip .spine{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+  .node{padding:7px 9px;gap:8px}
+  .node .t{font-size:12px;flex-wrap:wrap;gap:4px 7px;line-height:1.25}
+  .node .d{font-size:10px;margin-top:3px}
+  .node .idx{width:12px}
+  .node .go{font-size:13px}
+  .badge{font-size:8px;padding:2px 4px}
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:0;color:var(--muted);font-size:10px;line-height:1.5}
+  .foot .text-button,.foot .src{font-size:10px}
+  .src{color:var(--muted)}
+  .modal-b .tasks{grid-template-columns:1fr}
+  .modal-b .spine{display:grid;grid-template-columns:1fr}
+  .modal-b .focus-list{grid-template-columns:1fr;margin-bottom:14px}
   #next-action{font-size:12px;line-height:1.5}
   #next-action > a{display:inline-block;color:var(--accent);font-size:11px;margin-top:10px}
-  #next-action .nt{font-family:"Bricolage Grotesque",sans-serif;font-size:20px;line-height:1.35;font-weight:600;margin:0 0 12px}
-  #next-action .nowi{margin:8px 0 10px}
-  #next-action details ul{padding-left:18px;color:var(--muted)}
-  .focus-title{font-size:17px}
-  .focus-list{grid-template-columns:1fr;gap:9px}
-  .focus-item{line-height:1.5}
-  .road{gap:8px}
-  .rh{padding:12px 10px;min-height:120px}
-  .rh-list li{line-height:1.5}
-  .health{flex-wrap:wrap;margin-bottom:0}
-  .hp{min-width:110px;padding:12px 10px}
-  .hp .hv{font-size:14px;line-height:1.4;flex-wrap:wrap}
   #recent-changes{display:flex;flex-direction:column;gap:8px}
-  #recent-changes .nowi{padding:10px 12px;line-height:1.5;overflow-wrap:anywhere}
-  .measures{gap:12px}
-  .tasks{gap:24px;grid-template-columns:minmax(0,1fr) minmax(0,1.4fr)}
-  .mapstrip .spine{grid-template-columns:repeat(3,minmax(0,1fr))}
-  .node{padding:12px}
-  .foot{color:var(--muted);padding:6px 0 12px;line-height:1.6}
-  @media (max-width:1100px){
-    .metrics-row{grid-template-columns:1fr}
-    .northstar-metric .v{margin-top:8px}
-    .northstar-metric .k .dir{margin-left:auto}
-    .mapstrip .spine{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .change-line{font-size:12px;line-height:1.5;padding:8px 0;border-top:1px solid var(--line)}
+  .change-line:first-child{border-top:0;padding-top:0}
+  .change-line span{display:block;color:var(--muted);font-size:10px;margin-top:4px}
+  @media (min-width:1101px) and (min-height:680px){
+    .app{height:100dvh;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+    .main{grid-template-rows:auto auto minmax(0,1fr) auto}
+    .roadstrip{min-height:0}
+    .road{overflow:auto}
   }
-  @media (max-width:860px){
+  @media (min-width:1450px){
+    .app{padding:20px 30px;gap:14px}
+    .panel{padding:15px 16px}
+    .eyebrow{font-size:10px}
+    .rh-list li{font-size:13px;line-height:1.45}
+    .rh-list{gap:8px}
+    .node{padding:9px 12px}
+    .node .t{font-size:13px}
+    .node .d{font-size:11px}
+  }
+  @media (max-width:1100px){
+    .head{flex-wrap:wrap}
     .main{grid-template-columns:minmax(0,1fr)}
-    .wide{grid-column:auto}
-    .head-right{justify-content:flex-start}
-    .src{flex-basis:auto;justify-content:flex-start}
-    .focus-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .wide,.card-health,.metrics-panel,.card-focus,.roadstrip{grid-column:auto}
+    .mapstrip .spine{grid-template-columns:repeat(2,minmax(0,1fr))}
+    .road{min-height:240px}
     .pgrid{grid-template-columns:1fr 1fr}
   }
   @media (max-width:620px){
-    .app{padding:20px 14px;gap:18px}
-    .panel{padding:15px}
-    .tasks,.focus-list{grid-template-columns:minmax(0,1fr)}
+    .app{padding:16px 12px}
+    .head-right{flex-wrap:wrap}
+    .section-nav{margin-left:0}
+    .metrics-row{grid-template-columns:1fr}
     .metric-tiles{grid-template-columns:1fr}
     .mtile{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px 12px;align-items:center}
     .mtile .ms{grid-column:1/-1}
-    .mtile .mv{font-size:23px}
-    .mtile .mv.soft{font-size:14px}
-    .mapstrip .spine,.road,.pgrid{grid-template-columns:minmax(0,1fr)}
-    .rh{min-height:0}
-    .m .mk{width:88px}
-    .head-right{gap:8px}
-    .src{flex-basis:100%}
-  }
-  /* Один экран на desktop; длинные списки доступны в подробностях. */
-  .app{max-width:1600px;padding:18px 24px;gap:14px}
-  .head{padding-bottom:12px;flex-wrap:nowrap}
-  .brand h1{font-size:23px}
-  .brand-label{font-size:10px}
-  .head-right{flex-wrap:nowrap}
-  .section-nav{gap:18px;padding:0;margin-left:auto}
-  .text-button{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:4px 0;cursor:pointer;text-align:left}
-  .text-button:hover{text-decoration:underline}
-  .main{grid-template-columns:minmax(0,5fr) minmax(0,3fr) minmax(0,4fr);gap:12px}
-  .north{display:flex;align-items:baseline;gap:18px;padding:0}
-  .product-description{font-size:16px;line-height:1.4;letter-spacing:0;max-width:none;margin:0;flex:1}
-  .north > .text-button{flex:none}
-  .panel{padding:13px 14px}
-  .eyebrow{margin-bottom:10px;gap:6px;font-size:9px}
-  .eyebrow .n{display:none}
-  .more{font-size:9px;padding:3px 6px;letter-spacing:0}
-  .metrics-row{grid-template-columns:minmax(0,1.4fr) minmax(0,3fr)}
-  .northstar-metric,.mtile{padding:10px 12px}
-  .northstar-metric .v{font-size:27px;margin-top:6px;gap:5px}
-  .northstar-metric .k,.mtile .mk{font-size:11px}
-  .mtile .mv{font-size:24px}
-  .mtile .mv.soft{font-size:15px}
-  .mtile .ms{font-size:9px}
-  .card-next{grid-column:1}
-  .card-focus{grid-column:2}
-  .card-health{grid-column:3}
-  .roadstrip{grid-column:1}
-  .card-changes{grid-column:2}
-  .panel[aria-label="Состояние продукта"]{grid-column:3}
-  .preview{min-width:0}
-  .preview-title{font-family:"Bricolage Grotesque",sans-serif;font-size:16px;line-height:1.4;font-weight:600}
-  .preview-note{font-size:11px;color:var(--muted);line-height:1.4;margin-top:8px}
-  .warning{color:var(--hold)}
-  .card-focus .preview-title{font-size:13px;line-height:1.5}
-  .card-health .preview{display:flex;gap:6px;flex-wrap:wrap}
-  .card-health .hp{padding:9px 8px;min-width:90px}
-  .card-health .hp .hl{font-size:10px}
-  .card-health .hp .hv{font-size:12px}
-  .road{gap:6px}
-  .rh{padding:8px;min-height:0}
-  .rh-h .lb{font-size:12px}
-  .rh-list li{font-size:11px;line-height:1.4;padding-left:10px}
-  .rh-list li:not(:first-child){display:none}
-  .rh-list li::before{left:0}
-  .change-line{font-size:11px;line-height:1.4;padding:8px 0;border-top:1px solid var(--line)}
-  .change-line:first-child{border-top:0;padding-top:0}
-  .change-line span{display:block;color:var(--muted);font-size:10px;margin-top:4px}
-  .measures{gap:10px}
-  .m .mk{font-size:11px;width:94px}
-  .m .mv{font-size:11px}
-  .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:0;font-size:10px}
-  .foot .text-button{font-size:10px}
-  .foot .src{flex-basis:auto;font-size:10px}
-  .modal-b .tasks{grid-template-columns:1fr}
-  .modal-b .spine{display:grid;grid-template-columns:1fr}
-  .modal-b .preview-title{font-size:17px}
-  .modal-b .focus-list{margin-bottom:14px}
-  @media (min-width:1101px) and (min-height:600px){
-    .app{height:100dvh;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
-    .main{grid-template-rows:auto auto minmax(0,1fr) minmax(0,1fr);align-items:stretch}
-    .panel{overflow:auto}
-  }
-  @media (max-width:1100px){
-    .main{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
-    .card-next,.card-focus,.card-health,.roadstrip,.card-changes,.panel[aria-label="Состояние продукта"]{grid-column:auto}
-    .metrics-row{grid-template-columns:1fr}
-    .head{flex-wrap:wrap}
-    .section-nav{order:3;margin-left:0}
-  }
-  @media (max-width:700px){
-    .app{padding:16px 12px}
-    .main{grid-template-columns:minmax(0,1fr)}
-    .north{display:block}
-    .north > .text-button{margin-top:6px}
-    .head-right{flex-wrap:wrap}
-    .metric-tiles{grid-template-columns:1fr}
-    .road{grid-template-columns:1fr}
+    .road,.mapstrip .spine,.tasks,.pgrid{grid-template-columns:minmax(0,1fr)}
+    .card-health .preview{grid-template-columns:1fr}
+    .hp .hv{margin-top:4px}
     .foot{flex-direction:column;align-items:flex-start}
-    .card-health .hp{min-width:90px}
+    .preview-title{font-size:17px}
+    .rh-list li{font-size:12px}
   }
 </style>
 
@@ -491,10 +438,10 @@
         <h1>AI Ops Kit</h1>
       </div>
     </div>
-    <nav class="section-nav" aria-label="Разделы пульта"><button class="text-button" data-modal="panel:tasks">Задачи <span id="tasks-count"></span> ↗</button><button class="text-button" data-modal="panel:artifacts">Артефакты ↗</button></nav>
+    <nav class="section-nav" aria-label="Разделы пульта"><button class="text-button" data-modal="panel:tasks">Задачи <span id="tasks-count"></span> ↗</button></nav>
     <div class="head-right">
       <span class="chip">версия <b id="version">—</b></span>
-      <span class="chip chan"><span class="dot"></span>канал: <span id="channel">—</span></span>
+      <span class="chip chan"><span class="dot"></span><span id="channel">—</span></span>
 
     </div>
   </header>
@@ -502,20 +449,10 @@
   <main class="main">
   <div class="north wide">
     <p class="product-description">AI Ops Kit — напарник продуктовой команды: помогает выполнять задачи, проверять результат и сохранять принятые решения.</p>
-    <button class="text-button" data-modal="panel:about">О продукте →</button>
     <div id="about-full" hidden><div class="txt"><b id="tagline">—</b><span id="tagsub" class="sub"></span></div></div>
   </div>
 
-
-  <section class="panel wide" id="overview" aria-label="Метрики продукта">
-    <div class="eyebrow"><span>Метрики продукта · North Star</span>
-      <button class="more" data-modal="metrics">подробнее →</button></div>
-    <div class="metrics-row">
-    <div class="northstar-metric" id="ns-metric"></div>
-    <div class="metric-tiles" id="metric-tiles"></div>
-    </div>
-  </section>
-
+  <div id="tasks-full" hidden>
   <section class="panel card-next" aria-label="Следующая работа">
     <div class="eyebrow"><span>Что делать дальше</span><span class="n">из текущего плана</span><button class="more" data-modal="panel:next">подробнее →</button></div>
     <div class="preview" id="next-preview"></div>
@@ -523,50 +460,6 @@
     <div id="next-action"></div>
 </div>
   </section>
-
-  <section class="panel card-focus focus" id="focus-block" aria-label="Текущий фокус" hidden>
-    <div class="eyebrow"><span>Текущий фокус · веха</span><button class="more" data-modal="panel:focus">подробнее →</button></div>
-    <div class="preview" id="focus-preview"></div>
-    <div id="focus-full" hidden>
-    <div class="focus-title" id="focus-title">—</div>
-    <div class="focus-prog"><div class="bar"><i id="focus-bar"></i></div>
-      <span class="focus-n" id="focus-n"></span></div>
-    <div class="focus-list" id="focus-list"></div>
-</div>
-  </section>
-
-  <section class="panel card-health" aria-label="Пульс продукта">
-    <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span><button class="more" data-modal="panel:health">подробнее →</button></div>
-    <div class="preview health" id="health-preview"></div>
-    <div id="health-full" hidden>
-    <div class="health" id="health"></div>
-    <div class="techdims" id="tech-dims" hidden></div>
-    <div class="maturity" id="maturity" hidden></div>
-</div>
-  </section>
-
-  <section class="panel roadstrip" id="plan" aria-label="Роадмап">
-    <div class="eyebrow"><span>Роадмап · направление</span>
-      <button class="more" data-modal="roadmap">весь роадмап →</button></div>
-    <div class="road" id="road"></div>
-  </section>
-
-
-
-  <section class="panel card-changes" aria-label="Последние изменения">
-    <div class="eyebrow"><span>Что изменилось</span><span class="n">история Git · эффект проверяется отдельно</span><button class="more" data-modal="panel:changes">подробнее →</button></div>
-    <div class="preview" id="changes-preview"></div>
-    <div id="changes-full" hidden>
-    <div id="recent-changes"></div>
-</div>
-  </section>
-
-  <section class="panel" aria-label="Состояние продукта">
-    <div class="eyebrow"><span>Состояние продукта</span><button class="more" data-modal="backlog">бэклог →</button></div>
-    <div class="measures" id="state"></div>
-  </section>
-
-  <div id="tasks-full" hidden>
     <div class="eyebrow"><span>Ближайшие задачи · в работе</span></div>
     <div class="tasks">
       <div class="tasks-col">
@@ -580,13 +473,60 @@
     </div>
 </div>
 
-  <div id="artifacts-full" hidden>
+  <section class="panel card-health" aria-label="Пульс продукта">
+    <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span><button class="more" data-modal="panel:health">подробнее →</button></div>
+    <div class="preview health" id="health-preview"></div>
+    <div id="health-full" hidden>
+    <div class="health" id="health"></div>
+    <div class="techdims" id="tech-dims" hidden></div>
+    <div class="maturity" id="maturity" hidden></div>
+</div>
+  </section>
+
+  <section class="panel metrics-panel" id="overview" aria-label="Метрики продукта">
+    <div class="eyebrow"><span>Метрики продукта · North Star</span>
+      <button class="more" data-modal="metrics">подробнее →</button></div>
+    <div class="metrics-row">
+    <div class="northstar-metric" id="ns-metric"></div>
+    <div class="metric-tiles" id="metric-tiles"></div>
+    </div>
+  </section>
+
+  <section class="panel card-focus focus" id="focus-block" aria-label="Текущий фокус" hidden>
+    <div class="eyebrow"><span>Текущий фокус · веха</span><button class="more" data-modal="panel:focus">подробнее →</button></div>
+    <div class="preview" id="focus-preview"></div>
+    <div id="focus-full" hidden>
+    <div class="focus-title" id="focus-title">—</div>
+    <div class="focus-prog"><div class="bar"><i id="focus-bar"></i></div>
+      <span class="focus-n" id="focus-n"></span></div>
+    <div class="focus-list" id="focus-list"></div>
+</div>
+  </section>
+
+  <section class="panel roadstrip" id="plan" aria-label="Роадмап">
+    <div class="eyebrow"><span>Роадмап · направление</span>
+      <button class="more" data-modal="roadmap">весь роадмап →</button></div>
+    <div class="road" id="road"></div>
+  </section>
+
+  <section class="panel mapstrip wide" id="artifacts-full" aria-label="Артефакты продукта">
     <div class="eyebrow"><span>Артефакты</span><span class="n">клик → раздел, внутри — ссылка в репозиторий ↗</span></div>
     <div class="spine" id="spine"></div>
+</section>
+  <section hidden class="panel card-changes" aria-label="Последние изменения">
+    <div class="eyebrow"><span>Что изменилось</span><span class="n">история Git · эффект проверяется отдельно</span><button class="more" data-modal="panel:changes">подробнее →</button></div>
+    <div class="preview" id="changes-preview"></div>
+    <div id="changes-full" hidden>
+    <div id="recent-changes"></div>
 </div>
+  </section>
+  <section hidden class="panel" aria-label="Состояние продукта"><div id="state-full">
+    <div class="eyebrow"><span>Состояние продукта</span><button class="more" data-modal="backlog">бэклог →</button></div>
+    <div class="measures" id="state"></div>
+  </div></section>
   </main>
 
-  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
+  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button> · <button class="text-button" data-modal="panel:state">Состояние продукта →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
 </div>
 
 <div class="backdrop" id="backdrop" hidden>
@@ -1512,6 +1452,7 @@
       after_merge_kit_shows_what_happened_to_the_product:"После merge кит показывает результат для продукта",
       kit_recommends_what_the_product_needs:"Кит сам советует, что нужно продукту"};
     const outcomeRu=k=>OUTCOME_RU[k]||String(k).replace(/_/g," ");
+    const plainLabel=t=>String(t||"").replace(/\*\*/g,"");
 
     function render(d){
       DATA=d;
@@ -1563,6 +1504,7 @@
       const cf=d.current_focus, fb=$("focus-block");
       if(cf&&cf.total){
         $("focus-title").textContent=(d.roadmap&&d.roadmap[0]&&(d.roadmap[0].items||[])[0])||cf.id;
+        $("focus-title").textContent=plainLabel($("focus-title").textContent);
         const pct=cf.total?Math.round(100*cf.reached/cf.total):0;
         $("focus-bar").style.width=pct+"%";
         $("focus-n").textContent=`${cf.reached} из ${cf.total} исходов доказано`;
@@ -1652,11 +1594,11 @@
         `<div class="m"><span class="mk">Исследования</span><span class="mv">${disc.evidence} свид · ${disc.decisions} реш · ${disc.experiments} эксп</span></div>`;
 
 
-      // roadmap — три горизонта (первые 3 пункта; весь список — в модалке)
+      // Роадмап — все доступные буллиты трёх горизонтов прямо на обзоре.
       $("road").innerHTML=(d.roadmap||[]).map(h=>{
         const items=h.items||[];
         const body=items.length
-          ? `<ul class="rh-list">${items.map(t=>`<li>${esc(t)}</li>`).join("")}</ul>`
+          ? `<ul class="rh-list">${items.map(t=>`<li>${esc(plainLabel(t))}</li>`).join("")}</ul>`
           : `<div class="rh-empty">пусто — осознанно</div>`;
         return `<button class="rh ${esc(h.key)}" data-modal="roadmap">`+
           `<div class="rh-h"><span class="lb">${esc(h.label)}</span>`+
@@ -1708,7 +1650,8 @@
           `<div class="preview-note warning">Актуальность плана требует проверки</div>`:"");
       $("focus-preview").innerHTML=cf&&cf.total?
         `<div class="preview-title">${esc($("focus-title").textContent)}</div>`+
-        `<div class="preview-note">${esc($("focus-n").textContent)}</div>`: "";
+        `<div class="focus-prog"><div class="preview-note">${esc($("focus-n").textContent)}</div>`+
+        `<div class="bar"><i style="width:${Math.round(100*cf.reached/cf.total)}%"></i></div></div>`: "";
       $("health-preview").innerHTML=$("health").innerHTML;
       $("changes-preview").innerHTML=changes.length?changes.slice(0,2).map(x=>
         `<div class="change-line">${esc(x.title)}<span>${esc(ruDate(String(x.date||" ").slice(0,10)))}</span></div>`
@@ -1728,7 +1671,7 @@
     function openModal(key,trigger){
       const d=DATA; if(!d) return;
       const panelKey=key.startsWith("panel:")?key.slice(6):null;
-      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта"};
+      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта",state:"Состояние продукта"};
       const full=panelKey&&$(panelKey+"-full");
       const m=full?{title:panelTitles[panelKey]}:(d.modals||{})[key]; if(!m) return;
       if($("backdrop").hidden) lastTrigger=trigger||document.activeElement;

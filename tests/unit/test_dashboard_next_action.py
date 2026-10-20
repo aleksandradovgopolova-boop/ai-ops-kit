@@ -140,3 +140,30 @@ def test_missing_size_baseline_does_not_mean_zero_violations(tmp_path):
     code = next(x for x in dims if x["key"] == "code")
     assert code["state"] == "unknown"
     assert code["detail"] == "не измерено"
+
+def test_roadmap_goal_id_keeps_the_complete_bold_headline():
+    title = "Кит доказывает, что уже построенное меняет жизнь продуктов и сохраняет весь смысл длинного заголовка"
+    result = load()._road_bullets(f"- `prove-value` — **{title}.**\n  Доказательства остаются в описании.\n")
+    assert result == {"items": [title], "total": 1}
+
+
+def test_missing_roadmap_source_does_not_invent_bullets(tmp_path):
+    rows = load().roadmap(tmp_path)
+    assert all(row["items"] == [] and row["total"] == 0 for row in rows)
+
+
+def test_built_snapshot_preserves_every_roadmap_bullet(repo, monkeypatch):
+    mod = load()
+    monkeypatch.setattr(mod, "open_issues", lambda root: None)
+    (repo / "ROADMAP.md").write_text("# ROADMAP\n\n## Сейчас\n\n"
+        "- `first` — **Первый, целиком названный результат.**\n"
+        "- `second` — **Второй результат.**\n\n"
+        "## Следующий результат\n\n## Дальше\n\n- Дальнейшая работа\n\n## Later\n\n- Поздняя работа\n")
+    data = mod.build(repo)
+    target = repo / "index.html"
+    target.write_text("<script>\n/* SNAPSHOT:BEGIN */\nconst SNAPSHOT = null;\n/* SNAPSHOT:END */\n</script>")
+    assert mod.sync_snapshot(target, data) == 1
+    actual = target.read_text().split("const SNAPSHOT = ", 1)[1].split(";\n", 1)[0]
+    written = json.loads(actual)
+    assert written["roadmap"][0]["items"] == ["Первый, целиком названный результат", "Второй результат"]
+    assert written["roadmap"][0]["total"] == 2
