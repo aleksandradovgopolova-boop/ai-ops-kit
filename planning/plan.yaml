@@ -1116,7 +1116,12 @@ work:
     issue: 1321
     depends_on: []
     write_scope: [docs/change-briefs/, qualification/]
-    evidence: qualification/TECHNICAL-QUEUE-2026-10-19.md
+    evidence: qualification/PROGRESS-AND-VERIFICATION-BASELINE-2026-10-20.md
+    note: >-
+      Сведены 17 существующих CI runs и 111 jobs, причины известных повторов и аудит
+      пяти дочек; семь категорий имеют ограниченные источники, семь ещё без них.
+      Import-only срез PR1325 уже влит; повторять его не нужно. Сквозной baseline
+      и сопоставимый ABBA не завершены; общий #1321 и эта работа остаются открытыми.
     rationale: >-
       Прямое поручение владельца 19.10: ускорить проверки Кита и дочек, сохранив обязательную
       защиту. Начальный срез — baseline из существующих источников с точными SHA/версиями,
@@ -1125,32 +1130,31 @@ work:
       Полная приёмка остаётся в #1321: baseline не доказывает ускорение, а parent-only правка
       не доказывает эффект в дочках. Код следующего среза получает собственные границы/review/CI;
       эта запись не разрешает full/paid/provider/release/deploy или массовые правки продуктов.
-  - id: delegation-owner-fencing
-    title: Позднее завершение прежней попытки не снимает заявку нового держателя
-    type: engineering
+  - id: automatic-work-recovery-proof
+    title: Обычная разрешённая работа имеет проверенное продолжение после прерывания
+    type: quality
     goal: autonomous-work-distribution
-    status: in_progress
-    owner_role: engineer
+    status: todo
+    owner_role: qa
     value: high
     issue: 1322
-    branch: codex/durable-delegation-recovery-20261019
-    depends_on: []
+    depends_on:
+      - delegation-owner-fencing
     write_scope:
-      - ai_ops_kit/lifecycle/active_work.py
-      - ai_ops_kit/engine/parallel_live_dispatch.py
-      - tests/
-      - docs/change-briefs/
-      - newsfragments/
-    evidence: qualification/TECHNICAL-QUEUE-2026-10-19.md
+      - qualification/
+    evidence: qualification/PROGRESS-AND-VERIFICATION-BASELINE-2026-10-20.md
     rationale: >-
-      Первый срез #1322 по зарегистрированному baseline/Change Brief session02 от 19.10,
-      11:31:24 UTC: реальная RED на takeover и позднем old finish, fencing durable ownership
-      под существующим замком, сохранение нового claim/runtime/carrier/sentinel и отказ
-      устаревшего callback. На старте runtime RED ещё не доказана. Код не дублирует Budget
-      и PR1316/1317, не обещает автоматическое переназначение или durable USD accounting.
-      Граница сверяется с зарегистрированным Change Brief до source edit;
-      отдельные targeted/core, независимое review и exact-head CI обязательны. Срез не закрывает
-      полный контракт #1322 и полевую #1278. Полевые выборки не являются prerequisite.
+      Следующий технический proof по открытому контракту #1322: выбрать существующую
+      разрешённую обычную работу, до исполнения закрепить границы и критерии, затем
+      проследить реальные старты, прерывание, сохранённое состояние и продолжение
+      без повторного успешного пакета и чужих эффектов. Использовать уже влитые
+      PR1324/1330/1332/1334–1342, не строить их заново. Источники должны различать
+      actual callback, восстановленный результат и новую попытку; wall/queue/idle,
+      вмешательства и известные расходы сохраняются, отсутствующее остаётся unknown.
+      Контролируемый транспорт не объявляется полевой автономностью. Scope этой
+      записи — подготовка и наблюдение; production fixes требуют отдельного Change
+      Brief, новые paid/native вызовы, релиз и deploy ею не разрешены. Полевая #1278
+      остаётся отдельной, независимые технические задачи не зависят от набора #1243.
 
   - id: child-value-twenty-real-works
     title: На двадцати–тридцати настоящих работах измерены результат и цена сопровождения
