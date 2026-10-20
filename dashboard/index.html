@@ -520,13 +520,13 @@
     <div id="recent-changes"></div>
 </div>
   </section>
-  <section hidden class="panel" aria-label="Состояние продукта">
+  <section hidden class="panel" aria-label="Состояние продукта"><div id="state-full">
     <div class="eyebrow"><span>Состояние продукта</span><button class="more" data-modal="backlog">бэклог →</button></div>
     <div class="measures" id="state"></div>
-  </section>
+  </div></section>
   </main>
 
-  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
+  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button> · <button class="text-button" data-modal="panel:state">Состояние продукта →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
 </div>
 
 <div class="backdrop" id="backdrop" hidden>
@@ -1671,7 +1671,7 @@
     function openModal(key,trigger){
       const d=DATA; if(!d) return;
       const panelKey=key.startsWith("panel:")?key.slice(6):null;
-      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта"};
+      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта",state:"Состояние продукта"};
       const full=panelKey&&$(panelKey+"-full");
       const m=full?{title:panelTitles[panelKey]}:(d.modals||{})[key]; if(!m) return;
       if($("backdrop").hidden) lastTrigger=trigger||document.activeElement;
