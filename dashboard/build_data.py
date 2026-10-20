@@ -32,6 +32,8 @@ try:
 except Exception:  # noqa: BLE001
     yaml = None
 
+YAML_ERROR = yaml.YAMLError if yaml else ValueError
+
 CONTOUR_LABELS = {
     "product_strategy": "Стратегия",
     "research_decisions": "Исследования и решения",
@@ -337,7 +339,141 @@ def metric_observations(root: Path):
         "honest_note": data.get("honest_note"),
         "aggregate": data.get("aggregate"),
         "observations": obs,
+        "guardrails": guardrail_windows(obs),
     }
+
+
+def guardrail_windows(observations, now=None):
+    """Истёкший срок без follow-up — не открытое окно и не ноль дефектов."""
+    now = now or _dt.datetime.now(_dt.timezone.utc)
+    pending, expired = 0, 0
+    for obs in observations:
+        for key in ("rework_rate", "post_merge_defect_rate"):
+            item = (obs.get("metrics") or {}).get(key) or {}
+            if item.get("status") != "observation_window_open":
+                continue
+            pending += 1
+            try:
+                start = _dt.datetime.fromisoformat(item["opened_at"].replace("Z", "+00:00"))
+                end = start + _dt.timedelta(days=item.get("window_days", 7))
+                expired += end <= now
+            except (KeyError, ValueError, TypeError):
+                pass
+    return {"pending": pending, "expired": expired,
+            "label": "итог не снят" if expired else ("окна открыты" if pending else "см. наблюдения")}
+
+
+def field_readout(root: Path):
+    """Читаем принятую owner-led когорту из опубликованного readout, отдельно от TTVO."""
+    source = "qualification/FIRST-HOUR-READOUT-2026-10-05.md"
+    text = _read(root, source)
+    rows = []
+    for line in text.splitlines():
+        cells = [v.strip() for v in line.strip().strip("|").split("|")]
+        if line.startswith("| ") and len(cells) == 5 and cells[0] != "Репозиторий":
+            rows.append(dict(zip(("repo", "version", "result", "timing", "feedback"), cells)))
+    people = _first(r"n_people=(\d+)", text, int)
+    repos = _first(r"n_repositories=(\d+)", text, int)
+    if not rows or people is None or repos != len(rows):
+        return None
+    return {"source": source, "people": people, "repositories": repos, "rows": rows,
+            "note": "Один знакомый владелец; разные виды работ и начала отсчёта. "
+                    "Общая медиана и причинный эффект Kit не установлены. "
+                    "Строгие пороги первого часа ещё не подтверждены."}
+
+
+def _github(root, slug, path, collection=None):
+    """Read-only API через штатный gh; пагинация обязательна для runs/jobs."""
+    cmd = ["gh", "api"]
+    if collection:
+        cmd += ["--paginate", "--slurp"]
+    cmd += [f"repos/{slug}/{path}"]
+    result = subprocess.run(cmd, cwd=root, capture_output=True, text=True, timeout=45, check=True)
+    data = json.loads(result.stdout)
+    if collection:
+        if not isinstance(data, list) or not data:
+            raise ValueError("API pages missing")
+        values = [item for page in data for item in page[collection]]
+        if any(len(values) != page["total_count"] for page in data):
+            raise ValueError("API collection incomplete")
+        return values
+    return data
+
+
+def delivery_evidence(root: Path):
+    """Результаты точного main SHA и опубликованный выпуск, а не inventory паспорта."""
+    repo = repo_slug(root)
+    unknown = {"state": "unknown", "label": "результаты недоступны",
+               "detail": "Не удалось прочитать результаты GitHub Actions для текущего SHA."}
+    out = {"tech": unknown, "release": None}
+    if not repo:
+        return out
+    slug = f"{repo['owner']}/{repo['name']}"
+    try:
+        releases = _github(root, slug, "releases?per_page=10")
+        published = [r for r in releases if not r["draft"] and not r["prerelease"]
+                     and r.get("published_at") and r.get("html_url") and r.get("tag_name")]
+        if published:
+            r = max(published, key=lambda r: r["published_at"])
+            out["release"] = {"tag": r["tag_name"], "published_at": r["published_at"],
+                              "url": r["html_url"]}
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        pass
+    try:
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=root, capture_output=True,
+                              text=True, timeout=10, check=True).stdout.strip()
+        if not re.fullmatch(r"[0-9a-f]{40}", head):
+            raise ValueError("HEAD missing")
+        runs = _github(root, slug, f"actions/runs?head_sha={head}&event=push&per_page=100", "workflow_runs")
+        policy = json.loads(_read(root, "quality/premerge-checks.json"))
+        required = {k: list(policy[k]) for k in ("package-quality.yml", "docs.yml")}
+        # Два PR-only jobs штатно skipped на push; это не успех и не применимый main-гейт.
+        config = yaml.safe_load(_read(root, ".github/workflows/package-quality.yml"))
+        for name, job in config["jobs"].items():
+            if job.get("if") == "github.event_name == 'pull_request'":
+                required["package-quality.yml"].remove(name)
+        for name in ("nightly-quality.yml", "nightly-coverage.yml"):
+            config = yaml.safe_load(_read(root, f".github/workflows/{name}"))
+            required[name] = list(config["jobs"])
+        passed, total, failures, pending, sources = 0, sum(map(len, required.values())), [], [], []
+        for workflow, names in required.items():
+            candidates = [r for r in runs if r["path"] == f".github/workflows/{workflow}"
+                          and r["head_sha"] == head and r["event"] == "push"
+                          and r["head_branch"] == "main"
+                          and r["repository"]["full_name"] == slug]
+            if not candidates:
+                pending.append(workflow)
+                continue
+            run = max(candidates, key=lambda r: (r["id"], r["run_attempt"]))
+            sources.append({"name": workflow, "url": run["html_url"], "attempt": run["run_attempt"]})
+            jobs = _github(root, slug, f"actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs?per_page=100", "jobs")
+            for name in names:
+                matches = [j for j in jobs if j["name"] == name and j["head_sha"] == head
+                           and j["run_id"] == run["id"] and j["run_attempt"] == run["run_attempt"]]
+                if len(matches) != 1:
+                    pending.append(name)
+                elif matches[0]["status"] != "completed":
+                    pending.append(name)
+                elif matches[0]["conclusion"] == "success":
+                    passed += 1
+                else:
+                    failures.append(name)
+            if run["status"] != "completed":
+                pending.append(workflow)
+            elif run["conclusion"] != "success":
+                failures.append(workflow)
+        state = "red" if failures else ("yellow" if pending else "green")
+        out["tech"] = {"state": state, "head": head, "passed": passed, "total": total,
+                       "label": ("есть сбои" if failures else ("ожидаем проверки" if pending
+                                  else f"{passed}/{total} пройдено")),
+                       "detail": f"Текущий main {head[:7]}: {passed}/{total} проверок качества, документации, "
+                                 "покрытия и тяжёлых гейтов. PR-only проверки здесь не учитываются. "
+                                 + ("Не подтверждены: " + ", ".join(failures + pending)
+                                                    if failures or pending else "Все завершены успешно."),
+                       "sources": sources}
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, AttributeError, YAML_ERROR):
+        pass
+    return out
 
 
 def open_issues(root: Path):
@@ -580,10 +716,24 @@ def build_modals(root: Path, *, roadmap_data, goals_data, waiting, capmap, obs):
             {"name": "Без ручной доводки", "desc": agg.get("verified_pr_rate", "—")},
             {"name": "Вмешательств человека", "desc": agg.get("human_intervention_rate", "—")},
         ]})
+        windows = (obs or {}).get("guardrails") or {}
+        msec.append({"h": "Переделки и дефекты", "list": [
+            {"name": windows.get("label", "итог не проверен"),
+             "desc": f"Истекло окон без записанного итога: {windows.get('expired', 0)}. "
+                     "Истечение семи дней само по себе не подтверждает отсутствие дефектов."}]})
+    field = field_readout(root)
+    if field:
+        msec.append({"h": f"Реальные дочки · {field['repositories']} репо · {field['people']} владелец",
+                     "list": [{"name": row["repo"], "desc": f"{row['result']}. {row['timing']}. "
+                               f"Польза / помощь: {row['feedback']}"} for row in field["rows"]]})
+        msec.append({"h": "Границы полевого результата", "list": [{"name": field["note"]}]})
     modals["metrics"] = {
         "title": "Метрики продукта", "path": "context/product/ProductMetrics.md",
         "lead": (md or {}).get("north_star"),
-        "note": (md or {}).get("unmeasured_note"),
+        "note": ("TTVO: отдельная малая выборка полигонов, сентябрь 2026. "
+                 "Принятые работы в реальных дочках показаны отдельно. "
+                 "Активное время человека, полная стоимость и причинная экономия не измерены."
+                 if agg or field else (md or {}).get("unmeasured_note")),
         "sections": msec}
 
     return modals
@@ -613,6 +763,8 @@ def build(root: Path) -> dict:
     g = goals(plan)
     waiting = waiting_on_owner(plan)
     obs = metric_observations(root)
+    delivery = delivery_evidence(root)
+    field = field_readout(root)
     return {
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "repo": repo_slug(root),
@@ -630,6 +782,8 @@ def build(root: Path) -> dict:
             "observations": obs,
             "health": _health_from_passport(psections),
             "tech_dimensions": tech_dimensions(root),
+            "delivery_evidence": delivery,
+            "field_readout": field,
         },
         "goals": g,
         "current_focus": current_focus(plan),

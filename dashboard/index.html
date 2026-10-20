@@ -474,12 +474,13 @@
 </div>
 
   <section class="panel card-health" aria-label="Пульс продукта">
-    <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span><button class="more" data-modal="panel:health">подробнее →</button></div>
+    <div class="eyebrow"><span>Пульс продукта</span><span class="n">по источникам</span><button class="more" data-modal="panel:health">подробнее →</button></div>
     <div class="preview health" id="health-preview"></div>
     <div id="health-full" hidden>
     <div class="health" id="health"></div>
     <div class="techdims" id="tech-dims" hidden></div>
     <div class="maturity" id="maturity" hidden></div>
+    <div id="health-evidence"></div>
 </div>
   </section>
 
@@ -520,13 +521,9 @@
     <div id="recent-changes"></div>
 </div>
   </section>
-  <section hidden class="panel" aria-label="Состояние продукта"><div id="state-full">
-    <div class="eyebrow"><span>Состояние продукта</span><button class="more" data-modal="backlog">бэклог →</button></div>
-    <div class="measures" id="state"></div>
-  </div></section>
   </main>
 
-  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button> · <button class="text-button" data-modal="panel:state">Состояние продукта →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
+  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
 </div>
 
 <div class="backdrop" id="backdrop" hidden>
@@ -540,19 +537,19 @@
 <script>
   /* SNAPSHOT:BEGIN — сгенерировано build_data.py, руками не править (синхрон с data.json) */
   const SNAPSHOT = {
-  "generated_at": "2026-10-15T14:35:12+00:00",
+  "generated_at": "2026-10-20T11:43:04+00:00",
   "repo": {
     "owner": "aleksandradovgopolova-boop",
     "name": "ai-ops-kit",
     "blob_base": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main"
   },
-  "version": "4.10.1",
-  "channel": "stable",
+  "version": "4.11.1",
+  "channel": "qualification",
   "maturity": {
     "cls": "EXISTING_PRODUCT",
-    "confidence": "high",
-    "commits": 1760,
-    "code_files": 1116
+    "confidence": "medium",
+    "commits": null,
+    "code_files": null
   },
   "north_star": "Центральное обещание кита: задача владельца продукта превращается в доказуемое изменение продукта, сохраняя связь между намерением, реализацией, проверками и результатом. Умение, которое нельзя привязать к цепочке intent → decision → change → evidence → outcome, обязано обосновывать своё существование.",
   "product_tagline": {
@@ -772,7 +769,12 @@
             }
           }
         }
-      ]
+      ],
+      "guardrails": {
+        "pending": 8,
+        "expired": 8,
+        "label": "итог не снят"
+      }
     },
     "health": {
       "product": "unknown",
@@ -801,16 +803,84 @@
         "detail": "ссылок индекса: 52, битых: 0",
         "source": "docs/index.md"
       }
-    ]
+    ],
+    "delivery_evidence": {
+      "tech": {
+        "state": "green",
+        "head": "015331a7a3ae2322e8e53b3bf6054bbabd45933d",
+        "passed": 14,
+        "total": 14,
+        "label": "14/14 пройдено",
+        "detail": "Текущий main 015331a: 14/14 проверок качества, документации, покрытия и тяжёлых гейтов. PR-only проверки здесь не учитываются. Все завершены успешно.",
+        "sources": [
+          {
+            "name": "package-quality.yml",
+            "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/39414127210",
+            "attempt": 1
+          },
+          {
+            "name": "docs.yml",
+            "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/39414126887",
+            "attempt": 1
+          },
+          {
+            "name": "nightly-quality.yml",
+            "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/39414127007",
+            "attempt": 1
+          },
+          {
+            "name": "nightly-coverage.yml",
+            "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/39414126882",
+            "attempt": 1
+          }
+        ]
+      },
+      "release": {
+        "tag": "v4.11.1",
+        "published_at": "2026-10-19T09:17:53Z",
+        "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/releases/tag/v4.11.1"
+      }
+    },
+    "field_readout": {
+      "source": "qualification/FIRST-HOUR-READOUT-2026-10-05.md",
+      "people": 1,
+      "repositories": 3,
+      "rows": [
+        {
+          "repo": "Garden",
+          "version": "4.9.3",
+          "result": "Ревью/P0; затем установка и совместимость CI в main",
+          "timing": "P0 запрос→merge 55м29с; ветка установки→merge 30м54с",
+          "feedback": "Да / 0 по самоотчёту"
+        },
+        {
+          "repo": "Personal Cosmic Book",
+          "version": "4.9.3",
+          "result": "Установка; обзор качества с четырьмя офлайн-образцами; план",
+          "timing": "Установка запрос→merge 5м05с; этап обзора→merge 9м25с",
+          "feedback": "Да / 0 по самоотчёту"
+        },
+        {
+          "repo": "dashboard-kit",
+          "version": "4.3.2",
+          "result": "Установка; правка поиска с Chrome-регрессией; план",
+          "timing": "Выбор проекта→merge установки 8м18с; запрос правки→merge 14м21с",
+          "feedback": "Да / 0 по самоотчёту"
+        }
+      ],
+      "note": "Один знакомый владелец; разные виды работ и начала отсчёта. Общая медиана и причинный эффект Kit не установлены. Строгие пороги первого часа ещё не подтверждены."
+    }
   },
   "goals": {
-    "total": 40,
+    "total": 42,
     "achieved": 36,
-    "active": 3,
+    "active": 5,
     "paused": 1,
     "active_list": [
       "first-hour-for-a-stranger",
       "prove-the-loop-not-add-capabilities",
+      "verification-cycle-performance",
+      "autonomous-work-distribution",
       "child-code-style-held-by-machine"
     ],
     "paused_list": [
@@ -837,28 +907,15 @@
     "source": "planning/plan.yaml",
     "report": {
       "next_best": {
-        "id": "measure-first-hour-with-a-stranger",
-        "title": "Владелец завершает первые работы в трёх разных репозиториях с измеренным сопровождением",
+        "id": "child-value-twenty-real-works",
+        "title": "На двадцати–тридцати настоящих работах измерены результат и цена сопровождения",
         "why": [
-          "разблокирует 2 задачи",
-          "работает на цель первого приоритета",
-          "объявленная ценность высокая",
-          "тип 'research' снимает риск до траты на реализацию"
+          "разблокирует 1 задачу",
+          "объявленная ценность высокая"
         ],
-        "unblocks": 2
+        "unblocks": 1
       },
       "ready": [
-        {
-          "id": "measure-first-hour-with-a-stranger",
-          "title": "Владелец завершает первые работы в трёх разных репозиториях с измеренным сопровождением",
-          "why": [
-            "разблокирует 2 задачи",
-            "работает на цель первого приоритета",
-            "объявленная ценность высокая",
-            "тип 'research' снимает риск до траты на реализацию"
-          ],
-          "unblocks": 2
-        },
         {
           "id": "child-value-twenty-real-works",
           "title": "На двадцати–тридцати настоящих работах измерены результат и цена сопровождения",
@@ -867,6 +924,14 @@
             "объявленная ценность высокая"
           ],
           "unblocks": 1
+        },
+        {
+          "id": "automatic-work-recovery-proof",
+          "title": "Обычная разрешённая работа имеет проверенное продолжение после прерывания",
+          "why": [
+            "объявленная ценность высокая"
+          ],
+          "unblocks": 0
         }
       ],
       "staleness": {
@@ -877,28 +942,28 @@
   },
   "recent_changes": [
     {
-      "sha": "a2e49865283e509f7b58ccbd3c655fdf238dfa4d",
-      "title": "feat(dashboard): show next work, blockers and recent changes (#1286)",
-      "date": "2026-10-15T17:34:15+03:00"
+      "sha": "015331a7a3ae2322e8e53b3bf6054bbabd45933d",
+      "title": "feat(dashboard): перенести согласованный макет в живой пульт (#1350)",
+      "date": "2026-10-20T14:19:24+03:00"
     },
     {
-      "sha": "212b0805e4d7262d45e01fdb961b129892384303",
-      "title": "docs(intents): вести обычную задачу без выбора внутреннего конвейера (#1285)",
-      "date": "2026-10-15T16:45:11+03:00"
+      "sha": "3f7390335f901221b8c578cf77c91be618caf25a",
+      "title": "feat(dashboard): собрать компактный обзор продукта (#1349)",
+      "date": "2026-10-20T13:51:01+03:00"
     },
     {
-      "sha": "22784ea84bd68658add8bae09a9036fbc0611513",
-      "title": "chore(plan): close delivered runtime qualification matrix (#1284)",
-      "date": "2026-10-15T16:20:52+03:00"
+      "sha": "6644a6a07c885479015f61cb6898ec5d1b5148a5",
+      "title": "chore(planning): сверить доставленное и исходные замеры проверок (#1347)",
+      "date": "2026-10-20T13:21:05+03:00"
     }
   ],
   "waiting_on_owner": [
     {
       "id": "code-style-field-run-on-ii-sreda",
       "title": "Полевой прогон на ии-среде: профиль с базой включён, новое нарушение отказано при правке и в CI, main дочки не упал",
-      "waiting_on": "Настоящий CI и ревьюер проверены; живая сессия Claude Code отказала из-за политики организации. Нужен разрешённый доступ или API-ключ вне репозитория.",
-      "human_decision": "Предоставить среду для живой сессии агента; ручное событие PostToolUse не подменяет это наблюдение.",
-      "evidence": "qualification/CODE-STYLE-FIELD-RUN-2026-10-05.md"
+      "waiting_on": "GitHub private repository protection/rules API403 не позволяет доказать обязательный server merge-block. Настоящий native hook уже квалифицирован; прежний Claude auth blocker устарел.",
+      "human_decision": "Решить способ подтверждения обязательной серверной защиты приватного репозитория; покупка тарифа или публикация репозитория автоматически не разрешены.",
+      "evidence": "qualification/COORDINATION-SESSION04-2026-10-19.md"
     },
     {
       "id": "north-star-becomes-evidence-backed-outcome",
@@ -913,11 +978,13 @@
       "key": "now",
       "label": "Сейчас",
       "items": [
-        "**владелец проходит первый час в трёх разных репозиториях и завершает реальные работы.**…",
-        "**кит доказывает",
-        "**стиль кода в дочке держит машина"
+        "владелец проходит первый час в трёх разных репозиториях и завершает реальные работы",
+        "кит доказывает, что уже построенное меняет жизнь продуктов",
+        "маленькая правка получает быстрый ответ проверок без потери обязательной защиты в Ките и дочках",
+        "Кит сам распределяет работу исполнителей и безопасно продолжает её после прерывания",
+        "стиль кода в дочке держит машина, а не проза"
       ],
-      "total": 3
+      "total": 5
     },
     {
       "key": "next",
@@ -949,13 +1016,6 @@
   ],
   "issues": [
     {
-      "id": 1193,
-      "title": "child-code-style-held-by-machine",
-      "kind": "dir",
-      "kind_ru": "направление",
-      "updated": "2026-10-05"
-    },
-    {
       "id": 1145,
       "title": "prove-the-loop-not-add-capabilities",
       "kind": "dir",
@@ -977,25 +1037,32 @@
       "updated": "2026-10-05"
     },
     {
+      "id": 1193,
+      "title": "child-code-style-held-by-machine",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-10-16"
+    },
+    {
       "id": 1144,
       "title": "first-hour-for-a-stranger: владелец проходит первый час в трёх репозиториях",
       "kind": "dir",
       "kind_ru": "направление",
-      "updated": "2026-10-15"
+      "updated": "2026-10-16"
     },
     {
-      "id": 611,
-      "title": "runtime-agnostic-core: кит исполняется любым харнессом (Claude Code / Codex / Qwen), не привязан к одному",
-      "kind": "enh",
-      "kind_ru": "улучшение",
-      "updated": "2026-09-15"
+      "id": 1346,
+      "title": "autonomous-work-distribution: направление роадмапа достигнуто целиком",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-10-20"
     },
     {
-      "id": 1201,
-      "title": "Первый результат предлагает создать пульт продукта дочки (после доработки пульта самого кита)",
-      "kind": "enh",
-      "kind_ru": "улучшение",
-      "updated": "2026-09-29"
+      "id": 1345,
+      "title": "verification-cycle-performance: направление роадмапа достигнуто целиком",
+      "kind": "dir",
+      "kind_ru": "направление",
+      "updated": "2026-10-20"
     },
     {
       "id": 1183,
@@ -1003,13 +1070,6 @@
       "kind": "enh",
       "kind_ru": "улучшение",
       "updated": "2026-10-05"
-    },
-    {
-      "id": 1269,
-      "title": "runtime-context-live: проверить доставку skills и native события на реальном запуске",
-      "kind": "task",
-      "kind_ru": "задача",
-      "updated": "2026-10-06"
     },
     {
       "id": 1278,
@@ -1033,11 +1093,18 @@
       "updated": "2026-10-09"
     },
     {
-      "id": 1256,
-      "title": "measure-first-hour-with-a-stranger: Владелец завершает первые работы в трёх разных репозиториях с измеренным…",
-      "kind": "work",
-      "kind_ru": "work-item",
-      "updated": "2026-10-05"
+      "id": 1322,
+      "title": "autonomous-work-distribution: Кит сам распределяет работу агентов и восстанавливает её без дублей",
+      "kind": "task",
+      "kind_ru": "задача",
+      "updated": "2026-10-19"
+    },
+    {
+      "id": 1321,
+      "title": "verification-cycle-performance: проверки Кита и дочек дают быстрый feedback без потери обязательной защиты",
+      "kind": "task",
+      "kind_ru": "задача",
+      "updated": "2026-10-19"
     },
     {
       "id": 1244,
@@ -1054,18 +1121,25 @@
       "updated": "2026-10-05"
     },
     {
-      "id": 1240,
-      "title": "five-question-product-view-brief: Существующий пульт отвечает на пять вопросов и предлагает одну следующую ра…",
+      "id": 1348,
+      "title": "automatic-work-recovery-proof: Обычная разрешённая работа имеет проверенное продолжение после прерывания",
       "kind": "work",
       "kind_ru": "work-item",
-      "updated": "2026-10-05"
+      "updated": "2026-10-20"
     },
     {
-      "id": 1239,
-      "title": "human-intents-follow-field-friction: Обычная задача проходит через существующий вход без выбора внутреннего к…",
+      "id": 1343,
+      "title": "verification-cycle-performance-baseline: Измерить существующий цикл проверок и подготовить первый ограниченны…",
       "kind": "work",
       "kind_ru": "work-item",
-      "updated": "2026-10-05"
+      "updated": "2026-10-20"
+    },
+    {
+      "id": 1256,
+      "title": "measure-first-hour-with-a-stranger: Владелец завершает первые работы в трёх разных репозиториях с измеренным…",
+      "kind": "work",
+      "kind_ru": "work-item",
+      "updated": "2026-10-20"
     }
   ],
   "field_evidence": [
@@ -1138,7 +1212,7 @@
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность high). коммитов 1760, файлов кода 1116; признаки живой системы: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность medium). история короткая или не читается, но признаки зрелой системы на месте: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
@@ -1150,7 +1224,7 @@
       "name": "Версия и последний релиз",
       "state": "verified",
       "source": "VERSION, git tags",
-      "value": "Версия: **4.10.1**. Последний релиз: **v4.10.1**."
+      "value": "Версия: **4.11.1**. Последний релиз: **v4.11.0**."
     },
     {
       "name": "Текущий milestone и прогресс",
@@ -1274,16 +1348,22 @@
       "lead": "Куда движется продукт — три горизонта. «Следующий результат» осознанно один за раз.",
       "sections": [
         {
-          "h": "Сейчас · 3",
+          "h": "Сейчас · 5",
           "list": [
             {
-              "name": "**владелец проходит первый час в трёх разных репозиториях и завершает реальные работы.**…"
+              "name": "владелец проходит первый час в трёх разных репозиториях и завершает реальные работы"
             },
             {
-              "name": "**кит доказывает"
+              "name": "кит доказывает, что уже построенное меняет жизнь продуктов"
             },
             {
-              "name": "**стиль кода в дочке держит машина"
+              "name": "маленькая правка получает быстрый ответ проверок без потери обязательной защиты в Ките и дочках"
+            },
+            {
+              "name": "Кит сам распределяет работу исполнителей и безопасно продолжает её после прерывания"
+            },
+            {
+              "name": "стиль кода в дочке держит машина, а не проза"
             }
           ]
         },
@@ -1341,7 +1421,7 @@
     "backlog": {
       "title": "Бэклог целей",
       "path": "planning/plan.yaml",
-      "lead": "36 из 40 целей достигнуто · 3 в работе · 1 на паузе.",
+      "lead": "36 из 42 целей достигнуто · 5 в работе · 1 на паузе.",
       "sections": [
         {
           "h": "В работе",
@@ -1351,6 +1431,12 @@
             },
             {
               "name": "prove-the-loop-not-add-capabilities"
+            },
+            {
+              "name": "verification-cycle-performance"
+            },
+            {
+              "name": "autonomous-work-distribution"
             },
             {
               "name": "child-code-style-held-by-machine"
@@ -1382,7 +1468,7 @@
       "title": "Метрики продукта",
       "path": "context/product/ProductMetrics.md",
       "lead": "Time to Verified Outcome (TTVO) — астрономическое время от момента, когда владелец сформулировал задачу обычным языком (старт specify), до момента, когда готов проверенный результат: PR, у которого все обязательные проверки и гейты зелёные.",
-      "note": "Значения ещё не измерены. Ниже определён контракт метрик (что считаем, из чего и кто владеет), а не результаты. Baseline и текущие значения по каждой метрике снимаются первым живым прогоном (часть 2 работы `product-value-measurement`). Пока значений нет, здоровье продукта по этим метрикам — «неизвестно», и это правильное состояние, а не тревога.",
+      "note": "TTVO: отдельная малая выборка полигонов, сентябрь 2026. Принятые работы в реальных дочках показаны отдельно. Активное время человека, полная стоимость и причинная экономия не измерены.",
       "sections": [
         {
           "h": "Пять метрик семейства TTVO",
@@ -1427,6 +1513,40 @@
             {
               "name": "Вмешательств человека",
               "desc": "0/4"
+            }
+          ]
+        },
+        {
+          "h": "Переделки и дефекты",
+          "list": [
+            {
+              "name": "итог не снят",
+              "desc": "Истекло окон без записанного итога: 8. Истечение семи дней само по себе не подтверждает отсутствие дефектов."
+            }
+          ]
+        },
+        {
+          "h": "Реальные дочки · 3 репо · 1 владелец",
+          "list": [
+            {
+              "name": "Garden",
+              "desc": "Ревью/P0; затем установка и совместимость CI в main. P0 запрос→merge 55м29с; ветка установки→merge 30м54с. Польза / помощь: Да / 0 по самоотчёту"
+            },
+            {
+              "name": "Personal Cosmic Book",
+              "desc": "Установка; обзор качества с четырьмя офлайн-образцами; план. Установка запрос→merge 5м05с; этап обзора→merge 9м25с. Польза / помощь: Да / 0 по самоотчёту"
+            },
+            {
+              "name": "dashboard-kit",
+              "desc": "Установка; правка поиска с Chrome-регрессией; план. Выбор проекта→merge установки 8м18с; запрос правки→merge 14м21с. Польза / помощь: Да / 0 по самоотчёту"
+            }
+          ]
+        },
+        {
+          "h": "Границы полевого результата",
+          "list": [
+            {
+              "name": "Один знакомый владелец; разные виды работ и начала отсчёта. Общая медиана и причинный эффект Kit не установлены. Строгие пороги первого часа ещё не подтверждены."
             }
           ]
         }
@@ -1528,25 +1648,35 @@
 
       // пульс продукта — три оси на понятном языке; «неизвестно» с первыми данными → «первые данные»
       const h=(d.metrics&&d.metrics.health)||{};
+      const evidence=(d.metrics&&d.metrics.delivery_evidence)||{};
+      const field=d.metrics&&d.metrics.field_readout;
       const nObs=(d.metrics&&d.metrics.observations&&d.metrics.observations.aggregate&&d.metrics.observations.aggregate.n)||0;
       let prodState=h.product, prodVal=HRU[h.product]||"—";
       if(h.product==="unknown"&&nObs){ prodState="early"; prodVal=`первые данные · n=${nObs}`; }
+      if(field){prodState="early";prodVal=`${field.rows.length} принятые работы`;}
       const hcell=(lbl,state,val,tip)=>{const cls=HSTATE[state]||"unknownc";
         const info=tip?`<button class="hp-info" aria-label="Как определяется: ${esc(lbl)}. ${esc(tip)}" `+
           `title="${esc(tip)}">i</button><div class="hp-tip" role="tooltip">${esc(tip)}</div>`:"";
         return `<div class="hp ${cls}">${info}<div class="hl">${esc(lbl)}</div>`+
           `<div class="hv"><span class="d"></span>${esc(val)}</div></div>`;};
-      const tipProduct = (prodState==="early")
-        ? `Определяется по outcome-метрикам продукта (TTVO). Сейчас «первые данные»: метрики заведены, но выборка мала (n=${nObs}) и окна guardrail ещё открыты — доказанного вердикта нет. Закроют: больше наблюдений + закрытые окна guardrail (переделки и дефекты, 7 дней).`
+      const tipProduct = field ? `${field.repositories} репозитория, ${field.people} владелец. Польза подтверждена владельцем. ${field.note}` : (prodState==="early")
+        ? `Есть первые наблюдения TTVO (n=${nObs}). Выборка мала; итог переделок и дефектов требует отдельной сверки.`
         : (h.product==="unknown"
            ? "Определяется по outcome-метрикам продукта (TTVO). Пока не измерены."
            : "Определяется по outcome-метрикам продукта (TTVO).");
-      const tipTech="Вердикт из паспорта. Наличие CI и тестов само по себе не подтверждает результаты прогонов.";
-      const tipDelivery="«В норме» = есть история релизов (теги). Отклонение от плана считается отдельно.";
+      const tech=evidence.tech||{state:"unknown",label:"результаты недоступны",detail:"Нужны результаты GitHub Actions текущего main."};
+      const release=evidence.release;
+      const tipTech=tech.detail;
+      const tipDelivery=release ? `Опубликован ${release.tag}, ${release.published_at.slice(0,10)}. Отклонение от плана и состояние production этим не измерены.` : "Не удалось прочитать опубликованные выпуски GitHub Releases.";
       $("health").innerHTML=
         hcell("Ценность для пользователя",prodState,prodVal,tipProduct)+
-        hcell("Технологии и качество",h.tech,HRU[h.tech]||"—",tipTech)+
-        hcell("Доставка и релизы",h.delivery,HRU[h.delivery]||"—",tipDelivery);
+        hcell("Технологии и качество",tech.state,tech.label,tipTech)+
+        hcell("Доставка и релизы",release?"early":"unknown",release?`${release.tag} выпущен`:"выпуск не проверен",tipDelivery);
+      const evidenceLink=(url,label)=>`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>`;
+      $("health-evidence").innerHTML=`<p>${esc(tipProduct)}</p><p>${esc(tipTech)}</p>`+
+        (tech.sources||[]).map(s=>`<p>${evidenceLink(s.url,s.name+" · попытка "+s.attempt)}</p>`).join("")+
+        (release?`<p>${evidenceLink(release.url,release.tag)} · ${esc(release.published_at.slice(0,10))}</p>`:"")+
+        (field?`<p>${evidenceLink(link(d,field.source),"Принятые работы в дочках")}</p>`:"");
 
       // разбивка «Технологии» по направлениям (гейтовые замеры)
       const td=(d.metrics&&d.metrics.tech_dimensions)||[];
@@ -1568,7 +1698,7 @@
       if(agg&&agg.median_intent_to_verified){
         nsm.innerHTML=`<div class="k"><span class="tag">North Star</span>Идея → проверенный результат · медиана`+
           `<span class="dir">↓ меньше — лучше</span></div>`+
-          `<div class="v">${esc(agg.median_intent_to_verified)}<span class="u">n=${agg.n||"—"} · разброс ${esc(agg.range||"—")} · ранний тренд</span></div>`;
+          `<div class="v">${esc(agg.median_intent_to_verified)}<span class="u">n=${agg.n||"—"} · разброс ${esc(agg.range||"—")} · полигоны, ${esc((obs.observations[0]||{}).date||"дата не указана")}</span></div>`;
         nsm.hidden=false;
       } else {nsm.innerHTML=`<div class="k">Наблюдения метрик недоступны</div>`;nsm.hidden=false;}
 
@@ -1580,19 +1710,9 @@
         tiles.innerHTML=
           tile("Доходит без ручной доводки",agg.verified_pr_rate,"verified-PR · больше — лучше")+
           tile("Вмешательств человека",agg.human_intervention_rate,"меньше — лучше")+
-          tile("Переделки · дефекты после релиза","окна открыты","guardrail · окно 7 дней",true);
+          tile("Переделки · дефекты после релиза",(obs.guardrails||{}).label||"итог не проверен","guardrail · окно 7 дней",true);
         tiles.hidden=false;
       } else {tiles.innerHTML="";tiles.hidden=true;}
-
-      // состояние продукта — продуктовые счётчики (без внутренних)
-      const g=d.goals||{}; const pct=g.total?Math.round(100*g.achieved/g.total):0;
-      const fe=d.field_evidence||[]; const disc=d.discovery||{};
-      $("state").innerHTML=
-        `<div class="m"><span class="mk">Цели продукта</span><div class="bar"><i style="width:${pct}%"></i></div>`+
-          `<span class="mv">${g.achieved}/${g.total}</span></div>`+
-        `<div class="m"><span class="mk">Обкатка в поле</span><span class="mv">${fe.length} репо · ${fe.reduce((s,f)=>s+(f.versions?f.versions.length:0),0)} заезда ✓</span></div>`+
-        `<div class="m"><span class="mk">Исследования</span><span class="mv">${disc.evidence} свид · ${disc.decisions} реш · ${disc.experiments} эксп</span></div>`;
-
 
       // Роадмап — все доступные буллиты трёх горизонтов прямо на обзоре.
       $("road").innerHTML=(d.roadmap||[]).map(h=>{
@@ -1671,7 +1791,7 @@
     function openModal(key,trigger){
       const d=DATA; if(!d) return;
       const panelKey=key.startsWith("panel:")?key.slice(6):null;
-      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта",state:"Состояние продукта"};
+      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта"};
       const full=panelKey&&$(panelKey+"-full");
       const m=full?{title:panelTitles[panelKey]}:(d.modals||{})[key]; if(!m) return;
       if($("backdrop").hidden) lastTrigger=trigger||document.activeElement;
