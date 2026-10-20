@@ -272,21 +272,20 @@ ROAD_HORIZONS = [
 def _road_bullets(block: str, limit: int = 20):
     """Ёмкие названия направлений из буллитов секции — на понятном языке, без id и YAML.
 
-    Жирный заголовок буллита (`**...**`) — уже готовое название направления. Если его нет
-    (горизонт «Сейчас» — буллиты вида `` `goal-id` — фраза``), берём фразу после id и режем
-    по первому предложению или запятой, чтобы вышло коротко и по-человечески.
+    Жирный заголовок, в том числе после `` `goal-id` — ``, — готовое название направления.
+    Без жирного заголовка берём фразу после id до первого предложения или запятой.
     """
     items = []
     for m in re.finditer(r"^-\s+(.+?)(?=\n-\s|\n\(|\n##\s|\Z)", block, re.DOTALL | re.MULTILINE):
         raw = " ".join(m.group(1).split())
-        bold = re.match(r"\*\*(.+?)\*\*", raw)
+        rest = re.sub(r"^`[^`]+`\s*[—-]\s*", "", raw)
+        bold = re.match(r"\*\*(.+?)\*\*", rest)
         if bold:
             label = bold.group(1)
         else:
-            rest = re.sub(r"^`[^`]+`\s*[—-]\s*", "", raw)
             label = re.split(r"[.,](?:\s|$)", rest)[0]
         label = label.replace("`", "").strip().rstrip(":—- .").strip()
-        if len(label) > 90:
+        if not bold and len(label) > 90:
             label = label[:88].rstrip() + "…"
         if label:
             items.append(label)
