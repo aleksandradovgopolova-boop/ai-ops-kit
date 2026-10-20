@@ -400,6 +400,87 @@
     .head-right{gap:8px}
     .src{flex-basis:100%}
   }
+  /* Один экран на desktop; длинные списки доступны в подробностях. */
+  .app{max-width:1600px;padding:18px 24px;gap:14px}
+  .head{padding-bottom:12px;flex-wrap:nowrap}
+  .brand h1{font-size:23px}
+  .brand-label{font-size:10px}
+  .head-right{flex-wrap:nowrap}
+  .section-nav{gap:18px;padding:0;margin-left:auto}
+  .text-button{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:4px 0;cursor:pointer;text-align:left}
+  .text-button:hover{text-decoration:underline}
+  .main{grid-template-columns:minmax(0,5fr) minmax(0,3fr) minmax(0,4fr);gap:12px}
+  .north{display:flex;align-items:baseline;gap:18px;padding:0}
+  .product-description{font-size:16px;line-height:1.4;letter-spacing:0;max-width:none;margin:0;flex:1}
+  .north > .text-button{flex:none}
+  .panel{padding:13px 14px}
+  .eyebrow{margin-bottom:10px;gap:6px;font-size:9px}
+  .eyebrow .n{display:none}
+  .more{font-size:9px;padding:3px 6px;letter-spacing:0}
+  .metrics-row{grid-template-columns:minmax(0,1.4fr) minmax(0,3fr)}
+  .northstar-metric,.mtile{padding:10px 12px}
+  .northstar-metric .v{font-size:27px;margin-top:6px;gap:5px}
+  .northstar-metric .k,.mtile .mk{font-size:11px}
+  .mtile .mv{font-size:24px}
+  .mtile .mv.soft{font-size:15px}
+  .mtile .ms{font-size:9px}
+  .card-next{grid-column:1}
+  .card-focus{grid-column:2}
+  .card-health{grid-column:3}
+  .roadstrip{grid-column:1}
+  .card-changes{grid-column:2}
+  .panel[aria-label="Состояние продукта"]{grid-column:3}
+  .preview{min-width:0}
+  .preview-title{font-family:"Bricolage Grotesque",sans-serif;font-size:16px;line-height:1.4;font-weight:600}
+  .preview-note{font-size:11px;color:var(--muted);line-height:1.4;margin-top:8px}
+  .warning{color:var(--hold)}
+  .card-focus .preview-title{font-size:13px;line-height:1.5}
+  .card-health .preview{display:flex;gap:6px;flex-wrap:wrap}
+  .card-health .hp{padding:9px 8px;min-width:90px}
+  .card-health .hp .hl{font-size:10px}
+  .card-health .hp .hv{font-size:12px}
+  .road{gap:6px}
+  .rh{padding:8px;min-height:0}
+  .rh-h .lb{font-size:12px}
+  .rh-list li{font-size:11px;line-height:1.4;padding-left:10px}
+  .rh-list li:not(:first-child){display:none}
+  .rh-list li::before{left:0}
+  .change-line{font-size:11px;line-height:1.4;padding:8px 0;border-top:1px solid var(--line)}
+  .change-line:first-child{border-top:0;padding-top:0}
+  .change-line span{display:block;color:var(--muted);font-size:10px;margin-top:4px}
+  .measures{gap:10px}
+  .m .mk{font-size:11px;width:94px}
+  .m .mv{font-size:11px}
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:0;font-size:10px}
+  .foot .text-button{font-size:10px}
+  .foot .src{flex-basis:auto;font-size:10px}
+  .modal-b .tasks{grid-template-columns:1fr}
+  .modal-b .spine{display:grid;grid-template-columns:1fr}
+  .modal-b .preview-title{font-size:17px}
+  .modal-b .focus-list{margin-bottom:14px}
+  @media (min-width:1101px) and (min-height:600px){
+    .app{height:100dvh;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
+    .main{grid-template-rows:auto auto minmax(0,1fr) minmax(0,1fr);align-items:stretch}
+    .panel{overflow:auto}
+  }
+  @media (max-width:1100px){
+    .main{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+    .card-next,.card-focus,.card-health,.roadstrip,.card-changes,.panel[aria-label="Состояние продукта"]{grid-column:auto}
+    .metrics-row{grid-template-columns:1fr}
+    .head{flex-wrap:wrap}
+    .section-nav{order:3;margin-left:0}
+  }
+  @media (max-width:700px){
+    .app{padding:16px 12px}
+    .main{grid-template-columns:minmax(0,1fr)}
+    .north{display:block}
+    .north > .text-button{margin-top:6px}
+    .head-right{flex-wrap:wrap}
+    .metric-tiles{grid-template-columns:1fr}
+    .road{grid-template-columns:1fr}
+    .foot{flex-direction:column;align-items:flex-start}
+    .card-health .hp{min-width:90px}
+  }
 </style>
 
 <div class="app">
@@ -410,23 +491,21 @@
         <h1>AI Ops Kit</h1>
       </div>
     </div>
+    <nav class="section-nav" aria-label="Разделы пульта"><button class="text-button" data-modal="panel:tasks">Задачи <span id="tasks-count"></span> ↗</button><button class="text-button" data-modal="panel:artifacts">Артефакты ↗</button></nav>
     <div class="head-right">
       <span class="chip">версия <b id="version">—</b></span>
       <span class="chip chan"><span class="dot"></span>канал: <span id="channel">—</span></span>
-      <span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span>
+
     </div>
   </header>
 
   <main class="main">
   <div class="north wide">
     <p class="product-description">AI Ops Kit — напарник продуктовой команды: помогает выполнять задачи, проверять результат и сохранять принятые решения.</p>
-    <details><summary>О продукте</summary>
-      <div class="txt"><b id="tagline">—</b><span id="tagsub" class="sub"></span></div>
-    </details>
+    <button class="text-button" data-modal="panel:about">О продукте →</button>
+    <div id="about-full" hidden><div class="txt"><b id="tagline">—</b><span id="tagsub" class="sub"></span></div></div>
   </div>
-  <nav class="section-nav wide" aria-label="Разделы пульта">
-    <a href="#overview">Обзор</a><a href="#plan">Роадмап</a><a href="#tasks">Задачи</a><a href="#artifacts">Артефакты</a>
-  </nav>
+
 
   <section class="panel wide" id="overview" aria-label="Метрики продукта">
     <div class="eyebrow"><span>Метрики продукта · North Star</span>
@@ -437,17 +516,33 @@
     </div>
   </section>
 
-  <section class="panel" aria-label="Следующая работа">
-    <div class="eyebrow"><span>Что делать дальше</span><span class="n">из текущего плана</span></div>
+  <section class="panel card-next" aria-label="Следующая работа">
+    <div class="eyebrow"><span>Что делать дальше</span><span class="n">из текущего плана</span><button class="more" data-modal="panel:next">подробнее →</button></div>
+    <div class="preview" id="next-preview"></div>
+    <div id="next-full" hidden>
     <div id="next-action"></div>
+</div>
   </section>
 
-  <section class="panel focus" id="focus-block" aria-label="Текущий фокус" hidden>
-    <div class="eyebrow"><span>Текущий фокус · веха</span></div>
+  <section class="panel card-focus focus" id="focus-block" aria-label="Текущий фокус" hidden>
+    <div class="eyebrow"><span>Текущий фокус · веха</span><button class="more" data-modal="panel:focus">подробнее →</button></div>
+    <div class="preview" id="focus-preview"></div>
+    <div id="focus-full" hidden>
     <div class="focus-title" id="focus-title">—</div>
     <div class="focus-prog"><div class="bar"><i id="focus-bar"></i></div>
       <span class="focus-n" id="focus-n"></span></div>
     <div class="focus-list" id="focus-list"></div>
+</div>
+  </section>
+
+  <section class="panel card-health" aria-label="Пульс продукта">
+    <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span><button class="more" data-modal="panel:health">подробнее →</button></div>
+    <div class="preview health" id="health-preview"></div>
+    <div id="health-full" hidden>
+    <div class="health" id="health"></div>
+    <div class="techdims" id="tech-dims" hidden></div>
+    <div class="maturity" id="maturity" hidden></div>
+</div>
   </section>
 
   <section class="panel roadstrip" id="plan" aria-label="Роадмап">
@@ -456,16 +551,14 @@
     <div class="road" id="road"></div>
   </section>
 
-  <section class="panel" aria-label="Пульс продукта">
-    <div class="eyebrow"><span>Пульс продукта</span><span class="n">по паспорту</span></div>
-    <div class="health" id="health"></div>
-    <div class="techdims" id="tech-dims" hidden></div>
-    <div class="maturity" id="maturity" hidden></div>
-  </section>
 
-  <section class="panel" aria-label="Последние изменения">
-    <div class="eyebrow"><span>Что изменилось</span><span class="n">история Git · эффект проверяется отдельно</span></div>
+
+  <section class="panel card-changes" aria-label="Последние изменения">
+    <div class="eyebrow"><span>Что изменилось</span><span class="n">история Git · эффект проверяется отдельно</span><button class="more" data-modal="panel:changes">подробнее →</button></div>
+    <div class="preview" id="changes-preview"></div>
+    <div id="changes-full" hidden>
     <div id="recent-changes"></div>
+</div>
   </section>
 
   <section class="panel" aria-label="Состояние продукта">
@@ -473,7 +566,7 @@
     <div class="measures" id="state"></div>
   </section>
 
-  <section class="panel wide" id="tasks" aria-label="Ближайшие задачи и задачи в работе">
+  <div id="tasks-full" hidden>
     <div class="eyebrow"><span>Ближайшие задачи · в работе</span></div>
     <div class="tasks">
       <div class="tasks-col">
@@ -485,15 +578,15 @@
         <div class="issues" id="issues"></div>
       </div>
     </div>
-  </section>
+</div>
 
-  <section class="panel mapstrip wide" id="artifacts" aria-label="Артефакты продукта">
+  <div id="artifacts-full" hidden>
     <div class="eyebrow"><span>Артефакты</span><span class="n">клик → раздел, внутри — ссылка в репозиторий ↗</span></div>
     <div class="spine" id="spine"></div>
-  </section>
+</div>
   </main>
 
-  <div class="foot">Продуктовый пульт · всё ведёт в реальные артефакты · <b>что не доказано из источника — помечено, а не выдумано</b></div>
+  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
 </div>
 
 <div class="backdrop" id="backdrop" hidden>
@@ -1606,6 +1699,21 @@
         `<div class="ti">${esc(it.title)}</div></a>`).join("")
         :`<div class="nowi">${d.issues===null?"Список задач недоступен":"Нет открытых задач"}</div>`)+workNote;
 
+      $("tasks-count").textContent=(d.issues===null?"· нет данных":`· ${shownIss.length}`)+(w.length?` · ждут вас: ${w.length}`:"");
+      $("next-preview").innerHTML=(action&&action.state==="known"&&best?`<div class="preview-title">${title(best)}</div>`:
+        `<div class="preview-title">Следующая работа не определена</div>`)+
+        ((!action||action.state!=="known")?`<div class="preview-note warning">Источник плана недоступен</div>`:"")+
+        (!LIVE?`<div class="preview-note warning">Рекомендация из снимка · проверьте актуальный план</div>`:"")+
+        (rep&&rep.staleness&&(rep.staleness.unknown||rep.staleness.plan_behind)?
+          `<div class="preview-note warning">Актуальность плана требует проверки</div>`:"");
+      $("focus-preview").innerHTML=cf&&cf.total?
+        `<div class="preview-title">${esc($("focus-title").textContent)}</div>`+
+        `<div class="preview-note">${esc($("focus-n").textContent)}</div>`: "";
+      $("health-preview").innerHTML=$("health").innerHTML;
+      $("changes-preview").innerHTML=changes.length?changes.slice(0,2).map(x=>
+        `<div class="change-line">${esc(x.title)}<span>${esc(ruDate(String(x.date||" ").slice(0,10)))}</span></div>`
+      ).join(""):`<div class="preview-note warning">История изменений недоступна</div>`;
+
       // source badge
       const when=d.generated_at?new Date(d.generated_at):null;
       const stamp=when&&!Number.isNaN(when.getTime())?`${when.getDate()}.${String(when.getMonth()+1).padStart(2,"0")}.${when.getFullYear()} ${String(when.getHours()).padStart(2,"0")}:${String(when.getMinutes()).padStart(2,"0")}`:"";
@@ -1615,12 +1723,15 @@
 
     // ── модальные окна разделов карты продукта ──────────────────────────────
     let DATA=null, lastTrigger=null;
-    const focusablesIn=el=>[...el.querySelectorAll('a[href],button,[tabindex]:not([tabindex="-1"])')]
+    const focusablesIn=el=>[...el.querySelectorAll('a[href],button,summary,[tabindex]:not([tabindex="-1"])')]
       .filter(x=>!x.disabled&&x.offsetParent!==null);
     function openModal(key,trigger){
       const d=DATA; if(!d) return;
-      const m=(d.modals||{})[key]; if(!m) return;
-      lastTrigger=trigger||document.activeElement;
+      const panelKey=key.startsWith("panel:")?key.slice(6):null;
+      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта"};
+      const full=panelKey&&$(panelKey+"-full");
+      const m=full?{title:panelTitles[panelKey]}:(d.modals||{})[key]; if(!m) return;
+      if($("backdrop").hidden) lastTrigger=trigger||document.activeElement;
       $("modal-title").textContent=m.title||"";
       const parts=[];
       if(m.lead) parts.push(`<div class="lead">${esc(m.lead)}</div>`);
@@ -1635,7 +1746,9 @@
         }).join("");
         if(rows) parts.push(`<div class="msec"><div class="mh">${esc(s.h||"")}</div>${rows}</div>`);
       });
-      $("modal-body").innerHTML=parts.join("")||`<div class="lead">—</div>`;
+      $("modal-body").innerHTML=full?full.innerHTML:(parts.join("")||`<div class="lead">—</div>`);
+      // Копия для чтения не должна дублировать id источника в документе.
+      $("modal-body").querySelectorAll("[id]").forEach(el=>el.removeAttribute("id"));
       $("modal-foot").innerHTML=m.path
         ? `<a href="${link(d,m.path)}" target="_blank" rel="noopener">Открыть в репозитории · ${esc(m.path)} ↗</a>`
         : "";
