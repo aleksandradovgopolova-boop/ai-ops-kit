@@ -1,0 +1,8 @@
+# Восстановление own claim после полного checkpoint — #1322
+
+Результат: если процесс сохранил полный проверенный parallel checkpoint и погиб до finish_cmd, та же сессия может продолжить существующий partial/delivery-only retry без ручного снятия claim.
+Пути: сохранённый report/receipt/retained commits/exact tested integration → canonical claim retry → POSIX owner_pid absence proof → новая generation → durable Budget/resource slots → partial callback или существующий Intent/Receipt reconciliation.
+Инварианты: same identity/machine/worktree/attempt/base/frozen inputs и все существующие source/conflict guards обязательны. Только int PID>0 и доказанное ESRCH на своей машине; возраст/TTL, missing/live/PermissionError/unknown PID не разрешают recovery. Полный checkpoint проверяется под claim lock перед заменой. Unknown/incomplete/stale report не разрешает effects; late old finish не завершает новую generation; budget не обнуляется.
+Failure modes: crash после сохранения до finally; live/foreign/invalid owner; corrupted/mismatched checkpoint; две recovery попытки; неизвестная доставка.
+Доказательство: реальный child выполняет controlled Git callbacks, сохраняет report и os._exit до финализатора; canonical in-progress/PID gone подтверждены. Partial retry вызывает только failed пакет/сохраняет spend; ready delivery-only делает0model/package calls. Live/foreign/unknown/stale/missing/corrupt cases дают0effects; существующие concurrency/fencing/outbox tests сохранены. Ресурсный допуск локально, независимый review/17exactheadCI/normalmerge.
+Не входит: общий lease/автоматический takeover чужой сессии, resume незавершённых callbacks, отмена сети/rollback, новые права/paid models, field evidence или закрытие #1321/#1322.

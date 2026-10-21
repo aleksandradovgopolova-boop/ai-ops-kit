@@ -158,13 +158,19 @@ def writer_tier(signals=None):
             "reason": f"task_type={tt or 'QUICK'} -> дешёвый qualified writer (money-mode)"}
 
 
-def plan_run(roles_cfg=None, quals=None, models=None, signals=None):
+def plan_run(roles_cfg=None, quals=None, models=None, signals=None, available_providers=None):
     """v3.7.12: резолв ВСЕХ рантайм-ролей одним вызовом -> bundle для RunReport.model_resolution.
     Делает решение роутера ВИДИМЫМ в отчёте прогона (writer/reviewer/security/integration независимо).
     writer≠judge по МОДЕЛИ: если code_review резолвится в модель != implementation — это разные identity.
-    v3.9.0: + preferred_writer_tier (complexity-aware) — по классу задачи, если переданы signals."""
+    v3.9.0: + preferred_writer_tier (complexity-aware) — по классу задачи, если переданы signals.
+    available_providers — optional allowset вызывающего; не online health/новый допуск роли."""
     if roles_cfg is None:
         roles_cfg, quals, models = _load()
+    # None — чистый offline план; пустой allowset запрещает все providers.
+    # Фильтруем ДО всех resolve, включая writer≠judge/fallback/escalation.
+    if available_providers is not None:
+        available_providers = set(available_providers)
+        quals = [q for q in quals if q.get("provider") in available_providers]
     plan = {role: resolve(role, roles_cfg, quals, models) for role in ALL_ROLES}
     plan["preferred_writer_tier"] = writer_tier(signals)
     # v3.8.3 CONFLICT-AWARE writer≠judge: role_constraints (model-roles.yaml) вида

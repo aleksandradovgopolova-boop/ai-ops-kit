@@ -30,6 +30,13 @@ if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
   exit 2
 fi
 
+# Impact ведёт lint и тесты через тот же журнал; plan-only ничего не исполняет.
+if [[ "${1:-}" == "--impact" ]]; then
+  shift
+  "$PYTHON" -m ai_ops_kit.devtools.impact_check_cli "$@"
+  exit $?
+fi
+
 # Линтер — часть блокирующего CI (джоба `lint`) и находится за секунды: F821 (вызов несуществующего
 # имени) не должен ждать раунда CI. Тот же набор, что в check-full и CI ([tool.ruff.lint]).
 if command -v ruff >/dev/null 2>&1; then
@@ -37,14 +44,6 @@ if command -v ruff >/dev/null 2>&1; then
 else
   # Громко, а не молча: проверка, которая не запустилась, не должна выглядеть как пройденная.
   echo "ЛИНТЕР НЕ ЗАПУЩЕН: ruff не установлен, класс F821/F811/B023 сейчас НЕ проверен (в CI он есть)."
-fi
-
-# Opt-in impact mode includes ALL dirty files plus optional committed base diff.
-# Existing default stays the complete non-slow suite; merge/release forces check-full.
-if [[ "${1:-}" == "--impact" ]]; then
-  shift
-  "$PYTHON" -m ai_ops_kit.devtools.impact_check_cli "$@"
-  exit $?
 fi
 
 # -n auto: параллель по ядрам (набор параллель-безопасен — проверено на полном прогоне). Без

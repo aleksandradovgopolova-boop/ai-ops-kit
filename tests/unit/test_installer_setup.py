@@ -323,3 +323,70 @@ def test_project_name_is_none_when_nothing_fits(tmp_path):
     root = tmp_path / "Мой проект"
     root.mkdir()
     assert setup_ops._project_name(root) is None
+
+
+def test_setup_journals_real_steps_and_excludes_logs_from_commit(child):
+    """Положительный путь и доказательство: setup создал файлы, журнал остался локальным."""
+    import json
+    result = _run_cli(child, "setup", ".")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert (child / ".ai/managed/.checksums.json").is_file()
+    journals = list((child / ".ai/runtime/setup").glob("*/events.jsonl"))
+    assert len(journals) == 1
+    rows = [json.loads(line) for line in journals[0].read_text().splitlines()]
+    completed = [row["step"] for row in rows if row["event"] == "step_finished"]
+    assert completed[:7] == ["preflight", "source", "init", "doctor", "onboard", "bootstrap", "model"]
+    assert rows[-1]["status"] == "completed"
+    assert journals[0].as_posix() in result.stdout
+    tracked = _git(child, "ls-files", ".ai/runtime/setup").stdout
+    assert tracked == ""
+    assert _git(child, "check-ignore", str(journals[0])).returncode == 0
+
+
+def test_setup_short_budget_stops_with_journal_and_nonzero_result(child):
+    """Fail-closed: исчерпанный бюджет не начинает установку и не объявляет готовность."""
+    import json
+    result = _run_cli(child, "setup", ".", "--timeout-seconds", "0.000001")
+    assert result.returncode == 1, result.stdout + result.stderr
+    assert not (child / ".ai/managed").exists()
+    journals = list((child / ".ai/runtime/setup").glob("*/events.jsonl"))
+    assert len(journals) == 1
+    rows = [json.loads(line) for line in journals[0].read_text().splitlines()]
+    assert rows[-1]["status"] == "timeout"
+    assert "Вывод сохранён" in result.stdout
+
+
+@pytest.mark.parametrize("budget", ["0", "-1", "nan", "inf", "words"])
+def test_setup_invalid_budget_refuses_before_writing_files(child, budget):
+    result = _run_cli(child, "setup", ".", "--timeout-seconds", budget)
+    assert result.returncode == 2
+    assert not (child / ".ai").exists()
+
+
+def test_setup_refuses_damaged_installation_before_onboarding(installed_copy):
+    """Реальная порча managed доказана до проверки: doctor обязан остановить продолжение."""
+    import json
+    child = installed_copy
+    target = child / ".ai/managed/registry/agents.yaml"
+    original = target.read_text()
+    target.write_text(original + "\n# changed after installation\n")
+    assert target.read_text() != original
+    result = _run_cli(child, "setup", ".")
+    assert result.returncode == 1, result.stdout + result.stderr
+    journal = next((child / ".ai/runtime/setup").glob("*/events.jsonl"))
+    rows = [json.loads(line) for line in journal.read_text().splitlines()]
+    started = [row["step"] for row in rows if row["event"] == "step_started"]
+    assert "doctor" in started
+    assert "onboard" not in started and "git-commit" not in started
+    assert rows[-1]["status"] == "failed"
+
+
+def test_setup_old_gitignore_does_not_commit_attempt_logs(child):
+    result = _run_cli(child, "setup", ".")
+    assert result.returncode == 0, result.stdout + result.stderr
+    ignore = child / ".gitignore"
+    ignore.write_text(ignore.read_text().replace(".ai/runtime/setup/\n", ""))
+    result = _run_cli(child, "setup", ".")
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert len(list((child / ".ai/runtime/setup").glob("*/events.jsonl"))) == 2
+    assert _git(child, "ls-files", ".ai/runtime/setup").stdout == ""

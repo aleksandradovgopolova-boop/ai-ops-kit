@@ -341,6 +341,13 @@ def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
     return rep
 
 
+def _delivery_write(ctx, method, *args, **kwargs):
+    """Optional canonical ownership barrier per write; network never holds this lock."""
+    from contextlib import nullcontext
+    with getattr(ctx, "delivery_guard", nullcontext)():
+        return getattr(_ls, method)(*args, **kwargs)
+
+
 def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
     """Транзакционная доставка за commit-барьером: governance-gate -> DeliveryIntent -> внешнее
     действие (PR, идемпотентно) -> DeliveryReceipt. K6: вынесено из run() без изменения поведения.
@@ -360,14 +367,16 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
     _gate = None
     if plan and handoff_ok and report_ok:
         from ai_ops_kit.governance import enforcement as _enf
-        _gate = _enf.gate_delivery(child_root, target=fid)
+        from contextlib import nullcontext
+        with getattr(ctx, "delivery_guard", nullcontext)():
+            _gate = _enf.gate_delivery(child_root, target=fid)
         rep.setdefault("governance", {})["delivery"] = _gate
     if _gate and _gate.get("blocked"):
         rep["delivery"] = {"requested": True, "status": "blocked-by-policy",
                            "reason": f"policy: {_gate.get('reason')} — доставка остановлена "
                                      "governance (режим block)"}
         rep["overall_status"] = "delivery-blocked"
-        _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+        _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep)
     elif plan and handoff_ok and report_ok:
         import hashlib as _hl
         from ai_ops_kit.gates import concurrency_preflight as _cpp
@@ -388,8 +397,8 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                                "merge_preview": _reverify.get("merge_preview"),
                                "reason": _reverify.get("reason")}
             rep["overall_status"] = "delivery-stale-needs-reverify"
-            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
-            _ls.journal_append(jname, {"kind": "delivery_stale", "run_id": fid, "workitem_id": fid,
+            _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep)
+            _delivery_write(ctx, "journal_append", jname, {"kind": "delivery_stale", "run_id": fid, "workitem_id": fid,
                                        "current_target": _reverify.get("current_target")})
             return
         # repository identity (owner/name из origin) — часть СТРОГОЙ идентичности доставки
@@ -409,14 +418,14 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                                "reason": f"есть неразрешённая доставка {_blocking[0]} на ветке {_branch} "
                                          "(нет DeliveryReceipt) — новая доставка запрещена до reconciliation"}
             rep["overall_status"] = "delivery-failed"
-            _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+            _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep)
         else:
             # DeliveryIntent (BARRIER) со СТРОГОЙ идентичностью
             _intent = {"schema_version": 1, "kind": "DeliveryIntent", "delivery_id": _did,
                        "workitem_id": fid, "repository": _repo, "branch": _branch,
                        "base_ref": plan["base_ref"], "base_sha": plan["base_sha"],
                        "commit_sha": _csha, "status": "intended"}
-            _iw = _ls.durable_write(_ip, _intent,
+            _iw = _delivery_write(ctx, "durable_write", _ip, _intent,
                                     require_keys=("kind", "delivery_id", "commit_sha", "repository"),
                                     keep_backup=True)
             if not _iw.get("ok"):
@@ -424,12 +433,14 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                                    "reason": f"DeliveryIntent не зафиксирован durable ({_iw.get('error')}) "
                                              "— внешнее действие не выполняется"}
                 rep["overall_status"] = "delivery-failed"
-                _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+                _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep)
             else:
-                _ls.journal_append(jname, {"kind": "delivery_intent", "run_id": fid, "workitem_id": fid,
+                _delivery_write(ctx, "journal_append", jname, {"kind": "delivery_intent", "run_id": fid, "workitem_id": fid,
                                            "delivery_id": _did, "branch": _branch, "commit": _csha,
                                            "repository": _repo})
                 # ВНЕШНЕЕ ДЕЙСТВИЕ (идемпотентно; delivery_id вшивается в тело PR)
+                with getattr(ctx, "delivery_guard", nullcontext)():
+                    pass  # admission immediately before the external boundary
                 _dv = execution_pipeline._deliver_pr(
                     plan["work_root"], _branch, plan["base_ref"], plan["base_sha"],
                     plan["base_binding"], _csha, plan["wid"], plan["task"], delivery_id=_did)
@@ -437,14 +448,14 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                 _pr = _dv.get("pr") or {}
                 if _st == "outcome_unknown":
                     # неоднозначный POST -> НЕ пишем confirmed Receipt; помечаем Intent (BARRIER).
-                    _uw = _ls.durable_write(_ip, {**_intent, "status": "outcome_unknown",
+                    _uw = _delivery_write(ctx, "durable_write", _ip, {**_intent, "status": "outcome_unknown",
                                                   "reconciliation_required": True},
                                             require_keys=("kind", "delivery_id", "status"))
                     rep["delivery"] = {**_dv, "delivery_id": _did, "reconciliation_required": True,
                                        "intent_marker_durable": bool(_uw.get("ok"))}
                     rep["overall_status"] = "delivery-outcome-unknown"
-                    _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
-                    _ls.journal_append(jname, {"kind": "delivery_outcome_unknown", "run_id": fid,
+                    _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep)
+                    _delivery_write(ctx, "journal_append", jname, {"kind": "delivery_outcome_unknown", "run_id": fid,
                                                "workitem_id": fid, "delivery_id": _did, "cause": "ambiguous-post"})
                 else:
                     _delivered = _st in ("opened", "updated")
@@ -470,19 +481,19 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                             pass
                     if _del_breaches:
                         _receipt["invariant_breaches"] = _del_breaches
-                    _cw = _ls.durable_write(_rp, _receipt,
+                    _cw = _delivery_write(ctx, "durable_write", _rp, _receipt,
                                             require_keys=("kind", "delivery_id", "status"), keep_backup=True)
                     if _cw.get("ok"):
-                        _ls.durable_write(_ip, {**_intent, "status": "completed"})   # receipt авторитетен
+                        _delivery_write(ctx, "durable_write", _ip, {**_intent, "status": "completed"})   # receipt авторитетен
                         rep["delivery"] = {**_dv, "delivery_id": _did, "remote_sha": _remote_sha,
                                            "sha_verified": _sha_ok,
                                            "receipt": f"features/{fid}/delivery-outbox/{_did}.receipt.yaml"}
                         rep["overall_status"] = "delivered" if _delivered else "delivery-failed"
-                        _ls.journal_append(jname, {"kind": "delivery_receipt", "run_id": fid,
+                        _delivery_write(ctx, "journal_append", jname, {"kind": "delivery_receipt", "run_id": fid,
                                                    "workitem_id": fid, "delivery_id": _did, "status": _st,
                                                    "delivered": _delivered, "remote_sha": _remote_sha,
                                                    "pr_url": _pr.get("url")})
-                        _dw = _ls.durable_write_json(features_dir / fid / "run-report.json", rep,
+                        _dw = _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep,
                                                      keep_backup=True)
                         if not _dw.get("ok"):
                             rep.setdefault("lifecycle_errors", [])
@@ -490,7 +501,7 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                     else:
                         # ВНЕШНЕЕ ДЕЙСТВИЕ ВЫПОЛНЕНО, Receipt НЕ сохранён -> outcome_unknown (Intent BARRIER).
                         # Даже если и эта запись упадёт: reconciliation ловит Intent-БЕЗ-Receipt по факту.
-                        _uw = _ls.durable_write(_ip, {**_intent, "status": "outcome_unknown",
+                        _uw = _delivery_write(ctx, "durable_write", _ip, {**_intent, "status": "outcome_unknown",
                                                       "reconciliation_required": True,
                                                       "observed": {"status": _st, "pr_url": _pr.get("url")}},
                                                 require_keys=("kind", "delivery_id", "status"))
@@ -501,8 +512,8 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                                                      f"зафиксирован durable ({_cw.get('error')}) — исход "
                                                      "сверится с remote при следующем прогоне (идемпотентно)"}
                         rep["overall_status"] = "delivery-outcome-unknown"
-                        _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
-                        _ls.journal_append(jname, {"kind": "delivery_outcome_unknown", "run_id": fid,
+                        _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep)
+                        _delivery_write(ctx, "journal_append", jname, {"kind": "delivery_outcome_unknown", "run_id": fid,
                                                    "workitem_id": fid, "delivery_id": _did,
                                                    "cause": "receipt-write-failed"})
     elif plan and not (handoff_ok and report_ok):
@@ -511,5 +522,5 @@ def _deliver(ctx, rep, *, plan, handoff_ok, report_ok, jname, fid):
                            "reason": "durable RunHandoff/final report не зафиксированы — доставка "
                                      "запрещена до надёжной фиксации доказательств и состояния"}
         rep["overall_status"] = "delivery-failed"
-        _ls.durable_write_json(features_dir / fid / "run-report.json", rep)
+        _delivery_write(ctx, "durable_write_json", features_dir / fid / "run-report.json", rep)
 

@@ -1,0 +1,76 @@
+{
+  "observed_at": "2026-10-19T07:48:32.710802+00:00",
+  "status": "complete",
+  "pr": "https://github.com/Proektnyy-ofis/ii-sreda/pull/1193",
+  "tested_head": "9d2387706d069c3d7eac7d851777e240494c6760",
+  "merge_commit": "ffe4d9ee79cd8f7033ab5ef1bf3325acd96e63b7",
+  "merged_at": "2026-10-19T07:44:19Z",
+  "current_ci_success": 16,
+  "delivery_executor": "session02",
+  "independent_observer": "session04; no parallel merge or deployment",
+  "kit_version": "4.11.0",
+  "public_url": "https://sreda.testdash.site",
+  "health_version": "ffe4d9ee",
+  "database": "connected",
+  "service": "active",
+  "public_bundle": "index-BS-d4qln.js",
+  "public_bundle_sha256": "cfe33e5e96bdc09a4ea1bc41f60914125ee14d00ad4ecb8e2d314d04c7eb8c67",
+  "remote_postdeploy_checks": {
+    "merge_is_ancestor_of_deployed_source": true,
+    "service_active": true,
+    "deploy_stamp_matches_source": true,
+    "public_health_ok": true,
+    "database_connected": true,
+    "health_version_matches_source": true,
+    "public_bundle_name_matches": true,
+    "public_bundle_bytes_match": true,
+    "kit_version_4_11_0": true
+  },
+  "local_public_check_passed": true,
+  "scope": "CI, merge, canonical deployment, source/stamp/service/health and bundle bytes verified from server and local Mac. No AI inference or owner product acceptance claim.",
+  "source_receipts": [
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/delivery1193-followthrough/pr-observation-20261019T074448477565Z.json",
+      "sha256": "60e63e40c98a80fc63a468d2440a9d20964b2201a635989d03866e12c5150ad3"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/delivery1193-followthrough/post-deploy-20261019T074700405588Z.json",
+      "sha256": "3fb52598f74c254a629182d812454dbc631b5a86897ae61bfe1c6cca4f18044a"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/delivery1193-followthrough/local-public-20261019T074729817984Z.json",
+      "sha256": "d5cc7f82a9f886cbb14912d5ddd7e258ee7ce0ecc57860e72e315d6e759dcb42"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/session02-delivery-final-snapshot-2026-10-19.json",
+      "sha256": "fe033bf3b6bef16277b4e8f2da12b463e561cf030e73a1a8cba6979766d833f9"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/delivery1193-followthrough/docs-index-reviewed-committed-binding.json",
+      "sha256": "ee2020dedb48894587574983222f6661ef9ab9458f586b735d7c0f17dcea47af"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/delivery1193-followthrough/pdf-teardown-independent-review.json",
+      "sha256": "47e8eab6174fd277ecd2082f954e2a3ec82ed374cbc2d6a6b76a57a0b88b88a5"
+    },
+    {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/delivery1193-followthrough/docs-index-independent-review-corrected-pass-20261016T175619494452Z.json",
+      "sha256": "2163ddee69cca713aa21f756d6d8d832615ba785f6368dfbeb12b730d3811af6"
+    }
+  ],
+  "source_refresh": {
+    "recorded_at": "2026-10-19T08:33:33.239849+00:00",
+    "reason": "Mutable peer final receipt changed after the historical completion was captured; current projection uses a frozen snapshot. Original historical receipt and its hash are retained unchanged.",
+    "historical_source": {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session02/delivery-final-2026-10-19.json",
+      "sha256": "e9a32631f84c3e002d7c80a73ea87353b06b0000ec838d14b244c6af5243807c"
+    },
+    "current_snapshot": {
+      "path": "/Users/sasad/Documents/Codex/2026-10-15/referenced-chatgpt-conversation-this-is-an/outputs/parallel-sessions-2026-10-16/session04/reconcile-2026-10-19/session02-delivery-final-snapshot-2026-10-19.json",
+      "sha256": "fe033bf3b6bef16277b4e8f2da12b463e561cf030e73a1a8cba6979766d833f9"
+    },
+    "critical_delivery_facts_match": true,
+    "historical_bytes_recovered": false,
+    "scope": "Source binding repair only; no new deployment, CI or acceptance claim"
+  }
+}

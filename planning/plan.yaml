@@ -195,6 +195,27 @@ goals:
     # переведена в `dropped` тем же решением.
 
 
+  - id: verification-cycle-performance
+    # Поручение владельца 19.10.2026, #1321; самостоятельное техническое направление.
+    # Полевые доказательства пользы не являются prerequisite независимой оптимизации.
+    freeze_relation: extension
+    status: active
+    outcome:
+      end_to_end_baseline_and_repeat_causes_are_source_bound: false
+      small_changes_get_measured_faster_feedback_without_lowering_final_gates: false
+      parent_and_representative_children_apply_verified_policy_without_drift: false
+
+
+  - id: autonomous-work-distribution
+    # #1322: независимая техническая работа, не закрытие полевой квалификации #1278.
+    freeze_relation: extension
+    status: active
+    outcome:
+      product_goal_becomes_capability_and_resource_aware_parallel_work: false
+      interrupted_attempts_recover_without_duplicate_or_foreign_effects: false
+      actual_execution_and_verification_are_source_bound_and_measured: false
+
+
   - id: child-code-style-held-by-machine
     # НОВОЕ АКТИВНОЕ НАПРАВЛЕНИЕ, взято 2026-09-29 по жалобе владельца из дочек: где пишут несколько
     # людей и агентов, код расползается — русские имена, импорты через слои, разная структура. Ресерч
@@ -1084,6 +1105,57 @@ current_milestone:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  # Независимая техническая очередь. Полевые исходы ниже остаются открытыми.
+  - id: verification-cycle-performance-baseline
+    title: Измерить существующий цикл проверок и подготовить первый ограниченный срез ускорения
+    type: quality
+    goal: verification-cycle-performance
+    status: in_progress
+    owner_role: qa
+    value: high
+    issue: 1321
+    depends_on: []
+    write_scope: [docs/change-briefs/, qualification/]
+    evidence: qualification/PROGRESS-AND-VERIFICATION-BASELINE-2026-10-20.md
+    note: >-
+      Сведены 17 существующих CI runs и 111 jobs, причины известных повторов и аудит
+      пяти дочек; семь категорий имеют ограниченные источники, семь ещё без них.
+      Import-only срез PR1325 уже влит; повторять его не нужно. Сквозной baseline
+      и сопоставимый ABBA не завершены; общий #1321 и эта работа остаются открытыми.
+    rationale: >-
+      Прямое поручение владельца 19.10: ускорить проверки Кита и дочек, сохранив обязательную
+      защиту. Начальный срез — baseline из существующих источников с точными SHA/версиями,
+      причинами повторов и пропусками; затем Change Brief одного измеримого улучшения.
+      Учесть уже влитые PR1305/1306/1309/1312/1313/1317/1319, не повторять их работу.
+      Полная приёмка остаётся в #1321: baseline не доказывает ускорение, а parent-only правка
+      не доказывает эффект в дочках. Код следующего среза получает собственные границы/review/CI;
+      эта запись не разрешает full/paid/provider/release/deploy или массовые правки продуктов.
+  - id: automatic-work-recovery-proof
+    title: Обычная разрешённая работа имеет проверенное продолжение после прерывания
+    type: quality
+    goal: autonomous-work-distribution
+    status: todo
+    owner_role: qa
+    value: high
+    issue: 1322
+    depends_on:
+      - delegation-owner-fencing
+    write_scope:
+      - qualification/
+    evidence: qualification/PROGRESS-AND-VERIFICATION-BASELINE-2026-10-20.md
+    rationale: >-
+      Следующий технический proof по открытому контракту #1322: выбрать существующую
+      разрешённую обычную работу, до исполнения закрепить границы и критерии, затем
+      проследить реальные старты, прерывание, сохранённое состояние и продолжение
+      без повторного успешного пакета и чужих эффектов. Использовать уже влитые
+      PR1324/1330/1332/1334–1342, не строить их заново. Источники должны различать
+      actual callback, восстановленный результат и новую попытку; wall/queue/idle,
+      вмешательства и известные расходы сохраняются, отсутствующее остаётся unknown.
+      Контролируемый транспорт не объявляется полевой автономностью. Scope этой
+      записи — подготовка и наблюдение; production fixes требуют отдельного Change
+      Brief, новые paid/native вызовы, релиз и deploy ею не разрешены. Полевая #1278
+      остаётся отдельной, независимые технические задачи не зависят от набора #1243.
+
   - id: child-value-twenty-real-works
     title: На двадцати–тридцати настоящих работах измерены результат и цена сопровождения
     type: quality
@@ -1187,20 +1259,21 @@ work:
     rationale: Полевой прогон 16.10 подтвердил настоящий released hook, frozen baseline и отказ нового
       пересечения слоёв, сообщение при отсутствии линтера на восстановленном контролируемом варианте,
       статьи конституции в настоящем prompt reviewer и правило идентификаторов самого Kit. Достигнуты
-      4 из 5 исходов; combined hook/невозможность merge не засчитан. PR1193 обновления дочки ещё ожидает
-      подтверждения доставки; это не критерий выполненного server merge-block.
+      4 из 5 исходов; combined hook/невозможность merge не засчитан. PR1193 обновления Kit 4.11.0
+      влит и выложен 19.10; коммит, health и байты публичной сборки независимо сверены.
+      Доставка не заменяет доказательство обязательного server merge-block.
     waiting_on: GitHub private repository protection/rules API403 не позволяет доказать обязательный
       server merge-block. Настоящий native hook уже квалифицирован; прежний Claude auth blocker устарел.
     human_decision: Решить способ подтверждения обязательной серверной защиты приватного репозитория;
       покупка тарифа или публикация репозитория автоматически не разрешены.
-    evidence: qualification/COORDINATION-SESSION04-2026-10-16.md
+    evidence: qualification/COORDINATION-SESSION04-2026-10-19.md
 
   - id: measure-first-hour-with-a-stranger
     # Исторический id; текущая приёмка изменена прямым решением владельца 05.10.
     title: Владелец завершает первые работы в трёх разных репозиториях с измеренным сопровождением
     type: research
     goal: first-hour-for-a-stranger
-    status: todo
+    status: in_progress
     owner_role: product
     value: high
     write_scope:
@@ -1208,6 +1281,10 @@ work:
     rationale: 'P0. Решение владельца 05.10 «засчитывать будем на мне»: выполнить три owner-led сессии в разных репозиториях без Kit на старте. Результат ≤5 минут, готовность ≤15 минут, принятый PR отдельно; измерить вопросы, CLI, тупики, помощь и ручные решения, 0 внутренних YAML/выбора роли. Прежнее знакомство владельца явно записано; опыт независимых новичков не объявляется. qualification/FIRST-HOUR-PROTOCOL-2026-10-05.md'
     depends_on:
     - first-hour-three-strangers-protocol
+    evidence: qualification/COORDINATION-SESSION04-2026-10-19.md
+    note: Локальная правка школы принята владельцем и опубликована session05; это одна отдельная работа.
+      Полезное объяснение и doctor дали ограниченные временные сигналы, setup timeout сохранён;
+      три полных first-hour исхода не доказаны, primary двух экономических дочек не пополняется.
 
   # ══ Направление prove-the-loop-not-add-capabilities — взято 2026-09-23 (мандат ревью) ════════════
 

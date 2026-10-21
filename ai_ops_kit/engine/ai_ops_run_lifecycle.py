@@ -68,13 +68,17 @@ def live_provider_refusal(res, explicit):
               "`--provider mock`.")
 
 
-def _reconcile_pending_delivery(features_dir, fid, child_root):
+def _reconcile_pending_delivery(features_dir, fid, child_root, *, delivery_guard=None):
     """v3.0.16/v3.0.17 (finding аудита #2/P0): сверить с remote КАЖДУЮ незавершённую доставку (Intent без
     Receipt) и дописать DeliveryReceipt — но ТОЛЬКО при СТРОГОМ совпадении идентичности PR с Intent
     (repository + head.sha == commit_sha + base.ref). PR той же ветки, но с ДРУГИМ коммитом НЕ
     засчитывается за подтверждение старой доставки. Все записи — обязательные барьеры (реконсиляция НЕ
     рапортует успех, если Receipt фактически не сохранился). Идемпотентно, ничего не создаёт на remote.
     -> список исходов по delivery_id | None (нечего сверять)."""
+    from contextlib import nullcontext
+    from types import SimpleNamespace
+    from ai_ops_kit.engine.ai_ops_run_lifecycle_stages import _delivery_write
+    owned = SimpleNamespace(delivery_guard=delivery_guard or nullcontext)
     from pathlib import Path as _P
     # _outbox_dir/_unresolved_intents/_nonfinal_receipt_intents остаются в ai_ops_run (первые два
     # нужны и forbidden-функции/тестам) — ленивый импорт, чтобы не замкнуть импорт-граф.
@@ -105,7 +109,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
             results.append({"delivery_id": did, "status": "unavailable"})   # оставляем на следующий прогон
             continue
         if rc.get("status") == "absent":
-            _w = _ls.durable_write(rp, {**_base, "status": "not-delivered", "remote_sha": None},
+            _w = _delivery_write(owned, "durable_write", rp, {**_base, "status": "not-delivered", "remote_sha": None},
                                    require_keys=("kind", "delivery_id", "status"))
             results.append({"delivery_id": did, "status": "reconciled-absent" if _w.get("ok")
                             else "receipt-write-failed"})
@@ -116,7 +120,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
                 and rc.get("base_ref") == intent.get("base_ref"))
         if not _idn:
             # PR ветки есть, но это НЕ та доставка (другой SHA/base/repo) -> НЕ подтверждаем старую.
-            _w = _ls.durable_write(rp, {**_base, "status": "mismatch", "remote_sha": rc.get("head_sha"),
+            _w = _delivery_write(owned, "durable_write", rp, {**_base, "status": "mismatch", "remote_sha": rc.get("head_sha"),
                                         "remote_base_ref": rc.get("base_ref"),
                                         "remote_repository": rc.get("repository"), "sha_verified": False,
                                         "pr_url": rc.get("url"), "pr_number": rc.get("number")},
@@ -129,7 +133,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
         # Поля-факты (`checks_status`/`total`/`failed`) и поле-вердикт (`checks_verified`) пишутся из
         # одного источника — `pr_open.checks_verified()`, чтобы вердикт нельзя было проставить мимо фактов.
         _chk = rc.get("checks") or {"status": "unavailable"}
-        _w = _ls.durable_write(rp, {**_base, "status": "reconciled", "remote_sha": rc.get("head_sha"),
+        _w = _delivery_write(owned, "durable_write", rp, {**_base, "status": "reconciled", "remote_sha": rc.get("head_sha"),
                                     "sha_verified": True, "pr_url": rc.get("url"),
                                     "pr_number": rc.get("number"), "pr_state": rc.get("pr_state"),
                                     "merged": rc.get("merged"),
@@ -141,7 +145,7 @@ def _reconcile_pending_delivery(features_dir, fid, child_root):
         if not _w.get("ok"):
             results.append({"delivery_id": did, "status": "receipt-write-failed"})   # НЕ рапортуем успех
             continue
-        _ls.journal_append(jn, {"kind": "delivery_reconciled", "run_id": fid, "workitem_id": fid,
+        _delivery_write(owned, "journal_append", jn, {"kind": "delivery_reconciled", "run_id": fid, "workitem_id": fid,
                                 "delivery_id": did, "pr_url": rc.get("url"), "remote_sha": rc.get("head_sha")})
         results.append({"delivery_id": did, "status": "reconciled", "pr_url": rc.get("url")})
     return results
@@ -152,6 +156,8 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
     """Регистрация active-work + concurrency-preflight (координация параллельных сессий).
     K6: вынесено из run() без изменения поведения. -> (aw_path, preflight, error|None)."""
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
+    if active_work._git_common_dir(child_root):
+        aw_path = active_work.shared_registry_path(child_root)
     # v3.0.12 (finding аудита блок B): общий реестр координации повреждён -> FAIL-CLOSED (не стартуем
     # вслепую: пустая карта скрыла бы чужую активную работу и две сессии столкнулись бы). Проверяем
     # ДО preflight/register, чтобы register не наткнулся на corrupt-raise без обработки.
@@ -214,7 +220,7 @@ def _register_active_work(child_root, signals, write_scope, fid, session, lifecy
                                            audience=_run_start_audience(child_root))
         except active_work.ActiveWorkCorrupt as _e:   # v3.0.12: сбой durable-записи реестра не молчит
             lifecycle_errors.append(f"active-work register: {_e}")
-            _reg_rc = 0        # сбой записи реестра уже назван выше — не путать его с отказом
+            _reg_rc = 1        # lost claim never authorizes a writer
     if _reg_rc:
         return None, None, {"schema_version": 1, "kind": "run-report", "workitem_id": fid,
                 "status": "blocked",
@@ -324,8 +330,8 @@ def _resolve_models(ctx):
 
     K6: вынесено из run() без изменения поведения. Мутирует `ctx` (writer/reviewer model+prov,
     model_resolution, sec_qualified, klp_by_env/trust_cache/trust_now/trust_env). Явный --model =
-    override (записывается). Всё под fail-safe: нет резолва/ключа/endpoint -> прежнее поведение
-    (passthrough --model) + честная запись в отчёт. JIT provider-preflight PRIMARY не пройден ->
+    override (записывается). Без явного model в API-пути нет допущенного доступного кандидата/сбой назначения ->
+    blocked-preflight; явный override и остальные providers сохраняют прежний путь. JIT provider-preflight PRIMARY не пройден ->
     возвращает blocked-preflight-отчёт (fail-closed, provider не строится). -> error-dict | None.
     """
     from ai_ops_kit.providers import orchestrator
@@ -337,9 +343,17 @@ def _resolve_models(ctx):
     try:
         from ai_ops_kit.providers import model_router as _mr
         from ai_ops_kit.providers import provider_endpoints as _pe
-        _plan = _mr.plan_run(signals=ctx.signals)   # v3.9.0-rc3: signals -> preferred_writer_tier
+        available = None
+        if ctx.model is None and ctx.provider_name == "openai-compatible":
+            available = {p for p in _pe.PROVIDER_ENDPOINTS if _pe.key_available(p)}
+        _plan = (_mr.plan_run(signals=ctx.signals, available_providers=available) if available is not None
+                 else _mr.plan_run(signals=ctx.signals))
         ctx.model_resolution = {"kind": "ModelResolution", "plan": _plan, "applied": False,
                                 "mode": "explicit-override" if ctx.model else "router", "notes": []}
+        if available is not None:
+            ctx.model_resolution["provider_availability"] = {
+                "basis": "local-api-key-presence", "available_providers": sorted(available),
+                "unavailable_providers": sorted(set(_pe.PROVIDER_ENDPOINTS) - available), "online_health": None}
         # v3.8.3-rc3 Dynamic Model Trust: JIT provider-preflight для КАЖДОЙ реально вызываемой модели
         # (primary/reviewer/fallback/escalation), а не только primary+reviewer. Trust-переменные видны
         # и в fix-loop (эскалация проверяет trust там).
@@ -460,10 +474,15 @@ def _resolve_models(ctx):
                             "reason": _fpt.get("reason"),
                             "note": "необязательный fallback ИСКЛЮЧЁН по JIT-trust (не блокирует primary)"}
             else:
-                ctx.model_resolution["notes"].append("router не применён (implementation не резолвится/нет ключа) -> passthrough --model")
+                ctx.model_resolution["preflight_blocked"] = True
+                ctx.model_resolution["key_preflight"] = {"ready": False, "blocks": [
+                    "нет допущенной API-модели с локальным ключом (или ключ исчез до применения)"]}
     except Exception as _e:  # noqa: BLE001
         ctx.model_resolution = {"kind": "ModelResolution", "error": str(_e)[:200], "applied": False,
                                 "mode": "explicit-override" if ctx.model else "router"}
+        if ctx.model is None and ctx.provider_name == "openai-compatible":
+            ctx.model_resolution.update(preflight_blocked=True, key_preflight={"ready": False,
+                "blocks": [f"назначение API-модели недостоверно: {type(_e).__name__}"]})
     # v3.7.3 (#5 flip): security needs_review закрывает ТОЛЬКО КВАЛИФИЦИРОВАННЫЙ security-судья
     # (security_review.resolved в plan_run) ЛИБО человек (ApprovalRecord). Общий code reviewer — НЕТ.
     # Пока qualified security-судьи нет (до Bench v2) -> security needs_review -> pending_human до

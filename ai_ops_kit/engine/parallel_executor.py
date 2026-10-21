@@ -22,6 +22,8 @@ from __future__ import annotations
 import concurrent.futures as _cf
 import json
 import sys
+from datetime import datetime, timezone
+from time import monotonic
 from pathlib import Path
 
 import yaml
@@ -48,6 +50,18 @@ def _safe_run(package_runner, pkg):
     return r
 
 
+def _timed_run(package_runner, row, queued_at, pkg):
+    """Факт входа в callback, а не рекомендация/физический model spawn."""
+    started = monotonic()
+    row.update(runner_started_at=datetime.now(timezone.utc).isoformat(),
+               queue_seconds=max(0.0, started - queued_at))
+    try:
+        return _safe_run(package_runner, pkg)
+    finally:
+        row.update(runner_finished_at=datetime.now(timezone.utc).isoformat(),
+                   execution_seconds=max(0.0, monotonic() - started))
+
+
 def _run_packages(plan, by_id, package_runner, max_parallel=pp.MAX_PARALLEL):
     """Готовые пакеты занимают свободный слот (≤2), не ожидая постороннюю работу.
 
@@ -66,7 +80,9 @@ def _run_packages(plan, by_id, package_runner, max_parallel=pp.MAX_PARALLEL):
                 if bad is not None:
                     results[pid] = {"status": "blocked-dependency", "sha": None,
                                     "gate_report": {"all_pass": False}, "blocked_by": bad}
-                    trace.append({"pkg": pid, "mode": "blocked-dependency", "dep": bad})
+                    trace.append({"pkg": pid, "mode": "blocked-dependency", "dep": bad,
+                                  "submitted_at": None, "runner_started_at": None, "runner_finished_at": None,
+                                  "queue_seconds": None, "execution_seconds": None})
                     pending.remove(pid)
                     continue
                 if len(running) >= limit or not all(d in results for d in deps):
@@ -78,7 +94,10 @@ def _run_packages(plan, by_id, package_runner, max_parallel=pp.MAX_PARALLEL):
                 for row in running.values():
                     if row["mode"] == "single":
                         row["mode"] = "parallel"
-                running[pool.submit(_safe_run, package_runner, by_id[pid])] = {"pkg": pid, "mode": mode}
+                row = {"pkg": pid, "mode": mode, "submitted_at": datetime.now(timezone.utc).isoformat(),
+                       "runner_started_at": None, "runner_finished_at": None,
+                       "queue_seconds": None, "execution_seconds": None}
+                running[pool.submit(_timed_run, package_runner, row, monotonic(), by_id[pid])] = row
                 pending.remove(pid)
             if running:
                 done, _ = _cf.wait(running, return_when=_cf.FIRST_COMPLETED)

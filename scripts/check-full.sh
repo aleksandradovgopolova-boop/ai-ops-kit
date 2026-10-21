@@ -12,6 +12,7 @@ export PYTHONDONTWRITEBYTECODE=1
 cd "$(dirname "$0")/.."
 
 # --pr обещает конкретный набор: пользовательский selector не может сузить его молча.
+HOST_ARGS=("$@")
 PROFILE=full-current-python
 if [[ "${1:-}" == "--pr" ]]; then PROFILE=pr-current-python; shift; fi
 CUSTOM=0
@@ -58,6 +59,14 @@ if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
 fi
 
 FLOOR=$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' pyproject.toml | head -1)
+
+# Collection-only не исполняет тесты; широкие профили требуют настоящего host-slot.
+# Исходные argv сохраняются: --pr нельзя потерять при re-exec после shift.
+if [[ "$PROFILE" != collection-only ]] && ! "$PYTHON" -m ai_ops_kit.devtools.host_resource_cli --verify-inherited; then
+  exec "$PYTHON" -m ai_ops_kit.devtools.host_resource_cli \
+    --owner kit-check-full --wait-seconds 3600 -- bash "$0" "${HOST_ARGS[@]}"
+fi
+
 CURRENT=$("$PYTHON" -c 'import platform, sys; print(f"{platform.python_implementation()} {platform.python_version()} / {sys.platform}")')
 
 echo "ОХВАТ: ${PROFILE} — ${CURRENT}."

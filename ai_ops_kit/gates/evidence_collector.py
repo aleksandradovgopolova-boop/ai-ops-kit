@@ -34,6 +34,7 @@ import yaml
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import project_detector       # noqa: E402
 from ai_ops_kit.gates import verification_tiers     # noqa: E402  v3.26.0
+from ai_ops_kit.shared import lifecycle_store as receipts
 # профиль стиля дочки (#1183): линия и её сравнение — в checks (слой ниже gates, импорт вниз разрешён)
 from ai_ops_kit.checks import lint_baseline, lint_profile
 # текст находки «стиль кода никто не держит» — в слое речи (ui ниже gates, импорт вниз разрешён)
@@ -79,7 +80,8 @@ def _docs_only_result(revision, impact_status, verification_info):
     доказательство, и подменять его освобождением значило бы прятать факт за отговоркой."""
     return {
         "schema_version": 1, "kind": "evidence-collection",
-        "revision": revision, "checks": {},
+        "revision": revision, "checks": {check: {"status": "skip", "execution_status": "SKIP",
+                                                   "reason": impact_status} for check in CHECK_ORDER},
         "schema_evidence": {},
         "gate_evidence": {"implementation_verification": {
             "status": "pass",
@@ -222,7 +224,41 @@ def _add_warnings(iv: dict, extra: list) -> None:
         iv["warnings"] = list(iv.get("warnings") or []) + extra
 
 
-def collect(profile, root, policy, changed_files=None, broker=None, lifecycle_intent=None):
+def _execute_with_receipt(root, policy, broker, check, cmd, profile, context):
+    action = {"op": "shell", "command": cmd}
+    # Reuse не обходит текущий запрет Tool Broker. Неизвестная policy → обычный broker.
+    decision = policy.decide(action) if hasattr(policy, "decide") else {"allow": False}
+    if not decision.get("allow"):
+        return broker.execute(action, root, policy), {"status": "BLOCKED", "reused": False,
+                                                     "reason": "текущая политика не разрешает reuse"}
+    captured = {}
+    def execute():
+        captured.update(broker.execute(action, root, policy))
+        return {"status": ("BLOCKED" if not captured.get("allowed") else
+                           "PASS" if captured.get("ok") else "FAIL"),
+                "exit_code": captured.get("exit_code")}
+    receipt = receipts.run(root, check, cmd, execute, context or (lambda: {"complete": False}),
+                           extra={"profile": profile})
+    ev = captured if not receipt["reused"] else {
+        "allowed": True, "ok": True, "exit_code": 0, "output_tail": ""}
+    if receipt["status"] != "PASS":
+        ev = {**ev, "ok": False}
+    return ev, receipt
+
+
+def _verification_commands(profile, root, changed_files, lifecycle_intent):
+    by_check = _commands_by_check(profile)
+    info = (verification_tiers.select_tests(changed_files, str(root),
+                lifecycle_intent=lifecycle_intent, profile=profile) if (changed_files or
+                lifecycle_intent in ("merge_candidate", "release_candidate", "merge", "release") or
+                (profile.get("required_checks") or {}).get(lifecycle_intent)) else None)
+    if info and info["tier"] != "full" and info.get("targeted_command"):
+        by_check["test"] = [("targeted", info["targeted_command"])]
+    return info, by_check
+
+
+def collect(profile, root, policy, changed_files=None, broker=None, lifecycle_intent=None,
+            verification_context=None):
     """Прогнать команды профиля через Tool Broker и собрать evidence для implementation_verification.
 
     v3.27.3 WP4: Если changed_files задан, используется verification_tiers для определения
@@ -238,42 +274,36 @@ def collect(profile, root, policy, changed_files=None, broker=None, lifecycle_in
         raise TypeError("collect() requires broker parameter (tool_broker module)")
     verification_tiers.decide_tier([], lifecycle_intent=lifecycle_intent)  # unknown intent: до запуска процессов
     root = Path(root)
-    by_check = _commands_by_check(profile)
+    if (verification_context is None and root.resolve() == Path(__file__).resolve().parents[2]
+            and (root / "installer/ai_ops.py").is_file()):
+        verification_context = lambda: receipts.python_context(root)
+    verification_info, by_check = _verification_commands(profile, root, changed_files, lifecycle_intent)
+    required_checks = (profile.get("required_checks") or {}).get(lifecycle_intent, [])
     revision = broker._revision(root)
     checks_report, schema_evidence, provided, blockers = {}, {}, [], []
     not_applicable, tests_absent = [], False   # v2.61: инструмент отсутствует в подтверждённом стеке
 
-    # v3.27.3 WP4: Progressive Verification — определяем verification tier и targeted command
-    verification_info = None
-    if changed_files or lifecycle_intent in ("merge_candidate", "release_candidate", "merge", "release"):
-        verification_info = verification_tiers.select_tests(changed_files, str(root), lifecycle_intent=lifecycle_intent, profile=profile)
-        tier = verification_info.get("tier", "affected")
-        impact_status = verification_info.get("impact_status")
-        targeted_cmd = verification_info.get("targeted_command")
-
-        # v3.27.3 WP4: skip tier — docs-only, не запускаем product build/test
-        if tier == "skip":
-            return _docs_only_result(revision, impact_status, verification_info)
-
-        # Если tier=full или нет targeted command — используем обычные команды из профиля
-        # Если tier=affected/module и есть targeted command — заменяем test-команду
-        if tier != "full" and targeted_cmd:
-            # Заменяем test-команды на targeted
-            by_check["test"] = [("targeted", targeted_cmd)]
+    if verification_info and verification_info["tier"] == "skip":
+        return _docs_only_result(revision, verification_info["impact_status"], verification_info)
 
     for check in CHECK_ORDER:
         flag, schema_key = CHECK_MAP[check]
         cmds = by_check[check]
         if not cmds:
             checks_report[check] = {"status": "not_run",
+                                    "execution_status": "BLOCKED" if check in required_checks else "NOT_RUN",
                                     "reason": "команда не определена в профиле (undetermined)"}
+            if check in required_checks:
+                blockers.append(f"{check}: обязательная проверка стадии не настроена")
+                continue
             not_applicable.append(flag)         # нечем проверять -> не применимо к этому стеку
             if check == "test":
                 tests_absent = True
             continue
         runs, all_ok, any_denied = [], True, False
         for lang, cmd in cmds:
-            ev = broker.execute({"op": "shell", "command": cmd}, root, policy)
+            ev, receipt = _execute_with_receipt(root, policy, broker, check, cmd, profile,
+                                                verification_context)
             if not ev["allowed"]:
                 any_denied = True; all_ok = False
                 runs.append({"language": lang, "command": cmd, "denied": True, "reason": ev["reason"]})
@@ -282,6 +312,7 @@ def collect(profile, root, policy, changed_files=None, broker=None, lifecycle_in
             all_ok = all_ok and ok
             runs.append({"language": lang, "command": cmd,
                          "exit_code": ev.get("exit_code"), "ok": ok,
+                         "receipt": receipt,
                          "output_tail": ev.get("output_tail", "")})
         # honest: pytest exit 5 = «нет собранных тестов» — НЕ проваленный тест. Считаем ПО-РУНОВО
         # (finding adversarial-review: прежний all(...) ломался в полиглот-репо, где рядом с

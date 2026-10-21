@@ -514,3 +514,156 @@ def _intent_discuss(task, child_root, signals, a):
         _say(child_root, "from_discovery_draft", draft.relative_to(child_root), created)
     return 0
 
+
+
+def _prepare_automatic_roots(root, wid, signals, base, *, session_identity=None, execution_policy=None):
+    """Ordinary automatic route can compile a bounded fresh goal without model calls."""
+    from ai_ops_kit.engine import atomic_planner
+    options = dict(session_identity=session_identity, execution_policy=execution_policy)
+    atomic_planner.prepare_literal_goal(root, wid, signals, base, **options)
+    return _automatic_roots(root, wid, signals, base, **options)
+
+
+def _automatic_roots(root, wid, signals, base, *, session_identity=None, execution_policy=None):
+    """Opt-in saved, independent roots only. No model/clone/write during admission."""
+    import hashlib
+    import os
+    import itertools
+    import re
+    import yaml
+    from ai_ops_kit.engine import parallel_planner, parallel_live, run_plan, atomic_planner
+    from ai_ops_kit.shared import budget as budgets, gitio
+    root = Path(root).resolve()
+    snapshots = {}
+
+    def read(name):
+        p = root / name
+        if (any(q.is_symlink() for q in (p, *p.parents) if q.is_relative_to(root))
+                or not p.resolve().is_relative_to(root)):
+            raise ValueError("automatic unsafe saved input")
+        raw = p.read_bytes()
+        snapshots[name] = hashlib.sha256(raw).hexdigest()
+        data = yaml.safe_load(raw)
+        if not isinstance(data, dict):
+            raise ValueError("automatic saved artifact must be an object")
+        return data
+
+    try:
+        cfg = read(".ai-ops.yaml") if (root / ".ai-ops.yaml").exists() else {}
+        economy = cfg.get("session_economy") or {}
+        enabled = economy.get("auto_parallel_independent_roots", False)
+        if not isinstance(enabled, bool):
+            raise ValueError("automatic opt-in must be boolean")
+        if not enabled:
+            return None
+        if not isinstance(wid, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", wid):
+            raise ValueError("automatic unsafe goal identity")
+        candidates = ("work-graph.yaml", ".ai/runtime/work-graph.yaml", f"features/{wid}/work-graph.yaml")
+        paths = [p for p in candidates if (root / p).exists()
+                 or any(q.is_symlink() for q in (root / p, *(root / p).parents) if q.is_relative_to(root))]
+        if not paths:
+            return None
+        if len(paths) != 1:
+            raise ValueError("automatic ambiguous saved WorkGraph")
+        wg = read(paths[0])
+        shape = {"schema_version": int, "kind": str, "id": str, "feature": str, "execution_mode": str,
+                 "packages": list, "integration_order": list, "aggregate_verification": list}
+        if (set(wg) - {'goal_plan_intent'} != set(shape) or any(type(wg[k]) is not t for k, t in shape.items())
+                or wg["schema_version"] != 1 or wg["kind"] != "WorkGraph"
+                or not re.fullmatch(r"WG-[0-9]{3,}", wg["id"]) or wg["feature"] != wid):
+            raise ValueError("automatic invalid/wrong-feature WorkGraph")
+        intent_name = wg.get('goal_plan_intent')
+        intent = None
+        if 'goal_plan_intent' in wg:
+            if intent_name != f'features/{wid}/goal-plan-intent.yaml':
+                raise ValueError('automatic invalid goal plan intent path')
+            intent = read(intent_name)
+        pkgs = wg["packages"]
+        for p in pkgs:
+            if (not isinstance(p, dict) or set(p) - {"id", "write_scope", "depends_on", "shared_contracts"}
+                    or not isinstance(p.get("id"), str) or not p.get("id") or p["id"] == wid
+                    or any(not isinstance(p.get(k, []), list) or any(not isinstance(x, str) or not x for x in p.get(k, []))
+                           for k in ("write_scope", "depends_on", "shared_contracts")) or not p.get("write_scope")):
+                raise ValueError("automatic invalid saved package")
+        ids = [p["id"] for p in pkgs]
+        if not ids or len(set(ids)) != len(ids) or sorted(wg["integration_order"]) != sorted(ids):
+            raise ValueError("automatic invalid package identity/integration order")
+        if wg["aggregate_verification"] != ["implementation_verification"]:
+            raise ValueError("automatic unsupported aggregate verification")
+        pkgs = wg["packages"]
+        if wg["execution_mode"] not in ("parallel", "hybrid") or any(p.get("depends_on") for p in pkgs):
+            raise ValueError("automatic supports independent roots only; dependencies retained")
+        if len(pkgs) < 2:
+            return None
+        if any(k not in atomic_planner.AUTOMATIC_ECONOMY_KEYS and v is not None for k, v in economy.items()):
+            raise ValueError("automatic unsupported global/session/USD hard ceiling")
+        binding = gitio.resolve_base(root, base)
+        if not binding.get("resolved") or gitio.git(root, "rev-parse", "HEAD")[1] != binding["base_sha"]:
+            raise ValueError("automatic requires current immutable base SHA")
+        entry = gitio.git(root, "ls-tree", binding["base_sha"], "--", ".ai-ops.yaml")[1].split()
+        blob = gitio.git(root, "hash-object", "--no-filters", ".ai-ops.yaml")[1]
+        mode = "100755" if (root / ".ai-ops.yaml").stat().st_mode & 0o111 else "100644"
+        if entry[:3] != [mode, "blob", blob]:
+            raise ValueError("automatic config bytes/mode must match executable base tree")
+        task_map, package_signals, declarations, contracts = {}, {}, [signals.get("execution_budget")], {}
+        caller_plan = run_plan.build_plan(signals, wid)
+        for identity in [wid, *[p["id"] for p in pkgs]]:
+            if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", identity):
+                raise ValueError("automatic unsafe identity")
+            wi = read(f"features/{identity}/workitem.yaml")
+            plan = read(f"features/{identity}/run-plan.yaml")
+            saved = read(f"features/{identity}/run-settings.yaml")
+            sig = dict(saved["signals"])
+            policy, current = saved.get("policy") or {}, execution_policy or {}
+            if (any(policy.get(k) and not current.get(k) for k in
+                    ("author", "review", "sandbox", "baseline_diff", "require_fix"))
+                    or policy.get("max_steps", 40) < current.get("max_steps", 40)
+                    or (policy.get("base_binding") or {}).get("base_sha", binding["base_sha"]) != binding["base_sha"]
+                    or any(sig.get(k) is not None for k in ("budget", "budget_contract"))):
+                raise ValueError("automatic cannot weaken saved execution policy")
+            scopes = [s for p in pkgs if identity == wid or p["id"] == identity for s in p["write_scope"]]
+            if policy.get("write_scope") and not parallel_live._scope_ok(scopes, policy["write_scope"])[0]:
+                raise ValueError("automatic scope exceeds saved policy")
+            sig["task_text"] = wi["task"]
+            expected = run_plan.build_plan(sig, identity)
+            if (wi.get("id") != identity or not isinstance(wi.get("task"), str) or not wi["task"].strip()
+                    or plan.get("workitem_id") != identity or saved.get("workitem_id") != identity
+                    or saved.get("kind") != "run-settings" or wi.get("workflow") != expected["base_workflow"]
+                    or any(plan.get(k) != expected[k] for k in ("base_workflow", "gates", "required_tracks", "task_hash"))
+                    or wi.get("human_approval_required") or sig.get("destructive")):
+                raise ValueError("automatic saved policy/identity mismatch")
+            declarations.extend([plan.get("execution_budget"), sig.get("execution_budget")])
+            if identity != wid:
+                task_map[identity], package_signals[identity] = wi["task"], sig
+            elif (any(caller_plan[k] != expected[k] for k in ("base_workflow", "gates"))
+                  or signals.get("task_text", wi["task"]) != wi["task"]):
+                raise ValueError("automatic caller policy differs from saved root")
+        for p in pkgs:
+            for scope in p["write_scope"] + p.get("shared_contracts", []):
+                if (not scope or scope in (".", "/") or Path(scope).is_absolute() or ".." in Path(scope).parts
+                        or any(c in scope for c in "*?[:\\") or not (root / scope).resolve().is_relative_to(root)
+                        or any(q.is_symlink() for q in (root / scope, *(root / scope).parents) if q.is_relative_to(root))):
+                    raise ValueError("automatic requires concrete contained scopes/contracts")
+            for contract in p.get("shared_contracts", []):
+                rc, sha, _ = gitio.git(root, "rev-parse", f"{binding['base_sha']}:{contract}")
+                if rc or gitio.git(root, "cat-file", "-t", sha)[1] != "blob":
+                    raise ValueError("automatic contract must be fixed in base")
+                if parallel_planner._overlap([contract], [s for q in pkgs for s in q["write_scope"]]):
+                    raise ValueError("automatic contract is writable")
+                contracts[contract] = sha
+        if any(not parallel_planner.can_parallel(a, b)[0] for a, b in itertools.combinations(pkgs, 2)):
+            raise ValueError("automatic scopes are not disjoint")
+        if intent is not None and (set(intent) != {'schema_version', 'kind', 'feature', 'base_sha', 'files'}
+                or type(intent.get('schema_version')) is not int or intent['schema_version'] != 1
+                or intent['kind'] != 'GoalPlanIntent' or intent['feature'] != wid or intent['base_sha'] != binding['base_sha']
+                or intent['files'] != {k: v for k, v in snapshots.items() if k not in ('.ai-ops.yaml', intent_name)}):
+            raise ValueError('automatic goal plan intent/source mismatch')
+        budget = budgets.resolve_budget(None, *declarations)
+        if budget.max_model_calls is None:
+            raise ValueError("automatic requires declared shared max_model_calls")
+        budget.ensure_execution_supported()
+        return {"work_graph": wg, "task_map": task_map, "budget": budget, "contract_shas": contracts,
+                "admission": {"base_sha": binding["base_sha"], "graph_path": paths[0], "inputs": snapshots, "identity": session_identity or f"pid:{os.getpid()}"},
+                "package_signals": package_signals}
+    except (OSError, KeyError, TypeError, yaml.YAMLError, budgets.BudgetExceeded) as exc:
+        raise ValueError(f"automatic saved admission unavailable: {exc}") from exc

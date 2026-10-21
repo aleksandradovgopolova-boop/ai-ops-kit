@@ -109,3 +109,58 @@ class TestQualityEscalationInFixLoop:
         root, _ = escalated_run
         jr = _ls.journal_read(root / "features" / "fixesc" / "lifecycle-journal.jsonl")
         assert any(e.get("kind") == "fix_attempt" for e in jr["events"])
+
+
+def test_controller_fix_attempt_keeps_shared_counter(tmp_path, monkeypatch):
+    from ai_ops_kit.engine import execution_pipeline, tool_loop, tool_broker
+    from ai_ops_kit.shared.budget import Budget
+    _git_repo(tmp_path)
+    shared, seen, calls = Budget(max_model_calls=1), [], []
+    def pipeline(*args, **kwargs):
+        seen.append(kwargs["budget"])
+        loop = tool_loop.run_loop(lambda _: (calls.append("model") or {"done": True}),
+            tmp_path, tool_broker.Policy(), budget=kwargs["budget"], max_steps=1)
+        return {**_REP_NOT_READY, "loop": loop}
+    monkeypatch.setattr(execution_pipeline, "run_pipeline", pipeline)
+    monkeypatch.setattr(ai_ops_run, "_provider_trust", lambda *a, **k: {"ready": True,
+                        "preflight": {"ready": True, "blocks": []}})
+    monkeypatch.setattr(ai_ops_run, "_load_klp_by_env", lambda *a, **k: {})
+    rep = ai_ops_run.run("bounded fix", {"task_type": "QUICK", "size": "small", "risk": "low"},
+        tmp_path, feature="bounded-fix", provider_name="openai-compatible", model="controlled-model",
+        proposer=lambda _: {"done": True}, budget=shared, review_fix_attempts=1)
+    assert len(seen) == 2 and all(item is shared for item in seen)
+    assert calls == ["model"] and shared.model_calls == 1
+    assert rep["ready_for_pr"] is False
+
+
+@pytest.mark.parametrize("mode", ["restore", "conflict", "missing", "corrupt"])
+def test_resume_preserves_saved_limits_or_refuses_unknown_prior_budget(tmp_path, monkeypatch, mode):
+    import yaml
+    from ai_ops_kit.engine import execution_pipeline, tool_loop, tool_broker
+    from ai_ops_kit.shared.budget import Budget
+    _git_repo(tmp_path)
+    target = tmp_path / "features/prior/run-plan.yaml"
+    target.parent.mkdir(parents=True)
+    if mode != "missing":
+        target.write_text("corrupt: [" if mode == "corrupt" else yaml.safe_dump(
+            {"kind": "run-plan", "execution_budget": {"max_model_calls": 2}}))
+    before = target.read_bytes() if target.exists() else None
+    calls, seen = [], []
+    def pipeline(*args, **kwargs):
+        seen.append(kwargs["budget"])
+        loop = tool_loop.run_loop(lambda _: (calls.append("model") or {"op": "read", "path": "f"}),
+            tmp_path, tool_broker.Policy(), budget=kwargs["budget"], max_steps=3)
+        return {**_REP_NOT_READY, "loop": loop}
+    monkeypatch.setattr(execution_pipeline, "run_pipeline", pipeline)
+    monkeypatch.setattr(ai_ops_run, "_resume_gate", lambda *a, **kw: ({}, None, None))
+    monkeypatch.setattr(ai_ops_run, "_run_preflight", lambda *a, **kw: ({}, None))
+    shared = Budget(max_model_calls=3) if mode == "conflict" else None
+    rep = ai_ops_run.run("prior task", {"task_type": "QUICK"}, tmp_path, feature="prior",
+        resume=True, budget=shared, proposer=lambda _: {"done": True})
+    if mode == "restore":
+        assert calls == ["model", "model"] and seen[0].model_calls == 2
+        assert rep["budget"]["max_model_calls"] == 2 and rep["budget"]["remaining_calls"] == 0
+        assert yaml.safe_load(target.read_text())["execution_budget"]["max_model_calls"] == 2
+    else:
+        assert rep.get("blocked_by") == "execution-budget" and calls == []
+        assert (target.read_bytes() if target.exists() else None) == before

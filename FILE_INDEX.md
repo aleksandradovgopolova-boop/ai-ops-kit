@@ -754,6 +754,7 @@ CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-реп�
 
 - `installer/ai_ops.py` — точка входа и роутер команд
 - `installer/setup_ops.py` — init/setup
+- `installer/setup_run.py` — общий бюджет подпроцессов и сохраняемые журналы установки
 - `installer/update_ops.py` — update
 - `installer/doctor.py` — doctor
 - `installer/selftest_ops.py` — selftest

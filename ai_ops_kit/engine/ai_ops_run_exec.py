@@ -78,7 +78,7 @@ def _note_bookkeeping_error(rep, what, exc):
 def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, install_deps,
                            hybrid_prelude, calib, ui_evidence, reevaluate_only, resume,
                            resume_ctx, attempt_id, fid, aw_path, review_fix_attempts,
-                           reviewer_proposer, author_proposer):
+                           reviewer_proposer, author_proposer, budget=None):
     """Исполнение прогона движком + fix-loop с quality-эскалацией writer'а.
 
     K6: вынесено из run() без изменения поведения. Читает/мутирует `ctx` (prop/rev_prop/auth_prop,
@@ -97,10 +97,12 @@ def _execute_with_fix_loop(ctx, uctx, *, execute, plan, discard_previous, instal
     # _provider_trust/_with_provider_fallback берём через модуль ai_ops_run (ленивый импорт): тесты
     # подменяют их как `ai_ops_run.<name>`, и без обращения через модуль подмена бы сюда не дошла.
     from ai_ops_kit.engine import ai_ops_run as _ar
+    from ai_ops_kit.shared.budget import resolve_budget
+    budget = resolve_budget(budget, plan.get("execution_budget"))
 
     def _pipe(_resume, _rctx):
         return execution_pipeline.run_pipeline(
-            ctx.task_text, ctx.signals, ctx.child_root, ctx.prop, feature=ctx.feature, plan=plan,
+            ctx.task_text, ctx.signals, ctx.child_root, ctx.prop, feature=ctx.feature, plan=plan, budget=budget,
             commit=execute, isolate=execute, open_pr=ctx.open_pr, baseline_diff=ctx.baseline_diff,
             require_fix=ctx.require_fix, max_steps=ctx.max_steps, discard_previous=discard_previous,
             sandbox=ctx.sandbox, review=ctx.review, reviewer_proposer=ctx.rev_prop,

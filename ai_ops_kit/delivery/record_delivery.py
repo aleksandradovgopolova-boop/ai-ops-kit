@@ -24,6 +24,12 @@ PR ветка часто удалена или пришла из форка, и 
 from __future__ import annotations
 
 import hashlib
+import contextlib
+import json
+import subprocess
+from datetime import datetime, timezone
+from urllib.parse import urlsplit, urlunsplit
+import yaml
 import re
 from pathlib import Path
 
@@ -147,3 +153,188 @@ def record_delivery_for_pr(root, feature_id, pr_number):
     return {"status": status, "delivery_id": did, "repository": repository, "merged": False,
             "sha_verified": False, "pr_number": pr.get("number"), "pr_url": html_url,
             "pr_state": state, "path": str(rp)}
+
+
+# Координация фактической поставки: тот же домен delivery, отдельный DeployRecord.
+# POSIX-lock локален checkout/worktree; удалённый platform lock предоставляет адаптер.
+from ai_ops_kit.gates.deploy_readiness import confirmation
+from ai_ops_kit.shared import lifecycle_store as receipts
+from ai_ops_kit.shared.secret_formats import scrub
+
+class ReleaseBlocked(RuntimeError):
+    pass
+
+
+def _safe_metadata(value):
+    """Данные выпуска, не секреты: единый scrub + удаление credential URL/query.
+
+    Идентификаторы/путь recovery задаёт доверенный адаптер; raw command/stdout сюда не входят.
+    """
+    if isinstance(value, dict):
+        return {k: _safe_metadata(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_safe_metadata(v) for v in value]
+    if isinstance(value, str):
+        def clean_url(match):
+            try:
+                u = urlsplit(match.group())
+                host = u.netloc.rsplit("@", 1)[-1]
+                return urlunsplit((u.scheme, host, u.path, "", ""))
+            except ValueError:
+                return "[invalid-source]"
+        return scrub(re.sub(r"[a-zA-Z][a-zA-Z0-9+.-]*://[^\s\"<>]+", clean_url, value))
+    return value
+
+
+def coordinator_root(root):
+    root = Path(root).resolve()
+    result = subprocess.run(["git", "rev-parse", "--git-common-dir"], cwd=root,
+                            capture_output=True, text=True, timeout=10)
+    if result.returncode:
+        raise ReleaseBlocked("не определён общий coordinator checkout/worktrees")
+    common = Path(result.stdout.strip())
+    common = common if common.is_absolute() else root / common
+    return common.resolve().parent
+
+
+def required_ci_contexts(root):
+    """Существующая декларация Kit, не второй список обязательных checks."""
+    path = Path(root) / "quality/required-contexts.yaml"
+    if not path.exists():
+        return []  # fixture/репозиторий без декларации; не заявление о внешней защите ветки
+    try:
+        data = yaml.safe_load(path.read_text())
+        contexts = data["contexts"]
+        if not contexts or not all(isinstance(c, str) and c for c in contexts):
+            raise ValueError("invalid contexts")
+        return contexts
+    except (OSError, ValueError, KeyError, TypeError, yaml.YAMLError) as exc:
+        raise ReleaseBlocked("обязательные CI-контексты не определены достоверно") from exc
+
+
+@contextlib.contextmanager
+def environment_lock(root, environment):
+    """Не удаляет lock inode и не снимает чужую блокировку. ОС освобождает после crash."""
+    try:
+        import fcntl
+    except ImportError as exc:
+        raise ReleaseBlocked("нет безопасного POSIX lock; нужен внешний coordinator") from exc
+    path = coordinator_root(root) / ".ai/runtime/deploy-locks" / (receipts.digest(environment) + ".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a+") as stream:
+        try:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError as exc:
+            raise ReleaseBlocked(f"lock среды не получен (errno={exc.errno}); возможен другой deploy; lock сохранён") from exc
+        try:
+            yield
+        finally:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
+
+
+def access_preflight(operations, probe):
+    """Только безопасные read probes. Доступы трёх поверхностей независимы.
+
+    probe(surface, operation) возвращает наблюдаемый status/code. Никаких диагнозов
+    по 404, обходов запрета и переноса успеха terminal на connector.
+    """
+    results = []
+    for op in operations:
+        surface, operation = op["surface"], op["operation"]
+        if surface not in {"connector", "user_terminal", "agent"}:
+            raise ValueError("unknown access surface")
+        try:
+            observed = probe(surface, operation)
+        except Exception:  # noqa: BLE001 — внешняя граница: неизвестный сбой блокирует доступ
+            observed = {"status": "BLOCKED", "code": "probe_exception"}
+        # Сохраняем только код и статус: exception/URL/headers могут содержать секреты.
+        results.append({"surface": surface, "operation": operation,
+                        "status": observed.get("status", "BLOCKED"),
+                        "code": observed.get("code"), "required": op.get("required", True)})
+    return results
+
+
+def _observe(callback):
+    try:
+        result = callback()
+        if not isinstance(result, dict):
+            return {"status": "BLOCKED"}
+        # Только фиксированная форма; stdout, ошибки и credential URL не сохраняются.
+        return {k: result[k] for k in ("status", "source", "version", "sha", "artifact_digest", "environment")
+                if k in result}
+    except Exception:  # noqa: BLE001 — неизвестный ответ приёмки не становится успехом
+        return {"status": "BLOCKED"}
+
+
+def _preflight_checks(preflight, checks):
+    try:
+        access = preflight()
+        if (not isinstance(access, list) or not access or
+                any(not isinstance(p, dict) or (p.get("required", True) and p.get("status") != "PASS")
+                    for p in access)):
+            raise ReleaseBlocked("нет подтверждённого доступа на необходимой поверхности")
+        checked = checks()
+        if not isinstance(checked, list) or any(not isinstance(c, dict) for c in checked):
+            raise ReleaseBlocked("результаты обязательных проверок недоступны")
+        # Адаптер не может случайно записать headers/stdout/токен в произвольном поле.
+        return ([{k: p[k] for k in ("surface", "operation", "status", "code", "required") if k in p}
+                 for p in access],
+                [{k: c[k] for k in ("name", "status", "source", "inputs_digest", "kind", "sha") if k in c}
+                 for c in checked])
+    except ReleaseBlocked:
+        raise
+    except Exception as exc:
+        raise ReleaseBlocked("preflight/обязательные проверки недоступны") from exc
+
+
+def deliver(root, *, owner, expected, checks, recovery, preflight, deploy,
+            observe_runtime, observe_public):
+    """Неопределённое действие не повторяется. Повтор сначала делает reconciliation.
+
+    checks/preflight — read-only adapters, вызываются до побочного эффекта. checks
+    обязан наблюдать required CI, если он требуется процессом; local receipt его не заменяет.
+    """
+    if not owner or not isinstance(expected, dict) or not expected.get("environment"):
+        raise ReleaseBlocked("нужны владелец и целевая среда")
+    with environment_lock(root, expected["environment"]):
+        directory = coordinator_root(root) / ".ai/runtime/deploy"
+        path = directory / (receipts.digest(expected["environment"]) + ".json")
+        previous = receipts.load(path)
+        if path.exists() and (not previous or previous.get("kind") != "DeployRecord"):
+            raise ReleaseBlocked("предыдущая запись повреждена; исход неизвестен, deploy повторять нельзя")
+        if previous and confirmation(previous)[0] != "PASS":
+            if previous.get("owner") != owner or previous.get("expected") != expected:
+                raise ReleaseBlocked("незавершённый выпуск принадлежит другому владельцу/артефакту")
+        access, checked = _preflight_checks(preflight, checks)
+        now = datetime.now(timezone.utc).isoformat()
+        record = _safe_metadata({"schema_version": 1, "kind": "DeployRecord", "owner": owner,
+                  "expected": expected, "checks": checked, "recovery": recovery,
+                  "preflight": access, "observed_at": now, "deploy_exit_code": None,
+                  "required_ci": required_ci_contexts(root),
+                  "status": "BLOCKED"})
+        # До deploy проверяем форму идентичности, recovery и checks тем же валидатором.
+        trial_observation = {**expected, "status": "PASS", "source": "contract-preflight"}
+        trial = {**record, "runtime": trial_observation, "public": trial_observation,
+                 "deploy_exit_code": 0}
+        if confirmation(trial)[0] != "PASS":
+            raise ReleaseBlocked(confirmation(trial)[1])
+        if previous and previous.get("expected") == expected:
+            record.update(runtime=_observe(observe_runtime), public=_observe(observe_public), reconciled=True)
+            record["observed_at"] = datetime.now(timezone.utc).isoformat()
+            record["status"], record["reason"] = confirmation(record)
+            record = _safe_metadata(record)
+            receipts.atomic_json(path, record)
+            # Даже несовпадение не доказывает, что действие не выполнилось. Автоповтора нет.
+            return {**record, "path": str(path), "action": "reconcile"}
+        # Durable intent ДО операции: crash/timeout после этой точки требует reconcile.
+        receipts.atomic_json(path, record)
+        try:
+            record["deploy_exit_code"] = deploy()
+        except Exception:  # noqa: BLE001 — неопределённый исход; повтор запрещён до reconcile
+            record["deploy_exit_code"] = None
+        record.update(runtime=_observe(observe_runtime), public=_observe(observe_public))
+        record["observed_at"] = datetime.now(timezone.utc).isoformat()
+        record["status"], record["reason"] = confirmation(record)
+        record = _safe_metadata(record)
+        receipts.atomic_json(path, record)
+        return {**record, "path": str(path), "action": "deploy"}

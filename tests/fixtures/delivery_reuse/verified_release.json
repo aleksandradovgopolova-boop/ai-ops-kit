@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "kind": "DeployRecord",
+  "owner": "release-owner",
+  "expected": {
+    "version": "4.5.99-fixture",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "environment": "fixture"
+  },
+  "checks": [
+    {
+      "name": "required-ci",
+      "status": "PASS",
+      "source": "ci:fixture/1",
+      "inputs_digest": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    }
+  ],
+  "runtime": {
+    "version": "4.5.99-fixture",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "environment": "fixture",
+    "status": "PASS",
+    "source": "runtime:fixture"
+  },
+  "public": {
+    "version": "4.5.99-fixture",
+    "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "artifact_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "environment": "fixture",
+    "status": "PASS",
+    "source": "public:fixture"
+  },
+  "recovery": {
+    "procedure": "Остановить поставку и сверить артефакт; восстановить вручную по проверенному runbook.",
+    "automatic_rollback": false
+  },
+  "observed_at": "2026-10-20T14:00:00+00:00",
+  "deploy_exit_code": 0,
+  "status": "PASS"
+}

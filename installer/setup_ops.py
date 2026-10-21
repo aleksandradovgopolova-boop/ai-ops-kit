@@ -176,30 +176,14 @@ def cmd_init(target_dir):
     return 0
 
 
-def _run_managed_intent(root: Path, intent: str, *extra, timeout=300):
-    """Запустить интент движка ПОДПРОЦЕССОМ из managed-слоя дочки. -> (rc, объединённый вывод).
-
-    Пакет из `.ai/managed` в sys.path ЭТОГО процесса не попадает (`init` лишь скопировал файлы —
-    доставленный код не импортируется тем же процессом, что его положил). Поэтому интент нельзя
-    вызвать импортом, только запустить его копию. Первыми аргументами идут интент и путь репозитория
-    — ровно так, как их ждёт `ai_ops_cli.py` (intent + rest[0] = child_root).
-    """
+def _run_managed_intent(root: Path, intent: str, *extra, run):
+    """Запуск из доставленного слоя; stdout/stderr сразу сохраняются журналом установки."""
     import os
-    managed = root / ".ai" / "managed"
-    cli = managed / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
-    if not cli.is_file():
-        return 1, f"движок не найден в managed-слое: {cli}"
-    env = dict(os.environ)
-    env["PYTHONPATH"] = str(managed) + os.pathsep + env.get("PYTHONPATH", "")
-    env["PYTHONDONTWRITEBYTECODE"] = "1"
-    try:
-        r = subprocess.run([sys.executable, str(cli), intent, str(root), *extra],
-                           cwd=str(root), env=env, capture_output=True, text=True, timeout=timeout)
-    except subprocess.TimeoutExpired:
-        return 1, f"интент {intent} не ответил за {timeout}s"
-    except OSError as e:
-        return 1, f"не удалось запустить интент {intent}: {e}"
-    return r.returncode, ((r.stdout or "") + (r.stderr or "")).strip()
+    cli = root / ".ai" / "managed" / "ai_ops_kit" / "cli" / "ai_ops_cli.py"
+    env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUNBUFFERED="1")
+    env["PYTHONPATH"] = str(root / ".ai" / "managed") + os.pathsep + env.get("PYTHONPATH", "")
+    result = run.command(intent, [sys.executable, "-u", str(cli), intent, str(root), *extra], env=env)
+    return result.returncode, (result.stdout + result.stderr).strip()
 
 
 # Стадии первого часа (контракт `ai_ops_kit/planning/first_hour.py`, поле `stage`). Дублируем
@@ -257,7 +241,7 @@ def _first_hour_done_lines(first_hour):
     return lines
 
 
-def _commit_kit_files(root: Path):
+def _commit_kit_files(root: Path, *, run=None):
     """Зафиксировать ТОЛЬКО служебные файлы кита (создаваемые установкой). -> (committed, detail).
 
     Жёсткое ограничение: трогаем лишь пути из `_KIT_PATHS`, и НИКОГДА `git add -A`.
@@ -268,12 +252,20 @@ def _commit_kit_files(root: Path):
     paths = [p for p in _KIT_PATHS if (root / p).exists()]
     if not paths:
         return False, "служебных файлов кита не найдено"
+    # Защита и для уже установленных дочек со старым блоком .gitignore.
+    paths.append(":(exclude).ai/runtime/setup")
 
     def _git(*args):
-        return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True)
+        command = ["git", "-C", str(root), *args]
+        if run is not None:
+            accepted = (0, 1) if args[0] == "diff" else (0,)
+            return run.command("git-" + args[0], command, accepted=accepted)
+        return subprocess.run(command, capture_output=True, text=True)
 
     try:
-        add = _git("add", "--", *paths)
+        # git add считает даже отрицательный pathspec игнорируемого каталога ошибкой.
+        # Логи защищены локальным .gitignore; commit/diff дополнительно исключают их явно.
+        add = _git("add", "--", *[path for path in paths if not path.startswith(":(exclude)")])
         if add.returncode != 0:
             return False, f"ошибка git add: {(add.stderr or add.stdout).strip()[:200]}"
         # Есть ли что коммитить по ЭТИМ путям? diff --cached --quiet: код 0 — нет изменений, 1 — есть.
@@ -448,7 +440,7 @@ def _setup_summary(root: Path, steps_done, steps_failed, first_hour=None):
         print(f"  • {r}")
 
 
-def cmd_setup(target_dir, *, apply=True):
+def _setup_steps(root, *, apply, run):
     """Единая установка вместо ручной цепочки init → doctor → onboard → bootstrap → model --flow.
 
     Та же последовательность, что описывает скилл `ai-ops` (единый источник истины первого часа):
@@ -467,23 +459,19 @@ def cmd_setup(target_dir, *, apply=True):
     apply=True (по умолчанию): bootstrap РЕАЛЬНО пишет отсутствующие черновики направления/плана.
     apply=False (`--dry-run`): bootstrap только показывает, что создал бы, ничего не записывая.
     """
-    root = Path(target_dir).resolve()
-    # Предпроверка — та же, что у init: без git установка была бы ложным зелёным.
-    if not root.is_dir():
-        print(f"ОШИБКА: каталога {root} нет — создайте его и инициализируйте git (git init).")
-        return 2
-    if not _core()._is_git_worktree(root):
-        print(f"ОШИБКА: {root} — не git-репозиторий (или git недоступен). Кит ставится в "
-              f"git-репозиторий: движок работает через worktree/коммит и собирает evidence "
-              f"на точном SHA. Выполните `git init` (и первый коммит), затем повторите setup.")
-        return 2
-
     done, failed = [], []
 
     # 1) init — идемпотентно: уже установлено (rc 1) не роняет setup, продолжаем.
     print("→ шаг 1/5: managed-зона (init)")
-    rc = cmd_init(str(root))
-    if rc == 2:
+    import os
+    result = run.command("init", [sys.executable, "-u", str(_ao().HERE), "init", str(root)],
+                         env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1", PYTHONUNBUFFERED="1"),
+                         accepted=(0, 1))
+    print(result.stdout, end="", flush=True)
+    if result.stderr:
+        print(result.stderr, end="", file=sys.stderr, flush=True)
+    rc = result.returncode
+    if rc not in (0, 1):
         # Предпроверки (не каталог/не git) отсеяны выше; rc 2 здесь — иной жёсткий отказ init.
         print("\nУстановка прервана: подготовить managed-зону не удалось (см. сообщение выше).")
         return 2
@@ -493,17 +481,20 @@ def cmd_setup(target_dir, *, apply=True):
 
     # 2) doctor — целостность установки ИЗНУТРИ репозитория (тот же интент, что `./ai-ops doctor`).
     #    Скилл ставит проверку сразу после init: если установка неполна, всё ниже ничего не доказывает.
-    #    НЕ роняет setup (называем шаг, за успех не выдаём) — идемпотентный перезапуск не блокируем.
+    #    При неполной установке не запускаем анализ/запись поверх повреждённого managed-слоя.
     print("→ шаг 2/5: проверяю целостность установки (doctor)")
-    drc, dout = _run_managed_intent(root, "doctor")
+    drc, dout = _run_managed_intent(root, "doctor", run=run)
     if drc == 0:
         done.append("целостность установки проверена (doctor)")
     else:
         failed.append(("проверка целостности (doctor)", dout))
+        _setup_summary(root, done, failed)
+        print("Установка неполна: дальнейшие шаги не запускались. Подробности в журнале.", flush=True)
+        return 1
 
     # 3) onboard — детект стека → .ai/repository-profile.yaml.
     print("→ шаг 3/5: определяю стек (onboard)")
-    orc, oout = _run_managed_intent(root, "onboard")
+    orc, oout = _run_managed_intent(root, "onboard", run=run)
     if orc == 0:
         done.append("стек репозитория определён (.ai/repository-profile.yaml)")
     else:
@@ -511,7 +502,7 @@ def cmd_setup(target_dir, *, apply=True):
 
     # 4) bootstrap — черновики направления/плана ИЗ ФАКТОВ (реальный план не трогает).
     print("→ шаг 4/5: черновик направления и плана (bootstrap)")
-    brc, bout = _run_managed_intent(root, "bootstrap", *(("--apply",) if apply else ()))
+    brc, bout = _run_managed_intent(root, "bootstrap", *(("--apply",) if apply else ()), run=run)
     if brc == 0:
         done.append("черновик направления и плана из фактов репозитория"
                     + ("" if apply else " (показан, без записи — --dry-run)"))
@@ -525,7 +516,7 @@ def cmd_setup(target_dir, *, apply=True):
     #    надмножество обычного `model` — форма вопросов пишется в любом случае. Шаг НЕ блокирует
     #    установку: setup неинтерактивен, ответы всё равно за человеком.
     print("→ шаг 5/5: первый час — что понял и что нужно (model --flow)")
-    mrc, mout = _run_managed_intent(root, "model", "--flow", "--apply", "--json")
+    mrc, mout = _run_managed_intent(root, "model", "--flow", "--apply", "--json", run=run)
     first_hour = _parse_first_hour_json(mout)
     if first_hour is None:
         # Старый managed-слой без `--json`/`--apply`, argparse-ошибка или посторонний вывод — НЕ
@@ -536,7 +527,7 @@ def cmd_setup(target_dir, *, apply=True):
 
     # Финал автоматизируемого: setup фиксирует СВОИ служебные файлы (только пути установки).
     print("→ фиксирую служебные файлы кита (только пути установки, продуктовые — никогда)")
-    committed, cdetail = _commit_kit_files(root)
+    committed, cdetail = _commit_kit_files(root, run=run)
     if committed:
         done.append(f"служебные файлы кита закоммичены — {cdetail}")
     elif cdetail.startswith("ошибка"):
@@ -548,8 +539,8 @@ def cmd_setup(target_dir, *, apply=True):
 
     # Код возврата: 0 — автоматизируемое прошло (человеческие шаги остаются, это норма);
     # 1 — упал автоматизируемый шаг (onboard/bootstrap), сбой за успех не выдаём; жёсткий провал
-    # init/предпроверки уже вернул 2 выше. doctor и model --flow не жёсткие: их результат называется
-    # в экране, но неинтерактивный первый час и диагностика не обязаны ронять установку.
+    # init/предпроверки уже вернул 2 выше. Неполный doctor остановил цепочку раньше;
+    # сбои подпроцессов дополнительно отражены в итоговом статусе журнала.
     hard = [name for name, _ in failed
             if name.startswith("определение стека") or name.startswith("черновик")]
     return 1 if hard else 0
@@ -574,3 +565,33 @@ def _onboarding_summary(onboarding_path):
         + "\n\nДальше — просто наберите:  ai-ops   (кит покажет простым языком, что можно попросить)."
         "\nНовый репозиторий? Первый шаг:  ai-ops model   — соберу понимание о проекте и предложу задачи."
     )
+
+
+def cmd_setup(target_dir, *, apply=True, timeout=150.0):
+    """Установка с общим бюджетом, постоянным журналом и безопасным повторным запуском."""
+    from setup_run import SetupRun, SetupStopped
+    root = Path(target_dir).resolve()
+    if not root.is_dir():
+        print(f"ОШИБКА: каталога {root} нет. Создайте его и выполните git init и первый коммит.")
+        return 2
+    try:
+        with SetupRun(root, timeout=timeout) as run:
+            check = run.command("preflight", ["git", "rev-parse", "--is-inside-work-tree"])
+            if check.returncode != 0 or check.stdout.strip() != "true":
+                run.status = "failed"
+                print(f"ОШИБКА: {root} — не git-репозиторий. Выполните git init и первый коммит.")
+                return 2
+            source = run.command("source", ["git", "rev-parse", "--verify", "--quiet", "HEAD"], accepted=(0, 1))
+            run.event("source_revision", sha=source.stdout.strip() if source.returncode == 0 else None)
+            code = _setup_steps(root, apply=apply, run=run)
+            if code != 0:
+                run.status = "failed"
+                return code
+            return 0 if run.status == "completed" else 1
+    except (SetupStopped, KeyboardInterrupt) as error:
+        print(f"Установка остановлена: {str(error) or 'получен сигнал прерывания'}. "
+              "Вывод сохранён. Повторите setup с тем же путём; готовность будет проверена заново.", flush=True)
+        return 1
+    except OSError as error:
+        print(f"Установка не завершена: {error}", flush=True)
+        return 1

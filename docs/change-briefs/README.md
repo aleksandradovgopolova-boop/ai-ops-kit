@@ -27,3 +27,17 @@
 
 - [Границы автоматизации — #1241](1241-runtime-qualification-boundaries.md).
 - [Здоровье паспорта требует результата прогонов — #1257](1257-passport-health-evidence.md).
+
+- [Запуск установки и сохраняемый журнал](setup-run-journal.md).
+- [Покрытие обычного набора без повторного ночного корпуса](4.11.1-ordinary-coverage.md).
+- [Независимая техническая очередь — #1321/#1322](1321-independent-technical-queue.md).
+- [Импорты валидаторов без повторного исполнения сценариев](validator-bootstrap-import-only.md).
+
+- [Сверка доставленных срезов и baseline — #1321/#1322](1321-1322-progress-reconciliation-20261020.md).
+- [Компактный обзор продуктового пульта](dashboard-overview-20261020.md).
+- [Согласованная трёхрядная компоновка пульта](dashboard-approved-layout-20261020.md).
+- [Найденные данные качества, релизов и принятых работ](dashboard-evidence-20261020.md).
+
+- [Ускорение малых изменений без повторной работы](priority-delivery-reuse.md) — content receipts, review и подтверждение поставки.
+
+- [Граница собственных outputs и общий слот проверок](receipt-output-boundary.md).

@@ -10,7 +10,11 @@
 """
 from __future__ import annotations
 
+import os
 import re
+import shlex
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -18,6 +22,109 @@ import yaml
 
 PKG = Path(__file__).resolve().parents[2]
 WORKFLOWS = sorted((PKG / ".github" / "workflows").glob("*.yml"))
+
+
+def _ordinary_coverage_step():
+    workflow = yaml.safe_load((PKG / ".github/workflows/nightly-coverage.yml").read_text())
+    return next(step for step in workflow["jobs"]["coverage"]["steps"]
+                if "--cov-fail-under" in step.get("run", ""))
+
+
+def test_ordinary_coverage_keeps_both_roots_floor_and_explicit_scope():
+    """Явный -m переопределяет pytest.ini: release_gate нужно исключить повторно."""
+    step = _ordinary_coverage_step()
+    args = shlex.split(step["run"].replace("\\\n", " "))
+    assert args[args.index("-m", 3) + 1] == "not nightly and not release_gate"
+    assert [arg for arg in args if arg.startswith("--cov=")] == [
+        "--cov=ai_ops_kit", "--cov=installer"]
+    assert "--cov-fail-under=70" in args
+    assert step["env"]["COVERAGE_CORE"] == "sysmon"
+    assert "71%" not in step["name"]
+    assert "nightly/release_gate" in step["name"]
+
+
+@pytest.mark.parametrize("mode", ["passes", "test_failure", "below_floor", "no_data"])
+def test_actual_ordinary_coverage_command_selects_and_fails_closed(tmp_path, mode):
+    """Реальный run-блок, маленький корпус: исполнение и FAIL, без полного набора кита.
+
+    pytest-cov установлен в самом nightly-coverage; обычные PR-шарды не обязаны его ставить.
+    На машинах без него остаётся структурная проверка, а эта проба называется пропущенной.
+    """
+    pytest.importorskip("pytest_cov")
+    pytest.importorskip("xdist")
+    for name in ("ai_ops_kit", "installer"):
+        package = tmp_path / name
+        package.mkdir()
+        source = "VALUE = 1\n"
+        if mode == "below_floor":
+            source += "def unused():\n" + "".join(f"    value_{i} = {i}\n" for i in range(30))
+        (package / "__init__.py").write_text(source)
+    (tmp_path / "pytest.ini").write_text(
+        '[pytest]\naddopts=-m "not release_gate"\nmarkers=\n'
+        ' slow: slow\n nightly: nightly\n release_gate: release\n contract: contract\n')
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    (tests / "test_scope.py").write_text('''import os
+import sys
+from pathlib import Path
+import pytest
+
+def record(name):
+    root = Path(__file__).resolve().parents[1]
+    if os.environ["COVERAGE_FIXTURE_MODE"] != "no_data":
+        sys.path.insert(0, str(root))
+        import ai_ops_kit
+        import installer
+        for module in (ai_ops_kit, installer):
+            assert Path(module.__file__).resolve().is_relative_to(root)
+            assert module.VALUE == 1
+    with Path(os.environ["COVERAGE_SCOPE_LOG"]).open("a") as log:
+        log.write(name + "\\n")
+
+def test_fast():
+    record("fast")
+    assert os.environ["COVERAGE_FIXTURE_MODE"] != "test_failure"
+
+@pytest.mark.slow
+def test_slow(): record("slow")
+
+@pytest.mark.contract
+def test_contract(): record("contract")
+
+@pytest.mark.nightly
+def test_nightly(): record("nightly")
+
+@pytest.mark.release_gate
+def test_release(): record("release")
+''')
+    bindir = tmp_path / "bin"
+    bindir.mkdir()
+    python = bindir / "python3"
+    python.write_text("#!/bin/sh\nexec " + shlex.quote(sys.executable) + ' "$@"\n')
+    python.chmod(0o755)
+    step = _ordinary_coverage_step()
+    log = tmp_path / "scope.log"
+    env = {key: value for key, value in os.environ.items()
+           if not key.startswith(("COV_CORE_", "COVERAGE_")) and key != "PYTHONPATH"}
+    env.update(step["env"])
+    env.update(PATH=str(bindir) + os.pathsep + env["PATH"], PYTEST_ADDOPTS="",
+               PYTEST_XDIST_AUTO_NUM_WORKERS="1", COVERAGE_FIXTURE_MODE=mode,
+               COVERAGE_SCOPE_LOG=str(log))
+    result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
+                            cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
+    output = result.stdout + result.stderr
+    assert log.is_file(), output
+    assert sorted(log.read_text().splitlines()) == ["contract", "fast", "slow"], output
+    if mode == "passes":
+        assert result.returncode == 0, output
+    else:
+        assert result.returncode != 0, output
+        if mode == "test_failure":
+            assert "test_fast" in output and "failed" in output, output
+        elif mode == "below_floor":
+            assert "Coverage failure" in output, output
+        else:
+            assert "No data" in output, output
 
 
 def _addopts_require_cov():

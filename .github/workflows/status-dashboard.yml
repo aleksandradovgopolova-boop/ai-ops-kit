@@ -13,6 +13,10 @@ on:
   schedule:
     - cron: "0 6 * * *"        # каждый день в 06:00 UTC; частоту меняйте здесь
   workflow_dispatch: {}         # ручной запуск из вкладки Actions
+  workflow_run:
+    workflows: [package-quality, docs, nightly-quality, nightly-coverage]
+    types: [completed]
+    branches: [main]
   push:
     branches: [main]
     paths:                      # пересобирать сразу, когда меняются источники чисел
@@ -35,6 +39,7 @@ on:
 permissions:
   contents: read
   issues: read
+  actions: read
   pages: write
   id-token: write
 

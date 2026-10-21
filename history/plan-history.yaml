@@ -19,6 +19,41 @@ kind: delivery-plan-history
 
 
 work:
+  - id: delegation-owner-fencing
+    title: Позднее завершение прежней попытки не снимает заявку нового держателя
+    type: engineering
+    goal: autonomous-work-distribution
+    status: done
+    owner_role: engineer
+    value: high
+    issue: 1344
+    pr: 1324
+    closed_at: "2026-10-20"
+    branch: codex/durable-delegation-recovery-20261019
+    depends_on: []
+    write_scope:
+      - ai_ops_kit/lifecycle/active_work.py
+      - ai_ops_kit/engine/parallel_live_dispatch.py
+      - tests/
+      - docs/change-briefs/
+      - newsfragments/
+    evidence: qualification/PROGRESS-AND-VERIFICATION-BASELINE-2026-10-20.md
+    rationale: >-
+      Первый срез #1322 по зарегистрированному baseline/Change Brief session02 от 19.10,
+      11:31:24 UTC: реальная RED на takeover и позднем old finish, fencing durable ownership
+      под существующим замком, сохранение нового claim/runtime/carrier/sentinel и отказ
+      устаревшего callback. На старте runtime RED ещё не доказана. Код не дублирует Budget
+      и PR1316/1317, не обещает автоматическое переназначение или durable USD accounting.
+      Граница сверяется с зарегистрированным Change Brief до source edit;
+      отдельные targeted/core, независимое review и exact-head CI обязательны. Срез не закрывает
+      полный контракт #1322 и полевую #1278. Полевые выборки не являются prerequisite.
+    result: >-
+      Каждая автоматическая попытка имеет отдельную identity; допуск, запись отчёта
+      и условное завершение сохраняют нового держателя при позднем ответе старого.
+      PR1324 merged на c585e447; независимое review итогового 2b519453 без находок,
+      все 17 CI проверены по трём runs. Это ограниченный fencing, не атомарная
+      внешняя доставка, общее восстановление или закрытие #1322/#1278.
+
   - id: human-intents-follow-field-friction
     title: Обычная задача проходит через существующий вход без выбора внутреннего конвейера
     type: product

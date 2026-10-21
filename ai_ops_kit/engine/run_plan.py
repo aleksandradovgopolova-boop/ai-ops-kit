@@ -34,6 +34,8 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared.budget import declared_limits
+
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 # finding аудита (P1.1): workitem_id доходит до путей (worktree add строит root/<wt>/<wid>).
@@ -156,7 +158,7 @@ def build_plan(signals, workitem_id=None):
         # гейта за окончательные, а честно называет эскалацию (см. _escalation_disclosure).
         "classification_provisional": provisional,
         "escalation_disclosure": disclosure,
-        "execution_budget": {"max_cost": None, "max_duration": None, "max_model_calls": None},
+        "execution_budget": declared_limits(signals.get("execution_budget")),
     }
 
 

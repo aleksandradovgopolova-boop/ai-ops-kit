@@ -359,3 +359,49 @@ def test_unknown_verification_intent_refuses_before_execution(tmp_path, entry):
         assert result["status"] == "error" and result["ready_for_pr"] is False
         assert "unknown verification intent" in result["error"]
     assert not (tmp_path / "features").exists()
+
+
+@pytest.mark.parametrize('binding,read', [
+    ('load = __import__', "load('src.a', fromlist=['value']).value"),
+    ('evaluate = eval', '''evaluate("__import__('src.a', fromlist=['value']).value")'''),
+    ('execute = exec', "namespace['value']"),
+])
+def test_builtin_loader_alias_really_hides_changed_consumer_without_full_fallback(tmp_path, binding, read):
+    write(tmp_path, 'src/a.py', 'value = 1')
+    setup = 'namespace = {}\n    execute("from src.a import value", namespace)\n    ' if binding == 'execute = exec' else ''
+    write(tmp_path, 'src/bridge.py', f'{binding}\ndef read():\n    {setup}return {read}\n')
+    write(tmp_path, 'tests/test_direct.py', 'from src.a import value\ndef test_direct(): assert value > 0')
+    write(tmp_path, 'tests/test_alias.py', 'from src.bridge import read\ndef test_alias(): assert read() == 1')
+    # Actual interpreter executes the consumer: a cheap isolated process, no provider/nested pytest.
+    command = [sys.executable, '-c', "import runpy; runpy.run_path('tests/test_alias.py')['test_alias']()"]
+    def run():
+        return subprocess.run(command, cwd=tmp_path, capture_output=True, text=True, timeout=30,
+                              env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
+    assert run().returncode == 0
+    write(tmp_path, 'src/a.py', 'value = 22')
+    failed = run()
+    assert failed.returncode == 1 and 'AssertionError' in failed.stderr
+    graph = repo_graph.build_graph(tmp_path, subdirs=None)
+    # Prove a nonempty static selection would omit the consumer that actually failed.
+    static = repo_graph.affected_tests(graph, ['src/a.py'])
+    assert 'tests/test_direct.py' in static and 'tests/test_alias.py' not in static
+    result = tiers.select_tests(['src/a.py'], tmp_path, profile=PROFILE)
+    assert result['full_command'] and result['targeted_command'] is None
+    assert 'src/bridge.py' in graph['uncertainties'] and 'incomplete' in result['note']
+
+
+@pytest.mark.parametrize('binding', [
+    'consume(__import__)', 'consume(eval)', 'consume(exec)', 'loaders = [__import__]',
+    'def load(name, loader=__import__): return loader(name)',
+])
+def test_builtin_loader_reference_cannot_be_certified_static(tmp_path, binding):
+    path = write(tmp_path, 'loader.py', binding)
+    assert repo_graph._uncertain_dependency(path)
+
+
+def test_ordinary_static_import_and_unrelated_load_function_remain_targeted(tmp_path):
+    write(tmp_path, 'src/a.py', 'value = 1')
+    write(tmp_path, 'src/static.py', 'from src.a import value\ndef load(): return value')
+    write(tmp_path, 'tests/test_static.py', 'from src.static import load\ndef test_value(): assert load() == 1')
+    result = tiers.select_tests(['src/a.py'], tmp_path, profile=PROFILE)
+    assert not result['full_command'] and result['affected_tests'] == ['tests/test_static.py']

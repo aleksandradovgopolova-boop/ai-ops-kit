@@ -1,0 +1,8 @@
+# Общий local package callback admission — #1322
+
+Результат: automatic independent-root работы одного Git-common store суммарно допускают не более двух local package callbacks; новый запуск не умножает существующий per-run MAX_PARALLEL=2.
+Пути: canonical/frozen automatic admission → package clone/baseline → shared kernel-held resource slot → actual run_fn → Budget logical reservations → package result/receipt → partial retry/aggregate/cleanup.
+Инварианты: canonical generation/input проверяются до входа; canonical lock не держится во время модели/сети. Slot удерживается собственным fd до завершения callback и освобождается finally. Отказ до callback — явный NOT_STARTED, без Budget charge; actual callback error остаётся unknown/error. Default manual route и checkpoint reuse не занимают новые slots.
+Failure modes: оба слота заняты; небезопасный/недоступный lock; смена владельца перед callback; callback exception/process exit; busy result повторяется с прежним durable budget.
+Доказательство: реальные child processes держат два slots, третий отказан; release/exit освобождают только local capacity. Automatic отказ даёт0run_fn/calls и известный not-started receipt; retry после release реально выполняет пакеты. Owner/lock/symlink failures и exception cleanup; существующие fencing/budget/resume регрессии. Localpytest только resource admission; затем independent entire-delta review/17exactheadCI/normalmerge.
+Не входит: leases/TTL/automatic ownership takeover, отмена уже отправленных внешних запросов, physical requests/native sessions/все процессы машины, distributed org capacity, новые настройки/права/paid models, field/p95/USD или закрытие #1321/#1322.

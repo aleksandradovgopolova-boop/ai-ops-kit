@@ -5,10 +5,11 @@ name: nightly-coverage
 #   - ночью (heartbeat), чтобы дрейф покрытия не копился незамеченным;
 #   - на каждый push в main (сразу после слияния — таймернее ночного);
 #   - вручную перед релизом (workflow_dispatch).
-# Порог остаётся РАТЧЕТОМ (пол 70%, замер 71%): полный набор даёт 71% (23 889 инструкций, 7 015 без
-# покрытия), один пункт запаса, чтобы честный рефакторинг не краснел на шуме. Поднимать можно и нужно;
-# опускать — только осознанно, как ратчет пар/циклов в packages/layering.yaml. Падение здесь — сигнал
-# на main/ночью, а НЕ блок PR (это осознанный размен: быстрый PR важнее гейта покрытия на каждом пуше).
+# Охват покрытия — обычные fast/slow/contracts, без nightly и release_gate. Actual mutation и
+# агрегатный bench остаются в nightly-quality (cron/push/manual); release сам гоняет mutation до тега.
+# Пол покрытия остаётся 70% для ai_ops_kit + installer. Исторический замер полного набора (71%)
+# не является замером этого охвата. Ошибка теста, отсутствие данных или результат ниже пола — FAIL.
+# Падение здесь — сигнал на main/ночью, а НЕ блок PR.
 on:
   schedule:
     - cron: "17 3 * * *"   # ежедневно ~03:17 UTC
@@ -28,7 +29,7 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-cov==7.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
-      - name: "Покрытие продукта с порогом-ратчетом (пол 70%, замер 71%)"
+      - name: "Покрытие обычного набора без nightly/release_gate (пол 70%)"
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           # sysmon переводит coverage.py на sys.monitoring (CPython 3.12+) вместо трассировки каждой
@@ -36,7 +37,7 @@ jobs:
           # станет тихо считать медленно.
           COVERAGE_CORE: sysmon
         run: |
-          python3 -m pytest tests/ -q -n auto --dist loadfile \
+          python3 -m pytest tests/ -q -n auto --dist loadfile -m "not nightly and not release_gate" \
             --cov=ai_ops_kit --cov=installer \
             --cov-report=term-missing:skip-covered \
             --cov-fail-under=70

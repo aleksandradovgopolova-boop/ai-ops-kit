@@ -1,0 +1,17 @@
+# Durable logical-call reservation перед partial resume
+
+Ближайшая незакрытая зависимость1322: нынешний общий Budget защищает threads, но новый процесс создаёт counter0. До partial retry/lease reassignment нельзя разрешать повторные callbacks с обнулённым расходом. Граница этого среза — резервировать logical call durable ДО proposer callback, сохранять расход между попытками и процессами, не возвращать неизвестную/crashed reservation в доступный остаток.
+
+Используется существующий shared.Budget/charge_call, lifecycle_store durable-write и canonical generation guard. Для opt-in automatic roots ledger находится в Git common store на WorkItem, immutable base/frozen-input/limit binding. Thread+interprocess lock сериализует read/check/reserve/fsync; сеть/модель вне lock. Default Budget/manual run без durable binding не меняются. Подтверждённая reservation не возвращается при ошибке callback; неизвестная запись может консервативно съесть slot, но не допустить лишний callback.
+
+Canonical claim хранит только provenance marker (не второй counter), переживающий новую generation. После первого durable binding отсутствие ledger не считается fresh. Старые attempts без подтверждённого ledger не мигрируют в0: prior spend unknown → отказ, без моделей; новый logical WorkItem имеет отдельный бюджет. Повреждение, другой base/input/limit binding, symlink, write/lock failure и stale owner дают0новых callbacks.
+
+Meaningful proof: subprocess reload и concurrent process cap, simulated crash между charge и callback, write fault/uncertain write без model call/refund, corrupt/missing ledger без reset; real automatic2package runtime → свежий Budget/attempt с остатком вместо0; takeover guard запрещает позднюю reservation. Ни API/native paid model, ни новые права/runners/rollout не нужны. Resource admission перед local pytest; при занятом Mac — штатные hosted CI с честным localNOT_STARTED. Независимый entire-delta review,17exactheadCI, normal match-head merge/exacttree.
+
+Не входит: hardUSD/physical transport/native internal request limit, leases/automatic takeover, reuse passed packages/general partial resume, field20–30realjobs/cost/p95/firsthour. Общий1322 остаётсяOPEN. Это программный durability contract/fsync, не hardware power-loss испытание.
+
+Локальный pytest покаNOT_STARTED_RESOURCE_RULE (admission01 сохранён; чужие процессы не трогались). Staticruff/module-size/layering/diff проходят; это не тестовыйPASS. Созданы subprocess crash/concurrent-cap и real2package→fresh-process remaining-slot cases; missing/legacy/newbase/write-uncertainty/takeover cases проверяются штатными hosted CI. Перед частичным переисполнением пакетов потребуется отдельно выполнить partial resume с этими admission-барьерами; текущая правка его не объявляет готовым.
+
+Ledger/snapshot явно помечены reservation_mode=durable-before-callback: это reserved slots, не подтверждённый callback/spawn count. Гарантия локальна одному Git-common store с fcntl; распределённый межмашинный/org budget и hardware storage loss не заявляются. Пропажу всего набора provenance/counter/storage без внешнего evidence нельзя выдавать за восстановленный расход.
+
+Первое source review54b377b2 NO_FINDINGS сохранено отдельно. До публикацииPR дополнительно сужена новая durable mode: cost=quoted не принимается (default in-memory API unchanged), unknown_cost_calls обязан равняться reserved slots, known subtotal обязан0. Это не даёт persisted quote превратиться в утверждение actualUSD после crash доcallback. Добавлены0/.5quote refusal cases; финальный SHA требует нового review/17CI.

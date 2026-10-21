@@ -27,6 +27,8 @@ from pathlib import Path
 import pytest
 import yaml
 
+from ai_ops_kit.devtools import host_resource_cli as host_resources
+
 PKG = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG / "validation"))
 
@@ -135,7 +137,8 @@ def test_script_announces_the_scope_it_actually_gives():
     """
     env = {**os.environ, "PYTHON": sys.executable}
     r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"],
-                       cwd=str(PKG), capture_output=True, text=True, timeout=300, env=env)
+                       cwd=str(PKG), capture_output=True, text=True, timeout=300, env=env,
+                       **host_resources.subprocess_kwargs(env))
     out = r.stdout + r.stderr
     assert "full-current-python" in out, out[-800:]
     assert "compatibility-matrix" in out, out[-800:]
@@ -159,7 +162,7 @@ def test_script_refuses_an_interpreter_without_pytest(tmp_path):
     fake.chmod(0o755)
     r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
                        capture_output=True, text=True, timeout=120,
-                       env={**os.environ, "PYTHON": str(fake)})
+                       env={**os.environ, "PYTHON": str(fake)}, **host_resources.subprocess_kwargs())
     assert r.returncode == 2, (r.returncode, (r.stdout + r.stderr)[-600:])
     assert "pytest в нём нет" in (r.stdout + r.stderr), (r.stdout + r.stderr)[-600:]
 
@@ -180,7 +183,7 @@ def test_pytest_runs_on_the_interpreter_that_was_announced(tmp_path):
     wrapper.chmod(0o755)
     r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
                        capture_output=True, text=True, timeout=300,
-                       env={**os.environ, "PYTHON": str(wrapper)})
+                       env={**os.environ, "PYTHON": str(wrapper)}, **host_resources.subprocess_kwargs())
     assert r.returncode == 0, (r.stdout + r.stderr)[-600:]
     calls = log.read_text(encoding="utf-8") if log.is_file() else ""
     assert "-m pytest" in calls, (
@@ -201,6 +204,11 @@ def _tiny_scope_script(tmp_path):
     root = tmp_path / "pkg"
     (root / "scripts").mkdir(parents=True)
     shutil.copy2(SCRIPT, root / "scripts/check-full.sh")
+    # Fixture содержит настоящий runner и его runtime dependency, как обычный Kit checkout.
+    for relative in ("ai_ops_kit/devtools/host_resource_cli.py",):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(PKG / relative, target)
     (root / "scripts/warn-path-belt.sh").write_text("#!/bin/sh\nexit 0\n")
     (root / "scripts/warn-path-belt.sh").chmod(0o755)
     (root / "pyproject.toml").write_text('[project]\nname="fixture"\nversion="0.0.0"\nrequires-python=">=3.12"\n')
@@ -238,8 +246,16 @@ def test_release(): record("release")
 
 
 def _run_tiny_scope(root, env, *args):
-    return subprocess.run(["bash", str(root / "scripts/check-full.sh"), *args], cwd=root,
-                          env=env, capture_output=True, text=True, timeout=120)
+    def execute(bound):
+        return subprocess.run(["bash", str(root / "scripts/check-full.sh"), *args], cwd=root,
+                              env=bound, capture_output=True, text=True, timeout=120,
+                              **host_resources.subprocess_kwargs(bound))
+    if host_resources.inherited_slot(environment=env) is not None:
+        return execute(env)
+    # Собственный fixture-slot изолирует маленький проверочный corpus от реальных host jobs.
+    path = root.parent / "fixture-heavy.lock"
+    with host_resources.host_slot("scope-fixture", "local", path=path) as fd:
+        return execute({**env, "AI_OPS_HOST_SLOT_FD": str(fd), "AI_OPS_HOST_SLOT_PATH": str(path)})
 
 
 def _scope_ids(env):
@@ -264,6 +280,21 @@ def test_pr_profile_executes_and_refuses_red_ordinary_slow_test(tmp_path):
     result = _run_tiny_scope(root, {**env, "FAIL_SLOW": "1"}, "--pr", "-n1")
     assert _scope_ids(env) == ["fast", "slow"], result.stdout + result.stderr
     assert result.returncode != 0 and "ЗЕЛЁНЫЙ ОХВАТ" not in result.stdout
+
+
+def test_nested_scope_preserves_parent_slot_without_reacquiring(tmp_path):
+    root, env = _tiny_scope_script(tmp_path)
+    path = tmp_path / "parent-heavy.lock"
+    with host_resources.host_slot("parent-suite", "local", path=path) as fd:
+        before = path.read_bytes()
+        result = _run_tiny_scope(root, {**env, "AI_OPS_HOST_SLOT_FD": str(fd),
+                                       "AI_OPS_HOST_SLOT_PATH": str(path)}, "--pr", "-n1")
+        assert _scope_ids(env) == ["fast", "slow"], result.stdout + result.stderr
+        assert result.returncode == 0 and path.read_bytes() == before
+        # Попытка взять тот же slot новым open-file-description всё ещё блокируется.
+        with pytest.raises(host_resources.ResourceBlocked, match="занят"):
+            with host_resources.host_slot("foreign", "self_hosted_ci", path=path):
+                pytest.fail("parent slot must remain held after nested check")
 
 
 @pytest.mark.parametrize("args,extra_env", [

@@ -12,6 +12,7 @@
                          печатает ОДИН экран «сделано автоматически» и «осталось от тебя»
                          (секреты/провайдеры, ответы на вопросы, коммит — за человеком).
                          [--dry-run] не пишет черновики bootstrap, только показывает план.
+                         [--timeout-seconds N] общий бюджет (150 с); журнал: .ai/runtime/setup/.
                          Идемпотентна: на уже установленном ките не падает, обновляет состояние
   validate             — прогнать связанные валидаторы (child, registry, workflows, providers)
   doctor               — быстрая диагностика (гигиена путей окружения, версии, зоны, целостность,
@@ -320,7 +321,9 @@ def _dispatch(argv):
     if cmd == "setup":
         if len(argv) < 3:
             print("использование: ai-ops setup <путь-к-репозиторию> [--dry-run]"); return 2
-        return _setup_ops().cmd_setup(argv[2], apply="--dry-run" not in argv)
+        setup_ops = _setup_ops()
+        from setup_run import setup_cli
+        return setup_cli(argv[2:], setup_ops.cmd_setup)
     if cmd == "delivery-proof":
         return _aux_commands().cmd_delivery_proof(argv)
     if cmd == "validate":

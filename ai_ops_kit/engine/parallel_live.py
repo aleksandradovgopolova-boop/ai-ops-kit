@@ -26,6 +26,7 @@ from __future__ import annotations
 import fnmatch
 import hashlib
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -141,6 +142,8 @@ def _pkg_signals(base_signals, pkg):
     """#1: package-specific view сигналов — write_scope/affected_areas/shared_contracts/capability/budget
     из объявления пакета WorkGraph. НЕ шлём одинаковые signals всем пакетам."""
     sig = dict(base_signals or {})
+    saved = sig.pop("_auto_package_signals", {})
+    sig.update(saved.get(pkg["id"], {}))
     ws = pkg.get("write_scope")
     if ws:
         sig["write_scope"] = ws
@@ -164,7 +167,7 @@ def package_result_from_rep(rep):
     ok = bool(rep.get("ready_for_pr"))
     return {"status": "pass" if ok else "fail", "sha": sha,
             "gate_report": {"all_pass": ok, "tested_revision": sha},
-            "model_resolution": rep.get("model_resolution")}
+            "model_resolution": rep.get("model_resolution"), "package_capacity": rep.get("package_capacity")}
 
 
 def make_package_runner(child_root, base_sha, task_map, signals, run_fn, features_dir=None):
@@ -334,6 +337,9 @@ def make_isolated_package_runner(child_root, base_sha, task_map, signals, run_fn
                                                    "streams": clones[pid]["usage_baseline"]})
         if not saved.get("ok"):
             raise ValueError("package usage baseline не зафиксирована до вызовов")
+        reused = options.pop('reused_packages', {}).get(pid)
+        if reused:
+            return _restore_package_checkpoint(child_root, cpath, pid, reused)
         rep = run_fn(task_map[pid], pkg_signals, Path(cpath), **options)
         res = package_result_from_rep(rep)
         res["clone"] = str(cpath)
@@ -407,6 +413,51 @@ def _artifact_sha(value):
     return value if isinstance(value, str) and len(value) == 40 and all(c in "0123456789abcdef" for c in value) else None
 
 
+class _CheckpointFailure(ValueError):
+    """Только фиксированный stage code; Git stderr/модельные данные не уходят в receipt."""
+
+
+def _checkpoint_git(root, stage, *args, **options):
+    try:
+        return _git(root, *args, **options)
+    except (RuntimeError, OSError) as exc:
+        raise _CheckpointFailure(stage) from exc
+
+
+def _require_direct_checkpoint_ref(root, ref):
+    kind = _checkpoint_git(root, "ref-type", "symbolic-ref", "--quiet", ref, check=False)
+    if kind.returncode == 0:
+        raise _CheckpointFailure("ref-symbolic")
+    if kind.returncode != 1:
+        raise _CheckpointFailure("ref-type")
+
+
+def _retain_package_commit(child_root, source, sha, run_id, pid):
+    """Git objects+CAS ref до удаления source; local checkpoint, не доставка/ready."""
+    version = _checkpoint_git(child_root, "version", "--version").stdout
+    parsed = re.search(r"\b(\d+)\.(\d+)", version)
+    if not parsed or tuple(map(int, parsed.groups())) < (2, 36):
+        raise _CheckpointFailure("unsupported-git")
+    ref = f"refs/ai-ops/parallel/{run_id}/{hashlib.sha256(pid.encode()).hexdigest()}"
+    _require_direct_checkpoint_ref(child_root, ref)
+    old = _checkpoint_git(child_root, "ref-read", "rev-parse", "--verify", "--quiet", ref, check=False)
+    if old.returncode not in (0, 1) or (old.returncode == 0 and old.stdout.strip() != sha):
+        raise _CheckpointFailure("ref-conflict")
+    harden = ("-c", "core.fsync=objects,reference", "-c", "core.fsyncMethod=fsync")
+    if old.returncode == 1:
+        _checkpoint_git(child_root, "fetch", *harden, "fetch", "--no-tags", "--no-write-fetch-head",
+             "--no-recurse-submodules", "--no-auto-maintenance", "--no-write-commit-graph",
+                        "--no-prune", "--no-prune-tags", str(source.resolve()), sha)
+    # Same SHA retry тоже проходит CAS/hardened write, но никогда не перезаписывает другую generation.
+    _checkpoint_git(child_root, "ref-write", *harden, "update-ref", "--no-deref", ref, sha, sha if old.returncode == 0 else "0" * 40)
+    _require_direct_checkpoint_ref(child_root, ref)
+    if _checkpoint_git(child_root, "ref-readback", "rev-parse", "--verify", ref).stdout.strip() != sha:
+        raise _CheckpointFailure("ref-readback")
+    _checkpoint_git(child_root, "objects", "cat-file", "-e", f"{sha}^{{commit}}")
+    _checkpoint_git(child_root, "objects", "cat-file", "-e", f"{sha}^{{tree}}")
+    return ref
+
+
 def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
     """Whitelist evidence + call streams до удаления последней package source копии."""
     run_root = Path(run_dir).resolve()
@@ -428,6 +479,7 @@ def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
             sha = item["reported_package_sha"]
             if sha and _git(source, "cat-file", "-e", f"{sha}^{{commit}}", check=False).returncode == 0:
                 item["package_sha"] = sha
+                item["retained_ref"] = _retain_package_commit(child_root, source, sha, run_id, pid)
             item["usage_streams"] = usage_ledger.snapshot_ledgers(source)
             identity = f"{run_id}/{pid}"
             item["source_id"] = identity
@@ -446,6 +498,7 @@ def _preserve_package_artifacts(child_root, base_sha, clones, run_dir, results):
         gate = result.get("gate_report") if isinstance(result.get("gate_report"), dict) else {}
         item["gate_report"] = {"all_pass": gate.get("all_pass") is True,
                                "tested_revision": _artifact_sha(gate.get("tested_revision"))}
+        item['package_capacity'] = result.get('package_capacity')
         item["usage_status"] = "available" if item["usage_streams"] else "unavailable"
         packages.append(item)
     count = usage_ledger.merge_ledgers(child_root, sources, source_ids=identities, source_baselines=baselines)
@@ -524,6 +577,9 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
         ir = make_isolated_integration_runner(child_root, base_sha, clones, integration_branch)
         n = max_parallel or min(len(wg.get("packages", []) or [1]), getattr(pe.pp, "MAX_PARALLEL", 2))
         rec = pe.execute_parallel(wg, pr, ir, contract_shas=contract_shas, max_parallel=max(2, n))
+        for row in rec.get('trace', []):
+            if (rec.get('package_results', {}).get(row['pkg']) or {}).get('reused_from'):
+                row['mode'] = 'reused-checkpoint'
         rec["execution_concurrency"] = "concurrent"
         rec["isolation"] = "per-package-clone"
         rec["parallel_safe"] = True
@@ -538,6 +594,8 @@ def run_live_concurrent(wg, child_root, base_sha, task_map, signals, run_fn, clo
         except Exception as exc:  # noqa: BLE001 — потерю usage нельзя выдать за доставленный результат
             rec["package_artifacts"] = {"status": "blocked", "reason": type(exc).__name__,
                                         "retained_source": str(clones_dir)}
+            if isinstance(exc, _CheckpointFailure):
+                rec["package_artifacts"]["checkpoint_failure"] = str(exc)
             rec.update(proceed=False, stage="artifact-preservation")
             rec["delivery"] = {"intents": 0, "open_pr": False}
         _ready = bool(rec.get("delivery", {}).get("open_pr") and rec.get("integration_sha"))
@@ -573,3 +631,20 @@ def main(argv):
 
 if __name__ == "__main__":
     sys.exit(main(sys.argv[1:]))
+
+
+def _restore_package_checkpoint(root, clone, pid, checkpoint):
+    """Fresh owned clone, exact retained SHA; never invokes package/provider callback."""
+    result = json.loads(json.dumps(checkpoint['result']))
+    sha, ref = result['sha'], checkpoint['ref']
+    _require_direct_checkpoint_ref(root, ref)
+    if _git(root, 'rev-parse', '--verify', ref).stdout.strip() != sha:
+        raise _CheckpointFailure('resume-ref-changed')
+    _checkpoint_git(clone, 'resume-fetch', '-c', 'core.fsync=objects,reference', 'fetch',
+        '--no-tags', '--no-write-fetch-head', '--no-recurse-submodules', '--no-auto-maintenance',
+        '--no-write-commit-graph', str(Path(root).resolve()), sha)
+    _checkpoint_git(clone, 'resume-checkout', 'checkout', '-q', '-B', f'ai-ops/{pid}', sha)
+    if _git(clone, 'rev-parse', 'HEAD').stdout.strip() != sha:
+        raise _CheckpointFailure('resume-head')
+    result.update(clone=str(clone), reused_from=checkpoint['receipt'])
+    return result

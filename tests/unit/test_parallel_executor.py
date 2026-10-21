@@ -132,6 +132,11 @@ def test_cancelled_future_cannot_start_dependents_or_fan_in(monkeypatch, tmp_pat
     assert "CancelledError" in result["package_results"]["a"]["error"]
     assert result["package_results"]["c"]["status"] == "blocked-dependency"
     assert result["delivery"]["open_pr"] is False
+    for row in result["trace"]:
+        assert row["runner_started_at"] is None
+        assert row["runner_finished_at"] is None
+        assert row["queue_seconds"] is None
+        assert row["execution_seconds"] is None
 
 
 @pytest.mark.parametrize("limit", [1, 2, 8])
@@ -324,3 +329,40 @@ class TestMissingSha:
             no_sha_runner, _good_integration, contract_shas={},
         )
         assert r["proceed"] is False
+
+
+def test_trace_measures_actual_runner_and_queue_separately(tmp_path, monkeypatch):
+    from datetime import datetime
+    clock = iter([10.0, 12.0, 15.0])
+    monkeypatch.setattr(executor, "monotonic", lambda: next(clock), raising=False)
+    def runner(pkg):
+        (tmp_path / pkg["id"]).write_text("actually executed")
+        return _proof(pkg["id"])
+    results, trace = executor._run_packages(
+        {"integration_order": ["a"]}, {"a": {"id": "a", "write_scope": ["a/"]}}, runner, 1)
+    assert (tmp_path / "a").read_text() == "actually executed"
+    assert results["a"]["status"] == "pass"
+    row = trace[0]
+    assert row["queue_seconds"] == 2.0
+    assert row["execution_seconds"] == 3.0
+    assert datetime.fromisoformat(row["runner_started_at"]).utcoffset().total_seconds() == 0
+    assert datetime.fromisoformat(row["runner_finished_at"]).utcoffset().total_seconds() == 0
+
+
+def test_trace_preserves_actual_failed_run_and_no_dependent_start(tmp_path):
+    graph = {"packages": [{"id": "a", "write_scope": ["a/"]},
+                           {"id": "c", "write_scope": ["c/"], "depends_on": ["a"]}]}
+    def runner(pkg):
+        (tmp_path / pkg["id"]).write_text("started before error")
+        raise RuntimeError("controlled package failure")
+    result = execute_parallel(graph, runner, lambda _: pytest.fail("failed package fan-in"))
+    assert (tmp_path / "a").read_text() == "started before error"
+    assert not (tmp_path / "c").exists()
+    rows = {row["pkg"]: row for row in result["trace"]}
+    assert result["package_results"]["a"]["status"] == "error"
+    assert rows["a"]["runner_started_at"] is not None
+    assert rows["a"]["runner_finished_at"] is not None
+    assert rows["a"]["execution_seconds"] >= 0
+    assert rows["c"]["runner_started_at"] is None
+    assert rows["c"]["execution_seconds"] is None
+    assert result["delivery"]["intents"] == 0
