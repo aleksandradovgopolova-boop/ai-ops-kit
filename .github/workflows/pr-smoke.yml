@@ -11,6 +11,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ — см. пояснение в package-quality.yml. Коротко: пояс прятал
 # дефект импорта в валидаторах, из-за которого кит не запускался в child-репозитории при зелёном
 # CI. Причина устранена в коде (validation/_bootstrap.py); CI видит окружение пользователя.

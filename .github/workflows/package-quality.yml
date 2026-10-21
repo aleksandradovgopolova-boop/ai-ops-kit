@@ -15,6 +15,11 @@ on:
 permissions:
   contents: read
 
+# Новый SHA того же PR заменяет старый прогон; main/manual и разные PR независимы.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # v3.31: PYTHONPATH здесь БОЛЬШЕ НЕТ. Он ставился (v3.28.x) потому, что валидаторы делали
 # `import _bootstrap`, а файл лежал только в tools/ — и заодно прятал этот дефект от CI: с поясом
 # `installer --selftest` был зелёным, без пояса падал, то есть в child-репозитории кит не работал,

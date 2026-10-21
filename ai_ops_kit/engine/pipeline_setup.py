@@ -341,6 +341,16 @@ def _commit_work(work_root, wid, task, is_git, applied, authored, shell_changed,
     return committed_sha, work_branch, work_produced_by, tree_clean_before_checks
 
 
+def _verification_changed_files(root, base_sha, revision):
+    """Весь диапазон задачи; неизвестный scope — полный профиль, не docs-only skip."""
+    if not base_sha or not revision:
+        return None
+    rc, output, _ = _git(root, "diff", "--no-renames", "--name-only", "-z", base_sha, revision, "--")
+    if rc:
+        return None
+    return sorted({path for path in output.split("\0") if path})
+
+
 def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, loop, *,
                        commit, is_git, committed_sha, base_sha, authored_ev, allow_missing_tests,
                        calibrated_enforcement, ui_evidence, review, reviewer_proposer, budget,
@@ -355,7 +365,8 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
     effective_approval_signals).
     """
     # v3.26.1 Progressive Verification: передаём changed_files для targeted test execution
-    _changed_for_verification = _committed_changed_files(work_root, committed_sha) if (commit and is_git and committed_sha) else None
+    _changed_for_verification = (_verification_changed_files(work_root, base_sha, committed_sha)
+                                 if commit and is_git else None)
     # Явная стадия проверки: пакет/checkpoint может иметь SHA и оставаться draft.
     # Финальный whole-work/aggregate объявляет merge_candidate независимо от open_pr.
     coll = evidence_collector.collect(profile, work_root, pol, changed_files=_changed_for_verification,
