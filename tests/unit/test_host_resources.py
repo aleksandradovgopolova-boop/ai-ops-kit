@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from ai_ops_kit.shared import host_resources as hr
+from ai_ops_kit.devtools import host_resource_cli as hr
 from ai_ops_kit.devtools import host_resource_cli as cli
 
 pytestmark = pytest.mark.unit
@@ -31,7 +31,7 @@ def test_local_holder_blocks_ci_from_another_checkout(tmp_path):
     other.mkdir()
     source = str(Path(hr.__file__).parents[2])
     code = ("import sys; sys.path.insert(0,sys.argv[1]); "
-            "from ai_ops_kit.shared.host_resources import host_slot; "
+            "from ai_ops_kit.devtools.host_resource_cli import host_slot; "
             "from pathlib import Path; "
             "with_placeholder")
     code = code.replace("with_placeholder", "\nwith host_slot('ci','self_hosted_ci',path=Path(sys.argv[2])):\n Path('ran').write_text('yes')")
@@ -48,7 +48,7 @@ def test_local_holder_blocks_ci_from_another_checkout(tmp_path):
 def test_owned_holder_crash_releases_without_unlink(tmp_path):
     path = tmp_path / "shared.lock"
     code = ("import sys,time; from pathlib import Path; "
-            "from ai_ops_kit.shared.host_resources import host_slot;\n"
+            "from ai_ops_kit.devtools.host_resource_cli import host_slot;\n"
             "with host_slot('fixture','local',path=Path(sys.argv[1])):\n print('locked',flush=True); time.sleep(20)")
     child = subprocess.Popen([sys.executable, "-c", code, str(path)], stdout=subprocess.PIPE, text=True)
     try:
@@ -73,7 +73,7 @@ def test_real_inherited_fd_is_checked_and_child_action_runs(tmp_path):
     path = tmp_path / "shared.lock"
     target = tmp_path / "action"
     command = [sys.executable, "-c",
-               "import sys; from pathlib import Path; from ai_ops_kit.shared.host_resources import inherited_slot; "
+               "import sys; from pathlib import Path; from ai_ops_kit.devtools.host_resource_cli import inherited_slot; "
                "assert inherited_slot(Path(sys.argv[1])) is not None; Path(sys.argv[2]).write_text('ran')",
                str(path), str(target)]
     assert cli.execute(command, "local", "local", path=path, probe=lambda: []) == 0

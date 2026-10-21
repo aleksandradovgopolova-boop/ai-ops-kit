@@ -254,7 +254,8 @@ def test_receipt_does_not_dirty_verified_worktree(tmp_path, context):
     git("worktree", "add", "--detach", str(worktree))
     result = vr.run(worktree, "test", "true", lambda: {"status": "PASS", "exit_code": 0}, lambda: context)
     assert Path(result["source"]).is_file()
-    assert Path(result["source"]).is_relative_to(tmp_path / ".ai/runtime")
+    assert not Path(result["source"]).is_relative_to(tmp_path)
+    assert vr.state_root(worktree) == vr.state_root(tmp_path)
     assert subprocess.check_output(["git", "-C", str(worktree), "status", "--porcelain"], text=True) == ""
 
 
@@ -293,3 +294,24 @@ def test_main_impact_profiles_are_preserved_with_receipts(tmp_path, monkeypatch,
     assert impact_check_cli.main(["--root", str(tmp_path), "--intent", intent]) == 0
     assert observed[0][0] == ["bash", "scripts/check-full.sh", *flags]
     assert observed[0][1]["scope"] == scope
+
+
+def test_receipts_preserve_clean_ordinary_checkout_and_reuse_after_resume(tmp_path, context):
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.name=Fixture",
+                    "-c", "user.email=f@f", "commit", "--allow-empty", "-qm", "fixture"], check=True)
+    calls = []
+    def execute():
+        calls.append(1)
+        return {"status": "PASS", "exit_code": 0}
+    first = vr.run(repo, "fixture", "true", execute, lambda: context)
+    assert Path(first["source"]).is_file()
+    assert not Path(first["source"]).is_relative_to(repo)
+    assert subprocess.check_output(["git", "-C", str(repo), "status", "--porcelain"], text=True) == ""
+    second = vr.run(repo, "fixture", "true", execute, lambda: context)
+    assert second["reused"] and len(calls) == 1
+    (repo / "source.py").write_text("changed")
+    third = vr.run(repo, "fixture", "true", execute, lambda: context)
+    assert not third["reused"] and len(calls) == 2

@@ -58,6 +58,8 @@ if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
   exit 2
 fi
 
+FLOOR=$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' pyproject.toml | head -1)
+
 # Collection-only не исполняет тесты; широкие профили требуют настоящего host-slot.
 # Исходные argv сохраняются: --pr нельзя потерять при re-exec после shift.
 if [[ "$PROFILE" != collection-only ]] && ! "$PYTHON" -m ai_ops_kit.devtools.host_resource_cli --verify-inherited; then
@@ -65,7 +67,6 @@ if [[ "$PROFILE" != collection-only ]] && ! "$PYTHON" -m ai_ops_kit.devtools.hos
     --owner kit-check-full --wait-seconds 3600 -- bash "$0" "${HOST_ARGS[@]}"
 fi
 
-FLOOR=$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' pyproject.toml | head -1)
 CURRENT=$("$PYTHON" -c 'import platform, sys; print(f"{platform.python_implementation()} {platform.python_version()} / {sys.platform}")')
 
 echo "ОХВАТ: ${PROFILE} — ${CURRENT}."

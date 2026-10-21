@@ -39,3 +39,5 @@
 - [Найденные данные качества, релизов и принятых работ](dashboard-evidence-20261020.md).
 
 - [Ускорение малых изменений без повторной работы](priority-delivery-reuse.md) — content receipts, review и подтверждение поставки.
+
+- [Граница собственных outputs и общий слот проверок](receipt-output-boundary.md).

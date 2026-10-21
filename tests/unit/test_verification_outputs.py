@@ -155,7 +155,7 @@ def test_extracted_receipts_import_first_and_use_current_main_durable_io(tmp_pat
     from pathlib import Path
     root = Path(__file__).resolve().parents[2]
     code = ("import sys; from pathlib import Path; sys.path.insert(0,sys.argv[1]); "
-            "from ai_ops_kit.shared import verification_receipts as r; "
+            "from ai_ops_kit.shared import claim_provenance as r; "
             "from ai_ops_kit.shared import lifecycle_store as l; "
             "assert l.run is r.run; "
             "p=Path(sys.argv[2]); assert l.durable_create_batch(p,{'input':'value'})['ok']; "

@@ -27,7 +27,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from ai_ops_kit.shared import host_resources
+from ai_ops_kit.devtools import host_resource_cli as host_resources
 
 PKG = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PKG / "validation"))
@@ -205,7 +205,7 @@ def _tiny_scope_script(tmp_path):
     (root / "scripts").mkdir(parents=True)
     shutil.copy2(SCRIPT, root / "scripts/check-full.sh")
     # Fixture содержит настоящий runner и его runtime dependency, как обычный Kit checkout.
-    for relative in ("ai_ops_kit/shared/host_resources.py", "ai_ops_kit/devtools/host_resource_cli.py"):
+    for relative in ("ai_ops_kit/devtools/host_resource_cli.py",):
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(PKG / relative, target)

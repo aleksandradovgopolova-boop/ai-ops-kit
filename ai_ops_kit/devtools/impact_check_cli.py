@@ -12,7 +12,7 @@ from pathlib import Path
 
 from ai_ops_kit.gates import verification_tiers
 from ai_ops_kit.shared import lifecycle_store as receipts
-from ai_ops_kit.shared import host_resources
+from ai_ops_kit.devtools import host_resource_cli as host_resources
 
 
 def changed_paths(root: Path, base: str | None) -> list[str]:
@@ -61,11 +61,11 @@ def main(argv=None):
             return {"status": "PASS" if code == 0 else "FAIL", "exit_code": code}
         lint_receipt = receipts.run(root, "lint", [ruff, "check", "."], lint,
                                     lambda: receipts.python_context(root))
-        print(json.dumps(lint_receipt, ensure_ascii=False, indent=2))
+        print(json.dumps(lint_receipt, ensure_ascii=False, indent=2), file=sys.stderr)
         if lint_receipt["status"] != "PASS":
             return 1
     if result["tier"] == "skip":
-        print(json.dumps({"status": "SKIP", "check": "product-tests", "reason": result["note"]}))
+        print(json.dumps({"status": "SKIP", "check": "product-tests", "reason": result["note"]}), file=sys.stderr)
         return 0
     command = (result["full_argv"] if result["full_command"] else
                shlex.split(result["targeted_command"]))
@@ -77,7 +77,7 @@ def main(argv=None):
     receipt = receipts.run(root, "impact-tests", command, execute, lambda: receipts.python_context(root),
                            scope=result.get("full_profile", "local"),
                            output_contract=receipts.PYTEST_OUTPUTS)
-    print(json.dumps(receipt, ensure_ascii=False, indent=2))
+    print(json.dumps(receipt, ensure_ascii=False, indent=2), file=sys.stderr)
     if receipt["status"] == "PASS":
         return 0
     if receipt["status"] == "BLOCKED":
