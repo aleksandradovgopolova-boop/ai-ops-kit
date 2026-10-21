@@ -211,12 +211,11 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
 
     # --- источник 3: Repository Graph augmentation (граф строится ТОЛЬКО по разрешённым .py) ---
     graph_added = 0
-    ft_files = [r["file"] for r in ft]
-    needs_graph = any(rel.endswith(".py") for rel in ft_files)
-    graph_reason = None if needs_graph else "нет Python-кандидатов для расширения графом"
+    python_candidates = [r["file"] for r in ft if r["file"].endswith(".py")]
+    graph_reason = None if python_candidates else "нет Python-кандидатов для расширения графом"
     try:
         graph = (repo_graph.build_graph(root, subdirs=("",), path_filter=_allowed_path)
-                 if needs_graph else {"import_edges": {}})
+                 if python_candidates else {"import_edges": {}})
     # СБОЙ СБОРКИ ГРАФА НАЗЫВАЕТСЯ (срез ратчета, 2026-08-12). Прежде он давал пустой граф, и
     # `graph_added` оставался 0 — неотличимо от «граф построен, добавить было нечего». Отчёт
     # контекста говорил «0», а правда была «не смог посчитать»: тот же инвариант, что
@@ -224,9 +223,7 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
     except Exception as _ge:  # noqa: BLE001 — граф не роняет сборку контекста, но молчать не вправе
         graph = {"import_edges": {}}
         graph_reason = f"граф не построен: {type(_ge).__name__}: {_ge}"[:200]
-    for rel in ft_files:
-        if not rel.endswith(".py"):
-            continue
+    for rel in python_candidates:
         neighbors = set(graph.get("import_edges", {}).get(rel, []))   # forward: что импортит rel
         neighbors |= set(repo_graph.impact(graph, rel))               # reverse: кто зависит от rel
         for nb in neighbors:
