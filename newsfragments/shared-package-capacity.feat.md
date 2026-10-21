@@ -1,1 +1,0 @@
-Automatic independent-root работы одного Git-common store делят два local package callback slots: busy/unavailable admission даёт явный not-started без model callback и списания бюджета, а освобождение позволяет существующий partial retry. Сеть не держит canonical claim lock; actual callback errors остаются unknown/error.
