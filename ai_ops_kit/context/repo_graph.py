@@ -94,14 +94,15 @@ def _js_ts_files(root: Path, subdirs=None, path_filter=None, uncertainties=None)
     return _source_files(root, subdirs, JS_TS_EXTENSIONS, JS_SKIP_DIRS, path_filter, uncertainties)
 
 
-def _analyze(path: Path):
+def _analyze(path: Path, *, tree=None):
     """(symbols, imported_module_stems) Python-файла через ast; все Import/ImportFrom (вкл. в функциях)."""
     try:
         # ИМЯ ФАЙЛА ОБЯЗАТЕЛЬНО (F-022). `ast.parse` без него подписывает предупреждения
         # интерпретатора как `<unknown>`, и владелец получал в вывод прогона строку
         # `<unknown>:11: invalid escape sequence`, по которой нельзя ни починить, ни осознанно
         # пропустить: непонятно даже, чей это файл — его продукта или кита.
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if tree is None:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except (SyntaxError, OSError, UnicodeError):
         return [], set()
     symbols = [n.name for n in tree.body
@@ -136,11 +137,12 @@ def _stem(parts):
     return parts[-1] if parts[0] == "ai_ops_kit" and len(parts) >= 3 else parts[0]
 
 
-def _analyze_js(path: Path):
+def _analyze_js(path: Path, *, content=None):
     """v3.26.0: (symbols, imported_module_stems) JS/TS файла через regex.
     Парсит: import ... from '...', import '...', require('...'), export function/class."""
     try:
-        content = path.read_text(encoding="utf-8")
+        if content is None:
+            content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return [], set()
 
@@ -167,14 +169,16 @@ def _analyze_js(path: Path):
     return symbols, mods
 
 
-def _dependency_uncertainty(path: Path) -> str | None:
+def _dependency_uncertainty(path: Path, *, text=None, tree=None) -> str | None:
     """Динамический потребитель известен; непрочитанное дерево ограничить нельзя."""
     if path.is_symlink():
         return "unreadable"
     try:
-        text = path.read_text(encoding="utf-8")
+        if text is None:
+            text = path.read_text(encoding="utf-8")
         if path.suffix == ".py":
-            tree = ast.parse(text, filename=str(path))
+            if tree is None:
+                tree = ast.parse(text, filename=str(path))
             # pytest_plugins загружается фреймворком, без статического import-ребра.
             if any(isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
                    and n.id == "pytest_plugins" for n in ast.walk(tree)):
@@ -229,13 +233,22 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
             stem_to_rels.setdefault(f.parent.name, set()).add(rel)
 
     known_rels = {rel for _, rel in rels}
-    file_info, symbol_index, import_edges, tests = {}, {}, {}, {}
+    file_info, symbol_index, import_edges, tests, kinds = {}, {}, {}, {}, {}
     for f, rel in rels:
-        # Выбираем анализатор по расширению
-        if f.suffix in JS_TS_EXTENSIONS:
-            syms, mods = _analyze_js(f)
-        else:
-            syms, mods = _analyze(f)
+        # Один снимок содержимого на узел: imports и uncertainty используют тот же AST.
+        # Ничего не кешируется между сборками графа.
+        try:
+            content = f.read_text(encoding="utf-8")
+            tree = ast.parse(content, filename=str(f)) if f.suffix == ".py" else None
+            if f.suffix in JS_TS_EXTENSIONS:
+                syms, mods = _analyze_js(f, content=content)
+            else:
+                syms, mods = _analyze(f, tree=tree)
+            kind = _dependency_uncertainty(f, text=content, tree=tree)
+        except (SyntaxError, OSError, UnicodeError):
+            syms, mods, kind = [], set(), "unreadable"
+        if kind:
+            kinds[rel] = kind
         file_info[rel] = {"symbols": syms, "imports": sorted(mods), "language": "js" if f.suffix in JS_TS_EXTENSIONS else "py"}
         for s in syms:
             symbol_index.setdefault(s, []).append(rel)
@@ -253,7 +266,6 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
         stem = Path(rel).stem
         if stem.startswith("test_") or stem.endswith("_test") or stem.endswith(".test") or stem.endswith(".spec"):
             tests[rel] = internal
-    kinds = {rel: kind for f, rel in rels if (kind := _dependency_uncertainty(f))}
     kinds.update({rel: "unreadable" for rel in uncertainties})
     return {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs) if subdirs else ["*"],
             "file_count": len(rels), "files": file_info, "symbol_index": symbol_index,
