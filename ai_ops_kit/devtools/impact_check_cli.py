@@ -42,7 +42,8 @@ def main(argv=None):
         print(f"Cannot determine complete change scope: {exc}", file=sys.stderr)
         return 2
     profile = {"stacks": [{"language": "python", "commands": {
-        "test": shlex.join([sys.executable, "-m", "pytest", "tests/", "-q"])}}]}
+        "test": shlex.join([sys.executable, "-m", "pytest", "tests/", "-q",
+                            "-m", "not nightly and not release_gate"])}}]}
     result = verification_tiers.select_tests(changed, str(root), lifecycle_intent=args.intent, profile=profile)
     if result["full_command"]:
         release = args.intent == "release_candidate"

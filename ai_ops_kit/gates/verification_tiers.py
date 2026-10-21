@@ -23,6 +23,8 @@ CLI: verification_tiers.py --changed file1 file2 [--tier affected|module|full|sk
 from __future__ import annotations
 
 import json
+import os
+import re
 import shlex
 import sys
 from pathlib import Path
@@ -170,32 +172,65 @@ def _select_tests(changed_files: list, child_root: str, tier: str = None, lifecy
     if any(Path(f).suffix not in (".py", *repo_graph.JS_TS_EXTENSIONS) for f in sources):
         return fallback("non-source assets/configuration need the complete configured suite")
     # Test modules can be imported as helpers by other tests: include their
-    # importers too. Unknown dependencies anywhere retain the full fallback.
+    # importers too. Unreadable trees retain the full fallback.
     graph = repo_graph.build_graph(child_root, subdirs=None, include_js=True)
     if any(f not in graph["files"] for f in sources):
         return fallback("non-source assets/configuration need the complete configured suite")
-    if graph.get("uncertainties"):
-        return fallback("dependency graph incomplete: " + ", ".join(graph["uncertainties"][:3]))
+    uncertain = graph.get("uncertainties", [])
+    kinds = graph.get("uncertainty_kinds", {})
+    if any(kinds.get(path) != "dynamic" or path not in graph["files"] for path in uncertain):
+        return fallback("dependency graph incomplete: unreadable or unclassified inputs")
+    dynamic_consumers = set(uncertain)
+    for path in uncertain:
+        dynamic_consumers.update(repo_graph.impact(graph, path))
+    if any(Path(path).name == "conftest.py" for path in dynamic_consumers):
+        return fallback("dependency graph incomplete: dynamic pytest fixtures have implicit consumers")
+    if any(not repo_graph.affected_tests(graph, [path]) for path in uncertain):
+        return fallback("dependency graph incomplete: dynamic loader has no known test consumers")
     if any(not repo_graph.affected_tests(graph, [f]) for f in sources):
         return fallback("at least one changed source has unknown test impact")
     impacted = sources
     if tier == "module":
         parents = {str(Path(f).parent) for f in sources}
         impacted = [f for f in graph["files"] if str(Path(f).parent) in parents]
-    affected = repo_graph.affected_tests(graph, impacted)
+    # Каждый динамический узел может читать ЛЮБОЙ изменённый модуль. Включаем их ВСЕ
+    # вместе с транзитивными потребителями: неизвестное ребро не исчезает из проверки.
+    selection_roots = sorted(set(impacted) | set(uncertain))
+    affected = repo_graph.affected_tests(graph, selection_roots)
+    if uncertain and len(affected) >= len(graph["tests"]):
+        return fallback("dependency graph incomplete: dynamic consumers require the whole suite")
     profile = profile if profile is not None else project_detector.detect(child_root)
     test_commands = _get_test_commands_from_profile(profile, affected, child_root)
     if not test_commands:
         return fallback("runner command cannot be safely narrowed")
-    dependencies = set(impacted)
-    for source in impacted:
+    if uncertain and _pytest_plugins_configured(child_root, test_commands):
+        return fallback("dependency graph incomplete: explicit pytest plugin has implicit consumers")
+    dependencies = set(selection_roots)
+    for source in selection_roots:
         dependencies.update(repo_graph.impact(graph, source))
         dependencies.update(graph.get("import_edges", {}).get(source, []))
     return {"tier": tier, "changed_files": changed_files, "affected_tests": affected,
             "dependency_paths": sorted(dependencies), "dependency_status": "known",
+            "conservative_consumers": uncertain,
             "targeted_command": " && ".join(test_commands), "full_command": False,
             "impact_status": IMPACT_TARGETED_TESTS_FOUND,
-            "note": f"Iteration only: {len(affected)} test files; full regression remains required for merge/release"}
+            "note": f"Iteration only: {len(affected)} test files, {len(uncertain)} conservative dynamic consumers; "
+                    "full regression remains required for merge/release"}
+
+
+def _pytest_plugins_configured(root, commands):
+    """Явные plugins могут раздавать fixtures без статических import-рёбер."""
+    settings = [*commands, os.environ.get("PYTEST_ADDOPTS", "")]
+    if os.environ.get("PYTEST_PLUGINS"):
+        return True
+    for name in ("pytest.ini", ".pytest.ini", "pyproject.toml", "setup.cfg", "tox.ini"):
+        path = Path(root) / name
+        try:
+            if path.exists():
+                settings.append(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError):
+            return True
+    return any(re.search(r"(?<![\w-])-p(?:[=\s]|[A-Za-z_])", value) for value in settings)
 
 
 def risk_classes(changed_files, root):

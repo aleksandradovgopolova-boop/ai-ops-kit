@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 
@@ -66,3 +67,25 @@ def test_plan_only_does_not_execute_full_profile(child):
     assert json.loads(result.stdout)['full_profile'] == 'pr-current-python'
     assert json.loads(result.stdout)['full_argv'] == ['bash', 'scripts/check-full.sh', '--pr']
     assert not (child / 'selected-profile.txt').exists()
+
+
+@pytest.mark.parametrize('has_base', [True, False])
+def test_default_fast_check_uses_branch_diff_or_refuses_unknown_base(child, has_base):
+    for name in ('check-fast.sh', 'warn-path-belt.sh'):
+        shutil.copy2(KIT / 'scripts' / name, child / 'scripts' / name)
+    if has_base:
+        subprocess.run(['git', 'update-ref', 'refs/remotes/origin/main', 'HEAD'], cwd=child, check=True)
+    subprocess.run(['git', 'add', '.'], cwd=child, check=True)
+    subprocess.run(['git', '-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.invalid',
+                    'commit', '-qm', 'branch changes'], cwd=child, check=True)
+    result = subprocess.run(['bash', 'scripts/check-fast.sh'], cwd=child, capture_output=True,
+                            text=True, timeout=20, env={**os.environ, 'PYTHON': sys.executable,
+                            'PYTHONPATH': str(KIT), 'PYTHONDONTWRITEBYTECODE': '1'})
+    if has_base:
+        assert result.returncode == 0, result.stderr
+        assert '.github/workflows/check.yml' in json.loads(result.stdout)['changed_files']
+        assert (child / 'selected-profile.txt').read_text().strip() == '--pr'
+    else:
+        assert result.returncode == 2
+        assert 'Cannot determine complete change scope' in result.stderr
+        assert not (child / 'selected-profile.txt').exists()

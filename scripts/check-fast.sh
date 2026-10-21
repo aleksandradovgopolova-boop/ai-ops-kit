@@ -1,15 +1,8 @@
 #!/usr/bin/env bash
-# Быстрая обратная связь (~1–2 мин): те же БЫСТРЫЕ БЛОКИРУЮЩИЕ ворота, что и CI — линтер (джоба
-# `lint`) и весь pytest без маркера `slow` (джобы `fast`/`contracts`), — чтобы красное ловилось
-# ДО пуша, а не раундом CI после (работа `local-check-mirrors-ci`, находка
-# docs/parallel-execution-retro.md: регистрация валидатора/пакета, layering, public-surface,
-# footprint всплывали в CI после пуша, тратя раунд).
-#
-# НЕ входит и НЕ обязано: медленные selftests (группы `selftests-a`/`selftests-m`, ~8 мин) и
-# compatibility-matrix (другой интерпретатор, чистая установка, upgrade-path). Их даёт
-# scripts/check-full.sh и CI. Поэтому «быстро зелёное» НЕ значит «CI зелёный»: полный охват — только
-# check-full. Разделение существует потому, что девятиминутный цикл перестают запускать, и дыры
-# возвращаются.
+# Проверки итерации: по умолчанию impact полного diff от origin/main и существующие receipts.
+# --impact принимает свою базу/intent/plan-only; --all запускает прежний весь набор без slow.
+# Старые pytest-аргументы также используют прежний путь. При неизвестном влиянии impact
+# расширяет охват до PR-профиля. Успех итерации не заменяет финальный CI/compatibility-matrix.
 set -euo pipefail
 export PYTHONDONTWRITEBYTECODE=1
 cd "$(dirname "$0")/.."
@@ -30,12 +23,22 @@ if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
   exit 2
 fi
 
+# Обычная итерация использует impact и receipts. База обязательна: иначе после коммита
+# чистая рабочая папка скрыла бы изменения ветки. Нет origin/main → явный отказ с возможностью
+# назвать реальную базу через --impact --base REF. Сеть автоматически не вызывается.
+if [[ $# -eq 0 ]]; then
+  "$PYTHON" -m ai_ops_kit.devtools.impact_check_cli --base origin/main
+  exit $?
+fi
 # Impact ведёт lint и тесты через тот же журнал; plan-only ничего не исполняет.
 if [[ "${1:-}" == "--impact" ]]; then
   shift
   "$PYTHON" -m ai_ops_kit.devtools.impact_check_cli "$@"
   exit $?
 fi
+
+# Прежний весь быстрый набор остаётся явным. Старые pytest-аргументы также совместимы.
+if [[ "${1:-}" == "--all" ]]; then shift; fi
 
 # Линтер — часть блокирующего CI (джоба `lint`) и находится за секунды: F821 (вызов несуществующего
 # имени) не должен ждать раунда CI. Тот же набор, что в check-full и CI ([tool.ruff.lint]).

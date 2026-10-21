@@ -17,6 +17,8 @@
 from __future__ import annotations
 
 import os
+import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -24,13 +26,41 @@ from pathlib import Path
 import pytest
 
 PKG = Path(__file__).resolve().parents[2]
-SCRIPT = PKG / "scripts" / "check-fast.sh"
-
-# Каждый тест поднимает подпроцесс `check-fast.sh --collect-only` (ruff по всему репо + сбор всего
-# pytest) — 30–60 c на тест. По определению маркера (pytest.ini) это slow. Файл снят с шарда `fast`
-# в slow-шарды selftests, где есть запас; проверка зеркалирования CI по-прежнему идёт на КАЖДОМ PR.
-# Issue #465.
+# Маркер оставлен: этот срез убирает рекурсивную collection, не меняет распределение CI.
 pytestmark = [pytest.mark.unit, pytest.mark.slow]
+
+
+@pytest.fixture
+def check_project(tmp_path):
+    """Реальные скрипты на двух тестах: весь Kit уже проверяет внешний прогон pytest."""
+    root = tmp_path / "small project"
+    for rel in ("scripts/check-fast.sh", "scripts/warn-path-belt.sh", "pyproject.toml",
+                "ai_ops_kit/__init__.py", "ai_ops_kit/shared/__init__.py",
+                "ai_ops_kit/shared/path_hygiene.py"):
+        target = root / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(PKG / rel, target)
+    (root / "tests").mkdir()
+    (root / "pytest.ini").write_text("[pytest]\nmarkers =\n    slow: slow test\n")
+    (root / "tests/test_selection.py").write_text(
+        "from pathlib import Path\nimport pytest\n"
+        "def test_fast():\n    Path('fast-ran').write_text('executed')\n"
+        "@pytest.mark.slow\ndef test_slow():\n"
+        "    Path('slow-ran').write_text('executed')\n"
+        "    pytest.fail('slow must not run')\n")
+    return root
+
+
+def _run(root, python, bindir=None):
+    environment = {**os.environ, "PYTHON": str(python), "PYTEST_XDIST_AUTO_NUM_WORKERS": "1"}
+    # Проверяем свою fixture, без настроек внешнего pytest или другого checkout.
+    for key in ("PYTEST_ADDOPTS", "PYTEST_PLUGINS", "PYTHONPATH"):
+        environment.pop(key, None)
+    if bindir:
+        environment["PATH"] = f"{bindir}{os.pathsep}{environment['PATH']}"
+    return subprocess.run(["bash", str(root / "scripts/check-fast.sh"), "-q"],
+                          cwd=root, capture_output=True, text=True, timeout=30,
+                          env=environment)
 
 
 def _logging_python(tmp_path):
@@ -38,8 +68,8 @@ def _logging_python(tmp_path):
     log = tmp_path / "py-calls.log"
     w = tmp_path / "python-logging"
     w.write_text("#!/usr/bin/env bash\n"
-                 f'echo "$@" >> {log}\n'
-                 f'exec {sys.executable} "$@"\n', encoding="utf-8")
+                 f'echo "$@" >> {shlex.quote(str(log))}\n'
+                 f'exec {shlex.quote(sys.executable)} "$@"\n', encoding="utf-8")
     w.chmod(0o755)
     return w, log
 
@@ -51,7 +81,7 @@ def _fake_ruff(tmp_path, exit_code):
     bindir.mkdir(exist_ok=True)
     log = tmp_path / "ruff-calls.log"
     (bindir / "ruff").write_text("#!/usr/bin/env bash\n"
-                                 f'echo "$@" >> {log}\n'
+                                 f'echo "$@" >> {shlex.quote(str(log))}\n'
                                  f"exit {exit_code}\n", encoding="utf-8")
     (bindir / "ruff").chmod(0o755)
     return bindir, log
@@ -59,68 +89,64 @@ def _fake_ruff(tmp_path, exit_code):
 
 # ── positive ────────────────────────────────────────────────────────────────────────────────────
 
-def test_pytest_runs_on_the_announced_interpreter(tmp_path):
+def test_pytest_runs_on_the_announced_interpreter(tmp_path, check_project):
     """check-fast доходит до pytest тем же интерпретатором, что назван, — не голым `python3`."""
     w, log = _logging_python(tmp_path)
-    r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
-                       capture_output=True, text=True, timeout=300,
-                       env={**os.environ, "PYTHON": str(w)})
+    r = _run(check_project, w)
     assert r.returncode == 0, (r.stdout + r.stderr)[-800:]
     calls = log.read_text(encoding="utf-8") if log.is_file() else ""
     assert "-m pytest" in calls, (
         "быстрый прогон идёт не объявленным интерпретатором:\n" + calls)
+    assert (check_project / "fast-ran").read_text() == "executed"
 
 
-def test_it_runs_the_fast_not_slow_set(tmp_path):
+def test_it_runs_the_fast_not_slow_set(tmp_path, check_project):
     """Зеркалит группу CI `fast`: тот же отбор `-m "not slow"`, а не иной набор."""
     w, log = _logging_python(tmp_path)
-    subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
-                   capture_output=True, text=True, timeout=300,
-                   env={**os.environ, "PYTHON": str(w)})
+    r = _run(check_project, w)
+    assert r.returncode == 0, (r.stdout + r.stderr)[-800:]
     calls = log.read_text(encoding="utf-8") if log.is_file() else ""
     assert "not slow" in calls, calls
+    assert (check_project / "fast-ran").read_text() == "executed"
+    assert not (check_project / "slow-ran").exists()
 
 
 # ── fail-closed ───────────────────────────────────────────────────────────────────────────────
 
-def test_refuses_an_interpreter_without_pytest(tmp_path):
+def test_refuses_an_interpreter_without_pytest(tmp_path, check_project):
     """Интерпретатор без pytest -> названный отказ (код 2), а не `No module named pytest`."""
     fake = tmp_path / "python-without-pytest"
     fake.write_text("#!/usr/bin/env bash\n"
                     'if [ "$1" = "-c" ] && [[ "$2" == *"import pytest"* ]]; then exit 1; fi\n'
-                    f'exec {sys.executable} "$@"\n', encoding="utf-8")
+                    f'exec {shlex.quote(sys.executable)} "$@"\n', encoding="utf-8")
     fake.chmod(0o755)
-    r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
-                       capture_output=True, text=True, timeout=120,
-                       env={**os.environ, "PYTHON": str(fake)})
+    r = _run(check_project, fake)
     assert r.returncode == 2, (r.returncode, (r.stdout + r.stderr)[-600:])
     assert "pytest в нём нет" in (r.stdout + r.stderr), (r.stdout + r.stderr)[-600:]
+    assert not (check_project / "fast-ran").exists()
 
 
-def test_a_lint_failure_stops_before_pytest(tmp_path):
+def test_a_lint_failure_stops_before_pytest(tmp_path, check_project):
     """Провал линтера ОСТАНАВЛИВАЕТ быстрый прогон до тестов — красное не уезжает в CI-раунд."""
     w, pylog = _logging_python(tmp_path)
-    bindir, _ = _fake_ruff(tmp_path, exit_code=1)
-    r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
-                       capture_output=True, text=True, timeout=120,
-                       env={**os.environ, "PYTHON": str(w),
-                            "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"})
+    bindir, ruff_log = _fake_ruff(tmp_path, exit_code=1)
+    r = _run(check_project, w, bindir)
+    assert ruff_log.is_file() and "check" in ruff_log.read_text()
     assert r.returncode != 0, "линтер упал, а быстрый прогон не остановился"
     calls = pylog.read_text(encoding="utf-8") if pylog.is_file() else ""
     assert "-m pytest" not in calls, (
         "линтер упал, но pytest всё равно запустился — ворота линтера не блокируют:\n" + calls)
+    assert not (check_project / "fast-ran").exists()
 
 
 # ── side-effect ───────────────────────────────────────────────────────────────────────────────
 
-def test_the_linter_is_actually_invoked(tmp_path):
+def test_the_linter_is_actually_invoked(tmp_path, check_project):
     """Джоба `lint` CI зеркалится РЕАЛЬНЫМ вызовом ruff, а не одним упоминанием в комментарии."""
     w, _ = _logging_python(tmp_path)
     bindir, ruff_log = _fake_ruff(tmp_path, exit_code=0)
-    r = subprocess.run(["bash", str(SCRIPT), "--collect-only", "-q"], cwd=str(PKG),
-                       capture_output=True, text=True, timeout=300,
-                       env={**os.environ, "PYTHON": str(w),
-                            "PATH": f"{bindir}{os.pathsep}{os.environ['PATH']}"})
+    r = _run(check_project, w, bindir)
     assert r.returncode == 0, (r.stdout + r.stderr)[-800:]
     assert ruff_log.is_file() and "check" in ruff_log.read_text(encoding="utf-8"), (
         "check-fast не вызвал ruff — ворота линтера не зеркалятся")
+    assert (check_project / "fast-ran").read_text() == "executed"
