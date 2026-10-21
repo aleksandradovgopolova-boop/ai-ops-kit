@@ -5,11 +5,14 @@ import argparse
 import json
 import os
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
 
 from ai_ops_kit.gates import verification_tiers
+from ai_ops_kit.shared import lifecycle_store as receipts
+from ai_ops_kit.devtools import host_resource_cli as host_resources
 
 
 def changed_paths(root: Path, base: str | None) -> list[str]:
@@ -46,14 +49,40 @@ def main(argv=None):
         result["full_profile"] = "full-current-python" if release else "pr-current-python"
         result["full_argv"] = ["bash", "scripts/check-full.sh", *([] if release else ["--pr"])]
     print(json.dumps(result, ensure_ascii=False, indent=2), flush=True)
-    if args.plan_only or result["tier"] == "skip":
+    if args.plan_only:
         return 0
-    if result["full_command"]:
-        return subprocess.call(result["full_argv"], cwd=root,
-                               env={**os.environ, "PYTHON": sys.executable, "PYTHONDONTWRITEBYTECODE": "1"})
-    # Targeted commands here are generated solely by the simple pytest rewriter.
-    return subprocess.call(shlex.split(result["targeted_command"]), cwd=root,
-                           env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    if not result["full_command"]:
+        ruff = shutil.which("ruff")
+        if not ruff:
+            print("BLOCKED: ruff недоступен; обязательная статическая проверка не исполнена")
+            return 2
+        def lint():
+            code = subprocess.call([ruff, "check", "."], cwd=root, **host_resources.subprocess_kwargs())
+            return {"status": "PASS" if code == 0 else "FAIL", "exit_code": code}
+        lint_receipt = receipts.run(root, "lint", [ruff, "check", "."], lint,
+                                    lambda: receipts.python_context(root))
+        print(json.dumps(lint_receipt, ensure_ascii=False, indent=2), file=sys.stderr)
+        if lint_receipt["status"] != "PASS":
+            return 1
+    if result["tier"] == "skip":
+        print(json.dumps({"status": "SKIP", "check": "product-tests", "reason": result["note"]}), file=sys.stderr)
+        return 0
+    command = (result["full_argv"] if result["full_command"] else
+               shlex.split(result["targeted_command"]))
+    def execute():
+        code = subprocess.call(command, cwd=root, env={**os.environ, "PYTHON": sys.executable,
+                                                       "PYTHONDONTWRITEBYTECODE": "1"},
+                               **host_resources.subprocess_kwargs())
+        return {"status": "PASS" if code == 0 else "FAIL", "exit_code": code}
+    receipt = receipts.run(root, "impact-tests", command, execute, lambda: receipts.python_context(root),
+                           scope=result.get("full_profile", "local"),
+                           output_contract=receipts.PYTEST_OUTPUTS)
+    print(json.dumps(receipt, ensure_ascii=False, indent=2), file=sys.stderr)
+    if receipt["status"] == "PASS":
+        return 0
+    if receipt["status"] == "BLOCKED":
+        return 2
+    return receipt["exit_code"] if isinstance(receipt.get("exit_code"), int) and receipt["exit_code"] else 1
 
 
 if __name__ == "__main__":

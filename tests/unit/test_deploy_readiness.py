@@ -68,7 +68,8 @@ class TestMaturityLadder:
         (tmp_path / "rollback.sh").write_text("#!/bin/sh\necho undo\n", encoding="utf-8")
         rec_dir = tmp_path / ".ai" / "runtime" / "deploy"
         rec_dir.mkdir(parents=True)
-        (rec_dir / "DEP-001.json").write_text('{"environment": "production"}', encoding="utf-8")
+        fixture = PKG_ROOT / "tests/fixtures/delivery_reuse/verified_release.json"
+        (rec_dir / "DEP-001.json").write_text(fixture.read_text(), encoding="utf-8")
         rep = dr.assess(tmp_path)
         assert rep["deploy_maturity"] == "verified"
         assert rep["rollback_declared"] is True

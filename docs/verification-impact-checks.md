@@ -14,8 +14,8 @@ PYTHON=.venv/bin/python scripts/check-fast.sh --impact --intent ready_for_review
 PYTHON=.venv/bin/python scripts/check-fast.sh --impact --intent merge_candidate
 ```
 
-Без `--impact` сохраняется прежний весь набор `not slow`. Режим impact сначала запускает тот же
-линтер и проверку окружения. Scope включает staged, unstaged, untracked, удалённые файлы и, при
+Без `--impact` сохраняется прежний весь набор `not slow`. Режим impact сохраняет проверку окружения
+и линтер; `--plan-only` не исполняет проверки. Scope включает staged, unstaged, untracked, удалённые файлы и, при
 `--base`, изменения коммитов относительно merge-base. Неизвестный ref — явный отказ, не пустой scope.
 Имена до и после rename сохраняются. Не используйте только последний коммит вместо полного diff.
 
@@ -33,6 +33,27 @@ re-exports, ошибки разбора/чтения и символьные sou
 консервативная первая версия: в реальных Kit и ii-sreda есть такие зависимости, поэтому правки
 исходников часто остаются full. Дальнейшее сужение требует отдельного доказательства зависимостей;
 заявлять все небольшие фичи проверенными за секунды нельзя.
+
+План дополняется сочетающимися классами documents / visual / ui_state_navigation / backend_api /
+db_migrations / infra, причинами проверок и отдельными сценариями со статусом NOT_RUN.
+Наличие сценария в плане не доказывает его исполнение; его приёмку подтверждает адаптер.
+
+Impact и `evidence_collector` используют `shared/lifecycle_store`. Только полноценный PASS
+при совпадении содержимого входов (включая executable mode), dependencies/lockfile, toolchain,
+config, flags и среды разрешает reuse. По умолчанию охват входов консервативен: всё дерево,
+кроме выделенных runtime/cache/dependency-каталогов; внешние зависимости обязан покрыть адаптер
+контекста. Поэтому независимая правка документа может инвалидировать более широкий результат.
+Нечитаемые входы/симлинки/неизвестный контекст запрещают reuse. Каждый запуск сообщает причину;
+reuse — путь и основание. FAIL/SKIP/BLOCKED/NOT_RUN никогда не становятся PASS от кеширования.
+Журнал хранится в runtime общего checkout, вне проверяемого worktree: запись evidence сама не
+делает проверенный код грязным. Состояние Git учитывается дополнительно к содержимому файлов.
+Python Kit имеет content adapter; произвольный продуктовый runner без адаптера исполняется
+заново. Изменение входов во время проверки блокирует пригодность её результата.
+
+Локальные receipts не являются авторитетным CI evidence и не пересекают его доверенную границу.
+Документальный build CI Kit запускается на draft и не дублируется при ready_for_review;
+package-quality сохраняет событие для ранее пропущенных обязательных проверок. Повторный review
+применим только к той же базе, merge-base, точному diff, дереву и политике.
 
 Команда pytest заменяет прежние positional roots на выбранные файлы, сохраняя распознанные
 опции. Неизвестные опции, shell-композиции и coverage-команды не переписываются. Vitest получает
@@ -93,3 +114,36 @@ worker и сохраняют общий базовый прогон; кеш су
 ## Профиль полного локального fallback
 
 Impact CLI явно печатает `full_profile` и исполнимый `full_argv`, в том числе в `--plan-only`. Для `draft`, `ready_for_review` и `merge_candidate` полный fallback вызывает существующий `scripts/check-full.sh --pr`: все обычные fast/slow/contracts без nightly/release_gate. `release_candidate` сохраняет default `check-full.sh` с nightly (`full-current-python`). Это выбор локального профиля, а не изменение графа/подбора тестов или отмена обязательного exact-head CI. Неизвестное влияние по-прежнему требует полного набора своего профиля. Nightly и release gates выполняются своими существующими маршрутами; локальный успех их не заменяет. Ненулевой код проверки возвращается без подмены.
+
+## Собственные outputs проверки
+
+`lifecycle_store.run(..., output_contract=PYTEST_OUTPUTS)` применяется в Kit impact runner
+только к pytest/check-full. Это закрытый контракт `pytest-hypothesis-cache-v1`: только
+`.hypothesis/.gitignore`, `constants/<16 hex>[_nolimit]` и Unicode `charmap`/`codec-v2-utf-8`
+JSON gzip. Tracked-файл даже по такому пути остаётся входом. Неизвестные файлы и конфигурация
+под `.hypothesis/` не исключаются; symlink по-прежнему запрещает reuse.
+
+Outputs **входят** в точный fingerprint. Только сравнение семантических входов до/после
+свежего исполнения допускает изменение объявленных outputs. При успехе receipt привязан к
+фактическому состоянию **после** исполнения: позднейшая подмена/удаление cache требует запуска.
+Source, зависимости, lockfile, конфигурация, toolchain, flags, Git и значимая среда остаются
+причинами invalidation. `input_observation` сохраняет before/after fingerprints, изменившиеся
+компоненты и пути с digest/mode, без содержимого файлов и секретов. Старые BLOCKED не исправляются.
+
+`CODEX_TOOL_CALL_ID`, как thread/session id, считается служебной метаданной вызова, а не входом
+проверки. Исполнительская/access identity, `CI`, `PYTHONPATH` и остальные параметры сохраняются
+в environment digest. Проверка действующей access policy выполняется независимо от cache.
+
+## Тяжёлый запуск на общем хосте
+
+`check-full.sh` использует `devtools.host_resource_cli` и общий POSIX slot
+`/tmp/ai-ops-kit-heavy.lock`, не зависящий от checkout, git-common-dir или TMPDIR.
+Унаследованный fd проверяется по inode и flock; одного env-маркера недостаточно.
+Lock не удаляется и не снимается по TTL; после смерти держателя ОС закрывает fd.
+Наблюдение native `ps` блокирует запуск при видимом стороннем тяжёлом процессе, не останавливая его.
+
+Cooperating self-hosted runner может выполнить тот же wrapper:
+`python -m ai_ops_kit.devtools.host_resource_cli --kind self_hosted_ci --owner runner -- COMMAND`.
+Это точка подключения, а не уже подключённый product CI. Без wrapper остаётся окно между
+наблюдением ps и стартом внешнего CI. Разные OS users требуют заранее доступного общего пути;
+ошибка доступа блокирует запуск, права и security settings wrapper не меняет.

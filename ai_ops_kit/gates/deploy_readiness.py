@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """deploy_readiness.py (v3.20.0 Engineering Operating Model, WP5) — ЧЕСТНАЯ зрелость поставки.
 
-Кит НЕ деплоит и не собирается: он не даёт **врать о готовности деплоя**. Лестница — та же, что у
+Кит координирует поставку через адаптер, а этот гейт не даёт **врать о готовности деплоя**.
+Команды и доступы платформы остаются ответственностью адаптера. Лестница — та же, что у
 UI-evidence (ai_ops_kit/ui/ui_readiness.py), потому что болезнь та же: «у нас всё готово» без единого
 проверяемого признака.
 
@@ -36,6 +37,56 @@ import yaml
 # (слой primitives). gates -> checks вниз по слоям, статический импорт разрешён. Гейт больше не
 # тянет engops ни статически, ни динамически — ребро gates->engops (нарушение kernel-boundary) снято.
 from ai_ops_kit.checks import environment_map  # noqa: E402
+
+
+def confirmation(record):
+    """PASS / FAIL / BLOCKED. Непроверенная приёмка отличается от несовпадения версии."""
+    if not isinstance(record, dict):
+        return "BLOCKED", "нет записи выпуска"
+    if record.get("schema_version") != 1 or record.get("kind") != "DeployRecord":
+        return "BLOCKED", "неизвестный контракт записи выпуска"
+    expected = record.get("expected")
+    if not isinstance(expected, dict) or any(not expected.get(k) for k in
+                                           ("version", "sha", "artifact_digest", "environment")):
+        return "BLOCKED", "нет точной идентичности выпуска"
+    if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", str(expected["sha"])) or not re.fullmatch(
+            r"sha256:[0-9a-f]{64}", str(expected["artifact_digest"])):
+        return "BLOCKED", "невалидные SHA/digest"
+    recovery = record.get("recovery")
+    if (not record.get("owner") or not record.get("observed_at") or not isinstance(recovery, dict)
+            or not recovery.get("procedure") or recovery.get("automatic_rollback") is not False):
+        return "BLOCKED", "нет владельца, времени наблюдения или безопасного восстановления"
+    checks = record.get("checks")
+    if not isinstance(checks, list) or not checks:
+        return "BLOCKED", "нет результатов обязательных проверок"
+    observations = [record.get("runtime"), record.get("public")]
+    # Явный FAIL имеет приоритет над недоступностью другого источника.
+    if any(isinstance(c, dict) and c.get("status") == "FAIL" for c in checks + observations):
+        return "FAIL", "обязательная проверка/сценарий не прошли"
+    for observed in observations:
+        if isinstance(observed, dict) and observed.get("status") == "PASS":
+            if any(observed.get(k) != expected[k] for k in expected):
+                return "FAIL", "фактическая runtime/public-версия не совпадает с ожидаемой"
+    code = record.get("deploy_exit_code")
+    if code is not None and (type(code) is not int or code != 0):
+        return "FAIL", "deploy вернул ошибку; наблюдения сохранены, автоматического отката нет"
+    for check in checks:
+        if (not isinstance(check, dict) or check.get("status") != "PASS"
+                or not check.get("source") or not check.get("inputs_digest")):
+            return "BLOCKED", "нет проверяемого PASS обязательной проверки (SKIP не PASS)"
+    required_ci = record.get("required_ci", [])
+    if not isinstance(required_ci, list):
+        return "BLOCKED", "неизвестен набор обязательного CI"
+    for name in required_ci:
+        if not any(c.get("name") == name and c.get("kind") == "ci" and c.get("status") == "PASS"
+                   and c.get("sha") == expected["sha"] for c in checks):
+            return "BLOCKED", "обязательный CI не подтверждён для точного SHA; local receipt не заменяет CI"
+    for observed in observations:
+        if not isinstance(observed, dict) or observed.get("status") != "PASS" or not observed.get("source"):
+            return "BLOCKED", "приёмка недоступна или не выполнена"
+    if code is None and record.get("reconciled") is not True:
+        return "BLOCKED", "исход действия неопределён; сначала сверить опубликованное состояние"
+    return "PASS", "версия, SHA, digest и обязательные сценарии подтверждены"
 
 
 def _env_assess(root):
@@ -195,6 +246,13 @@ def assess(child_root):
     pkg_rollback = sorted(n for n in pkg if re.fullmatch(r"(rollback|revert|undeploy)(:.+)?", n))
     ci_jobs = _ci_deploy_jobs(root)
     records = _deploy_records(root)
+    confirmed = []
+    for name in records:
+        try:
+            if confirmation(json.loads((root / name).read_text()))[0] == "PASS":
+                confirmed.append(name)
+        except (OSError, ValueError):
+            continue
 
     runnable_paths = ci_jobs + deploy_scripts + [f"package.json:scripts.{n}" for n in pkg_deploy]
     if cfg.get("deploy_command"):
@@ -205,7 +263,7 @@ def assess(child_root):
         + [f"package.json:scripts.{n}" for n in pkg_rollback]
 
     has_intent = bool(markers or declared_envs or env_map["environments"])
-    if runnable_paths and records and rollback_declared:
+    if runnable_paths and confirmed and rollback_declared:
         maturity = "verified"
     elif runnable_paths:
         maturity = "runnable"
@@ -231,13 +289,16 @@ def assess(child_root):
             + " Объявите deploy_command и rollback в .ai-ops.yaml — тогда поставка станет описанной "
               "и воспроизводимой."),
         "runnable": "Поставку можно произвести. До verified не хватает: "
-                    + ("evidence фактической поставки (.ai/runtime/deploy/*.json)" if not records else "")
-                    + ("; " if not records and not rollback_declared else "")
+                    + ("подтверждённой записи версии/SHA/digest и runtime/public-приёмки" if not confirmed else "")
+                    + ("; " if not confirmed and not rollback_declared else "")
                     + ("объявленного отката (rollback)" if not rollback_declared else "") + ".",
         "verified": "Поставка исполнима, есть evidence фактических поставок и объявленный откат.",
     }[maturity]
 
     findings = list(env_map["findings"])
+    if records and not confirmed:
+        findings.append({"rule": "deploy_evidence_unconfirmed",
+                         "detail": "запись поставки есть, но версия/обязательные проверки не подтверждены"})
     if deploy_path_unknown:
         findings.append({"rule": "deploy_path_unknown",
                          "detail": "чем и как производится поставка — из репозитория НЕ следует"
@@ -266,6 +327,7 @@ def assess(child_root):
         "rollback_declared": rollback_declared,
         "rollback_sources": sorted(set(rollback_sources)),
         "deploy_records": records,
+        "confirmed_deploy_records": confirmed,
         "secret_names": env_map["secret_names"],
         "findings": findings,
     }

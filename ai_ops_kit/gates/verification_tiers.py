@@ -114,7 +114,7 @@ def decide_tier(changed_files: list, force_tier: str = None, lifecycle_intent: s
 # Test Selection Engine
 # ============================================================================
 
-def select_tests(changed_files: list, child_root: str, tier: str = None, lifecycle_intent: str = None, profile: dict = None) -> dict:
+def _select_tests(changed_files: list, child_root: str, tier: str = None, lifecycle_intent: str = None, profile: dict = None) -> dict:
     """Выбрать тесты на основе изменённых файлов, уровня верификации и lifecycle_intent.
     -> {tier, changed_files, affected_tests, targeted_command, full_command, impact_status, note}
 
@@ -128,6 +128,11 @@ def select_tests(changed_files: list, child_root: str, tier: str = None, lifecyc
 
     tier = decide_tier(changed_files, tier, lifecycle_intent)
     child_root = Path(child_root)
+    # Адаптер процесса может объявить ранее пропущенные обязательные проверки стадии.
+    # Сама смена стадии не инвалидирует receipts эквивалентных команд.
+    required = ((profile or {}).get("required_checks") or {}).get(lifecycle_intent, [])
+    if tier == "skip" and required:
+        tier = "full"
 
     # v3.27.3 WP4: skip tier — docs-only, не запускаем verification
     if tier == "skip":
@@ -182,10 +187,73 @@ def select_tests(changed_files: list, child_root: str, tier: str = None, lifecyc
     test_commands = _get_test_commands_from_profile(profile, affected, child_root)
     if not test_commands:
         return fallback("runner command cannot be safely narrowed")
+    dependencies = set(impacted)
+    for source in impacted:
+        dependencies.update(repo_graph.impact(graph, source))
+        dependencies.update(graph.get("import_edges", {}).get(source, []))
     return {"tier": tier, "changed_files": changed_files, "affected_tests": affected,
+            "dependency_paths": sorted(dependencies), "dependency_status": "known",
             "targeted_command": " && ".join(test_commands), "full_command": False,
             "impact_status": IMPACT_TARGETED_TESTS_FOUND,
             "note": f"Iteration only: {len(affected)} test files; full regression remains required for merge/release"}
+
+
+def risk_classes(changed_files, root):
+    """Классы сочетаются. Размер diff не используется как доказательство низкого риска."""
+    classes, unknown = set(), []
+    for path in changed_files:
+        p = path.lower()
+        if _prose_only(path):
+            classes.add("documents")
+            continue
+        if _matches_any(path, ALWAYS_FULL_PATTERNS) or any(
+                s in p for s in ("docker", "infra/", "deploy", "terraform", ".tf", ".sh")):
+            classes.add("infra")
+        if any(s in p for s in ("migration", "schema", "database", "/db/")) or p.endswith(".sql"):
+            classes.add("db_migrations")
+        if p.endswith((".css", ".scss", ".sass", ".svg", ".png")):
+            classes.add("visual")
+        if p.endswith((".tsx", ".jsx", ".vue", ".html", ".svelte")):
+            classes.update(("visual", "ui_state_navigation"))
+        if any(s in p for s in ("route", "navigation", "state", "store")):
+            classes.add("ui_state_navigation")
+        if any(s in p for s in ("api/", "backend/", "server/")) or p.endswith(".py"):
+            classes.add("backend_api")
+        if p.endswith((".ts", ".js", ".mjs", ".cjs")):
+            # JS без доказанной границы может исполняться и в браузере, и на сервере.
+            classes.update(("ui_state_navigation", "backend_api"))
+        if not _matches_any(path, ALWAYS_FULL_PATTERNS) and not Path(root, path).is_file():
+            unknown.append(path)
+    if changed_files and not classes:
+        unknown.extend(changed_files)
+    return sorted(classes), sorted(set(unknown))
+
+
+def select_tests(changed_files: list, child_root: str, tier: str = None,
+                 lifecycle_intent: str = None, profile: dict = None) -> dict:
+    changed_files = list(changed_files or [])
+    result = _select_tests(changed_files, child_root, tier, lifecycle_intent, profile)
+    classes, unknown = risk_classes(sorted(set(changed_files) | set(result.get("dependency_paths", []))), child_root)
+    result.setdefault("dependency_status", "not_applicable" if result["tier"] == "skip" else "unknown")
+    result["risk_classes"] = classes
+    result["unknown_inputs"] = unknown
+    result["check_plan"] = [
+        {"check": "lint/configuration", "reason": "существующие обязательные статические проверки сохраняются"},
+        {"check": "product_tests", "selection": result["tier"], "reason": result["note"]},
+        {"check": "required_ci", "reason": "независимая обязательная проверка; локальный результат её не заменяет"},
+    ]
+    reasons = {
+        "visual": "визуал: сборка и визуальная приёмка затронутых экранов",
+        "ui_state_navigation": "состояния и переходы: регрессия взаимодействий/навигации",
+        "backend_api": "API: positive, отказ и доказательство побочного эффекта",
+        "db_migrations": "миграции: совместимость и безопасное восстановление на тестовой базе",
+        "infra": "инфраструктура: preflight и подтверждение публичной версии",
+    }
+    result["risk_scenarios"] = [{"class": c, "reason": reasons[c],
+                                  "status": "NOT_RUN", "evidence_required": True}
+                                 for c in classes if c in reasons]
+    # Наличие сценария в плане не выдаётся за его исполнение; команды не угадываем.
+    return result
 
 
 def _get_test_commands_from_profile(profile: dict, affected_tests: list, child_root=None) -> list:
