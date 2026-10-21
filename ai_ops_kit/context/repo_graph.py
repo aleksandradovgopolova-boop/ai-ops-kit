@@ -167,37 +167,48 @@ def _analyze_js(path: Path):
     return symbols, mods
 
 
-def _uncertain_dependency(path: Path) -> bool:
-    """Static selection cannot certify dynamic loading, JS aliases/re-exports or parse failures."""
+def _dependency_uncertainty(path: Path) -> str | None:
+    """Динамический потребитель известен; непрочитанное дерево ограничить нельзя."""
     if path.is_symlink():
-        return True
+        return "unreadable"
     try:
         text = path.read_text(encoding="utf-8")
         if path.suffix == ".py":
             tree = ast.parse(text, filename=str(path))
+            # pytest_plugins загружается фреймворком, без статического import-ребра.
+            if any(isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+                   and n.id == "pytest_plugins" for n in ast.walk(tree)):
+                return "test-hook"
             dynamic_names = {"__import__", "eval", "exec", "import_module",
                              "spec_from_file_location", "run_path", "run_module"}
             # A builtin loader is also dynamic when retained/passed under another name.
             if any(isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                    and n.id in ("__import__", "eval", "exec") for n in ast.walk(tree)):
-                return True
+                return "dynamic"
             # Imported loaders may be aliased or passed to another function; the
             # presence of such a binding already makes this graph incomplete.
             if any(isinstance(n, ast.Attribute) and n.attr in dynamic_names
                    for n in ast.walk(tree)):
-                return True
+                return "dynamic"
             if any(isinstance(n, ast.ImportFrom) and any(
                     a.name in dynamic_names for a in n.names) for n in ast.walk(tree)):
-                return True
-            return any(isinstance(n, ast.Call) and (
+                return "dynamic"
+            dynamic = any(isinstance(n, ast.Call) and (
                 isinstance(n.func, ast.Name) and n.func.id in ("__import__", "eval", "exec") or
                 isinstance(n.func, ast.Attribute) and n.func.attr in
                 ("import_module", "spec_from_file_location", "run_path", "run_module")) for n in ast.walk(tree))
-        return bool(re.search(r"\bimport\s*\(|\brequire\s*\((?!\s*['\"])|"
-                              r"\brequire\s*\(\s*['\"](?:@|/)|"
-                              r"(?:from\s*|import\s*)['\"](?:@|/)|\bexport\s+.*?\bfrom\s", text))
+            return "dynamic" if dynamic else None
+        dynamic = re.search(r"\bimport\s*\(|\brequire\s*\((?!\s*['\"])|"
+                            r"\brequire\s*\(\s*['\"](?:@|/)|"
+                            r"(?:from\s*|import\s*)['\"](?:@|/)|\bexport\s+.*?\bfrom\s", text)
+        # JS setupFiles/globalSetup и aliases пока не имеют границы потребителей.
+        return "unbounded" if dynamic else None
     except (SyntaxError, OSError, UnicodeError):
-        return True
+        return "unreadable"
+
+
+def _uncertain_dependency(path: Path) -> bool:
+    return _dependency_uncertainty(path) is not None
 
 
 def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=True) -> dict:
@@ -242,10 +253,12 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
         stem = Path(rel).stem
         if stem.startswith("test_") or stem.endswith("_test") or stem.endswith(".test") or stem.endswith(".spec"):
             tests[rel] = internal
+    kinds = {rel: kind for f, rel in rels if (kind := _dependency_uncertainty(f))}
+    kinds.update({rel: "unreadable" for rel in uncertainties})
     return {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs) if subdirs else ["*"],
             "file_count": len(rels), "files": file_info, "symbol_index": symbol_index,
             "import_edges": import_edges, "tests": tests,
-            "uncertainties": sorted(set(uncertainties + [rel for f, rel in rels if _uncertain_dependency(f)])),
+            "uncertainties": sorted(kinds), "uncertainty_kinds": kinds,
             "languages": {"python": len(py_files), "javascript": len(js_files)}}
 
 
@@ -256,9 +269,7 @@ def affected_tests(graph: dict, changed_files: list) -> list:
     if not changed_files:
         return []
     # Собираем все затронутые файлы (прямые + транзитивные через impact)
-    all_affected = set(changed_files)
-    for cf in changed_files:
-        all_affected.update(impact(graph, cf))
+    all_affected = set(changed_files) | _impact_many(graph, changed_files)
     # Находим тесты, которые импортируют затронутые файлы
     tests = graph.get("tests", {})
     result = []
@@ -274,19 +285,24 @@ def affected_tests(graph: dict, changed_files: list) -> list:
 
 def impact(graph: dict, changed_rel: str) -> list:
     """Файлы, которые (транзитивно) импортируют changed_rel — обратный обход рёбер импорта."""
+    return sorted(_impact_many(graph, [changed_rel]))
+
+
+def _impact_many(graph: dict, changed_files) -> set:
+    """Один обратный граф и обход для всей группы, а не повтор на каждый загрузчик."""
     edges = graph.get("import_edges", {})
     reverse = {}
     for src, dsts in edges.items():
         for d in dsts:
             reverse.setdefault(d, set()).add(src)
-    seen, stack = set(), [changed_rel]
+    seen, stack = set(), list(changed_files)
     while stack:
         cur = stack.pop()
         for dep in reverse.get(cur, ()):
             if dep not in seen:
                 seen.add(dep)
                 stack.append(dep)
-    return sorted(seen)
+    return seen
 
 
 def main(argv):
