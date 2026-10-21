@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "kind": "local-verification-cycle-baseline-evidence",
+  "measured_at": "2026-10-21T14:49:42.848493+00:00",
+  "env": {
+    "python": "3.14.7",
+    "python_exe": "/Users/sasad/ai-ops-kit/.venv/bin/python",
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "cpu_count": 10,
+    "ruff": "ruff 0.16.2"
+  },
+  "revision": {
+    "head": "e6ba0d2fe9775c2d74f747eecec8d40a9721cefd",
+    "tree": "4dc17d7c9ac1e8d99e812fd34cbba2a4155a5202",
+    "origin_main": "e6ba0d2fe9775c2d74f747eecec8d40a9721cefd"
+  },
+  "docs_scenario": {
+    "name": "docs_only",
+    "file": "README.md",
+    "samples": [
+      {
+        "wall_s": 1.352,
+        "returncode": 0,
+        "index": 0,
+        "temp": "cold"
+      },
+      {
+        "wall_s": 0.799,
+        "returncode": 0,
+        "index": 1,
+        "temp": "warm"
+      },
+      {
+        "wall_s": 0.679,
+        "returncode": 0,
+        "index": 2,
+        "temp": "warm"
+      },
+      {
+        "wall_s": 0.958,
+        "returncode": 0,
+        "index": 3,
+        "temp": "warm"
+      },
+      {
+        "wall_s": 0.772,
+        "returncode": 0,
+        "index": 4,
+        "temp": "warm"
+      }
+    ]
+  },
+  "code_change_plan_only": {
+    "note": "любая правка кода → полный откат; воспроизводимо через plan-only",
+    "tier": "full",
+    "impact_status": "targeted_tests_not_found",
+    "dependency_status": "unknown",
+    "affected_tests": 0,
+    "fallback_note": "Full fallback: dependency graph incomplete: dynamic pytest fixtures have implicit consumers",
+    "full_argv": [
+      "bash",
+      "scripts/check-full.sh",
+      "--pr"
+    ],
+    "full_profile": "pr-current-python",
+    "probed_files_all_full": [
+      "ai_ops_kit/shared/budget.py",
+      "ai_ops_kit/shared/gitio.py",
+      "ai_ops_kit/checks/lint_baseline.py",
+      "ai_ops_kit/engine/acceptance_verify.py",
+      "tests/unit/test_budget.py"
+    ]
+  },
+  "not_slow_subset": {
+    "collected_tests": 9251,
+    "collection_s": 6.67,
+    "bounded_run": "80% за 220с на 10 ядрах под реальной нагрузкой → ≈275с; скрипт документирует ~283с"
+  },
+  "full_pr_cycle": {
+    "command": "bash scripts/check-full.sh --pr (= ruff + pytest -m 'not nightly and not release_gate')",
+    "clean_wall": null,
+    "observations": [
+      "одно наблюдение ~3606с, прервано (rc=2), с контаминацией",
+      "чистый замер не получен: host-slot блокировал весь 480с-кап"
+    ]
+  },
+  "host_slot_guard": {
+    "matcher": "pytest|vitest|playwright test|check-full.sh|npm/pnpm/yarn (run) build|test|typecheck|tsc",
+    "cpu_independent": true,
+    "blocking_pids_observed": [
+      28644,
+      63377,
+      96703
+    ],
+    "blocking_source": "self-hosted actions-runner (prechecker) на машине владельца",
+    "effect": "локальный полный цикл не стартует, пока рядом есть совпавший процесс"
+  },
+  "version_drift": {
+    "local": "3.14.7",
+    "ci": "3.12",
+    "risk": "local green ≠ CI green → лишний круг"
+  },
+  "still_unknown": [
+    "сквозной wall с очередью CI",
+    "CPU/оплаченные минуты",
+    "денежная цена",
+    "cold OS-кэш",
+    "p95 (n мал)"
+  ]
+}

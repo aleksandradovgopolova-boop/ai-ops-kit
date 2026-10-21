@@ -105,3 +105,49 @@ class TestRealKitGraph:
     def test_symbol_index_covers_known_symbol(self):
         real = build_graph()
         assert "build_graph" in real["symbol_index"]
+
+
+@pytest.mark.unit
+class TestFileSpecKnownEdges:
+    """spec_from_file_location по известному __file__-пути — статическое ребро, не динамика.
+    Непрослеживаемый путь остаётся динамическим (граф неполон — безопасный full)."""
+
+    @pytest.fixture(autouse=True)
+    def setup_repo(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "pkg").mkdir()
+            (root / "pkg" / "target.py").write_text("VALUE = 1\n", encoding="utf-8")
+            # Загрузка по пути от __file__ к соседнему файлу — цель известна статически.
+            (root / "pkg" / "loader.py").write_text(
+                "from pathlib import Path\n"
+                "import importlib.util as ilu\n"
+                "_t = Path(__file__).resolve().parent / 'target.py'\n"
+                "_spec = ilu.spec_from_file_location('target_mod', _t)\n"
+                "_mod = ilu.module_from_spec(_spec)\n"
+                "_spec.loader.exec_module(_mod)\n"
+                "VALUE = _mod.VALUE\n", encoding="utf-8")
+            (root / "pkg" / "test_loader.py").write_text(
+                "import loader\n\ndef test_v():\n    assert loader.VALUE == 1\n", encoding="utf-8")
+            # Путь не выводится из __file__ — потребитель/цель неизвестны, файл динамичен.
+            (root / "pkg" / "dyn.py").write_text(
+                "import os\n"
+                "from pathlib import Path\n"
+                "import importlib.util as ilu\n"
+                "_p = Path(os.environ['SOMEWHERE'])\n"
+                "_s = ilu.spec_from_file_location('x', _p)\n", encoding="utf-8")
+            self.graph = build_graph(root, ("pkg",))
+
+    def test_resolvable_loader_is_not_dynamic(self):
+        assert "pkg/loader.py" not in self.graph["uncertainties"]
+        assert self.graph["uncertainty_kinds"].get("pkg/loader.py") is None
+
+    def test_resolved_target_becomes_a_real_edge(self):
+        assert "pkg/target.py" in self.graph["import_edges"]["pkg/loader.py"]
+
+    def test_target_change_selects_the_loaders_test(self):
+        # Без ребра правка target.py не выбрала бы тест загрузчика — это и была бы дыра покрытия.
+        assert "pkg/test_loader.py" in affected_tests(self.graph, ["pkg/target.py"])
+
+    def test_unresolvable_path_stays_dynamic(self):
+        assert self.graph["uncertainty_kinds"].get("pkg/dyn.py") == "dynamic"
