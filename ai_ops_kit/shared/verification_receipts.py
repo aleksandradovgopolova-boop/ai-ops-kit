@@ -13,7 +13,7 @@ import re
 import stat
 import subprocess
 from datetime import datetime, timezone
-from typing import Callable
+from typing import Callable, cast
 
 STATUSES = ("PASS", "FAIL", "SKIP", "BLOCKED", "NOT_RUN")
 _HEX = re.compile(r"[0-9a-f]{64}")
@@ -82,8 +82,9 @@ def tree_digest(root: str | Path) -> str:
     return digest(_tree_inventory(root))
 
 
-def _capture_inputs(root, command, context, *, scope="local", extra=None,
-                    git_context=True, output_contract=None):
+def _capture_inputs(root: str | Path, command: object, context: dict | None, *,
+                    scope: str = "local", extra: object = None, git_context: bool = True,
+                    output_contract: str | None = None) -> tuple[dict | None, str, list | None]:
     try:
         if not isinstance(context, dict) or context.get("complete") is not True:
             return None, "контекст зависимостей/toolchain/среды не подтверждён", None
@@ -113,13 +114,13 @@ def _capture_inputs(root, command, context, *, scope="local", extra=None,
 
 
 def fingerprint(root: str | Path, command: object, context: dict | None, *, scope: str = "local",
-                extra: object = None, git_context: bool = True, output_contract=None) -> tuple[dict | None, str]:
+                extra: object = None, git_context: bool = True, output_contract: str | None = None) -> tuple[dict | None, str]:
     inputs, reason, _ = _capture_inputs(root, command, context, scope=scope, extra=extra,
                                         git_context=git_context, output_contract=output_contract)
     return inputs, reason
 
 
-def _output_paths(root, files, output_contract):
+def _output_paths(root: str | Path, files: list | None, output_contract: str | None) -> set[str]:
     if output_contract != PYTEST_OUTPUTS or files is None:
         return set()
     tracked = set()
@@ -130,7 +131,8 @@ def _output_paths(root, files, output_contract):
     return {p for p, _, _ in files if p not in tracked and _PYTEST_OUTPUT_PATH.fullmatch(p)}
 
 
-def _input_drift(before, after, files_before, files_after, outputs):
+def _input_drift(before: dict | None, after: dict | None, files_before: list | None,
+                 files_after: list | None, outputs: set[str]) -> dict:
     old = {p: (mode, sha) for p, mode, sha in files_before or []}
     new = {p: (mode, sha) for p, mode, sha in files_after or []}
     return {"before": before, "after": after,
@@ -141,8 +143,8 @@ def _input_drift(before, after, files_before, files_after, outputs):
                               for p in sorted(old.keys() | new.keys()) if old.get(p) != new.get(p)]}
 
 
-def _semantic_inputs(inputs, files, outputs):
-    return {**inputs, "tree": digest([entry for entry in files if entry[0] not in outputs])} if inputs else None
+def _semantic_inputs(inputs: dict | None, files: list | None, outputs: set[str]) -> dict | None:
+    return {**inputs, "tree": digest([entry for entry in cast(list, files) if entry[0] not in outputs])} if inputs else None
 
 
 def load(path: str | Path) -> dict:
@@ -179,7 +181,7 @@ def reusable(record: dict, inputs: dict | None) -> bool:
 
 def run(root: str | Path, check: str, command: object, execute: Callable[[], dict],
         context_factory: Callable[[], dict], *, scope: str = "local", extra: object = None,
-        output_contract=None) -> dict:
+        output_contract: str | None = None) -> dict:
     """Исполнитель вызывается только при отсутствии пригодного PASS; без raw output на диске.
 
     execute -> {status, exit_code}. Policy/preflight проверяется ВЫЗЫВАТЕЛЕМ до run,

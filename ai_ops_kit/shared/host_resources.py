@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import stat
 import subprocess
+from collections.abc import Iterator, Mapping
 
 DEFAULT_LOCK = Path("/tmp/ai-ops-kit-heavy.lock")
 _HEAVY = re.compile(r"\bpytest\b|\bvitest\b|\bplaywright\s+test\b|check-full\.sh|"
@@ -26,7 +27,7 @@ class InheritedSlotLost(ResourceBlocked):
     pass
 
 
-def heavy_processes():
+def heavy_processes() -> list[dict[str, int | str]]:
     """Read-only ps; возвращает только PID и класс, без command/env/секретов."""
     result = subprocess.run(["ps", "-axo", "pid=,ppid=,command="], capture_output=True,
                             text=True, timeout=10, check=True)
@@ -41,12 +42,13 @@ def heavy_processes():
             and "-m ai_ops_kit.devtools.host_resource_cli" not in command]
 
 
-def inherited_slot(path=None, *, environment=None):
+def inherited_slot(path: str | Path | None = None, *,
+                   environment: Mapping[str, str] | None = None) -> int | None:
     """Env alone никогда не разрешает skip lock: проверяем реальный fd/inode и flock."""
     try:
         import fcntl
         environment = os.environ if environment is None else environment
-        path = Path(path or environment.get("AI_OPS_HOST_SLOT_PATH", DEFAULT_LOCK))
+        path = Path(path or environment.get("AI_OPS_HOST_SLOT_PATH", str(DEFAULT_LOCK)))
         fd = int(environment["AI_OPS_HOST_SLOT_FD"])
         opened, expected = os.fstat(fd), Path(path).lstat()
         if not stat.S_ISREG(opened.st_mode) or (opened.st_dev, opened.st_ino) != (expected.st_dev, expected.st_ino):
@@ -57,14 +59,14 @@ def inherited_slot(path=None, *, environment=None):
         return None
 
 
-def subprocess_kwargs(environment=None):
+def subprocess_kwargs(environment: Mapping[str, str] | None = None) -> dict[str, tuple[int, ...]]:
     """Передаёт реальный lease через subprocess, не снимая родительский flock."""
     fd = inherited_slot(environment=environment)
     return {"pass_fds": (fd,)} if fd is not None else {}
 
 
 @contextlib.contextmanager
-def host_slot(owner, kind, *, path=DEFAULT_LOCK):
+def host_slot(owner: str, kind: str, *, path: str | Path = DEFAULT_LOCK) -> Iterator[int]:
     """Nonblocking flock; чужой inode не удаляется. Crash закрывает fd штатно."""
     if not owner or kind not in {"local", "self_hosted_ci"} or not Path(path).is_absolute():
         raise ResourceBlocked("нужны owner, kind и общий absolute lock path")
