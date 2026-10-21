@@ -41,3 +41,5 @@
 - [Ускорение малых изменений без повторной работы](priority-delivery-reuse.md) — content receipts, review и подтверждение поставки.
 
 - [Граница собственных outputs и общий слот проверок](receipt-output-boundary.md).
+- [Выборочные проверки при динамических зависимостях](4.11.2-bounded-impact-checks.md).
+- [Проверка check-fast без повторного сбора всего набора](4.11.2-fast-check-no-recursive-collection.md).
