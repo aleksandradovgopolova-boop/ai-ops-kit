@@ -94,14 +94,15 @@ def _js_ts_files(root: Path, subdirs=None, path_filter=None, uncertainties=None)
     return _source_files(root, subdirs, JS_TS_EXTENSIONS, JS_SKIP_DIRS, path_filter, uncertainties)
 
 
-def _analyze(path: Path):
+def _analyze(path: Path, *, tree=None):
     """(symbols, imported_module_stems) Python-файла через ast; все Import/ImportFrom (вкл. в функциях)."""
     try:
         # ИМЯ ФАЙЛА ОБЯЗАТЕЛЬНО (F-022). `ast.parse` без него подписывает предупреждения
         # интерпретатора как `<unknown>`, и владелец получал в вывод прогона строку
         # `<unknown>:11: invalid escape sequence`, по которой нельзя ни починить, ни осознанно
         # пропустить: непонятно даже, чей это файл — его продукта или кита.
-        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        if tree is None:
+            tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except (SyntaxError, OSError, UnicodeError):
         return [], set()
     symbols = [n.name for n in tree.body
@@ -136,11 +137,12 @@ def _stem(parts):
     return parts[-1] if parts[0] == "ai_ops_kit" and len(parts) >= 3 else parts[0]
 
 
-def _analyze_js(path: Path):
+def _analyze_js(path: Path, *, content=None):
     """v3.26.0: (symbols, imported_module_stems) JS/TS файла через regex.
     Парсит: import ... from '...', import '...', require('...'), export function/class."""
     try:
-        content = path.read_text(encoding="utf-8")
+        if content is None:
+            content = path.read_text(encoding="utf-8")
     except (OSError, UnicodeError):
         return [], set()
 
@@ -167,37 +169,50 @@ def _analyze_js(path: Path):
     return symbols, mods
 
 
-def _uncertain_dependency(path: Path) -> bool:
-    """Static selection cannot certify dynamic loading, JS aliases/re-exports or parse failures."""
+def _dependency_uncertainty(path: Path, *, text=None, tree=None) -> str | None:
+    """Динамический потребитель известен; непрочитанное дерево ограничить нельзя."""
     if path.is_symlink():
-        return True
+        return "unreadable"
     try:
-        text = path.read_text(encoding="utf-8")
+        if text is None:
+            text = path.read_text(encoding="utf-8")
         if path.suffix == ".py":
-            tree = ast.parse(text, filename=str(path))
+            if tree is None:
+                tree = ast.parse(text, filename=str(path))
+            # pytest_plugins загружается фреймворком, без статического import-ребра.
+            if any(isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store)
+                   and n.id == "pytest_plugins" for n in ast.walk(tree)):
+                return "test-hook"
             dynamic_names = {"__import__", "eval", "exec", "import_module",
                              "spec_from_file_location", "run_path", "run_module"}
             # A builtin loader is also dynamic when retained/passed under another name.
             if any(isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                    and n.id in ("__import__", "eval", "exec") for n in ast.walk(tree)):
-                return True
+                return "dynamic"
             # Imported loaders may be aliased or passed to another function; the
             # presence of such a binding already makes this graph incomplete.
             if any(isinstance(n, ast.Attribute) and n.attr in dynamic_names
                    for n in ast.walk(tree)):
-                return True
+                return "dynamic"
             if any(isinstance(n, ast.ImportFrom) and any(
                     a.name in dynamic_names for a in n.names) for n in ast.walk(tree)):
-                return True
-            return any(isinstance(n, ast.Call) and (
+                return "dynamic"
+            dynamic = any(isinstance(n, ast.Call) and (
                 isinstance(n.func, ast.Name) and n.func.id in ("__import__", "eval", "exec") or
                 isinstance(n.func, ast.Attribute) and n.func.attr in
                 ("import_module", "spec_from_file_location", "run_path", "run_module")) for n in ast.walk(tree))
-        return bool(re.search(r"\bimport\s*\(|\brequire\s*\((?!\s*['\"])|"
-                              r"\brequire\s*\(\s*['\"](?:@|/)|"
-                              r"(?:from\s*|import\s*)['\"](?:@|/)|\bexport\s+.*?\bfrom\s", text))
+            return "dynamic" if dynamic else None
+        dynamic = re.search(r"\bimport\s*\(|\brequire\s*\((?!\s*['\"])|"
+                            r"\brequire\s*\(\s*['\"](?:@|/)|"
+                            r"(?:from\s*|import\s*)['\"](?:@|/)|\bexport\s+.*?\bfrom\s", text)
+        # JS setupFiles/globalSetup и aliases пока не имеют границы потребителей.
+        return "unbounded" if dynamic else None
     except (SyntaxError, OSError, UnicodeError):
-        return True
+        return "unreadable"
+
+
+def _uncertain_dependency(path: Path) -> bool:
+    return _dependency_uncertainty(path) is not None
 
 
 def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=True) -> dict:
@@ -218,13 +233,22 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
             stem_to_rels.setdefault(f.parent.name, set()).add(rel)
 
     known_rels = {rel for _, rel in rels}
-    file_info, symbol_index, import_edges, tests = {}, {}, {}, {}
+    file_info, symbol_index, import_edges, tests, kinds = {}, {}, {}, {}, {}
     for f, rel in rels:
-        # Выбираем анализатор по расширению
-        if f.suffix in JS_TS_EXTENSIONS:
-            syms, mods = _analyze_js(f)
-        else:
-            syms, mods = _analyze(f)
+        # Один снимок содержимого на узел: imports и uncertainty используют тот же AST.
+        # Ничего не кешируется между сборками графа.
+        try:
+            content = f.read_text(encoding="utf-8")
+            tree = ast.parse(content, filename=str(f)) if f.suffix == ".py" else None
+            if f.suffix in JS_TS_EXTENSIONS:
+                syms, mods = _analyze_js(f, content=content)
+            else:
+                syms, mods = _analyze(f, tree=tree)
+            kind = _dependency_uncertainty(f, text=content, tree=tree)
+        except (SyntaxError, OSError, UnicodeError):
+            syms, mods, kind = [], set(), "unreadable"
+        if kind:
+            kinds[rel] = kind
         file_info[rel] = {"symbols": syms, "imports": sorted(mods), "language": "js" if f.suffix in JS_TS_EXTENSIONS else "py"}
         for s in syms:
             symbol_index.setdefault(s, []).append(rel)
@@ -242,10 +266,11 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
         stem = Path(rel).stem
         if stem.startswith("test_") or stem.endswith("_test") or stem.endswith(".test") or stem.endswith(".spec"):
             tests[rel] = internal
+    kinds.update({rel: "unreadable" for rel in uncertainties})
     return {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs) if subdirs else ["*"],
             "file_count": len(rels), "files": file_info, "symbol_index": symbol_index,
             "import_edges": import_edges, "tests": tests,
-            "uncertainties": sorted(set(uncertainties + [rel for f, rel in rels if _uncertain_dependency(f)])),
+            "uncertainties": sorted(kinds), "uncertainty_kinds": kinds,
             "languages": {"python": len(py_files), "javascript": len(js_files)}}
 
 
@@ -256,9 +281,7 @@ def affected_tests(graph: dict, changed_files: list) -> list:
     if not changed_files:
         return []
     # Собираем все затронутые файлы (прямые + транзитивные через impact)
-    all_affected = set(changed_files)
-    for cf in changed_files:
-        all_affected.update(impact(graph, cf))
+    all_affected = set(changed_files) | _impact_many(graph, changed_files)
     # Находим тесты, которые импортируют затронутые файлы
     tests = graph.get("tests", {})
     result = []
@@ -274,19 +297,24 @@ def affected_tests(graph: dict, changed_files: list) -> list:
 
 def impact(graph: dict, changed_rel: str) -> list:
     """Файлы, которые (транзитивно) импортируют changed_rel — обратный обход рёбер импорта."""
+    return sorted(_impact_many(graph, [changed_rel]))
+
+
+def _impact_many(graph: dict, changed_files) -> set:
+    """Один обратный граф и обход для всей группы, а не повтор на каждый загрузчик."""
     edges = graph.get("import_edges", {})
     reverse = {}
     for src, dsts in edges.items():
         for d in dsts:
             reverse.setdefault(d, set()).add(src)
-    seen, stack = set(), [changed_rel]
+    seen, stack = set(), list(changed_files)
     while stack:
         cur = stack.pop()
         for dep in reverse.get(cur, ()):
             if dep not in seen:
                 seen.add(dep)
                 stack.append(dep)
-    return sorted(seen)
+    return seen
 
 
 def main(argv):

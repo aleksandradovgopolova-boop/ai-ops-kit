@@ -132,7 +132,8 @@ child-репозиториев. Здесь разрабатывается сам
 smoke и применимые линтеры/валидация. При неясном охвате расширяйте локальную проверку:
 
 ```bash
-./scripts/check-fast.sh     # весь профиль без slow; не заменяет итоговый CI
+./scripts/check-fast.sh     # impact diff от origin/main, с reuse; не заменяет итоговый CI
+./scripts/check-fast.sh --all  # прежний весь профиль без slow
 ./scripts/check-full.sh --pr  # все обычные fast/slow/contracts, без nightly/release_gate
 ./scripts/check-full.sh       # также nightly; release_gate отдельно в CI выпуска
 ```
