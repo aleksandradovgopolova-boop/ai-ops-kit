@@ -110,8 +110,9 @@ def _record(root, *, action, target, outcome, reason, date) -> bool:
 
 def main(argv) -> int:
     import json
+    import sys
     if len(argv) < 2:
-        print("usage: enforcement.py <repo_root> <target> [--action NAME]", file=__import__("sys").stderr)
+        print("usage: enforcement.py <repo_root> <target> [--action NAME]", file=sys.stderr)
         return 1
     root, target = argv[0], argv[1]
     action = DEFAULT_ACTION
