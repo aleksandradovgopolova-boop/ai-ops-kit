@@ -1,1 +1,0 @@
-Собственная automatic попытка может продолжить полный проверенный checkpoint после доказанного завершения локального owner_pid до finish_cmd: новая generation сохраняет бюджет и fencing, partial retry не повторяет pass пакеты, delivery-only не вызывает модели. Unknown/live/foreign/stale checkpoints остаются закрытыми для effects; возраст заявки не используется как разрешение.

@@ -1,1 +1,0 @@
-Новые automatic jobs привязывают существующий durable logical Budget к immutable original goal/constraints и переносят binding metadata между generations. Execution snapshot остаётся полным; legacy full-input ledger не мигрируется и не обнуляется, corrupt/missing binding закрывает admission. Это предпосылка goal→plan без новых model calls.
