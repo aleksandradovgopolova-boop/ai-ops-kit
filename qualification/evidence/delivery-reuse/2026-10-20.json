@@ -1,0 +1,106 @@
+{
+  "scope": "offline-fixture-only",
+  "requested_checks": 6,
+  "baseline_executions": 6,
+  "executions_with_reuse": 2,
+  "reused_results": 4,
+  "avoided_executions": 4,
+  "deploy_executions": 1,
+  "release_status": "PASS",
+  "repeat_action": "reconcile",
+  "repeat_status": "PASS",
+  "release_record": {
+    "schema_version": 1,
+    "kind": "DeployRecord",
+    "owner": "fixture-release-owner",
+    "expected": {
+      "version": "fixture-1.0.0",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "environment": "offline-fixture",
+      "artifact_digest": "sha256:88f92d58d9706e16b293aacf471dd930213780b70cbf773d31c716c3e1e84682"
+    },
+    "checks": [
+      {
+        "name": "static",
+        "status": "PASS",
+        "source": "embedded-receipt:b42069281d1fc7b67399c367c20795e64da9aa33ca74c27cf0a81d83c6fe203c.json",
+        "inputs_digest": "653cb9af8991c4e9660ca73af0b4314f4e850c3696065d22784c481c5650562d"
+      },
+      {
+        "name": "build",
+        "status": "PASS",
+        "source": "embedded-receipt:5d807ffc5a9c863318b6b9a107785e984c38336e41e9bb1d593d34df7f7c054e.json",
+        "inputs_digest": "f198eb8cb5a7823e3677bb6b5dcb2c1a55f61f3897c88ab2db72e7282731071b"
+      }
+    ],
+    "recovery": {
+      "procedure": "Сверить fixture-файлы и вручную восстановить известный артефакт.",
+      "automatic_rollback": false
+    },
+    "preflight": [
+      {
+        "surface": "agent",
+        "operation": "read-fixture",
+        "status": "PASS",
+        "code": "fixture_readable",
+        "required": true
+      }
+    ],
+    "observed_at": "2026-10-20T15:33:22.047043+00:00",
+    "deploy_exit_code": null,
+    "required_ci": [],
+    "status": "PASS",
+    "runtime": {
+      "status": "PASS",
+      "source": "fixture:runtime-file",
+      "version": "fixture-1.0.0",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_digest": "sha256:88f92d58d9706e16b293aacf471dd930213780b70cbf773d31c716c3e1e84682",
+      "environment": "offline-fixture"
+    },
+    "public": {
+      "status": "PASS",
+      "source": "fixture:public-file",
+      "version": "fixture-1.0.0",
+      "sha": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "artifact_digest": "sha256:88f92d58d9706e16b293aacf471dd930213780b70cbf773d31c716c3e1e84682",
+      "environment": "offline-fixture"
+    },
+    "reconciled": true,
+    "reason": "версия, SHA, digest и обязательные сценарии подтверждены"
+  },
+  "check_receipts": {
+    "b42069281d1fc7b67399c367c20795e64da9aa33ca74c27cf0a81d83c6fe203c.json": {
+      "schema_version": 1,
+      "inputs": {
+        "tree": "3b0712fb9e15859b3d9593f419c0f781c3bee76abf0ae252b2a74d41784520af",
+        "git": "c5e9dce499a54fa863fdb4f4fecdb0843bad4c8c2b44c511611a99c4f66e607c",
+        "command": "ca37fd23d4064393348776504a4dfc681b3f241b90ea7442fcef5cff548e4714",
+        "context": "ecf297e5891b065bf01ed919840018a132c7d12be9804b1cd8b80a4acedbe77a",
+        "scope": "local",
+        "extra": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      },
+      "status": "PASS",
+      "exit_code": 0,
+      "completed_at": "2026-10-20T15:33:21.058994+00:00",
+      "evidence_digest": "428b4c1e8767af9e1b7eea887548c866221855a74a7b30e6d9f66249add21681"
+    },
+    "5d807ffc5a9c863318b6b9a107785e984c38336e41e9bb1d593d34df7f7c054e.json": {
+      "schema_version": 1,
+      "inputs": {
+        "tree": "3b0712fb9e15859b3d9593f419c0f781c3bee76abf0ae252b2a74d41784520af",
+        "git": "c5e9dce499a54fa863fdb4f4fecdb0843bad4c8c2b44c511611a99c4f66e607c",
+        "command": "b611f098113335a39c8d142f0f8415c98274ef577a7912f6c1a20e4da4b032a8",
+        "context": "ecf297e5891b065bf01ed919840018a132c7d12be9804b1cd8b80a4acedbe77a",
+        "scope": "local",
+        "extra": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      },
+      "status": "PASS",
+      "exit_code": 0,
+      "completed_at": "2026-10-20T15:33:21.376347+00:00",
+      "evidence_digest": "112bdbdb182db1243f505f7b04a34dd34cdc2b1d777f2aefc0d2274741465606"
+    }
+  },
+  "external_ci_verified": false,
+  "external_public_verified": false
+}

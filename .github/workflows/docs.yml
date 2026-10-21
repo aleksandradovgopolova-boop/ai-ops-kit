@@ -14,7 +14,9 @@
 name: docs
 on:
   pull_request:
-    types: [opened, ready_for_review, synchronize]
+    # Build уже выполняется на draft: ready_for_review не меняет входы сборки.
+    # Required job build сохраняется; новый SHA проверяется через synchronize.
+    types: [opened, synchronize]
   push:
     branches: [main]
   workflow_dispatch: {}

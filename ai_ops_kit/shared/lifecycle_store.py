@@ -498,6 +498,13 @@ def load_guarded(path: str | Path, required_keys: tuple = (), kind: str | None =
     return {"state": "ok", "data": data}
 
 
+# Тот же механизм receipts, выделенный внутри foundation/shared без нового framework.
+from ai_ops_kit.shared.verification_receipts import (  # noqa: F401
+    STATUSES, PYTEST_OUTPUTS, digest, file_digest, environment_digest, tree_digest,
+    fingerprint, load, state_root, reusable, run, atomic_json, python_context,
+)
+
+
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="lifecycle_store.py")
     ap.add_argument("--selftest", action="store_true")

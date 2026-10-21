@@ -12,6 +12,7 @@ export PYTHONDONTWRITEBYTECODE=1
 cd "$(dirname "$0")/.."
 
 # --pr обещает конкретный набор: пользовательский selector не может сузить его молча.
+HOST_ARGS=("$@")
 PROFILE=full-current-python
 if [[ "${1:-}" == "--pr" ]]; then PROFILE=pr-current-python; shift; fi
 CUSTOM=0
@@ -55,6 +56,13 @@ if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
   echo "  $("$PYTHON" -c 'import sys; print(sys.executable)' 2>/dev/null || echo "$PYTHON")" >&2
   echo "Запустите из своего окружения или назовите его явно: PYTHON=.venv/bin/python $0" >&2
   exit 2
+fi
+
+# Collection-only не исполняет тесты; широкие профили требуют настоящего host-slot.
+# Исходные argv сохраняются: --pr нельзя потерять при re-exec после shift.
+if [[ "$PROFILE" != collection-only ]] && ! "$PYTHON" -m ai_ops_kit.devtools.host_resource_cli --verify-inherited; then
+  exec "$PYTHON" -m ai_ops_kit.devtools.host_resource_cli \
+    --owner kit-check-full --wait-seconds 3600 -- bash "$0" "${HOST_ARGS[@]}"
 fi
 
 FLOOR=$(sed -n 's/^requires-python[[:space:]]*=[[:space:]]*"\(.*\)"/\1/p' pyproject.toml | head -1)

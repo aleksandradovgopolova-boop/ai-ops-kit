@@ -73,3 +73,5 @@ pytest: `test_validator_runtime_contract.py` (каждый валидатор и
 - `ai_ops_kit/validation/validate_ai_ops_child.py` — проверяет установку кита в **child-репозиторий**
   (`.ai-ops.yaml`, зоны `.ai/*`, целостность managed-слоя). В репозитории самого кита проверять
   нечего; запускается в child-репо и покрыт `tests/unit/test_installer.py`.
+
+Content receipts существующего impact runner переиспользуют только проверяемый PASS с теми же значимыми входами. Причина повторного запуска или источник reuse выводятся явно. Это не отменяет профили, описанные выше, и обязательный exact-head CI.

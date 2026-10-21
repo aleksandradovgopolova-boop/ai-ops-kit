@@ -31,9 +31,10 @@ Linux/macOS — три итерации одного класса ошибки).
   обычную функцию. Для Git/concurrency локально гонять и `GIT_CONFIG_GLOBAL=/dev/null` (CI-Linux
   без идентичности), и нативный macOS smoke. Полная OS×Python-матрица сейчас НЕ нужна.
 
-## 3. Один свежий review до merge
+## 3. Один независимый review применимой delta до merge
 
 Одна AI-сессия БЕЗ авторского контекста, ≤5 находок, одна итерация исправлений.
+Действительный review неизменных diff/base/dependencies/policy переиспользуется; новая база требует оценки применимости. Штатный premerge проверяет точный итоговый head/base и происхождение независимого review.
 Проверяет: заявленный пользовательский результат, 5 failure modes, исполнение инвариантов,
 ОТСУТСТВИЕ пустых тестов, связность слоёв, соответствие заявлений runtime.
 
@@ -78,13 +79,10 @@ strict security → `security_decision.py`; доставка single/parallel →
 
 Если стабильно 2–3 фикса на класс — этот шов в общий helper/guard.
 
-## Отложено
+## Малые итерации и сохраняемые результаты
 
-Инструмент `dev_check` (профиль `quality-fast`) — НЕ СОЗДАН, это идея: статические профили
-`--core/--parallel/--security` из 8–12 критичных self-test ядра (ai_ops_run, execution_pipeline, workpackage_executor,
-parallel_executor, parallel_live, lifecycle_store, pr_open, security_enforcement, model_router,
-provider_endpoints). Не заменяет CI — быстрый ответ в разработке. Без анализа изменённых
-файлов/dependency-graph сейчас.
+Используйте существующий `scripts/check-fast.sh --impact`: граф зависимостей выбирает проверки и объясняет риск. `evidence_collector` и impact сохраняют content receipts через `shared/lifecycle_store`. Новый чат не обнуляет проверяемый PASS; SKIP/BLOCKED/NOT_RUN и неполная запись не разрешают пропуск. Команда/flags/source/dependencies/lockfiles/toolchain/config/env входят в binding. Проверка текущей access policy остаётся обязательной.
+Неизвестное влияние требует консервативного набора своего профиля. Локальный receipt не заменяет required CI; профили main и штатный premerge ниже сохраняются. Отдельного dev_check или второго набора gates нет.
 
 ## Перед PR в дочке
 

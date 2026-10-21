@@ -22,6 +22,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from ai_ops_kit.shared import lifecycle_store as receipts
+
 from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401
 
 
@@ -110,6 +112,9 @@ def _persist_review(child_root, wid, rep):
               "base": rep.get("base"), "base_source": rep.get("base_source"),
               "base_note": rep.get("base_note"),
               "readiness": rep.get("readiness"),
+              "inputs": rep.get("inputs"),
+              "reviews": [{k: r[k] for k in ("gate", "status", "valid", "provenance") if k in r}
+                          for r in rep.get("reviews", [])],
               "created_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat()}
     path = fdir / "branch-review.yaml"
     path.write_text(yaml.safe_dump(record, allow_unicode=True, sort_keys=False), encoding="utf-8")
@@ -156,17 +161,51 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
     gate_ids = plan.get("gates") or ["code_review"]
     signals = {"task_type": plan.get("base_workflow", "QUICK")}
     from ai_ops_kit.engine import execution_pipeline as _ep   # внутрипакетно
+    from ai_ops_kit.gates import gate_executor
     reviewable = _ep._reviewable_gates(gate_ids, signals)
 
     reviews = []
-    if reviewable and reviewer_proposer is not None:
+    rc_base, base_sha, _ = _git(wp, "rev-parse", based.get("base") or "HEAD")
+    rc_merge, merge_base, _ = _git(wp, "merge-base", based.get("base") or "HEAD", branch)
+    rc_diff, exact_diff, _ = _git(wp, "diff", "--no-ext-diff", "--no-textconv", "--binary",
+                                 "--full-index", f"{based.get('base') or 'HEAD'}...{branch}")
+    # Любое изменение базы/политик/зависимостей требует новой оценки применимости.
+    context = {"complete": based["resolved"] and rc_base == rc_merge == rc_diff == 0,
+               "toolchain": receipts.digest([receipts.file_digest(Path(__file__)),
+                                               receipts.file_digest(Path(_ep.__file__))]),
+               "dependencies": receipts.digest([plan, gate_ids, signals, gate_executor.load_gates()]),
+               "environment": receipts.environment_digest()}
+    extra = {"base": base_sha, "merge_base": merge_base, "diff": receipts.digest(exact_diff),
+             "gates": reviewable}
+    inputs, basis = receipts.fingerprint(wp, "branch-review", context, extra=extra, git_context=False)
+    path = child_root / "features" / str(wid) / "branch-review.yaml"
+    import yaml
+    try:
+        previous = yaml.safe_load(path.read_text()) or {}
+    except (OSError, yaml.YAMLError):
+        previous = {}
+    if not isinstance(previous, dict):
+        previous = {}
+    old_reviews = previous.get("reviews") or []
+    reused = bool(inputs and previous.get("inputs") == inputs
+                  and previous.get("created_at") and previous.get("verdict") == "pass"
+                  and isinstance(old_reviews, list)
+                  and all(any(isinstance(r, dict) and r.get("gate") == g and r.get("valid") is True
+                              and r.get("status") == "pass" for r in old_reviews) for g in reviewable))
+    reuse_reason = basis if reused else ("нет применимого review; база, входы или политики изменились")
+    if reused:
+        reviews = old_reviews
+    elif reviewable and reviewer_proposer is not None:
         _, reviews = _ep._run_reviews(reviewer_proposer, wp, gate_ids, {}, signals, revision, budget)
+    after, _ = receipts.fingerprint(wp, "branch-review", context, extra=extra, git_context=False)
+    if after != inputs:
+        inputs = None
 
     # вердикт ветки: pass только если все ревьюируемые гейты получили pass; иначе needs-changes/blocked
     statuses = {r["gate"]: (r.get("status") if r.get("valid") else "invalid") for r in reviews}
     if not reviewable:
         verdict = "no-ai-review-gates"
-    elif reviewer_proposer is None:
+    elif reviewer_proposer is None and not reused:
         verdict = "needs-reviewer"
     elif all(statuses.get(g) == "pass" for g in reviewable):
         verdict = "pass"
@@ -184,6 +223,8 @@ def review(child_root, wid, reviewer_proposer, base=None, budget=None, persist=T
         constitution_findings = []
 
     rep = {"kind": "BranchReview", "workitem_id": wid, "branch": branch, "revision": revision,
+           "inputs": inputs, "reused": reused, "reuse_reason": reuse_reason,
+           "reuse_source": str(path) if reused else None,
            "reattached_worktree": reattached, "reviewable": reviewable, "reviews": reviews,
            "verdict": verdict, "readiness": _readiness_for(verdict), "changed_files": changed,
            "constitution_findings": constitution_findings,
