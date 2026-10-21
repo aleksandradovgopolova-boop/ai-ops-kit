@@ -105,7 +105,7 @@ jobs:
           echo "auto_update=$AUTO" >> "$GITHUB_OUTPUT"
           echo "needs_update=$([ "$INSTALLED" != "$AVAILABLE" ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           # разрешаем открывать PR только при auto_update: true ИЛИ ручном запуске
-          echo "proceed=$([ \"$INSTALLED\" != \"$AVAILABLE\" ] && { [ \"$AUTO\" = true ] || [ \"${{ github.event_name }}\" = workflow_dispatch ]; } && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "proceed=$([ "$INSTALLED" != "$AVAILABLE" ] && { [ "$AUTO" = true ] || [ "${{ github.event_name }}" = workflow_dispatch ]; } && echo true || echo false)" >> "$GITHUB_OUTPUT"
       - name: Пропуск (auto_update:false, запуск по расписанию)
         if: steps.ver.outputs.needs_update == 'true' && steps.ver.outputs.proceed != 'true'
         run: echo "Доступно обновление $INSTALLED -> $AVAILABLE, но parent.auto_update=false (опт-аут) и запуск по расписанию — PR не открывается. Запустите workflow вручную (Run workflow) или включите auto_update."
