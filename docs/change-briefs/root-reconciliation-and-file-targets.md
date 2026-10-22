@@ -20,7 +20,7 @@ positive/fail-closed/actual-import regressions, целевые проверки,
 до исправления она падала. Symlink-файлы теперь сохраняют dynamic.
 После одной коррекции: **157 passed, 19.47s**, включая critical_path и fixture с
 `-W error::pytest.PytestRemovedIn10Warning`; Ruff и diff-check проходят.
-Сверка checkout: [отчёт](../../qualification/ROOT-CHECKOUT-RECONCILIATION-2026-10-22.md).
+Сверка checkout: [отчёт](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/0acf1e5e292913d4932ac0805a11689f4ff24faa/qualification/ROOT-CHECKOUT-RECONCILIATION-2026-10-22.md).
 Бюджет поставки и host-slot не изменены; локальная проверка не подменяет CI итогового SHA.
 
 Широкий итог: **full-current-python**, CPython 3.14.7/darwin — **9936 passed,
