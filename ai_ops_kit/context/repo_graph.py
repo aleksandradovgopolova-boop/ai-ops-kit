@@ -128,6 +128,10 @@ def _analyze(path: Path, *, tree=None):
                     mods.add(_stem(parts))
             else:
                 mods.update(a.name for a in n.names)
+    # Загрузка по известному __file__-пути (spec_from_file_location) — реальная зависимость:
+    # добавляем ребро к цели, иначе сужение потеряло бы её тесты.
+    for target in _known_file_spec_targets(path, tree)[0]:
+        mods.add(target.stem)
     return symbols, mods
 
 
@@ -169,6 +173,123 @@ def _analyze_js(path: Path, *, content=None):
     return symbols, mods
 
 
+_FILE_SPEC_NAME = "spec_from_file_location"
+
+
+class _UnresolvablePath(Exception):
+    """Путь загрузки не сводится статически к известному файлу репозитория."""
+
+
+def _collect_assignments(tree):
+    """Только однозначные module-level bindings; другие scope не подменяют путь."""
+    writes = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            writes[node.id] = writes.get(node.id, 0) + 1
+        elif isinstance(node, ast.arg):
+            writes[node.arg] = writes.get(node.arg, 0) + 1
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            writes[node.name] = writes.get(node.name, 0) + 1
+        elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and node.name:
+            writes[node.name] = writes.get(node.name, 0) + 1
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            writes[node.rest] = writes.get(node.rest, 0) + 1
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                writes[name] = writes.get(name, 0) + 1
+    return {
+        node.targets[0].id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign) and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and writes.get(node.targets[0].id) == 1
+    }
+
+
+def _eval_file_path(node, selfpath: Path, assigns, _depth=0) -> Path:
+    """Статически вычислить `Path(__file__)[.resolve()]{.parent|.parents[N]}{ / "seg"}` → абсолютный
+    путь. Любая другая форма (вызов, вычисляемый сегмент, неизвестное имя) — _UnresolvablePath."""
+    if _depth > 24:
+        raise _UnresolvablePath
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        right = node.right
+        if not (isinstance(right, ast.Constant) and isinstance(right.value, str)):
+            raise _UnresolvablePath
+        return _eval_file_path(node.left, selfpath, assigns, _depth + 1) / right.value
+    if isinstance(node, ast.Call):
+        func = node.func
+        if (isinstance(func, ast.Name) and func.id == "Path" and len(node.args) == 1
+                and isinstance(node.args[0], ast.Name) and node.args[0].id == "__file__"):
+            return selfpath
+        if isinstance(func, ast.Attribute) and func.attr == "resolve":
+            return _eval_file_path(func.value, selfpath, assigns, _depth + 1)
+        raise _UnresolvablePath
+    if isinstance(node, ast.Attribute) and node.attr == "parent":
+        return _eval_file_path(node.value, selfpath, assigns, _depth + 1).parent
+    if (isinstance(node, ast.Subscript) and isinstance(node.value, ast.Attribute)
+            and node.value.attr == "parents"):
+        idx = node.slice
+        if not (isinstance(idx, ast.Constant) and isinstance(idx.value, int)):
+            raise _UnresolvablePath
+        return _eval_file_path(node.value.value, selfpath, assigns, _depth + 1).parents[idx.value]
+    if isinstance(node, ast.Name):
+        if node.id in assigns:
+            return _eval_file_path(assigns[node.id], selfpath, assigns, _depth + 1)
+        raise _UnresolvablePath
+    raise _UnresolvablePath
+
+
+def _known_file_spec_targets(path: Path, tree) -> tuple[set[Path], bool]:
+    """Разрешённые по `__file__`-пути цели `spec_from_file_location` — это ИЗВЕСТНЫЕ рёбра импорта,
+    а не непрослеживаемая динамика (их потребитель и цель статически определены).
+
+    -> (targets_abs, fully_resolvable). fully_resolvable=False, если загрузчик вызван с
+    непрослеживаемым путём, целью вне репозитория, без location, импортирован под алиасом или
+    использован мимо прямого вызова (алиас/хранение/передача) — тогда граф неполон и файл динамичен.
+    """
+    targets: set[Path] = set()
+    if tree is None:
+        return targets, True
+    resolvable = True
+    assigns = _collect_assignments(tree)
+    selfpath = path.resolve()
+    call_func_ids: set[int] = set()
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Call):
+            func = n.func
+            is_spec = ((isinstance(func, ast.Attribute) and func.attr == _FILE_SPEC_NAME)
+                       or (isinstance(func, ast.Name) and func.id == _FILE_SPEC_NAME))
+            if is_spec:
+                call_func_ids.add(id(func))
+                loc = n.args[1] if len(n.args) >= 2 else None
+                if loc is None:
+                    loc = next((kw.value for kw in n.keywords if kw.arg == "location"), None)
+                if loc is None:
+                    resolvable = False
+                    continue
+                try:
+                    target = _eval_file_path(loc, selfpath, assigns)
+                except (_UnresolvablePath, IndexError):
+                    resolvable = False
+                    continue
+                if target.is_file():
+                    targets.add(target)
+                else:
+                    resolvable = False
+    # Имя загрузчика мимо прямого вызова (алиас/хранение/передача) оставляет граф неполным.
+    for n in ast.walk(tree):
+        if isinstance(n, ast.Attribute) and n.attr == _FILE_SPEC_NAME and id(n) not in call_func_ids:
+            resolvable = False
+        elif isinstance(n, ast.Name) and n.id == _FILE_SPEC_NAME and id(n) not in call_func_ids:
+            resolvable = False
+        elif isinstance(n, ast.ImportFrom):
+            if any(a.name == _FILE_SPEC_NAME and a.asname and a.asname != _FILE_SPEC_NAME
+                   for a in n.names):
+                resolvable = False
+    return targets, resolvable
+
+
 def _dependency_uncertainty(path: Path, *, text=None, tree=None) -> str | None:
     """Динамический потребитель известен; непрочитанное дерево ограничить нельзя."""
     if path.is_symlink():
@@ -184,7 +305,7 @@ def _dependency_uncertainty(path: Path, *, text=None, tree=None) -> str | None:
                    and n.id == "pytest_plugins" for n in ast.walk(tree)):
                 return "test-hook"
             dynamic_names = {"__import__", "eval", "exec", "import_module",
-                             "spec_from_file_location", "run_path", "run_module"}
+                             "run_path", "run_module"}
             # A builtin loader is also dynamic when retained/passed under another name.
             if any(isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)
                    and n.id in ("__import__", "eval", "exec") for n in ast.walk(tree)):
@@ -200,8 +321,16 @@ def _dependency_uncertainty(path: Path, *, text=None, tree=None) -> str | None:
             dynamic = any(isinstance(n, ast.Call) and (
                 isinstance(n.func, ast.Name) and n.func.id in ("__import__", "eval", "exec") or
                 isinstance(n.func, ast.Attribute) and n.func.attr in
-                ("import_module", "spec_from_file_location", "run_path", "run_module")) for n in ast.walk(tree))
-            return "dynamic" if dynamic else None
+                ("import_module", "run_path", "run_module")) for n in ast.walk(tree))
+            if dynamic:
+                return "dynamic"
+            # spec_from_file_location с известным путём от `__file__` к файлу репозитория —
+            # статически определённое ребро (_known_file_spec_targets), а не слепое пятно.
+            # Непрослеживаемый путь, цель вне репозитория, алиас или использование мимо прямого
+            # вызова оставляют файл динамическим.
+            if not _known_file_spec_targets(path, tree)[1]:
+                return "dynamic"
+            return None
         dynamic = re.search(r"\bimport\s*\(|\brequire\s*\((?!\s*['\"])|"
                             r"\brequire\s*\(\s*['\"](?:@|/)|"
                             r"(?:from\s*|import\s*)['\"](?:@|/)|\bexport\s+.*?\bfrom\s", text)
