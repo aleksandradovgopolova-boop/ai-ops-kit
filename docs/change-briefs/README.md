@@ -48,3 +48,5 @@
 - [Сверка старого checkout и граница файловых импортов](root-reconciliation-and-file-targets.md).
 - [Запас поставки без повышения потолка](compact-managed-python.md).
 - [Точечные проверки сканера](targeted-security-checks.md)
+
+- [Ускорение выбора проверок без изменения охвата](graph-selection-speed.md).

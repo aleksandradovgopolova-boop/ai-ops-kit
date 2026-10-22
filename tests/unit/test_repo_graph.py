@@ -210,3 +210,15 @@ def test_file_spec_target_outside_graph_stays_dynamic(tmp_path, location):
                         path_filter=lambda rel: location != 'filtered' or rel != 'target.py')
     assert 'target.py' not in graph['files']
     assert graph['uncertainty_kinds'].get('loader.py') == 'dynamic'
+
+
+def test_file_spec_without_loader_does_not_collect_bindings(tmp_path, monkeypatch):
+    import ast
+    from ai_ops_kit.context import repo_graph
+
+    source = tmp_path / 'plain.py'
+    tree = ast.parse('from pathlib import Path\nx = Path(__file__).parent\n')
+    def unexpected_bindings(_tree):
+        raise AssertionError('no file loader: binding scan must not run')
+    monkeypatch.setattr(repo_graph, '_collect_assignments', unexpected_bindings)
+    assert repo_graph._known_file_spec_targets(source, tree) == (set(), True)

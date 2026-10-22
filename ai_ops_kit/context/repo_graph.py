@@ -251,11 +251,21 @@ def _known_file_spec_targets(path: Path, tree, *, known_paths=None) -> tuple[set
     targets: set[Path] = set()
     if tree is None:
         return targets, True
+    nodes = list(ast.walk(tree))
+    # Без упоминания загрузчика bindings не могут изменить результат. Проверяем и
+    # import-from aliases: их передача/хранение обязаны оставаться dynamic.
+    if not any(
+        isinstance(n, ast.Attribute) and n.attr == _FILE_SPEC_NAME
+        or isinstance(n, ast.Name) and n.id == _FILE_SPEC_NAME
+        or isinstance(n, ast.ImportFrom) and any(a.name == _FILE_SPEC_NAME for a in n.names)
+        for n in nodes
+    ):
+        return targets, True
     resolvable = True
     assigns = _collect_assignments(tree)
     selfpath = path.resolve()
     call_func_ids: set[int] = set()
-    for n in ast.walk(tree):
+    for n in nodes:
         if isinstance(n, ast.Call):
             func = n.func
             is_spec = ((isinstance(func, ast.Attribute) and func.attr == _FILE_SPEC_NAME)
@@ -279,7 +289,7 @@ def _known_file_spec_targets(path: Path, tree, *, known_paths=None) -> tuple[set
                 else:
                     resolvable = False
     # Имя загрузчика мимо прямого вызова (алиас/хранение/передача) оставляет граф неполным.
-    for n in ast.walk(tree):
+    for n in nodes:
         if isinstance(n, ast.Attribute) and n.attr == _FILE_SPEC_NAME and id(n) not in call_func_ids:
             resolvable = False
         elif isinstance(n, ast.Name) and n.id == _FILE_SPEC_NAME and id(n) not in call_func_ids:
