@@ -132,6 +132,8 @@ INIT_CHECKS = {
 # записана: пустая строка здесь означала бы «не применимо» без причины, а это не исход.
 NOT_CULTURE = {
     "deliver_assets": "разобран пошагово выше — это и есть перечень доставки",
+    "copy_managed_file": "запись managed-копии; набор исходников проверен в managed_set, "
+                         "а целостность установленной копии проверяется только в дочке (managed_layer)",
     "_child_scaffolding": "загрузчик сателлита; шаг — back-fill контекста, проверен в DELIVERY_CHECKS",
     "ensure_zone_markers": "шаг `zone_markers` из `deliver_assets`",
     "_assets_report_line": "печатает отчёт о доставке; в репозиторий не пишет",
