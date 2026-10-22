@@ -4,6 +4,7 @@
 """
 from __future__ import annotations
 
+import copy
 import tempfile
 
 import pytest
@@ -89,21 +90,32 @@ class TestJsGraph:
         assert "src/utils.test.ts" in at
 
 
+@pytest.fixture(scope="module")
+def _real_kit_graph():
+    """Реальная сборка одна на модуль/worker; тесты получают собственные копии."""
+    return build_graph()
+
+
+@pytest.fixture
+def real_kit_graph(_real_kit_graph):
+    return copy.deepcopy(_real_kit_graph)
+
+
 @pytest.mark.unit
 class TestRealKitGraph:
-    def test_real_graph_builds(self):
-        real = build_graph()
+    def test_real_graph_builds(self, real_kit_graph):
+        real = real_kit_graph
         assert real["file_count"] > 50
         assert isinstance(real["symbol_index"], dict)
 
-    def test_impact_gate_policy(self):
-        real = build_graph()
+    def test_impact_gate_policy(self, real_kit_graph):
+        real = real_kit_graph
         imp_gp = impact(real, "ai_ops_kit/gates/gate_policy.py")
         assert "ai_ops_kit/engine/execution_pipeline.py" in imp_gp
         assert "ai_ops_kit/devtools/bench_lite.py" in imp_gp
 
-    def test_symbol_index_covers_known_symbol(self):
-        real = build_graph()
+    def test_symbol_index_covers_known_symbol(self, real_kit_graph):
+        real = real_kit_graph
         assert "build_graph" in real["symbol_index"]
 
 
@@ -222,3 +234,13 @@ def test_file_spec_without_loader_does_not_collect_bindings(tmp_path, monkeypatc
         raise AssertionError('no file loader: binding scan must not run')
     monkeypatch.setattr(repo_graph, '_collect_assignments', unexpected_bindings)
     assert repo_graph._known_file_spec_targets(source, tree) == (set(), True)
+
+
+@pytest.mark.unit
+def test_real_graph_fixture_copies_are_isolated(real_kit_graph, _real_kit_graph):
+    before = copy.deepcopy(_real_kit_graph)
+    real_kit_graph["files"].clear()
+    real_kit_graph["symbol_index"].clear()
+    real_kit_graph["import_edges"].clear()
+    assert _real_kit_graph == before
+    assert real_kit_graph != _real_kit_graph

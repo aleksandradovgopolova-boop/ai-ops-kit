@@ -1,0 +1,28 @@
+import hashlib, io, json, os, platform, statistics, subprocess, sys, tarfile, time
+from pathlib import Path
+work=Path.cwd(); out=Path('/Users/sasad/.codex/tmp/test-execution-speed-20261022')
+base='954261c2b59f00ffdc725aa6cc478131b18cea9d'; rel='tests/unit/test_repo_graph.py'
+snapshot=out/'snapshot'; snapshot.mkdir(exist_ok=True)
+archive=subprocess.check_output(['git','archive',base],cwd=work)
+with tarfile.open(fileobj=io.BytesIO(archive)) as tf: tf.extractall(snapshot,filter='data')
+sources={'before':(snapshot/rel).read_bytes(),'after':(work/rel).read_bytes()}
+env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1','PYTHONPATH':os.pathsep.join([str(snapshot),str(out)]),'BENCH_REPORT':str(out/'collect.json')}
+common=[sys.executable,'-m','pytest','-q','-p','bench_plugin']
+r=subprocess.run(common+[rel,'--collect-only'],cwd=snapshot,env=env,capture_output=True,text=True)
+assert r.returncode==0,r.stdout+r.stderr
+nodeids=json.loads((out/'collect.json').read_text())['nodeids']; assert len(nodeids)>20
+rows=[]; expected=None
+for i,name in enumerate(['before','after']+['before','after','after','before']*3):
+    (snapshot/rel).write_bytes(sources[name]); env['BENCH_REPORT']=str(out/f'run-{i:02d}.json')
+    t=time.perf_counter(); r=subprocess.run(common+nodeids,cwd=snapshot,env=env,capture_output=True,text=True); wall=time.perf_counter()-t
+    assert r.returncode==0,r.stdout+r.stderr
+    report=json.loads(Path(env['BENCH_REPORT']).read_text())
+    outcomes=[(p['nodeid'],p['when'],p['outcome']) for p in report['reports']]
+    if expected is None: expected=outcomes
+    assert outcomes==expected,'outcome or executed node changed'
+    assert report['real_builds']==(3 if name=='before' else 1),report['real_builds']
+    row={'condition':name,'warmup':i<2,'process_wall_s':wall,'execution_s':sum(p['duration'] for p in report['reports']),'real_builds':report['real_builds'],'passed':sum(p['when']=='call' and p['outcome']=='passed' for p in report['reports']),'outcomes_sha256':hashlib.sha256(json.dumps(outcomes).encode()).hexdigest()}
+    rows.append(row);print(json.dumps(row),flush=True);(out/'raw.json').write_text(json.dumps(rows,indent=2))
+med={metric:{name:statistics.median(r[metric] for r in rows if r['condition']==name and not r['warmup']) for name in sources} for metric in ['process_wall_s','execution_s']}
+report={'base':base,'archive_sha256':hashlib.sha256(archive).hexdigest(),'python':sys.version,'platform':platform.platform(),'workers':1,'order':'2 warmups then ABBA x3; 6 measured per condition','scenario':'same complete baseline test_repo_graph.py nodeids; pytest subprocess actually executes every test; execution_s includes setup+call+teardown','source_sha256':{n:hashlib.sha256(s).hexdigest() for n,s in sources.items()},'nodeids':nodeids,'rows':rows,'medians':med,'reduction_percent':{m:100*(1-d['after']/d['before']) for m,d in med.items()},'outcomes_identical':True,'limitations':'Warm filesystem, same host/interpreter/workers/production snapshot; no claim about whole suite/CI queue; added isolation test checked separately.'}
+(out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps({k:v for k,v in report.items() if k not in ('rows','nodeids')},ensure_ascii=False),flush=True)
