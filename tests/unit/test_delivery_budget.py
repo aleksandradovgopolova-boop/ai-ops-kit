@@ -64,7 +64,8 @@ class TestBreakdownIsHonest:
         assert sum(d["bytes"] for d in rep["by_dir"]) == rep["total_bytes"]
         assert sum(d["files"] for d in rep["by_dir"]) == rep["file_count"]
         measured = sum(src.stat().st_size for src, _ in ai_ops.managed_set())
-        assert rep["total_bytes"] == measured, "разбивка и поставка считают разное"
+        assert rep["source_bytes"] == measured
+        assert rep["total_bytes"] + rep["saved_bytes"] == measured
 
     def test_largest_files_are_named_with_paths(self, ai_ops):
         """«Что занимает» — это путь, а не каталог: 66% поставки лежит в одном каталоге, и без имён
@@ -91,9 +92,9 @@ class TestTheCeilingHasOneHome:
             "тест поставки не спрашивает реестр потолков — реестр и проверка разъедутся")
         assert "3.8 * 1024 * 1024" not in src, "потолок остался вписанным числом"
 
-    def test_the_ceiling_is_not_below_what_ships_now(self, ai_ops, budget):
+    def test_the_ceiling_is_not_below_what_ships_now(self, ai_ops, budget, installed):
         """Потолок ниже фактической поставки означал бы, что он не проверяется вовсе."""
-        now = sum(src.stat().st_size for src, _ in ai_ops.managed_set())
+        now = sum(p.stat().st_size for p in (installed / ".ai" / "managed").rglob("*") if p.is_file())
         assert now <= budget["ceilings"]["volume_bytes"], (
             f"поставка {now} Б уже выше объявленного потолка "
             f"{budget['ceilings']['volume_bytes']} Б")

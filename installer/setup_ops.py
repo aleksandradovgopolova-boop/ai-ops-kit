@@ -86,7 +86,7 @@ def cmd_init(target_dir):
     for src, rel in _core().managed_set():
         dst = ai / "managed" / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+        _core().copy_managed_file(src, dst, rel)
     # checksums/provenance в целевом корне
     saved = _ao().MANAGED
     _ao().MANAGED = ai / "managed"
