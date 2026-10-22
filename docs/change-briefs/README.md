@@ -50,3 +50,5 @@
 - [Точечные проверки сканера](targeted-security-checks.md)
 
 - [Ускорение выбора проверок без изменения охвата](graph-selection-speed.md).
+
+- [Сокращение повторной подготовки графа в тестах](reuse-real-graph-fixture.md).

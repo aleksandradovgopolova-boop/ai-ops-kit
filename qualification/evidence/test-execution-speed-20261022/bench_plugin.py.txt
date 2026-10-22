@@ -1,0 +1,27 @@
+import json, os
+from pathlib import Path
+from ai_ops_kit.context import repo_graph
+
+calls=0
+reports=[]
+_original=repo_graph.build_graph
+
+def build_graph(*args, **kwargs):
+    global calls
+    real = not args and not kwargs
+    if real:
+        calls += 1
+    result=_original(*args, **kwargs)
+    if real and os.environ.get('BENCH_MUTANT')=='1':
+        result['file_count']=0
+        result['symbol_index']={}
+        result['import_edges']={}
+    return result
+
+repo_graph.build_graph=build_graph
+
+def pytest_runtest_logreport(report):
+    reports.append({'nodeid':report.nodeid,'when':report.when,'outcome':report.outcome,'duration':report.duration})
+
+def pytest_sessionfinish(session, exitstatus):
+    Path(os.environ['BENCH_REPORT']).write_text(json.dumps({'nodeids':[i.nodeid for i in session.items],'exit':int(exitstatus),'real_builds':calls,'reports':reports}))
