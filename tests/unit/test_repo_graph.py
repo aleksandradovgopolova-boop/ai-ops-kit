@@ -181,3 +181,32 @@ def test_file_spec_out_of_range_parent_stays_dynamic(tmp_path):
         "spec = ilu.spec_from_file_location('loaded', Path(__file__).parents[999] / 'x.py')\n")
     graph = build_graph(tmp_path, subdirs=None)
     assert graph['uncertainty_kinds'].get('loader.py') == 'dynamic'
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('location', ['outside', 'excluded', 'filtered'])
+def test_file_spec_target_outside_graph_stays_dynamic(tmp_path, location):
+    import runpy
+
+    root = tmp_path / 'repo'
+    root.mkdir()
+    if location == 'outside':
+        target = tmp_path / 'target.py'
+        expression = "Path(__file__).parent.parent / 'target.py'"
+    elif location == 'excluded':
+        (root / '.ai').mkdir()
+        target = root / '.ai' / 'target.py'
+        expression = "Path(__file__).parent / '.ai' / 'target.py'"
+    else:
+        target = root / 'target.py'
+        expression = "Path(__file__).parent / 'target.py'"
+    target.write_text('VALUE = 7\n')
+    (root / 'loader.py').write_text(
+        'from pathlib import Path\nimport importlib.util as ilu\n'
+        f"spec = ilu.spec_from_file_location('loaded', {expression})\n"
+        'module = ilu.module_from_spec(spec)\nspec.loader.exec_module(module)\n')
+    assert runpy.run_path(str(root / 'loader.py'))['module'].VALUE == 7
+    graph = build_graph(root, subdirs=None,
+                        path_filter=lambda rel: location != 'filtered' or rel != 'target.py')
+    assert 'target.py' not in graph['files']
+    assert graph['uncertainty_kinds'].get('loader.py') == 'dynamic'
