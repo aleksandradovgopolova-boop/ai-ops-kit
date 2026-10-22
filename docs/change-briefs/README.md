@@ -44,3 +44,4 @@
 - [Выборочные проверки при динамических зависимостях](4.11.2-bounded-impact-checks.md).
 - [Проверка check-fast без повторного сбора всего набора](4.11.2-fast-check-no-recursive-collection.md).
 - [Оставшиеся повторы перед выпуском](4.11.2-pre-release-speed-audit.md).
+- [Безопасное продолжение выбора тестов по файловым импортам](file-spec-fail-closed.md).

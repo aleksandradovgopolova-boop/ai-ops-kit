@@ -151,3 +151,33 @@ class TestFileSpecKnownEdges:
 
     def test_unresolvable_path_stays_dynamic(self):
         assert self.graph["uncertainty_kinds"].get("pkg/dyn.py") == "dynamic"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize('assignment', [
+    "_t = Path(__file__).parent / 'target.py'\n_t = Path(__file__).parent / 'other.py'\n",
+    "_t = Path(__file__).parent / 'target.py'\ndef unrelated():\n    _t = Path(__file__).parent / 'other.py'\n",
+    "_t = Path(__file__).parent / 'target.py'\nmatch Path(__file__).parent / 'other.py':\n    case _t:\n        pass\n",
+], ids=['reassignment', 'other-scope', 'pattern-capture'])
+def test_file_spec_ambiguous_binding_stays_dynamic(tmp_path, assignment):
+    import runpy
+
+    (tmp_path / 'target.py').write_text('VALUE = 1\n')
+    (tmp_path / 'other.py').write_text('VALUE = 2\n')
+    (tmp_path / 'loader.py').write_text(
+        'from pathlib import Path\nimport importlib.util as ilu\n' + assignment +
+        "spec = ilu.spec_from_file_location('loaded', _t)\n"
+        "module = ilu.module_from_spec(spec)\nspec.loader.exec_module(module)\n")
+    loaded = runpy.run_path(str(tmp_path / 'loader.py'))
+    assert loaded['module'].VALUE == (1 if 'def unrelated' in assignment else 2)
+    graph = build_graph(tmp_path, subdirs=None)
+    assert graph['uncertainty_kinds'].get('loader.py') == 'dynamic'
+
+
+@pytest.mark.unit
+def test_file_spec_out_of_range_parent_stays_dynamic(tmp_path):
+    (tmp_path / 'loader.py').write_text(
+        'from pathlib import Path\nimport importlib.util as ilu\n'
+        "spec = ilu.spec_from_file_location('loaded', Path(__file__).parents[999] / 'x.py')\n")
+    graph = build_graph(tmp_path, subdirs=None)
+    assert graph['uncertainty_kinds'].get('loader.py') == 'dynamic'

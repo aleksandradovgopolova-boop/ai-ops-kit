@@ -181,12 +181,30 @@ class _UnresolvablePath(Exception):
 
 
 def _collect_assignments(tree):
-    """name -> последнее присвоенное выражение (одиночная цель-Name). Для resolve пути-переменной."""
-    assigns = {}
-    for n in ast.walk(tree):
-        if isinstance(n, ast.Assign) and len(n.targets) == 1 and isinstance(n.targets[0], ast.Name):
-            assigns[n.targets[0].id] = n.value
-    return assigns
+    """Только однозначные module-level bindings; другие scope не подменяют путь."""
+    writes = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Name) and isinstance(node.ctx, (ast.Store, ast.Del)):
+            writes[node.id] = writes.get(node.id, 0) + 1
+        elif isinstance(node, ast.arg):
+            writes[node.arg] = writes.get(node.arg, 0) + 1
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            writes[node.name] = writes.get(node.name, 0) + 1
+        elif isinstance(node, (ast.ExceptHandler, ast.MatchAs, ast.MatchStar)) and node.name:
+            writes[node.name] = writes.get(node.name, 0) + 1
+        elif isinstance(node, ast.MatchMapping) and node.rest:
+            writes[node.rest] = writes.get(node.rest, 0) + 1
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                name = alias.asname or alias.name.split(".")[0]
+                writes[name] = writes.get(name, 0) + 1
+    return {
+        node.targets[0].id: node.value
+        for node in tree.body
+        if isinstance(node, ast.Assign) and len(node.targets) == 1
+        and isinstance(node.targets[0], ast.Name)
+        and writes.get(node.targets[0].id) == 1
+    }
 
 
 def _eval_file_path(node, selfpath: Path, assigns, _depth=0) -> Path:
@@ -252,7 +270,7 @@ def _known_file_spec_targets(path: Path, tree) -> tuple[set[Path], bool]:
                     continue
                 try:
                     target = _eval_file_path(loc, selfpath, assigns)
-                except _UnresolvablePath:
+                except (_UnresolvablePath, IndexError):
                     resolvable = False
                     continue
                 if target.is_file():
