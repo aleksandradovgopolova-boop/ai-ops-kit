@@ -240,7 +240,7 @@ def _eval_file_path(node, selfpath: Path, assigns, _depth=0) -> Path:
     raise _UnresolvablePath
 
 
-def _known_file_spec_targets(path: Path, tree) -> tuple[set[Path], bool]:
+def _known_file_spec_targets(path: Path, tree, *, known_paths=None) -> tuple[set[Path], bool]:
     """Разрешённые по `__file__`-пути цели `spec_from_file_location` — это ИЗВЕСТНЫЕ рёбра импорта,
     а не непрослеживаемая динамика (их потребитель и цель статически определены).
 
@@ -273,7 +273,8 @@ def _known_file_spec_targets(path: Path, tree) -> tuple[set[Path], bool]:
                 except (_UnresolvablePath, IndexError):
                     resolvable = False
                     continue
-                if target.is_file():
+                if (target.is_file() and not target.is_symlink()
+                        and (known_paths is None or target.resolve() in known_paths)):
                     targets.add(target)
                 else:
                     resolvable = False
@@ -290,7 +291,7 @@ def _known_file_spec_targets(path: Path, tree) -> tuple[set[Path], bool]:
     return targets, resolvable
 
 
-def _dependency_uncertainty(path: Path, *, text=None, tree=None) -> str | None:
+def _dependency_uncertainty(path: Path, *, text=None, tree=None, known_paths=None) -> str | None:
     """Динамический потребитель известен; непрочитанное дерево ограничить нельзя."""
     if path.is_symlink():
         return "unreadable"
@@ -328,7 +329,7 @@ def _dependency_uncertainty(path: Path, *, text=None, tree=None) -> str | None:
             # статически определённое ребро (_known_file_spec_targets), а не слепое пятно.
             # Непрослеживаемый путь, цель вне репозитория, алиас или использование мимо прямого
             # вызова оставляют файл динамическим.
-            if not _known_file_spec_targets(path, tree)[1]:
+            if not _known_file_spec_targets(path, tree, known_paths=known_paths)[1]:
                 return "dynamic"
             return None
         dynamic = re.search(r"\bimport\s*\(|\brequire\s*\((?!\s*['\"])|"
@@ -362,6 +363,9 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
             stem_to_rels.setdefault(f.parent.name, set()).add(rel)
 
     known_rels = {rel for _, rel in rels}
+    # Реальный target должен присутствовать в выбранном графе: is_file недостаточно
+    # для внешних файлов, исключённых каталогов, symlink и path_filter.
+    known_paths = {f.resolve() for f, _ in rels if not f.is_symlink()}
     file_info, symbol_index, import_edges, tests, kinds = {}, {}, {}, {}, {}
     for f, rel in rels:
         # Один снимок содержимого на узел: imports и uncertainty используют тот же AST.
@@ -373,7 +377,7 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
                 syms, mods = _analyze_js(f, content=content)
             else:
                 syms, mods = _analyze(f, tree=tree)
-            kind = _dependency_uncertainty(f, text=content, tree=tree)
+            kind = _dependency_uncertainty(f, text=content, tree=tree, known_paths=known_paths)
         except (SyntaxError, OSError, UnicodeError):
             syms, mods, kind = [], set(), "unreadable"
         if kind:
