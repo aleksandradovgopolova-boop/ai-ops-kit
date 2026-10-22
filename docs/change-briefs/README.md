@@ -46,3 +46,5 @@
 - [Оставшиеся повторы перед выпуском](4.11.2-pre-release-speed-audit.md).
 - [Безопасное продолжение выбора тестов по файловым импортам](file-spec-fail-closed.md).
 - [Сверка старого checkout и граница файловых импортов](root-reconciliation-and-file-targets.md).
+
+- [Точечные проверки сканера](targeted-security-checks.md)
