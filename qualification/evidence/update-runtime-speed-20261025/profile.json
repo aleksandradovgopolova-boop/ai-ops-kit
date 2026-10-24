@@ -1,0 +1,324 @@
+{
+  "kind": "diagnostic-cProfile-not-comparative-timing",
+  "base": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+  "command": "pytest test_upgrade_from_released_version[v4.11.3], cProfile only on actual current installer update subprocess",
+  "total_calls": 59710031,
+  "total_tt": 11.711508624000006,
+  "top_cumulative": [
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.exec>",
+      "primitive_calls": 1,
+      "calls": 78,
+      "self_s": 0.00017400100000000002,
+      "cumulative_s": 11.711490625000001
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/ai_ops.py",
+      "line": 1,
+      "function": "<module>",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 1.5333e-05,
+      "cumulative_s": 11.711486584000001
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/ai_ops.py",
+      "line": 290,
+      "function": "main",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 4.542e-06,
+      "cumulative_s": 11.709145000000001
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/ai_ops.py",
+      "line": 300,
+      "function": "_dispatch",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 6.012600000000001e-05,
+      "cumulative_s": 11.709131000000001
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/update_ops.py",
+      "line": 324,
+      "function": "cmd_update",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.0026516300000000003,
+      "cumulative_s": 11.689554958
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/managed_state.py",
+      "line": 273,
+      "function": "build_diff",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 0.005150854000000001,
+      "cumulative_s": 5.837491249
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/delivery_ops.py",
+      "line": 495,
+      "function": "managed_content",
+      "primitive_calls": 2046,
+      "calls": 2046,
+      "self_s": 0.032074527000000005,
+      "cumulative_s": 5.45364551
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/delivery_ops.py",
+      "line": 457,
+      "function": "_compact_python",
+      "primitive_calls": 344,
+      "calls": 344,
+      "self_s": 0.163483608,
+      "cumulative_s": 5.4212741310000006
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'join' of 'str' objects>",
+      "primitive_calls": 56779,
+      "calls": 1241447,
+      "self_s": 0.212860547,
+      "cumulative_s": 4.320998193
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py",
+      "line": 109,
+      "function": "dump",
+      "primitive_calls": 688,
+      "calls": 688,
+      "self_s": 0.000539131,
+      "cumulative_s": 4.320864709
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py",
+      "line": 127,
+      "function": "_format",
+      "primitive_calls": 688,
+      "calls": 4260374,
+      "self_s": 2.822257456,
+      "cumulative_s": 4.3202484430000005
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py",
+      "line": 183,
+      "function": "<genexpr>",
+      "primitive_calls": 13560,
+      "calls": 571218,
+      "self_s": 0.094952346,
+      "cumulative_s": 4.305418769
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/update_ops.py",
+      "line": 147,
+      "function": "security_surface",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.000503208,
+      "cumulative_s": 3.8626858750000004
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/security_scan.py",
+      "line": 502,
+      "function": "delivered_surface",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 6.5639e-05,
+      "cumulative_s": 3.844899625
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/security_scan.py",
+      "line": 310,
+      "function": "scan_injection",
+      "primitive_calls": 2,
+      "calls": 2,
+      "self_s": 0.0018502430000000001,
+      "cumulative_s": 3.8150935
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/scan_inline_code.py",
+      "line": 649,
+      "function": "inline_code_lines",
+      "primitive_calls": 284,
+      "calls": 284,
+      "self_s": 0.0204569,
+      "cumulative_s": 3.1391430860000002
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/scan_inline_code.py",
+      "line": 337,
+      "function": "_py_строки",
+      "primitive_calls": 284,
+      "calls": 284,
+      "self_s": 0.036805694,
+      "cumulative_s": 3.1182043370000003
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/scan_inline_code.py",
+      "line": 248,
+      "function": "_константы",
+      "primitive_calls": 284,
+      "calls": 284,
+      "self_s": 0.0015693850000000002,
+      "cumulative_s": 2.050428632
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py",
+      "line": 386,
+      "function": "walk",
+      "primitive_calls": 1399506,
+      "calls": 1399506,
+      "self_s": 0.298800771,
+      "cumulative_s": 1.8484970500000002
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'extend' of 'collections.deque' objects>",
+      "primitive_calls": 1398654,
+      "calls": 1398654,
+      "self_s": 0.230544664,
+      "cumulative_s": 1.479455152
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py",
+      "line": 280,
+      "function": "iter_child_nodes",
+      "primitive_calls": 2796456,
+      "calls": 2796456,
+      "self_s": 0.620513977,
+      "cumulative_s": 1.2489104880000002
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/scan_inline_code.py",
+      "line": 209,
+      "function": "_связывания",
+      "primitive_calls": 284,
+      "calls": 284,
+      "self_s": 0.25525182,
+      "cumulative_s": 1.078893334
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.isinstance>",
+      "primitive_calls": 19751207,
+      "calls": 19751207,
+      "self_s": 1.020118847,
+      "cumulative_s": 1.0215887620000002
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py",
+      "line": 513,
+      "function": "run",
+      "primitive_calls": 13,
+      "calls": 13,
+      "self_s": 0.000511748,
+      "cumulative_s": 1.0145167480000001
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py",
+      "line": 1177,
+      "function": "communicate",
+      "primitive_calls": 13,
+      "calls": 13,
+      "self_s": 0.00016062200000000002,
+      "cumulative_s": 0.990318958
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/scan_inline_code.py",
+      "line": 232,
+      "function": "_пространство_переписывается",
+      "primitive_calls": 284,
+      "calls": 284,
+      "self_s": 0.202791344,
+      "cumulative_s": 0.966415927
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py",
+      "line": 2093,
+      "function": "_communicate",
+      "primitive_calls": 11,
+      "calls": 11,
+      "self_s": 0.0007287340000000001,
+      "cumulative_s": 0.9347668760000001
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/selectors.py",
+      "line": 385,
+      "function": "select",
+      "primitive_calls": 21,
+      "calls": 21,
+      "self_s": 0.00022842100000000003,
+      "cumulative_s": 0.932472877
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<method 'poll' of 'select.poll' objects>",
+      "primitive_calls": 21,
+      "calls": 21,
+      "self_s": 0.9322154170000001,
+      "cumulative_s": 0.9322154170000001
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/managed_state.py",
+      "line": 428,
+      "function": "run_validators",
+      "primitive_calls": 1,
+      "calls": 1,
+      "self_s": 0.00011774800000000001,
+      "cumulative_s": 0.908322375
+    },
+    {
+      "file": "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/security/scan_inline_code.py",
+      "line": 316,
+      "function": "_последовательности",
+      "primitive_calls": 7855,
+      "calls": 7855,
+      "self_s": 0.09201956300000001,
+      "cumulative_s": 0.771308985
+    },
+    {
+      "file": "~",
+      "line": 0,
+      "function": "<built-in method builtins.compile>",
+      "primitive_calls": 988,
+      "calls": 988,
+      "self_s": 0.7415873780000001,
+      "cumulative_s": 0.7422658780000001
+    },
+    {
+      "file": "/opt/homebrew/Cellar/python@3.14/3.14.7/Frameworks/Python.framework/Versions/3.14/lib/python3.14/ast.py",
+      "line": 26,
+      "function": "parse",
+      "primitive_calls": 972,
+      "calls": 972,
+      "self_s": 0.00041285100000000005,
+      "cumulative_s": 0.7209857270000001
+    },
+    {
+      "file": "/Users/sasad/ai-ops-kit/.venv/lib/python3.14/site-packages/yaml/__init__.py",
+      "line": 117,
+      "function": "safe_load",
+      "primitive_calls": 47,
+      "calls": 47,
+      "self_s": 5.8295000000000003e-05,
+      "cumulative_s": 0.622698296
+    },
+    {
+      "file": "/Users/sasad/ai-ops-kit/.venv/lib/python3.14/site-packages/yaml/__init__.py",
+      "line": 74,
+      "function": "load",
+      "primitive_calls": 47,
+      "calls": 47,
+      "self_s": 0.0012659560000000002,
+      "cumulative_s": 0.622640001
+    }
+  ]
+}

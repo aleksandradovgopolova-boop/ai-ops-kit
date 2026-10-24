@@ -1,0 +1,417 @@
+{
+  "update_medians_s": {
+    "before": 122.6327993330051,
+    "after": 115.50430816503649
+  },
+  "update_saved_s": 7.128491167968605,
+  "update_reduction_percent": 5.8128748644246775,
+  "base": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+  "source_sha256": {
+    "before": "39b7081c3938e59dfcc2c524d0a884870a8cab68a84f4406c62f80ea2b0cbf4b",
+    "after": "77f51649117a6e7f5e9fa16353ba1a47668ebf4be4564db7359a688d8325d995"
+  },
+  "other_inputs_sha256": "ce5f78a3fcb68cbfea2843cfe63442c7c3c7a3a4f429f97a4f39af0059e14347",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "argv": [
+    "/Users/sasad/ai-ops-kit/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-p",
+    "release_bench_probe",
+    "tests/unit/test_upgrade_from_released_versions.py",
+    "-n",
+    "0",
+    "-q",
+    "-k",
+    "not release_checkout",
+    "--durations=8",
+    "--basetemp=/Users/sasad/.codex/tmp/update-runtime-speed-20261025/pytest-temp"
+  ],
+  "environment_overrides": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "PYTHONPATH": "/Users/sasad/.codex/tmp/update-runtime-speed-20261025"
+  },
+  "order": "ABBAAB",
+  "release_refs": [
+    "refs/tags/v4.0.0 ffb57f42a2ce048b5f852b6e2cf4fa7653b76012",
+    "refs/tags/v4.1.0 0431daa7d971dbfad232c10d45395f256ade8437",
+    "refs/tags/v4.10.0 593acf28c8026ac7684a1b978c095b1d20176549",
+    "refs/tags/v4.10.1 521a39c3246c2e609248bae03e481c28842f0930",
+    "refs/tags/v4.11.0 b7c64dd978fae2a525a0e4ed4a6c2396a07e6f8c",
+    "refs/tags/v4.11.1 99b254425e3760aaf4a7ca6e58f727a73a134f4c",
+    "refs/tags/v4.11.2 136cfacdbdbd4980b27a426aff43159b123f7a44",
+    "refs/tags/v4.11.3 e6ba0d2fe9775c2d74f747eecec8d40a9721cefd",
+    "refs/tags/v4.2.0 bac4af45e3f4b7a871e56e0be64fbaac203e1ef2",
+    "refs/tags/v4.3.0 dc5f5f2345e62703796a372834bcfa545b1faacc",
+    "refs/tags/v4.3.1 850f57c947f0fd36f793f0bc8ad5652f78732cb8",
+    "refs/tags/v4.3.2 d45d4c0960ff7eb2145123a3acc9d8594037edf9",
+    "refs/tags/v4.4.0 026b3405ed7f3f194c11932908e2b0d3b31cefee",
+    "refs/tags/v4.4.1 7b45e5736aa7756edd7196c3543b0219db1cc7ce",
+    "refs/tags/v4.4.2 07a8c36d1168a9f959485f4e7f4cc1252a0a0651",
+    "refs/tags/v4.5.0 eb3cf00f615fb5711f9bf55a877697ac40e400e8",
+    "refs/tags/v4.6.0 648d6e008c17851d7ae124336500155412cadda4",
+    "refs/tags/v4.7.0 6472634fcd15294f393be558fed26e6dfa5b3058",
+    "refs/tags/v4.8.0 c10de16dda3f1eebbd92bf760a45e2d59f86c7ae",
+    "refs/tags/v4.9.0 413bc0cb256031745fbada1df4eb57d78dc2c8f4",
+    "refs/tags/v4.9.1 173854d84b9a88912af0620a76344b0258cc996e",
+    "refs/tags/v4.9.2 4b1b75c51d8ddac1b0e3e4684abe06e972509cbc",
+    "refs/tags/v4.9.3 ad16611cec1ca65a659f597f7b3b0436df8e78b8"
+  ],
+  "tags": [
+    "v4.11.3",
+    "v4.11.2",
+    "v4.11.1",
+    "v4.11.0",
+    "v4.10.1",
+    "v4.10.0",
+    "v4.9.3",
+    "v4.9.2",
+    "v4.9.1",
+    "v4.9.0",
+    "v4.8.0",
+    "v4.7.0",
+    "v4.6.0",
+    "v4.5.0",
+    "v4.4.2",
+    "v4.4.1",
+    "v4.4.0",
+    "v4.3.2",
+    "v4.3.1",
+    "v4.3.0",
+    "v4.2.0",
+    "v4.1.0",
+    "v4.0.0"
+  ],
+  "rows": [
+    {
+      "condition": "before",
+      "wall_s": 150.8925076250016,
+      "child_cpu_s": 149.646323,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.26671170799818356,
+        "installer init": 12.506658997983322,
+        "installer update": 122.6327993330051,
+        "checksums": 1.1605927080236143,
+        "child-validator": 2.215918042973499,
+        "worktree remove": 0.15225095800997224
+      },
+      "command_cpu_s": {
+        "worktree add": 0.18967299999999998,
+        "installer init": 12.24713500000002,
+        "installer update": 122.08669599999993,
+        "checksums": 1.1070800000000176,
+        "child-validator": 2.164595999999971,
+        "worktree remove": 0.11873699999998877
+      },
+      "products_sha256": "1dcecd08f2ce1774f96789582d82ef68815edd674b156d17c8cec89451a841f1",
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+    },
+    {
+      "condition": "after",
+      "wall_s": 143.5018753339973,
+      "child_cpu_s": 142.25035400000002,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.21115329199528787,
+        "installer init": 12.425672956989729,
+        "installer update": 115.50430816503649,
+        "checksums": 1.1561748319654725,
+        "child-validator": 2.2045905419945484,
+        "worktree remove": 0.17707937498926185
+      },
+      "command_cpu_s": {
+        "worktree add": 0.199598,
+        "installer init": 12.133996000000025,
+        "installer update": 114.89853399999998,
+        "checksums": 1.0984130000000187,
+        "child-validator": 2.1450239999999434,
+        "worktree remove": 0.10805299999999818
+      },
+      "products_sha256": "1dcecd08f2ce1774f96789582d82ef68815edd674b156d17c8cec89451a841f1",
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+    },
+    {
+      "condition": "after",
+      "wall_s": 143.2326302500005,
+      "child_cpu_s": 142.206641,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.19911845799651928,
+        "installer init": 12.35975232902274,
+        "installer update": 115.53676370900939,
+        "checksums": 1.144746208039578,
+        "child-validator": 2.205705706990557,
+        "worktree remove": 0.1593015840044245
+      },
+      "command_cpu_s": {
+        "worktree add": 0.187789,
+        "installer init": 12.081139000000029,
+        "installer update": 115.01089000000003,
+        "checksums": 1.0867340000000019,
+        "child-validator": 2.1537909999999867,
+        "worktree remove": 0.10699600000000586
+      },
+      "products_sha256": "1dcecd08f2ce1774f96789582d82ef68815edd674b156d17c8cec89451a841f1",
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+    },
+    {
+      "condition": "before",
+      "wall_s": 150.9107780839986,
+      "child_cpu_s": 148.84784599999998,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.20342691699624993,
+        "installer init": 12.320511879006517,
+        "installer update": 123.34893537797325,
+        "checksums": 1.1516931670194026,
+        "child-validator": 2.197995620997972,
+        "worktree remove": 0.14517404200159945
+      },
+      "command_cpu_s": {
+        "worktree add": 0.18780599999999997,
+        "installer init": 12.08081200000001,
+        "installer update": 121.73197499999998,
+        "checksums": 1.0931209999999913,
+        "child-validator": 2.1425289999999535,
+        "worktree remove": 0.1065170000000002
+      },
+      "products_sha256": "1dcecd08f2ce1774f96789582d82ef68815edd674b156d17c8cec89451a841f1",
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+    },
+    {
+      "condition": "before",
+      "wall_s": 149.51569495799777,
+      "child_cpu_s": 148.36962800000003,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.19491025000752416,
+        "installer init": 12.370560085008037,
+        "installer update": 121.93571891600732,
+        "checksums": 1.1669253310392378,
+        "child-validator": 2.2247245029720943,
+        "worktree remove": 0.15510566699958872
+      },
+      "command_cpu_s": {
+        "worktree add": 0.190109,
+        "installer init": 12.106930000000023,
+        "installer update": 121.32643499999999,
+        "checksums": 1.1008080000000633,
+        "child-validator": 2.1608850000000004,
+        "worktree remove": 0.10648600000001451
+      },
+      "products_sha256": "1dcecd08f2ce1774f96789582d82ef68815edd674b156d17c8cec89451a841f1",
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+    },
+    {
+      "condition": "after",
+      "wall_s": 142.85472445799678,
+      "child_cpu_s": 141.85071699999992,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.18913491700368468,
+        "installer init": 12.303208206998534,
+        "installer update": 115.2452340820455,
+        "checksums": 1.1528250419942196,
+        "child-validator": 2.2095638339669676,
+        "worktree remove": 0.13913837500149384
+      },
+      "command_cpu_s": {
+        "worktree add": 0.182916,
+        "installer init": 12.064528000000003,
+        "installer update": 114.69977799999994,
+        "checksums": 1.0874170000000236,
+        "child-validator": 2.151301000000004,
+        "worktree remove": 0.10479600000000389
+      },
+      "products_sha256": "1dcecd08f2ce1774f96789582d82ef68815edd674b156d17c8cec89451a841f1",
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+    }
+  ],
+  "medians_wall_s": {
+    "before": 150.8925076250016,
+    "after": 143.2326302500005
+  },
+  "saved_s": 7.659877375001088,
+  "reduction_percent": 5.076380196449137,
+  "case_outcomes": [
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_the_release_corpus_is_not_empty",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.0.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.1.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.10.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.10.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.3]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.2.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.3.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.3.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.3.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.4.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.4.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.4.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.5.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.6.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.7.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.8.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.3]",
+      "pass"
+    ]
+  ],
+  "limitations": "Three samples per variant on one host. Whole original module: all 23 release versions plus corpus guard. Four new guard tests excluded from both timings and checked separately. Process wall includes startup/setup/teardown, clean identical basetemp before each run (cleanup excluded). Same subprocess observation plugin both conditions. Actual update subprocess duration separately observed. Exact security_surface and all delivered managed file bytes compared, excluding the changed scanner module and checksums/provenance metadata. Existing test independently verifies all checksums. Not total selftests-m or CI wall."
+}
