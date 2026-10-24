@@ -1,0 +1,329 @@
+{
+  "base": "da0471b1ff56c2c21cd77bb8191209764afdcff7",
+  "source_sha256": {
+    "before": {
+      "tests/unit/test_installer_setup.py": "11dac2e9f8f6ca29ffe813b42f962ffd4c58552ebdf215a247ef3fb4e2d9936c",
+      "tests/unit/test_update_policy_enforcement.py": "627221151f64726c202d4cf7d32be2d4250ffcf21df1057e9d1eb7fc996fbb4f"
+    },
+    "after": {
+      "tests/unit/test_installer_setup.py": "247157cbf836426c918d34178c99bc2bbcc4da7b9415748deaa2833a9e9fcac3",
+      "tests/unit/test_update_policy_enforcement.py": "f2d05d534eca6e98b0ce2a668882464cffa347bec8fd33500fc408953c9c08ce"
+    }
+  },
+  "other_inputs_sha256": "a317f56b2def6137e5a674f18f475228f1e0ce0aa8be426b6d884ecfd3b8e971",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "argv": [
+    "/Users/sasad/ai-ops-kit/.venv/bin/python",
+    "-m",
+    "pytest",
+    "tests/unit/test_installer_setup.py",
+    "tests/unit/test_update_policy_enforcement.py",
+    "-n",
+    "0",
+    "-q",
+    "-k",
+    "not fixture_copy_isolation",
+    "--durations=12",
+    "--basetemp=/Users/sasad/.codex/tmp/installer-fixtures-20261024/pytest-temp"
+  ],
+  "environment_overrides": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1"
+  },
+  "order": "ABBAAB",
+  "rows": [
+    {
+      "condition": "before",
+      "wall_s": 108.80452245900233,
+      "child_cpu_s": 105.06587199999998,
+      "load_start": [
+        2.73388671875,
+        2.71435546875,
+        2.72119140625
+      ],
+      "tests": 36,
+      "passed": 36,
+      "durations_by_module_s": {
+        "tests.unit.test_installer_setup": 65.11000000000001,
+        "tests.unit.test_update_policy_enforcement": 43.325
+      },
+      "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+    },
+    {
+      "condition": "after",
+      "wall_s": 52.543694124993635,
+      "child_cpu_s": 50.713915,
+      "load_start": [
+        3.0810546875,
+        2.8291015625,
+        2.7626953125
+      ],
+      "tests": 36,
+      "passed": 36,
+      "durations_by_module_s": {
+        "tests.unit.test_installer_setup": 29.601000000000003,
+        "tests.unit.test_update_policy_enforcement": 22.561999999999998
+      },
+      "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+    },
+    {
+      "condition": "after",
+      "wall_s": 54.26348404100281,
+      "child_cpu_s": 52.07604099999999,
+      "load_start": [
+        3.50732421875,
+        2.98095703125,
+        2.8203125
+      ],
+      "tests": 36,
+      "passed": 36,
+      "durations_by_module_s": {
+        "tests.unit.test_installer_setup": 30.62299999999999,
+        "tests.unit.test_update_policy_enforcement": 23.208
+      },
+      "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+    },
+    {
+      "condition": "before",
+      "wall_s": 111.95537620899267,
+      "child_cpu_s": 107.68929499999999,
+      "load_start": [
+        4.41943359375,
+        3.30810546875,
+        2.94970703125
+      ],
+      "tests": 36,
+      "passed": 36,
+      "durations_by_module_s": {
+        "tests.unit.test_installer_setup": 68.59800000000001,
+        "tests.unit.test_update_policy_enforcement": 42.964
+      },
+      "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+    },
+    {
+      "condition": "before",
+      "wall_s": 109.37393604200042,
+      "child_cpu_s": 105.66739199999998,
+      "load_start": [
+        3.708984375,
+        3.43603515625,
+        3.0439453125
+      ],
+      "tests": 36,
+      "passed": 36,
+      "durations_by_module_s": {
+        "tests.unit.test_installer_setup": 65.53999999999999,
+        "tests.unit.test_update_policy_enforcement": 43.437
+      },
+      "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+    },
+    {
+      "condition": "after",
+      "wall_s": 65.43786108300264,
+      "child_cpu_s": 62.986149,
+      "load_start": [
+        3.4775390625,
+        3.525390625,
+        3.13037109375
+      ],
+      "tests": 36,
+      "passed": 36,
+      "durations_by_module_s": {
+        "tests.unit.test_installer_setup": 36.778999999999996,
+        "tests.unit.test_update_policy_enforcement": 28.206
+      },
+      "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+    }
+  ],
+  "medians_wall_s": {
+    "before": 109.37393604200042,
+    "after": 54.26348404100281
+  },
+  "saved_s": 55.11045200099761,
+  "reduction_percent": 50.38718911956755,
+  "case_outcomes": [
+    [
+      "tests.unit.test_installer_setup",
+      "test_first_hour_done_lines_names_first_work_at_ready",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_first_result_lead_leads_with_result_per_stage",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_first_result_lead_names_project_state_right_under_the_header",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_project_name_falls_back_to_the_main_repo_dir",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_project_name_from_manifest_without_remote",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_project_name_from_origin_remote",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_project_name_is_none_when_nothing_fits",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_remaining_depends_on_first_hour_stage_in_process",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_remaining_names_config_placeholders_in_process",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_commits_only_kit_files_not_foreign",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_invalid_budget_refuses_before_writing_files[-1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_invalid_budget_refuses_before_writing_files[0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_invalid_budget_refuses_before_writing_files[inf]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_invalid_budget_refuses_before_writing_files[nan]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_invalid_budget_refuses_before_writing_files[words]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_is_idempotent_on_already_installed",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_journals_real_steps_and_excludes_logs_from_commit",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_leaves_first_result_artifact_and_leads_with_it",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_names_blocking_questions_at_needs_answers",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_names_what_is_left_to_the_human",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_old_gitignore_does_not_commit_attempt_logs",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_on_non_git_dir_refuses_with_git_init_hint",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_prepares_managed_zone_detects_stack_and_bootstraps",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_reaches_first_hour_via_doctor_and_flow",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_refuses_damaged_installation_before_onboarding",
+      "pass"
+    ],
+    [
+      "tests.unit.test_installer_setup",
+      "test_setup_short_budget_stops_with_journal_and_nonzero_result",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_ci_template_passes_in_place",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_existing_branch_is_not_silently_extended",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_in_place_flag_applies_in_place",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_missing_policy_is_treated_as_pr",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_policy_manual_applies_in_place",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_policy_pr_does_not_touch_the_working_tree",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_policy_pr_prepares_a_branch_with_the_change",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_prepared_branch_does_not_carry_the_backup",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_prepared_branch_message_names_the_security_surface",
+      "pass"
+    ],
+    [
+      "tests.unit.test_update_policy_enforcement",
+      "test_report_survives_and_names_the_deferral",
+      "pass"
+    ]
+  ],
+  "limitations": "Three samples per variant on one macOS host/Python 3.14.7; 36 original tests in two modules; new fixture isolation tests excluded from both timings and checked separately. Full process wall incl startup/setup/teardown. Clean identical basetemp before each run, cleanup excluded. Not an estimate of total CI wall."
+}

@@ -1,0 +1,45 @@
+from pathlib import Path
+import hashlib,json,os,platform,resource,shutil,statistics,subprocess,sys,time,xml.etree.ElementTree as E
+root=Path.cwd();out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True)
+files=['tests/unit/test_installer_setup.py','tests/unit/test_update_policy_enforcement.py']
+head=subprocess.check_output(['git','rev-parse',sys.argv[2]],text=True).strip()
+sources={k:{p:subprocess.check_output(['git','show',head+':'+p]) if k=='before' else (root/p).read_bytes() for p in files} for k in ('before','after')}
+for k,items in sources.items():
+ for p,data in items.items():
+  dst=out/k/p;dst.parent.mkdir(parents=True,exist_ok=True);dst.write_bytes(data)
+def fingerprint():
+ h=hashlib.sha256()
+ paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z']).decode().split('\0')
+ for p in sorted(set(paths)-set(files)-{''}):
+  h.update(p.encode()+b'\0'+(root/p).read_bytes()+b'\0')
+ return h.hexdigest()
+frozen=fingerprint();rows=[];expected=None
+baseargs=[sys.executable,'-m','pytest',*files,'-n','0','-q','-k','not fixture_copy_isolation','--durations=12','--basetemp='+str(out/'pytest-temp')]
+env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1','GIT_CONFIG_GLOBAL':os.devnull,'GIT_CONFIG_NOSYSTEM':'1'}
+assert not env.get('PYTEST_ADDOPTS')
+try:
+ for i,condition in enumerate(['before','after','after','before','before','after']):
+  assert fingerprint()==frozen
+  for p,data in sources[condition].items():(root/p).write_bytes(data)
+  shutil.rmtree(out/'pytest-temp',ignore_errors=True)
+  xml=out/f'run-{i:02d}.xml';log=out/f'run-{i:02d}.log';cmd=baseargs+['--junitxml='+str(xml)]
+  print(json.dumps({'started':i,'condition':condition}),flush=True)
+  cpu0=resource.getrusage(resource.RUSAGE_CHILDREN);t=time.perf_counter();load=os.getloadavg()
+  with log.open('w') as f:r=subprocess.run(cmd,stdout=f,stderr=subprocess.STDOUT,env=env)
+  wall=time.perf_counter()-t;cpu1=resource.getrusage(resource.RUSAGE_CHILDREN)
+  assert r.returncode==0,log.read_text()[-6000:]
+  cases=sorted((c.get('classname'),c.get('name'),'skip' if c.find('skipped') is not None else 'failed' if c.find('failure') is not None or c.find('error') is not None else 'pass') for c in E.parse(xml).iter('testcase'))
+  assert len(cases)==len(set(cases))==36 and all(c[2]=='pass' for c in cases)
+  if expected is None:expected=cases
+  assert cases==expected
+  assert fingerprint()==frozen
+  for p,data in sources[condition].items():assert (root/p).read_bytes()==data
+  durations={}
+  for c in E.parse(xml).iter('testcase'):durations[c.get('classname')]=durations.get(c.get('classname'),0)+float(c.get('time'))
+  row={'condition':condition,'wall_s':wall,'child_cpu_s':cpu1.ru_utime+cpu1.ru_stime-cpu0.ru_utime-cpu0.ru_stime,'load_start':load,'tests':36,'passed':36,'durations_by_module_s':durations,'outcomes_sha256':hashlib.sha256(json.dumps(cases).encode()).hexdigest()};rows.append(row)
+  (out/'raw.json').write_text(json.dumps(rows,indent=2));print(json.dumps(row),flush=True)
+finally:
+ for p,data in sources['after'].items():(root/p).write_bytes(data)
+med={k:statistics.median(r['wall_s'] for r in rows if r['condition']==k) for k in sources}
+report={'base':head,'source_sha256':{k:{p:hashlib.sha256(data).hexdigest() for p,data in items.items()} for k,items in sources.items()},'other_inputs_sha256':frozen,'python':sys.version,'platform':platform.platform(),'argv':baseargs,'environment_overrides':{k:env[k] for k in ['PYTHONDONTWRITEBYTECODE','GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM']},'order':'ABBAAB','rows':rows,'medians_wall_s':med,'saved_s':med['before']-med['after'],'reduction_percent':100*(1-med['after']/med['before']),'case_outcomes':expected,'limitations':'Three samples per variant on one macOS host/Python 3.14.7; 36 original tests in two modules; new fixture isolation tests excluded from both timings and checked separately. Full process wall incl startup/setup/teardown. Clean identical basetemp before each run, cleanup excluded. Not an estimate of total CI wall.'}
+(out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps({k:v for k,v in report.items() if k in ('medians_wall_s','saved_s','reduction_percent')},ensure_ascii=False),flush=True)
