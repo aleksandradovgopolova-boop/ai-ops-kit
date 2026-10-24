@@ -85,6 +85,27 @@ def child(installed_at_older, tmp_path):
     return dst
 
 
+@pytest.fixture(scope="module")
+def prepared_update_template(installed_at_older, tmp_path_factory):
+    """Один реальный update для проверок одного и того же результата policy=pr."""
+    root = tmp_path_factory.mktemp("prepared-update") / "repo"
+    shutil.copytree(installed_at_older, root)
+    _policy(root, "pr")
+    before = (root / ".ai-ops.yaml").read_text(encoding="utf-8")
+    result = _run(root, "update")
+    assert result.returncode == 0, result.stdout + result.stderr
+    return root, result, before
+
+
+@pytest.fixture
+def prepared_update_copy(prepared_update_template, tmp_path):
+    """Независимая копия результата, включая refs/index Git и локальный отчёт."""
+    root, result, before = prepared_update_template
+    child = tmp_path / "prepared-update-copy"
+    shutil.copytree(root, child)
+    return child, result, before
+
+
 def _report(root):
     return json.loads((root / ".ai" / "runtime" / "last-update-report.json").read_text(encoding="utf-8"))
 
@@ -95,12 +116,10 @@ def _branches(root):
 
 # ─── fail-closed: policy pr не даёт применить на месте ───────────────────────────────────────────
 @pytest.mark.slow
-def test_policy_pr_does_not_touch_the_working_tree(child):
+def test_policy_pr_does_not_touch_the_working_tree(prepared_update_copy):
     """Главное обещание: при `update_policy: pr` рабочее дерево владельца остаётся как было."""
-    _policy(child, "pr")
-    before = (child / ".ai-ops.yaml").read_text(encoding="utf-8")
+    child, r, before = prepared_update_copy
 
-    r = _run(child, "update")
     assert r.returncode == 0, f"{r.stdout[-800:]}\n{r.stderr[-800:]}"
 
     assert (child / ".ai-ops.yaml").read_text(encoding="utf-8") == before, (
@@ -113,10 +132,9 @@ def test_policy_pr_does_not_touch_the_working_tree(child):
 
 
 @pytest.mark.slow
-def test_policy_pr_prepares_a_branch_with_the_change(child):
+def test_policy_pr_prepares_a_branch_with_the_change(prepared_update_copy):
     """Обновление не потеряно, а отложено: ветка есть и версия в ней поднята."""
-    _policy(child, "pr")
-    r = _run(child, "update")
+    child, r, before = prepared_update_copy
     assert r.returncode == 0, r.stdout[-500:]
 
     branches = _branches(child)
@@ -127,13 +145,12 @@ def test_policy_pr_prepares_a_branch_with_the_change(child):
 
 
 @pytest.mark.slow
-def test_prepared_branch_message_names_the_security_surface(child):
+def test_prepared_branch_message_names_the_security_surface(prepared_update_copy):
     """#1157: тело PR обновления говорит, что выпуск привозит по безопасности — и пустое тоже.
 
     Поставка в этой дочке уже совпадает с пакетом, новых адресов нет — и это сказано словом
     «ничего», а не отсутствием раздела (молчание читалось бы как «не проверяли»)."""
-    _policy(child, "pr")
-    r = _run(child, "update")
+    child, r, before = prepared_update_copy
     assert r.returncode == 0, r.stdout[-500:]
     body = _git(child, "log", "-1", "--format=%B", _branches(child)[0]).stdout
     assert "Что этот выпуск привозит по безопасности" in body, body
@@ -141,15 +158,15 @@ def test_prepared_branch_message_names_the_security_surface(child):
 
 
 @pytest.mark.slow
-def test_prepared_branch_does_not_carry_the_backup(child):
+def test_prepared_branch_does_not_carry_the_backup(prepared_update_copy):
     """Дифф обязан быть ОТСМАТРИВАЕМЫМ: бэкап managed-слоя в PR не едет.
 
     ЗАМЕР при первой живой проверке: без правила в `.gitignore` подготовленный PR содержал 612
     файлов, из которых 609 — копия managed-слоя из `.ai/runtime/backups/`. Дифф, который нельзя
     отсмотреть, — тот же ложный green: «отревьюено» превращается в «пролистано».
     """
-    _policy(child, "pr")
-    assert _run(child, "update").returncode == 0
+    child, r, before = prepared_update_copy
+    assert r.returncode == 0
     branch = _branches(child)[0]
     files = _git(child, "diff", "--name-only", f"main..{branch}").stdout.split()
 
@@ -160,15 +177,15 @@ def test_prepared_branch_does_not_carry_the_backup(child):
 
 
 @pytest.mark.slow
-def test_report_survives_and_names_the_deferral(child):
+def test_report_survives_and_names_the_deferral(prepared_update_copy):
     """Отчёт остаётся У ВЛАДЕЛЬЦА и называет отложенное решение.
 
     Вложенный прогон пишет отчёт в свой корень — временный worktree, который удаляется. Именно этот
     файл позволил найти F-022 (`pull_request: null` при `update_policy: pr`), поэтому он обязан
     выжить и сказать правду.
     """
-    _policy(child, "pr")
-    assert _run(child, "update").returncode == 0
+    child, r, before = prepared_update_copy
+    assert r.returncode == 0
 
     rep = _report(child)
     assert rep["applied_in_place"] is False
@@ -194,10 +211,10 @@ def test_missing_policy_is_treated_as_pr(child):
 
 
 @pytest.mark.slow
-def test_existing_branch_is_not_silently_extended(child):
+def test_existing_branch_is_not_silently_extended(prepared_update_copy):
     """Готовая ветка обновления — не место для дозаписи: отказ с объяснением, дерево не тронуто."""
-    _policy(child, "pr")
-    assert _run(child, "update").returncode == 0
+    child, r, before = prepared_update_copy
+    assert r.returncode == 0
     branch = _branches(child)[0]
     before = (child / ".ai-ops.yaml").read_text(encoding="utf-8")
 
@@ -244,3 +261,25 @@ def test_ci_template_passes_in_place():
     line = next((l for l in text.splitlines() if "ai_ops.py update" in l and not l.strip().startswith("#")), "")
     assert line, "в шаблоне нет вызова `ai_ops.py update`"
     assert "--in-place" in line, f"шаблон CI не просит применение на месте: {line.strip()}"
+
+
+@pytest.mark.slow
+def test_update_fixture_copy_isolation(prepared_update_copy, prepared_update_template):
+    """Изменения managed/config и Git копии не меняют общий источник следующих тестов."""
+    child = prepared_update_copy[0]
+    source = prepared_update_template[0]
+    paths = (".ai-ops.yaml", ".ai/managed/registry/agents.yaml")
+    original = {rel: (source / rel).read_bytes() for rel in paths}
+    source_head = _git(source, "rev-parse", "HEAD").stdout
+    source_index = (source / ".git/index").read_bytes()
+    for rel in paths:
+        (child / rel).write_bytes(original[rel] + b"\n# copy isolation proof\n")
+        assert (child / rel).read_bytes() != original[rel]
+    assert _git(child, "checkout", "-qb", "fixture-isolation-proof").returncode == 0
+    assert _git(child, "add", *paths).returncode == 0
+    assert _git(child, "commit", "-qm", "fixture isolation proof").returncode == 0
+    assert _git(child, "rev-parse", "HEAD").stdout != source_head
+    assert {rel: (source / rel).read_bytes() for rel in paths} == original
+    assert _git(source, "rev-parse", "HEAD").stdout == source_head
+    assert (source / ".git/index").read_bytes() == source_index
+    assert not _git(source, "branch", "--list", "fixture-isolation-proof").stdout.strip()

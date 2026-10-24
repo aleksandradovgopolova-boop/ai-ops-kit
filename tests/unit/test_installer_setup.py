@@ -19,13 +19,14 @@ model --flow.
 from __future__ import annotations
 
 import importlib.util
+import shutil
 from pathlib import Path
 
 import pytest
 
-from _installer_helpers import _git, _run_cli
+from _installer_helpers import _git, _make_child_repo, _run_cli
 
-# Каждый тест поднимает реальную установку кита (подпроцессы + копирование дерева) — 20–40 c на
+# Модуль поднимает реальные установки кита (подпроцессы + копирование дерева) — 20–40 c на
 # CI, то есть slow по определению маркера (pytest.ini). Снят с шарда `fast` под `--dist loadfile`
 # в slow-шарды selftests, где есть запас; на КАЖДОМ PR по-прежнему выполняется. Issue #465.
 pytestmark = [pytest.mark.unit, pytest.mark.slow]
@@ -42,9 +43,27 @@ def _load_installer():
     return mod
 
 
-def test_setup_prepares_managed_zone_detects_stack_and_bootstraps(child):
+@pytest.fixture(scope="module")
+def setup_template(tmp_path_factory):
+    """Один реальный setup для проверок одинакового результата свежей установки."""
+    root = _make_child_repo(tmp_path_factory.mktemp("setup-template") / "child")
+    result = _run_cli(root, "setup", ".")
+    assert result.returncode == 0, result.stdout + result.stderr
+    return root, result
+
+
+@pytest.fixture
+def setup_copy(setup_template, tmp_path):
+    """Копируем и рабочее дерево, и Git; вывод относится к реальному запуску шаблона."""
+    root, result = setup_template
+    child = tmp_path / "setup-copy"
+    shutil.copytree(root, child)
+    return child, result
+
+
+def test_setup_prepares_managed_zone_detects_stack_and_bootstraps(setup_copy):
     """(1) Одна команда проходит цепочку: managed-зона + профиль стека + черновики bootstrap."""
-    r = _run_cli(child, "setup", ".")
+    child, r = setup_copy
     assert r.returncode == 0, f"setup упал: rc={r.returncode}\n{r.stdout}\n{r.stderr}"
     # managed-зона на месте — установка состоялась
     assert (child / ".ai" / "managed").is_dir(), "managed-зона не создана"
@@ -56,9 +75,9 @@ def test_setup_prepares_managed_zone_detects_stack_and_bootstraps(child):
     assert "планирование" in prof_gaps.stdout, "doctor не видит контур планирования после setup"
 
 
-def test_setup_names_what_is_left_to_the_human(child):
+def test_setup_names_what_is_left_to_the_human(setup_copy):
     """(2) Финал перечисляет «осталось от тебя» — незаполненный конфиг НЕ выдан за готовый."""
-    r = _run_cli(child, "setup", ".")
+    child, r = setup_copy
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     out = r.stdout
     assert "Осталось от тебя" in out, "нет раздела «осталось от тебя» — остаток спрятан"
@@ -71,10 +90,10 @@ def test_setup_names_what_is_left_to_the_human(child):
         "коммит всё ещё свален на человека, хотя setup фиксирует свои файлы сам"
 
 
-def test_setup_reaches_first_hour_via_doctor_and_flow(child):
+def test_setup_reaches_first_hour_via_doctor_and_flow(setup_copy):
     """(5) `setup` доводит до первого часа: называет шаг проверки целостности (doctor) и шаг первого
     часа (model --flow), а не останавливается на подготовке формы вопросов (issue #612)."""
-    r = _run_cli(child, "setup", ".")
+    child, r = setup_copy
     assert r.returncode == 0, f"setup упал: rc={r.returncode}\n{r.stdout}\n{r.stderr}"
     out = r.stdout
     assert "doctor" in out.lower(), "setup не проверяет целостность установки (нет шага doctor)"
@@ -100,9 +119,9 @@ def test_setup_on_non_git_dir_refuses_with_git_init_hint(tmp_path):
     assert not (plain / ".ai" / "managed").exists(), "в не-git каталоге не должно быть установки"
 
 
-def test_setup_is_idempotent_on_already_installed(child):
+def test_setup_is_idempotent_on_already_installed(setup_copy):
     """(4) Повторный `setup` на уже установленном ките не падает (можно перезапускать)."""
-    first = _run_cli(child, "setup", ".")
+    child, first = setup_copy
     assert first.returncode == 0, f"первый setup упал: {first.stdout}\n{first.stderr}"
     second = _run_cli(child, "setup", ".")
     assert second.returncode == 0, f"повторный setup упал: {second.stdout}\n{second.stderr}"
@@ -112,13 +131,13 @@ def test_setup_is_idempotent_on_already_installed(child):
     assert (child / ".ai" / "managed").is_dir()
 
 
-def test_remaining_names_config_placeholders_in_process(child):
+def test_remaining_names_config_placeholders_in_process(setup_copy):
     """`_setup_remaining` называет незаполненный конфиг остатком — на свежей установке (in-process).
 
     Прямой вызов функции установщика: остаток «от человека» вычисляется из валидатора конфига, а
     не из общих слов, и заготовки `.ai-ops.yaml` НЕ выдаются за заполненный конфиг.
     """
-    r = _run_cli(child, "setup", ".")
+    child, r = setup_copy
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     # Установка теперь сама выводит имя проекта из репозитория (#1205); заготовку ставим руками —
     # предмет теста в том, что кит её ЗАМЕЧАЕТ, а не в том, что установка её оставляет.
@@ -135,12 +154,12 @@ def test_remaining_names_config_placeholders_in_process(child):
         "коммит остался в остатке, хотя его теперь делает setup"
 
 
-def test_remaining_depends_on_first_hour_stage_in_process(child):
+def test_remaining_depends_on_first_hour_stage_in_process(setup_copy):
     """`_setup_remaining` спрашивает ответы ПО СТАДИИ первого часа, а не по наличию формы.
 
     ready — вопросов не остаётся; needs_answers — просит ответить и перечисляет блокирующие;
     blocked_understanding — честно говорит, что репозиторий пока не читается."""
-    r = _run_cli(child, "setup", ".")
+    child, r = setup_copy
     assert r.returncode == 0, f"{r.stdout}\n{r.stderr}"
     setup_ops = _load_installer()._setup_ops()
 
@@ -227,10 +246,10 @@ def test_first_result_lead_names_project_state_right_under_the_header(tmp_path):
                    for x in setup_ops._first_result_lead(tmp_path, {"kind": "first-hour", "stage": "ready"}))
 
 
-def test_setup_leaves_first_result_artifact_and_leads_with_it(child):
+def test_setup_leaves_first_result_artifact_and_leads_with_it(setup_copy):
     """(issue #1140) Конец установки — первый РЕЗУЛЬТАТ: setup оставляет открываемый файл
     `.ai/generated/first-result.md` и ведёт им экран, а не строкой «AI Ops установлен»."""
-    r = _run_cli(child, "setup", ".")
+    child, r = setup_copy
     assert r.returncode == 0, f"setup упал: {r.stdout}\n{r.stderr}"
     out = r.stdout
     # Файл первого результата создан и его можно открыть.
@@ -244,10 +263,10 @@ def test_setup_leaves_first_result_artifact_and_leads_with_it(child):
         "экран всё ещё ведёт строкой «установлено», а не результатом"
 
 
-def test_setup_names_blocking_questions_at_needs_answers(child):
+def test_setup_names_blocking_questions_at_needs_answers(setup_copy):
     """(needs_answers, подпроцесс) минимальный репозиторий даёт вопросы: экран просит ответить и
     перечисляет блокирующие с их id — человек видит, чего именно не хватает."""
-    r = _run_cli(child, "setup", ".")
+    child, r = setup_copy
     assert r.returncode == 0, f"setup упал: {r.stdout}\n{r.stderr}"
     out = r.stdout
     assert "продуктовые вопросы" in out, "не попросил ответить на продуктовые вопросы"
@@ -381,8 +400,8 @@ def test_setup_refuses_damaged_installation_before_onboarding(installed_copy):
     assert rows[-1]["status"] == "failed"
 
 
-def test_setup_old_gitignore_does_not_commit_attempt_logs(child):
-    result = _run_cli(child, "setup", ".")
+def test_setup_old_gitignore_does_not_commit_attempt_logs(setup_copy):
+    child, result = setup_copy
     assert result.returncode == 0, result.stdout + result.stderr
     ignore = child / ".gitignore"
     ignore.write_text(ignore.read_text().replace(".ai/runtime/setup/\n", ""))
@@ -390,3 +409,25 @@ def test_setup_old_gitignore_does_not_commit_attempt_logs(child):
     assert result.returncode == 0, result.stdout + result.stderr
     assert len(list((child / ".ai/runtime/setup").glob("*/events.jsonl"))) == 2
     assert _git(child, "ls-files", ".ai/runtime/setup").stdout == ""
+
+
+@pytest.mark.slow
+def test_setup_fixture_copy_isolation(setup_copy, setup_template):
+    """Изменения managed/config и Git копии не меняют общий источник следующих тестов."""
+    child = setup_copy[0]
+    source = setup_template[0]
+    paths = (".ai-ops.yaml", ".ai/managed/registry/agents.yaml")
+    original = {rel: (source / rel).read_bytes() for rel in paths}
+    source_head = _git(source, "rev-parse", "HEAD").stdout
+    source_index = (source / ".git/index").read_bytes()
+    for rel in paths:
+        (child / rel).write_bytes(original[rel] + b"\n# copy isolation proof\n")
+        assert (child / rel).read_bytes() != original[rel]
+    assert _git(child, "checkout", "-qb", "fixture-isolation-proof").returncode == 0
+    assert _git(child, "add", *paths).returncode == 0
+    assert _git(child, "commit", "-qm", "fixture isolation proof").returncode == 0
+    assert _git(child, "rev-parse", "HEAD").stdout != source_head
+    assert {rel: (source / rel).read_bytes() for rel in paths} == original
+    assert _git(source, "rev-parse", "HEAD").stdout == source_head
+    assert (source / ".git/index").read_bytes() == source_index
+    assert not _git(source, "branch", "--list", "fixture-isolation-proof").stdout.strip()
