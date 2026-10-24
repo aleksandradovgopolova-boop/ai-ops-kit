@@ -1,0 +1,28 @@
+import hashlib,json,os,resource,subprocess,time
+from pathlib import Path
+original=subprocess.run
+rows=[]
+products={}
+def run(*args,**kwargs):
+ cmd=args[0] if args else kwargs.get('args');t=time.perf_counter();rc=None;c0=resource.getrusage(resource.RUSAGE_CHILDREN);load0=os.getloadavg()
+ try:
+  result=original(*args,**kwargs);rc=result.returncode;return result
+ finally:
+  c1=resource.getrusage(resource.RUSAGE_CHILDREN)
+  rows.append({'cmd':cmd,'wall_s':time.perf_counter()-t,'cpu_s':c1.ru_utime+c1.ru_stime-c0.ru_utime-c0.ru_stime,'load_before':load0,'load_after':os.getloadavg(),'returncode':rc})
+def pytest_configure(config):subprocess.run=run
+def pytest_runtest_teardown(item,nextitem):
+ if item.originalname!='test_upgrade_from_released_version':return
+ child=item.funcargs['tmp_path']/'product'
+ report=json.loads((child/'.ai/runtime/last-update-report.json').read_text())
+ managed=child/'.ai/managed';files={}
+ for p in sorted(managed.rglob('*')):
+  if p.is_file():
+   rel=p.relative_to(managed).as_posix()
+   if rel not in {'.checksums.json','.provenance.json','ai_ops_kit/security/scan_inline_code.py'}:
+    files[rel]=hashlib.sha256(p.read_bytes()).hexdigest()
+ products[item.funcargs['tag']]={'security_surface':report['security_surface'],'managed':files}
+def pytest_sessionfinish(session,exitstatus):
+ subprocess.run=original
+ Path(os.environ['RELEASE_BENCH_TRACE']).write_text(json.dumps(rows,indent=2))
+ Path(os.environ['RELEASE_BENCH_PRODUCTS']).write_text(json.dumps(products,ensure_ascii=False,indent=2))
