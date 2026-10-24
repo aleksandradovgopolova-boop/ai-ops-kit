@@ -422,3 +422,29 @@ class TestAMultiStagePipeline:
 
     def test_a_literal_pipeline_is_silent(self):
         assert _строки("echo 'print(1)' | tr a b | python3\n", "a.sh") == []
+
+
+
+def test_python_tree_is_walked_once_without_losing_shadowed_bindings(monkeypatch):
+    """Один обход сохраняет позднее затенение: литеральный NODE уже нельзя считать доказанным."""
+    source = 'NODE = "node"\nrun([NODE, "-e", code])\ndef f(NODE): pass\nrun([sys.executable, "-c", code])\n'
+    original = scan_inline_code.ast.walk
+    walks = []
+
+    def observe(tree):
+        walks.append(tree)
+        return original(tree)
+
+    monkeypatch.setattr(scan_inline_code.ast, "walk", observe)
+    assert scan_inline_code.inline_code_lines(source, "script.py") == [4]
+    assert len(walks) == 1
+
+
+def test_python_scan_keeps_current_input_after_literal_and_dynamic_calls():
+    """Настоящая смена входа меняет находки: узлы/константы не утекают между файлами."""
+    literal = 'CODE = "print(1)"\nrun(["python3", "-c", CODE])\n'
+    dynamic = literal.replace('CODE = "print(1)"', 'CODE = user_input()')
+    assert dynamic != literal
+    assert scan_inline_code.inline_code_lines(literal, "script.py") == []
+    assert scan_inline_code.inline_code_lines(dynamic, "script.py") == [2]
+    assert scan_inline_code.inline_code_lines(literal, "script.py") == []

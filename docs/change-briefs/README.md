@@ -56,3 +56,5 @@
 - [Повторное использование подготовки тестовых установок и обновлений](reuse-installer-test-environments.md).
 
 - [Один чистый checkout для корпуса выпущенных версий](reuse-release-test-checkout.md).
+
+- [Один обход AST внутри проверки безопасности обновления](update-security-ast-reuse.md).
