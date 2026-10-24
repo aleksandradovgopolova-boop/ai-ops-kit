@@ -71,9 +71,41 @@ def _run(installer: Path, root: Path, *args, timeout=600):
                           env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
 
 
+
+def _assert_pristine_source(root):
+    status = _git("status", "--porcelain", "--untracked-files=all", "--ignored", cwd=root).stdout
+    assert not status, f"исходники релиза изменены; переключение небезопасно:\n{status}"
+
+
+def _checkout_release(root, tag):
+    _assert_pristine_source(root)
+    revision = _git("rev-parse", "--verify", f"{tag}^{{commit}}", cwd=root).stdout.strip()
+    _git("checkout", "-q", "--detach", revision, cwd=root)
+    assert _git("rev-parse", "HEAD", cwd=root).stdout.strip() == revision
+
+
+@pytest.fixture(scope="module")
+def release_checkout(tmp_path_factory):
+    """Git переиспользует неизменные файлы, каждый тег остаётся настоящим checkout."""
+    tags = _release_tags()
+    assert tags, "корпус релизов пуст — исходники для проверки недоступны"
+    root = tmp_path_factory.mktemp("released-kit") / "kit"
+    _git("worktree", "add", "-q", "--detach", str(root), tags[0], cwd=KIT)
+    try:
+        yield root
+    finally:
+        _git("worktree", "remove", "--force", str(root), cwd=KIT)
+
+
+@pytest.fixture
+def released_kit(release_checkout, tag):
+    _checkout_release(release_checkout, tag)
+    yield release_checkout
+    _assert_pristine_source(release_checkout)
+
 @pytest.mark.slow
 @pytest.mark.parametrize("tag", _release_tags())
-def test_upgrade_from_released_version(tag, tmp_path):
+def test_upgrade_from_released_version(tag, tmp_path, released_kit):
     """Поставить кит из тега {tag}, обновиться текущим — и проверить глазами владельца.
 
     На новой линии новейший релизный тег (v4.0.0) равен текущему номеру версии, но дерево ушло на
@@ -82,70 +114,65 @@ def test_upgrade_from_released_version(tag, tmp_path):
     assert _git("rev-parse", "--verify", "--quiet", tag, cwd=KIT, check=False).returncode == 0, (
         f"тега {tag} нет в репозитории — проверка обновления с этой версии ослепла, а не прошла")
 
-    old_kit = tmp_path / f"kit-{tag}"
-    added = _git("worktree", "add", "-q", "--detach", str(old_kit), tag, cwd=KIT, check=False)
-    assert added.returncode == 0, added.stderr[-300:]
-    try:
-        child = _child_repo(tmp_path / "product")
+    old_kit = released_kit
+    child = _child_repo(tmp_path / "product")
 
-        # ── установка ВЫПУЩЕННЫМ китом ──────────────────────────────────────────────────────────
-        inst_old = old_kit / "installer" / "ai_ops.py"
-        assert inst_old.is_file(), f"в {tag} нет installer/ai_ops.py"
-        r = _run(inst_old, child, "init", ".")
-        assert r.returncode == 0, f"init из {tag} упал:\n{r.stdout[-700:]}\n{r.stderr[-400:]}"
-        released_ver = (old_kit / "VERSION").read_text(encoding="utf-8").strip()
-        assert released_ver == tag.lstrip("v"), f"VERSION в {tag} = {released_ver}, ожидали {tag}"
+    # ── установка ВЫПУЩЕННЫМ китом ──────────────────────────────────────────────────────────
+    inst_old = old_kit / "installer" / "ai_ops.py"
+    assert inst_old.is_file(), f"в {tag} нет installer/ai_ops.py"
+    r = _run(inst_old, child, "init", ".")
+    assert r.returncode == 0, f"init из {tag} упал:\n{r.stdout[-700:]}\n{r.stderr[-400:]}"
+    released_ver = (old_kit / "VERSION").read_text(encoding="utf-8").strip()
+    assert released_ver == tag.lstrip("v"), f"VERSION в {tag} = {released_ver}, ожидали {tag}"
 
-        _git("add", "-A", cwd=child)
-        _git("commit", "-qm", f"ai-ops init {tag}", cwd=child)
-        owner_files = {p.name: p.read_text(encoding="utf-8")
-                       for p in (child / "src").glob("*.py")}
+    _git("add", "-A", cwd=child)
+    _git("commit", "-qm", f"ai-ops init {tag}", cwd=child)
+    owner_files = {p.name: p.read_text(encoding="utf-8")
+                   for p in (child / "src").glob("*.py")}
 
-        # ── обновление ТЕКУЩИМ китом ────────────────────────────────────────────────────────────
-        # --force моделирует документированный путь мажор-обновления (MIGRATION_GUIDE) и безвреден
-        # для равного/минорного перехода: guard allowed_version_range пропускает, но осознанное
-        # согласие мы отдаём явно, как это делает владелец по гайду.
-        upd = _run(KIT / "installer" / "ai_ops.py", child, "update", "--in-place", "--force")
-        assert upd.returncode == 0, f"update {tag} -> текущая упал:\n{upd.stdout[-900:]}"
+    # ── обновление ТЕКУЩИМ китом ────────────────────────────────────────────────────────────
+    # --force моделирует документированный путь мажор-обновления (MIGRATION_GUIDE) и безвреден
+    # для равного/минорного перехода: guard allowed_version_range пропускает, но осознанное
+    # согласие мы отдаём явно, как это делает владелец по гайду.
+    upd = _run(KIT / "installer" / "ai_ops.py", child, "update", "--in-place", "--force")
+    assert upd.returncode == 0, f"update {tag} -> текущая упал:\n{upd.stdout[-900:]}"
 
-        target = (KIT / "VERSION").read_text(encoding="utf-8").strip()
-        cfg = (child / ".ai-ops.yaml").read_text(encoding="utf-8")
-        assert f"installed_version: {target}" in cfg, (
-            f"версия в конфиге не поднялась до {target}:\n{cfg[:400]}")
+    target = (KIT / "VERSION").read_text(encoding="utf-8").strip()
+    cfg = (child / ".ai-ops.yaml").read_text(encoding="utf-8")
+    assert f"installed_version: {target}" in cfg, (
+        f"версия в конфиге не поднялась до {target}:\n{cfg[:400]}")
 
-        # ── файлы владельца не тронуты ──────────────────────────────────────────────────────────
-        for name, text in owner_files.items():
-            assert (child / "src" / name).read_text(encoding="utf-8") == text, (
-                f"обновление изменило файл продукта: src/{name}")
+    # ── файлы владельца не тронуты ──────────────────────────────────────────────────────────
+    for name, text in owner_files.items():
+        assert (child / "src" / name).read_text(encoding="utf-8") == text, (
+            f"обновление изменило файл продукта: src/{name}")
 
-        # ── целостность managed и валидатор дочки ────────────────────────────────────────────────
-        cs = subprocess.run(
-            [sys.executable, str(KIT / "ai_ops_kit" / "validation" / "ai_managed_checksums.py"),
-             "verify", str(child / ".ai" / "managed")],
-            capture_output=True, text=True, timeout=300,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
-        assert cs.returncode == 0, f"после обновления managed-слой не целостен:\n{cs.stdout[-600:]}"
+    # ── целостность managed и валидатор дочки ────────────────────────────────────────────────
+    cs = subprocess.run(
+        [sys.executable, str(KIT / "ai_ops_kit" / "validation" / "ai_managed_checksums.py"),
+         "verify", str(child / ".ai" / "managed")],
+        capture_output=True, text=True, timeout=300,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    assert cs.returncode == 0, f"после обновления managed-слой не целостен:\n{cs.stdout[-600:]}"
 
-        val = subprocess.run(
-            [sys.executable, str(KIT / "ai_ops_kit" / "validation" / "validate_ai_ops_child.py")],
-            cwd=str(child), capture_output=True, text=True, timeout=300,
-            env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
-        assert val.returncode == 0, f"валидатор дочки красный после обновления:\n{val.stdout[-600:]}"
+    val = subprocess.run(
+        [sys.executable, str(KIT / "ai_ops_kit" / "validation" / "validate_ai_ops_child.py")],
+        cwd=str(child), capture_output=True, text=True, timeout=300,
+        env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    assert val.returncode == 0, f"валидатор дочки красный после обновления:\n{val.stdout[-600:]}"
 
-        # ── мёртвого груза прежних раскладок не осталось ─────────────────────────────────────────
-        # Класс дефекта 3.36.7: миграция переносила `validation/`, а удаление считалось ДО неё,
-        # поэтому копия по старому пути жила у ребёнка вечно. v4.0 к тому же снял плоский `tools/`.
-        # Проверяем, что в поставке нет НИ ОДНОГО плоского слоя прежних раскладок.
-        for stale_rel in ("validation", "tools"):
-            stale = child / ".ai" / "managed" / stale_rel
-            assert not stale.exists(), (
-                f"после обновления с {tag} остался мёртвый груз прежней раскладки "
-                f".ai/managed/{stale_rel}: {sorted(p.name for p in stale.rglob('*'))[:5]}")
-        # Актуальная раскладка на месте — «переезда не было вовсе» тоже не должно проходить.
-        assert (child / ".ai" / "managed" / "ai_ops_kit" / "validation").is_dir(), (
-            f"обновление с {tag} не доставило валидаторы в актуальной раскладке ai_ops_kit/validation")
-    finally:
-        _git("worktree", "remove", "--force", str(old_kit), cwd=KIT, check=False)
+    # ── мёртвого груза прежних раскладок не осталось ─────────────────────────────────────────
+    # Класс дефекта 3.36.7: миграция переносила `validation/`, а удаление считалось ДО неё,
+    # поэтому копия по старому пути жила у ребёнка вечно. v4.0 к тому же снял плоский `tools/`.
+    # Проверяем, что в поставке нет НИ ОДНОГО плоского слоя прежних раскладок.
+    for stale_rel in ("validation", "tools"):
+        stale = child / ".ai" / "managed" / stale_rel
+        assert not stale.exists(), (
+            f"после обновления с {tag} остался мёртвый груз прежней раскладки "
+            f".ai/managed/{stale_rel}: {sorted(p.name for p in stale.rglob('*'))[:5]}")
+    # Актуальная раскладка на месте — «переезда не было вовсе» тоже не должно проходить.
+    assert (child / ".ai" / "managed" / "ai_ops_kit" / "validation").is_dir(), (
+        f"обновление с {tag} не доставило валидаторы в актуальной раскладке ai_ops_kit/validation")
 
 
 @pytest.mark.slow
@@ -162,3 +189,49 @@ def test_the_release_corpus_is_not_empty():
     missing = [t for t in tags
                if _git("rev-parse", "--verify", "--quiet", t, cwd=KIT, check=False).returncode != 0]
     assert not missing, f"тег в корпусе не резолвится: {missing}"
+
+
+@pytest.mark.unit
+def test_release_checkout_changes_exact_revision_and_removes_old_files(tmp_path):
+    root = _child_repo(tmp_path / "source")
+    old = root / "old-only.txt"
+    old.write_text("old\n")
+    _git("add", "-A", cwd=root)
+    _git("commit", "-qm", "first release", cwd=root)
+    _git("tag", "first", cwd=root)
+    first = _git("rev-parse", "HEAD", cwd=root).stdout
+    old.unlink()
+    (root / "new-only.txt").write_text("new\n")
+    (root / "src/app.py").write_text("changed\n")
+    _git("add", "-A", cwd=root)
+    _git("commit", "-qm", "second release", cwd=root)
+    _git("tag", "second", cwd=root)
+    second = _git("rev-parse", "HEAD", cwd=root).stdout
+    assert first != second
+    _checkout_release(root, "first")
+    assert _git("rev-parse", "HEAD", cwd=root).stdout == first
+    assert old.read_text() == "old\n"
+    assert not (root / "new-only.txt").exists()
+    assert (root / "src/app.py").read_text() == "def main():\n    return 0\n"
+    _checkout_release(root, "second")
+    assert _git("rev-parse", "HEAD", cwd=root).stdout == second
+    assert not old.exists()
+    assert (root / "new-only.txt").read_text() == "new\n"
+    assert (root / "src/app.py").read_text() == "changed\n"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("kind", ["tracked", "untracked", "ignored"])
+def test_release_checkout_refuses_dirty_source_without_overwriting(tmp_path, kind):
+    root = _child_repo(tmp_path / "source")
+    (root / ".gitignore").write_text("ignored.txt\n")
+    _git("add", "-A", cwd=root)
+    _git("commit", "-qm", "ignore", cwd=root)
+    head = _git("rev-parse", "HEAD", cwd=root).stdout
+    path = root / {"tracked": "src/app.py", "untracked": "extra.txt", "ignored": "ignored.txt"}[kind]
+    path.write_text("unexpected mutation\n")
+    assert path.read_text() == "unexpected mutation\n"
+    with pytest.raises(AssertionError, match="исходники релиза изменены"):
+        _checkout_release(root, "HEAD~1")
+    assert path.read_text() == "unexpected mutation\n"
+    assert _git("rev-parse", "HEAD", cwd=root).stdout == head
