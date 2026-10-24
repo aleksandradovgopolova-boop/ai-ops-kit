@@ -54,3 +54,5 @@
 - [Сокращение повторной подготовки графа в тестах](reuse-real-graph-fixture.md).
 
 - [Повторное использование подготовки тестовых установок и обновлений](reuse-installer-test-environments.md).
+
+- [Один чистый checkout для корпуса выпущенных версий](reuse-release-test-checkout.md).

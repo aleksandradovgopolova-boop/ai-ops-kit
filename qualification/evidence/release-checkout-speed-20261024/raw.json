@@ -1,0 +1,146 @@
+[
+  {
+    "condition": "before",
+    "wall_s": 157.2431607079925,
+    "child_cpu_s": 155.33399799999998,
+    "tests": 24,
+    "passed": 24,
+    "command_counts": {
+      "worktree add": 23,
+      "installer init": 23,
+      "installer update": 23,
+      "checksums": 23,
+      "child-validator": 23,
+      "worktree remove": 23
+    },
+    "command_durations_s": {
+      "worktree add": 4.633160876954207,
+      "installer init": 12.600242208005511,
+      "installer update": 124.22613154107239,
+      "checksums": 1.1966888329625363,
+      "child-validator": 2.296200581055018,
+      "worktree remove": 2.8533138769853394
+    },
+    "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+  },
+  {
+    "condition": "after",
+    "wall_s": 166.84589516700362,
+    "child_cpu_s": 165.31608600000004,
+    "tests": 24,
+    "passed": 24,
+    "command_counts": {
+      "worktree add": 1,
+      "installer init": 23,
+      "installer update": 23,
+      "checksums": 23,
+      "child-validator": 23,
+      "worktree remove": 1
+    },
+    "command_durations_s": {
+      "worktree add": 0.1985701249941485,
+      "installer init": 13.215186043045833,
+      "installer update": 137.6779077060346,
+      "checksums": 1.2837025870248908,
+      "child-validator": 2.4089529150223825,
+      "worktree remove": 0.1505133750033565
+    },
+    "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+  },
+  {
+    "condition": "after",
+    "wall_s": 174.38557529200625,
+    "child_cpu_s": 173.21475,
+    "tests": 24,
+    "passed": 24,
+    "command_counts": {
+      "worktree add": 1,
+      "installer init": 23,
+      "installer update": 23,
+      "checksums": 23,
+      "child-validator": 23,
+      "worktree remove": 1
+    },
+    "command_durations_s": {
+      "worktree add": 0.20400641599553637,
+      "installer init": 13.917893419027678,
+      "installer update": 144.0707191250258,
+      "checksums": 1.3860587070230395,
+      "child-validator": 2.5890922070102533,
+      "worktree remove": 0.158997458012891
+    },
+    "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+  },
+  {
+    "condition": "before",
+    "wall_s": 192.37647624999227,
+    "child_cpu_s": 189.90738799999997,
+    "tests": 24,
+    "passed": 24,
+    "command_counts": {
+      "worktree add": 23,
+      "installer init": 23,
+      "installer update": 23,
+      "checksums": 23,
+      "child-validator": 23,
+      "worktree remove": 23
+    },
+    "command_durations_s": {
+      "worktree add": 5.83184379497834,
+      "installer init": 15.70678241403948,
+      "installer update": 152.10460470602266,
+      "checksums": 1.4727225820242893,
+      "child-validator": 2.738927540005534,
+      "worktree remove": 3.2854250850214157
+    },
+    "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+  },
+  {
+    "condition": "before",
+    "wall_s": 171.60349391700584,
+    "child_cpu_s": 170.27542799999998,
+    "tests": 24,
+    "passed": 24,
+    "command_counts": {
+      "worktree add": 23,
+      "installer init": 23,
+      "installer update": 23,
+      "checksums": 23,
+      "child-validator": 23,
+      "worktree remove": 23
+    },
+    "command_durations_s": {
+      "worktree add": 4.749937333996058,
+      "installer init": 13.477062374004163,
+      "installer update": 136.61991546205536,
+      "checksums": 1.2546836280234857,
+      "child-validator": 2.404582750998088,
+      "worktree remove": 2.9694434580160305
+    },
+    "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+  },
+  {
+    "condition": "after",
+    "wall_s": 164.87679329200182,
+    "child_cpu_s": 163.9524570000001,
+    "tests": 24,
+    "passed": 24,
+    "command_counts": {
+      "worktree add": 1,
+      "installer init": 23,
+      "installer update": 23,
+      "checksums": 23,
+      "child-validator": 23,
+      "worktree remove": 1
+    },
+    "command_durations_s": {
+      "worktree add": 0.25824487500358373,
+      "installer init": 13.376877626971691,
+      "installer update": 135.74690641698544,
+      "checksums": 1.2764862080512103,
+      "child-validator": 2.435767290968215,
+      "worktree remove": 0.1372987920040032
+    },
+    "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177"
+  }
+]

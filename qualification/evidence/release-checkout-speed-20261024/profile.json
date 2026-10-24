@@ -1,0 +1,402 @@
+[
+  {
+    "cmd": [
+      "git",
+      "tag",
+      "--list",
+      "v[0-9]*",
+      "--sort=-v:refname"
+    ],
+    "wall_s": 0.010150041998713277
+  },
+  {
+    "cmd": [
+      "git",
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      "v4.11.3"
+    ],
+    "wall_s": 0.004726458006189205
+  },
+  {
+    "cmd": [
+      "git",
+      "worktree",
+      "add",
+      "-q",
+      "--detach",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver0/kit-v4.11.3",
+      "v4.11.3"
+    ],
+    "wall_s": 0.34126891699270345
+  },
+  {
+    "cmd": [
+      "git",
+      "init",
+      "-q",
+      "-b",
+      "main",
+      "."
+    ],
+    "wall_s": 0.011234916993998922
+  },
+  {
+    "cmd": [
+      "git",
+      "config",
+      "user.email",
+      "owner@example.com"
+    ],
+    "wall_s": 0.005190374999074265
+  },
+  {
+    "cmd": [
+      "git",
+      "config",
+      "user.name",
+      "owner"
+    ],
+    "wall_s": 0.0046227910061134025
+  },
+  {
+    "cmd": [
+      "git",
+      "add",
+      "-A"
+    ],
+    "wall_s": 0.006630875010159798
+  },
+  {
+    "cmd": [
+      "git",
+      "commit",
+      "-qm",
+      "\u043f\u0440\u043e\u0434\u0443\u043a\u0442 \u0434\u043e \u043a\u0438\u0442\u0430"
+    ],
+    "wall_s": 0.009057792005478404
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver0/kit-v4.11.3/installer/ai_ops.py",
+      "init",
+      "."
+    ],
+    "wall_s": 0.6153564590058522
+  },
+  {
+    "cmd": [
+      "git",
+      "add",
+      "-A"
+    ],
+    "wall_s": 0.3569202920043608
+  },
+  {
+    "cmd": [
+      "git",
+      "commit",
+      "-qm",
+      "ai-ops init v4.11.3"
+    ],
+    "wall_s": 0.05084137499216013
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/ai_ops.py",
+      "update",
+      "--in-place",
+      "--force"
+    ],
+    "wall_s": 5.670586624997668
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/validation/ai_managed_checksums.py",
+      "verify",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver0/product/.ai/managed"
+    ],
+    "wall_s": 0.051001291009015404
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/validation/validate_ai_ops_child.py"
+    ],
+    "wall_s": 0.09818670799722895
+  },
+  {
+    "cmd": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver0/kit-v4.11.3"
+    ],
+    "wall_s": 0.1402270839898847
+  },
+  {
+    "cmd": [
+      "git",
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      "v4.5.0"
+    ],
+    "wall_s": 0.005810083996038884
+  },
+  {
+    "cmd": [
+      "git",
+      "worktree",
+      "add",
+      "-q",
+      "--detach",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver1/kit-v4.5.0",
+      "v4.5.0"
+    ],
+    "wall_s": 0.36855674999242183
+  },
+  {
+    "cmd": [
+      "git",
+      "init",
+      "-q",
+      "-b",
+      "main",
+      "."
+    ],
+    "wall_s": 0.012512750006862916
+  },
+  {
+    "cmd": [
+      "git",
+      "config",
+      "user.email",
+      "owner@example.com"
+    ],
+    "wall_s": 0.0065304159943480045
+  },
+  {
+    "cmd": [
+      "git",
+      "config",
+      "user.name",
+      "owner"
+    ],
+    "wall_s": 0.008727958003873937
+  },
+  {
+    "cmd": [
+      "git",
+      "add",
+      "-A"
+    ],
+    "wall_s": 0.007937875008792616
+  },
+  {
+    "cmd": [
+      "git",
+      "commit",
+      "-qm",
+      "\u043f\u0440\u043e\u0434\u0443\u043a\u0442 \u0434\u043e \u043a\u0438\u0442\u0430"
+    ],
+    "wall_s": 0.010386624999227934
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver1/kit-v4.5.0/installer/ai_ops.py",
+      "init",
+      "."
+    ],
+    "wall_s": 0.618380582993268
+  },
+  {
+    "cmd": [
+      "git",
+      "add",
+      "-A"
+    ],
+    "wall_s": 0.341102749996935
+  },
+  {
+    "cmd": [
+      "git",
+      "commit",
+      "-qm",
+      "ai-ops init v4.5.0"
+    ],
+    "wall_s": 0.052336834007292055
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/ai_ops.py",
+      "update",
+      "--in-place",
+      "--force"
+    ],
+    "wall_s": 5.831087124999613
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/validation/ai_managed_checksums.py",
+      "verify",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver1/product/.ai/managed"
+    ],
+    "wall_s": 0.06825187499634922
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/validation/validate_ai_ops_child.py"
+    ],
+    "wall_s": 0.12183045900019351
+  },
+  {
+    "cmd": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver1/kit-v4.5.0"
+    ],
+    "wall_s": 0.12730724998982623
+  },
+  {
+    "cmd": [
+      "git",
+      "rev-parse",
+      "--verify",
+      "--quiet",
+      "v4.0.0"
+    ],
+    "wall_s": 0.005672875005984679
+  },
+  {
+    "cmd": [
+      "git",
+      "worktree",
+      "add",
+      "-q",
+      "--detach",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver2/kit-v4.0.0",
+      "v4.0.0"
+    ],
+    "wall_s": 0.24084187499829568
+  },
+  {
+    "cmd": [
+      "git",
+      "init",
+      "-q",
+      "-b",
+      "main",
+      "."
+    ],
+    "wall_s": 0.015102042001672089
+  },
+  {
+    "cmd": [
+      "git",
+      "config",
+      "user.email",
+      "owner@example.com"
+    ],
+    "wall_s": 0.006269542005611584
+  },
+  {
+    "cmd": [
+      "git",
+      "config",
+      "user.name",
+      "owner"
+    ],
+    "wall_s": 0.006212916996446438
+  },
+  {
+    "cmd": [
+      "git",
+      "add",
+      "-A"
+    ],
+    "wall_s": 0.007771624994347803
+  },
+  {
+    "cmd": [
+      "git",
+      "commit",
+      "-qm",
+      "\u043f\u0440\u043e\u0434\u0443\u043a\u0442 \u0434\u043e \u043a\u0438\u0442\u0430"
+    ],
+    "wall_s": 0.010116124991327524
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver2/kit-v4.0.0/installer/ai_ops.py",
+      "init",
+      "."
+    ],
+    "wall_s": 0.4583167499949923
+  },
+  {
+    "cmd": [
+      "git",
+      "add",
+      "-A"
+    ],
+    "wall_s": 0.27461995799967553
+  },
+  {
+    "cmd": [
+      "git",
+      "commit",
+      "-qm",
+      "ai-ops init v4.0.0"
+    ],
+    "wall_s": 0.04705758299678564
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/installer/ai_ops.py",
+      "update",
+      "--in-place",
+      "--force"
+    ],
+    "wall_s": 5.560798332997365
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/validation/ai_managed_checksums.py",
+      "verify",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver2/product/.ai/managed"
+    ],
+    "wall_s": 0.05040391700458713
+  },
+  {
+    "cmd": [
+      "/Users/sasad/ai-ops-kit/.venv/bin/python",
+      "/Users/sasad/.codex/worktrees/graph-selection-speed/ai-ops-kit/ai_ops_kit/validation/validate_ai_ops_child.py"
+    ],
+    "wall_s": 0.0986258749908302
+  },
+  {
+    "cmd": [
+      "git",
+      "worktree",
+      "remove",
+      "--force",
+      "/private/var/folders/h1/3_z8zfj15yggh5pnq51gdk8w0000gn/T/pytest-of-sasad/pytest-779/test_upgrade_from_released_ver2/kit-v4.0.0"
+    ],
+    "wall_s": 0.11657229201227892
+  }
+]
