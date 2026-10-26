@@ -60,3 +60,5 @@
 - [Замер: локальная правка получает более быстрый feedback без ослабления гейтов — #1321](local-feedback-targeted-selection.md).
 - [Baseline CI всего пути — #1321](ci-end-to-end-baseline.md).
 - [Доставляемая команда объёма проверки `verify-scope` — #1321](verify-scope-delivered-command.md).
+
+- [Допуск host-slot учитывает реальную нагрузку, а не имя процесса — #1377](host-slot-load-aware-admission.md).
