@@ -329,12 +329,16 @@ def test_pr_scope_is_declared_and_cannot_replace_exact_release_gate(claims):
     scoped = claims["evidence_scopes"]["pr-current-python"]
     assert "nightly" in scoped["does_not_cover"] and "release" in scoped["does_not_cover"]
     release = yaml.safe_load((PKG / ".github/workflows/release.yml").read_text())
-    steps = release["jobs"]["release"]["steps"]
+    job = release["jobs"]["release"]
+    steps = job["steps"]
     mutation = next(i for i, step in enumerate(steps) if "test_mutation_probe.py" in step.get("run", ""))
     tag = next(i for i, step in enumerate(steps) if "gh release create" in step.get("run", ""))
     assert mutation < tag and "-m nightly" in steps[mutation]["run"]
-    assert steps[0]["with"]["ref"] == "${{ github.event.workflow_run.head_sha }}"
-    assert steps[mutation]["if"] == "steps.check_release.outputs.needed == 'true'"
+    # #1376: финальный полный гейт перенесён в release (триггер push в main, а не workflow_run);
+    # гейты гонятся на ТОЧНОМ релизном SHA — github.sha, т.е. merge-коммите. Вся джоба release
+    # условна на нужде выпуска, поэтому per-step `if` заменён условием джобы.
+    assert steps[0]["with"]["ref"] == "${{ github.sha }}"
+    assert "needs.check.outputs.needed == 'true'" in str(job.get("if"))
 
 
 @pytest.mark.parametrize("mutation_exit", [0, 7])

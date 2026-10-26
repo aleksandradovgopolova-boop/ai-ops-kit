@@ -7,15 +7,24 @@ on:
     # запускался вовсе, а PR показывал зелёный статус по одному pr-smoke. Draft-PR
     # по-прежнему отсекается условием на уровне джоба, так что смысл v3.25.1 сохранён.
     types: [opened, ready_for_review, synchronize]
-  push:
-    branches: [main]
+  # 2026-10-26 (#1376): триггер `push: branches: [main]` СНЯТ. Прежде полный обязательный набор
+  # исполнялся ДВАЖДЫ на одно влитое изменение — на голове PR и снова на merge-коммите (squash даёт
+  # новый SHA). Прогон на `pull_request` сохранён — он отдаёт обязательные status-контексты и feedback,
+  # по которым branch protection пускает merge. Финальный полный гейт на ТОЧНОМ итоговом SHA НЕ
+  # потерян: он перенесён в release.yml, который вызывает ЭТОТ workflow как reusable (`workflow_call`)
+  # на релизном коммите и НЕ создаёт тег/Release, пока набор не зелёный на этом самом SHA. Итог:
+  # полный обязательный набор на КАЖДЫЙ merge в main больше не гоняется — только на релизном SHA.
+  # Решение владельца (merge queue на его плане недоступен). Не возвращать `push: [main]` без переноса
+  # финального гейта обратно: это снова даст дубль PR↔merge, ради снятия которого триггер и убран.
+  workflow_call: {}      # release.yml вызывает полный гейт на точном релизном SHA (reusable)
   workflow_dispatch: {}  # ручной запуск перед release
 
 # Lane A1: минимальные привилегии — workflow получает только чтение контента.
 permissions:
   contents: read
 
-# Новый SHA того же PR заменяет старый прогон; main/manual и разные PR независимы.
+# Новый SHA того же PR заменяет старый прогон; вызов из release (workflow_call), ручной запуск и
+# разные PR независимы (ключ по run_id, отмена только на pull_request — релизный гейт не отменяется).
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
