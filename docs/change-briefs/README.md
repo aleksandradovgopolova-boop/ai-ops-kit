@@ -63,3 +63,4 @@
 - [Закрытие направления цикла проверок (3/3) — #1321](1321-verification-cycle-performance-closeout.md).
 
 - [Допуск host-slot учитывает реальную нагрузку, а не имя процесса — #1377](host-slot-load-aware-admission.md).
+- [Предупреждение о дрейфе версии Python local↔CI перед пушем — #1378](1378-python-version-drift-warning.md).
