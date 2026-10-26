@@ -1,0 +1,13 @@
+import json,os,subprocess,time
+from pathlib import Path
+original=subprocess.run
+rows=[]
+def run(*args,**kwargs):
+ cmd=args[0] if args else kwargs.get('args');t=time.perf_counter();rc=None
+ try:
+  result=original(*args,**kwargs);rc=result.returncode;return result
+ finally:rows.append({'cmd':cmd,'wall_s':time.perf_counter()-t,'returncode':rc})
+def pytest_configure(config):subprocess.run=run
+def pytest_sessionfinish(session,exitstatus):
+ subprocess.run=original
+ Path(os.environ['RELEASE_BENCH_TRACE']).write_text(json.dumps(rows,indent=2))

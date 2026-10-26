@@ -1,0 +1,31 @@
+{
+  "baseline_sha": "ddb2bf18bb5036a388955d2ca3b6863be2253ee0",
+  "ceiling": 6970000,
+  "warning_fraction": 0.1,
+  "measurements": {
+    "before": {
+      "bytes": 6830336,
+      "files": 684
+    },
+    "after": {
+      "bytes": 6113271,
+      "files": 684
+    }
+  },
+  "saved_bytes": 717065,
+  "after_reserve": 856729,
+  "after_reserve_percent": 12.292,
+  "same_installed_file_set": true,
+  "source_bytes": 6753563,
+  "payload_bytes": 6036428,
+  "installer_inputs_sha256": {
+    "installer/delivery_ops.py": "951ecca3a5677f4f0eefe1cb7d74b9c1ddfdac7ce11508f03c4f7e30d6774807",
+    "installer/managed_state.py": "7b8dfcf535f07c52328d13c97b012b1c405f44d08594f34084b45e7e3152a11f",
+    "installer/setup_ops.py": "e7b5580ff363f0673f7743baa9802a70b8ffbeb7796d11ae870229bc3c27f688",
+    "installer/update_ops.py": "3d943e3f4adc25acaa468434e74de3109a0cc22d7a6d71b6ed7a9cb1aee0cc6b",
+    "installer/delivered_merge_footprint.py": "dfc9f2d61be98371b95251f74f44db98f258f46bd097d0869bb691c87861a294"
+  },
+  "budget_sha256": "1e50bdcb09d90ef6c5fd2147b1f975426a4df7f560a9a5089fadf735957c1606",
+  "ast_with_coordinates_verified_files": 344,
+  "source_engine_unchanged": true
+}

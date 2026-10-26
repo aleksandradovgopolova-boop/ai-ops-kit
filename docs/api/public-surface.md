@@ -119,6 +119,7 @@ experimental:
   # устаканивается — delivery читает backlog по контракту ленты 3, который сводится, а вывод
   # roadmap/delivery ещё может измениться. Дочка вправе пользоваться, зная это.
   cli_intents:
+    - verify-scope
     - feedback
     # voluntary-child-registration: `reach register|decline|forget|status|summary` (в дочке) и
     # `reach coverage` (в ките) — ДОБРОВОЛЬНАЯ отметка о подключении и честный охват БЕЗ телеметрии.
@@ -298,6 +299,7 @@ audience:
     - model
     - review
   expert:
+    - verify-scope
     - new
     - onboard
     - discuss

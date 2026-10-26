@@ -53,7 +53,7 @@
 написанная руками: **[docs/capability-map.md](docs/capability-map.md)**. Там у каждой возможности
 состояние built / built≠wired / partial / planned и способ проверки.
 
-Коротко: 38 <!-- claim:commands-total --> команд владельца (`status`, `inbox`, `next`, `explain`,
+Коротко: 39 <!-- claim:commands-total --> команд владельца (`status`, `inbox`, `next`, `explain`,
 `do`, `run`, `review`, `contract`, `model`, `portfolio` …), 36 <!-- claim:gates-total --> quality-gate
 (23 блокирующих, 13 advisory), 42 <!-- claim:agents-total --> роли в реестре, детерминированный
 security-scan.
@@ -77,7 +77,7 @@ cd /path/to/project
 
 ## Честно о границах
 
-- **Канал заработан, а не объявлен.** Свежий тег — **v4.11.3 qualification**. Минор 4.10 обкатан
+- **Канал заработан, а не объявлен.** Свежий тег — **v4.11.4 qualification**. Минор 4.10 обкатан
   обновлениями ии-среды и Personal Cosmic Book до 4.10.0: релизный источник, целостность установки
   и проверки подтверждены. Патчи наследуют обкатку своего минора; критерий двух живых дочек и
   достигнутого продуктового слоя проверяет `validate_release_claims`.

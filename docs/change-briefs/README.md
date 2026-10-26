@@ -44,3 +44,19 @@
 - [Выборочные проверки при динамических зависимостях](4.11.2-bounded-impact-checks.md).
 - [Проверка check-fast без повторного сбора всего набора](4.11.2-fast-check-no-recursive-collection.md).
 - [Оставшиеся повторы перед выпуском](4.11.2-pre-release-speed-audit.md).
+- [Безопасное продолжение выбора тестов по файловым импортам](file-spec-fail-closed.md).
+- [Сверка старого checkout и граница файловых импортов](root-reconciliation-and-file-targets.md).
+- [Запас поставки без повышения потолка](compact-managed-python.md).
+- [Точечные проверки сканера](targeted-security-checks.md)
+
+- [Ускорение выбора проверок без изменения охвата](graph-selection-speed.md).
+
+- [Сокращение повторной подготовки графа в тестах](reuse-real-graph-fixture.md).
+
+- [Повторное использование подготовки тестовых установок и обновлений](reuse-installer-test-environments.md).
+
+- [Один чистый checkout для корпуса выпущенных версий](reuse-release-test-checkout.md).
+
+- [Замер: локальная правка получает более быстрый feedback без ослабления гейтов — #1321](local-feedback-targeted-selection.md).
+- [Baseline CI всего пути — #1321](ci-end-to-end-baseline.md).
+- [Доставляемая команда объёма проверки `verify-scope` — #1321](verify-scope-delivered-command.md).

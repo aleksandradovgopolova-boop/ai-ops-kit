@@ -1,0 +1,60 @@
+{
+  "head_sha": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+  "tree_sha": "43fb35e78d7438a9b045712833a432a9abc64380",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "ruff": "ruff 0.16.2",
+  "pytest": "9.1.1",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "plan_only_probes": {
+    "leaf": {
+      "edited_file": "ai_ops_kit/checks/capability_policy.py",
+      "intent": "draft",
+      "tier": "affected",
+      "impact_status": "targeted_tests_found",
+      "affected_tests_count": 133,
+      "conservative_consumers_count": 36,
+      "full_command": false,
+      "targeted_command_head": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest -q -m 'not nightly and not release_gate' tests/contracts/test_capability_inventory.py tests/contracts/test_ca ..."
+    },
+    "leaf_alt_lint_baseline": {
+      "edited_file": "ai_ops_kit/checks/lint_baseline.py",
+      "intent": "draft",
+      "tier": "affected",
+      "impact_status": "targeted_tests_found",
+      "affected_tests_count": 204,
+      "conservative_consumers_count": 36,
+      "full_command": false,
+      "targeted_command_head": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest -q -m 'not nightly and not release_gate' tests/contracts/test_capability_inventory.py tests/contracts/test_ca ..."
+    },
+    "central_budget": {
+      "edited_file": "ai_ops_kit/shared/budget.py",
+      "intent": "draft",
+      "tier": "affected",
+      "impact_status": "targeted_tests_found",
+      "affected_tests_count": 272,
+      "conservative_consumers_count": 36,
+      "full_command": false,
+      "targeted_command_head": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest -q -m 'not nightly and not release_gate' tests/contracts/test_capability_inventory.py tests/contracts/test_ca ..."
+    },
+    "leaf_at_merge_candidate_goes_full": {
+      "edited_file": "ai_ops_kit/checks/capability_policy.py",
+      "intent": "merge_candidate",
+      "tier": "full",
+      "impact_status": "targeted_tests_found",
+      "affected_tests_count": null,
+      "conservative_consumers_count": 0,
+      "full_command": true,
+      "targeted_command_head": null
+    },
+    "central_at_release_candidate_goes_full": {
+      "edited_file": "ai_ops_kit/shared/budget.py",
+      "intent": "release_candidate",
+      "tier": "full",
+      "impact_status": "targeted_tests_found",
+      "affected_tests_count": null,
+      "conservative_consumers_count": 0,
+      "full_command": true,
+      "targeted_command_head": null
+    }
+  }
+}

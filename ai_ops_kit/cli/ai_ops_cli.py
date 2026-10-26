@@ -163,6 +163,13 @@ INTENTS = {
     # #1183: стиль кода держит машина — профиль линтеров поверх конфига дочки + заморозка существующего.
     "lint-profile": ("единый стиль кода: имена латиницей и границы слоёв поверх ваших линтеров; "
                      "--apply — включить, check — новое расхождение краснеет", "lint-profile", False),
+    # #1321 (verification-cycle-performance, 2a): доставляемый ответ «какой объём проверки нужен
+    # ЭТОМУ изменению» — решение tier/stage (docs-only / затронутые / полный по diff+риску) +
+    # причина + точечный набор тестов, когда осмысленно. Переиспользует доставленную политику
+    # (gates/verification_tiers + context/repo_graph), БЕЗ dev-only devtools. Fail-closed: неизвестное
+    # влияние (не Python / неполный граф / нет git) ⇒ консервативный полный набор.
+    "verify-scope": ("какой объём проверки нужен текущему изменению: tier/стадия (docs-only / "
+                     "затронутые / полный) + причина + точечные тесты, когда осмысленно", "verify-scope", True),
 }
 
 
@@ -173,7 +180,7 @@ DIRECT_INTENTS = ("onboard", "status", "health", "plan", "new", "discuss", "revi
                   "next", "explain", "model", "bootstrap", "feedback", "session", "doctor",
                   "roadmap", "delivery", "backlog", "contract", "propose", "products", "team",
                   "governance", "inspect", "replan", "inbox", "work", "readout", "graph", "reach",
-                  "scorecard", "candidates", "portfolio", "lint-profile")
+                  "scorecard", "candidates", "portfolio", "lint-profile", "verify-scope")
 
 
 # ── Фасад владельца (P1 №8/№9 ревью): 7 действий человеческим языком поверх 34 intents ──────────────
@@ -336,6 +343,8 @@ from ai_ops_kit.cli.ai_ops_cli_delivery import _intent_delivery  # noqa: E402,F4
 # portfolio-intelligence (T5) и профиль стиля (#1183) — тоже отдельные спутники.
 from ai_ops_kit.cli.portfolio_cli import _intent_portfolio  # noqa: E402,F401 — ре-экспорт/регистрация
 from ai_ops_kit.cli.lint_profile_cli import _intent_lint_profile  # noqa: E402,F401 — регистрация
+# #1321: `verify-scope` — доставляемый ответ об объёме проверки для текущего diff (отдельный спутник).
+from ai_ops_kit.cli.verify_scope_cli import _intent_verify_scope  # noqa: E402,F401 — регистрация
 
 # Регистрация перенесённых обработчиков в общий реестр интентов (декоратор и реестр живут здесь).
 for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery),
@@ -358,7 +367,8 @@ for _name, _fn in (("products", _intent_products), ("delivery", _intent_delivery
                    ("status", _intent_status), ("next", _intent_next),
                    ("review", _intent_review), ("advise", _intent_advise),
                    ("candidates", _intent_candidates),
-                   ("portfolio", _intent_portfolio), ("lint-profile", _intent_lint_profile)):
+                   ("portfolio", _intent_portfolio), ("lint-profile", _intent_lint_profile),
+                   ("verify-scope", _intent_verify_scope)):
     _intent(_name)(_fn)
 del _name, _fn
 

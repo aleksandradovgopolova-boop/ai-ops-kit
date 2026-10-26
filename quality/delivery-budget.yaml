@@ -378,7 +378,9 @@ ceilings:
   #   См. `raises`.
   # 2026-09-29: 681 -> 682 под единый формат issue `planning/issue_format.py` (issues-one-format).
   #   См. `raises`.
-  substantive_files: 685
+  substantive_files: 686
+  # 2026-10-26: 685 -> 686 под verify-scope-delivered-command (#1321): один доставляемый модуль
+  #   ai_ops_kit/cli/verify_scope_cli.py. Реальная установка 684 -> 685. См. запись в `raises`.
 
 # Порог предупреждения о ТАЮЩЕМ запасе — данными, а не хардкодом (его читает test_installer, работа
 # `delivery-footprint-warns-before-breach`, 2026-08-27). Пока поставка под потолком, но осталось
@@ -3872,3 +3874,22 @@ raises:
       дочке, а не только CI из клона parent. Без доставки импорт в дочке падал бы.
       При реальной установке substantive inventory вырос 683 -> 684; строгий предел
       <684 больше не пропускает этот файл. Подъём ровно на один, новых модулей нет.
+
+  - at: '2026-10-26'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 685
+    to_count: 686
+    measured_before: 684
+    measured_after: 685
+    work: verify-scope-delivered-command (#1321)
+    files:
+      - ai_ops_kit/cli/verify_scope_cli.py
+    why_it_works_in_the_child: >-
+      Доставляемая команда `./ai-ops verify-scope` исполняется В дочке: по её текущему diff она
+      отвечает, какой объём проверки нужен (tier/стадия + причина + точечные тесты), переиспользуя
+      уже доставленную политику gates/verification_tiers и context/repo_graph. Прямой impact-вход
+      до этого был только dev-only у кита (devtools/impact_check_cli), в дочку не ехал. Без доставки
+      этого модуля интент в дочке падал бы импортом. Реальная установка 684 -> 685; строгий предел
+      <685 больше не пропускает этот файл. Подъём ровно на один, новой пакетной границы нет.

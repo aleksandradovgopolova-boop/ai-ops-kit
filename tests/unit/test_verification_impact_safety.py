@@ -405,3 +405,24 @@ def test_ordinary_static_import_and_unrelated_load_function_remain_targeted(tmp_
     write(tmp_path, 'tests/test_static.py', 'from src.static import load\ndef test_value(): assert load() == 1')
     result = tiers.select_tests(['src/a.py'], tmp_path, profile=PROFILE)
     assert not result['full_command'] and result['affected_tests'] == ['tests/test_static.py']
+
+
+def test_excluded_file_alias_cannot_hide_its_test(tmp_path):
+    import runpy
+
+    real = write(tmp_path, 'real.py', 'VALUE = 7\n')
+    alias = tmp_path / '.ai' / 'alias.py'
+    alias.parent.mkdir()
+    alias.symlink_to(real)
+    loader = write(tmp_path, 'loader.py',
+                   'from pathlib import Path\nimport importlib.util as ilu\n'
+                   "spec = ilu.spec_from_file_location('loaded', Path(__file__).parent / '.ai' / 'alias.py')\n"
+                   'module = ilu.module_from_spec(spec)\nspec.loader.exec_module(module)\n')
+    write(tmp_path, 'test_loader.py', 'import loader\n')
+    write(tmp_path, 'test_real.py', 'import real\n')
+    write(tmp_path, 'test_other.py', 'def test_other(): pass\n')
+    assert runpy.run_path(str(loader))['module'].VALUE == 7
+    graph = repo_graph.build_graph(tmp_path, subdirs=None)
+    assert graph['uncertainty_kinds'].get('loader.py') == 'dynamic'
+    selected = tiers.select_tests(['real.py'], tmp_path, profile=PROFILE)
+    assert selected['full_command'] or 'test_loader.py' in selected['affected_tests']

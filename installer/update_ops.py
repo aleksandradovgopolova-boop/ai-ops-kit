@@ -433,7 +433,7 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     for src, rel in _core().managed_set():
         dst = _ao().MANAGED / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
+        _core().copy_managed_file(src, dst, rel)
     # удалить исключённые
     for c in changes:
         if c["action"] == "remove":

@@ -1,0 +1,104 @@
+[
+  {
+    "condition": "before",
+    "wall_s": 108.80452245900233,
+    "child_cpu_s": 105.06587199999998,
+    "load_start": [
+      2.73388671875,
+      2.71435546875,
+      2.72119140625
+    ],
+    "tests": 36,
+    "passed": 36,
+    "durations_by_module_s": {
+      "tests.unit.test_installer_setup": 65.11000000000001,
+      "tests.unit.test_update_policy_enforcement": 43.325
+    },
+    "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+  },
+  {
+    "condition": "after",
+    "wall_s": 52.543694124993635,
+    "child_cpu_s": 50.713915,
+    "load_start": [
+      3.0810546875,
+      2.8291015625,
+      2.7626953125
+    ],
+    "tests": 36,
+    "passed": 36,
+    "durations_by_module_s": {
+      "tests.unit.test_installer_setup": 29.601000000000003,
+      "tests.unit.test_update_policy_enforcement": 22.561999999999998
+    },
+    "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+  },
+  {
+    "condition": "after",
+    "wall_s": 54.26348404100281,
+    "child_cpu_s": 52.07604099999999,
+    "load_start": [
+      3.50732421875,
+      2.98095703125,
+      2.8203125
+    ],
+    "tests": 36,
+    "passed": 36,
+    "durations_by_module_s": {
+      "tests.unit.test_installer_setup": 30.62299999999999,
+      "tests.unit.test_update_policy_enforcement": 23.208
+    },
+    "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+  },
+  {
+    "condition": "before",
+    "wall_s": 111.95537620899267,
+    "child_cpu_s": 107.68929499999999,
+    "load_start": [
+      4.41943359375,
+      3.30810546875,
+      2.94970703125
+    ],
+    "tests": 36,
+    "passed": 36,
+    "durations_by_module_s": {
+      "tests.unit.test_installer_setup": 68.59800000000001,
+      "tests.unit.test_update_policy_enforcement": 42.964
+    },
+    "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+  },
+  {
+    "condition": "before",
+    "wall_s": 109.37393604200042,
+    "child_cpu_s": 105.66739199999998,
+    "load_start": [
+      3.708984375,
+      3.43603515625,
+      3.0439453125
+    ],
+    "tests": 36,
+    "passed": 36,
+    "durations_by_module_s": {
+      "tests.unit.test_installer_setup": 65.53999999999999,
+      "tests.unit.test_update_policy_enforcement": 43.437
+    },
+    "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+  },
+  {
+    "condition": "after",
+    "wall_s": 65.43786108300264,
+    "child_cpu_s": 62.986149,
+    "load_start": [
+      3.4775390625,
+      3.525390625,
+      3.13037109375
+    ],
+    "tests": 36,
+    "passed": 36,
+    "durations_by_module_s": {
+      "tests.unit.test_installer_setup": 36.778999999999996,
+      "tests.unit.test_update_policy_enforcement": 28.206
+    },
+    "outcomes_sha256": "486e68d7c22868d499fc7e1e6807d3bcd00ed2cd0b9d07be590aa106114dc41b"
+  }
+]

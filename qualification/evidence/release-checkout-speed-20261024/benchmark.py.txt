@@ -1,0 +1,50 @@
+from pathlib import Path
+import collections,hashlib,json,os,platform,resource,shutil,statistics,subprocess,sys,time,xml.etree.ElementTree as E
+root=Path.cwd();out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True);rel='tests/unit/test_upgrade_from_released_versions.py'
+head=subprocess.check_output(['git','rev-parse',sys.argv[2]],text=True).strip()
+sources={'before':subprocess.check_output(['git','show',head+':'+rel]),'after':(root/rel).read_bytes()}
+for k,data in sources.items():(out/(k+'.py.txt')).write_bytes(data)
+def fingerprint():
+ h=hashlib.sha256();paths=subprocess.check_output(['git','ls-files','--cached','--others','--exclude-standard','-z']).decode().split('\0')
+ for p in sorted(set(paths)-{rel,''}):h.update(p.encode()+b'\0'+(root/p).read_bytes()+b'\0')
+ return h.hexdigest()
+def release_refs():
+ return subprocess.check_output(['git','for-each-ref','--format=%(refname) %(objectname)','refs/tags/v[0-9]*'],text=True)
+refs=release_refs();tags=subprocess.check_output(['git','tag','--list','v[0-9]*','--sort=-v:refname'],text=True).splitlines();assert tags
+frozen=fingerprint();rows=[];expected=None
+baseargs=[sys.executable,'-m','pytest','-p','release_bench_probe',rel,'-n','0','-q','-k','not release_checkout','--durations=8','--basetemp='+str(out/'pytest-temp')]
+env={**os.environ,'PYTHONDONTWRITEBYTECODE':'1','GIT_CONFIG_GLOBAL':os.devnull,'GIT_CONFIG_NOSYSTEM':'1','PYTHONPATH':str(out)}
+assert not env.get('PYTEST_ADDOPTS')
+try:
+ for i,condition in enumerate(['before','after','after','before','before','after']):
+  assert fingerprint()==frozen and release_refs()==refs
+  (root/rel).write_bytes(sources[condition]);shutil.rmtree(out/'pytest-temp',ignore_errors=True)
+  xml=out/f'run-{i:02d}.xml';log=out/f'run-{i:02d}.log';trace=out/f'run-{i:02d}-commands.json'
+  cmd=baseargs+['--junitxml='+str(xml)];print(json.dumps({'started':i,'condition':condition}),flush=True)
+  cpu0=resource.getrusage(resource.RUSAGE_CHILDREN);t=time.perf_counter()
+  with log.open('w') as f:r=subprocess.run(cmd,stdout=f,stderr=subprocess.STDOUT,env={**env,'RELEASE_BENCH_TRACE':str(trace)})
+  wall=time.perf_counter()-t;cpu1=resource.getrusage(resource.RUSAGE_CHILDREN)
+  assert r.returncode==0,log.read_text()[-6000:]
+  cases=sorted((c.get('classname'),c.get('name'),'skip' if c.find('skipped') is not None else 'failed' if c.find('failure') is not None or c.find('error') is not None else 'pass') for c in E.parse(xml).iter('testcase'))
+  assert len(cases)==len(set(cases))==len(tags)+1 and all(c[2]=='pass' for c in cases)
+  assert {c[1] for c in cases}=={'test_upgrade_from_released_version['+t+']' for t in tags}|{'test_the_release_corpus_is_not_empty'}
+  if expected is None:expected=cases
+  assert cases==expected and fingerprint()==frozen and release_refs()==refs and (root/rel).read_bytes()==sources[condition]
+  calls=json.loads(trace.read_text());counts=collections.Counter();durations=collections.Counter()
+  for call in calls:
+   c=call['cmd'];key=None
+   if c[:2]==['git','worktree']:key='worktree '+c[2]
+   elif len(c)>2 and str(c[1]).endswith('/installer/ai_ops.py'):key='installer '+c[2]
+   elif len(c)>1 and str(c[1]).endswith('/ai_managed_checksums.py'):key='checksums'
+   elif len(c)>1 and str(c[1]).endswith('/validate_ai_ops_child.py'):key='child-validator'
+   if key:
+    assert call['returncode']==0
+    counts[key]+=1;durations[key]+=call['wall_s']
+  for k in ['installer init','installer update','checksums','child-validator']:assert counts[k]==len(tags)
+  for k in ['worktree add','worktree remove']:assert counts[k]==(len(tags) if condition=='before' else 1)
+  row={'condition':condition,'wall_s':wall,'child_cpu_s':cpu1.ru_utime+cpu1.ru_stime-cpu0.ru_utime-cpu0.ru_stime,'tests':len(cases),'passed':len(cases),'command_counts':dict(counts),'command_durations_s':dict(durations),'outcomes_sha256':hashlib.sha256(json.dumps(cases).encode()).hexdigest()};rows.append(row)
+  (out/'raw.json').write_text(json.dumps(rows,indent=2));print(json.dumps(row),flush=True)
+finally:(root/rel).write_bytes(sources['after'])
+med={k:statistics.median(r['wall_s'] for r in rows if r['condition']==k) for k in sources}
+report={'base':head,'source_sha256':{k:hashlib.sha256(v).hexdigest() for k,v in sources.items()},'other_inputs_sha256':frozen,'python':sys.version,'platform':platform.platform(),'argv':baseargs,'environment_overrides':{k:env[k] for k in ['PYTHONDONTWRITEBYTECODE','GIT_CONFIG_GLOBAL','GIT_CONFIG_NOSYSTEM','PYTHONPATH']},'order':'ABBAAB','release_refs':refs.splitlines(),'tags':tags,'rows':rows,'medians_wall_s':med,'saved_s':med['before']-med['after'],'reduction_percent':100*(1-med['after']/med['before']),'case_outcomes':expected,'limitations':'Three samples per variant on one host. Whole original module: all 23 release versions plus corpus guard. Four new guard tests excluded from both timings and checked separately. Process wall includes startup/setup/teardown, clean identical basetemp before each run (cleanup excluded). Same subprocess observation plugin both conditions. Not total CI wall.'}
+(out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps({k:v for k,v in report.items() if k in ('medians_wall_s','saved_s','reduction_percent')},ensure_ascii=False),flush=True)

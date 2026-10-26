@@ -106,6 +106,11 @@ EXPECTED_INTENTS = {
     "portfolio",
     # #1183: `lint-profile` — профиль линтеров поверх конфигов дочки + заморозка существующего.
     "lint-profile",
+    # #1321 (verification-cycle-performance, 2a): `verify-scope` — доставляемый ответ об объёме
+    # проверки для текущего diff (tier/stage + причина + точечные тесты). Переиспользует доставленную
+    # политику gates/verification_tiers + context/repo_graph, без dev-only devtools. Делает
+    # достижимым это решение ЛОКАЛЬНО в дочке (прямой impact-вход был только dev-only у кита).
+    "verify-scope",
 }
 
 

@@ -1,0 +1,69 @@
+{
+  "title": "KIT local feedback: localized edit runs the targeted subset, not the whole corpus",
+  "closes_outcome": "small_changes_get_measured_faster_feedback_without_lowering_final_gates",
+  "goal": "verification-cycle-performance",
+  "roadmap_direction": 1321,
+  "scope": "KIT ONLY; outcome 2 only; #1321 stays OPEN; no end-to-end dev-cycle % and no child-product claim",
+  "head_sha": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+  "tree_sha": "43fb35e78d7438a9b045712833a432a9abc64380",
+  "environment": {
+    "python": "3.14.7 (.venv)",
+    "ruff": "0.16.2",
+    "pytest": "9.1.1",
+    "platform": "macOS-27.0-arm64",
+    "cpu_count": 10,
+    "note": "owner's self-hosted CI runners share this host; benchmark used raw pytest (not check-full) to avoid the host-slot guard, and recorded slot cleanliness before each run"
+  },
+  "baseline_ref": "qualification/LOCAL-VERIFICATION-CYCLE-BASELINE-2026-10-21.md",
+  "what_is_now_selected_plan_only": {
+    "source": "plan-and-environment.json",
+    "leaf_capability_policy_py": {"intent": "draft", "tier": "affected", "impact_status": "targeted_tests_found", "targeted_test_files": 133},
+    "leaf_lint_baseline_py": {"intent": "draft", "tier": "affected", "targeted_test_files": 204},
+    "central_budget_py": {"intent": "draft", "tier": "affected", "targeted_test_files": 272},
+    "note": "all leaves share a 133-file floor: 36 conservative dynamic consumers are always added, so even a leaf pulls heavy integration tests — this caps the wall-time win"
+  },
+  "wall_time_abba": {
+    "source": "wall-time-abba.json",
+    "design": "same tree, same marker ('not nightly and not release_gate and not slow'); only which tests run differs; 1 warmup per condition then ABBA, n=6 per condition",
+    "after_targeted_133_files": {"median_wall_s": 291.9, "range_wall_s": [165.6, 702.7], "n": 6, "tests_executed_each_run": 1971},
+    "before_whole_corpus": {"median_wall_s": 401.0, "range_wall_s": [328.8, 469.2], "n": 6, "tests_executed_each_run": 9247},
+    "median_wall_reduction_percent": 27.2,
+    "deterministic_test_count_reduction_percent": 79,
+    "cleaner_presize_pass_no_abba": {"after_wall_s": 190, "before_wall_s": 405, "reduction_percent": 53, "note": "slot cleaner; same direction"}
+  },
+  "not_proven_and_contamination": [
+    "Host under load: owner's self-hosted runners were active during the window (slot-waits of 60/120/180s logged; one AFTER spike to 702.7s under contention). Median is robust to the single spike but ranges are wide — a loaded developer machine, not an isolated bench.",
+    "One BEFORE run had 1 pre-existing flaky failure (1 failed, 9246 passed). This slice's diff is docs/evidence ONLY (no code touched), so the failure cannot be caused by it; wall time retained in raw rows.",
+    "slow excluded from BOTH conditions for marker-consistency and tractability; the real old full fallback (check-full.sh --pr) INCLUDED slow, so BEFORE here is a conservative lower bound of the old wall.",
+    "Not measured: cold OS cache, CI queue/dispatch, paid CPU-minutes, p95 (n too small). No end-to-end development-cycle % claimed."
+  ],
+  "no_gate_lowered": {
+    "same_edit_escalates_to_full_at_merge_and_release": {
+      "source": "plan-and-environment.json",
+      "capability_policy_py_at_merge_candidate": {"tier": "full", "full_command": true},
+      "budget_py_at_release_candidate": {"tier": "full", "full_command": true},
+      "enforcement": "verification_tiers.decide_tier (merge/release and ALWAYS_FULL_PATTERNS -> full); impact_check_cli.main sets full_argv=['bash','scripts/check-full.sh', ...] (release -> full profile, else --pr)",
+      "regression_tests": ["tests/unit/test_verification_impact_safety.py::test_release_runs_full_and_propagates_failure", "tests/unit/test_verification_impact_safety.py::test_risk_floor_cannot_be_weakened"]
+    },
+    "selection_is_a_dependency_graph_superset_not_name_based": {
+      "source": "soundness.json",
+      "module": "ai_ops_kit/shared/budget.py",
+      "selected_tests": 251,
+      "independent_transitive_consumer_closure": 251,
+      "selected_equals_closure": true,
+      "consumers_missing_from_selection": 0,
+      "selected_without_name_match": 247,
+      "name_match_only": 4,
+      "negative_control_not_selected": "tests/contracts/test_architecture_constitution.py"
+    },
+    "nothing_disabled": "This slice adds only docs + evidence; no new skip/xfail, no lowered coverage/security floors, no marker edits.",
+    "backing_regressions_in_measured_set": ["tests/unit/test_verification_impact_safety.py", "tests/unit/test_repo_graph.py"]
+  },
+  "files": {
+    "wall-time-abba.json": "raw wall/cpu per run, medians, ranges, SHAs, versions, host-slot cleanliness",
+    "plan-and-environment.json": "plan-only tiers for leaf/central and escalation to full at merge/release; environment",
+    "soundness.json": "superset / name-independence / negative control",
+    "benchmark.py.txt": "ABBA wall-time harness (run a copy outside the repo; ROOT path is local)",
+    "soundness.py.txt": "superset/soundness harness"
+  }
+}

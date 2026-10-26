@@ -1,0 +1,29 @@
+{
+  "module": "ai_ops_kit/shared/budget.py",
+  "selected_count": 251,
+  "independent_closure_count": 251,
+  "selected_equals_independent_closure": true,
+  "selected_without_name_match_count": 247,
+  "name_match_only_count": 4,
+  "name_match_examples_excluded_if_only_naming": [
+    "tests/unit/test_budget.py",
+    "tests/unit/test_budget_reservations.py",
+    "tests/unit/test_delivery_budget.py",
+    "tests/unit/test_goal_budget_anchor.py"
+  ],
+  "dependency_selected_not_name_examples": [
+    "tests/contracts/test_capability_inventory.py",
+    "tests/contracts/test_capability_reachability.py",
+    "tests/contracts/test_critical_path.py",
+    "tests/contracts/test_direct_intents_match_handler.py",
+    "tests/contracts/test_kit_product_passport.py",
+    "tests/contracts/test_platform_e2e.py",
+    "tests/contracts/test_product_contract_tier.py",
+    "tests/unit/test_absent_base_is_resolved_or_refused.py",
+    "tests/unit/test_acceptance_criteria_not_claimed_verified.py",
+    "tests/unit/test_acceptance_criteria_parsing.py"
+  ],
+  "negative_control_test": "tests/contracts/test_architecture_constitution.py",
+  "negative_control_selected": false,
+  "consumers_missing_from_selection": 0
+}

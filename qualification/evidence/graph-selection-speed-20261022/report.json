@@ -1,0 +1,122 @@
+{
+  "base": "d84d772a081e5e9ce91dbb613ebfafd30d69ed41",
+  "snapshot_archive_sha256": "8f4e32c367d7d03b951c9da266799b69a5cd0398eb8037e0a7557eab921eeefc",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "executable": "/Users/sasad/ai-ops-kit/.venv/bin/python",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "cpu_count": 10,
+  "scenario": "select_tests(secret_formats,draft), full graph build included; test execution excluded",
+  "order": "2 warmups, ABBA x3 (6 measured samples per condition)",
+  "source_sha256": {
+    "before": "fb1b89987fdce845f7c334b33e8d653621726854c2a6578747eca414f65a7bdf",
+    "after": "55cf726fd87704660ef4c3a79216178a29147debbc2752c999f5bb4cba9f8b09"
+  },
+  "rows": [
+    {
+      "condition": "before",
+      "warmup": true,
+      "wall_s": 7.25642791700011,
+      "cpu_s": 7.168753000000001,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "after",
+      "warmup": true,
+      "wall_s": 4.871378125000774,
+      "cpu_s": 4.868780000000001,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 7.145008041999972,
+      "cpu_s": 7.14331,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 4.882359957999142,
+      "cpu_s": 4.879372,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 4.877793416999339,
+      "cpu_s": 4.875769999999999,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 7.929729041999963,
+      "cpu_s": 7.686863000000002,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 7.465984791000665,
+      "cpu_s": 7.403233999999998,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 4.8726315409985546,
+      "cpu_s": 4.871025000000003,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 4.844005082999502,
+      "cpu_s": 4.843491999999998,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 7.18194916700304,
+      "cpu_s": 7.178420000000003,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 7.22279058300046,
+      "cpu_s": 7.218249,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 4.896911874999205,
+      "cpu_s": 4.895560000000003,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 4.855012290998275,
+      "cpu_s": 4.8542970000000025,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 7.135050958000647,
+      "cpu_s": 7.133786000000001,
+      "result_sha256": "03b8647ccd230a82f5bd11b6c1704994dd24cb1e48b8cb3e81c3a7814fca3999"
+    }
+  ],
+  "medians_wall_s": {
+    "before": 7.20236987500175,
+    "after": 4.875212478998947
+  },
+  "reduction_percent": 32.31099535834707,
+  "affected_files": 248,
+  "outputs_identical": true,
+  "limitations": "Warm filesystem; same process; no pytest execution or CI queue timing; single host; not an end-to-end development-speed claim."
+}

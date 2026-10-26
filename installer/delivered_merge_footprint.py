@@ -32,6 +32,9 @@ CLI:  python3 installer/delivered_merge_footprint.py --base origin/main --head H
 from __future__ import annotations
 
 import argparse
+import io
+import subprocess
+import tarfile
 import sys
 from pathlib import Path
 
@@ -46,6 +49,27 @@ from ai_ops_kit.gates import merge_preview                              # noqa: 
 from ai_ops_kit.validation import delivery_footprint_warning as dfw     # noqa: E402 — путь выше
 
 DEFAULT_FRACTION = 0.10   # запасной порог предупреждения, если реестр его не назвал
+
+
+
+def _project_entries(root, tree, entries, managed_rels):
+    """Те же bytes, что пишет installer; читаем blob'ы merge-tree, а не working tree."""
+    paths = [p for p, _ in entries if p in managed_rels
+             and p.startswith("ai_ops_kit/") and p.endswith(".py")]
+    if not paths:
+        return entries
+    import ai_ops as installer
+    result = subprocess.run(["git", "-C", str(root), "archive", "--format=tar", tree, "--", *paths],
+                            capture_output=True, timeout=60, check=True)
+    sizes = {}
+    with tarfile.open(fileobj=io.BytesIO(result.stdout)) as archive:
+        for path in paths:
+            member = archive.getmember(path)
+            if not member.isfile():
+                raise ValueError("managed Python target is not a regular file")
+            raw = archive.extractfile(member).read()
+            sizes[path] = len(installer.managed_content(path, raw))
+    return [(path, sizes.get(path, size)) for path, size in entries]
 
 
 def delivered_merge_footprint(root, base_ref: str, head_ref: str,
@@ -72,6 +96,14 @@ def delivered_merge_footprint(root, base_ref: str, head_ref: str,
     breached=False (пробой доставляемого НЕ утверждается, раз итог посчитать не смогли), reason назван.
     """
     preview = merge_preview.merge_preview_tree(root, base_ref, head_ref)
+    entries = []
+    if preview.get("ok"):
+        try:
+            entries = _project_entries(root, preview["tree"],
+                                       merge_preview.merge_preview_entries(root, preview["tree"]),
+                                       managed_rels)
+        except (OSError, subprocess.SubprocessError, tarfile.TarError, KeyError, ValueError) as exc:
+            preview = {"ok": False, "reason": f"managed projection unavailable: {type(exc).__name__}"}
     if not preview.get("ok"):
         return {"ok": False, "reason": preview.get("reason", "merge-preview не удалось"),
                 "delivered_bytes": None, "delivered_files": None, "paths": [],
@@ -79,7 +111,6 @@ def delivered_merge_footprint(root, base_ref: str, head_ref: str,
                 "breached": False, "thin": False, "reserve": None,
                 "files_ceiling": files_ceiling, "files_breached": False,
                 "files_thin": False, "files_reserve": None}
-    entries = merge_preview.merge_preview_entries(root, preview["tree"])
     fp = dfw.delivered_merge_footprint(entries, managed_rels)
     verdict = dfw.delivered_footprint_verdict(fp["delivered_bytes"], ceiling, fraction)
     if isinstance(files_ceiling, int) and files_ceiling > 0:

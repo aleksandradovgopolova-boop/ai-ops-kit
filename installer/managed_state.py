@@ -282,7 +282,7 @@ def build_diff():
     for rel, src in sorted(pkg_files.items()):
         if rel not in installed:
             changes.append({"path": f".ai/managed/{rel}", "action": "add", "reason": "новый managed-файл"})
-        elif sha256(src) != sha256(installed[rel]):
+        elif hashlib.sha256(_core().managed_content(rel, src.read_bytes())).hexdigest() != sha256(installed[rel]):
             changes.append({"path": f".ai/managed/{rel}", "action": "replace", "reason": "обновлён в пакете"})
     for rel in sorted(installed):
         if rel not in pkg_files and rel != "README.md":

@@ -1,0 +1,379 @@
+{
+  "base": "4fed5eae512faaf45addf78a79a77b0bc96788a3",
+  "source_sha256": {
+    "before": "27c2d98ae78a2aff3ac3267acb18af8d23246700ea23b4044a7c5a6820bae76d",
+    "after": "be7c936f7515f3c5173dc557ba914a93f18972f3dba200136ff67e161c31350f"
+  },
+  "other_inputs_sha256": "67463079d13f56fe8e89a5b1cab3699eeff161a8c4378c3cff7a02751f6e5b94",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "argv": [
+    "/Users/sasad/ai-ops-kit/.venv/bin/python",
+    "-m",
+    "pytest",
+    "-p",
+    "release_bench_probe",
+    "tests/unit/test_upgrade_from_released_versions.py",
+    "-n",
+    "0",
+    "-q",
+    "-k",
+    "not release_checkout",
+    "--durations=8",
+    "--basetemp=/Users/sasad/.codex/tmp/release-checkout-speed-20261024/pytest-temp"
+  ],
+  "environment_overrides": {
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "PYTHONPATH": "/Users/sasad/.codex/tmp/release-checkout-speed-20261024"
+  },
+  "order": "ABBAAB",
+  "release_refs": [
+    "refs/tags/v4.0.0 ffb57f42a2ce048b5f852b6e2cf4fa7653b76012",
+    "refs/tags/v4.1.0 0431daa7d971dbfad232c10d45395f256ade8437",
+    "refs/tags/v4.10.0 593acf28c8026ac7684a1b978c095b1d20176549",
+    "refs/tags/v4.10.1 521a39c3246c2e609248bae03e481c28842f0930",
+    "refs/tags/v4.11.0 b7c64dd978fae2a525a0e4ed4a6c2396a07e6f8c",
+    "refs/tags/v4.11.1 99b254425e3760aaf4a7ca6e58f727a73a134f4c",
+    "refs/tags/v4.11.2 136cfacdbdbd4980b27a426aff43159b123f7a44",
+    "refs/tags/v4.11.3 e6ba0d2fe9775c2d74f747eecec8d40a9721cefd",
+    "refs/tags/v4.2.0 bac4af45e3f4b7a871e56e0be64fbaac203e1ef2",
+    "refs/tags/v4.3.0 dc5f5f2345e62703796a372834bcfa545b1faacc",
+    "refs/tags/v4.3.1 850f57c947f0fd36f793f0bc8ad5652f78732cb8",
+    "refs/tags/v4.3.2 d45d4c0960ff7eb2145123a3acc9d8594037edf9",
+    "refs/tags/v4.4.0 026b3405ed7f3f194c11932908e2b0d3b31cefee",
+    "refs/tags/v4.4.1 7b45e5736aa7756edd7196c3543b0219db1cc7ce",
+    "refs/tags/v4.4.2 07a8c36d1168a9f959485f4e7f4cc1252a0a0651",
+    "refs/tags/v4.5.0 eb3cf00f615fb5711f9bf55a877697ac40e400e8",
+    "refs/tags/v4.6.0 648d6e008c17851d7ae124336500155412cadda4",
+    "refs/tags/v4.7.0 6472634fcd15294f393be558fed26e6dfa5b3058",
+    "refs/tags/v4.8.0 c10de16dda3f1eebbd92bf760a45e2d59f86c7ae",
+    "refs/tags/v4.9.0 413bc0cb256031745fbada1df4eb57d78dc2c8f4",
+    "refs/tags/v4.9.1 173854d84b9a88912af0620a76344b0258cc996e",
+    "refs/tags/v4.9.2 4b1b75c51d8ddac1b0e3e4684abe06e972509cbc",
+    "refs/tags/v4.9.3 ad16611cec1ca65a659f597f7b3b0436df8e78b8"
+  ],
+  "tags": [
+    "v4.11.3",
+    "v4.11.2",
+    "v4.11.1",
+    "v4.11.0",
+    "v4.10.1",
+    "v4.10.0",
+    "v4.9.3",
+    "v4.9.2",
+    "v4.9.1",
+    "v4.9.0",
+    "v4.8.0",
+    "v4.7.0",
+    "v4.6.0",
+    "v4.5.0",
+    "v4.4.2",
+    "v4.4.1",
+    "v4.4.0",
+    "v4.3.2",
+    "v4.3.1",
+    "v4.3.0",
+    "v4.2.0",
+    "v4.1.0",
+    "v4.0.0"
+  ],
+  "rows": [
+    {
+      "condition": "before",
+      "wall_s": 157.2431607079925,
+      "child_cpu_s": 155.33399799999998,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 23,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 23
+      },
+      "command_durations_s": {
+        "worktree add": 4.633160876954207,
+        "installer init": 12.600242208005511,
+        "installer update": 124.22613154107239,
+        "checksums": 1.1966888329625363,
+        "child-validator": 2.296200581055018,
+        "worktree remove": 2.8533138769853394
+      },
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177",
+      "source_git_operations_s": 7.742261131919804
+    },
+    {
+      "condition": "after",
+      "wall_s": 166.84589516700362,
+      "child_cpu_s": 165.31608600000004,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.1985701249941485,
+        "installer init": 13.215186043045833,
+        "installer update": 137.6779077060346,
+        "checksums": 1.2837025870248908,
+        "child-validator": 2.4089529150223825,
+        "worktree remove": 0.1505133750033565
+      },
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177",
+      "source_git_operations_s": 2.5346992430713726
+    },
+    {
+      "condition": "after",
+      "wall_s": 174.38557529200625,
+      "child_cpu_s": 173.21475,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.20400641599553637,
+        "installer init": 13.917893419027678,
+        "installer update": 144.0707191250258,
+        "checksums": 1.3860587070230395,
+        "child-validator": 2.5890922070102533,
+        "worktree remove": 0.158997458012891
+      },
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177",
+      "source_git_operations_s": 2.67530804600392
+    },
+    {
+      "condition": "before",
+      "wall_s": 192.37647624999227,
+      "child_cpu_s": 189.90738799999997,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 23,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 23
+      },
+      "command_durations_s": {
+        "worktree add": 5.83184379497834,
+        "installer init": 15.70678241403948,
+        "installer update": 152.10460470602266,
+        "checksums": 1.4727225820242893,
+        "child-validator": 2.738927540005534,
+        "worktree remove": 3.2854250850214157
+      },
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177",
+      "source_git_operations_s": 9.412911005973001
+    },
+    {
+      "condition": "before",
+      "wall_s": 171.60349391700584,
+      "child_cpu_s": 170.27542799999998,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 23,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 23
+      },
+      "command_durations_s": {
+        "worktree add": 4.749937333996058,
+        "installer init": 13.477062374004163,
+        "installer update": 136.61991546205536,
+        "checksums": 1.2546836280234857,
+        "child-validator": 2.404582750998088,
+        "worktree remove": 2.9694434580160305
+      },
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177",
+      "source_git_operations_s": 7.98746279104671
+    },
+    {
+      "condition": "after",
+      "wall_s": 164.87679329200182,
+      "child_cpu_s": 163.9524570000001,
+      "tests": 24,
+      "passed": 24,
+      "command_counts": {
+        "worktree add": 1,
+        "installer init": 23,
+        "installer update": 23,
+        "checksums": 23,
+        "child-validator": 23,
+        "worktree remove": 1
+      },
+      "command_durations_s": {
+        "worktree add": 0.25824487500358373,
+        "installer init": 13.376877626971691,
+        "installer update": 135.74690641698544,
+        "checksums": 1.2764862080512103,
+        "child-validator": 2.435767290968215,
+        "worktree remove": 0.1372987920040032
+      },
+      "outcomes_sha256": "c928d74526076a247e0a86437e5e0bcea86b33700a259de44fdc5dfa73f5c177",
+      "source_git_operations_s": 2.4414311300351983
+    }
+  ],
+  "medians_wall_s": {
+    "before": 171.60349391700584,
+    "after": 166.84589516700362
+  },
+  "saved_s": 4.7575987500022165,
+  "reduction_percent": 2.772436994961869,
+  "case_outcomes": [
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_the_release_corpus_is_not_empty",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.0.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.1.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.10.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.10.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.11.3]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.2.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.3.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.3.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.3.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.4.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.4.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.4.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.5.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.6.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.7.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.8.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.0]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.1]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.2]",
+      "pass"
+    ],
+    [
+      "tests.unit.test_upgrade_from_released_versions",
+      "test_upgrade_from_released_version[v4.9.3]",
+      "pass"
+    ]
+  ],
+  "limitations": "Three samples per variant on one host. Whole original module: all 23 release versions plus corpus guard. Four new guard tests excluded from both timings and checked separately. Process wall includes startup/setup/teardown, clean identical basetemp before each run (cleanup excluded). Same subprocess observation plugin both conditions. Not total CI wall.",
+  "source_git_operations": {
+    "included_commands": [
+      "checkout",
+      "rev-parse",
+      "status",
+      "tag",
+      "worktree"
+    ],
+    "definition": "All actual source Git operations observed in full corpus runs, including corpus/tag resolution and new checkout/dirty guards. Child Git init/config/add/commit excluded identically. Post-hoc breakdown of the pre-recorded command traces.",
+    "medians_s": {
+      "before": 7.98746279104671,
+      "after": 2.5346992430713726
+    },
+    "saved_s": 5.452763547975337,
+    "reduction_percent": 68.2665283159433
+  }
+}

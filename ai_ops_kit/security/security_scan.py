@@ -60,7 +60,7 @@ except ImportError:                                    # запуск КАК С�
     import importlib.util as _ilu
 
     _formats_path = Path(__file__).resolve().parents[1] / "shared" / "secret_formats.py"
-    _spec = _ilu.spec_from_file_location("ai_ops_secret_formats", _formats_path)
+    _spec = _ilu.spec_from_file_location("ai_ops_secret_formats", Path(__file__).resolve().parents[1] / "shared" / "secret_formats.py")
     if _spec is None or _spec.loader is None:          # fail-closed: без форматов сканер не сканер
         raise RuntimeError(f"не удалось загрузить форматы секретов из {_formats_path}") from None
     _formats_mod = _ilu.module_from_spec(_spec)
@@ -195,7 +195,7 @@ except ImportError:                                    # запуск КАК С�
     import importlib.util as _ilu3
 
     _noise_path = Path(__file__).resolve().parent / "scan_secret_noise.py"
-    _spec3 = _ilu3.spec_from_file_location("ai_ops_scan_secret_noise", _noise_path)
+    _spec3 = _ilu3.spec_from_file_location("ai_ops_scan_secret_noise", Path(__file__).resolve().parent / "scan_secret_noise.py")
     if _spec3 is None or _spec3.loader is None:        # fail-closed: без отсева сканер блокирует зря
         raise RuntimeError(f"не удалось загрузить отсев не-секретов из {_noise_path}") from None
     _noise_mod = _ilu3.module_from_spec(_spec3)
@@ -206,7 +206,7 @@ except ImportError:                                    # запуск КАК С�
     _PEM_LOOKAHEAD = _noise_mod.PEM_LOOKAHEAD
 
     _sql_path = Path(__file__).resolve().parent / "scan_sql_template.py"
-    _spec4 = _ilu3.spec_from_file_location("ai_ops_scan_sql_template", _sql_path)
+    _spec4 = _ilu3.spec_from_file_location("ai_ops_scan_sql_template", Path(__file__).resolve().parent / "scan_sql_template.py")
     if _spec4 is None or _spec4.loader is None:        # fail-closed: без правила сканер слепнет
         raise RuntimeError(f"не удалось загрузить правило SQL-шаблона из {_sql_path}") from None
     _sql_mod = _ilu3.module_from_spec(_spec4)
@@ -228,7 +228,7 @@ except ImportError:                                    # запуск КАК С�
     import importlib.util as _ilu2
 
     _prose_path = Path(__file__).resolve().parent / "scan_prose.py"
-    _spec2 = _ilu2.spec_from_file_location("ai_ops_scan_prose", _prose_path)
+    _spec2 = _ilu2.spec_from_file_location("ai_ops_scan_prose", Path(__file__).resolve().parent / "scan_prose.py")
     if _spec2 is None or _spec2.loader is None:        # fail-closed: без разбора прозы сканер шумит
         raise RuntimeError(f"не удалось загрузить разбор прозы из {_prose_path}") from None
     _prose_mod = _ilu2.module_from_spec(_spec2)
@@ -239,7 +239,7 @@ except ImportError:                                    # запуск КАК С�
     _blank_strings = _prose_mod.blank_string_contents
 
     _exec_path = Path(__file__).resolve().parent / "scan_exec_call.py"
-    _spec7 = _ilu2.spec_from_file_location("ai_ops_scan_exec_call", _exec_path)
+    _spec7 = _ilu2.spec_from_file_location("ai_ops_scan_exec_call", Path(__file__).resolve().parent / "scan_exec_call.py")
     if _spec7 is None or _spec7.loader is None:        # fail-closed: без разбора сканер слепнет
         raise RuntimeError(f"не удалось загрузить разбор запуска команд из {_exec_path}") from None
     _exec_mod = _ilu2.module_from_spec(_spec7)
@@ -248,7 +248,7 @@ except ImportError:                                    # запуск КАК С�
     _launch_findings = _exec_mod.launch_findings
 
     _inline_path = Path(__file__).resolve().parent / "scan_inline_code.py"
-    _spec8 = _ilu2.spec_from_file_location("ai_ops_scan_inline_code", _inline_path)
+    _spec8 = _ilu2.spec_from_file_location("ai_ops_scan_inline_code", Path(__file__).resolve().parent / "scan_inline_code.py")
     if _spec8 is None or _spec8.loader is None:        # fail-closed: без разбора сканер слепнет
         raise RuntimeError(f"не удалось загрузить разбор inline-кода из {_inline_path}") from None
     _inline_mod = _ilu2.module_from_spec(_spec8)
@@ -256,7 +256,7 @@ except ImportError:                                    # запуск КАК С�
     _inline_code_lines = _inline_mod.inline_code_lines
 
     _vendor_path = Path(__file__).resolve().parent / "scan_vendor.py"
-    _spec6 = _ilu2.spec_from_file_location("ai_ops_scan_vendor", _vendor_path)
+    _spec6 = _ilu2.spec_from_file_location("ai_ops_scan_vendor", Path(__file__).resolve().parent / "scan_vendor.py")
     if _spec6 is None or _spec6.loader is None:        # fail-closed: без сверки версий раздел слеп
         raise RuntimeError(f"не удалось загрузить сверку поставки из {_vendor_path}") from None
     _vendor_mod = _ilu2.module_from_spec(_spec6)
@@ -381,7 +381,7 @@ except ImportError:                                    # запуск КАК С�
     import importlib.util as _ilu5
 
     _deps_path = Path(__file__).resolve().parent / "scan_deps.py"
-    _spec5 = _ilu5.spec_from_file_location("ai_ops_scan_deps", _deps_path)
+    _spec5 = _ilu5.spec_from_file_location("ai_ops_scan_deps", Path(__file__).resolve().parent / "scan_deps.py")
     if _spec5 is None or _spec5.loader is None:        # fail-closed: без разбора «новых нет» = незнание
         raise RuntimeError(f"не удалось загрузить разбор зависимостей из {_deps_path}") from None
     _deps_mod = _ilu5.module_from_spec(_spec5)

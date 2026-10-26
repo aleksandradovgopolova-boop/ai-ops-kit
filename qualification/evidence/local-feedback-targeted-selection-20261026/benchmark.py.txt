@@ -1,0 +1,138 @@
+"""ABBA before/after feedback-time benchmark for localized kit edits (#1321, outcome 2, KIT only).
+
+Measures pytest WALL time under two conditions on the SAME tree; the only difference is
+which tests run:
+  AFTER  = the targeted set the kit now selects for a localized edit (tier=affected).
+  BEFORE = the whole corpus the old behavior ran on ANY code edit (tier=full fallback).
+
+Marker is IDENTICAL in both conditions so file-selection is the only variable.
+Raw pytest is invoked directly (not check-full) to avoid the host-slot guard, but each
+condition's command byte-for-byte represents its scenario. Before every measured run we
+confirm no competing heavy process (owner's CI runners) is active and record it.
+"""
+import json, os, platform, shlex, statistics, subprocess, sys, time
+from pathlib import Path
+
+ROOT = "/Users/sasad/ai-ops-kit/.claude/worktrees/agent-aab985b37f2d1463d"
+sys.path.insert(0, ROOT)
+from ai_ops_kit.gates import verification_tiers  # noqa: E402
+from ai_ops_kit.devtools import host_resource_cli  # noqa: E402
+
+PY = "/Users/sasad/ai-ops-kit/.venv/bin/python"
+# Same marker both sides; see brief for why slow is excluded from BOTH (consistency + tractable;
+# the real old fallback also ran slow, so BEFORE here is a conservative lower bound of old wall).
+MARKER = os.environ.get("BENCH_MARKER", "not nightly and not release_gate and not slow")
+LEAF = "ai_ops_kit/checks/capability_policy.py"
+CENTRAL = "ai_ops_kit/shared/budget.py"
+MODE = sys.argv[1] if len(sys.argv) > 1 else "full"
+N = int(os.environ.get("BENCH_N", "6"))
+
+profile = {"stacks": [{"language": "python", "commands": {
+    "test": shlex.join([PY, "-m", "pytest", "tests/", "-q",
+                        "-m", "not nightly and not release_gate"])}}]}
+
+
+def plan(path):
+    r = verification_tiers.select_tests([path], ROOT, lifecycle_intent="draft", profile=profile)
+    return r
+
+
+def heavy_procs():
+    # Reuse the kit's own matcher (_HEAVY: \bpytest\b|\bvitest\b|\bplaywright\s+test\b|
+    # check-full.sh|npm/pnpm/yarn build|test|typecheck|tsc) so we flag exactly what the
+    # host-slot guard flags, ignoring our own process tree.
+    return [h for h in host_resource_cli.heavy_processes()
+            if int(h["pid"]) != os.getpid()]
+
+
+def wait_for_slot():
+    waited = 0
+    while True:
+        h = heavy_procs()
+        if not h:
+            return waited
+        print(f"[slot busy, waiting 60s] {h[:2]}", flush=True)
+        time.sleep(60)
+        waited += 60
+
+
+def run_once(cmd):
+    waited = wait_for_slot()
+    slot_clean = not heavy_procs()
+    t = time.perf_counter()
+    p = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True,
+                       env={**os.environ, "PYTHONDONTWRITEBYTECODE": "1"})
+    wall = time.perf_counter() - t
+    last = p.stdout.strip().splitlines()[-1] if p.stdout.strip() else ""
+    return {"wall_s": wall, "returncode": p.returncode, "summary": last,
+            "slot_clean_before": slot_clean, "waited_s_for_slot": waited}
+
+
+def main():
+    r = plan(LEAF)
+    affected = sorted(r["affected_tests"])
+    assert r["tier"] == "affected" and r["impact_status"] == "targeted_tests_found"
+    base = [PY, "-m", "pytest", "-q", "-n", "auto", "--dist", "loadfile", "-m", MARKER]
+    after_cmd = base + affected
+    before_cmd = [PY, "-m", "pytest", "tests/", "-q", "-n", "auto", "--dist", "loadfile", "-m", MARKER]
+
+    if MODE == "size":
+        print("targeted set:", len(affected))
+        a = run_once(after_cmd); print("AFTER once:", a)
+        b = run_once(before_cmd); print("BEFORE once:", b)
+        return
+
+    seq = ["after", "before", "before", "after"]
+    while len([s for s in seq if s == "after"]) < N or len([s for s in seq if s == "before"]) < N:
+        seq += ["after", "before", "before", "after"]
+    seq = seq[:2 * N]
+    rows = []
+    # one warmup each
+    for cond in ("after", "before"):
+        cmd = after_cmd if cond == "after" else before_cmd
+        res = run_once(cmd)
+        rows.append({"condition": cond, "warmup": True, **res})
+        print("warmup", cond, res, flush=True)
+    for cond in seq:
+        cmd = after_cmd if cond == "after" else before_cmd
+        res = run_once(cmd)
+        rows.append({"condition": cond, "warmup": False, **res})
+        print(cond, res, flush=True)
+
+    def med(cond):
+        vals = [r["wall_s"] for r in rows if r["condition"] == cond and not r["warmup"]]
+        return statistics.median(vals), min(vals), max(vals), len(vals)
+
+    am, amin, amax, an = med("after")
+    bm, bmin, bmax, bn = med("before")
+    report = {
+        "scenario": "KIT local feedback: targeted subset vs whole corpus, same marker; pytest wall time",
+        "head_sha": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT).decode().strip(),
+        "tree_sha": subprocess.check_output(["git", "rev-parse", "HEAD^{tree}"], cwd=ROOT).decode().strip(),
+        "python": sys.version, "executable": PY, "platform": platform.platform(),
+        "cpu_count": os.cpu_count(),
+        "marker": MARKER,
+        "leaf_edit": LEAF, "targeted_set_size": len(affected),
+        "kit_targeted_command_verbatim": r["targeted_command"],
+        "after_command": shlex.join(after_cmd[:11]) + f" <{len(affected)} targeted test files>",
+        "before_command": shlex.join(before_cmd),
+        "order": f"1 warmup each, ABBA, n={N} measured per condition",
+        "rows": rows,
+        "medians_wall_s": {"after": am, "before": bm},
+        "ranges_wall_s": {"after": [amin, amax], "before": [bmin, bmax]},
+        "n_measured": {"after": an, "before": bn},
+        "reduction_percent": 100 * (1 - am / bm),
+        "all_green": all(x["returncode"] == 0 for x in rows),
+        "limitations": ("Warm filesystem; single loaded developer host; no CI queue/dispatch; "
+                        "no cold OS cache; p95 not reported (n small). slow excluded from BOTH "
+                        "conditions for marker-consistency and tractability — the real old full "
+                        "fallback also ran slow tests, so BEFORE here is a conservative lower bound "
+                        "of the old feedback wall. Not an end-to-end dev-cycle claim; KIT only."),
+    }
+    outdir = Path(sys.argv[2]) if len(sys.argv) > 2 else Path(".")
+    (outdir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2))
+    print(json.dumps({k: v for k, v in report.items() if k != "rows"}, ensure_ascii=False, indent=2))
+
+
+if __name__ == "__main__":
+    main()

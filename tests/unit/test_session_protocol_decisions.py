@@ -95,7 +95,8 @@ class TestSessionStartRitualKnowsAboutLimits:
     в решениях и молчал там, где его читают."""
 
     @pytest.fixture(scope="class")
-    def text(self):
+    @classmethod
+    def text(cls):
         return (KIT / "commands" / "task" / "ai-session-start.md").read_text(encoding="utf-8")
 
     def test_it_reads_the_previous_session_state(self, text):

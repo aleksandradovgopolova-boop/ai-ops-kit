@@ -1,0 +1,165 @@
+{
+  "scenario": "KIT local feedback: targeted subset vs whole corpus, same marker; pytest wall time",
+  "head_sha": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+  "tree_sha": "43fb35e78d7438a9b045712833a432a9abc64380",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "executable": "/Users/sasad/ai-ops-kit/.venv/bin/python",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "cpu_count": 10,
+  "marker": "not nightly and not release_gate and not slow",
+  "leaf_edit": "ai_ops_kit/checks/capability_policy.py",
+  "targeted_set_size": 133,
+  "kit_targeted_command_verbatim": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest -q -m 'not nightly and not release_gate' tests/contracts/test_capability_inventory.py tests/contracts/test_capability_policy.py tests/contracts/test_capability_reachability.py tests/contracts/test_direct_intents_match_handler.py tests/contracts/test_platform_e2e.py tests/contracts/test_product_contract_tier.py tests/contracts/test_safety_validators_green_on_live_kit.py tests/unit/test_absent_base_is_resolved_or_refused.py tests/unit/test_ai_ops_cli.py tests/unit/test_ai_ops_cli_main.py tests/unit/test_ai_ops_cli_owner_queue.py tests/unit/test_ai_ops_cli_reevaluate.py tests/unit/test_architecture_constitution_style_articles.py tests/unit/test_architecture_gate_reconciliation.py tests/unit/test_architecture_map_ships_to_child.py tests/unit/test_attention_bus.py tests/unit/test_autonomous_delivery_of_ready_work.py tests/unit/test_backlog_cli_wiring.py tests/unit/test_bounded_literal_goal.py tests/unit/test_budget_reservations.py tests/unit/test_checklist_completeness.py tests/unit/test_child_ci_template.py tests/unit/test_child_registry.py tests/unit/test_child_value_share.py tests/unit/test_ci_template_delivery.py tests/unit/test_claim_publication_files.py tests/unit/test_cli_long_arg_is_dir.py tests/unit/test_cli_process_gate.py tests/unit/test_cli_roadmap_delivery_intents.py tests/unit/test_command_language_wiring.py tests/unit/test_constitution_map_ships_to_child.py tests/unit/test_decision_loop_wired.py tests/unit/test_delivered_kit_scan.py tests/unit/test_delivery_budget.py tests/unit/test_delivery_proof_debt.py tests/unit/test_event_arrival.py tests/unit/test_fast_path_small_low.py tests/unit/test_feature_catalog_child_ci.py tests/unit/test_field_findings_bnbm_rerun.py tests/unit/test_field_findings_cockpit.py tests/unit/test_foundation_freshness.py tests/unit/test_foundation_proposal.py tests/unit/test_goal_budget_anchor.py tests/unit/test_goal_scoped_work_graph.py tests/unit/test_graph_positionals.py tests/unit/test_human_actions_facade.py tests/unit/test_human_api_door.py tests/unit/test_installer.py tests/unit/test_installer_commands.py tests/unit/test_installer_config.py tests/unit/test_installer_delivery.py tests/unit/test_installer_doctor.py tests/unit/test_installer_entrypoint.py tests/unit/test_installer_setup.py tests/unit/test_intake_signals.py tests/unit/test_journals_merge_union.py tests/unit/test_kit_feedback.py tests/unit/test_kit_feedback_field_probe.py tests/unit/test_knowledge_graph.py tests/unit/test_level_signals_carry.py tests/unit/test_lint_hook_setup.py tests/unit/test_local_claim_honest_reach.py tests/unit/test_managed_bytecode_is_not_drift.py tests/unit/test_managed_python_content.py tests/unit/test_merge_preview.py tests/unit/test_mutation_probe.py tests/unit/test_night_review_autofix.py tests/unit/test_nightly_dimensions.py tests/unit/test_nightly_hotspots.py tests/unit/test_nightly_review.py tests/unit/test_no_orphaned_gate_config.py tests/unit/test_outcome_insight.py tests/unit/test_own_medicine.py tests/unit/test_owner_onboarding_path.py tests/unit/test_parallel_claim_fencing.py tests/unit/test_parallel_completed_checkpoint.py tests/unit/test_parallel_delivery_retry.py tests/unit/test_parallel_live_dispatch.py tests/unit/test_parallel_package_admission.py tests/unit/test_parallel_partial_resume.py tests/unit/test_parallel_shared_capacity.py tests/unit/test_plan_control_plane.py tests/unit/test_post_release_learning_cluster.py tests/unit/test_pre_pr_validation.py tests/unit/test_probes_survive_the_editable_belt.py tests/unit/test_product_audit.py tests/unit/test_product_contract.py tests/unit/test_product_layer_bootstrap.py tests/unit/test_product_map_ships_to_child.py tests/unit/test_product_registry.py tests/unit/test_project_detection.py tests/unit/test_provider_decision_equals_launch.py tests/unit/test_provider_limit_is_human.py tests/unit/test_registry_reconciles_with_base.py tests/unit/test_release_owner_layer.py tests/unit/test_repo_graph.py tests/unit/test_required_architecture.py tests/unit/test_required_security.py tests/unit/test_resolve_update_ref.py tests/unit/test_roadmap_single_source.py tests/unit/test_roid_cost_to_outcome.py tests/unit/test_root_pollution_guard.py tests/unit/test_run_task_from_spec.py tests/unit/test_second_session_is_refused.py tests/unit/test_session_coordination.py tests/unit/test_session_handoff_seam.py tests/unit/test_setup_run.py tests/unit/test_signals_plain_words.py tests/unit/test_skill_sync_delivered_print.py tests/unit/test_specify_answers_plain_words.py tests/unit/test_specify_hides_feature_id.py tests/unit/test_specify_tops_up_sections.py tests/unit/test_stable_channel_honest.py tests/unit/test_staleness_and_provenance.py tests/unit/test_standard_version.py tests/unit/test_ui_status_command.py tests/unit/test_unwired_modules.py tests/unit/test_update_channel.py tests/unit/test_update_force_major_reconciles_range.py tests/unit/test_update_points_to_propose.py tests/unit/test_update_pr_security_section.py tests/unit/test_update_removes_migrated_stale_files.py tests/unit/test_update_strategy.py tests/unit/test_usage_ledger.py tests/unit/test_validate_product_layer.py tests/unit/test_validator_bootstrap.py tests/unit/test_validator_contract.py tests/unit/test_validator_runtime_contract.py tests/unit/test_validator_teeth_fail_closed.py tests/unit/test_verification_impact_safety.py tests/unit/test_verified_shows_what_was_checked.py tests/unit/test_work_spine_565.py tests/unit/test_writer_contention.py",
+  "after_command": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest -q -n auto --dist loadfile -m 'not nightly and not release_gate and not slow' tests/contracts/test_capability_inventory.py <133 targeted test files>",
+  "before_command": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest tests/ -q -n auto --dist loadfile -m 'not nightly and not release_gate and not slow'",
+  "order": "1 warmup each, ABBA, n=6 measured per condition",
+  "rows": [
+    {
+      "condition": "after",
+      "warmup": true,
+      "wall_s": 295.40493416699974,
+      "returncode": 0,
+      "summary": "1971 passed, 2 skipped in 295.02s (0:04:55)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "before",
+      "warmup": true,
+      "wall_s": 499.3662974580002,
+      "returncode": 0,
+      "summary": "9247 passed, 34 skipped in 498.66s (0:08:18)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 314.1255820000006,
+      "returncode": 0,
+      "summary": "1971 passed, 2 skipped in 313.70s (0:05:13)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 180
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 469.2372025000004,
+      "returncode": 0,
+      "summary": "9247 passed, 34 skipped in 468.40s (0:07:48)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 393.50238991600054,
+      "returncode": 1,
+      "summary": "1 failed, 9246 passed, 34 skipped in 392.97s (0:06:32)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 702.6981195409999,
+      "returncode": 0,
+      "summary": "1971 passed, 2 skipped in 702.45s (0:11:42)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 165.63739224999972,
+      "returncode": 0,
+      "summary": "1971 passed, 2 skipped in 165.39s (0:02:45)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 422.5595739170003,
+      "returncode": 0,
+      "summary": "9247 passed, 34 skipped in 422.05s (0:07:02)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 408.4876100419997,
+      "returncode": 0,
+      "summary": "9247 passed, 34 skipped in 407.79s (0:06:47)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 331.0893880829999,
+      "returncode": 0,
+      "summary": "1971 passed, 2 skipped in 330.69s (0:05:30)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 180
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 268.41876537499957,
+      "returncode": 0,
+      "summary": "1971 passed, 2 skipped in 268.03s (0:04:28)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 120
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 328.7867975420013,
+      "returncode": 0,
+      "summary": "9247 passed, 34 skipped in 328.41s (0:05:28)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "wall_s": 335.6515560830012,
+      "returncode": 0,
+      "summary": "9247 passed, 34 skipped in 335.01s (0:05:35)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "wall_s": 269.7537240420006,
+      "returncode": 0,
+      "summary": "1971 passed, 2 skipped in 269.22s (0:04:29)",
+      "slot_clean_before": true,
+      "waited_s_for_slot": 0
+    }
+  ],
+  "medians_wall_s": {
+    "after": 291.9396530210006,
+    "before": 400.9949999790001
+  },
+  "ranges_wall_s": {
+    "after": [
+      165.63739224999972,
+      702.6981195409999
+    ],
+    "before": [
+      328.7867975420013,
+      469.2372025000004
+    ]
+  },
+  "n_measured": {
+    "after": 6,
+    "before": 6
+  },
+  "reduction_percent": 27.196186227686304,
+  "all_green": false,
+  "limitations": "Warm filesystem; single loaded developer host; no CI queue/dispatch; no cold OS cache; p95 not reported (n small). slow excluded from BOTH conditions for marker-consistency and tractability — the real old full fallback also ran slow tests, so BEFORE here is a conservative lower bound of the old feedback wall. Not an end-to-end dev-cycle claim; KIT only."
+}

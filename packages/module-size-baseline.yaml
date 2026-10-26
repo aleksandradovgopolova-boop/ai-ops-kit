@@ -19,9 +19,21 @@ threshold: 700
 
 # По одному потолку на файл. Потолок = текущий измеренный размер файла (замер 2026-09-02).
 # Пусто: последний файл сверх порога (contours.py) разрезан на фасад + сателлит — оба ниже 700.
-ceilings: {}
+ceilings:
+  ai_ops_kit/cli/ai_ops_cli.py: 709
 
 raises:
+  - at: '2026-10-26'
+    what: raise_ceiling
+    from: 'ai_ops_kit/cli/ai_ops_cli.py — не было в ceilings (ниже порога 700 до этой правки)'
+    to: 'ai_ops_kit/cli/ai_ops_cli.py = 709'
+    work: 'feat(verification): delivered scope command for child iteration (#1321)'
+    why: >-
+      Проводка нового ПОСТАВЛЯЕМОГО интента verify-scope (#1321) в реестр CLI
+      (INTENTS/DIRECT_INTENTS + карта обработчиков) довела ai_ops_kit/cli/ai_ops_cli.py до 709
+      строк (был ниже порога 700). Это диспетчер команд — рост от строк регистрации одного интента,
+      а не god-функция; логика самой команды лежит отдельно в ai_ops_kit/cli/verify_scope_cli.py.
+      Потолок зафиксирован на текущем факте 709; ратчет держит дальнейший рост вниз.
   - at: '2026-09-14'
     what: lower_ceiling
     from: 'ai_ops_kit/planning/contours.py = 724'

@@ -1,0 +1,186 @@
+{
+  "base": "954261c2b59f00ffdc725aa6cc478131b18cea9d",
+  "archive_sha256": "f7bef916c6c2b0a3625b89704faac042bce90fcddadd672813b2548cf19412e8",
+  "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "workers": 1,
+  "order": "2 warmups then ABBA x3; 6 measured per condition",
+  "scenario": "same complete baseline test_repo_graph.py nodeids; pytest subprocess actually executes every test; execution_s includes setup+call+teardown",
+  "source_sha256": {
+    "before": "95cf5073ecf3b0e826915ce0107c21309e58b3a27c431f2b7633a9c912402ea0",
+    "after": "2ad060ada1fd37aa5e2fa14720709925a029f37acfacbd0d2ada0c5046951612"
+  },
+  "nodeids": [
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_symbols_extracted",
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_symbol_index",
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_import_edge",
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_test_file_recognized",
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_impact_includes_dependents",
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_impact_leaf_is_empty",
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_affected_tests",
+    "tests/unit/test_repo_graph.py::TestPythonGraph::test_affected_tests_empty_for_leaf",
+    "tests/unit/test_repo_graph.py::TestJsGraph::test_js_symbols_extracted",
+    "tests/unit/test_repo_graph.py::TestJsGraph::test_js_import_edge",
+    "tests/unit/test_repo_graph.py::TestJsGraph::test_js_test_file_recognized",
+    "tests/unit/test_repo_graph.py::TestJsGraph::test_js_affected_tests",
+    "tests/unit/test_repo_graph.py::TestRealKitGraph::test_real_graph_builds",
+    "tests/unit/test_repo_graph.py::TestRealKitGraph::test_impact_gate_policy",
+    "tests/unit/test_repo_graph.py::TestRealKitGraph::test_symbol_index_covers_known_symbol",
+    "tests/unit/test_repo_graph.py::TestFileSpecKnownEdges::test_resolvable_loader_is_not_dynamic",
+    "tests/unit/test_repo_graph.py::TestFileSpecKnownEdges::test_resolved_target_becomes_a_real_edge",
+    "tests/unit/test_repo_graph.py::TestFileSpecKnownEdges::test_target_change_selects_the_loaders_test",
+    "tests/unit/test_repo_graph.py::TestFileSpecKnownEdges::test_unresolvable_path_stays_dynamic",
+    "tests/unit/test_repo_graph.py::test_file_spec_ambiguous_binding_stays_dynamic[reassignment]",
+    "tests/unit/test_repo_graph.py::test_file_spec_ambiguous_binding_stays_dynamic[other-scope]",
+    "tests/unit/test_repo_graph.py::test_file_spec_ambiguous_binding_stays_dynamic[pattern-capture]",
+    "tests/unit/test_repo_graph.py::test_file_spec_out_of_range_parent_stays_dynamic",
+    "tests/unit/test_repo_graph.py::test_file_spec_target_outside_graph_stays_dynamic[outside]",
+    "tests/unit/test_repo_graph.py::test_file_spec_target_outside_graph_stays_dynamic[excluded]",
+    "tests/unit/test_repo_graph.py::test_file_spec_target_outside_graph_stays_dynamic[filtered]",
+    "tests/unit/test_repo_graph.py::test_file_spec_without_loader_does_not_collect_bindings"
+  ],
+  "rows": [
+    {
+      "condition": "before",
+      "warmup": true,
+      "process_wall_s": 6.7148923330023536,
+      "execution_s": 6.451508210997417,
+      "real_builds": 3,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "after",
+      "warmup": true,
+      "process_wall_s": 2.523777042002621,
+      "execution_s": 2.246205251001811,
+      "real_builds": 1,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "process_wall_s": 6.7888762910006335,
+      "execution_s": 6.493134207998082,
+      "real_builds": 3,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "process_wall_s": 2.553685166996729,
+      "execution_s": 2.2667953789823514,
+      "real_builds": 1,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "process_wall_s": 2.4689943750017846,
+      "execution_s": 2.187221540014434,
+      "real_builds": 1,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "process_wall_s": 7.117119540998829,
+      "execution_s": 6.838889711001684,
+      "real_builds": 3,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "process_wall_s": 7.3300577080008225,
+      "execution_s": 7.040121420988726,
+      "real_builds": 3,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "process_wall_s": 2.7338050409998687,
+      "execution_s": 2.443703833007021,
+      "real_builds": 1,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "process_wall_s": 2.606926083997678,
+      "execution_s": 2.283977253988269,
+      "real_builds": 1,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "process_wall_s": 7.372777874999883,
+      "execution_s": 7.066008137004246,
+      "real_builds": 3,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "process_wall_s": 8.80125529200086,
+      "execution_s": 8.394024711993552,
+      "real_builds": 3,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "process_wall_s": 3.2576939999999013,
+      "execution_s": 2.8058377920024213,
+      "real_builds": 1,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "after",
+      "warmup": false,
+      "process_wall_s": 2.540544833002059,
+      "execution_s": 2.23343954601296,
+      "real_builds": 1,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    },
+    {
+      "condition": "before",
+      "warmup": false,
+      "process_wall_s": 8.742764708000323,
+      "execution_s": 8.431185749999713,
+      "real_builds": 3,
+      "passed": 27,
+      "outcomes_sha256": "561fff86154aaca07dcb017873e192350f7d161da73f9ad920b513cf595f7cb3"
+    }
+  ],
+  "medians": {
+    "process_wall_s": {
+      "before": 7.351417791500353,
+      "after": 2.5803056254972034
+    },
+    "execution_s": {
+      "before": 7.053064778996486,
+      "after": 2.27538631648531
+    }
+  },
+  "reduction_percent": {
+    "process_wall_s": 64.90057158116451,
+    "execution_s": 67.73904128512693
+  },
+  "outcomes_identical": true,
+  "limitations": "Warm filesystem, same host/interpreter/workers/production snapshot; no claim about whole suite/CI queue; added isolation test checked separately."
+}

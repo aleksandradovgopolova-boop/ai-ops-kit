@@ -11,7 +11,11 @@
 """
 from __future__ import annotations
 
+import ast
 import hashlib
+import io
+import tokenize
+from functools import lru_cache
 import json
 import re
 import shutil
@@ -449,6 +453,56 @@ def is_runtime_asset(rel):
     return True
 
 
+
+@lru_cache(maxsize=512)
+def _compact_python(data):
+    """Только full-line comments; строки и AST с координатами обязаны совпасть."""
+    try:
+        encoding, _ = tokenize.detect_encoding(io.BytesIO(data).readline)
+        text = data.decode(encoding)
+        before = ast.dump(ast.parse(text, type_comments=True), include_attributes=True)
+        lines = io.StringIO(text).readlines()
+        tokens = list(tokenize.generate_tokens(io.StringIO(text).readline))
+        trivia = {tokenize.COMMENT, tokenize.NL, tokenize.NEWLINE, tokenize.INDENT,
+                  tokenize.DEDENT, tokenize.ENDMARKER}
+        first_code = next((t.start[0] for t in tokens if t.type not in trivia), len(lines) + 1)
+        groups = []
+        for token in tokens:
+            if token.type != tokenize.COMMENT or token.line[:token.start[1]].strip():
+                continue
+            if groups and groups[-1][-1].start[0] + 1 == token.start[0]:
+                groups[-1].append(token)
+            else:
+                groups.append([token])
+        protected = re.compile(r"#\s*[\w.-]+\s*:|#\s*@|#!|coding\s*[:=]|noqa|type\s*:|pylint|ruff|fmt\s*:|"
+                               r"pragma|pyright|mypy|nosec|semgrep|bandit|isort|yapf|doctest|"
+                               r"spdx|copyright|licen[sc]e|redistribution|permission is hereby|"
+                               r"all rights reserved", re.I)
+        for group in groups:
+            if group[0].start[0] < first_code or any(protected.search(t.string) for t in group):
+                continue
+            for token in group:
+                row, col = token.start
+                lines[row - 1] = lines[row - 1][:col] + lines[row - 1][token.end[1]:]
+        compact = "".join(lines)
+        if ast.dump(ast.parse(compact, type_comments=True), include_attributes=True) != before:
+            return data
+        return compact.encode(encoding)
+    except (SyntaxError, tokenize.TokenError, UnicodeError, LookupError):
+        return data
+
+
+def managed_content(rel, data):
+    """Одна проекция для init/update/diff/состава; остальные ассеты побайтно исходные."""
+    return _compact_python(data) if rel.startswith("ai_ops_kit/") and rel.endswith(".py") else data
+
+
+def copy_managed_file(src, dst, rel):
+    data = managed_content(rel, src.read_bytes())
+    dst.write_bytes(data)
+    shutil.copystat(src, dst)
+
+
 def managed_set():
     """Список (source_path, relative_target) managed-файлов — из манифеста.
     v2.48: при заданном .ai-ops.yaml -> packages фильтруется по выбранным пакетам (аддитивно;
@@ -478,15 +532,19 @@ def delivery_breakdown(top=10):
     """
     by_dir, count = {}, {}
     files = []
+    source_bytes = 0
     for src, rel in managed_set():
-        size = src.stat().st_size
+        raw = src.read_bytes()
+        source_bytes += len(raw)
+        size = len(managed_content(rel, raw))
         head = rel.split("/")[0] if "/" in rel else "(корень)"
         by_dir[head] = by_dir.get(head, 0) + size
         count[head] = count.get(head, 0) + 1
         files.append((size, rel))
     total = sum(by_dir.values())
     files.sort(reverse=True)
-    return {"total_bytes": total, "file_count": sum(count.values()),
+    return {"total_bytes": total, "source_bytes": source_bytes, "saved_bytes": source_bytes - total,
+            "file_count": sum(count.values()),
             "by_dir": [{"dir": k, "bytes": v, "files": count[k],
                         "share": round(100.0 * v / total, 1) if total else 0.0}
                        for k, v in sorted(by_dir.items(), key=lambda kv: -kv[1])],

@@ -1,0 +1,38 @@
+import hashlib, io, json, os, platform, statistics, subprocess, sys, tarfile, time, types
+from pathlib import Path
+from ai_ops_kit.context import repo_graph
+from ai_ops_kit.gates import verification_tiers
+import ai_ops_kit.context as context
+
+work = Path.cwd()
+out = Path('/Users/sasad/.codex/tmp/graph-speed-20261022')
+base = 'd84d772a081e5e9ce91dbb613ebfafd30d69ed41'
+snapshot = out / 'snapshot'
+snapshot.mkdir(exist_ok=True)
+archive = subprocess.check_output(['git','archive',base],cwd=work)
+with tarfile.open(fileobj=io.BytesIO(archive)) as tf:
+    tf.extractall(snapshot,filter='data')
+rel='ai_ops_kit/context/repo_graph.py'
+sources = {'before':subprocess.check_output(['git','show',f'{base}:{rel}'],cwd=work).decode(),
+           'after':(work/rel).read_text()}
+modules={}
+for name, source in sources.items():
+    m=types.ModuleType(f'graph_bench_{name}'); m.__file__=str(work/rel)
+    exec(compile(source,m.__file__,'exec'),m.__dict__)
+    modules[name]=m
+profile={'stacks':[{'language':'python','commands':{'test':f'{sys.executable} -m pytest tests/ -q -m "not nightly and not release_gate"'}}]}
+rows=[]; expected=None
+for i,name in enumerate(['before','after'] + ['before','after','after','before']*3):
+    context.repo_graph=modules[name]
+    t=time.perf_counter(); c=time.process_time()
+    result=verification_tiers.select_tests(['ai_ops_kit/shared/secret_formats.py'],str(snapshot),lifecycle_intent='draft',profile=profile)
+    wall=time.perf_counter()-t; cpu=time.process_time()-c
+    encoded=json.dumps(result,sort_keys=True,ensure_ascii=False).encode()
+    if expected is None: expected=encoded
+    assert encoded==expected, 'selection changed'
+    row={'condition':name,'warmup':i<2,'wall_s':wall,'cpu_s':cpu,'result_sha256':hashlib.sha256(encoded).hexdigest()}
+    rows.append(row);print(json.dumps(row),flush=True)
+    (out/'raw.json').write_text(json.dumps(rows,indent=2))
+med={k:statistics.median(r['wall_s'] for r in rows if r['condition']==k and not r['warmup']) for k in sources}
+report={'base':base,'snapshot_archive_sha256':hashlib.sha256(archive).hexdigest(),'python':sys.version,'executable':sys.executable,'platform':platform.platform(),'cpu_count':os.cpu_count(),'scenario':'select_tests(secret_formats,draft), full graph build included; test execution excluded','order':'2 warmups, ABBA x3 (6 measured samples per condition)','source_sha256':{k:hashlib.sha256(v.encode()).hexdigest() for k,v in sources.items()},'rows':rows,'medians_wall_s':med,'reduction_percent':100*(1-med['after']/med['before']),'affected_files':len(result['affected_tests']),'outputs_identical':True,'limitations':'Warm filesystem; same process; no pytest execution or CI queue timing; single host; not an end-to-end development-speed claim.'}
+(out/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print(json.dumps({k:v for k,v in report.items() if k!='rows'},ensure_ascii=False),flush=True)

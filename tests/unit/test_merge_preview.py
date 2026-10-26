@@ -481,3 +481,39 @@ def test_ci_wires_the_delivered_footprint_advisory_job():
     joined = "\n".join(calls)
     assert "--base origin/main" in joined and "--head HEAD" in joined, joined
     assert "--strict" not in joined, "гейт обязан оставаться advisory (без --strict) до промоута"
+
+
+def test_delivered_python_size_uses_merged_blob_projection(tmp_path):
+    dmf = _load_orchestrator()
+    root = tmp_path / 'repo'
+    root.mkdir()
+    _make_base(root, 10_000_000)
+    path = root / 'ai_ops_kit' / 'example.py'
+    path.parent.mkdir()
+    raw = b'"""Help."""\n# ' + b'history ' * 200 + b'\nVALUE = 42\n'
+    path.write_bytes(raw)
+    head = _commit_all(root, 'runtime source')
+    # Dirty working tree не должен подменить bytes выбранного merge-tree.
+    path.write_text('VALUE = 999\n')
+    result = dmf.delivered_merge_footprint(root, head, head, {'ai_ops_kit/example.py'},
+                                        ceiling=1000, fraction=0.10)
+    assert result['ok'], result
+    assert result['delivered_bytes'] == len(b'"""Help."""\n\nVALUE = 42\n')
+    assert not result['breached']
+
+
+def test_unreadable_python_projection_is_not_a_green_preview(tmp_path, monkeypatch):
+    dmf = _load_orchestrator()
+    root = tmp_path / 'repo'
+    root.mkdir()
+    base = _make_base(root, 10_000_000)
+    path = root / 'ai_ops_kit' / 'example.py'
+    path.parent.mkdir()
+    path.write_text('VALUE = 42\n')
+    head = _commit_all(root, 'runtime source')
+    def unavailable(*args):
+        raise OSError('unavailable')
+    monkeypatch.setattr(dmf, '_project_entries', unavailable)
+    result = dmf.delivered_merge_footprint(root, base, head, {'ai_ops_kit/example.py'},
+                                        ceiling=1000, fraction=0.10)
+    assert not result['ok'] and result['delivered_bytes'] is None
