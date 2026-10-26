@@ -1,0 +1,31 @@
+# Команды gh, которыми собран baseline CI-END-TO-END-BASELINE-2026-10-26.
+# Все read-only. Ни один workflow не запускался, не перезапускался и не отменялся.
+# repo: aleksandradovgopolova-boop/ai-ops-kit; дата сбора: 2026-10-26.
+
+# 1. Перечень workflow (контуры CI):
+gh workflow list
+
+# 2. Контекстное окно последних 40 прогонов с временами (wall ≈ updatedAt − createdAt):
+gh run list --limit 40 --json databaseId,name,headSha,status,conclusion,event,createdAt,updatedAt,startedAt,workflowName,displayTitle
+#   -> runs-context-40.json
+
+# 3. Поджобовый тайминг по выбранным прогонам (execution = completedAt − startedAt,
+#    queue = startedAt − createdAt):
+for id in 40134935060 40134935135 40134935160 \
+          40127987294 40127987239 40127987236 \
+          40119362098 40119362016 40119361902 \
+          40131519011 40131519003 \
+          40125297962 40125297961; do
+  gh run view $id --json databaseId,name,workflowName,headSha,event,status,conclusion,createdAt,startedAt,updatedAt,jobs
+done
+
+# 4. Проверка числа попыток (были ли ручные перезапуски того же run):
+gh api repos/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/<id>   # поле run_attempt
+
+# 5. Класс раннера и метки (gh НЕ отдаёт CPU/RAM/число workers — только label):
+gh api repos/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/40127987236/jobs   # runner_name / labels
+
+# 6. Связь PR-head -> merge-commit (для вывода о дубле PR/push):
+gh pr list --state all --search "<sha>" --json number,title,state,mergeCommit
+
+# report.json собран скриптом из сырых JSON выше (определения метрик — в самом report.json).
