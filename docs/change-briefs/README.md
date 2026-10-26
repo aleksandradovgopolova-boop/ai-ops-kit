@@ -56,3 +56,5 @@
 - [Повторное использование подготовки тестовых установок и обновлений](reuse-installer-test-environments.md).
 
 - [Один чистый checkout для корпуса выпущенных версий](reuse-release-test-checkout.md).
+
+- [Baseline CI всего пути — #1321](ci-end-to-end-baseline.md).

@@ -1,0 +1,929 @@
+{
+  "baseline": "CI-END-TO-END-BASELINE-2026-10-26",
+  "generated_utc": "2026-10-26",
+  "repo": "aleksandradovgopolova-boop/ai-ops-kit",
+  "data_source": "GitHub Actions REST via gh CLI (read-only); no workflow triggered/re-run/cancelled",
+  "scope": "CI half of the end-to-end verification baseline for the KIT only; NOT a speedup claim; NOT child-product CI",
+  "definitions": {
+    "wall_s": "run.updatedAt - run.createdAt (whole-run clock)",
+    "queue_s": "min(active job startedAt) - run.createdAt",
+    "execution_s (job)": "job.completedAt - job.startedAt",
+    "exec_span_s (run)": "max(active job completedAt) - min(active job startedAt)",
+    "critical_path_s": "longest single job; jobs within a workflow run in parallel with no declared inter-job deps, so the critical path equals the longest job, NOT the sum of parallel jobs",
+    "sum_parallel_s_DO_NOT_USE_AS_WALL": "arithmetic sum of parallel job executions; recorded only to show it is NOT the wall"
+  },
+  "sample": {
+    "shas": {
+      "f28fc143": "PR #1371 head (OPEN at capture; package-quality FAILED on contracts job)",
+      "22a6cdd9": "PR #1370 head -> merged as f5adcab5",
+      "1a321e9d": "PR #1369 head -> merged as 4fed5eae",
+      "f5adcab5": "main tip (merge of #1370), push event",
+      "4fed5eae": "main (merge of #1369), push event"
+    },
+    "workflows_detailed": [
+      "docs",
+      "pr-smoke",
+      "package-quality"
+    ],
+    "n_runs_detailed": 13,
+    "note": "pr-smoke runs only on pull_request; on push(merge) the PR path is package-quality+docs. 40-run context window also captured in runs.json."
+  },
+  "runner_classes_observed": {
+    "source": "actions/runs/<id>/jobs API (runner_name/labels)",
+    "labels": {
+      "linux_jobs": "ubuntu-latest (GitHub-hosted)",
+      "smoke-macos": "macos-latest (GitHub-hosted)"
+    },
+    "note": "GitHub-hosted runners -> near-zero observed queue (1-4s). Per-run CPU/RAM/worker count NOT exposed by gh API -> null."
+  },
+  "not_captured_null": [
+    "cold vs warm cache (actions/cache hit/miss not separated in this pass)",
+    "runner CPU/RAM/worker count per run (only the runner class/label is exposed)",
+    "external-service waits",
+    "human waits (review latency, time-to-merge)",
+    "p95 (n too small per workflow+SHA; only point observations)",
+    "local<->CI duplication wall (local half is the 2026-10-21 baseline)",
+    "step-level timing (not pulled; --log avoided to not contend with shared test slot)"
+  ],
+  "runs": [
+    {
+      "databaseId": 40119361902,
+      "workflow": "docs",
+      "headSha": "1a321e9d7745b5718ad430e57209d4b4b103a042",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T18:08:53Z",
+      "startedAt": "2026-10-24T18:08:53Z",
+      "updatedAt": "2026-10-24T18:09:11Z",
+      "n_jobs": 1,
+      "wall_s": 18,
+      "queue_s": 3,
+      "exec_span_s": 15,
+      "critical_path_job": "build",
+      "critical_path_s": 15,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 15,
+      "jobs": [
+        {
+          "name": "build",
+          "startedAt": "2026-10-24T18:08:56Z",
+          "completedAt": "2026-10-24T18:09:11Z",
+          "conclusion": "success",
+          "execution_s": 15,
+          "queue_s": 3
+        }
+      ]
+    },
+    {
+      "databaseId": 40119362016,
+      "workflow": "pr-smoke",
+      "headSha": "1a321e9d7745b5718ad430e57209d4b4b103a042",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T18:08:53Z",
+      "startedAt": "2026-10-24T18:08:53Z",
+      "updatedAt": "2026-10-24T18:10:25Z",
+      "n_jobs": 3,
+      "wall_s": 92,
+      "queue_s": 4,
+      "exec_span_s": 87,
+      "critical_path_job": "smoke",
+      "critical_path_s": 87,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 102,
+      "jobs": [
+        {
+          "name": "pr-size",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:09:04Z",
+          "conclusion": "success",
+          "execution_s": 7,
+          "queue_s": 4
+        },
+        {
+          "name": "parallel-safety",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:09:05Z",
+          "conclusion": "success",
+          "execution_s": 8,
+          "queue_s": 4
+        },
+        {
+          "name": "smoke",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:10:24Z",
+          "conclusion": "success",
+          "execution_s": 87,
+          "queue_s": 4
+        }
+      ]
+    },
+    {
+      "databaseId": 40119362098,
+      "workflow": "package-quality",
+      "headSha": "1a321e9d7745b5718ad430e57209d4b4b103a042",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T18:08:53Z",
+      "startedAt": "2026-10-24T18:08:53Z",
+      "updatedAt": "2026-10-24T18:13:43Z",
+      "n_jobs": 13,
+      "wall_s": 290,
+      "queue_s": 3,
+      "exec_span_s": 286,
+      "critical_path_job": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+      "critical_path_s": 285,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 1565,
+      "jobs": [
+        {
+          "name": "upgrade-path",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:09:23Z",
+          "conclusion": "success",
+          "execution_s": 26,
+          "queue_s": 4
+        },
+        {
+          "name": "delivered-footprint",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:09:11Z",
+          "conclusion": "success",
+          "execution_s": 14,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.12)",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:10:02Z",
+          "conclusion": "success",
+          "execution_s": 65,
+          "queue_s": 4
+        },
+        {
+          "name": "security-scan",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:09:05Z",
+          "conclusion": "success",
+          "execution_s": 8,
+          "queue_s": 4
+        },
+        {
+          "name": "clean-install",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:09:36Z",
+          "conclusion": "success",
+          "execution_s": 39,
+          "queue_s": 4
+        },
+        {
+          "name": "lint",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:09:20Z",
+          "conclusion": "success",
+          "execution_s": 23,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.13)",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:10:27Z",
+          "conclusion": "success",
+          "execution_s": 90,
+          "queue_s": 4
+        },
+        {
+          "name": "smoke-macos",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:11:59Z",
+          "conclusion": "success",
+          "execution_s": 182,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (fast-2, .github/ci-groups/fast-2.sh)",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:12:28Z",
+          "conclusion": "success",
+          "execution_s": 211,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:13:16Z",
+          "conclusion": "success",
+          "execution_s": 259,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (fast-1, .github/ci-groups/fast-1.sh)",
+          "startedAt": "2026-10-24T18:08:56Z",
+          "completedAt": "2026-10-24T18:12:27Z",
+          "conclusion": "success",
+          "execution_s": 211,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (contracts, .github/ci-groups/contracts.sh)",
+          "startedAt": "2026-10-24T18:08:56Z",
+          "completedAt": "2026-10-24T18:11:28Z",
+          "conclusion": "success",
+          "execution_s": 152,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+          "startedAt": "2026-10-24T18:08:57Z",
+          "completedAt": "2026-10-24T18:13:42Z",
+          "conclusion": "success",
+          "execution_s": 285,
+          "queue_s": 4
+        }
+      ]
+    },
+    {
+      "databaseId": 40125297961,
+      "workflow": "package-quality",
+      "headSha": "4fed5eae512faaf45addf78a79a77b0bc96788a3",
+      "event": "push",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T19:26:25Z",
+      "startedAt": "2026-10-24T19:26:25Z",
+      "updatedAt": "2026-10-24T19:34:58Z",
+      "n_jobs": 13,
+      "wall_s": 513,
+      "queue_s": 3,
+      "exec_span_s": 510,
+      "critical_path_job": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+      "critical_path_s": 510,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 1846,
+      "jobs": [
+        {
+          "name": "clean-install",
+          "startedAt": "2026-10-24T19:26:28Z",
+          "completedAt": "2026-10-24T19:27:05Z",
+          "conclusion": "success",
+          "execution_s": 37,
+          "queue_s": 3
+        },
+        {
+          "name": "lint",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:26:48Z",
+          "conclusion": "success",
+          "execution_s": 19,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (fast-1, .github/ci-groups/fast-1.sh)",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:30:35Z",
+          "conclusion": "success",
+          "execution_s": 246,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (contracts, .github/ci-groups/contracts.sh)",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:29:01Z",
+          "conclusion": "success",
+          "execution_s": 152,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.13)",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:27:52Z",
+          "conclusion": "success",
+          "execution_s": 83,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.12)",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:27:57Z",
+          "conclusion": "success",
+          "execution_s": 88,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:30:42Z",
+          "conclusion": "success",
+          "execution_s": 253,
+          "queue_s": 4
+        },
+        {
+          "name": "upgrade-path",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:26:52Z",
+          "conclusion": "success",
+          "execution_s": 23,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+          "startedAt": "2026-10-24T19:26:28Z",
+          "completedAt": "2026-10-24T19:34:58Z",
+          "conclusion": "success",
+          "execution_s": 510,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (fast-2, .github/ci-groups/fast-2.sh)",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:30:23Z",
+          "conclusion": "success",
+          "execution_s": 234,
+          "queue_s": 4
+        },
+        {
+          "name": "smoke-macos",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:29:50Z",
+          "conclusion": "success",
+          "execution_s": 201,
+          "queue_s": 4
+        },
+        {
+          "name": "delivered-footprint",
+          "startedAt": null,
+          "completedAt": null,
+          "conclusion": "skipped",
+          "execution_s": null,
+          "queue_s": null
+        },
+        {
+          "name": "security-scan",
+          "startedAt": null,
+          "completedAt": null,
+          "conclusion": "skipped",
+          "execution_s": null,
+          "queue_s": null
+        }
+      ]
+    },
+    {
+      "databaseId": 40125297962,
+      "workflow": "docs",
+      "headSha": "4fed5eae512faaf45addf78a79a77b0bc96788a3",
+      "event": "push",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T19:26:25Z",
+      "startedAt": "2026-10-24T19:26:25Z",
+      "updatedAt": "2026-10-24T19:26:46Z",
+      "n_jobs": 1,
+      "wall_s": 21,
+      "queue_s": 4,
+      "exec_span_s": 16,
+      "critical_path_job": "build",
+      "critical_path_s": 16,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 16,
+      "jobs": [
+        {
+          "name": "build",
+          "startedAt": "2026-10-24T19:26:29Z",
+          "completedAt": "2026-10-24T19:26:45Z",
+          "conclusion": "success",
+          "execution_s": 16,
+          "queue_s": 4
+        }
+      ]
+    },
+    {
+      "databaseId": 40127987236,
+      "workflow": "package-quality",
+      "headSha": "22a6cdd9bd6db3c83fb903271c470c54267eeb1d",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T20:02:17Z",
+      "startedAt": "2026-10-24T20:02:17Z",
+      "updatedAt": "2026-10-24T20:10:59Z",
+      "n_jobs": 13,
+      "wall_s": 522,
+      "queue_s": 3,
+      "exec_span_s": 519,
+      "critical_path_job": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+      "critical_path_s": 519,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 1941,
+      "jobs": [
+        {
+          "name": "smoke-macos",
+          "startedAt": "2026-10-24T20:02:21Z",
+          "completedAt": "2026-10-24T20:05:22Z",
+          "conclusion": "success",
+          "execution_s": 181,
+          "queue_s": 4
+        },
+        {
+          "name": "security-scan",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:02:28Z",
+          "conclusion": "success",
+          "execution_s": 8,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (fast-2, .github/ci-groups/fast-2.sh)",
+          "startedAt": "2026-10-24T20:02:21Z",
+          "completedAt": "2026-10-24T20:07:57Z",
+          "conclusion": "success",
+          "execution_s": 336,
+          "queue_s": 4
+        },
+        {
+          "name": "lint",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:02:47Z",
+          "conclusion": "success",
+          "execution_s": 27,
+          "queue_s": 3
+        },
+        {
+          "name": "delivered-footprint",
+          "startedAt": "2026-10-24T20:02:21Z",
+          "completedAt": "2026-10-24T20:02:34Z",
+          "conclusion": "success",
+          "execution_s": 13,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.12)",
+          "startedAt": "2026-10-24T20:02:21Z",
+          "completedAt": "2026-10-24T20:03:45Z",
+          "conclusion": "success",
+          "execution_s": 84,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.13)",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:03:43Z",
+          "conclusion": "success",
+          "execution_s": 83,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:06:46Z",
+          "conclusion": "success",
+          "execution_s": 266,
+          "queue_s": 3
+        },
+        {
+          "name": "upgrade-path",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:02:39Z",
+          "conclusion": "success",
+          "execution_s": 19,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (fast-1, .github/ci-groups/fast-1.sh)",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:06:45Z",
+          "conclusion": "success",
+          "execution_s": 265,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (contracts, .github/ci-groups/contracts.sh)",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:03:59Z",
+          "conclusion": "success",
+          "execution_s": 99,
+          "queue_s": 3
+        },
+        {
+          "name": "clean-install",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:03:01Z",
+          "conclusion": "success",
+          "execution_s": 41,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:10:59Z",
+          "conclusion": "success",
+          "execution_s": 519,
+          "queue_s": 3
+        }
+      ]
+    },
+    {
+      "databaseId": 40127987239,
+      "workflow": "pr-smoke",
+      "headSha": "22a6cdd9bd6db3c83fb903271c470c54267eeb1d",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T20:02:17Z",
+      "startedAt": "2026-10-24T20:02:17Z",
+      "updatedAt": "2026-10-24T20:03:47Z",
+      "n_jobs": 3,
+      "wall_s": 90,
+      "queue_s": 3,
+      "exec_span_s": 87,
+      "critical_path_job": "smoke",
+      "critical_path_s": 87,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 103,
+      "jobs": [
+        {
+          "name": "pr-size",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:02:30Z",
+          "conclusion": "success",
+          "execution_s": 10,
+          "queue_s": 3
+        },
+        {
+          "name": "smoke",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:03:47Z",
+          "conclusion": "success",
+          "execution_s": 87,
+          "queue_s": 3
+        },
+        {
+          "name": "parallel-safety",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:02:26Z",
+          "conclusion": "success",
+          "execution_s": 6,
+          "queue_s": 3
+        }
+      ]
+    },
+    {
+      "databaseId": 40127987294,
+      "workflow": "docs",
+      "headSha": "22a6cdd9bd6db3c83fb903271c470c54267eeb1d",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T20:02:17Z",
+      "startedAt": "2026-10-24T20:02:17Z",
+      "updatedAt": "2026-10-24T20:02:36Z",
+      "n_jobs": 1,
+      "wall_s": 19,
+      "queue_s": 3,
+      "exec_span_s": 16,
+      "critical_path_job": "build",
+      "critical_path_s": 16,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 16,
+      "jobs": [
+        {
+          "name": "build",
+          "startedAt": "2026-10-24T20:02:20Z",
+          "completedAt": "2026-10-24T20:02:36Z",
+          "conclusion": "success",
+          "execution_s": 16,
+          "queue_s": 3
+        }
+      ]
+    },
+    {
+      "databaseId": 40131519003,
+      "workflow": "package-quality",
+      "headSha": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+      "event": "push",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T20:49:36Z",
+      "startedAt": "2026-10-24T20:49:36Z",
+      "updatedAt": "2026-10-24T20:56:52Z",
+      "n_jobs": 13,
+      "wall_s": 436,
+      "queue_s": 3,
+      "exec_span_s": 432,
+      "critical_path_job": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+      "critical_path_s": 432,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 1727,
+      "jobs": [
+        {
+          "name": "upgrade-path",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:50:05Z",
+          "conclusion": "success",
+          "execution_s": 26,
+          "queue_s": 3
+        },
+        {
+          "name": "smoke-macos",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:51:56Z",
+          "conclusion": "success",
+          "execution_s": 137,
+          "queue_s": 3
+        },
+        {
+          "name": "clean-install",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:50:12Z",
+          "conclusion": "success",
+          "execution_s": 33,
+          "queue_s": 3
+        },
+        {
+          "name": "pipeline-e2e (3.13)",
+          "startedAt": "2026-10-24T20:49:40Z",
+          "completedAt": "2026-10-24T20:51:04Z",
+          "conclusion": "success",
+          "execution_s": 84,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (contracts, .github/ci-groups/contracts.sh)",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:51:23Z",
+          "conclusion": "success",
+          "execution_s": 104,
+          "queue_s": 3
+        },
+        {
+          "name": "lint",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:50:02Z",
+          "conclusion": "success",
+          "execution_s": 23,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:56:51Z",
+          "conclusion": "success",
+          "execution_s": 432,
+          "queue_s": 3
+        },
+        {
+          "name": "pipeline-e2e (3.12)",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:50:53Z",
+          "conclusion": "success",
+          "execution_s": 74,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (fast-1, .github/ci-groups/fast-1.sh)",
+          "startedAt": "2026-10-24T20:49:40Z",
+          "completedAt": "2026-10-24T20:55:24Z",
+          "conclusion": "success",
+          "execution_s": 344,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:54:03Z",
+          "conclusion": "success",
+          "execution_s": 264,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (fast-2, .github/ci-groups/fast-2.sh)",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:53:05Z",
+          "conclusion": "success",
+          "execution_s": 206,
+          "queue_s": 3
+        },
+        {
+          "name": "delivered-footprint",
+          "startedAt": null,
+          "completedAt": null,
+          "conclusion": "skipped",
+          "execution_s": null,
+          "queue_s": null
+        },
+        {
+          "name": "security-scan",
+          "startedAt": null,
+          "completedAt": null,
+          "conclusion": "skipped",
+          "execution_s": null,
+          "queue_s": null
+        }
+      ]
+    },
+    {
+      "databaseId": 40131519011,
+      "workflow": "docs",
+      "headSha": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+      "event": "push",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T20:49:36Z",
+      "startedAt": "2026-10-24T20:49:36Z",
+      "updatedAt": "2026-10-24T20:49:59Z",
+      "n_jobs": 1,
+      "wall_s": 23,
+      "queue_s": 3,
+      "exec_span_s": 20,
+      "critical_path_job": "build",
+      "critical_path_s": 20,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 20,
+      "jobs": [
+        {
+          "name": "build",
+          "startedAt": "2026-10-24T20:49:39Z",
+          "completedAt": "2026-10-24T20:49:59Z",
+          "conclusion": "success",
+          "execution_s": 20,
+          "queue_s": 3
+        }
+      ]
+    },
+    {
+      "databaseId": 40134935060,
+      "workflow": "docs",
+      "headSha": "f28fc143b050b2926b4482cc498be7d17b16bee1",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T21:36:01Z",
+      "startedAt": "2026-10-24T21:36:01Z",
+      "updatedAt": "2026-10-24T21:36:20Z",
+      "n_jobs": 1,
+      "wall_s": 19,
+      "queue_s": 3,
+      "exec_span_s": 16,
+      "critical_path_job": "build",
+      "critical_path_s": 16,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 16,
+      "jobs": [
+        {
+          "name": "build",
+          "startedAt": "2026-10-24T21:36:04Z",
+          "completedAt": "2026-10-24T21:36:20Z",
+          "conclusion": "success",
+          "execution_s": 16,
+          "queue_s": 3
+        }
+      ]
+    },
+    {
+      "databaseId": 40134935135,
+      "workflow": "pr-smoke",
+      "headSha": "f28fc143b050b2926b4482cc498be7d17b16bee1",
+      "event": "pull_request",
+      "conclusion": "success",
+      "createdAt": "2026-10-24T21:36:01Z",
+      "startedAt": "2026-10-24T21:36:01Z",
+      "updatedAt": "2026-10-24T21:37:36Z",
+      "n_jobs": 3,
+      "wall_s": 95,
+      "queue_s": 3,
+      "exec_span_s": 91,
+      "critical_path_job": "smoke",
+      "critical_path_s": 90,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 108,
+      "jobs": [
+        {
+          "name": "smoke",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:37:35Z",
+          "conclusion": "success",
+          "execution_s": 90,
+          "queue_s": 4
+        },
+        {
+          "name": "pr-size",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:36:15Z",
+          "conclusion": "success",
+          "execution_s": 10,
+          "queue_s": 4
+        },
+        {
+          "name": "parallel-safety",
+          "startedAt": "2026-10-24T21:36:04Z",
+          "completedAt": "2026-10-24T21:36:12Z",
+          "conclusion": "success",
+          "execution_s": 8,
+          "queue_s": 3
+        }
+      ]
+    },
+    {
+      "databaseId": 40134935160,
+      "workflow": "package-quality",
+      "headSha": "f28fc143b050b2926b4482cc498be7d17b16bee1",
+      "event": "pull_request",
+      "conclusion": "failure",
+      "createdAt": "2026-10-24T21:36:01Z",
+      "startedAt": "2026-10-24T21:36:01Z",
+      "updatedAt": "2026-10-24T21:42:06Z",
+      "n_jobs": 13,
+      "wall_s": 365,
+      "queue_s": 3,
+      "exec_span_s": 361,
+      "critical_path_job": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+      "critical_path_s": 360,
+      "sum_parallel_s_DO_NOT_USE_AS_WALL": 1623,
+      "jobs": [
+        {
+          "name": "lint",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:36:28Z",
+          "conclusion": "success",
+          "execution_s": 23,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.12)",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:37:28Z",
+          "conclusion": "success",
+          "execution_s": 83,
+          "queue_s": 4
+        },
+        {
+          "name": "pipeline-e2e (3.13)",
+          "startedAt": "2026-10-24T21:36:04Z",
+          "completedAt": "2026-10-24T21:37:31Z",
+          "conclusion": "success",
+          "execution_s": 87,
+          "queue_s": 3
+        },
+        {
+          "name": "security-scan",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:36:14Z",
+          "conclusion": "success",
+          "execution_s": 9,
+          "queue_s": 4
+        },
+        {
+          "name": "clean-install",
+          "startedAt": "2026-10-24T21:36:04Z",
+          "completedAt": "2026-10-24T21:36:44Z",
+          "conclusion": "success",
+          "execution_s": 40,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (contracts, .github/ci-groups/contracts.sh)",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:37:44Z",
+          "conclusion": "failure",
+          "execution_s": 99,
+          "queue_s": 4
+        },
+        {
+          "name": "delivered-footprint",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:36:19Z",
+          "conclusion": "success",
+          "execution_s": 14,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (fast-2, .github/ci-groups/fast-2.sh)",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:41:33Z",
+          "conclusion": "success",
+          "execution_s": 328,
+          "queue_s": 4
+        },
+        {
+          "name": "upgrade-path",
+          "startedAt": "2026-10-24T21:36:04Z",
+          "completedAt": "2026-10-24T21:36:22Z",
+          "conclusion": "success",
+          "execution_s": 18,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:42:05Z",
+          "conclusion": "success",
+          "execution_s": 360,
+          "queue_s": 4
+        },
+        {
+          "name": "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+          "startedAt": "2026-10-24T21:36:04Z",
+          "completedAt": "2026-10-24T21:38:46Z",
+          "conclusion": "success",
+          "execution_s": 162,
+          "queue_s": 3
+        },
+        {
+          "name": "quality (fast-1, .github/ci-groups/fast-1.sh)",
+          "startedAt": "2026-10-24T21:36:04Z",
+          "completedAt": "2026-10-24T21:39:18Z",
+          "conclusion": "success",
+          "execution_s": 194,
+          "queue_s": 3
+        },
+        {
+          "name": "smoke-macos",
+          "startedAt": "2026-10-24T21:36:05Z",
+          "completedAt": "2026-10-24T21:39:31Z",
+          "conclusion": "success",
+          "execution_s": 206,
+          "queue_s": 4
+        }
+      ]
+    }
+  ]
+}
