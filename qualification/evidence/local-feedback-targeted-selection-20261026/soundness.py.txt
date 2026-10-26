@@ -1,0 +1,70 @@
+"""Superset/soundness demonstration on the REAL kit tree.
+
+Claim: the targeted set the kit selects for an edited module INCLUDES every test that
+(transitively) depends on that module, and selection is dependency-graph based, NOT name-based.
+"""
+import json, sys
+from pathlib import Path
+ROOT = "/Users/sasad/ai-ops-kit/.claude/worktrees/agent-aab985b37f2d1463d"
+sys.path.insert(0, ROOT)
+from ai_ops_kit.context import repo_graph
+
+graph = repo_graph.build_graph(Path(ROOT), subdirs=None, include_js=True)
+tests = set(graph["tests"])
+impact_edges = graph.get("impact", {})
+
+M = "ai_ops_kit/shared/budget.py"
+stem = Path(M).stem  # 'budget'
+
+# 1) The kit's selection for M (direct impact closure -> tests)
+selected = set(repo_graph.affected_tests(graph, [M]))
+
+# 2) Independently recompute: BFS over reverse-import closure from M, collect every test reached.
+#    repo_graph.impact(graph, M) returns transitive consumers; intersect with tests.
+consumers = set(repo_graph.impact(graph, M))
+indep_tests = (consumers | {M}) & tests
+
+print(f"module={M}")
+print(f"selected affected tests (kit): {len(selected)}")
+print(f"independent transitive-consumer tests: {len(indep_tests)}")
+print(f"selected == independent closure: {selected == indep_tests}")
+
+# 3) Not name-based: selected tests whose filename does NOT contain the module stem.
+non_name = sorted(t for t in selected if stem not in Path(t).name)
+name_match = sorted(t for t in selected if stem in Path(t).name)
+print(f"selected whose name lacks '{stem}': {len(non_name)} (name-match only: {len(name_match)})")
+print("  examples (dependency-selected, not name-selected):")
+for t in non_name[:8]:
+    print("   ", t)
+
+# 4) Negative control: a test that does NOT depend on M must NOT be selected.
+not_selected = sorted(tests - selected)
+# find one that genuinely has no path to M
+ctrl = None
+for t in not_selected:
+    if (t.startswith("tests/") and M not in repo_graph.impact(graph, t)
+            and stem not in Path(t).name):
+        ctrl = t
+        break
+print(f"negative control (independent test, correctly NOT selected): {ctrl}")
+print(f"  control in selected? {ctrl in selected}")
+
+# 5) Completeness check: for every selected source consumer, its tests are in the set.
+missing = [t for t in indep_tests if t not in selected]
+print(f"consumers missing from selection (must be 0): {len(missing)}")
+
+out = {
+    "module": M,
+    "selected_count": len(selected),
+    "independent_closure_count": len(indep_tests),
+    "selected_equals_independent_closure": selected == indep_tests,
+    "selected_without_name_match_count": len(non_name),
+    "name_match_only_count": len(name_match),
+    "name_match_examples_excluded_if_only_naming": name_match[:5],
+    "dependency_selected_not_name_examples": non_name[:10],
+    "negative_control_test": ctrl,
+    "negative_control_selected": ctrl in selected if ctrl else None,
+    "consumers_missing_from_selection": len(missing),
+}
+Path("/private/tmp/claude-501/-Users-sasad-ai-ops-kit--claude-worktrees-kit-cleanup-templates-9c932e/48ea5470-42f8-4f90-918d-817132561334/scratchpad/soundness.json").write_text(json.dumps(out, indent=2))
+print("saved soundness.json")

@@ -56,3 +56,5 @@
 - [Повторное использование подготовки тестовых установок и обновлений](reuse-installer-test-environments.md).
 
 - [Один чистый checkout для корпуса выпущенных версий](reuse-release-test-checkout.md).
+
+- [Замер: локальная правка получает более быстрый feedback без ослабления гейтов — #1321](local-feedback-targeted-selection.md).
