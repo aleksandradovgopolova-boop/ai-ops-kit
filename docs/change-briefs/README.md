@@ -64,3 +64,5 @@
 
 - [Допуск host-slot учитывает реальную нагрузку, а не имя процесса — #1377](host-slot-load-aware-admission.md).
 - [Предупреждение о дрейфе версии Python local↔CI перед пушем — #1378](1378-python-version-drift-warning.md).
+
+- [Дубль обязательного набора PR↔merge убран; финальный полный гейт перенесён на релиз (Вариант 1) — #1376](ci-pr-merge-duplication-design.md).

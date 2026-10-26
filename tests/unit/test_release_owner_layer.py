@@ -553,12 +553,15 @@ def test_released_version_owner_layer_passes_the_strict_check():
 
 def test_release_workflow_runs_the_owner_layer_gate_before_the_tag():
     wf = yaml.safe_load((KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
-    steps = wf["jobs"]["release"]["steps"]
+    job = wf["jobs"]["release"]
+    steps = job["steps"]
     gate = next(i for i, s in enumerate(steps)
                 if "test_release_owner_layer.py" in str(s.get("run")) and "-m release_gate" in str(s.get("run")))
     tag = next(i for i, s in enumerate(steps) if "gh release create" in str(s.get("run")))
     assert gate < tag, "проверка слоя владельца стоит после создания тега"
-    assert str(steps[gate].get("if")) == "steps.check_release.outputs.needed == 'true'"
+    # 2026-10-26 (#1376): триггер release теперь push в main; вся джоба release условна на нужде
+    # выпуска (per-step `if` заменён условием джобы), поэтому гейт не тратится на обычных merge.
+    assert "needs.check.outputs.needed == 'true'" in str(job.get("if"))
 
 
 def test_kit_own_policy_and_template_titles_build_a_clean_layer(tmp_path):
