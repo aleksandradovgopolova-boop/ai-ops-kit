@@ -62,3 +62,5 @@
 - [Доставляемая команда объёма проверки `verify-scope` — #1321](verify-scope-delivered-command.md).
 
 - [Допуск host-slot учитывает реальную нагрузку, а не имя процесса — #1377](host-slot-load-aware-admission.md).
+
+- [Дубль обязательного набора PR↔merge: безопасного среза нет без решения владельца (merge queue) — #1376](ci-pr-merge-duplication-design.md).
