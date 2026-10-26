@@ -58,3 +58,4 @@
 - [Один чистый checkout для корпуса выпущенных версий](reuse-release-test-checkout.md).
 
 - [Замер: локальная правка получает более быстрый feedback без ослабления гейтов — #1321](local-feedback-targeted-selection.md).
+- [Baseline CI всего пути — #1321](ci-end-to-end-baseline.md).
