@@ -12,7 +12,7 @@ owner: product-team
 фактом в `planning/plan.yaml` (статус `achieved`), закрытая работа — в `history/plan-history.yaml`, а не
 здесь: roadmap смотрит вперёд, история — назад.
 
-Совместимость: текущий мажор — **4.x** (текущий канал — **v4.11.3 qualification**; заработанный stable —
+Совместимость: текущий мажор — **4.x** (текущий канал — **v4.11.4 qualification**; заработанный stable —
 на миноре 4.10 по обновлениям ии-среды и Personal Cosmic Book; точная версия — в `VERSION`). Переход 3.x → 4.0 был breaking: снят плоский слой `tools/`, точки входа только пакетные
 (`python3 -m ai_ops_kit.<pkg>.<mod>`) — руководство в `MIGRATION_GUIDE_4.0.md`, обновление дочки
 через границу мажора осознанное (`ai-ops update --force`). Внутри 4.x — обратная совместимость.
