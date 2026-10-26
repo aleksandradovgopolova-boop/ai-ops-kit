@@ -89,6 +89,69 @@ def test_observed_unwrapped_heavy_process_blocks_action(tmp_path):
     assert not target.exists()
 
 
+def test_busy_filter_drops_idle_matched_process():
+    matched = [{"pid": 900002, "class": "observed_heavy_command"}]
+    assert hr.busy_heavy_processes(matched, sampler=lambda pid: 0.0) == []
+
+
+def test_busy_filter_keeps_loaded_matched_process():
+    matched = [{"pid": 900002, "class": "observed_heavy_command"}]
+    busy = hr.busy_heavy_processes(matched, sampler=lambda pid: 95.0)
+    assert busy == [{"pid": 900002, "class": "observed_heavy_command", "cpu_percent": 95.0}]
+
+
+def test_busy_filter_treats_unmeasurable_process_as_busy():
+    # None (процесс исчез / ps не прочитан) не должен ослаблять защиту.
+    matched = [{"pid": 900002, "class": "observed_heavy_command"}]
+    busy = hr.busy_heavy_processes(matched, sampler=lambda pid: None)
+    assert busy == [{"pid": 900002, "class": "observed_heavy_command", "cpu_percent": "unmeasured"}]
+
+
+def test_matched_but_idle_heavy_process_admits_action(tmp_path):
+    # Совпал по имени, но CPU≈0 (простаивающий раннер/контейнер) ⇒ допуск, действие исполняется.
+    path, target = tmp_path / "shared.lock", tmp_path / "ran"
+    command = [sys.executable, "-c", f"open({str(target)!r},'w').write('ran')"]
+    rc = cli.execute(command, "local", "local", path=path,
+                     probe=lambda: [{"pid": 900002, "class": "observed_heavy_command"}],
+                     load_filter=lambda m: hr.busy_heavy_processes(m, sampler=lambda pid: 0.0))
+    assert rc == 0 and target.read_text() == "ran"
+
+
+def test_matched_and_busy_heavy_process_still_blocks_action(tmp_path):
+    # Реальная oversubscription (идущий pytest/vitest/build) по-прежнему закрывает допуск.
+    path, target = tmp_path / "shared.lock", tmp_path / "must-not-exist"
+    command = [sys.executable, "-c", f"open({str(target)!r},'w').write('ran')"]
+    with pytest.raises(hr.ResourceBlocked, match="ps наблюдает"):
+        cli.execute(command, "local", "local", path=path,
+                    probe=lambda: [{"pid": 900002, "class": "observed_heavy_command"}],
+                    load_filter=lambda m: hr.busy_heavy_processes(m, sampler=lambda pid: 95.0))
+    assert not target.exists()
+
+
+def test_cpu_sampler_reads_delta_of_cputime_window(monkeypatch):
+    # Два снимка cputime → мгновенный % одного ядра по дельте за окно.
+    samples = iter(["0:01.00", "0:01.30"])
+
+    class Result:
+        returncode = 0
+
+        def __init__(self):
+            self.stdout = next(samples)
+
+    monkeypatch.setattr(hr.subprocess, "run", lambda *a, **kw: Result())
+    cpu = hr._sample_cpu_percent(900002, window=0.3)
+    assert cpu == pytest.approx((0.30 / 0.3) * 100.0)  # 0.3s CPU за 0.3s окна ≈ 100% одного ядра
+
+
+def test_cpu_sampler_returns_none_when_process_gone(monkeypatch):
+    class Result:
+        returncode = 1
+        stdout = ""
+
+    monkeypatch.setattr(hr.subprocess, "run", lambda *a, **kw: Result())
+    assert hr._sample_cpu_percent(900002, window=0.0) is None
+
+
 def test_symlink_lock_is_blocked_without_changing_target(tmp_path):
     target, path = tmp_path / "foreign", tmp_path / "shared.lock"
     target.write_text("foreign lock data")
