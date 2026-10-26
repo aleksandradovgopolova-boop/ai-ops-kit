@@ -60,7 +60,9 @@
 - [Замер: локальная правка получает более быстрый feedback без ослабления гейтов — #1321](local-feedback-targeted-selection.md).
 - [Baseline CI всего пути — #1321](ci-end-to-end-baseline.md).
 - [Доставляемая команда объёма проверки `verify-scope` — #1321](verify-scope-delivered-command.md).
+- [Закрытие направления цикла проверок (3/3) — #1321](1321-verification-cycle-performance-closeout.md).
 
 - [Допуск host-slot учитывает реальную нагрузку, а не имя процесса — #1377](host-slot-load-aware-admission.md).
+- [Предупреждение о дрейфе версии Python local↔CI перед пушем — #1378](1378-python-version-drift-warning.md).
 
 - [Дубль обязательного набора PR↔merge убран; финальный полный гейт перенесён на релиз (Вариант 1) — #1376](ci-pr-merge-duplication-design.md).

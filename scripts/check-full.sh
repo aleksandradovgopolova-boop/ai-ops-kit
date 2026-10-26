@@ -69,6 +69,12 @@ fi
 
 CURRENT=$("$PYTHON" -c 'import platform, sys; print(f"{platform.python_implementation()} {platform.python_version()} / {sys.platform}")')
 
+# Честность версии: локальный цикл идёт на $PYTHON, а блокирующий CI считает пол requires-python.
+# Если minor расходится (машина владельца: local 3.14 vs CI 3.12), зелёное здесь не гарантирует
+# зелёное в CI — предупреждаем ДО пуша тем же интерпретатором, которым идёт прогон. Advisory: `||
+# true` держит правило владельца — разница версий НЕ блокирует локальную работу.
+"$PYTHON" -m ai_ops_kit.devtools.python_drift || true
+
 echo "ОХВАТ: ${PROFILE} — ${CURRENT}."
 case "$PROFILE" in
   pr-current-python) echo "Все обычные fast/slow/contracts; НЕ входят nightly и release_gate." ;;

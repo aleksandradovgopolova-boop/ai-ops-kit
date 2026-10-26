@@ -19,6 +19,41 @@ kind: delivery-plan-history
 
 
 work:
+  - id: verification-cycle-performance-baseline
+    title: Измерить существующий цикл проверок и подготовить первый ограниченный срез ускорения
+    type: quality
+    goal: verification-cycle-performance
+    status: done
+    owner_role: qa
+    value: high
+    issue: 1321
+    pr: 1373
+    closed_at: "2026-10-26"
+    depends_on: []
+    write_scope: [docs/change-briefs/, qualification/]
+    evidence: qualification/CI-END-TO-END-BASELINE-2026-10-26.md
+    rationale: >-
+      Прямое поручение владельца 19.10: ускорить проверки Кита и дочек, сохранив обязательную
+      защиту. Начальный срез — baseline из существующих источников с точными SHA/версиями,
+      причинами повторов и пропусками; затем Change Brief одного измеримого улучшения.
+      Учесть уже влитые PR1305/1306/1309/1312/1313/1317/1319, не повторять их работу.
+      Полная приёмка остаётся в #1321: baseline не доказывает ускорение, а parent-only правка
+      не доказывает эффект в дочках. Код следующего среза получает собственные границы/review/CI.
+    result: >-
+      ЗАКРЫТО 2026-10-26 вместе со всем направлением #1321 (исходы достигнуты). Сквозной baseline
+      цикла проверок закреплён источниками: CI end-to-end (PR #1372,
+      qualification/CI-END-TO-END-BASELINE-2026-10-26.md) и локальный
+      (qualification/LOCAL-VERIFICATION-CYCLE-BASELINE-2026-10-21.md); причины повторов, включая
+      дублирование PR↔merge, названы. Первый измеримый срез ускорения доставлен и выпущен в 4.11.4:
+      маленькая правка получает выбранный набор тестов (до/после PR #1373: −79% исполняемых тестов,
+      −27% медианного времени; выбранный набор равен транзитивному замыканию), финальные ворота на
+      слиянии и выпуске эскалируют до полного набора — не ослаблены. Доставляемая команда verify-scope
+      (PR #1374) и обновление 4.11.4 проверены на двух представительных дочках с no-drift:
+      ii-sreda (JS/TS) Proektnyy-ofis/ii-sreda#1227 и dashboard-kit (UI)
+      aleksandradovgopolova-boop/dashboard-kit#60. niti (монорепо) НЕ влит — niti#54 держится
+      черновиком из-за своего красного ai-ops CI; его per-test выбор Python-only. Разбор —
+      docs/change-briefs/1321-verification-cycle-performance-closeout.md. Это ограниченная
+      оптимизация с сохранённой защитой, не полевое доказательство экономической пользы (#1278).
   - id: delegation-owner-fencing
     title: Позднее завершение прежней попытки не снимает заявку нового держателя
     type: engineering
