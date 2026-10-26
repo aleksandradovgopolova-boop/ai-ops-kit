@@ -62,3 +62,4 @@
 - [Доставляемая команда объёма проверки `verify-scope` — #1321](verify-scope-delivered-command.md).
 
 - [Допуск host-slot учитывает реальную нагрузку, а не имя процесса — #1377](host-slot-load-aware-admission.md).
+- [Предупреждение о дрейфе версии Python local↔CI перед пушем — #1378](1378-python-version-drift-warning.md).
