@@ -23,8 +23,11 @@ evidence:
 - kind: note
   text: Исправлено в child PR15; upstream ещё не исправлен этим учётным шагом. Managed
     файлы не изменены.
-state: delivered
-state_reason: null
+state: resolved
+state_reason: 'уже исправлено: текущий ai-ops-feature-coverage.yml contents:read,
+  baseline только через PR.'
 delivered_to:
   kit_root: /Users/sasad/.codex/worktrees/garden-field-accounting/ai-ops-kit
   at: '2026-10-05T11:39:32+00:00'
+decided_at: '2026-10-27T08:14:42+00:00'
+became_work: null
