@@ -18,11 +18,11 @@ principles:
     scope: [package-evolution]
     status: ratified
     confidence: high
-    recurrence_count: 4        # research-pack, systems-thinking, session-review, team-os
+    recurrence_count: 5        # research-pack, systems-thinking, session-review, team-os, ub-mode
     counterexamples: []
     review_date: 2026-12-01
     supersedes: null
-    derived_from: [ep-2026-07-13-teamos, ep-2026-07-13-systems]
+    derived_from: [ep-2026-07-13-teamos, ep-2026-07-13-systems, ep-2026-10-27-ub-mode-curated-crap]
 
   - id: dp-002
     principle: >
@@ -1068,6 +1068,34 @@ episodes:
     reversibility: two-way
     date: 2026-09-17
     source: чат-сессия (писатель-субагент, разбор находки B1)
+
+  - id: ep-2026-10-27-ub-mode-curated-crap
+    question: Переиспользовать ли ub-mode (unclebob) целиком или частично в ките?
+    decision: >
+      Взять только недостающую механику — метрику сложности на функцию (CRAP = цикломатика ×
+      покрытие). Реализовать своим stdlib-Python-замерщиком в стиле code_duplication.py (gate-ратчет,
+      non-blocking до обкатки — dp-002); crapper (0BSD) взять как референс алгоритма, не как
+      зависимость. Сам SKILL.md, dryer, mutator и uml-viewer отклонить.
+    reason: >
+      ~90% принципов ub-mode кит уже проверяет машиной строже, чем прозаический скилл: dryer дублирует
+      code_duplication.py (CODE-003), mutator — mutation-probes.yaml, корень/рефакторинг/worktree/
+      коммиты — field-lessons и verification cycle. Единственный реальный пробел — нет метрики
+      цикломатической сложности (есть лишь ратчеты на размер строк). Правовой и инвариантный барьеры:
+      у SKILL.md и uml-viewer НЕТ лицензии (дословный перенос запрещён, uml-viewer к тому же Clojure);
+      инвариант «никаких новых зависимостей, кроме stdlib+pyyaml» запрещает тащить crapper внутрь.
+      crapper/dryer/mutator — Python под 0BSD, идеи и алгоритм свободны к переизложению.
+    context: >
+      Ресёрч по запросу владельца (ветка ub-mode-ai-ops). Источник: github.com/unclebob/ub-mode
+      (SKILL.md 152 строки, без лицензии) и четыре спутника (crapper/dryer — 0BSD Python,
+      mutator — 0BSD Python, uml-viewer — Clojure без лицензии). Прямое повторение dp-001.
+    confidence: high
+    reversibility: two-way
+    date: 2026-10-27
+    source: чат-сессия (ресёрч ub-mode); github.com/unclebob/ub-mode
+    expected_outcome:
+      metric: функции ai_ops_kit с CRAP ≥ 10
+      baseline: неизвестно (гейта сложности нет)
+      target: baseline заморожен ратчетом, новый CRAP ≥ 10 краснеет
 
 
 outcomes:
