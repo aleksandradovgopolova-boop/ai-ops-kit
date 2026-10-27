@@ -318,3 +318,119 @@ def test_flow_style_work_block_is_refused_without_writing(tmp_path):
     assert rep["applied"] is False
     assert rep.get("error") and "work" in rep["error"]
     assert p.read_bytes() == before                         # F4: не записано ничего
+
+
+# ── decline: снятие наблюдения-кандидата как неактуального (#1386) ─────────────────────────────────
+#
+# Доказываем: (1) decline записывает решение (resolved + причина) в наблюдение-источник; (2) снятый
+# кандидат уходит из активной очереди И НЕ деривируется снова; (3) decline без причины отвергается и
+# источник не трогается; (4) НОВОЕ отличное наблюдение всё так же даёт кандидата (снятие одного не
+# глушит будущие); (5) кандидат не-находки (роадмап) снять нечем — honest skip; (6) план не тронут.
+
+def _obs_doc(kit_root, oid):
+    kp = kit_root / kit_feedback.KIT_DIR / f"{oid}.yaml"
+    return yaml.safe_load(kp.read_text(encoding="utf-8"))
+
+
+def test_decline_records_resolved_with_reason_and_removes_from_queue(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    _write_obs(repo, "obs-stale", state="delivered")
+    assert any(c.get("source_observation") == "obs-stale" for c in gather_candidates(repo))
+
+    rep = ci.decline_candidates(repo, ["cand-obs-stale"], gather_candidates(repo),
+                                reason="уже исправлено в текущей версии кита")
+    assert rep["declined"] == ["obs-stale"] and rep["errors"] == []
+
+    doc = _obs_doc(repo, "obs-stale")
+    assert doc["state"] == "resolved"
+    assert doc["state_reason"] == "уже исправлено в текущей версии кита"
+    assert doc.get("decided_at")                              # когда — записано
+
+    # Ре-деривация на следующем прогоне НЕ воскрешает снятого кандидата.
+    assert not any(c.get("source_observation") == "obs-stale" for c in gather_candidates(repo))
+
+
+def test_decline_without_reason_is_refused_and_source_untouched(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    _write_obs(repo, "obs-keep", state="delivered")
+    rep = ci.decline_candidates(repo, ["cand-obs-keep"], gather_candidates(repo), reason="  ")
+    assert rep["declined"] == [] and rep["errors"]
+    assert _obs_doc(repo, "obs-keep")["state"] == "delivered"   # источник не тронут
+    assert any(c.get("source_observation") == "obs-keep" for c in gather_candidates(repo))
+
+
+def test_decline_unknown_id_is_reported_not_silent(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    rep = ci.decline_candidates(repo, ["cand-obs-nope"], gather_candidates(repo), reason="x")
+    assert rep["declined"] == [] and rep["skipped_unknown"] == ["cand-obs-nope"]
+
+
+def test_declining_one_observation_does_not_mute_a_new_distinct_one(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    _write_obs(repo, "obs-old", state="delivered")
+    ci.decline_candidates(repo, ["cand-obs-old"], gather_candidates(repo), reason="исправлено")
+    # Новое, ОТЛИЧНОЕ наблюдение приходит позже — оно обязано всплыть кандидатом.
+    _write_obs(repo, "obs-new", state="delivered")
+    ids = [c.get("source_observation") for c in gather_candidates(repo)]
+    assert "obs-new" in ids and "obs-old" not in ids
+
+
+def test_decline_of_non_observation_candidate_is_honest_skip(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    cands = rc.project_uncovered_directions(repo)["candidates"]       # роадмап-кандидат (не находка)
+    rep = ci.decline_candidates(repo, ["cand-dir-uncovered-direction"], cands, reason="не надо")
+    assert rep["declined"] == []
+    assert rep["skipped_unsupported"] and \
+        rep["skipped_unsupported"][0]["id"] == "cand-dir-uncovered-direction"
+
+
+def test_decline_does_not_touch_plan_file(tmp_path):
+    repo = _fixture_repo(tmp_path)
+    _write_obs(repo, "obs-stale", state="delivered")
+    p = repo / "planning" / "plan.yaml"
+    before = p.read_bytes()
+    ci.decline_candidates(repo, ["cand-obs-stale"], gather_candidates(repo), reason="исправлено")
+    assert p.read_bytes() == before                          # decline — не accept: план байт-в-байт
+
+
+# ── CLI-обвязка `candidates decline` (глагол доходит до операции; причина обязательна) ─────────────
+
+class _Args:
+    """Минимальный argparse-намеспейс для run_candidates (как у реального CLI)."""
+    def __init__(self, rest, *, why=None, json=False, all=False, goal=None, apply=False):
+        self.rest, self.why, self.json, self.all, self.goal, self.apply = \
+            rest, why, json, all, goal, apply
+
+
+def test_cli_decline_verb_reaches_operation_and_suppresses(tmp_path):
+    from ai_ops_kit.cli.candidates_cli import run_candidates
+    repo = _fixture_repo(tmp_path)
+    _write_obs(repo, "obs-cli", state="delivered")
+    rc_code = run_candidates(repo, _Args(["decline", "cand-obs-cli"], why=["исправлено в ките"]))
+    assert rc_code == 0
+    assert _obs_doc(repo, "obs-cli")["state"] == "resolved"
+    assert not any(c.get("source_observation") == "obs-cli" for c in gather_candidates(repo))
+
+
+def test_cli_decline_without_why_is_refused(tmp_path):
+    from ai_ops_kit.cli.candidates_cli import run_candidates
+    repo = _fixture_repo(tmp_path)
+    _write_obs(repo, "obs-cli2", state="delivered")
+    rc_code = run_candidates(repo, _Args(["decline", "cand-obs-cli2"], why=None))
+    assert rc_code == 1                                       # причина обязательна → ошибка
+    assert _obs_doc(repo, "obs-cli2")["state"] == "delivered"
+
+
+def test_cli_decline_without_id_asks_for_id(tmp_path):
+    from ai_ops_kit.cli.candidates_cli import run_candidates
+    repo = _fixture_repo(tmp_path)
+    assert run_candidates(repo, _Args(["decline"], why=["x"])) == 2   # нет id кандидата
+
+
+def test_cli_accept_still_works_after_decline_added(tmp_path):
+    from ai_ops_kit.cli.candidates_cli import run_candidates
+    repo = _fixture_repo(tmp_path)
+    rc_code = run_candidates(repo, _Args(["accept", "cand-dir-uncovered-direction"]))
+    assert rc_code == 0
+    plan = dp.load(repo)
+    assert "uncovered-direction" in {w["id"] for w in dp.items(plan)}
