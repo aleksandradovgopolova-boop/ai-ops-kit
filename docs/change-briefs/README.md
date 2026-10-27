@@ -68,3 +68,5 @@
 - [Дубль обязательного набора PR↔merge убран; финальный полный гейт перенесён на релиз (Вариант 1) — #1376](ci-pr-merge-duplication-design.md).
 
 - [Описание выпуска деградирует чисто, когда devtools нет в дочке — #1380](1380-release-notes-degrade-without-devtools.md).
+
+- [Стухшие наблюдения-кандидаты можно снять (`candidates decline --why`) — #1386](decline-stale-observation-candidates.md).

@@ -193,6 +193,94 @@ def accept_candidates(child_root, candidate_ids, candidates, *, goal: str | None
     return result
 
 
+# ── Отклонение наблюдений-кандидатов (симметрично accept: обратный глагол решения) ────────────────
+#
+# ПОВОД (#1386). У наблюдений-кандидатов (`cand-obs-…` из findings/from-children) был ЕДИНСТВЕННЫЙ
+# глагол — accept (заводит работу). «Уже исправлено / протухло» пометить было нечем, и стухшие
+# наблюдения копились в инбоксе. Для мёртвых РАБОЧИХ заявок авто-отпуск у кита есть (work_reconcile),
+# для наблюдений — не было. Асимметрия закрывается здесь.
+#
+# ПОЧЕМУ ПЕРЕВОД СОСТОЯНИЯ, А НЕ ВТОРОЙ ЖУРНАЛ. Кандидат РЕ-ДЕРИВИРУЕТСЯ на каждом прогоне из своего
+# наблюдения (`child_findings.project_findings` отбирает ОТКРЫТЫЕ состояния delivered/accepted).
+# Значит, чтобы отклонённый не воскрес, подавить надо ИСТОЧНИК. Двусторонний канал наблюдений уже
+# ведёт журнал решений (`kit_feedback.set_state` пишет состояние и причину — в кит и обратно в дочку).
+# Переводим наблюдение в `resolved` с причиной: оно уходит из ОТКРЫТЫХ → кандидат больше не
+# деривируется, запись честная (решение + причина + `decided_at`, история не стирается), а НОВОЕ
+# отличное наблюдение (новый id) всё так же даст своего кандидата. Второй журнал был бы второй
+# правдой о судьбе наблюдения и разъехался бы с каналом — поэтому его НЕ заводим.
+
+
+def _observation_id_for(cand: dict) -> str | None:
+    """id наблюдения-источника кандидата. Берём объявленный `source_observation`; если его нет —
+    снимаем префикс `cand-` с id (кандидаты находок — `cand-<obs-id>`). Не-находка → None."""
+    if str(cand.get("source") or "") != "child-finding":
+        return None
+    oid = _text(cand.get("source_observation"))
+    if oid:
+        return oid
+    cid = _text(cand.get("id"))
+    return cid[len("cand-"):] if cid.startswith("cand-") else None
+
+
+def _child_root_for(root: Path, obs_id: str) -> str:
+    """child_root для возврата решения дочке. Читаем доставленную в кит копию наблюдения
+    (findings/from-children/<id>.yaml), берём `child.path` и отдаём его КАК ЕСТЬ.
+
+    Почему как есть, а не только существующий: `set_state` сам решает, писать ли копию дочки
+    (`cp.is_file() or Path(child_root).is_dir()`). Дочка на месте → решение ложится и в неё
+    (двусторонний канал, правило 2 kit_feedback); дочки нет (исправлено в более новой версии кита /
+    продукт закрыт) → ложится только кит-копия. Важно НЕ подсунуть сюда существующий каталог КИТА:
+    тогда set_state создал бы `.ai/kit-feedback/` внутри кита. Поэтому при отсутствии `child.path`
+    возвращаем заведомо несуществующий путь-страж — так пишется только кит-копия."""
+    from ai_ops_kit.engops import kit_feedback
+    doc, err = kit_feedback._load(kit_feedback.kit_path(root, obs_id))
+    cpath = ""
+    if not err and isinstance(doc, dict):
+        child = doc.get("child") if isinstance(doc.get("child"), dict) else {}
+        cpath = _text(child.get("path"))
+    return cpath or str(root / "__no_child_present__")
+
+
+def decline_candidates(child_root, candidate_ids, candidates, *, reason: str) -> dict:
+    """Отклонить (снять как неактуальные) наблюдения-кандидаты с ОБЯЗАТЕЛЬНОЙ причиной.
+
+    -> {"declined": [obs_id…], "skipped_unknown": [id…], "skipped_unsupported": [{id, source}…],
+        "errors": [str…]}.
+
+    Решение ПЕРСИСТИТСЯ и ПОДАВЛЯЕТ РЕ-ДЕРИВАЦИЮ через перевод наблюдения-источника в состояние
+    `resolved` (kit_feedback.set_state) — см. блок-комментарий выше. Причина обязательна (как улика у
+    дефекта): без неё отклонение — стёртая запись, а не решение. Отклонять умеем ТОЛЬКО кандидатов
+    наблюдений (`source: child-finding`): у них есть устойчивый источник-ключ (файл наблюдения).
+    Кандидаты из непокрытых направлений роадмапа и недобравших исходов ре-деривируются из ЖИВОГО
+    состояния (покрытие плана / замер фичи) — у них нет наблюдения, чтобы «снять»; такой кандидат
+    уходит в `skipped_unsupported` с честной причиной, а не подавляется наполовину.
+    """
+    from ai_ops_kit.engops import kit_feedback
+    root = Path(child_root)
+    result: dict = {"declined": [], "skipped_unknown": [], "skipped_unsupported": [], "errors": []}
+    why = _text(reason)
+    if not why:
+        return {**result, "errors": ["отклонение требует причину: укажи --why \"<почему снято>\" "
+                                     "(например «уже исправлено в текущей версии кита»)"]}
+    by_id = {c.get("id"): c for c in (candidates or []) if isinstance(c, dict) and c.get("id")}
+    for cid in (candidate_ids or []):
+        cand = by_id.get(cid)
+        if cand is None:
+            result["skipped_unknown"].append(cid)
+            continue
+        obs_id = _observation_id_for(cand)
+        if obs_id is None:
+            result["skipped_unsupported"].append({"id": cid, "source": _text(cand.get("source"))})
+            continue
+        cr = _child_root_for(root, obs_id)
+        _doc, errs = kit_feedback.set_state(root, cr, obs_id, "resolved", reason=why)
+        if errs:
+            result["errors"].append(f"{cid}: {'; '.join(errs)}")
+            continue
+        result["declined"].append(obs_id)
+    return result
+
+
 # ── Запись в plan.yaml ТЕКСТОМ (комментарии сохраняются) ─────────────────────────────────────────
 
 def _yaml_scalar(s: str) -> str:
