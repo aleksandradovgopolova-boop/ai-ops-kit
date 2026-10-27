@@ -118,6 +118,16 @@ def test_code_004_keeps_meaning_and_hands_mechanics_to_code_011():
 
 
 @pytest.mark.unit
+def test_code_004_bans_transliteration_as_reviewer_criterion():
+    """CODE-004 прямо называет имя-транслитерацию (латиница, но не английское слово) нарушением и
+    отдаёт этот критерий ревьюеру — линтер (алфавит) его не ловит."""
+    text = _flat(_article("CODE-004"))
+    assert "транслит" in text, "CODE-004 не называет транслитерацию нарушением имени"
+    assert "proverka" in text and "check" in text, "нет конкретного примера транслита (proverka/check)"
+    assert "ревьюер" in text, "язык слова (английское против транслита) не отдан ревьюеру"
+
+
+@pytest.mark.unit
 def test_arch_006_not_promised_to_child():
     rule = _rule("ARCH-006")
     assert rule["gate"] == "validate_module_size"
