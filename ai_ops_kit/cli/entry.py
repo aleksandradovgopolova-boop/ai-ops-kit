@@ -34,6 +34,8 @@ def main() -> None:
         sys.exit(ai_ops_cli._main_guarded(["help", *argv[1:]]))
 
     intent, rest = argv[0], argv[1:]
+    # cwd — корень проекта — добавляется последним; разбор флагов в любом порядке относительно
+    # позиционных обеспечивает `parse_intermixed_args` в CLI (#1398), а не порядок аргументов здесь.
     sys.exit(ai_ops_cli._main_guarded([intent, *rest, os.getcwd()]))
 
 

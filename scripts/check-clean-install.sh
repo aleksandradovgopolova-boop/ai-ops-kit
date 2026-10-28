@@ -51,9 +51,20 @@ echo "OK  parent-кит удалён — дальше только child"
 # ------------------------------------------------------------------ 4. точки входа ДЕЛАЮТ работу
 check_produces_output() {
   local label="$1"; shift
-  local out
-  out="$("$@" 2>&1 || true)"
-  [ -n "${out//[[:space:]]/}" ] || fail "$label: пустой вывод — команда ничего не сделала (rc не показатель)"
+  local out rc
+  # Код возврата — ПОКАЗАТЕЛЬ (#1397): раньше `|| true` его глотал, и команда с Traceback и rc=2
+  # проходила как OK. Теперь падение команды — падение проверки.
+  out="$("$@" 2>&1)" && rc=0 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    printf '%s\n' "$out" | tail -20 >&2
+    fail "$label: команда завершилась с кодом $rc (сломанная команда — не «OK»)"
+  fi
+  case "$out" in
+    *Traceback*)
+      printf '%s\n' "$out" | tail -20 >&2
+      fail "$label: в выводе Traceback — исключение, несмотря на код 0" ;;
+  esac
+  [ -n "${out//[[:space:]]/}" ] || fail "$label: пустой вывод — команда ничего не сделала"
   echo "OK  $label: $(printf '%s' "$out" | head -1 | cut -c1-70)"
 }
 

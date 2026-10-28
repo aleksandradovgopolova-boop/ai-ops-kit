@@ -512,6 +512,14 @@ def _build_cli_arg_parser():
     return ap
 
 
+def _parse_cli_args(argv):
+    """Разбор argv CLI. `parse_intermixed_args`, а не `parse_args` (#1398): позиционный `rest`
+    (nargs="*") + опциональные в ЛЮБОМ порядке — `plan "задача" --json` и `plan --json "задача"`
+    разбираются одинаково. Обычный parse_args отвергал позиционный после опционального
+    («unrecognized arguments»), из-за чего pip-вход ломал привычное расположение флагов."""
+    return _build_cli_arg_parser().parse_intermixed_args(argv)
+
+
 def _parse_task_and_root(intent, rest):
     """Разобрать позиционные `[задача] child_root` -> (task, child_root). Вынесено из main (ратчет
     func-size). `rest` мутируется на месте (pop): остаток виден вызывающему.
@@ -559,8 +567,7 @@ def main(argv):
     _facade = _dispatch_human_action(argv, main)
     if _facade is not None:
         return _facade
-    ap = _build_cli_arg_parser()
-    a = ap.parse_args(argv)
+    a = _parse_cli_args(argv)
 
     intent = a.intent
     rest = list(a.rest)
