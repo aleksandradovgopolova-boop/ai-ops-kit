@@ -10,23 +10,30 @@
   - context_compiler: bundle assembly
   - lifecycle_store: durable_write + load_guarded
 
-Baseline хранится в tools/.bench-baseline.json. Если benchmark медленнее baseline >2x —
+Microbenchmark baseline хранится в ai_ops_kit/devtools/.bench-baseline.json. Если benchmark медленнее baseline >2x —
 предупреждение. Если >5x — ошибка (регрессия).
 
 Честность:
   - Каждый benchmark запускается N раз, берётся медиана (не минимум — устойчивее к шуму)
   - Первый прогон — warmup (не считается)
-  - Пустой baseline = первый прогон создаёт его (не падает)
+  - Пустой baseline = первый прогон без сравнения; запись только явно
   - --update-baseline обновляет baseline текущими результатами
 
 CLI:
   bench_performance.py [--iterations N] [--threshold X] [--update-baseline] [--json]
-  bench_performance.py --selftest
+  python3 -m ai_ops_kit.devtools.host_resource_cli --owner baseline-1409 -- \
+    python3 -m ai_ops_kit.devtools.bench_performance --suite suite.json --output run.json
+
+Командные серии: явный неизменяемый --baseline run.json, повторы --iterations N,
+--warmup N; время/пик RSS сравниваются с --regression-threshold (по умолчанию 1.2).
+Локальная серия домена ci — реплика этапов CI, не измерение GitHub Actions.
+Пик RSS — максимум child-процесса, не суммарная память параллельного дерева.
 """
 from __future__ import annotations
 
 import json
 import statistics
+import subprocess
 import sys
 import tempfile
 import time
@@ -239,7 +246,221 @@ def format_text(results: dict, comparison: dict = None) -> str:
     return "\n".join(lines)
 
 
-def main():
+# --- Command suites share this harness and the existing explicit baseline workflow. ---
+
+def load_suite(path):
+    """Прочитать команды без shell; неверный план не запускает ни одной команды."""
+    suite = json.loads(Path(path).read_text(encoding="utf-8"))
+    if not isinstance(suite, dict):
+        raise ValueError("suite must be an object")
+    cases = suite.get("cases")
+    if suite.get("schema_version") != 1 or not isinstance(cases, list) or not cases:
+        raise ValueError("suite requires schema_version=1 and nonempty cases")
+    names = set()
+    for case in cases:
+        if not isinstance(case, dict):
+            raise ValueError("case must be an object")
+        name, command = case.get("name"), case.get("command")
+        if (not isinstance(name, str) or not name or name in names
+                or case.get("domain") not in {"ci", "runtime"}
+                or not isinstance(command, list) or not command
+                or any(not isinstance(arg, str) or not arg for arg in command)
+                or not _positive_number(case.get("timeout_seconds"))):
+            raise ValueError("case requires unique name, ci/runtime domain, argv and positive timeout")
+        names.add(name)
+    return suite
+
+
+def _positive_number(value):
+    import math
+    return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
+
+
+def _command_worker():
+    """Один свежий измеритель на попытку: RUSAGE_CHILDREN не копится между командами."""
+    import os
+    import resource
+    import signal
+    import threading
+    from ai_ops_kit.devtools import host_resource_cli
+
+    spec = json.loads(sys.argv[1])
+    command = [sys.executable if arg == "{python}" else arg for arg in spec["command"]]
+    started = time.perf_counter()
+    error = None
+    with open(spec["stdout"], "wb") as stdout, open(spec["stderr"], "wb") as stderr:
+        process = subprocess.Popen(command, cwd=spec["cwd"], stdout=stdout, stderr=stderr,
+                                   start_new_session=True, **host_resource_cli.subprocess_kwargs())
+        expired = []
+
+        def expire():
+            # Только собственная группа. Timer не добавляет квант polling к короткому startup.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+                expired.append(True)
+            except ProcessLookupError:
+                pass  # Процесс успел штатно завершиться на границе timeout.
+
+        timer = threading.Timer(spec["timeout_seconds"], expire)
+        timer.daemon = True
+        timer.start()
+        try:
+            code = process.wait()
+        finally:
+            timer.cancel()
+            timer.join()
+        error = "timeout" if expired else None
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    usage = resource.getrusage(resource.RUSAGE_CHILDREN)
+    print(json.dumps({"elapsed_ms": elapsed_ms, "peak_rss_bytes": int(usage.ru_maxrss *
+                     (1 if sys.platform == "darwin" else 1024)),
+                     "cpu_seconds": usage.ru_utime + usage.ru_stime, "returncode": code,
+                     "error": error or (f"exit {code}" if code else None)}))
+
+
+def measure_command(case, root, log_prefix):
+    """Время команды включает создание процесса и ожидание, исключает запуск worker."""
+    import subprocess
+    from ai_ops_kit.devtools import host_resource_cli
+
+    spec = {**case, "cwd": str(root), "stdout": str(log_prefix) + ".stdout.log",
+            "stderr": str(log_prefix) + ".stderr.log"}
+    worker = subprocess.run([sys.executable, "-c",
+                             "from ai_ops_kit.devtools.bench_performance import _command_worker; _command_worker()",
+                             json.dumps(spec)], cwd=PKG, capture_output=True, text=True,
+                            timeout=case["timeout_seconds"] + 30, **host_resource_cli.subprocess_kwargs())
+    if worker.returncode:
+        raise RuntimeError(f"measurement worker exit {worker.returncode}: {worker.stderr.strip()}")
+    return {**json.loads(worker.stdout), "stdout": spec["stdout"], "stderr": spec["stderr"]}
+
+
+def suite_metadata(root, suite, iterations, warmup):
+    """Исходники, toolchain и безопасный allowlist среды; секреты окружения не сохраняются."""
+    import hashlib
+    import importlib.metadata
+    import os
+    import platform
+    import subprocess
+    from datetime import datetime, timezone
+
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=root)
+
+    sha = git("rev-parse", "HEAD").decode().strip()
+    diff = git("diff", "--binary", "HEAD", "--")
+    untracked = git("ls-files", "--others", "--exclude-standard", "-z").split(b"\0")
+    fingerprint = hashlib.sha256(diff)
+    for path in sorted(p for p in untracked if p):
+        fingerprint.update(path)
+        fingerprint.update(hashlib.sha256((Path(root) / os.fsdecode(path)).read_bytes()).digest())
+    environment = {
+        "platform": platform.platform(), "machine": platform.machine(), "host": platform.node(),
+        "python": platform.python_version(), "implementation": platform.python_implementation(),
+        "executable": sys.executable, "cpu_count": os.cpu_count(),
+        "packages": sorted([d.metadata["Name"], d.version] for d in importlib.metadata.distributions()),
+        "variables": {key: os.environ.get(key) for key in
+                      ("PATH", "PYTHONHASHSEED", "PYTEST_ADDOPTS", "PYTHONPATH", "PYTHON", "AI_OPS_PYTHON",
+                       "LC_ALL", "LANG", "TZ", "OMP_NUM_THREADS", "CI")},
+    }
+    return {"sha": sha, "dirty": bool(git("status", "--porcelain")),
+            "dirty_sha256": fingerprint.hexdigest(), "environment": environment,
+            "suite_sha256": hashlib.sha256(json.dumps(suite, sort_keys=True).encode()).hexdigest(),
+            "iterations": iterations, "warmup": warmup,
+            "started_at": datetime.now(timezone.utc).isoformat(), "load_average": os.getloadavg(),
+            "execution_context": "github_actions" if os.environ.get("GITHUB_ACTIONS") == "true" else "local",
+            "ci_run_id": os.environ.get("GITHUB_RUN_ID"), "ci_run_attempt": os.environ.get("GITHUB_RUN_ATTEMPT"),
+            "memory_semantics": "RUSAGE_CHILDREN ru_maxrss; max child RSS, not sum of concurrent process RSS"}
+
+
+def run_suite(suite, root, log_directory, iterations=DEFAULT_ITERATIONS, warmup=1):
+    """Последовательные повторы, включая ошибочные; warmup сохраняется отдельно."""
+    if not isinstance(iterations, int) or iterations < 1 or not isinstance(warmup, int) or warmup < 0:
+        raise ValueError("iterations must be positive and warmup nonnegative")
+    metadata = suite_metadata(root, suite, iterations, warmup)
+    Path(log_directory).mkdir(parents=True, exist_ok=False)
+    results = {}
+    for index, case in enumerate(suite["cases"]):
+        samples = []
+        for attempt in range(warmup + iterations):
+            prefix = Path(log_directory).resolve() / f"case-{index}-attempt-{attempt}"
+            try:
+                sample = measure_command(case, root, prefix)
+            except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+                sample = {"error": str(exc), "returncode": None}
+            samples.append({**sample, "attempt": attempt + 1, "warmup": attempt < warmup})
+        measured = samples[warmup:]
+        successful = all(not sample.get("error") and sample.get("returncode") == 0 for sample in samples)
+        results[case["name"]] = {"domain": case["domain"], "command": case["command"], "cwd": str(Path(root).resolve()),
+                                 "timeout_seconds": case["timeout_seconds"], "samples": samples, "iterations": iterations,
+                                 "command_attempts": len(samples), "repeat_count": len(samples) - 1,
+                                 "status": "measured" if successful else "error"}
+        for field, source in (("median_ms", "elapsed_ms"), ("median_peak_rss_bytes", "peak_rss_bytes"),
+                              ("median_cpu_seconds", "cpu_seconds")):
+            results[case["name"]][field] = statistics.median(s[source] for s in measured) if successful else None
+    return {"schema_version": 1, "metadata": metadata, "suite": suite, "results": results}
+
+
+def compare_suites(current, baseline, threshold=1.2):
+    """Несопоставимость/ошибка/потеря метрики запрещает зелёный результат."""
+    if not _positive_number(threshold) or threshold <= 1:
+        raise ValueError("regression threshold must exceed 1")
+    for receipt in (current, baseline):
+        if (not isinstance(receipt, dict) or receipt.get("schema_version") != 1
+                or not isinstance(receipt.get("metadata"), dict)
+                or not isinstance(receipt.get("results"), dict) or not receipt["results"]):
+            return {"status": "INVALID", "reason": "missing command-suite receipt"}
+    for key in ("environment", "suite_sha256", "iterations", "warmup", "execution_context", "memory_semantics"):
+        if current["metadata"].get(key) is None or current["metadata"].get(key) != baseline["metadata"].get(key):
+            return {"status": "INCOMPARABLE", "reason": f"metadata differs: {key}"}
+    if set(current["results"]) != set(baseline["results"]):
+        return {"status": "INCOMPARABLE", "reason": "case set differs"}
+    comparisons = {}
+    for name, result in current["results"].items():
+        old = baseline["results"][name]
+        if result.get("status") != "measured" or old.get("status") != "measured":
+            return {"status": "ERROR", "reason": f"failed case: {name}"}
+        ratios = {}
+        for metric in ("median_ms", "median_peak_rss_bytes"):
+            if not _positive_number(result.get(metric)) or not _positive_number(old.get(metric)):
+                return {"status": "INVALID", "reason": f"missing/invalid {name}.{metric}"}
+            ratios[metric] = result[metric] / old[metric]
+        comparisons[name] = {"status": "REGRESSION" if max(ratios.values()) > threshold else "OK", "ratios": ratios}
+    return {"status": "REGRESSION" if any(c["status"] == "REGRESSION" for c in comparisons.values()) else "OK",
+            "threshold": threshold, "cases": comparisons}
+
+
+def command_suite_main(args, parser):
+    from ai_ops_kit.devtools import host_resource_cli
+
+    if not args.output:
+        parser.error("--suite requires --output (a new receipt file)")
+    output = Path(args.output).resolve()
+    if output.exists() or (args.baseline and output == Path(args.baseline).resolve()):
+        parser.error("output must be new and distinct from baseline")
+    if args.update_baseline:
+        parser.error("command suites keep the baseline immutable; select a receipt using --baseline")
+    try:
+        suite = load_suite(args.suite)
+        if (args.iterations < 1 or args.warmup < 0 or not _positive_number(args.regression_threshold)
+                or args.regression_threshold <= 1):
+            raise ValueError("positive iterations, nonnegative warmup and threshold >1 required")
+        baseline = json.loads(Path(args.baseline).read_text()) if args.baseline else None
+        # Не запускаем произвольные серии без реального общего lease. Wrapper проверяет нагрузку.
+        if host_resource_cli.inherited_slot() is None:
+            raise ValueError("command suite requires host_resource_cli shared slot")
+        receipt = run_suite(suite, PKG, output.with_suffix(".logs"), args.iterations, args.warmup)
+        receipt["comparison"] = compare_suites(receipt, baseline, args.regression_threshold) if baseline is not None else None
+        receipt["status"] = (receipt["comparison"]["status"] if receipt["comparison"] else
+                             "NO_BASELINE" if all(r["status"] == "measured" for r in receipt["results"].values()) else "ERROR")
+        output.write_text(json.dumps(receipt, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
+    print(json.dumps({"status": receipt["status"], "receipt": str(output)}, ensure_ascii=False))
+    return 0 if receipt["status"] in {"OK", "NO_BASELINE"} else 1
+
+
+def main(argv=None):
     import argparse
     parser = argparse.ArgumentParser(description="AI Ops Kit performance benchmarks")
     parser.add_argument("--iterations", type=int, default=DEFAULT_ITERATIONS,
@@ -250,7 +471,18 @@ def main():
                         help="Save current results as new baseline")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
     parser.add_argument("--selftest", action="store_true", help="Run selftest")
-    args = parser.parse_args()
+    parser.add_argument("--suite", type=Path, help="JSON command suite (requires shared host slot)")
+    parser.add_argument("--output", type=Path, help="New command-suite receipt; logs saved beside it")
+    parser.add_argument("--baseline", type=Path, help="Explicit immutable command-suite baseline receipt")
+    parser.add_argument("--warmup", type=int, default=1, help="Warmup commands per case, also recorded")
+    parser.add_argument("--regression-threshold", type=float, default=1.2, help="Command time/RSS failure ratio")
+    args = parser.parse_args(argv)
+    if args.suite:
+        return command_suite_main(args, parser)
+    if args.output or args.baseline:
+        parser.error("--output/--baseline require --suite")
+    if args.iterations < 1:
+        parser.error("--iterations must be positive")
 
     results = run_all(iterations=args.iterations)
     baseline = load_baseline()
