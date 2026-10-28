@@ -88,6 +88,14 @@ def _child_root_from(rest):
     return "."
 
 
+def parse_cli_args(ap, argv):
+    """Разбор argv готовым парсером через `parse_intermixed_args`, а не `parse_args` (#1398):
+    позиционный `rest` (nargs="*") + опциональные в ЛЮБОМ порядке — `plan "задача" --json` и
+    `plan --json "задача"` разбираются одинаково. Обычный parse_args отвергал позиционный после
+    опционального («unrecognized arguments»), из-за чего pip-вход ломал привычный порядок флагов."""
+    return ap.parse_intermixed_args(argv)
+
+
 def _inject_task_type(rest, task_type):
     """Копия rest, где в --signals ГАРАНТИРОВАН task_type (не перетирая явный).
 

@@ -10,6 +10,7 @@ from __future__ import annotations
 import pytest
 
 from ai_ops_kit.cli import ai_ops_cli as c
+from ai_ops_kit.cli import human_facade
 
 pytestmark = pytest.mark.unit
 
@@ -20,14 +21,14 @@ pytestmark = pytest.mark.unit
     ["plan", "задача", "--json", "/root"],   # флаг между позиционными (ломало parse_args)
 ])
 def test_flags_parse_in_any_order_around_positionals(argv):
-    a = c._parse_cli_args(argv)
+    a = human_facade.parse_cli_args(c._build_cli_arg_parser(), argv)
     assert a.intent == "plan"
     assert a.json is True
     assert "задача" in a.rest and "/root" in a.rest
 
 
 def test_plain_call_without_flags_parses():
-    a = c._parse_cli_args(["plan", "задача", "/root"])
+    a = human_facade.parse_cli_args(c._build_cli_arg_parser(), ["plan", "задача", "/root"])
     assert a.intent == "plan"
     assert a.rest == ["задача", "/root"]
 
@@ -52,5 +53,5 @@ def test_entry_appends_cwd_and_main_guarded_receives_it(monkeypatch):
     assert exc.value.code == 0
     assert seen["argv"] == ["plan", "задача", "--json", os.getcwd()]
     # и этот argv разбирается без ошибок (позиционный cwd после флага)
-    a = c._parse_cli_args(seen["argv"])
+    a = human_facade.parse_cli_args(c._build_cli_arg_parser(), seen["argv"])
     assert a.json is True and a.rest[-1] == os.getcwd()
