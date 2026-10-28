@@ -428,3 +428,61 @@ def test_delivery_fetch_failure_preserves_created_run_ref(harness, target):
     assert "DELIVER:" not in result.stdout
     assert harness.git("rev-parse", "ai-ops/result", repo=clone) == before[0]
     assert harness.child_state() == before
+
+
+@pytest.mark.parametrize("sig", [signal.SIGINT, signal.SIGTERM], ids=["SIGINT", "SIGTERM"])
+def test_signal_during_failed_delivery_retains_unique_run_work(harness, sig):
+    harness.git("checkout", "-qb", "ai-ops/result")
+    before = harness.child_state()
+    real_git = (harness.bindir / "git").resolve()
+    harness.env["FIXTURE_REAL_GIT"] = str(real_git)
+    harness.env["FIXTURE_BARRIER"] = str(harness.root)
+    # Only delay our delivery fetch. The refusal itself is real Git: the destination
+    # branch is checked out in child, so fetch must reject updating it.
+    git_shim = r'''
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+root = Path(os.environ["FIXTURE_BARRIER"])
+is_fetch = len(sys.argv) > 3 and sys.argv[3] == "fetch"
+if is_fetch:
+    (root / "fetch-started").write_text(str(os.getpid()))
+    deadline = time.monotonic() + 5
+    while not (root / "release-fetch").exists() and time.monotonic() < deadline:
+        time.sleep(0.01)
+rc = subprocess.call([os.environ["FIXTURE_REAL_GIT"], *sys.argv[1:]])
+if is_fetch:
+    (root / "fetch-stopped").write_text(str(rc))
+sys.exit(rc)
+'''
+    (harness.bindir / "git").unlink()
+    (harness.bindir / "git").write_text(f"#!{sys.executable}\n" + git_shim)
+    (harness.bindir / "git").chmod(0o755)
+    proc = harness.start(mode="branches")
+    started = harness.root / "fetch-started"
+    deadline = time.monotonic() + 5
+    while not started.exists():
+        if proc.poll() is not None or time.monotonic() >= deadline:
+            pytest.fail("own delivery fetch did not reach barrier")
+        time.sleep(0.01)
+    data = json.loads(harness.record.read_text())
+    clone = Path(data["clone"])
+    assert clone.is_dir()
+    assert data["head"] != before[0]
+    assert harness.git("rev-parse", "ai-ops/result", repo=clone) == data["head"]
+    fetch_pid = int(started.read_text())
+    assert process_exists(fetch_pid)
+    proc.send_signal(sig)
+    (harness.root / "release-fetch").write_text("release own Git fetch")
+    _, stderr = proc.communicate(timeout=8)
+    assert proc.returncode != 0
+    assert int((harness.root / "fetch-stopped").read_text()) != 0
+    assert "refusing to fetch into branch" in stderr
+    assert_stopped(fetch_pid)
+    assert_stopped(data["pid"])
+    assert clone.is_dir()
+    assert harness.git("rev-parse", "ai-ops/result", repo=clone) == data["head"]
+    assert f"работа сохранена в {clone} (не удаляю)" in stderr
+    assert harness.child_state() == before

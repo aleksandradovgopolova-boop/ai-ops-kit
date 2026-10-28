@@ -53,14 +53,14 @@ TimeoutExpired. Отдельный тест доказывает утечку di
 
 ## Локальная проверка
 
-Нативно: macOS, Python 3.14.7, Bash 3.2.57. 26 новых сценариев + существующие
-asset/delivery/credentialless проверки: **48 passed** (с `GIT_CONFIG_GLOBAL=/dev/null`).
+Нативно: macOS, Python 3.14.7, Bash 3.2.57. 28 новых сценариев + существующие
+asset/delivery/credentialless проверки: **50 passed** (с `GIT_CONFIG_GLOBAL=/dev/null`).
 Короткий core smoke из текущего PR workflow (orchestrator, execution_pipeline, preflight,
 tool_broker, gate_executor, ai_ops_run, ai_ops_cli; `-m "not slow"`): **292 passed**.
 Ruff целевого Python-файла, `bash -n` обоих wrappers и `git diff --check` прошли.
 Новый newsfragment укладывается в ограничение длины; старые advisory замечания очереди
-не относятся к этому срезу. Полный профиль, независимый review и Linux/required CI точного
-head остаются следующими этапами; локальный успех их не заменяет.
+не относятся к этому срезу. Linux/required CI точного head
+остаются следующими этапами; локальный успех их не заменяет.
 
 Воспроизведение целевого набора из корня checkout (интерпретатор с pytest):
 
@@ -71,3 +71,15 @@ GIT_CONFIG_GLOBAL=/dev/null python3 -m pytest -q \
   tests/unit/test_validate_container_delivery.py \
   tests/unit/test_credentialless_push_env.py
 ```
+
+
+Независимое review head 371a6101 воспроизвело P1 на пересечении delivery failure и
+SIGINT/SIGTERM: отложенный Bash trap выполнялся до установки KEEP_DISPOSABLE и удалял
+единственную копию run-коммита. Добавлены две регрессии с собственным ограниченным барьером
+перед fetch и настоящим отказом Git обновлять checked-out ветку. Защита клона теперь
+включается до начала доставки и снимается только после её подтверждённого успеха;
+обработчик сигнала сообщает путь восстановления. Сигнал во время Docker по-прежнему
+ожидает собственный процесс и очищает disposable. Общая exit-семантика доставки не меняется.
+Частичный полный профиль старого head остановлен после 4535 passed/29 skipped;
+он не считается зелёным доказательством. Исправленная delta требует нового review и
+полного штатного PR-профиля через host-slot.

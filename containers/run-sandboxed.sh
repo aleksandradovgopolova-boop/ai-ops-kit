@@ -115,6 +115,9 @@ interrupt_run() {
     kill -s "$1" "$DOCKER_PID" 2>/dev/null || true
     wait "$DOCKER_PID" 2>/dev/null || true
   fi
+  if [ "$KEEP_DISPOSABLE" -eq 1 ]; then
+    echo "ВНИМАНИЕ: прогон прерван при доставке; работа сохранена в $CLONE (не удаляю)." >&2
+  fi
   exit "$2"
 }
 trap 'interrupt_run INT 130' INT
@@ -142,11 +145,11 @@ set -e
 # 3. Доставка доверенным host-слоем: ТОЛЬКО ветки, которые создал/изменил ЭТОТ прогон (диф снимка
 #    ai-ops/* до/после), а не все ai-ops/*. Логика — в отдельном deliver-run-branches.sh (тестируется
 #    валидатором без docker). Модель этого сделать НЕ могла — была заперта в клоне.
+KEEP_DISPOSABLE=1  # До подтверждённого успеха доставки клон — единственная копия работы.
 if "$SCRIPT_DIR/deliver-run-branches.sh" "$CLONE" "$CHILD_ABS" "$SNAP_BEFORE" >&2; then
-  :
+  KEEP_DISPOSABLE=0
 else
   echo "ВНИМАНИЕ: доставка веток прогона не удалась; работа сохранена в $CLONE (не удаляю)." >&2
-  KEEP_DISPOSABLE=1
   exit "$RC"
 fi
 
