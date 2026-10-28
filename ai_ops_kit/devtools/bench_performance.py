@@ -250,7 +250,10 @@ def format_text(results: dict, comparison: dict = None) -> str:
 
 def load_suite(path):
     """Прочитать команды без shell; неверный план не запускает ни одной команды."""
-    suite = json.loads(Path(path).read_text(encoding="utf-8"))
+    return _validate_suite(json.loads(Path(path).read_text(encoding="utf-8")))
+
+
+def _validate_suite(suite):
     if not isinstance(suite, dict):
         raise ValueError("suite must be an object")
     cases = suite.get("cases")
@@ -276,13 +279,22 @@ def _positive_number(value):
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(value) and value > 0
 
 
+class _LeaseLost(ValueError):
+    """Команда не должна стартовать без того же настоящего host-slot."""
+
+
+def _lease_subprocess_kwargs():
+    from ai_ops_kit.devtools import host_resource_cli
+    fd = host_resource_cli.inherited_slot()
+    if fd is None:
+        raise _LeaseLost("shared host-slot lost or unavailable")
+    return {"pass_fds": (fd,)}
+
+
 def _command_worker():
     """Один свежий измеритель на попытку: RUSAGE_CHILDREN не копится между командами."""
-    import os
     import resource
-    import signal
     import threading
-    from ai_ops_kit.devtools import host_resource_cli
 
     spec = json.loads(sys.argv[1])
     command = [sys.executable if arg == "{python}" else arg for arg in spec["command"]]
@@ -290,13 +302,13 @@ def _command_worker():
     error = None
     with open(spec["stdout"], "wb") as stdout, open(spec["stderr"], "wb") as stderr:
         process = subprocess.Popen(command, cwd=spec["cwd"], stdout=stdout, stderr=stderr,
-                                   start_new_session=True, **host_resource_cli.subprocess_kwargs())
+                                   **_lease_subprocess_kwargs())
         expired = []
 
         def expire():
-            # Только собственная группа. Timer не добавляет квант polling к короткому startup.
+            # Внешний supervisor очистит всю собственную session перед возвратом sample.
             try:
-                os.killpg(process.pid, signal.SIGKILL)
+                process.kill()
                 expired.append(True)
             except ProcessLookupError:
                 pass  # Процесс успел штатно завершиться на границе timeout.
@@ -320,18 +332,34 @@ def _command_worker():
 
 def measure_command(case, root, log_prefix):
     """Время команды включает создание процесса и ожидание, исключает запуск worker."""
-    import subprocess
-    from ai_ops_kit.devtools import host_resource_cli
+    import os
+    import signal
 
     spec = {**case, "cwd": str(root), "stdout": str(log_prefix) + ".stdout.log",
             "stderr": str(log_prefix) + ".stderr.log"}
-    worker = subprocess.run([sys.executable, "-c",
+    worker = subprocess.Popen([sys.executable, "-c",
                              "from ai_ops_kit.devtools.bench_performance import _command_worker; _command_worker()",
-                             json.dumps(spec)], cwd=PKG, capture_output=True, text=True,
-                            timeout=case["timeout_seconds"] + 30, **host_resource_cli.subprocess_kwargs())
+                             json.dumps(spec)], cwd=PKG, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                            start_new_session=True, **_lease_subprocess_kwargs())
+    leftover = False
+    try:
+        stdout, stderr = worker.communicate(timeout=case["timeout_seconds"] + 30)
+    finally:
+        # PGID получен из только что созданного собственного supervisor. Чужие группы не ищем.
+        try:
+            os.killpg(worker.pid, signal.SIGKILL)
+            leftover = True
+        except ProcessLookupError:
+            pass
+        worker.communicate()
     if worker.returncode:
-        raise RuntimeError(f"measurement worker exit {worker.returncode}: {worker.stderr.strip()}")
-    return {**json.loads(worker.stdout), "stdout": spec["stdout"], "stderr": spec["stderr"]}
+        if "_LeaseLost" in stderr:
+            raise _LeaseLost("shared host-slot lost in measurement worker")
+        raise RuntimeError(f"measurement worker exit {worker.returncode}: {stderr.strip()}")
+    sample = json.loads(stdout)
+    if leftover and not sample.get("error"):
+        sample["error"] = "background descendants outlived command"
+    return {**sample, "stdout": spec["stdout"], "stderr": spec["stderr"]}
 
 
 def suite_metadata(root, suite, iterations, warmup):
@@ -374,25 +402,31 @@ def suite_metadata(root, suite, iterations, warmup):
 
 def run_suite(suite, root, log_directory, iterations=DEFAULT_ITERATIONS, warmup=1):
     """Последовательные повторы, включая ошибочные; warmup сохраняется отдельно."""
-    if not isinstance(iterations, int) or iterations < 1 or not isinstance(warmup, int) or warmup < 0:
+    if type(iterations) is not int or iterations < 1 or type(warmup) is not int or warmup < 0:
         raise ValueError("iterations must be positive and warmup nonnegative")
+    _validate_suite(suite)
+    _lease_subprocess_kwargs()
     metadata = suite_metadata(root, suite, iterations, warmup)
     Path(log_directory).mkdir(parents=True, exist_ok=False)
-    results = {}
+    results, lease_lost = {}, False
     for index, case in enumerate(suite["cases"]):
         samples = []
         for attempt in range(warmup + iterations):
+            if lease_lost:
+                break
             prefix = Path(log_directory).resolve() / f"case-{index}-attempt-{attempt}"
             try:
                 sample = measure_command(case, root, prefix)
             except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
                 sample = {"error": str(exc), "returncode": None}
+                lease_lost = isinstance(exc, _LeaseLost)
             samples.append({**sample, "attempt": attempt + 1, "warmup": attempt < warmup})
         measured = samples[warmup:]
-        successful = all(not sample.get("error") and sample.get("returncode") == 0 for sample in samples)
+        successful = (len(samples) == warmup + iterations
+                      and all(not sample.get("error") and sample.get("returncode") == 0 for sample in samples))
         results[case["name"]] = {"domain": case["domain"], "command": case["command"], "cwd": str(Path(root).resolve()),
                                  "timeout_seconds": case["timeout_seconds"], "samples": samples, "iterations": iterations,
-                                 "command_attempts": len(samples), "repeat_count": len(samples) - 1,
+                                 "command_attempts": len(samples), "repeat_count": max(0, len(samples) - 1),
                                  "status": "measured" if successful else "error"}
         for field, source in (("median_ms", "elapsed_ms"), ("median_peak_rss_bytes", "peak_rss_bytes"),
                               ("median_cpu_seconds", "cpu_seconds")):
@@ -400,15 +434,93 @@ def run_suite(suite, root, log_directory, iterations=DEFAULT_ITERATIONS, warmup=
     return {"schema_version": 1, "metadata": metadata, "suite": suite, "results": results}
 
 
+def _validate_receipt(receipt):
+    """Полный source/command/sample binding; агрегаты не заменяют выполненные попытки."""
+    import hashlib
+    import re
+    from datetime import datetime
+
+    if not isinstance(receipt, dict) or receipt.get("schema_version") != 1:
+        raise ValueError("missing command-suite receipt")
+    metadata = receipt.get("metadata")
+    if not isinstance(metadata, dict):
+        raise ValueError("missing metadata")
+    for key, length in (("sha", 40), ("dirty_sha256", 64), ("suite_sha256", 64)):
+        if not isinstance(metadata.get(key), str) or not re.fullmatch(f"[0-9a-f]{{{length}}}", metadata[key]):
+            raise ValueError(f"invalid source binding: {key}")
+    if (type(metadata.get("dirty")) is not bool or type(metadata.get("iterations")) is not int
+            or metadata["iterations"] < 1 or type(metadata.get("warmup")) is not int
+            or metadata["warmup"] < 0 or metadata.get("execution_context") not in {"local", "github_actions"}
+            or not isinstance(metadata.get("memory_semantics"), str) or not metadata["memory_semantics"]):
+        raise ValueError("invalid execution binding")
+    if datetime.fromisoformat(metadata["started_at"]).tzinfo is None:
+        raise ValueError("start time needs timezone")
+    environment = metadata.get("environment")
+    required = {"platform", "machine", "host", "python", "implementation", "executable"}
+    if (not isinstance(environment, dict)
+            or any(not isinstance(environment.get(k), str) or not environment[k] for k in required)
+            or type(environment.get("cpu_count")) is not int or environment["cpu_count"] < 1
+            or not isinstance(environment.get("packages"), list)
+            or any(not isinstance(p, list) or len(p) != 2 or any(not isinstance(v, str) for v in p)
+                   for p in environment["packages"])
+            or not isinstance(environment.get("variables"), dict)):
+        raise ValueError("incomplete toolchain/environment")
+    suite = _validate_suite(receipt.get("suite"))
+    if hashlib.sha256(json.dumps(suite, sort_keys=True).encode()).hexdigest() != metadata["suite_sha256"]:
+        raise ValueError("suite hash does not match commands")
+    results = receipt.get("results")
+    if not isinstance(results, dict) or set(results) != {c["name"] for c in suite["cases"]}:
+        raise ValueError("case set does not match suite")
+    for case in suite["cases"]:
+        result = results[case["name"]]
+        if (not isinstance(result, dict) or any(result.get(k) != case[k]
+                for k in ("domain", "command", "timeout_seconds"))
+                or not _positive_number(result.get("timeout_seconds"))
+                or not isinstance(result.get("cwd"), str) or not Path(result["cwd"]).is_absolute()):
+            raise ValueError("result is not bound to case/argv/cwd")
+        if result.get("status") != "measured":
+            return f"failed case: {case['name']}"
+        _validate_samples(result, metadata)
+    return None
+
+
+def _validate_samples(result, metadata):
+    total, warmup = metadata["iterations"] + metadata["warmup"], metadata["warmup"]
+    samples = result.get("samples")
+    if (not isinstance(samples, list) or len(samples) != total
+            or any(type(result.get(k)) is not int for k in ("iterations", "command_attempts", "repeat_count"))
+            or result.get("iterations") != metadata["iterations"]
+            or result.get("command_attempts") != total or result.get("repeat_count") != total - 1):
+        raise ValueError("missing attempts")
+    for index, sample in enumerate(samples):
+        if (not isinstance(sample, dict) or type(sample.get("attempt")) is not int or sample["attempt"] != index + 1
+                or type(sample.get("warmup")) is not bool or sample["warmup"] != (index < warmup)
+                or type(sample.get("returncode")) is not int or sample["returncode"] != 0
+                or "error" not in sample or sample["error"] is not None
+                or any(not isinstance(sample.get(p), str) or not sample[p] for p in ("stdout", "stderr"))):
+            raise ValueError("attempt is not successful")
+        for field in ("elapsed_ms", "peak_rss_bytes", "cpu_seconds"):
+            value = sample.get(field)
+            if not (_positive_number(value) or field == "cpu_seconds" and type(value) in (int, float) and value == 0):
+                raise ValueError(f"invalid sample metric: {field}")
+    for aggregate, field in (("median_ms", "elapsed_ms"), ("median_peak_rss_bytes", "peak_rss_bytes"),
+                             ("median_cpu_seconds", "cpu_seconds")):
+        value = result.get(aggregate)
+        if (not (_positive_number(value) or aggregate == "median_cpu_seconds" and type(value) in (int, float) and value == 0)
+                or value != statistics.median(s[field] for s in samples[warmup:])):
+            raise ValueError(f"aggregate does not match attempts: {aggregate}")
+
+
 def compare_suites(current, baseline, threshold=1.2):
     """Несопоставимость/ошибка/потеря метрики запрещает зелёный результат."""
     if not _positive_number(threshold) or threshold <= 1:
         raise ValueError("regression threshold must exceed 1")
-    for receipt in (current, baseline):
-        if (not isinstance(receipt, dict) or receipt.get("schema_version") != 1
-                or not isinstance(receipt.get("metadata"), dict)
-                or not isinstance(receipt.get("results"), dict) or not receipt["results"]):
-            return {"status": "INVALID", "reason": "missing command-suite receipt"}
+    try:
+        errors = [_validate_receipt(receipt) for receipt in (current, baseline)]
+    except (KeyError, TypeError, ValueError, OverflowError) as exc:
+        return {"status": "INVALID", "reason": str(exc)}
+    if any(errors):
+        return {"status": "ERROR", "reason": next(error for error in errors if error)}
     for key in ("environment", "suite_sha256", "iterations", "warmup", "execution_context", "memory_semantics"):
         if current["metadata"].get(key) is None or current["metadata"].get(key) != baseline["metadata"].get(key):
             return {"status": "INCOMPARABLE", "reason": f"metadata differs: {key}"}
@@ -417,6 +529,8 @@ def compare_suites(current, baseline, threshold=1.2):
     comparisons = {}
     for name, result in current["results"].items():
         old = baseline["results"][name]
+        if result["cwd"] != old["cwd"]:
+            return {"status": "INCOMPARABLE", "reason": f"cwd differs: {name}"}
         if result.get("status") != "measured" or old.get("status") != "measured":
             return {"status": "ERROR", "reason": f"failed case: {name}"}
         ratios = {}
