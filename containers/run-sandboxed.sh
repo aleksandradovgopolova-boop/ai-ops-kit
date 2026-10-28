@@ -52,6 +52,13 @@ fi
 #    базу под клоны (по умолчанию системный tmp).
 WORKBASE="${AI_OPS_WORKDIR:-${TMPDIR:-/tmp}}"
 DISPOSABLE="$(mktemp -d "${WORKBASE%/}/ai-ops-run.XXXXXX")"
+KEEP_DISPOSABLE=0
+cleanup() {
+  if [ "$KEEP_DISPOSABLE" -eq 0 ]; then
+    rm -rf "$DISPOSABLE" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
 CLONE="$DISPOSABLE/repo"
 echo "worktree-only: клонирую child в одноразовый checkout $CLONE (основной репо не монтируется)…" >&2
 git clone --quiet --no-hardlinks --local "$CHILD_ABS" "$CLONE"
@@ -62,8 +69,6 @@ git clone --quiet --no-hardlinks --local "$CHILD_ABS" "$CLONE"
 SNAP_BEFORE="$DISPOSABLE/ai-ops-refs.before"
 git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:short)' 'refs/heads/ai-ops/*' \
   > "$SNAP_BEFORE" 2>/dev/null || : > "$SNAP_BEFORE"
-
-cleanup() { rm -rf "$DISPOSABLE" 2>/dev/null || true; }
 
 # Пробрасываем ТОЛЬКО имена секрет-переменных (значения берутся из окружения, не в образ).
 # GITHUB_TOKEN/GH_TOKEN нужны для ЧТЕНИЯ GitHub (integrations: issues/PR как operational source) и
@@ -101,6 +106,19 @@ CREDLESS_ENV=(
 )
 
 # 2. Запуск движка в jail'е над ОДНОРАЗОВЫМ клоном (не над основным репо).
+# wait над фоновым Docker позволяет Bash обработать сигнал wrapper немедленно.
+# Сигнал пересылается только собственному Docker PID; до удаления клона ждём его выхода.
+DOCKER_PID=
+interrupt_run() {
+  trap '' INT TERM
+  if [ -n "$DOCKER_PID" ]; then
+    kill -s "$1" "$DOCKER_PID" 2>/dev/null || true
+    wait "$DOCKER_PID" 2>/dev/null || true
+  fi
+  exit "$2"
+}
+trap 'interrupt_run INT 130' INT
+trap 'interrupt_run TERM 143' TERM
 set +e
 docker run --rm \
   --read-only \
@@ -112,10 +130,13 @@ docker run --rm \
   --memory "$MEM" --cpus "$CPUS" --pids-limit 512 \
   --cap-drop ALL --security-opt no-new-privileges \
   "${CREDLESS_ENV[@]}" \
-  "${ENVFLAGS[@]}" \
+  ${ENVFLAGS[@]+"${ENVFLAGS[@]}"} \
   "$IMAGE" \
-  run "$TASK" /work "$@"
+  run "$TASK" /work "$@" &
+DOCKER_PID=$!
+wait "$DOCKER_PID"
 RC=$?
+DOCKER_PID=
 set -e
 
 # 3. Доставка доверенным host-слоем: ТОЛЬКО ветки, которые создал/изменил ЭТОТ прогон (диф снимка
@@ -125,8 +146,8 @@ if "$SCRIPT_DIR/deliver-run-branches.sh" "$CLONE" "$CHILD_ABS" "$SNAP_BEFORE" >&
   :
 else
   echo "ВНИМАНИЕ: доставка веток прогона не удалась; работа сохранена в $CLONE (не удаляю)." >&2
-  trap - EXIT; exit "$RC"
+  KEEP_DISPOSABLE=1
+  exit "$RC"
 fi
 
-cleanup
 exit "$RC"
