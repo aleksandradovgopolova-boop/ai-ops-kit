@@ -19,6 +19,25 @@ kind: delivery-plan-history
 
 
 work:
+  - id: north-star-becomes-evidence-backed-outcome
+    title: >-
+      Главная мера меняется с «идея → релиз» на «доля изменений, дошедших до ИЗМЕРЕННОГО результата
+      с непрерывной цепочкой доказательств»
+    type: product
+    goal: prove-the-loop-not-add-capabilities
+    status: done
+    owner_role: product
+    value: high
+    closed_at: '2026-10-28'
+    pr: 1393
+    result: >-
+      Главная мера карты продукта кита — метрика 1 evidence_backed_outcome_rate: фича засчитана, только
+      если замкнута вся цепочка идея (motivates) → постройка (builds) → ИЗМЕРЕННЫЙ результат
+      (outcome-readout со снятым числом и target_met != unknown). Прежняя feature_completion_rate
+      (идея→релиз, бралась на ~100%) ушла из карты во вспомогательную функцию. Проведено в
+      product_scorecard.build_scorecard, зеркало SCORECARD_METRICS, docs/capability-map.md и
+      public-surface; карта осталась из 5 метрик. Решение владельца
+      ep-2026-10-28-evidence-backed-north-star.
   - id: verification-cycle-performance-baseline
     title: Измерить существующий цикл проверок и подготовить первый ограниченный срез ускорения
     type: quality

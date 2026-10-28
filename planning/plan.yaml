@@ -1290,31 +1290,10 @@ work:
   # Исход направления `kit_work_is_measured_by_child_value` — мера теперь ЕСТЬ и видна; объявлять сам
   # исход достигнутым оставлено владельцу (мера читает 0%, и «направление достигнуто» — его слово).
 
-  - id: north-star-becomes-evidence-backed-outcome
-    title: >-
-      Главная мера меняется с «идея → релиз» на «доля изменений, дошедших до ИЗМЕРЕННОГО результата
-      с непрерывной цепочкой доказательств»
-    type: product
-    goal: prove-the-loop-not-add-capabilities
-    status: todo
-    # waiting_on снят: владелец принял смену главной меры 2026-10-28 (decisions/registry.yaml ->
-    # ep-2026-10-28-evidence-backed-north-star). Работа разблокирована: довести меру в контракт
-    # (ProductMetrics/MetricCatalog/ROADMAP/VISION) и в scorecard. Эшафот замера уже построен
-    # (#1243/#1276/#1244: precedent_ledger, протоколы child-value, child_value_share).
-    owner_role: product
-    value: high
-    human_decision: >-
-      Ревью: «идея → релиз» слишком про доставку и потому берётся легко (100% уже сегодня), а обещание
-      Vision — про обучение продукта. Предлагаемая мера строже: путь засчитывается только если результат
-      ИЗМЕРЕН и цепочка доказательств не рвётся. Цена решения: заглавное число кита упадёт с 100%
-      до честно низкого — это и есть смысл смены, но объявлять его должен владелец.
-    write_scope:
-    - ROADMAP.md
-    - VISION.md
-    - ai_ops_kit/
-    rationale: >-
-      Мера, которую легко взять, перестаёт быть мерой. Сегодня метрика 1 показывает 100% при метриках
-      4 и 5 «не измерено» — карта выглядит зелёной там, где петля не замкнута.
+  # north-star-becomes-evidence-backed-outcome ЗАКРЫТА 2026-10-28 (решение владельца
+  # ep-2026-10-28-evidence-backed-north-star, реализация — PR #1393) и живёт в history/plan-history.yaml:
+  # главная мера карты продукта — evidence_backed_outcome_rate (непрерывная цепочка идея→постройка→
+  # ИЗМЕРЕННЫЙ результат), прежняя feature_completion_rate ушла во вспомогательные.
 
   # Работа `moratorium-on-new-capabilities-recorded` ОТКЛОНЕНА решением владельца 2026-09-28 и живёт
   # фактом в history/plan-history.yaml (dropped). Мораторий не объявляется; сильная половина направления
