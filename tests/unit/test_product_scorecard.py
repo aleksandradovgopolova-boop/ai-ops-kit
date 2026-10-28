@@ -149,6 +149,37 @@ def test_evidence_backed_outcome_rate_unmeasured_without_features(tmp_path: Path
     assert m["measured"] is False and m["value"] is None and m["reason"]
 
 
+def test_evidence_counts_valid_negative_result(child: Path):
+    """Годный отрицательный результат (target_met: no) — замер, идёт в числитель наравне с yes."""
+    _write(child / "features" / "f-full" / "outcome-readout.yaml", {
+        "schema_version": 1, "kind": "OutcomeReadout", "feature": "f-full",
+        "measured": {"value": 3}, "target_met": "no",
+    })
+    m = ps.evidence_backed_outcome_rate(kg.build_graph(child), child)
+    assert m["numerator"] == 1 and m["value"] == 0.5
+
+
+@pytest.mark.parametrize("bad", [
+    pytest.param({"feature": "someone-else", "measured": {"value": 19}, "target_met": "yes"},
+                 id="foreign-feature-id"),
+    pytest.param({"feature": "f-full", "measured": {"value": "not-a-number"}, "target_met": "yes"},
+                 id="non-number-value"),
+    pytest.param({"feature": "f-full", "measured": {"value": 19}, "target_met": "made-up"},
+                 id="made-up-target_met"),
+    pytest.param({"feature": "f-full", "measured": {"value": True}, "target_met": "yes"},
+                 id="bool-is-not-a-number"),
+])
+def test_invalid_evidence_is_not_counted(child: Path, bad: dict):
+    """#1399: негодное evidence (чужой id, нечисловое значение, выдуманный verdict, bool) НЕ
+    увеличивает числитель — наличия полей мало, проверяется ДОПУСТИМОСТЬ и принадлежность фиче."""
+    _write(child / "features" / "f-full" / "outcome-readout.yaml",
+           {"schema_version": 1, "kind": "OutcomeReadout", **bad})
+    m = ps.evidence_backed_outcome_rate(kg.build_graph(child), child)
+    assert m["numerator"] == 0 and m["value"] == 0.0
+    # и в метрике 4 (тот же помощник) негодное evidence тоже не засчитано
+    assert ps.outcome_coverage(kg.build_graph(child), child)["numerator"] == 0
+
+
 # ── Метрика 2: доля утверждений с evidence — ДОЛЕЙ, не pass/fail ──────────────────────────────────
 
 
