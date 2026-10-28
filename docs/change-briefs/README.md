@@ -74,5 +74,5 @@
 - [Установленный wheel работает вне клона — #1398](1398-wheel-runtime-data.md).
 
 - [Проверка обязательных контекстов защиты main — #1401](1401-required-contexts.md).
-
+- [Отказы и очистка контейнерного wrapper — #1410](1410-wrapper-failures.md).
 - [Локальный JS/TS AST-пилот — #1408](../evidence/1408-jsts-ast-pilot/README.md).
