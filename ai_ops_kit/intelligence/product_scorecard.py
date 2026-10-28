@@ -7,7 +7,10 @@
 метрик 2/3/4 разрознено (`validate_claims`, `knowledge_graph.gaps`), 1 и 5 не считаются вовсе.
 
 ЧТО СЧИТАЕТСЯ И ЧТО ЧЕСТНО «НЕ ИЗМЕРЕНО».
-  1. feature_completion_rate  — доля фич, дошедших от идеи до релиза (из графа знаний). СЧИТАЕТСЯ.
+  1. evidence_backed_outcome_rate — ГЛАВНАЯ МЕРА (с 2026-10-28): доля изменений, дошедших до
+     ИЗМЕРЕННОГО результата с непрерывной цепочкой идея→постройка→замер. СЧИТАЕТСЯ. Строже прежней
+     feature_completion_rate (идея→релиз, ~100%): та осталась вспомогательной функцией, но из карты
+     ушла — лёгкая мера мерой быть перестала (решение владельца ep-2026-10-28-evidence-backed-north-star).
   2. evidence_coverage        — доля утверждений кита с реальным evidence, ДОЛЕЙ, не pass/fail. Долю
      считает этот слой; сырые результаты проверок реестра честности даёт `validate_claims` (из
      `validation`, entrypoints), поэтому передаются СНАРУЖИ — intelligence её не импортирует (это была
@@ -136,6 +139,46 @@ def feature_completion_rate(graph: dict) -> dict:
                "работа/PR (builds)",
         caveat="«без ручного проектирования конвейера» per-feature не фиксируется — это доля "
                "дошедших до релиза с записанным провенансом идея+постройка, не доля автономных прогонов")
+
+
+def evidence_backed_outcome_rate(graph: dict, child_root) -> dict:
+    """Метрика 1 (ГЛАВНАЯ МЕРА с 2026-10-28, решение владельца ep-2026-10-28-evidence-backed-north-star):
+    доля изменений, дошедших до ИЗМЕРЕННОГО результата с НЕПРЕРЫВНОЙ цепочкой доказательств.
+
+    Строже прежней метрики 1 (`feature_completion_rate`, идея→релиз, бралась на ~100% и потому мерой
+    быть перестала): здесь должна быть замкнута ВСЯ цепочка идея (`motivates`) → постройка (`builds`) →
+    ИЗМЕРЕННЫЙ результат (`features/<id>/outcome-readout.yaml` со снятым числом и названным
+    `target_met`, см. `_measured_readouts`). Разрыв на любом звене — не засчитано.
+
+    Знаменатель — реальные фичи с паспортом; нет ни одной -> «не измерено». Фичи есть, ни у одной
+    цепочка не замкнута -> ЧЕСТНЫЙ НОЛЬ, а не «не измерено»: «ни одно изменение не дошло до измеренного
+    результата» — это знание (тот же разбор, что у `outcome_coverage`). Ровно к этому смена меры и
+    ведёт: заглавное число честно низкое, пока петля не замкнута на измеренном результате.
+
+    ОГОВОРКА: «результат измерен» не равно «цель взята» (`target_met: no` входит наравне с `yes` —
+    мера про НАЛИЧИЕ непрерывной цепочки до замера, не про знак итога). Идея→релиз без замера сюда НЕ
+    попадает — это и есть разница с прежней «долей фич идея→релиз».
+    """
+    feats = _real_features(graph)
+    if not feats:
+        return _metric(
+            "evidence_backed_outcome_rate",
+            "Доля изменений с непрерывной цепочкой до измеренного результата",
+            measured=False,
+            reason="в проекте нет паспортов фич (features/<id>/blueprint.yaml) — долю считать не от чего")
+    es = _story_edges(graph)
+    measured = _measured_readouts(child_root)
+    chained = [f for f in feats if f in es["decision"] and f in es["work"] and f in measured]
+    return _metric(
+        "evidence_backed_outcome_rate",
+        "Доля изменений с непрерывной цепочкой до измеренного результата",
+        measured=True, value=len(chained) / len(feats),
+        numerator=len(chained), denominator=len(feats),
+        detail="фича засчитана, только если замкнута ВСЯ цепочка: идея (motivates) -> постройка "
+               "(builds) -> измеренный результат (outcome-readout со снятым числом и target_met != unknown)",
+        caveat="«результат измерен» не равно «цель взята»; идея→релиз без замера сюда не входит — "
+               "мера строже прежней «доли фич идея→релиз» (feature_completion_rate остаётся "
+               "вспомогательным сигналом, но заглавной мерой быть перестал)")
 
 
 def evidence_coverage(claim_results) -> dict:
@@ -400,7 +443,7 @@ def build_scorecard(child_root, *, claim_results=None) -> dict:
     from ai_ops_kit.intelligence import knowledge_graph as kg
     graph = kg.build_graph(child_root)
     metrics = [
-        feature_completion_rate(graph),
+        evidence_backed_outcome_rate(graph, child_root),
         evidence_coverage(claim_results),
         product_memory_coverage(graph),
         outcome_coverage(graph, child_root),

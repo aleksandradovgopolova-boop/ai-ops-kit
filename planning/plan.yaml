@@ -1296,11 +1296,12 @@ work:
       с непрерывной цепочкой доказательств»
     type: product
     goal: prove-the-loop-not-add-capabilities
-    status: todo
-    # waiting_on снят: владелец принял смену главной меры 2026-10-28 (decisions/registry.yaml ->
-    # ep-2026-10-28-evidence-backed-north-star). Работа разблокирована: довести меру в контракт
-    # (ProductMetrics/MetricCatalog/ROADMAP/VISION) и в scorecard. Эшафот замера уже построен
-    # (#1243/#1276/#1244: precedent_ledger, протоколы child-value, child_value_share).
+    status: done
+    # Решение владельца 2026-10-28 (decisions/registry.yaml -> ep-2026-10-28-evidence-backed-north-star),
+    # реализовано: главная мера карты продукта — метрика 1 evidence_backed_outcome_rate (непрерывная
+    # цепочка идея→постройка→ИЗМЕРЕННЫЙ результат), прежняя feature_completion_rate (идея→релиз) ушла из
+    # карты во вспомогательные. Проведено в scorecard, зеркало SCORECARD_METRICS, docs/capability-map.md
+    # и public-surface. ROADMAP/VISION старую лёгкую меру заглавной не объявляли — правок не требовали.
     owner_role: product
     value: high
     human_decision: >-
