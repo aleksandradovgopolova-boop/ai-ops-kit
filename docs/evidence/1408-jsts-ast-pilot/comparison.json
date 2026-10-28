@@ -1,0 +1,4864 @@
+{
+  "source": {
+    "repository": "ii-sreda",
+    "revision": "7b14b251acc65cdf50de4439ef3013c5f83858c1",
+    "eligible_files": 1019,
+    "subtrees": [
+      "src/",
+      "server/",
+      "e2e/",
+      "scripts/",
+      "eslint-rules/"
+    ],
+    "selection": "round-robin(root, suffix, test/other); SHA256(path) order",
+    "limit": 160,
+    "selected_files": 160,
+    "selected_groups": {
+      "e2e:.mjs": 19,
+      "eslint-rules:.js": 2,
+      "eslint-rules:.mjs": 1,
+      "scripts:.mjs": 28,
+      "server:.mjs": 38,
+      "src:.ts": 36,
+      "src:.tsx": 36
+    }
+  },
+  "environment": {
+    "tree-sitter": "0.25.2",
+    "tree-sitter-javascript": "0.25.0",
+    "tree-sitter-typescript": "0.23.2"
+  },
+  "snapshot_sha256_before": "d35f724e61a198b35c2fd4ec2a1e75b871934919caa24a37136e8dfe73c8fd80",
+  "snapshot_sha256_after": "d35f724e61a198b35c2fd4ec2a1e75b871934919caa24a37136e8dfe73c8fd80",
+  "timing": "NOT_RUN: explicit resource window required; #1409 has priority",
+  "summary": {
+    "ast_success_files": 152,
+    "fallback_files": 8,
+    "regex_specifier_pairs": 590,
+    "regex_pairs_on_ast_success_files": 546,
+    "ast_specifier_pairs": 537,
+    "ast_only_pairs": 7,
+    "regex_only_pairs": 16,
+    "unresolved_files": 2
+  },
+  "limitations": [
+    "No independent complete oracle; counts are not precision or recall.",
+    "Limited deterministic sample of one pinned repository; no generalization.",
+    "Stem graph is not Node/tsconfig/package resolution; all AST JS stays unbounded.",
+    "Literal strings only; escapes/computed imports unresolved; require binding not resolved."
+  ],
+  "manifest": [
+    {
+      "path": "e2e/_browser.mjs",
+      "blob": "3dd06959af069406d692737fa15520bf34170f3f",
+      "sha256": "f9422a5fea1e14494436cbb3b0f7cb0530eb10c1ff94b2507718de06010e8ec3"
+    },
+    {
+      "path": "e2e/_session.mjs",
+      "blob": "29f75918facfa308e2dc9346979af71c06cb9fc0",
+      "sha256": "5d1e54cfdedd108fe3db7c2441b01610be5a677bba45e7b7a251b59f4c48dfa9"
+    },
+    {
+      "path": "e2e/a11y-app.e2e.mjs",
+      "blob": "05b5beb3227d7bf442fcc9c15ec8f18d020687aa",
+      "sha256": "3ee5acf8710b89ae369e0472e92e99c1cf2754152f6da07d65b95f7a72da0399"
+    },
+    {
+      "path": "e2e/a11y.e2e.mjs",
+      "blob": "7c6abf2bf919c6ecd1d336dafe4ad038e7639e7d",
+      "sha256": "9f6662835b71b57d585e1d80cefbface347b19a572c17182b768d8fc7bad9e3b"
+    },
+    {
+      "path": "e2e/agent-catalog-update.e2e.mjs",
+      "blob": "195713f04b6c945be0621a6dc352aebe128ea6c1",
+      "sha256": "5f9fba5a8693341e6716abcd7b2fb5fb1365617011b0a5485d760e9b1bb5093b"
+    },
+    {
+      "path": "e2e/catalog.e2e.mjs",
+      "blob": "577865ab3b614166365e2acdd4b2e01640d2e814",
+      "sha256": "9a26982a9c77bd394c63067063e2ec18e188a1e5b7e9a3a6eb6b8075e77f22f7"
+    },
+    {
+      "path": "e2e/collab.e2e.mjs",
+      "blob": "fd406eb06ab57d7a217d9c6b819a4906b23eaf75",
+      "sha256": "ff6c8b59c41963032075ecd9e229c6f3ec972e1aa4085184e98d06adf065e9c4"
+    },
+    {
+      "path": "e2e/export.e2e.mjs",
+      "blob": "7e48c3a43e7f3b9e141f874d2a4d76bb4670744e",
+      "sha256": "323dc279880009f3bfba47860e17dfe6252837c7e57c39d6fed927316952f5f5"
+    },
+    {
+      "path": "e2e/invite.e2e.mjs",
+      "blob": "f4fa2ea354167adf5e332522ed99adbf79e89546",
+      "sha256": "28b547a6e89ecef32ae51dd3da6efe55ae6481ac68e89042e518e4028d0d900a"
+    },
+    {
+      "path": "e2e/link-dashboard.e2e.mjs",
+      "blob": "af19cb5798de4115d8b2f0ad5750795f890243b3",
+      "sha256": "db69ae74db624f379d75d98d7b661350748483bf0eccfdd473f23f6f201a5f83"
+    },
+    {
+      "path": "e2e/materials-ds.e2e.mjs",
+      "blob": "e87e46f0d709ee9ab880ae380111386a48c412bb",
+      "sha256": "23a3c918f0aa63e86d1f5070a4df707f3449e10ffa883c920644e602fbbb102b"
+    },
+    {
+      "path": "e2e/notify.e2e.mjs",
+      "blob": "a29e229367e157f02bc5808f879a44976b3c98c9",
+      "sha256": "0417e603cafa08f210b2ca0b6fdb7311c1b2944b20bf58d35021a80d6569e143"
+    },
+    {
+      "path": "e2e/prepare-database.mjs",
+      "blob": "e820ff5717b66c709235ed7d0140284c132c6644",
+      "sha256": "94b33edb559cfa75d4edee053f84fbea64daabe6bb725f87be26cf133759c4ed"
+    },
+    {
+      "path": "e2e/profile-fields.e2e.mjs",
+      "blob": "7b4ed249bfdb2597886576cfd3f82581656e1161",
+      "sha256": "1be2bda7a66f28236b57ec3432648aab926c70b1a371055162241ffbebdaeea9"
+    },
+    {
+      "path": "e2e/run-app.mjs",
+      "blob": "eea5a1d92472079bede4c08a9e3693eaa2e85a85",
+      "sha256": "b4a7f1366699628fd96347938a30b0024b5e8326ca054e109b438171b6fb9795"
+    },
+    {
+      "path": "e2e/scenarios.mjs",
+      "blob": "48c9bff698b084d978339b24c518743b9281d185",
+      "sha256": "b01b562b5ea362abe7328b11eb5d41eb3ff7b5f695206311e0411ac1de7eb492"
+    },
+    {
+      "path": "e2e/smoke.e2e.mjs",
+      "blob": "b514fcb6914da0894d45cb63244428c9c391ec95",
+      "sha256": "885bc22654be30547cbe8b52c60a429ee0fa664dd64047495f538326e772811a"
+    },
+    {
+      "path": "e2e/stability.e2e.mjs",
+      "blob": "b80a79816e6bade5eaa4304f8b1a2f8741140477",
+      "sha256": "515ae3026dd9061904afdeaa4a39b03b8a3ee027e277cae93e264da8ba8e87aa"
+    },
+    {
+      "path": "e2e/storybook-shots.mjs",
+      "blob": "c7ac83e8f31b2edd4e0622b8294833b86bcef4d2",
+      "sha256": "e280d8728815cf025c53aedf607d942ddafceb7bf2ed8fca551350de62eaa06b"
+    },
+    {
+      "path": "eslint-rules/debt.js",
+      "blob": "f46d4c6072792258d66b7c88bfe219b13f728b9f",
+      "sha256": "afb2bbcb1980456093ba1ed3dcba09048e7534adc6f653dbd1ce5ccfad2a657f"
+    },
+    {
+      "path": "eslint-rules/index.js",
+      "blob": "fe027bfaae9db57c0edea180d20f5e2a6a9da22b",
+      "sha256": "614524ac6f4706a4939986b298a89923828082f18146c8ad004399146907bc70"
+    },
+    {
+      "path": "eslint-rules/rules.test.mjs",
+      "blob": "906febeacffb71932b6482bf3e23dc290223a790",
+      "sha256": "ff98b7170a1621d4b49f9607644f05daef84bba86429a2d62447f589822dd2aa"
+    },
+    {
+      "path": "scripts/add-rox-only-user.mjs",
+      "blob": "7de42cccb752c17e2f16199ee35fd6ae6cbab3c1",
+      "sha256": "aeb5e25d6a6612f0749f199f85ff9511dd99c0163fef369fbfc866c8eefe8008"
+    },
+    {
+      "path": "scripts/add-rox-only-user.test.mjs",
+      "blob": "860eb16b8b32814e072655a2f17f12fbb8ada3a9",
+      "sha256": "a6d395eedee66b1984404957a92ca6981ad76386c31ef45a6d034bcf55dace09"
+    },
+    {
+      "path": "scripts/check-doc-sizes.mjs",
+      "blob": "91151f67b5d9bb6f8cbc82490ef076dd5f88c9a8",
+      "sha256": "9d314ceae535cce147b95877ed5f96057671c16d3e08039dfbddd3289c078044"
+    },
+    {
+      "path": "scripts/check-headers.mjs",
+      "blob": "95393ce9337e7a03c43a65eb98c32c522aecacc3",
+      "sha256": "a975360a9153fc085286d357427604fcc2e78aa122e4946adb76331b8c2e6205"
+    },
+    {
+      "path": "scripts/check-prod-deps.mjs",
+      "blob": "818601f0b77524fa3f409f16cb86486fb0b2c26f",
+      "sha256": "fc3d39c13463d94deafba20921f1406e4a4833f7ec68ce7b12cb5550f0e5bb41"
+    },
+    {
+      "path": "scripts/check-prod-deps.test.mjs",
+      "blob": "ead24fc5795baed00560e9a84d03ca3efb59b26a",
+      "sha256": "948ea699a17fdfaa9f6d538af966534a14720346be14f2daaad654b2df2b11e9"
+    },
+    {
+      "path": "scripts/check-test-vacuum.mjs",
+      "blob": "f6c8419b7239fbed0e3c417c9f5bbbfead884d1a",
+      "sha256": "3ce1ba44db4f21fda78574d8aef37848e21efe39c4f29d53ef16b2475445c4b9"
+    },
+    {
+      "path": "scripts/check-test-vacuum.test.mjs",
+      "blob": "26bb1f99b8b6fb80a6b79ed57842d200ce89739a",
+      "sha256": "8567ae3ff43459a4e9027324b45206ad7fe3c38c2c3d9e9e2dd15ae2ef2d0e5a"
+    },
+    {
+      "path": "scripts/doc-counters.mjs",
+      "blob": "ca004f15c32ee63d30973b1a7d17394bdf611c2b",
+      "sha256": "5595d145600a23e79e4d2a78eb04d3a3875613454deb188232aa1818ab352137"
+    },
+    {
+      "path": "scripts/eval-content-grounding.mjs",
+      "blob": "ca7e560927b9e1735d12ad47393d91faaf15d663",
+      "sha256": "e9f9204483d6f2e064d7cb6340b01a9a97b9a91ed230b5df342510114e94ef12"
+    },
+    {
+      "path": "scripts/eval-corporate-agents.mjs",
+      "blob": "1680aa7c58063a12d2b8e4038ad87adabafc61e1",
+      "sha256": "ec3d9edcb8fede35badffd4b75bf410cfb88c5c86a82b750c38e42794223dc57"
+    },
+    {
+      "path": "scripts/eval-note-cutoff.mjs",
+      "blob": "3ca129d053d8229d2821dcab46da51690c755474",
+      "sha256": "1faac5f13bcf869a947eddb7e2714e726cafacb1d4681ed192cb4bc84ed4b9fd"
+    },
+    {
+      "path": "scripts/evals-judge.test.mjs",
+      "blob": "1d0c8157782c9b4096e096568ff1cb4c79426599",
+      "sha256": "61aa1a35ea996125e4d2eefbec6353b5f75ea7cf059c6dd7ea609512d9282124"
+    },
+    {
+      "path": "scripts/evals-noise.test.mjs",
+      "blob": "8261a2f2a36a3b7b931126be1827239bb2e245e9",
+      "sha256": "9cefdc930d6a7eedd7350fd3e28bfd3bebdda140c2f67c8ad3cce3a84592355f"
+    },
+    {
+      "path": "scripts/headers-core.mjs",
+      "blob": "8afe10c90b65cbfa583359a82365190e528decb4",
+      "sha256": "b67a95e4d87aac7f5aeda7515e791a4cf8ea8769ab796e1f1feb43acbbde6ebe"
+    },
+    {
+      "path": "scripts/health-alert-core.test.mjs",
+      "blob": "9208b771226efce6cf9b32049e101f2096969925",
+      "sha256": "d30533cae9c3851799a059c6bdfffe4c7b36f5fa41706d0736429aad780a2d08"
+    },
+    {
+      "path": "scripts/lib/decision-arithmetic-oracle.mjs",
+      "blob": "61324117c36c87fef2658727cf85fc125ee169b6",
+      "sha256": "e2854684076b59fdf8c48a828382b8d19ac45d8e729eb6926aaeff07d6a7d66b"
+    },
+    {
+      "path": "scripts/lib/decision-formula-oracle.mjs",
+      "blob": "2a1d2b714a04388eed5dd4a17b9d9bdd0fe404e2",
+      "sha256": "54a3b17e9ce211110f4a1739815a1f4389c96e6a6edf85bde62dbecf8e712e6f"
+    },
+    {
+      "path": "scripts/lib/decision-formula-oracle.test.mjs",
+      "blob": "e3c04f1fc480f67897b6020577fe209cdaea522f",
+      "sha256": "6b4f04c057844ca451d264dc8d689b41ed5b07a59c033983b3e3f408d5608ea3"
+    },
+    {
+      "path": "scripts/outcome-emit.test.mjs",
+      "blob": "8951186b0597583d4edd0e9ba18fc55b3f875e46",
+      "sha256": "7e031f98eeacf9f1abd6f83ca831121ed4783acc3296eec82ac09d5533208d14"
+    },
+    {
+      "path": "scripts/run-evals.mjs",
+      "blob": "89b0c55333d0765d6a79ab9c518209e9ac4dadc3",
+      "sha256": "0c532c9408e5a7d53b5f3cad30cb957f565e760838eb90699bad48b49114d338"
+    },
+    {
+      "path": "scripts/run-memory-real-golden.mjs",
+      "blob": "4722d12cf1dedc3f3bf2f644adca150a4e66f1f5",
+      "sha256": "f04b85158fb3d718ba8b89d77c3bb72b45baea7861ea898a5f0db4b22ee913fb"
+    },
+    {
+      "path": "scripts/set-rox-only-models.mjs",
+      "blob": "f4d68afeb636a777ee864898869587045315d7bf",
+      "sha256": "ef11eccd470a8a92f9d9742db060f10d9499d2f7e89a7409238e309b19fcd5bc"
+    },
+    {
+      "path": "scripts/set-rox-only-user-model.mjs",
+      "blob": "05122e76d52a3ea35e6bd4cd4ac166acce3b9de7",
+      "sha256": "32fe90268acc983ecfc662d6e5efb0f0e6bb35442dba1bcbc4f7872baed52082"
+    },
+    {
+      "path": "scripts/set-rox-only-user-model.test.mjs",
+      "blob": "7346917c1ffb00c149067b2b7d14c2e3558ddaf4",
+      "sha256": "50d94a655c404e9fa9a39c7ce9fdb8b1204ec65623b15a39865b8d097783ecf3"
+    },
+    {
+      "path": "scripts/verify-backend.mjs",
+      "blob": "bc1e6a69fc2ff682a0bbf8284acdcbbc470f7719",
+      "sha256": "f3dd24f8db659c33ca81be681554f8027b9b284544ae1ae171875d3fb858a828"
+    },
+    {
+      "path": "scripts/verify-compact-actions.mjs",
+      "blob": "9eef44b6b2438494625dd561ee123870f72bbe91",
+      "sha256": "8d901080d4d0134c8844164cfa8c0e4ee8de9b3fdf7c8c569585902285ce169a"
+    },
+    {
+      "path": "scripts/verify-conversation-search.mjs",
+      "blob": "feb1caa2da1bb5eb3ca5767020816d1c4d45e3d7",
+      "sha256": "e413a77c24bea7d74b5fbfc90802730cb8b1218003c48c1d58e52e014fd99b2a"
+    },
+    {
+      "path": "server/auth-endpoints.visit.test.mjs",
+      "blob": "9681f02cb3760c29aae77d6205ba6123b9ee8a96",
+      "sha256": "bb7f5f007f186b2e9d758ccfbcb00e949836469839812c86eb271cff3976d2ae"
+    },
+    {
+      "path": "server/context/context-index.mjs",
+      "blob": "c9fdbcbdd8419ba331bccad5fb34e2c847343b54",
+      "sha256": "dce3cd62d97157e4e6be9b124b37419e2b55ecd3d9c183e10f9c4e857f6a3a7d"
+    },
+    {
+      "path": "server/context/corporate-context.test.mjs",
+      "blob": "044c4de44bba13f96667230130cd21e71bac7e69",
+      "sha256": "cb1e5837ae3a2a09f790620360f147b51d50b312fafb5592a810fe6ed9508e34"
+    },
+    {
+      "path": "server/domain/access-control.mjs",
+      "blob": "52f0b3f60d2fe9c594642105e60d24d7a7c1234c",
+      "sha256": "69d8633587cc530f6a36903371e248040301230c7ee68c5b3f6c38d10acf9a47"
+    },
+    {
+      "path": "server/domain/artifact-materialize.mjs",
+      "blob": "75714a229d92a7552270cbc67f04b1df90d3dfd9",
+      "sha256": "6288e2df29e4daced479c72d489fb695e795ad49b92392146bf943f551156dff"
+    },
+    {
+      "path": "server/domain/domain-store.mjs",
+      "blob": "123632b452331b9f7f1fb7406f4c85b5b9bdeac9",
+      "sha256": "701f79317b0a30380eac26e0e43957e4d47c0eead370c7be198f95f82dd66422"
+    },
+    {
+      "path": "server/domain/prompt-dashboard.test.mjs",
+      "blob": "f35f8ca3335fd27c2571f61e8fb85bb09ce5085c",
+      "sha256": "4e5d924a54b4bd038571dfdd14e6f82a606f5a1c40b138433cfe071671389801"
+    },
+    {
+      "path": "server/domain/run-payload-attachments.test.mjs",
+      "blob": "8f271f3a6b58636313a980c4dc1c7ff06b9ce810",
+      "sha256": "91f4cf36eb42ea24149b2017c146d0980a9e7ba7ce56b2bce70bd4e439b3c65a"
+    },
+    {
+      "path": "server/domain/store/agent-catalog-updates.mjs",
+      "blob": "6ecb65b99eda0fd6fa72453dd21402a326463ac3",
+      "sha256": "06f91c8766edeb9208b073a4e6df74c78d2f89dd2871254728c57a4e49d44f33"
+    },
+    {
+      "path": "server/domain/store/assistant.mjs",
+      "blob": "528ea52bf2b298801b4f1e5879617cbad24a5771",
+      "sha256": "c05e14c1b0962ad18656ed469ff61ff85dcd91d32274af495995fd6503f1095a"
+    },
+    {
+      "path": "server/domain/store/migrate.mjs",
+      "blob": "d9a37255bf6679e5335ca4d366b3fc63701bfeda",
+      "sha256": "8a3d9f54c73812db6141bad465aeb02964c5473eb53f6c1dc709817147579d22"
+    },
+    {
+      "path": "server/domain/store/projects.mjs",
+      "blob": "f80bdcee6aa8a19d6b3192239439eaf7f44f494d",
+      "sha256": "7c0305838700c1e7d7a44c017daebe69c9d35dacc9e6da3e0f7b8ecb79bb6520"
+    },
+    {
+      "path": "server/domain/store/rows-preview.test.mjs",
+      "blob": "24290d43716e5e46b34abf02e33fba4e165972bf",
+      "sha256": "4a9e5f92bead90672f066c031d3919fda51f793b9ee75fcf011deb4ea6ef101e"
+    },
+    {
+      "path": "server/domain/store/rows.mjs",
+      "blob": "3319c20add4c51b16e98556eab95cbc7bbba7619",
+      "sha256": "fb2c2dd08bb81257e58d0a25db1f068e3c1004bceca70313895ce143537c8360"
+    },
+    {
+      "path": "server/domain/store/settings.mjs",
+      "blob": "638351eca22d475b426a9c902038a902732573fc",
+      "sha256": "aa87da40380d5a32c7c4531110f191dc7a12dc0305152a4ba4b83b94d893c5cb"
+    },
+    {
+      "path": "server/domain/store/settings.test.mjs",
+      "blob": "796f88b7b15f96bf494cec1a2a146af4cb74174d",
+      "sha256": "21eff979abfd0e404e1f188989aaafdecc2bf22ef6fd3dc2ccea3e80f526e70d"
+    },
+    {
+      "path": "server/domain/store/share-links.mjs",
+      "blob": "7fe437a982c0abca70189ebea732a458fe2812d2",
+      "sha256": "e7471634f5ea6e3c05ab09b4174f880baf26be33f20177b4431c0887c79099b4"
+    },
+    {
+      "path": "server/domain/store/workspaces.mjs",
+      "blob": "cff6f905b51a4d9fe9afcfab271566e7e0d55402",
+      "sha256": "dbc2547ed94738c057417d7e0e0fd09a3c37d6e09bdb7d8614b3088ea38848ce"
+    },
+    {
+      "path": "server/domain/task-runner-dashboard-records.test.mjs",
+      "blob": "78e1f811f3761a95e359a9135cab4ed0b97ae421",
+      "sha256": "d95a505f860a05a30d65c7c8b00cd3cd0ba721c5e6e432fe9e086c989e5b7fa4"
+    },
+    {
+      "path": "server/domain/task-runner-presentation.test.mjs",
+      "blob": "865b37ce5c310211a14f495184f1d530eefbc4a0",
+      "sha256": "a8c58000c7f39dc752cd85c83c7331dbcfd3e198adba644f18e83f06de4253b2"
+    },
+    {
+      "path": "server/domain/task-runner-readiness.test.mjs",
+      "blob": "a8b57294fcd2580ae61becb9406094300e3a9a60",
+      "sha256": "11d2d7c83901ddbc9ace7547d412ab09b0fabfffa52a5deb967760c3e8769f66"
+    },
+    {
+      "path": "server/files/scanner.mjs",
+      "blob": "6659e8b5813d2f3e1264992b073c9be0122b4f91",
+      "sha256": "b346a3d3a24434c12693152d4b25fe8312afc15c2c9653622efa629be7ca5fc1"
+    },
+    {
+      "path": "server/generation/chat-legal-evidence.mjs",
+      "blob": "d781ce5ce81b9d604e0f12ed9c6d606be372ea11",
+      "sha256": "ff79acf67f5bc45742c1eda23684a561d9a8d150fd7057a0983d957b7f7c0d50"
+    },
+    {
+      "path": "server/generation/citations-compound.test.mjs",
+      "blob": "a94f326613cc0dcce07a347b1472d21f431e17fe",
+      "sha256": "163f2257d5386f1742027cdf0c8e269a9deaad4279b2657f6ea643e4b41b43d7"
+    },
+    {
+      "path": "server/generation/content-grounding-causal.test.mjs",
+      "blob": "2c50c6de5ec53110826f28e8ba61c8174e335641",
+      "sha256": "d3eafd67ef3f12dcb23794f141e446268a17492b9125fc026f991bd3978268b4"
+    },
+    {
+      "path": "server/generation/content-grounding.mjs",
+      "blob": "17eafc2474d7e3a901986538528da02cf257dc51",
+      "sha256": "da085a86328ecc3118ab827ed6e34f8f3c82881cdfbea2818517d5e523391a2c"
+    },
+    {
+      "path": "server/generation/decision-review-generate.test.mjs",
+      "blob": "49e9416786239a00a81333deae71a5ddaf4b65f6",
+      "sha256": "d57310450c2d71d8ef855aaaa0863e28e73e5a1623d29e910eb11bdb50b10de2"
+    },
+    {
+      "path": "server/generation/legal-source-plan.test.mjs",
+      "blob": "b471fbab31a169c95e70a344ce444bc781a235ca",
+      "sha256": "ce7ec5a2edb6ef10123e0189964fb561389d8d496304609d0ed619dbec1ebaca"
+    },
+    {
+      "path": "server/generation/memory-real-golden.test.mjs",
+      "blob": "ef6166e07bbc472d3c1e18bb6d139affd0f4d38e",
+      "sha256": "eaba0d8649863458cc60d3d8009f22383811ef016c162628e37a164ab3d11c5d"
+    },
+    {
+      "path": "server/generation/normative-tool.mjs",
+      "blob": "bde636601420e79f3b6c1b9468c7ad3eda2dedd1",
+      "sha256": "a69b41ee0f1af4e5a7b8b48523561efb977af458d8d3bad318e1c7810ea4f2ce"
+    },
+    {
+      "path": "server/generation/npa-pipeline.test.mjs",
+      "blob": "9d149405a0183cba688c5bfc2e99fa47b2d15293",
+      "sha256": "38c67eb1325364e88ed6d5e57266f003fd8a3706e6df7ceb4f54f20070c488e4"
+    },
+    {
+      "path": "server/generation/one-pager-format.mjs",
+      "blob": "eb91df39365a3c347460572298c2cd349341705b",
+      "sha256": "24a6403869902959a90e74265f31ea09aa620e7da1e5bb7d733d83859b99b197"
+    },
+    {
+      "path": "server/generation/presentation-edition.test.mjs",
+      "blob": "cac8419e638ff28ccba5875d9730f0913e40f77d",
+      "sha256": "51d42b77bffe4650272e130a73c434666944c8e96be181f5fea01d11f6ff9f21"
+    },
+    {
+      "path": "server/generation/procedure-addresses.test.mjs",
+      "blob": "dcfa87973ff2575679a5d14d1bc7351bc81f3254",
+      "sha256": "a89df2f43ffe4f60d2aed44379739da3bec11c0baf20682e731dea6faaabf594"
+    },
+    {
+      "path": "server/generation/skills.mjs",
+      "blob": "31be7c1d789d947be636282c98c048781b044e77",
+      "sha256": "0372c1da2d542f1b563eeff1e14e5797ac9968355d92b1062377a6150e14b784"
+    },
+    {
+      "path": "server/mailer.test.mjs",
+      "blob": "78ab51bd3e44936f517d551db9c826d4a025ab2d",
+      "sha256": "7a938080ba55556f2f7da569b027020cfdac9ad10c44b70aee93488eb1374e28"
+    },
+    {
+      "path": "server/reset-link.mjs",
+      "blob": "530359bd4e16323e4e2f6587712f408b6cf267f6",
+      "sha256": "b4278c2715cfadedeb2467b775f919a4643efa724d32c5d84e613714aa5b53a4"
+    },
+    {
+      "path": "server/reset-link.test.mjs",
+      "blob": "6425eafe82aa39d48ae8d3705f22adc253cbacd9",
+      "sha256": "bce4ee41b355504dd1b84365b998be8acd16a4b6711c496dcf697b6a93a96705"
+    },
+    {
+      "path": "src/app/api-client/catalog.ts",
+      "blob": "5c0f4de11c1958272a368c2f5c6f206f04b78020",
+      "sha256": "44fd442c415d46b28c9bcd0a39b11d9e18c6d27fe1f2b426b290274a31ecd501"
+    },
+    {
+      "path": "src/app/api-client/no-second-contour.test.ts",
+      "blob": "d2f51ac0521f249441959c12dbc74e40d53ca5c0",
+      "sha256": "2f14c528d50e2eb102f397f9641b91f98ec2a92c784e666ea8963fa67a96ddab"
+    },
+    {
+      "path": "src/app/api-client/request-draft.integration.test.tsx",
+      "blob": "cc00f1ac1b93f9fd801c4f89df16896db7d2a540",
+      "sha256": "380e8f9d8849a368ca14916131bc9eeb156493a77d15053aadd6f1893e2f36e3"
+    },
+    {
+      "path": "src/app/api-client/server.catalog-fallback.test.ts",
+      "blob": "f71451c1dcc7b5296b4177df0abdc92835711d97",
+      "sha256": "28a240150aa636e279849cfef2ddab6d49c6da1556c58bdddfba7c0f7f457f8d"
+    },
+    {
+      "path": "src/app/api-client/server.org-audit.test.ts",
+      "blob": "79fc1b6542513ec7df846954db4316882b81d1f5",
+      "sha256": "633ca47f4c2000f0c9ac397ff0e00b95717066cf9c631d1bd7355a0328b06751"
+    },
+    {
+      "path": "src/app/layouts/SidebarProjectsSection.test.tsx",
+      "blob": "a74f1f99344d435ecac04f918b76bdc84a76cb8d",
+      "sha256": "9ea9735a3a36841719bf5428991a739a30d59c76d287219e4d499d453d31a581"
+    },
+    {
+      "path": "src/entities/agent/agent.test.ts",
+      "blob": "f5b70152ecd175623cb4acd85cd58547bf4b17c3",
+      "sha256": "a53703be7cb6c4544f1b0941dd70c9b16367782305f01d3f9c13857008a83b31"
+    },
+    {
+      "path": "src/entities/collaboration/changes.ts",
+      "blob": "f24522d56a434d367ab06ad6d72de0f9e816f49f",
+      "sha256": "74919b60e80720cd72ed2f921106fab2793b364b8d869cf6851116a96ae8ca32"
+    },
+    {
+      "path": "src/entities/collaboration/permissions-parity.test.ts",
+      "blob": "86d5c20aea7f60a86408dfd6d1dd946f0c567698",
+      "sha256": "2b51a43a7cbd392095e5d9cec7f25ca10b0e034d0548c1d5b1e5a37905243fb9"
+    },
+    {
+      "path": "src/entities/collaboration/policy.test.ts",
+      "blob": "0be3d70a2157fa78461e5ab27e1bd9f63431c31f",
+      "sha256": "423ae660f906632d8ef80831a70425a10849807a9a8bdba0d1febe2575237ceb"
+    },
+    {
+      "path": "src/entities/dashboard-data/records-formats.test.ts",
+      "blob": "3e5ad225615cc7bc0f8d255296dadc3056e1b5f6",
+      "sha256": "2b4dfcb68e5918aed4d659a9ac0ec21b4f574d7e3a8805e6da4b5c99049162b3"
+    },
+    {
+      "path": "src/entities/presentation/deck-sync.ts",
+      "blob": "e4e542d46051a25c0be08223ba1514ec8f950965",
+      "sha256": "074314b8cfb804991fa4e0bba7d7ebd1aca8634cd6cf9a9d64445e7eadd90d31"
+    },
+    {
+      "path": "src/features/access-management/useAccessRequests.ts",
+      "blob": "f4f23448da44b3c2a15c58fee03d436049d969b7",
+      "sha256": "061ed32ec8ae487d2e732fe2cf528da438600d330a246641ef9cdbe429ec9647"
+    },
+    {
+      "path": "src/features/admin-overview/index.ts",
+      "blob": "e817f01a5093e26edad64cc12bd839a6d8ca8a26",
+      "sha256": "e0d6dcb91e09bfd8b17f9157d3826f01ea8a1b0342f9d0b672ff1a6aeeaa8ed9"
+    },
+    {
+      "path": "src/features/admin-overview/model.ts",
+      "blob": "676fd4aa456ecf9f1982ad61b1441c2e4b11188b",
+      "sha256": "266fc4b959e9310de71fe41098d2db653875303dfc77db19103fec7813f5402c"
+    },
+    {
+      "path": "src/features/agent-catalog-update/AgentCatalogUpdateModal.test.tsx",
+      "blob": "1d1ebe14e6df2e8b61cae0d29e80cf7ae6230202",
+      "sha256": "f82c11e6b97e5f5240fe9b5c9c58db834855d1710246645dc6b0791b69b4e6a5"
+    },
+    {
+      "path": "src/features/artifact-export/builders/markdown.ts",
+      "blob": "f3616242fa50ace8108f813754c978359e2e3d5b",
+      "sha256": "b9adb9ec57c4f9376e5c9c4fa4717922214fe8253b8f43f5fbd95179d019029a"
+    },
+    {
+      "path": "src/features/artifact-export/builders/pptxBuilder.test.ts",
+      "blob": "794824626b32807cfcbc736f2f39d7c280af61af",
+      "sha256": "dece80d61bec0be8e477b2d45044d7530b4ba57bbf7a6191aaeb8e5b89a04acd"
+    },
+    {
+      "path": "src/features/artifact-export/builders/printPdf.test.ts",
+      "blob": "7eeb466defe61d5ace0c40b8425367292c273871",
+      "sha256": "655dc06a61df2f7afc5c53727553db6f552467b30584c987f79f20cb0786eeb3"
+    },
+    {
+      "path": "src/features/catalog-management/CatalogEntryModal.tsx",
+      "blob": "f1637e3eaa494fb37e90836b2acabcc0f5e534c7",
+      "sha256": "6b9bd5de57026f9f82734a4899fcac8e321759d0340d0cc414316a7eef1c149c"
+    },
+    {
+      "path": "src/features/collaboration/model.ts",
+      "blob": "c5a9f970785649011795eabf1366fe4e8c7abb92",
+      "sha256": "1f9b87ed2155e1e1de5fc0cecbc644a837e31062ee2bebc765ee2056150f61a7"
+    },
+    {
+      "path": "src/features/content-assistant/ArtifactCard.tsx",
+      "blob": "daf005bde88df504f0a3edeb44a3832dac29c268",
+      "sha256": "6c157990da31364571e811bd3388bea48b649322a6ddded700a073677c7df38e"
+    },
+    {
+      "path": "src/features/content-assistant/EditorChatPanel.tsx",
+      "blob": "c97f7e17bc35ca8d0cb080da27e49a94d836cad1",
+      "sha256": "393376b842ef46509894d50e7309f6cd5e2a0d57096086ec845a6a964fcb3d38"
+    },
+    {
+      "path": "src/features/content-assistant/useContentChat.ts",
+      "blob": "46454dd147fb794e2c8a700ff119bad4da5ff5e7",
+      "sha256": "ba351282fee1991fd23e0ec98368f7d24800bf7ab415a77f4f957dbf0a9e973b"
+    },
+    {
+      "path": "src/features/dashboard-management/DashboardPagedView.tsx",
+      "blob": "e1b6496d9b822927e7e213e7c961883edd3ffab3",
+      "sha256": "b2d87e8e715479007921d6466e39030fd3f2d1bc72a43d2e10d40599ba69095b"
+    },
+    {
+      "path": "src/features/dashboard-management/ReplaceSource.tsx",
+      "blob": "e9e4820ec6a6c19e1ff11c4d2bc0ee8ecaa9b38f",
+      "sha256": "578d45cd56ba125477230b77fb28e4fddafe6d2f748a282eb8b8786fa0d5f5b2"
+    },
+    {
+      "path": "src/features/dashboard-management/model.ts",
+      "blob": "278abe043624b8b642a2c3caa8860a9e543bcfde",
+      "sha256": "80a9cfe5b61aaa9edc1c9a0a44e398e10e2d8bbdfb7b084d84d5db031449ccdc"
+    },
+    {
+      "path": "src/features/material-management/docxToDocument.test.tsx",
+      "blob": "34464369fb1fe6187cdefbcb8ac1aa842a00e4e1",
+      "sha256": "b9a239010fe179eaaee5df6be38bf8526a986e570b6fbe343f013eeffd015fc1"
+    },
+    {
+      "path": "src/features/material-management/upload.ts",
+      "blob": "ebaa3dbf353962c4f304dbc531c2035170a8fd83",
+      "sha256": "d37306425ff3aac060df1314cf29669be7b39ee1a2ff2aed7b8d1b8880d21c7b"
+    },
+    {
+      "path": "src/features/observability/reporter.ts",
+      "blob": "17b7db6e27b4205d76e9d6b5a0ade6cfdb6f6542",
+      "sha256": "5329a40ebd1a37bded327bf705aa443c56a65e9a9a9532f94b9589a52e8d79bf"
+    },
+    {
+      "path": "src/features/onboarding/OnboardingOverlay.test.tsx",
+      "blob": "dc360cd72fde33c5bc09b032627f8dc233b49bd0",
+      "sha256": "731e9ad633dc9bac76a3477e7f7290412d70f0ac11fe51b2d38a47486fdbaec1"
+    },
+    {
+      "path": "src/features/onboarding/OnboardingOverlay.tsx",
+      "blob": "4083e8f6968f0fe2fa246deef5eca68c4e509a4d",
+      "sha256": "9e0fa917c5f3640275b3d0ad79015a1ff3414c76e3a54b4010355e32174b1000"
+    },
+    {
+      "path": "src/features/prompt-composer/ComposerDropOverlay.stories.tsx",
+      "blob": "4ab7b480786ddd51c57b5f3128f94c8b922466ec",
+      "sha256": "127590f2f0ce76a403242f4137b2f2d3706d25f92922a037ffbd3a95e738ff48"
+    },
+    {
+      "path": "src/features/prompt-composer/ComposerEditor.test.tsx",
+      "blob": "f20a8cab4088501491f129fed72cad26ea45aed3",
+      "sha256": "97d95f5bf4e5815d48214a688b3deba289e33b5e46c75eb9ab765d4e57dd96ff"
+    },
+    {
+      "path": "src/features/prompt-composer/incomplete.test.tsx",
+      "blob": "db82f08c0c936ce949258e949b3be66c569591f1",
+      "sha256": "b829a9879cd0319d0fce0625145da630167ee549a416de5da9cd26852d0e382c"
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.npaFollowup.test.tsx",
+      "blob": "2f2fdb8b753a21359fa402dc8f6bc29fd52c81e2",
+      "sha256": "bfabda7907ec29a35be7dbd9e3532a5d644b02673a5c1cf3d0107ea36f02c427"
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.outlineRace.test.tsx",
+      "blob": "b6ba25c29dda129b581835f968a9f33f6ec1716c",
+      "sha256": "a7c87c57a14367a58eee819c9509bc8c4dc9d6a7062061f889ce66915b4916cd"
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.presentationTopic.test.tsx",
+      "blob": "b00811836826b9de8533a994a862fe5206be369e",
+      "sha256": "88a6bd222470f78688820d901374d9a12e32c58e2e053bb97b4a35eefff57068"
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.taskOutcome.test.tsx",
+      "blob": "9350e978aa6756443b06369fc8cc17918da7c38e",
+      "sha256": "2ac89906c3e4dfab510736b5e79986082525fe7dcb848b0afa1660aa26d59b1d"
+    },
+    {
+      "path": "src/features/quick-scenarios/StarterTile.test.tsx",
+      "blob": "844d10c18c9635db22e60d279e7e3256e0917ffd",
+      "sha256": "35557ba43a5253d2248304fbe44e5dc0e05610429db67e5d02ab7bc3ce9b4d26"
+    },
+    {
+      "path": "src/features/sources/SourceMarkerPopover.test.tsx",
+      "blob": "af949739ce21d29947a401f09404a841d0d4148f",
+      "sha256": "3c8b8a96d1e700273d2ef8a4c76dbec61742b1cb9e3b33bd3efda61179501a76"
+    },
+    {
+      "path": "src/features/sources/SourcesChip.test.tsx",
+      "blob": "b754e2226b2de75258330b143323d9df8e58e055",
+      "sha256": "783eb648d510755ad63ed1e3da82619fba66f6f331f4bbf3aaea19123c2de784"
+    },
+    {
+      "path": "src/features/task-plan/TaskPlanView.test.tsx",
+      "blob": "8db3d49386d30832bd1b440ddd81edca7338f84a",
+      "sha256": "1b3df83b774dd94b87a82c53176931e60dd7652665a44fe16c0888012f5c4369"
+    },
+    {
+      "path": "src/pages/administration/ScenariosTab.test.tsx",
+      "blob": "bc977ac6895c717425d6d24f20fef6ca3ce91246",
+      "sha256": "79a2f1a52548920be5ce6eb2015adb0c9720c6d60b7e19877ed3ce2480ac8216"
+    },
+    {
+      "path": "src/pages/home/OutlineCard.test.tsx",
+      "blob": "541d917f9171d41a12eabfd6adc94ab7683199d8",
+      "sha256": "4ff71b3f1c47b2a8b2180d5b2897d6a19ff4bdc93871de3e4c5674e9ee25db70"
+    },
+    {
+      "path": "src/pages/materials/MaterialsPage.tsx",
+      "blob": "09c6776000932e0bbe740d0f6b2c12af4c47f015",
+      "sha256": "b98eb839153a27a89f99560f54f3c3662fe3975b35d37a15c0cb086cf44f7e44"
+    },
+    {
+      "path": "src/pages/projects/ProjectPage.tsx",
+      "blob": "edf20377099700c744c0b839b485169c029d46aa",
+      "sha256": "4f3032076420e778d932e81d91fc3eb8fb63a3610032fc571e13451dccec778a"
+    },
+    {
+      "path": "src/shared/api/citations-unresolved.test.ts",
+      "blob": "2c20884d410a208d776953e81fa1a69b420855fc",
+      "sha256": "17d75599007bb3970c21204534c8c9b433f3b9bae51eac4b8b2ec705573fc9a8"
+    },
+    {
+      "path": "src/shared/api/client.ts",
+      "blob": "0ae3cfeb9b1bf88a9050c327131f4f676fd18f64",
+      "sha256": "90e6645a13ad4924ff27e63cbcd69073677614ceb629bef61aa3ac3fdd8fee04"
+    },
+    {
+      "path": "src/shared/api/contentGuard.ts",
+      "blob": "67ffac1520c94251f066d8d6dd70b96ca3f0bb24",
+      "sha256": "7eecd0db32918e157984d0c1cab2ebf95454cff9001962ded998840a0e0c16b6"
+    },
+    {
+      "path": "src/shared/api/dev-wiring.test.ts",
+      "blob": "6c1cf950e201b9624216255734703d45138dc75a",
+      "sha256": "296a5623e202816fc464b60f6c920eec8e24c8604acce21f51a6010318b48071"
+    },
+    {
+      "path": "src/shared/api/domainClient.ts",
+      "blob": "ce905b99842f7d07c21ce6f8ca916367649e869e",
+      "sha256": "5e82856e65f7c561b75e3725df5b655b0db4197f9b7e20037b13261a1ad6183d"
+    },
+    {
+      "path": "src/shared/api/generation-run.test.ts",
+      "blob": "47516523685f2239aceb2044629c9b1da5ec142f",
+      "sha256": "8ad370adbf0306570b8a7b34adeead5cb8226727a04adcf9f8ee248207ff7477"
+    },
+    {
+      "path": "src/shared/api/generation.test.ts",
+      "blob": "ce94197b1908c6a574a50f8db909c512b51141e3",
+      "sha256": "145e5a738f3942f1308bc0583385a59d950188276d85abaeec032cf1ffdaf755"
+    },
+    {
+      "path": "src/shared/api/golden-citations.test.ts",
+      "blob": "4e59748d105678e7e6dfa6b0d50c39ef89bddba3",
+      "sha256": "f2b26affe71928b9276c76a669e9f6acd9f831f9805191b08e737f11252b4012"
+    },
+    {
+      "path": "src/shared/api/health.ts",
+      "blob": "d65da1ab9519bfacd3c8bfbaa59603204f1ef820",
+      "sha256": "bc68fec4360b10ac14a39ff9b095a98cbfed11fd3c203cfa28ed3c387bbcf85a"
+    },
+    {
+      "path": "src/shared/api/http-core.test.ts",
+      "blob": "9a3c3a898dae141e0006c48721695a39623197d5",
+      "sha256": "53df06784b45ccbe5b8e695701b30c6db1d4748326c5682e527c7268278fda03"
+    },
+    {
+      "path": "src/shared/api/model-failover.test.ts",
+      "blob": "90321eaf809cb7e1c0a9d3ce4a89ac27275526a2",
+      "sha256": "75920c7f9adc5d5e74531c2789df28a3ced85808019d63a7ee40d816d92a1302"
+    },
+    {
+      "path": "src/shared/api/parseFile.ts",
+      "blob": "c6da0ad1ca14d8a3de47a1a76afb1c501af57a61",
+      "sha256": "2b2ab99f8a775fa01d735804c00b1dd75f1e4ad6b85b49513b3947a0d7b2afdb"
+    },
+    {
+      "path": "src/shared/lib/attachments.test.ts",
+      "blob": "5299f63542bdcfec74df47545e656eb0b4701c58",
+      "sha256": "f9c329d3445d31d4c7aa55bb145d8f22bbe848540723aa5ed830a06c5e785631"
+    },
+    {
+      "path": "src/shared/lib/queue-health.test.ts",
+      "blob": "6acc5e2a627812a718923a43b4c5cc679588bf65",
+      "sha256": "78152b967fdc32658029cc2931992aa7f0ecbc1aabd9580aefcc75592397d752"
+    },
+    {
+      "path": "src/shared/ui/ds/BulkBar.stories.tsx",
+      "blob": "494191662c7fdf49ac33d2a9dccbb60dbd6f9e5d",
+      "sha256": "2a11c84ca255fb18d47562317e18271495de67d46543e5890e90d31e29f36c2f"
+    },
+    {
+      "path": "src/shared/ui/ds/PageHeader.stories.tsx",
+      "blob": "dba4c6688a93f802bfd3d15f7ad78b60846e4c66",
+      "sha256": "eb1e665cf839f86ae88ba74e00a31f8679546665047f8638a8e7bd4fc5d1ae09"
+    },
+    {
+      "path": "src/shared/ui/ds/PreviewDialog.stories.tsx",
+      "blob": "9e2201cffc9e760935f4d96cf994f85e478dfa0a",
+      "sha256": "c3c9f11bd6e51209f51d23ac41b8e8481fba01bdd6c44e139ec6d88148188f90"
+    },
+    {
+      "path": "src/shared/ui/ds/PreviewShell.tsx",
+      "blob": "9878df2e691d6f8a01ed566822188fb7d75763d6",
+      "sha256": "5ab1b38232d034fcb494f4852f4ffa1b5c388eeec7345e656ccb59f0b53ff981"
+    },
+    {
+      "path": "src/shared/ui/ds/RadioGroup.tsx",
+      "blob": "c3b27c3da83601788b65593ac9f15c382e8f19f1",
+      "sha256": "bbbe59ffc168d65ce5e806de6dc997aff7ccefdd051e62620cad2ff9e0786a23"
+    },
+    {
+      "path": "src/shared/ui/ds/StatusBadge.stories.tsx",
+      "blob": "afa6532521fd745619874a99277fe09b9310265d",
+      "sha256": "0f9056f2562eddb4a07b27eb01005e2c87389de5a0b37980ea06a6d43e04e6e3"
+    },
+    {
+      "path": "src/shared/ui/ds/Table.test.tsx",
+      "blob": "1e52c5df45ab1163fad8fed575eac4f2a5ed8d16",
+      "sha256": "d88ec69de926b2263ba72bfad1a21781059afb3de337898d951ab431a8c958c1"
+    },
+    {
+      "path": "src/shared/ui/ds/Textarea.stories.tsx",
+      "blob": "015e205da0fc67ff654b1aa006fb7f21416a7ce2",
+      "sha256": "c4749fe02532ee9841abc342d11ffb703e353eb358ec94181b6e7610b1de4258"
+    },
+    {
+      "path": "src/shared/ui/ds/Tooltip.stories.tsx",
+      "blob": "ffe1005208fd77a2e55027485a1ddfe6bbec0166",
+      "sha256": "fcda911beec50d7cef542aad86eaa230ea125feba3af8b4a12d656476c169181"
+    },
+    {
+      "path": "src/vite-env.d.ts",
+      "blob": "948c43dc80a7d1986cd9cbb57aa36d1cef2fa1cf",
+      "sha256": "6c76cd32b431c7bba8a8bf90e307fad91be82db54e87d7ab54bc20b66c8bc633"
+    },
+    {
+      "path": "src/widgets/material-editors/TableEditor.tsx",
+      "blob": "66cb5eeef7b4771ec6fccbdb3cd619f85b515230",
+      "sha256": "65b1463bbb9ded47cfe26a348f2a6772b90626d3f9b37387592c159d4deaf88a"
+    }
+  ],
+  "records": [
+    {
+      "path": "e2e/_browser.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "node:path",
+        "playwright"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:path",
+          "playwright"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "e2e/_session.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "e2e/a11y-app.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/a11y.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "e2e/agent-catalog-update.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs",
+        "node:fs/promises"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs",
+          "node:fs/promises"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/catalog.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/collab.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/export.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs",
+          "fs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [
+        "fs"
+      ],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/invite.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "e2e/link-dashboard.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/materials-ds.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/notify.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/prepare-database.mjs",
+      "regex_specifiers": [
+        "pg"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "pg"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "e2e/profile-fields.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/run-app.mjs",
+      "regex_specifiers": [
+        "./scenarios.mjs",
+        "node:child_process"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./scenarios.mjs",
+          "node:child_process"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/scenarios.mjs"
+      ],
+      "ast_edges": [
+        "e2e/scenarios.mjs"
+      ]
+    },
+    {
+      "path": "e2e/scenarios.mjs",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "e2e/smoke.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "e2e/stability.e2e.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "./_session.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "./_session.mjs",
+          "jszip"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [
+        "jszip"
+      ],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "e2e/storybook-shots.mjs",
+      "regex_specifiers": [
+        "./_browser.mjs",
+        "node:fs",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./_browser.mjs",
+          "node:fs",
+          "node:fs/promises",
+          "node:path"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "eslint-rules/debt.js",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "eslint-rules/index.js",
+      "regex_specifiers": [
+        "./debt.js",
+        "node:path"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./debt.js",
+          "node:path"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "eslint-rules/debt.js"
+      ],
+      "ast_edges": [
+        "eslint-rules/debt.js"
+      ]
+    },
+    {
+      "path": "eslint-rules/rules.test.mjs",
+      "regex_specifiers": [
+        "../../app/router/x",
+        "../../entities/chat",
+        "../../features/foo",
+        "../../pages/bar/Page",
+        "../../shared/lib/x",
+        "../baz/model",
+        "../other/Page",
+        "./debt.js",
+        "./index.js",
+        "./ui/Card",
+        "eslint",
+        "node:path",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./debt.js",
+          "./index.js",
+          "eslint",
+          "node:path",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [
+        "../../app/router/x",
+        "../../entities/chat",
+        "../../features/foo",
+        "../../pages/bar/Page",
+        "../../shared/lib/x",
+        "../baz/model",
+        "../other/Page",
+        "./ui/Card"
+      ],
+      "regex_edges": [
+        "eslint-rules/debt.js",
+        "eslint-rules/index.js",
+        "src/features/admin-overview/index.ts",
+        "src/features/admin-overview/model.ts",
+        "src/features/collaboration/model.ts",
+        "src/features/dashboard-management/model.ts"
+      ],
+      "ast_edges": [
+        "eslint-rules/debt.js",
+        "eslint-rules/index.js",
+        "src/features/admin-overview/index.ts"
+      ]
+    },
+    {
+      "path": "scripts/add-rox-only-user.mjs",
+      "regex_specifiers": [
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:crypto",
+          "node:fs",
+          "node:path"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/add-rox-only-user.test.mjs",
+      "regex_specifiers": [
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:url",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:child_process",
+          "node:fs",
+          "node:os",
+          "node:path",
+          "node:url",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/check-doc-sizes.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "node:path",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:path",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/check-headers.mjs",
+      "regex_specifiers": [
+        "./headers-core.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./headers-core.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "scripts/headers-core.mjs"
+      ],
+      "ast_edges": [
+        "scripts/headers-core.mjs"
+      ]
+    },
+    {
+      "path": "scripts/check-prod-deps.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "node:module",
+        "node:path",
+        "x"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:module",
+          "node:path"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [
+        "x"
+      ],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/check-prod-deps.test.mjs",
+      "regex_specifiers": [
+        "../domain/xlsx-core.mjs",
+        "./check-prod-deps.mjs",
+        "./local.mjs",
+        "@scope/pkg/sub",
+        "jszip",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "os",
+        "unpdf",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./check-prod-deps.mjs",
+          "node:fs",
+          "node:os",
+          "node:path",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [
+        "../domain/xlsx-core.mjs",
+        "./local.mjs",
+        "@scope/pkg/sub",
+        "jszip",
+        "os",
+        "unpdf"
+      ],
+      "regex_edges": [
+        "scripts/check-prod-deps.mjs"
+      ],
+      "ast_edges": [
+        "scripts/check-prod-deps.mjs"
+      ]
+    },
+    {
+      "path": "scripts/check-test-vacuum.mjs",
+      "regex_specifiers": [
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:child_process",
+          "node:fs",
+          "node:os",
+          "node:path",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/check-test-vacuum.test.mjs",
+      "regex_specifiers": [
+        "./check-test-vacuum.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./check-test-vacuum.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "scripts/check-test-vacuum.mjs"
+      ],
+      "ast_edges": [
+        "scripts/check-test-vacuum.mjs"
+      ]
+    },
+    {
+      "path": "scripts/doc-counters.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "node:path",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:path",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/eval-content-grounding.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:url"
+        ],
+        "unresolved": true
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/eval-corporate-agents.mjs",
+      "regex_specifiers": [
+        "../server/domain/agent-catalog.mjs",
+        "node:child_process",
+        "node:fs",
+        "node:module"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../server/domain/agent-catalog.mjs",
+          "../server/generate-core.mjs",
+          "node:child_process",
+          "node:fs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [
+        "../server/generate-core.mjs"
+      ],
+      "regex_only": [
+        "node:module"
+      ],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/eval-note-cutoff.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:url"
+        ],
+        "unresolved": true
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/evals-judge.test.mjs",
+      "regex_specifiers": [
+        "../features/generation-quality/evals/judge.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../features/generation-quality/evals/judge.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/evals-noise.test.mjs",
+      "regex_specifiers": [
+        "../features/generation-quality/evals/report.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../features/generation-quality/evals/report.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/headers-core.mjs",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/health-alert-core.test.mjs",
+      "regex_specifiers": [
+        "./health-alert-core.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./health-alert-core.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/lib/decision-arithmetic-oracle.mjs",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/lib/decision-formula-oracle.mjs",
+      "regex_specifiers": [
+        "../../server/generation/exact-arithmetic.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../server/generation/exact-arithmetic.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/lib/decision-formula-oracle.test.mjs",
+      "regex_specifiers": [
+        "./decision-formula-oracle.mjs",
+        "node:fs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./decision-formula-oracle.mjs",
+          "node:fs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "scripts/lib/decision-formula-oracle.mjs"
+      ],
+      "ast_edges": [
+        "scripts/lib/decision-formula-oracle.mjs"
+      ]
+    },
+    {
+      "path": "scripts/outcome-emit.test.mjs",
+      "regex_specifiers": [
+        "../src/shared/api/metrics",
+        "./outcome-emit.mjs",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../src/shared/api/metrics",
+          "./outcome-emit.mjs",
+          "node:fs",
+          "node:os",
+          "node:path",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/run-evals.mjs",
+      "regex_specifiers": [
+        "../features/generation-quality/evals/checks.mjs",
+        "../features/generation-quality/evals/cost.mjs",
+        "../features/generation-quality/evals/judge.mjs",
+        "../features/generation-quality/evals/report.mjs",
+        "../features/generation-quality/evals/suites.mjs",
+        "../server/generate-core.mjs",
+        "../server/generation/agent-structure.mjs",
+        "../server/generation/models-catalog.mjs",
+        "../server/generation/presentation-count.mjs",
+        "../server/generation/pricing.mjs",
+        "../server/generation/source-policy.mjs",
+        "@anthropic-ai/sdk",
+        "node:fs",
+        "node:path",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../features/generation-quality/evals/checks.mjs",
+          "../features/generation-quality/evals/cost.mjs",
+          "../features/generation-quality/evals/judge.mjs",
+          "../features/generation-quality/evals/report.mjs",
+          "../features/generation-quality/evals/suites.mjs",
+          "../server/generate-core.mjs",
+          "../server/generation/agent-structure.mjs",
+          "../server/generation/models-catalog.mjs",
+          "../server/generation/presentation-count.mjs",
+          "../server/generation/pricing.mjs",
+          "../server/generation/source-policy.mjs",
+          "@anthropic-ai/sdk",
+          "node:fs",
+          "node:path",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/run-memory-real-golden.mjs",
+      "regex_specifiers": [
+        "../server/generation/source-routing.mjs",
+        "node:fs",
+        "node:path",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../server/generation/source-routing.mjs",
+          "node:fs",
+          "node:path",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/set-rox-only-models.mjs",
+      "regex_specifiers": [
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:crypto",
+          "node:fs",
+          "node:path"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/set-rox-only-user-model.mjs",
+      "regex_specifiers": [
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:crypto",
+          "node:fs",
+          "node:path"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/set-rox-only-user-model.test.mjs",
+      "regex_specifiers": [
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:url",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:child_process",
+          "node:fs",
+          "node:os",
+          "node:path",
+          "node:url",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/verify-backend.mjs",
+      "regex_specifiers": [
+        "../server/db-config.mjs",
+        "../server/generate-core.mjs",
+        "node:fs",
+        "node:path",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../server/db-config.mjs",
+          "../server/generate-core.mjs",
+          "node:fs",
+          "node:path",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "scripts/verify-compact-actions.mjs",
+      "regex_specifiers": [
+        "../e2e/_browser.mjs",
+        "node:assert/strict",
+        "node:fs/promises"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../e2e/_browser.mjs",
+          "node:assert/strict",
+          "node:fs/promises"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "scripts/verify-conversation-search.mjs",
+      "regex_specifiers": [
+        "../e2e/_browser.mjs",
+        "../e2e/_session.mjs",
+        "node:assert/strict"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../e2e/_browser.mjs",
+          "../e2e/_session.mjs",
+          "node:assert/strict"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs",
+        "e2e/_session.mjs"
+      ]
+    },
+    {
+      "path": "server/auth-endpoints.visit.test.mjs",
+      "regex_specifiers": [
+        "./auth-endpoints.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./auth-endpoints.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/context/context-index.mjs",
+      "regex_specifiers": [
+        "../db-config.mjs",
+        "../generation/capabilities.mjs",
+        "../memoize-async.mjs",
+        "../pg-sql.mjs",
+        "./context-extract.mjs",
+        "./context-fs.mjs",
+        "./context-morph.mjs",
+        "node:path"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../db-config.mjs",
+          "../generation/capabilities.mjs",
+          "../memoize-async.mjs",
+          "../pg-sql.mjs",
+          "./context-extract.mjs",
+          "./context-fs.mjs",
+          "./context-morph.mjs",
+          "node:path"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/context/corporate-context.test.mjs",
+      "regex_specifiers": [
+        "../domain/classification.mjs",
+        "./context-fs.mjs",
+        "./corporate-context.mjs",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../domain/classification.mjs",
+          "./context-fs.mjs",
+          "./corporate-context.mjs",
+          "node:fs",
+          "node:os",
+          "node:path",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/access-control.mjs",
+      "regex_specifiers": [
+        "./permissions.mjs",
+        "./shared-org.mjs",
+        "./store/rows.mjs",
+        "node:crypto"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./permissions.mjs",
+          "./shared-org.mjs",
+          "./store/rows.mjs",
+          "node:crypto"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/rows.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/rows.mjs"
+      ]
+    },
+    {
+      "path": "server/domain/artifact-materialize.mjs",
+      "regex_specifiers": [
+        "./store/errors.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./store/errors.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/domain-store.mjs",
+      "regex_specifiers": [
+        "../pg-sql.mjs",
+        "./access-control.mjs",
+        "./artifact-diff.mjs",
+        "./artifact-materialize.mjs",
+        "./audit-core.mjs",
+        "./permissions.mjs",
+        "./request-draft.mjs",
+        "./shared-org.mjs",
+        "./store/access-requests.mjs",
+        "./store/added-scenarios.mjs",
+        "./store/added-services.mjs",
+        "./store/artifacts.mjs",
+        "./store/assistant.mjs",
+        "./store/catalog.mjs",
+        "./store/comments.mjs",
+        "./store/constants.mjs",
+        "./store/conversations.mjs",
+        "./store/errors.mjs",
+        "./store/files.mjs",
+        "./store/limits.mjs",
+        "./store/materials.mjs",
+        "./store/projects.mjs",
+        "./store/rows.mjs",
+        "./store/runs.mjs",
+        "./store/schema.mjs",
+        "./store/settings.mjs",
+        "./store/share-links.mjs",
+        "./store/starters.mjs",
+        "./store/tasks.mjs",
+        "./store/validation.mjs",
+        "./store/workspaces.mjs",
+        "node:crypto"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../pg-sql.mjs",
+          "./access-control.mjs",
+          "./artifact-diff.mjs",
+          "./artifact-materialize.mjs",
+          "./audit-core.mjs",
+          "./permissions.mjs",
+          "./request-draft.mjs",
+          "./shared-org.mjs",
+          "./store/access-requests.mjs",
+          "./store/added-scenarios.mjs",
+          "./store/added-services.mjs",
+          "./store/artifacts.mjs",
+          "./store/assistant.mjs",
+          "./store/catalog.mjs",
+          "./store/comments.mjs",
+          "./store/constants.mjs",
+          "./store/conversations.mjs",
+          "./store/errors.mjs",
+          "./store/files.mjs",
+          "./store/limits.mjs",
+          "./store/materials.mjs",
+          "./store/projects.mjs",
+          "./store/rows.mjs",
+          "./store/runs.mjs",
+          "./store/schema.mjs",
+          "./store/settings.mjs",
+          "./store/share-links.mjs",
+          "./store/starters.mjs",
+          "./store/tasks.mjs",
+          "./store/validation.mjs",
+          "./store/workspaces.mjs",
+          "node:crypto"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/access-control.mjs",
+        "server/domain/artifact-materialize.mjs",
+        "server/domain/store/assistant.mjs",
+        "server/domain/store/projects.mjs",
+        "server/domain/store/rows.mjs",
+        "server/domain/store/settings.mjs",
+        "server/domain/store/share-links.mjs",
+        "server/domain/store/workspaces.mjs",
+        "src/app/api-client/catalog.ts"
+      ],
+      "ast_edges": [
+        "server/domain/access-control.mjs",
+        "server/domain/artifact-materialize.mjs",
+        "server/domain/store/assistant.mjs",
+        "server/domain/store/projects.mjs",
+        "server/domain/store/rows.mjs",
+        "server/domain/store/settings.mjs",
+        "server/domain/store/share-links.mjs",
+        "server/domain/store/workspaces.mjs",
+        "src/app/api-client/catalog.ts"
+      ]
+    },
+    {
+      "path": "server/domain/prompt-dashboard.test.mjs",
+      "regex_specifiers": [
+        "./dataset-core.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./dataset-core.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/run-payload-attachments.test.mjs",
+      "regex_specifiers": [
+        "./domain-endpoints.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./domain-endpoints.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/store/agent-catalog-updates.mjs",
+      "regex_specifiers": [
+        "./constants.mjs",
+        "./errors.mjs",
+        "./rows.mjs",
+        "node:crypto"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./constants.mjs",
+          "./errors.mjs",
+          "./rows.mjs",
+          "node:crypto"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/rows.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/rows.mjs"
+      ]
+    },
+    {
+      "path": "server/domain/store/assistant.mjs",
+      "regex_specifiers": [
+        "./constants.mjs",
+        "./errors.mjs",
+        "./rows.mjs",
+        "./validation.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./constants.mjs",
+          "./errors.mjs",
+          "./rows.mjs",
+          "./validation.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/rows.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/rows.mjs"
+      ]
+    },
+    {
+      "path": "server/domain/store/migrate.mjs",
+      "regex_specifiers": [
+        "../../pg-sql.mjs",
+        "./migrations.mjs",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../pg-sql.mjs",
+          "./migrations.mjs",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/store/projects.mjs",
+      "regex_specifiers": [
+        "./constants.mjs",
+        "./errors.mjs",
+        "./rows.mjs",
+        "./validation.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./constants.mjs",
+          "./errors.mjs",
+          "./rows.mjs",
+          "./validation.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/rows.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/rows.mjs"
+      ]
+    },
+    {
+      "path": "server/domain/store/rows-preview.test.mjs",
+      "regex_specifiers": [
+        "../content-preview.mjs",
+        "./rows.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../content-preview.mjs",
+          "./rows.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/rows.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/rows.mjs"
+      ]
+    },
+    {
+      "path": "server/domain/store/rows.mjs",
+      "regex_specifiers": [
+        "../content-preview.mjs",
+        "../material-quality.mjs",
+        "../request-draft.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../content-preview.mjs",
+          "../material-quality.mjs",
+          "../request-draft.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/store/settings.mjs",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/store/settings.test.mjs",
+      "regex_specifiers": [
+        "./settings.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./settings.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/settings.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/settings.mjs"
+      ]
+    },
+    {
+      "path": "server/domain/store/share-links.mjs",
+      "regex_specifiers": [
+        "./constants.mjs",
+        "./errors.mjs",
+        "./rows.mjs",
+        "./validation.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./constants.mjs",
+          "./errors.mjs",
+          "./rows.mjs",
+          "./validation.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/rows.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/rows.mjs"
+      ]
+    },
+    {
+      "path": "server/domain/store/workspaces.mjs",
+      "regex_specifiers": [
+        "../shared-org.mjs",
+        "./constants.mjs",
+        "./errors.mjs",
+        "./validation.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../shared-org.mjs",
+          "./constants.mjs",
+          "./errors.mjs",
+          "./validation.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/task-runner-dashboard-records.test.mjs",
+      "regex_specifiers": [
+        "./prompt-records.mjs",
+        "./task-runner.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./prompt-records.mjs",
+          "./task-runner.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/task-runner-presentation.test.mjs",
+      "regex_specifiers": [
+        "./task-runner.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./task-runner.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/domain/task-runner-readiness.test.mjs",
+      "regex_specifiers": [
+        "../generation/request.mjs",
+        "./task-runner.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../generation/request.mjs",
+          "./task-runner.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/files/scanner.mjs",
+      "regex_specifiers": [
+        "node:child_process"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:child_process"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/chat-legal-evidence.mjs",
+      "regex_specifiers": [
+        "./presentation-edition.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./presentation-edition.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/citations-compound.test.mjs",
+      "regex_specifiers": [
+        "../generate-core.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../generate-core.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/content-grounding-causal.test.mjs",
+      "regex_specifiers": [
+        "./content-grounding.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./content-grounding.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/generation/content-grounding.mjs"
+      ],
+      "ast_edges": [
+        "server/generation/content-grounding.mjs"
+      ]
+    },
+    {
+      "path": "server/generation/content-grounding.mjs",
+      "regex_specifiers": [
+        "../domain/presentation-core.mjs",
+        "./content-grounding-causal.mjs",
+        "./content-grounding-qualifiers.mjs",
+        "./input.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../domain/presentation-core.mjs",
+          "./content-grounding-causal.mjs",
+          "./content-grounding-qualifiers.mjs",
+          "./input.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/decision-review-generate.test.mjs",
+      "regex_specifiers": [
+        "../domain/agent-catalog.mjs",
+        "../generate-core.mjs",
+        "./decision-calculations.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../domain/agent-catalog.mjs",
+          "../generate-core.mjs",
+          "./decision-calculations.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/legal-source-plan.test.mjs",
+      "regex_specifiers": [
+        "./legal-source-plan.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./legal-source-plan.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/memory-real-golden.test.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/normative-tool.mjs",
+      "regex_specifiers": [
+        "./input.mjs"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./input.mjs",
+          "./memory-tools.mjs"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [
+        "./memory-tools.mjs"
+      ],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/npa-pipeline.test.mjs",
+      "regex_specifiers": [
+        "./npa-pipeline.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./npa-pipeline.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/one-pager-format.mjs",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/presentation-edition.test.mjs",
+      "regex_specifiers": [
+        "./presentation-edition.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./presentation-edition.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/procedure-addresses.test.mjs",
+      "regex_specifiers": [
+        "./providers.mjs",
+        "./source-routing.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./providers.mjs",
+          "./source-routing.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/generation/skills.mjs",
+      "regex_specifiers": [
+        "node:fs",
+        "node:path",
+        "node:url"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:path",
+          "node:url"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/mailer.test.mjs",
+      "regex_specifiers": [
+        "./mailer.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./mailer.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/reset-link.mjs",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "server/reset-link.test.mjs",
+      "regex_specifiers": [
+        "../src/features/auth/inviteLink",
+        "./reset-link.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../src/features/auth/inviteLink",
+          "./reset-link.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/reset-link.mjs"
+      ],
+      "ast_edges": [
+        "server/reset-link.mjs"
+      ]
+    },
+    {
+      "path": "src/app/api-client/catalog.ts",
+      "regex_specifiers": [
+        "../../entities/catalog/rules",
+        "../../shared/api/client",
+        "../../shared/api/domainClient",
+        "../../shared/api/errors",
+        "../../shared/api/preview",
+        "../../shared/api/types",
+        "./collaboration",
+        "./util"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../entities/catalog/rules",
+          "../../shared/api/client",
+          "../../shared/api/domainClient",
+          "../../shared/api/errors",
+          "../../shared/api/preview",
+          "../../shared/api/types",
+          "./collaboration",
+          "./util"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/shared/api/client.ts",
+        "src/shared/api/domainClient.ts"
+      ],
+      "ast_edges": [
+        "src/shared/api/client.ts",
+        "src/shared/api/domainClient.ts"
+      ]
+    },
+    {
+      "path": "src/app/api-client/no-second-contour.test.ts",
+      "regex_specifiers": [
+        "node:fs",
+        "node:url",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "node:fs",
+          "node:url",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/app/api-client/request-draft.integration.test.tsx",
+      "regex_specifiers": [
+        "../../features/request-draft/RequestDraftView",
+        "../../shared/api",
+        "./client",
+        "./taskPoller",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../features/request-draft/RequestDraftView",
+          "../../shared/api",
+          "./client",
+          "./taskPoller",
+          "@testing-library/react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/shared/api/client.ts"
+      ],
+      "ast_edges": [
+        "src/shared/api/client.ts"
+      ]
+    },
+    {
+      "path": "src/app/api-client/server.catalog-fallback.test.ts",
+      "regex_specifiers": [
+        "../../shared/api/errors",
+        "../../shared/api/types",
+        "./client",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/errors",
+          "../../shared/api/types",
+          "./client",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/shared/api/client.ts"
+      ],
+      "ast_edges": [
+        "src/shared/api/client.ts"
+      ]
+    },
+    {
+      "path": "src/app/api-client/server.org-audit.test.ts",
+      "regex_specifiers": [
+        "../../shared/api/types",
+        "./client",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/types",
+          "./client",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/shared/api/client.ts"
+      ],
+      "ast_edges": [
+        "src/shared/api/client.ts"
+      ]
+    },
+    {
+      "path": "src/app/layouts/SidebarProjectsSection.test.tsx",
+      "regex_specifiers": [
+        "./SidebarProjectsSection",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./SidebarProjectsSection",
+          "@testing-library/jest-dom/vitest",
+          "@testing-library/react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/entities/agent/agent.test.ts",
+      "regex_specifiers": [
+        "../../shared/api/types",
+        "./index",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/types",
+          "./index",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "eslint-rules/index.js",
+        "src/features/admin-overview/index.ts"
+      ],
+      "ast_edges": [
+        "eslint-rules/index.js",
+        "src/features/admin-overview/index.ts"
+      ]
+    },
+    {
+      "path": "src/entities/collaboration/changes.ts",
+      "regex_specifiers": [
+        "../../shared/api/collaboration"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/collaboration"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/entities/collaboration/permissions-parity.test.ts",
+      "regex_specifiers": [
+        "../../../server/domain/permissions.mjs",
+        "../../shared/api/collaboration",
+        "../../shared/api/types",
+        "./policy",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../server/domain/permissions.mjs",
+          "../../shared/api/collaboration",
+          "../../shared/api/types",
+          "./policy",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/entities/collaboration/policy.test.ts",
+      "regex_specifiers": [
+        "../../shared/api/collaboration",
+        "./policy",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/collaboration",
+          "./policy",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/entities/dashboard-data/records-formats.test.ts",
+      "regex_specifiers": [
+        "../../shared/api/collaboration",
+        "./compute",
+        "./records",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/collaboration",
+          "./compute",
+          "./records",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/entities/presentation/deck-sync.ts",
+      "regex_specifiers": [
+        "../../shared/api/collaboration",
+        "../../shared/lib/deckHtml"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/collaboration",
+          "../../shared/lib/deckHtml"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/access-management/useAccessRequests.ts",
+      "regex_specifiers": [
+        "../../shared/api",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/admin-overview/index.ts",
+      "regex_specifiers": [
+        "./model",
+        "./overview-signals"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./model",
+          "./overview-signals"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/features/admin-overview/model.ts",
+        "src/features/collaboration/model.ts",
+        "src/features/dashboard-management/model.ts"
+      ],
+      "ast_edges": [
+        "src/features/admin-overview/model.ts",
+        "src/features/collaboration/model.ts",
+        "src/features/dashboard-management/model.ts"
+      ]
+    },
+    {
+      "path": "src/features/admin-overview/model.ts",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/agent-catalog-update/AgentCatalogUpdateModal.test.tsx",
+      "regex_specifiers": [
+        "../../shared/api/errors",
+        "./AgentCatalogUpdateModal",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "@testing-library/user-event",
+        "vitest"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 8,
+          "column": 60
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/artifact-export/builders/markdown.ts",
+      "regex_specifiers": [
+        "../../../shared/api",
+        "../../../shared/lib/blockRefs",
+        "../../../shared/lib/safeHref",
+        "./citedSources"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../shared/api",
+          "../../../shared/lib/blockRefs",
+          "../../../shared/lib/safeHref",
+          "./citedSources"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/artifact-export/builders/pptxBuilder.test.ts",
+      "regex_specifiers": [
+        "../../../shared/api",
+        "./pptxBuilder",
+        "jszip",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../entities/presentation/build",
+          "../../../shared/api",
+          "./pptxBuilder",
+          "jszip",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [
+        "../../../entities/presentation/build"
+      ],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/artifact-export/builders/printPdf.test.ts",
+      "regex_specifiers": [
+        "../../../../e2e/_browser.mjs",
+        "../../../entities/dashboard-data",
+        "../../../entities/presentation/build",
+        "../../../shared/api",
+        "./html",
+        "./onePager",
+        "./slidePrint",
+        "node:fs",
+        "playwright",
+        "unpdf",
+        "vitest"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 157,
+          "column": 59
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [
+        "e2e/_browser.mjs"
+      ],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "src/features/catalog-management/CatalogEntryModal.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "../../shared/ui/ds",
+        "./useCatalogEntry",
+        "./usePublishToCatalog",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "../../shared/ui/ds",
+          "./useCatalogEntry",
+          "./usePublishToCatalog",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/collaboration/model.ts",
+      "regex_specifiers": [
+        "../../shared/api"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/content-assistant/ArtifactCard.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "../../shared/ui/ds",
+        "./useArtifactCard",
+        "./useContentChat",
+        "@tabler/icons-react",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "../../shared/ui/ds",
+          "./useArtifactCard",
+          "./useContentChat",
+          "@tabler/icons-react",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/features/content-assistant/useContentChat.ts"
+      ],
+      "ast_edges": [
+        "src/features/content-assistant/useContentChat.ts"
+      ]
+    },
+    {
+      "path": "src/features/content-assistant/EditorChatPanel.tsx",
+      "regex_specifiers": [
+        "../../entities/agent",
+        "../../entities/assistant/TrustLine",
+        "../../shared/api",
+        "../../shared/api/generation",
+        "../../shared/types",
+        "../../shared/ui",
+        "../../shared/ui/ds",
+        "../note-blocks",
+        "../prompt-composer",
+        "../sources",
+        "./ArtifactCard",
+        "./useContentChat",
+        "@tabler/icons-react",
+        "react",
+        "sonner"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../entities/agent",
+          "../../entities/assistant/TrustLine",
+          "../../shared/api",
+          "../../shared/api/generation",
+          "../../shared/types",
+          "../../shared/ui",
+          "../../shared/ui/ds",
+          "../note-blocks",
+          "../prompt-composer",
+          "../sources",
+          "./ArtifactCard",
+          "./useContentChat",
+          "@tabler/icons-react",
+          "react",
+          "sonner"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/features/content-assistant/ArtifactCard.tsx",
+        "src/features/content-assistant/useContentChat.ts"
+      ],
+      "ast_edges": [
+        "src/features/content-assistant/ArtifactCard.tsx",
+        "src/features/content-assistant/useContentChat.ts"
+      ]
+    },
+    {
+      "path": "src/features/content-assistant/useContentChat.ts",
+      "regex_specifiers": [
+        "../../entities/assistant/materialTurn",
+        "../../entities/assistant/summary",
+        "../../shared/api",
+        "../../shared/api/generation",
+        "../../shared/lib/appEvents",
+        "./conversationBridge",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../entities/assistant/materialTurn",
+          "../../entities/assistant/summary",
+          "../../shared/api",
+          "../../shared/api/generation",
+          "../../shared/lib/appEvents",
+          "./conversationBridge",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/dashboard-management/DashboardPagedView.tsx",
+      "regex_specifiers": [
+        "../../shared/api/collaboration",
+        "../../shared/ui/ds",
+        "@tabler/icons-react",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api/collaboration",
+          "../../shared/ui/ds",
+          "@tabler/icons-react",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/dashboard-management/ReplaceSource.tsx",
+      "regex_specifiers": [
+        "../../entities/collaboration",
+        "../../entities/dashboard-data",
+        "../../shared/api",
+        "../../shared/lib/attachments",
+        "../../shared/ui/ds",
+        "@tabler/icons-react",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../entities/collaboration",
+          "../../entities/dashboard-data",
+          "../../shared/api",
+          "../../shared/lib/attachments",
+          "../../shared/ui/ds",
+          "@tabler/icons-react",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/dashboard-management/model.ts",
+      "regex_specifiers": [
+        "../../shared/api",
+        "../../shared/lib/formatModified",
+        "../../shared/types"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "../../shared/lib/formatModified",
+          "../../shared/types"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/material-management/docxToDocument.test.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "./docxToDocument",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "./docxToDocument",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/material-management/upload.ts",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/observability/reporter.ts",
+      "regex_specifiers": [
+        "../../shared/api",
+        "./errorLog"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "./errorLog"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/onboarding/OnboardingOverlay.test.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "./OnboardingOverlay",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "./OnboardingOverlay",
+          "@testing-library/jest-dom/vitest",
+          "@testing-library/react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/features/onboarding/OnboardingOverlay.tsx"
+      ],
+      "ast_edges": [
+        "src/features/onboarding/OnboardingOverlay.tsx"
+      ]
+    },
+    {
+      "path": "src/features/onboarding/OnboardingOverlay.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "../../shared/hooks",
+        "../../shared/ui/ds",
+        "@tabler/icons-react",
+        "react",
+        "react-dom"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "../../shared/hooks",
+          "../../shared/ui/ds",
+          "@tabler/icons-react",
+          "react",
+          "react-dom"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/prompt-composer/ComposerDropOverlay.stories.tsx",
+      "regex_specifiers": [
+        "./ComposerDropOverlay",
+        "@storybook/react-vite"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./ComposerDropOverlay",
+          "@storybook/react-vite"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/prompt-composer/ComposerEditor.test.tsx",
+      "regex_specifiers": [
+        "./ComposerEditor",
+        "@testing-library/react",
+        "react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./ComposerEditor",
+          "@testing-library/react",
+          "react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/prompt-composer/incomplete.test.tsx",
+      "regex_specifiers": [
+        "./IncompleteNotice",
+        "./useChat",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "@testing-library/user-event",
+        "vitest"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 19,
+          "column": 62
+        },
+        {
+          "kind": "ERROR",
+          "line": 24,
+          "column": 62
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.npaFollowup.test.tsx",
+      "regex_specifiers": [
+        "./followup",
+        "./useChat",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 19,
+          "column": 73
+        },
+        {
+          "kind": "ERROR",
+          "line": 23,
+          "column": 62
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.outlineRace.test.tsx",
+      "regex_specifiers": [
+        "../../shared/api/generation",
+        "./useChat",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 34,
+          "column": 73
+        },
+        {
+          "kind": "ERROR",
+          "line": 38,
+          "column": 62
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.presentationTopic.test.tsx",
+      "regex_specifiers": [
+        "../../shared/config",
+        "./followup",
+        "./useChat",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 16,
+          "column": 73
+        },
+        {
+          "kind": "ERROR",
+          "line": 25,
+          "column": 62
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/prompt-composer/useChat.taskOutcome.test.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "../../shared/lib/appEvents",
+        "./useChat",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 30,
+          "column": 62
+        },
+        {
+          "kind": "ERROR",
+          "line": 33,
+          "column": 62
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/quick-scenarios/StarterTile.test.tsx",
+      "regex_specifiers": [
+        "./StarterTile",
+        "@tabler/icons-react",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./StarterTile",
+          "@tabler/icons-react",
+          "@testing-library/react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/sources/SourceMarkerPopover.test.tsx",
+      "regex_specifiers": [
+        "./SourcesChip",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./SourcesChip",
+          "@testing-library/react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/sources/SourcesChip.test.tsx",
+      "regex_specifiers": [
+        "./SourcesChip",
+        "@testing-library/react",
+        "react-router",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./SourcesChip",
+          "@testing-library/react",
+          "react-router",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/features/task-plan/TaskPlanView.test.tsx",
+      "regex_specifiers": [
+        "./TaskPlanView",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./TaskPlanView",
+          "@testing-library/react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/pages/administration/ScenariosTab.test.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "./ScenariosTab",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "@testing-library/user-event",
+        "react-router",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "./ScenariosTab",
+          "@testing-library/jest-dom/vitest",
+          "@testing-library/react",
+          "@testing-library/user-event",
+          "react-router",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/pages/home/OutlineCard.test.tsx",
+      "regex_specifiers": [
+        "../../features/prompt-composer",
+        "./OutlineCard",
+        "@testing-library/react",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../features/prompt-composer",
+          "./OutlineCard",
+          "@testing-library/react",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/pages/materials/MaterialsPage.tsx",
+      "regex_specifiers": [
+        "../../entities/user",
+        "../../features/artifact-export",
+        "../../features/collaboration",
+        "../../features/material-management",
+        "../../features/settings",
+        "../../shared/api",
+        "../../shared/config",
+        "../../shared/config/routes",
+        "../../shared/lib/classification",
+        "../../shared/lib/sortItems",
+        "../../shared/lib/useNav",
+        "../../shared/ui/ds",
+        "./ArchiveTrashView",
+        "./SharedWithMeSection",
+        "./ds/MaterialsView",
+        "@tabler/icons-react",
+        "react",
+        "react-router",
+        "sonner"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../entities/user",
+          "../../features/artifact-export",
+          "../../features/collaboration",
+          "../../features/material-management",
+          "../../features/settings",
+          "../../shared/api",
+          "../../shared/config",
+          "../../shared/config/routes",
+          "../../shared/lib/classification",
+          "../../shared/lib/sortItems",
+          "../../shared/lib/useNav",
+          "../../shared/ui/ds",
+          "./ArchiveTrashView",
+          "./SharedWithMeSection",
+          "./ds/MaterialsView",
+          "@tabler/icons-react",
+          "react",
+          "react-router",
+          "sonner"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "server/domain/store/settings.mjs"
+      ],
+      "ast_edges": [
+        "server/domain/store/settings.mjs"
+      ]
+    },
+    {
+      "path": "src/pages/projects/ProjectPage.tsx",
+      "regex_specifiers": [
+        "../../entities/user",
+        "../../shared/api",
+        "../../shared/api/domainClient",
+        "../../shared/ui/ds",
+        "./EntityPickerModal",
+        "@tabler/icons-react",
+        "react",
+        "react-router",
+        "sonner"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../entities/user",
+          "../../shared/api",
+          "../../shared/api/domainClient",
+          "../../shared/ui/ds",
+          "./EntityPickerModal",
+          "@tabler/icons-react",
+          "react",
+          "react-router",
+          "sonner"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/shared/api/domainClient.ts"
+      ],
+      "ast_edges": [
+        "src/shared/api/domainClient.ts"
+      ]
+    },
+    {
+      "path": "src/shared/api/citations-unresolved.test.ts",
+      "regex_specifiers": [
+        "../../../server/generate-core.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../server/generate-core.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/client.ts",
+      "regex_specifiers": [
+        "./collaboration",
+        "./metrics",
+        "./types"
+      ],
+      "syntax_errors": [
+        {
+          "kind": "ERROR",
+          "line": 654,
+          "column": 33
+        },
+        {
+          "kind": "ERROR",
+          "line": 657,
+          "column": 30
+        }
+      ],
+      "analysis": {
+        "backend": "regex",
+        "fallback": "syntax-error"
+      },
+      "ast_only": null,
+      "regex_only": null,
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/contentGuard.ts",
+      "regex_specifiers": [
+        "./collaboration"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./collaboration"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/dev-wiring.test.ts",
+      "regex_specifiers": [
+        "node:fs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../e2e/_browser.mjs",
+          "node:fs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [
+        "../../../e2e/_browser.mjs"
+      ],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": [
+        "e2e/_browser.mjs"
+      ]
+    },
+    {
+      "path": "src/shared/api/domainClient.ts",
+      "regex_specifiers": [
+        "../lib/apiFetch",
+        "./types"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../lib/apiFetch",
+          "./client",
+          "./types"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [
+        "./client"
+      ],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": [
+        "src/shared/api/client.ts"
+      ]
+    },
+    {
+      "path": "src/shared/api/generation-run.test.ts",
+      "regex_specifiers": [
+        "../../../server/generate-core.mjs",
+        "../../../server/generation/run.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../server/generate-core.mjs",
+          "../../../server/generation/run.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/generation.test.ts",
+      "regex_specifiers": [
+        "../../../server/generate-core.mjs",
+        "../../../server/generation/schema-capability.mjs",
+        "./collaboration",
+        "./generation",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../server/generate-core.mjs",
+          "../../../server/generation/schema-capability.mjs",
+          "./collaboration",
+          "./generation",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/golden-citations.test.ts",
+      "regex_specifiers": [
+        "../../../features/generation-quality/evals/checks.mjs",
+        "node:fs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../features/generation-quality/evals/checks.mjs",
+          "node:fs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/health.ts",
+      "regex_specifiers": [
+        "../lib/apiFetch",
+        "./errors"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../lib/apiFetch",
+          "./errors"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/http-core.test.ts",
+      "regex_specifiers": [
+        "../../../server/http-core.mjs",
+        "node:path",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../server/http-core.mjs",
+          "node:path",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/model-failover.test.ts",
+      "regex_specifiers": [
+        "../../../server/generate-core.mjs",
+        "../../../server/generation/request.mjs",
+        "../../../server/generation/route.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../server/generate-core.mjs",
+          "../../../server/generation/request.mjs",
+          "../../../server/generation/route.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/api/parseFile.ts",
+      "regex_specifiers": [
+        "../lib/apiFetch"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../lib/apiFetch"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/lib/attachments.test.ts",
+      "regex_specifiers": [
+        "./attachments",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./attachments",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/lib/queue-health.test.ts",
+      "regex_specifiers": [
+        "../../../server/domain/queue-health.mjs",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../../server/domain/queue-health.mjs",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/BulkBar.stories.tsx",
+      "regex_specifiers": [
+        "./BulkBar",
+        "./Button",
+        "./Checkbox",
+        "@storybook/react-vite",
+        "@tabler/icons-react",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./BulkBar",
+          "./Button",
+          "./Checkbox",
+          "@storybook/react-vite",
+          "@tabler/icons-react",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/PageHeader.stories.tsx",
+      "regex_specifiers": [
+        "./Breadcrumbs",
+        "./Button",
+        "./FilterChip",
+        "./PageHeader",
+        "./SearchInput",
+        "./Segmented",
+        "./SortControl",
+        "@storybook/react-vite",
+        "@tabler/icons-react",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./Breadcrumbs",
+          "./Button",
+          "./FilterChip",
+          "./PageHeader",
+          "./SearchInput",
+          "./Segmented",
+          "./SortControl",
+          "@storybook/react-vite",
+          "@tabler/icons-react",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/PreviewDialog.stories.tsx",
+      "regex_specifiers": [
+        "./Avatar",
+        "./Button",
+        "./FormattedText",
+        "./Menu",
+        "./PreviewDialog",
+        "./PreviewShell",
+        "@storybook/react-vite",
+        "@tabler/icons-react",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./Avatar",
+          "./Button",
+          "./FormattedText",
+          "./Menu",
+          "./PreviewDialog",
+          "./PreviewShell",
+          "@storybook/react-vite",
+          "@tabler/icons-react",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [
+        "src/shared/ui/ds/PreviewShell.tsx"
+      ],
+      "ast_edges": [
+        "src/shared/ui/ds/PreviewShell.tsx"
+      ]
+    },
+    {
+      "path": "src/shared/ui/ds/PreviewShell.tsx",
+      "regex_specifiers": [
+        "./Accordion",
+        "./cx",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./Accordion",
+          "./cx",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/RadioGroup.tsx",
+      "regex_specifiers": [
+        "./cx",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./cx",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/StatusBadge.stories.tsx",
+      "regex_specifiers": [
+        "./StatusBadge",
+        "./Tag",
+        "@storybook/react-vite"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./StatusBadge",
+          "./Tag",
+          "@storybook/react-vite"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/Table.test.tsx",
+      "regex_specifiers": [
+        "./Table",
+        "@testing-library/jest-dom/vitest",
+        "@testing-library/react",
+        "@testing-library/user-event",
+        "vitest"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./Table",
+          "@testing-library/jest-dom/vitest",
+          "@testing-library/react",
+          "@testing-library/user-event",
+          "vitest"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/Textarea.stories.tsx",
+      "regex_specifiers": [
+        "./Textarea",
+        "@storybook/react-vite",
+        "react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./Textarea",
+          "@storybook/react-vite",
+          "react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/shared/ui/ds/Tooltip.stories.tsx",
+      "regex_specifiers": [
+        "./Button",
+        "./Tooltip",
+        "@storybook/react-vite",
+        "@tabler/icons-react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "./Button",
+          "./Tooltip",
+          "@storybook/react-vite",
+          "@tabler/icons-react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/vite-env.d.ts",
+      "regex_specifiers": [],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    },
+    {
+      "path": "src/widgets/material-editors/TableEditor.tsx",
+      "regex_specifiers": [
+        "../../shared/api",
+        "./_shared",
+        "@tabler/icons-react"
+      ],
+      "syntax_errors": [],
+      "analysis": {
+        "backend": "tree-sitter",
+        "specifiers": [
+          "../../shared/api",
+          "./_shared",
+          "@tabler/icons-react"
+        ],
+        "unresolved": false
+      },
+      "ast_only": [],
+      "regex_only": [],
+      "regex_edges": [],
+      "ast_edges": []
+    }
+  ]
+}

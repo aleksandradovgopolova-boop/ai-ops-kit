@@ -1,0 +1,38 @@
+{
+  "files": {
+    "dep.ts": {
+      "symbols": [
+        "value"
+      ],
+      "imports": [],
+      "language": "js"
+    },
+    "main.ts": {
+      "symbols": [],
+      "imports": [
+        "dep"
+      ],
+      "language": "js"
+    }
+  },
+  "import_edges": {
+    "dep.ts": [],
+    "main.ts": [
+      "dep.ts"
+    ]
+  },
+  "js_analysis": {
+    "dep.ts": {
+      "backend": "regex",
+      "fallback": "parser-unavailable:ModuleNotFoundError"
+    },
+    "main.ts": {
+      "backend": "regex",
+      "fallback": "parser-unavailable:ModuleNotFoundError"
+    }
+  },
+  "uncertainty_kinds": {
+    "dep.ts": "unbounded",
+    "main.ts": "unbounded"
+  }
+}

@@ -118,3 +118,4 @@
 - [Актуализация карточек, плана и архитектурных границ02.11.2026](2026-11-02-repository-reconciliation.md).
 
 - [Точная граница CI после реконструкции истории](history-exact-ci-cutoff.md).
+- [Локальный JS/TS AST-пилот — #1408](../evidence/1408-jsts-ast-pilot/README.md).

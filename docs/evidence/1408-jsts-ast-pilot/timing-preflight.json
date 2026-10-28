@@ -1,0 +1,94 @@
+{
+  "status": "NOT_RUN",
+  "at_utc": "2026-10-28T11:44:39.406318+00:00",
+  "command": [
+    "docs/evidence/1408-jsts-ast-pilot/time_snapshot.py",
+    "--snapshot",
+    "/Users/sasad/Documents/Codex/2026-10-28/task-4/jsts-snapshot-7b14b251",
+    "--comparison",
+    "docs/evidence/1408-jsts-ast-pilot/comparison.json",
+    "--output",
+    "docs/evidence/1408-jsts-ast-pilot/timing-preflight.json",
+    "--preflight-only"
+  ],
+  "environment": {
+    "python": "3.14.7 (main, Aug  5 2026, 10:29:49) [Clang 21.0.0 (clang-2100.1.1.101)]",
+    "executable": "/Users/sasad/Documents/Codex/2026-10-28/task-4/ast-pilot-env/bin/python",
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "packages": {
+      "tree-sitter": "0.25.2",
+      "tree-sitter-javascript": "0.25.0",
+      "tree-sitter-typescript": "0.23.2"
+    }
+  },
+  "bindings": {
+    "engine_sha256": "07039d174657da2cbc11568d81eeb7238488603c63d6c0c24afb71329330068d",
+    "harness_sha256": "5c7ea62609c775531ddffcc184e1d573c062e557d0a3ee8d6e2dfe2db23c1b97",
+    "comparison_sha256": "f207c215e18bdd6812d4ceca25ba9f060882c18c43d03facc363ea567cbcffed",
+    "snapshot_sha256_before": "d35f724e61a198b35c2fd4ec2a1e75b871934919caa24a37136e8dfe73c8fd80",
+    "snapshot_sha256_after": "d35f724e61a198b35c2fd4ec2a1e75b871934919caa24a37136e8dfe73c8fd80"
+  },
+  "protocol": {
+    "pairs": 7,
+    "order": "AB,BA alternating; A=regex B=tree-sitter",
+    "warmup_pairs": 1,
+    "timed": "build_graph: file I/O, parse, graph, per-build parser init",
+    "excluded": "process start, initial imports (warmup), input hashing, validation, noise probes",
+    "cache": "warm process and OS file cache; no cache purge or cold-start claim",
+    "thresholds": {
+      "aggregate_cpu_max_percent": 15,
+      "load_per_logicalcpu_max": 0.5,
+      "memory_pressure_free_min_percent": 20,
+      "swap_io_max": 0,
+      "disk_free_min_gib": 10
+    }
+  },
+  "slot": {
+    "path": "/tmp/ai-ops-kit-heavy.lock",
+    "owner": "p0-1408-jsts-ast-pilot",
+    "acquired": true,
+    "released": true
+  },
+  "observations": [
+    {
+      "at_utc": "2026-10-28T11:44:42.151940+00:00",
+      "logicalcpu": 10,
+      "load_average": [
+        2.35205078125,
+        3.48291015625,
+        4.90478515625
+      ],
+      "aggregate_cpu_percent_last_two": [
+        23.7,
+        32.57
+      ],
+      "memory_pressure": "The system has 17179869184 (1048576 pages with a page size of 16384).\nSystem-wide memory free percentage: 42%\n",
+      "swap": "vm.swapusage: total = 6144.00M  used = 4457.75M  free = 1686.25M  (encrypted)\n",
+      "swap_io": [
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ],
+        [
+          0,
+          0
+        ]
+      ],
+      "disk_free_bytes": 22872023040,
+      "top": "Processes: 645 total, 3 running, 642 sleeping, 5119 threads \n2026/10/28 14:44:39\nLoad Avg: 2.35, 3.48, 4.90 \nCPU usage: 6.88% user, 17.20% sys, 75.91% idle \nSharedLibs: 288M resident, 67M data, 70M linkedit.\nMemRegions: 787228 total, 2417M resident, 111M private, 2862M shared.\nPhysMem: 15G used (2160M wired, 6903M compressor), 96M unused.\nVM: 361T vsize, 57G framework vsize, 1991143(0) swapins, 2744426(0) swapouts.\nNetworks: packets: 51235850/61G in, 45663877/53G out.\nDisks: 278124546/2643G read, 91170079/952G written.\n\nPID    %CPU MEM\n99684  0.0  54M\nProcesses: 645 total, 7 running, 638 sleeping, 5127 threads \n2026/10/28 14:44:41\nLoad Avg: 2.35, 3.48, 4.90 \nCPU usage: 13.91% user, 9.79% sys, 76.29% idle \nSharedLibs: 288M resident, 67M data, 70M linkedit.\nMemRegions: 0 total, 0B resident, 111M private, 2862M shared.\nPhysMem: 15G used (2160M wired, 6909M compressor), 106M unused.\nVM: 361T vsize, 57G framework vsize, 1991143(0) swapins, 2744426(0) swapouts.\nNetworks: packets: 51235886/61G in, 45663893/53G out.\nDisks: 278125374/2643G read, 91174351/952G written.\n\nPID    %CPU MEM \n43824  69.2 25M-\nProcesses: 643 total, 3 running, 640 sleeping, 5135 threads \n2026/10/28 14:44:42\nLoad Avg: 2.35, 3.48, 4.90 \nCPU usage: 22.3% user, 10.27% sys, 67.69% idle \nSharedLibs: 288M resident, 67M data, 70M linkedit.\nMemRegions: 0 total, 0B resident, 111M private, 2862M shared.\nPhysMem: 15G used (2159M wired, 6909M compressor), 107M unused.\nVM: 360T vsize, 57G framework vsize, 1991143(0) swapins, 2744426(0) swapouts.\nNetworks: packets: 51235959/61G in, 45663989/53G out.\nDisks: 278125756/2643G read, 91177205/952G written.\n\nPID    %CPU  MEM \n715    127.8 53M+\n",
+      "blocked_reasons": [
+        "aggregate CPU is unmeasured or above 15%"
+      ]
+    }
+  ],
+  "samples": [],
+  "heavy_processes": {
+    "matched": [],
+    "busy": []
+  },
+  "reason": "aggregate CPU is unmeasured or above 15%"
+}
