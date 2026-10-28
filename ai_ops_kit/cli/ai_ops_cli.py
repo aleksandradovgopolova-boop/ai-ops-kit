@@ -560,7 +560,7 @@ def main(argv):
     if _facade is not None:
         return _facade
     ap = _build_cli_arg_parser()
-    a = ap.parse_args(argv)
+    a = ap.parse_intermixed_args(argv)
 
     intent = a.intent
     rest = list(a.rest)

@@ -70,3 +70,5 @@
 - [Описание выпуска деградирует чисто, когда devtools нет в дочке — #1380](1380-release-notes-degrade-without-devtools.md).
 
 - [Стухшие наблюдения-кандидаты можно снять (`candidates decline --why`) — #1386](decline-stale-observation-candidates.md).
+
+- [Установленный wheel работает вне клона — #1398](1398-wheel-runtime-data.md).
