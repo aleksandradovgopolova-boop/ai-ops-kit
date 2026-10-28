@@ -1,0 +1,55 @@
+Source: Google Chrome native CUA accessibility text, 2026-10-28 ~11:44 UTC.
+Only task-relevant excerpts retained; no cookies, tokens, unrelated tabs or account contact data.
+
+Account menu:
+  User navigation
+  aleksandradovgopolova-boop
+  Profile -> github.com/aleksandradovgopolova-boop
+
+https://github.com/aleksandradovgopolova-boop/ai-ops-kit/settings/branches
+  Settings: aleksandradovgopolova-boop/ai-ops-kit
+  Branch protection rules
+  main Currently applies to 1 branch
+
+https://github.com/aleksandradovgopolova-boop/ai-ops-kit/settings/branch_protection_rules/81759903
+  Branch name pattern*, Value: main
+  Applies to 1 branch
+  main
+  Require a pull request before merging, Value: 0
+  Require status checks to pass before merging, Value: 1
+  Require branches to be up to date before merging, Value: 0
+  Status checks that are required
+  Remove smoke as a required status check
+  Remove lint as a required status check
+  Remove clean-install as a required status check
+  Remove pipeline-e2e (3.12) as a required status check
+  Remove quality (contracts, .github/ci-groups/contracts.sh) as a required status check
+  Remove quality (selftests-a, .github/ci-groups/selftests-a.sh) as a required status check
+  Remove quality (selftests-m, .github/ci-groups/selftests-m.sh) as a required status check
+  Remove upgrade-path as a required status check
+  Remove quality (fast-1, .github/ci-groups/fast-1.sh) as a required status check
+  Remove quality (fast-2, .github/ci-groups/fast-2.sh) as a required status check
+  [Each of the 10 rows: Accept updates from @github-actions GitHub Actions]
+  Require conversation resolution before merging, Value: 0
+  Require signed commits, Value: 0
+  Require linear history, Value: 0
+  Require deployments to succeed before merging, Value: 0
+  Lock branch, Value: 0
+  Do not allow bypassing the above settings, Value: 0
+  The above settings will apply to administrators and custom roles with the "bypass branch protections" permission.
+  Rules applied to everyone including administrators
+  Allow force pushes, Value: 0
+  Allow deletions, Value: 0
+  Save changes [not clicked]
+
+https://github.com/aleksandradovgopolova-boop/ai-ops-kit/settings/rules
+  Settings: aleksandradovgopolova-boop/ai-ops-kit
+  You have branch protection rules that can be converted
+  Rulesets
+  You haven't created any rulesets
+
+Evidence interpretation:
+  Value 1 = checked; Value 0 = unchecked.
+  "Remove ..." is the observed UI label identifying an already-required check; no Remove button was clicked.
+  No new rule was created/imported/converted, no checkbox/field was changed, Save was not clicked.
+  The final browser page was the non-editing rulesets list.
