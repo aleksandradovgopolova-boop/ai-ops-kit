@@ -9,7 +9,7 @@
 - `ai_ops_kit/devtools/capability_inventory.py` — зеркало `SCORECARD_METRICS` (метрика 1).
 - `docs/capability-map.md` — перегенерирована (`--write`), не правлена руками.
 - `docs/api/public-surface.md` — описание scorecard.
-- `planning/plan.yaml` — работа `north-star-becomes-evidence-backed-outcome`: `todo` → `done`.
+- Флаг плана `north-star-becomes-evidence-backed-outcome` `todo` → `done` идёт ОТДЕЛЬНЫМ координаторским PR: `parallel-safety` запрещает смешивать код с координационным файлом (`planning/plan.yaml`) в одном PR.
 
 Инварианты (держатся): честность превыше полноты — нет фич → «не измерено» с причиной; фичи есть, цепочка ни у одной не замкнута → ЧЕСТНЫЙ НОЛЬ (в этом и смысл смены: заглавное число честно низкое). «Результат измерен» ≠ «цель взята» (`target_met: no` входит наравне). Карта остаётся ровно из 5 метрик. writer ≠ judge не затронут.
 
