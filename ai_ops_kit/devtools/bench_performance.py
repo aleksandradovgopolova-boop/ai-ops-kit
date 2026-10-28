@@ -309,9 +309,10 @@ def _command_worker():
             # Внешний supervisor очистит всю собственную session перед возвратом sample.
             try:
                 process.kill()
-                expired.append(True)
             except ProcessLookupError:
-                pass  # Процесс успел штатно завершиться на границе timeout.
+                expired.append(False)  # Процесс завершился на границе timeout.
+            else:
+                expired.append(True)
 
         timer = threading.Timer(spec["timeout_seconds"], expire)
         timer.daemon = True
@@ -321,7 +322,7 @@ def _command_worker():
         finally:
             timer.cancel()
             timer.join()
-        error = "timeout" if expired else None
+        error = "timeout" if any(expired) else None
     elapsed_ms = (time.perf_counter() - started) * 1000
     usage = resource.getrusage(resource.RUSAGE_CHILDREN)
     print(json.dumps({"elapsed_ms": elapsed_ms, "peak_rss_bytes": int(usage.ru_maxrss *
@@ -341,16 +342,16 @@ def measure_command(case, root, log_prefix):
                              "from ai_ops_kit.devtools.bench_performance import _command_worker; _command_worker()",
                              json.dumps(spec)], cwd=PKG, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                             start_new_session=True, **_lease_subprocess_kwargs())
-    leftover = False
     try:
         stdout, stderr = worker.communicate(timeout=case["timeout_seconds"] + 30)
     finally:
         # PGID получен из только что созданного собственного supervisor. Чужие группы не ищем.
         try:
             os.killpg(worker.pid, signal.SIGKILL)
-            leftover = True
         except ProcessLookupError:
-            pass
+            leftover = False  # Собственная группа уже полностью завершилась.
+        else:
+            leftover = True
         worker.communicate()
     if worker.returncode:
         if "_LeaseLost" in stderr:
@@ -372,7 +373,7 @@ def suite_metadata(root, suite, iterations, warmup):
     from datetime import datetime, timezone
 
     def git(*args):
-        return subprocess.check_output(["git", *args], cwd=root)
+        return subprocess.check_output(["git", *args], cwd=root, timeout=15)
 
     sha = git("rev-parse", "HEAD").decode().strip()
     diff = git("diff", "--binary", "HEAD", "--")
