@@ -25,7 +25,8 @@
 - `VERSION`
 - `VISION.md`
 - `mkdocs.yml`
-- `pyproject.toml`, `setup.py` — дистрибутив (`pip install -e .`); включает `ai_ops_kit`
+- `pyproject.toml`, `setup.py` — дистрибутив (`pip install -e .`); включает `ai_ops_kit`,
+  а в wheel — VERSION и 14 корневых каталогов данных внутри пакета (из checkout или sdist).
 - `pytest.ini` — маркеры (в т.ч. `slow`) и addopts контура
 - `requirements.txt` (рантайм: только pyyaml), `requirements-dev.txt` (pytest/hypothesis/ruff/mypy)
 

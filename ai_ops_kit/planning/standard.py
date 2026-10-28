@@ -28,7 +28,8 @@ from pathlib import Path
 
 import yaml
 
-PKG = Path(__file__).resolve().parents[2]
+PKG = next((p for p in Path(__file__).resolve().parents if (p / "VERSION").is_file()),
+           Path(__file__).resolve().parents[2])
 STANDARD_FILE = "registry/standard.yaml"
 
 

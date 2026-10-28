@@ -13,10 +13,62 @@ Python на машине. Три беды сразу:
      `pip install`. Пакет, который правит sys.path чужих процессов, лишает и себя, и пользователя
      возможности увидеть, что он на самом деле сломан.
 
-Пути пакету не нужны: `ai_ops_kit/shared/_bootstrap.py` находит корень по маркеру VERSION в рантайме
-и кладёт `tools/` с `validation/` сам. Проверено установкой в venv — 95 модулей из 95 импортируются
-без единого .pth (`scripts/check-clean-install.sh`).
+Корень данных определяется по VERSION. Для wheel ресурсы копируются под ai_ops_kit только
+в каталоге сборки; checkout и editable продолжают читать единственный исходный экземпляр.
 """
-from setuptools import setup
+from pathlib import Path
 
-setup()
+from setuptools import setup
+from setuptools.command.build_py import build_py
+from setuptools.errors import FileError
+
+
+RUNTIME_DATA_DIRS = (
+    "registry", "quality", "workflows", "schemas", "decisions", "packages", "manifest",
+    "standards", "knowledge", "planning", "templates", "context", "agents", "rules",
+)
+
+
+class BuildPyWithRuntimeData(build_py):
+    """Одна декларация ресурсов для sdist и wheel, без переноса исходных каталогов."""
+
+    def _runtime_sources(self):
+        sources = [Path("VERSION")]
+        for name in RUNTIME_DATA_DIRS:
+            directory = Path(name)
+            if not directory.is_dir():
+                raise FileError(f"missing runtime data directory: {name}")
+            sources.extend(p for p in sorted(directory.rglob("*"))
+                           if p.is_file() and "__pycache__" not in p.parts
+                           and p.suffix not in {".pyc", ".pyo"})
+        for source in sources:
+            if not source.is_file():
+                raise FileError(f"missing runtime data file: {source}")
+            if (Path("ai_ops_kit") / source).exists():
+                raise FileError(f"runtime data collides with package source: {source}")
+        return [str(p) for p in sources]
+
+    def _runtime_mapping(self):
+        return {str(Path(self.build_lib) / "ai_ops_kit" / p): p
+                for p in self._runtime_sources()}
+
+    def get_source_files(self):
+        # egg_info/sdist вызывают этот публичный hook: архив содержит те же входы сборки.
+        return super().get_source_files() + self._runtime_sources()
+
+    def get_output_mapping(self):
+        return {**super().get_output_mapping(), **self._runtime_mapping()}
+
+    def get_outputs(self, include_bytecode=True):
+        return sorted(set(super().get_outputs(include_bytecode)) | self._runtime_mapping().keys())
+
+    def run(self):
+        mapping = self._runtime_mapping()  # Отказ до копирования при неполных/конфликтных входах.
+        super().run()
+        if self.editable_mode:
+            return
+        for destination, source in mapping.items():
+            self.mkpath(str(Path(destination).parent))
+            self.copy_file(source, destination)
+
+setup(cmdclass={"build_py": BuildPyWithRuntimeData})
