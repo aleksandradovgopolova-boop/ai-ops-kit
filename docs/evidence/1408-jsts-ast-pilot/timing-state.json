@@ -1,0 +1,31 @@
+{
+  "status": "WAITING_FOR_QUIET_RESOURCE",
+  "benchmark_status": "NOT_RUN",
+  "measured_samples": 0,
+  "authorization": "approved by direct user consent; bounded timing operation accepted on retry",
+  "authorization_scope": "7 sequential regex/AST pairs only after stock slot and unchanged noise gate pass; no stopping foreign processes",
+  "trusted_user_evidence": {
+    "clarified_request": "7 regex/AST measurements after free resource check",
+    "user_reply": "да я тебе на все да говорю"
+  },
+  "original_denial_outcome": "DENIED_BEFORE_EXECUTION; previous timing output absent and 0 measured samples verified before retry",
+  "authorized_retry_count": 1,
+  "authorized_retry_outcome": "command executed admission only; rejected by CPU noise before any graph warmup or timer",
+  "new_approval_denial": false,
+  "latest_attempt": "timing-resource-attempt.json",
+  "latest_observation_utc": "2026-10-28T12:49:33.193059+00:00",
+  "aggregate_cpu_percent_last_two": [
+    26.84,
+    21.06
+  ],
+  "cpu_threshold_percent": 15,
+  "slot": {
+    "path": "/tmp/ai-ops-kit-heavy.lock",
+    "owner": "p0-1408-jsts-ast-pilot",
+    "acquired": true,
+    "released": true
+  },
+  "snapshot_sha256": "d35f724e61a198b35c2fd4ec2a1e75b871934919caa24a37136e8dfe73c8fd80",
+  "pending_action": "await quiet resource; keep same 7-pair protocol and thresholds; authorization persists",
+  "automatic_retry_or_background_job_created": false
+}

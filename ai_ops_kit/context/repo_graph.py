@@ -10,7 +10,8 @@
     (для automatic write-scope / relevant-test-selection в v3.6);
   - affected_tests(changed_files): какие тесты затронуты изменениями (v3.26 Progressive Verification).
 
-Поддерживаемые языки: Python (ast), JavaScript/TypeScript (regex-based import parsing).
+Поддерживаемые языки: Python (ast), JavaScript/TypeScript (regex по умолчанию;
+build_graph(..., js_analyzer="tree-sitter") — ограниченный optional AST-пилот).
 
 CLI: repo_graph.py [root] [--impact tools/x.py] [--affected-tests path1 path2] [--json] | --selftest
 """
@@ -171,6 +172,87 @@ def _analyze_js(path: Path, *, content=None):
             mods.add(mod_name)
 
     return symbols, mods
+
+
+def _load_js_parser(extension):
+    """Optional wheels загружаются только при явном opt-in; установка здесь запрещена."""
+    from tree_sitter import Language, Parser
+
+    if extension in (".ts", ".tsx"):
+        import tree_sitter_typescript
+        language = (tree_sitter_typescript.language_tsx() if extension == ".tsx"
+                    else tree_sitter_typescript.language_typescript())
+    else:
+        import tree_sitter_javascript
+        language = tree_sitter_javascript.language()
+    return Parser(Language(language))
+
+
+def _js_specifier_stems(specifiers):
+    # Тот же ограниченный resolver, что у regex: не tsconfig/Node resolution.
+    return {Path(m).stem if "/" in m else m for m in specifiers
+            if m.startswith(".") or (not m.startswith("/") and not m.startswith("@"))}
+
+
+def _analyze_js_tree_sitter(content, parser):
+    """Прямые literal imports/re-exports/require; comments и строки кодом не считаются.
+
+    Не вычисляет выражения и JS escapes, не разрешает aliases, bindings require,
+    package exports и пути. Syntax recovery не считается успешным анализом.
+    """
+    source = content.encode("utf-8")
+    root = parser.parse(source).root_node
+    if root.has_error:
+        raise ValueError("syntax-error")
+    specifiers, symbols, unresolved = set(), [], False
+
+    def text(node):
+        return source[node.start_byte:node.end_byte].decode("utf-8")
+
+    def literal(node):
+        nonlocal unresolved
+        if node is None or node.type != "string":
+            unresolved = True
+            return
+        raw = text(node)[1:-1]
+        if "\\" in raw:
+            unresolved = True
+        elif raw:
+            specifiers.add(raw)
+
+    stack = [root]
+    while stack:
+        node = stack.pop()
+        stack.extend(reversed(node.named_children))
+        if node.type in ("import_statement", "export_statement", "import_require_clause"):
+            specifier = node.child_by_field_name("source")
+            if specifier is not None:
+                literal(specifier)
+        elif node.type == "call_expression":
+            function = node.child_by_field_name("function")
+            if function is not None and (function.type == "import" or
+                    function.type == "identifier" and text(function) == "require"):
+                args = node.child_by_field_name("arguments")
+                values = [n for n in args.named_children if n.type != "comment"] if args else []
+                literal(values[0] if values else None)
+
+    for node in root.named_children:
+        if node.type == "export_statement":
+            node = node.child_by_field_name("declaration")
+            if node is None:
+                continue
+        if node.type in ("function_declaration", "generator_function_declaration",
+                         "class_declaration", "interface_declaration", "type_alias_declaration",
+                         "enum_declaration"):
+            name = node.child_by_field_name("name")
+            if name is not None:
+                symbols.append(text(name))
+        elif node.type in ("lexical_declaration", "variable_declaration"):
+            for declaration in node.named_children:
+                name = declaration.child_by_field_name("name")
+                if name is not None and name.type == "identifier":
+                    symbols.append(text(name))
+    return list(dict.fromkeys(symbols)), specifiers, unresolved
 
 
 _FILE_SPEC_NAME = "spec_from_file_location"
@@ -355,8 +437,15 @@ def _uncertain_dependency(path: Path) -> bool:
     return _dependency_uncertainty(path) is not None
 
 
-def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=True) -> dict:
-    """Построить граф зависимостей. v3.26.0: include_js=True добавляет JS/TS файлы."""
+def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=True,
+                *, js_analyzer="regex") -> dict:
+    """Построить граф; optional js_analyzer='tree-sitter' сохраняет консервативную uncertainty.
+
+    Без optional wheels или при ошибке grammar/parser используется прежний regex.
+    Default не импортирует Tree-sitter. JS resolver остаётся эвристикой по stem.
+    """
+    if js_analyzer not in ("regex", "tree-sitter"):
+        raise ValueError("js_analyzer must be 'regex' or 'tree-sitter'")
     root = Path(root)
     uncertainties = []
     py_files = _py_files(root, subdirs, path_filter=path_filter, uncertainties=uncertainties)
@@ -377,6 +466,7 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
     # для внешних файлов, исключённых каталогов, symlink и path_filter.
     known_paths = {f.resolve() for f, _ in rels if not f.is_symlink()}
     file_info, symbol_index, import_edges, tests, kinds = {}, {}, {}, {}, {}
+    js_analysis, js_parsers = {}, {}
     for f, rel in rels:
         # Один снимок содержимого на узел: imports и uncertainty используют тот же AST.
         # Ничего не кешируется между сборками графа.
@@ -384,12 +474,41 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
             content = f.read_text(encoding="utf-8")
             tree = ast.parse(content, filename=str(f)) if f.suffix == ".py" else None
             if f.suffix in JS_TS_EXTENSIONS:
-                syms, mods = _analyze_js(f, content=content)
+                if js_analyzer == "tree-sitter":
+                    grammar = f.suffix if f.suffix in (".ts", ".tsx") else ".js"
+                    if grammar not in js_parsers:
+                        try:
+                            js_parsers[grammar] = (_load_js_parser(grammar), None)
+                        except (ImportError, OSError, AttributeError, TypeError, ValueError, RuntimeError) as exc:
+                            js_parsers[grammar] = (None, f"parser-unavailable:{type(exc).__name__}")
+                    parser, fallback = js_parsers[grammar]
+                    if parser is not None:
+                        try:
+                            syms, specifiers, unresolved = _analyze_js_tree_sitter(content, parser)
+                            mods = _js_specifier_stems(specifiers)
+                            js_analysis[rel] = {"backend": "tree-sitter",
+                                                "specifiers": sorted(specifiers), "unresolved": unresolved}
+                        except (OSError, AttributeError, TypeError, ValueError, RuntimeError) as exc:
+                            fallback = ("syntax-error" if isinstance(exc, ValueError)
+                                        and str(exc) == "syntax-error"
+                                        else f"parser-failed:{type(exc).__name__}")
+                    if fallback:
+                        syms, mods = _analyze_js(f, content=content)
+                        js_analysis[rel] = {"backend": "regex", "fallback": fallback}
+                else:
+                    syms, mods = _analyze_js(f, content=content)
             else:
                 syms, mods = _analyze(f, tree=tree)
             kind = _dependency_uncertainty(f, text=content, tree=tree, known_paths=known_paths)
+            if f.suffix in JS_TS_EXTENSIONS and js_analyzer == "tree-sitter" and kind != "unreadable":
+                # AST extraction does not make stem/alias resolution complete. Never
+                # use one successful parse to authorize narrower verification.
+                kind = ("unreadable" if js_analysis[rel].get("fallback") == "syntax-error"
+                        else "unbounded")
         except (SyntaxError, OSError, UnicodeError):
             syms, mods, kind = [], set(), "unreadable"
+            if f.suffix in JS_TS_EXTENSIONS and js_analyzer == "tree-sitter":
+                js_analysis[rel] = {"backend": "none", "fallback": "source-unreadable"}
         if kind:
             kinds[rel] = kind
         file_info[rel] = {"symbols": syms, "imports": sorted(mods), "language": "js" if f.suffix in JS_TS_EXTENSIONS else "py"}
@@ -410,11 +529,14 @@ def build_graph(root=PKG, subdirs=DEFAULT_SUBDIRS, path_filter=None, include_js=
         if stem.startswith("test_") or stem.endswith("_test") or stem.endswith(".test") or stem.endswith(".spec"):
             tests[rel] = internal
     kinds.update({rel: "unreadable" for rel in uncertainties})
-    return {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs) if subdirs else ["*"],
+    graph = {"kind": "repository-graph", "root": str(root), "subdirs": list(subdirs) if subdirs else ["*"],
             "file_count": len(rels), "files": file_info, "symbol_index": symbol_index,
             "import_edges": import_edges, "tests": tests,
             "uncertainties": sorted(kinds), "uncertainty_kinds": kinds,
             "languages": {"python": len(py_files), "javascript": len(js_files)}}
+    if js_analyzer == "tree-sitter":
+        graph["js_analysis"] = js_analysis
+    return graph
 
 
 def affected_tests(graph: dict, changed_files: list) -> list:

@@ -1,0 +1,15 @@
+{
+  "status": "DENIED_BEFORE_EXECUTION",
+  "action": "7 sequential regex/AST timing pairs with stock resource admission",
+  "target": {
+    "snapshot": "/Users/sasad/Documents/Codex/2026-10-28/task-4/jsts-snapshot-7b14b251",
+    "output": "docs/evidence/1408-jsts-ast-pilot/timing-resource-attempt.json"
+  },
+  "reviewer": "automatic approval review",
+  "exact_reason": "Although bounded and read-only, this may execute the requested benchmark; the required explicit resource window is evidenced only by another agent’s message, not trusted user authorization, so the stated approval prerequisite is unmet.",
+  "executed": false,
+  "benchmark_samples": 0,
+  "retry": "not attempted; no workaround or indirect benchmark",
+  "independent_action": "approved --preflight-only probe; NOT_RUN due to CPU noise; stock slot acquired and released",
+  "next_step": "Human confirmation of the timing resource window plus passing stock slot/noise admission; no benchmark while CPU is noisy."
+}
