@@ -72,3 +72,5 @@
 - [Стухшие наблюдения-кандидаты можно снять (`candidates decline --why`) — #1386](decline-stale-observation-candidates.md).
 
 - [Установленный wheel работает вне клона — #1398](1398-wheel-runtime-data.md).
+
+- [Проверка обязательных контекстов защиты main — #1401](1401-required-contexts.md).
