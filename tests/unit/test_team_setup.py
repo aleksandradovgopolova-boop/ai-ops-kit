@@ -90,3 +90,16 @@ def test_default_off_does_not_reformat_owner_settings(project):
     path.write_text(original)
     setup.ensure_team_session(project)
     assert path.read_text() == original
+
+
+def test_delivery_before_config_exists_keeps_experiment_off(tmp_path):
+    original = b'{"permissions":{"deny":["Bash(rm *)"]}}\n'
+    settings = tmp_path / ".claude/settings.json"
+    settings.parent.mkdir()
+    settings.write_bytes(original)
+    result = setup.ensure_team_session(tmp_path)
+    assert result["mode"] == "not-enabled"
+    assert settings.read_bytes() == original
+    assert not (tmp_path / "AGENTS.md").exists()
+    assert not (tmp_path / ".codex/hooks.json").exists()
+    assert not (tmp_path / ".ai-ops.yaml").exists()

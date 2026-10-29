@@ -11,7 +11,11 @@ from ai_ops_kit.lifecycle import project_session as sessions
 
 def ensure_team_session(root):
     root = Path(root)
-    cfg = yaml.safe_load((root / ".ai-ops.yaml").read_text(encoding="utf-8")) or {}
+    try:
+        cfg = yaml.safe_load((root / ".ai-ops.yaml").read_text(encoding="utf-8")) or {}
+    except FileNotFoundError:
+        # init доставляет assets до создания конфига; эксперимент включается только явно.
+        cfg = {}
     enabled = (cfg.get("standard") or {}).get("team_session") == "required"
     actions = []
     for name in ("AGENTS.md", "CLAUDE.md"):
