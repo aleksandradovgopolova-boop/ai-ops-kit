@@ -30,6 +30,11 @@ ctx = RunContext.from_run_args(
 )
 ctx.max_steps = 5
 ctx.prop = lambda prompt: {"done": True}
+ctx.rev_prop = lambda prompt: "Recommendation: pass"
+ctx.rev_prop = lambda prompt: {"kind": "reviewer-result", "status": "pass"}
+ctx.auth_prop = lambda prompt: "kind: requirements-artifact"
+ctx.auth_prop = lambda prompt: {"kind": "requirements-artifact"}
+ctx.writer_prov = lambda prompt: "raw model response"
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -69,6 +74,9 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('{"status": "pass"}', '{"status": "unknown"}', '[typeddict-item]'),
     ('return {"ready_for_pr": True}', 'return {"ready_for_pr": "yes"}', '[typeddict-item]'),
     ('data: dict[str, Any]', 'data: str', '[arg-type]'),
+    ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
+    ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
+    ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),
 ])
 def test_bad_contract_values_are_rejected_after_actual_mutation(tmp_path, before, after, error):
     assert CONSUMER.count(before) == 1

@@ -81,8 +81,9 @@ class RunContext:
 
     # --- предложители (execute+fix-loop перевязывает при эскалации) ---
     prop: Optional[Callable[[str], dict[str, Any]]] = None
-    rev_prop: Optional[Callable[[str], str]] = None
-    auth_prop: Optional[Callable[[str], str]] = None
+    # Внедрённые reviewer/author callbacks могут вернуть уже разобранный документ.
+    rev_prop: Optional[Callable[[str], str | dict[str, Any]]] = None
+    auth_prop: Optional[Callable[[str], str | dict[str, Any]]] = None
 
     @classmethod
     def from_run_args(
