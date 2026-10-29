@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -178,6 +179,51 @@ def test_invalid_evidence_is_not_counted(child: Path, bad: dict):
     assert m["numerator"] == 0 and m["value"] == 0.0
     # и в метрике 4 (тот же помощник) негодное evidence тоже не засчитано
     assert ps.outcome_coverage(kg.build_graph(child), child)["numerator"] == 0
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")],
+                         ids=["nan", "positive-infinity", "negative-infinity"])
+def test_nonfinite_measurement_does_not_increase_either_numerator(child: Path, value: float):
+    path = child / "features" / "f-full" / "outcome-readout.yaml"
+    _write(path, {"kind": "OutcomeReadout", "feature": "f-full",
+                  "measured": {"value": value}, "target_met": "yes"})
+    # Проверяем настоящий YAML round-trip, а не подготовленное значение только в памяти.
+    assert not math.isfinite(yaml.safe_load(path.read_text())["measured"]["value"])
+    graph = kg.build_graph(child)
+    for measure in (ps.outcome_coverage, ps.evidence_backed_outcome_rate):
+        result = measure(graph, child)
+        assert result["numerator"] == 0
+        assert result["denominator"] == 2 and result["value"] == 0.0
+
+
+@pytest.mark.parametrize("value", [0, -3, 0.0, 1e308, 10 ** 400],
+                         ids=["zero", "negative", "float-zero", "large-float", "large-int"])
+def test_finite_measurement_counts_even_when_target_was_not_met(child: Path, value):
+    _write(child / "features" / "f-full" / "outcome-readout.yaml",
+           {"kind": "OutcomeReadout", "feature": "f-full",
+            "measured": {"value": value}, "target_met": "no"})
+    graph = kg.build_graph(child)
+    for measure in (ps.outcome_coverage, ps.evidence_backed_outcome_rate):
+        assert measure(graph, child)["numerator"] == 1
+
+
+def test_replacing_real_measurement_with_nan_removes_it_without_writing(child: Path):
+    path = child / "features" / "f-full" / "outcome-readout.yaml"
+    doc = {"kind": "OutcomeReadout", "feature": "f-full",
+           "measured": {"value": 19}, "target_met": "yes"}
+    _write(path, doc)
+    graph = kg.build_graph(child)
+    assert ps.evidence_backed_outcome_rate(graph, child)["numerator"] == 1
+    previous = path.read_bytes()
+    doc["measured"]["value"] = float("nan")
+    _write(path, doc)
+    assert path.read_bytes() != previous
+    assert math.isnan(yaml.safe_load(path.read_text())["measured"]["value"])
+    before = {str(p.relative_to(child)): p.read_bytes() for p in child.rglob("*") if p.is_file()}
+    for measure in (ps.outcome_coverage, ps.evidence_backed_outcome_rate):
+        assert measure(graph, child)["numerator"] == 0
+    assert before == {str(p.relative_to(child)): p.read_bytes()
+                      for p in child.rglob("*") if p.is_file()}
 
 
 # ── Метрика 2: доля утверждений с evidence — ДОЛЕЙ, не pass/fail ──────────────────────────────────

@@ -47,6 +47,7 @@
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 
@@ -245,8 +246,9 @@ _COUNTED_TARGET_MET = ("yes", "no")
 
 
 def _is_number(v) -> bool:
-    """Настоящее число замера, а не строка «not-a-number» и не bool (bool — подтип int)."""
-    return isinstance(v, (int, float)) and not isinstance(v, bool)
+    """Конечный замер: bool/NaN/∞ не числа результата, большие int сохраняют точность."""
+    return (isinstance(v, int) and not isinstance(v, bool)
+            or isinstance(v, float) and math.isfinite(v))
 
 
 def _measured_readouts(child_root) -> dict:
@@ -254,7 +256,7 @@ def _measured_readouts(child_root) -> dict:
 
     Замерен = есть `features/<id>/outcome-readout.yaml` (kind OutcomeReadout), и его evidence проходит
     проверку ДОПУСТИМОСТИ, а не только наличия (#1399):
-      * `measured.value` — настоящее число (строка «not-a-number», bool, пусто — НЕ замер);
+      * `measured.value` — конечное число (строка, bool, NaN/∞, пусто — НЕ замер);
       * `target_met` ∈ {yes, no} — объявленный исход; `unknown` не считается (честное «не узнали»),
         выдуманное значение («made-up») отвергается;
       * отчёт ПРИНАДЛЕЖИТ своей фиче: если объявлено поле `feature`, оно обязано совпасть с именем
