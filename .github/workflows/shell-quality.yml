@@ -1,0 +1,86 @@
+# Наблюдающий пилот #1410; обязательные проверки и wrappers не меняются.
+name: shell-quality-advisory
+on:
+  pull_request:
+    paths: ['**/*.sh', '.github/workflows/shell-quality.yml', 'docs/agent-guides/shell-policy.md', 'tests/unit/test_shell_quality_contract.py']
+  push:
+    branches: [main]
+    paths: ['**/*.sh', '.github/workflows/shell-quality.yml', 'docs/agent-guides/shell-policy.md', 'tests/unit/test_shell_quality_contract.py']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: shell-quality-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  shell-quality:
+    continue-on-error: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            shellcheck-platform: linux.x86_64
+            shellcheck-sha256: b7af85e41cc99489dcc21d66c6d5f3685138f06d34651e6d34b42ec6d54fe6f6
+            shfmt-platform: linux_amd64
+            shfmt-sha256: 76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf
+          - os: macos-15-intel
+            shellcheck-platform: darwin.x86_64
+            shellcheck-sha256: c2c15e08df0e8fbc374c335b230a7ee958c313fa5714817a59aa59f1aa594f51
+            shfmt-platform: darwin_amd64
+            shfmt-sha256: d33eee0da0f92835b3562e9767a05cee7e4eaeef47daa03bfd09da17b4b590a6
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Установить закреплённые CLI с проверкой SHA256
+        env:
+          SC_PLATFORM: ${{ matrix.shellcheck-platform }}
+          SC_SHA256: ${{ matrix.shellcheck-sha256 }}
+          SHFMT_PLATFORM: ${{ matrix.shfmt-platform }}
+          SHFMT_SHA256: ${{ matrix.shfmt-sha256 }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/shell-quality-tools"
+          mkdir -p "$tools"
+          curl --fail --location --silent --show-error "https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.$SC_PLATFORM.tar.gz" -o "$tools/shellcheck.tar.gz"
+          curl --fail --location --silent --show-error "https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_$SHFMT_PLATFORM" -o "$tools/shfmt"
+          printf '%s  %s\n' "$SC_SHA256" "$tools/shellcheck.tar.gz" "$SHFMT_SHA256" "$tools/shfmt" | shasum -a 256 -c -
+          tar -xzf "$tools/shellcheck.tar.gz" -C "$tools"
+          mv "$tools/shellcheck-v0.11.0/shellcheck" "$tools/shellcheck"
+          chmod +x "$tools/shellcheck" "$tools/shfmt"
+          echo "$tools" >> "$GITHUB_PATH"
+      - name: Все отслеживаемые .sh — полный долг
+        id: all
+        continue-on-error: true
+        shell: bash
+        run: |
+          set -euo pipefail
+          /bin/bash scripts/check-shell-quality.sh --inventory
+          /bin/bash scripts/check-shell-quality.sh
+      - name: Изменённые скрипты — отдельный сигнал
+        id: changed
+        if: always()
+        env:
+          SHELL_QUALITY_BASE: ${{ github.event.pull_request.base.sha || github.event.before || 'HEAD^' }}
+        shell: bash
+        run: /bin/bash scripts/check-shell-quality.sh --changed "$SHELL_QUALITY_BASE"
+      - name: Итог наблюдения
+        if: always()
+        env:
+          ALL_OUTCOME: ${{ steps.all.outcome }}
+          CHANGED_OUTCOME: ${{ steps.changed.outcome }}
+        shell: bash
+        run: |
+          {
+            echo '## Shell quality — advisory'
+            echo "Все tracked .sh (включая старый долг): $ALL_OUTCOME"
+            echo "Изменённые скрипты (полный файл): $CHANGED_OUTCOME"
+            echo 'Диагностика и форматирующие diff — в двух отдельных шагах выше.'
+            echo 'Failure/skipped не означают clean; нарушения и неполный запуск различаются кодами 1/2 в логах.'
+            echo 'Пилот не является обязательным допуском к merge и не закрывает #1410 целиком.'
+          } >> "$GITHUB_STEP_SUMMARY"
