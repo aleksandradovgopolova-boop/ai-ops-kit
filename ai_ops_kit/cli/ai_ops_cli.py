@@ -197,7 +197,7 @@ from ai_ops_kit.cli.human_facade import (  # noqa: E402,F401 — ре-экспо
     _inject_task_type,
     _first_nondir,
     _child_root_from,
-    _is_dir_safe,
+    _is_dir_safe, _add_execution_arguments,
 )
 
 
@@ -408,7 +408,7 @@ def _build_cli_arg_parser():
     ap.add_argument("--flow", action="store_true",
                     help="model: первый час одним нарративом (понял → знаю/не знаю → направление и "
                          "план → следующая работа); с --apply записывает направление и план")
-    ap.add_argument("--execute", action="store_true")
+    _add_execution_arguments(ap)
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
     ap.add_argument("--takeover", action="store_true",

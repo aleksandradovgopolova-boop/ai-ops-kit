@@ -67,6 +67,14 @@ HUMAN_ACTIONS = {
 }
 
 
+def _add_execution_arguments(parser):
+    """Параметры штатного запуска, общие для фасадных действий."""
+    parser.add_argument("--execute", action="store_true")
+    parser.add_argument("--runtime", default="claude-code",
+                        help="фактический runtime проектной сессии (передаётся штатному движку)")
+    parser.add_argument("--session", help="идентификатор проектной сессии runtime")
+
+
 # ── Диспетч фасада владельца (7 действий поверх INTENTS) ───────────────────────────────────────────
 def _first_nondir(rest):
     """Первый позиционный токен, который НЕ флаг и НЕ каталог репозитория, нижним регистром.
