@@ -11,11 +11,12 @@ read_tier: 3   # ярус чтения: 3 по явной необходимос
      name | definition (точная формула) | events used | grain | filters/exclusions
      | owner | source | good/bad direction | current baseline -->
 
-Семейство **Time to Verified Outcome (TTVO)**: путь идея→проверенный результат. Все данные
+Главная мера продукта — **evidence_backed_outcome_rate** (контракт ниже). Семейство
+**Time to Verified Outcome (TTVO)** — вспомогательные показатели пути идея→проверенный PR. Все данные
 снимаются ЛОКАЛЬНО из артефактов прогона, git и PR — телеметрия запрещена, в сеть ничего не
-уходит. Ни одного придуманного значения: baseline у каждой метрики = «ещё не измерено».
+уходит. Ни одного придуманного значения: baseline метрик семейства TTVO = «ещё не измерено».
 
-### intent→verified-PR time  (NORTH STAR)
+### intent→verified-PR time  (вспомогательная метрика скорости)
 - **name:** intent→verified-PR time
 - **definition (формула):** `t_verified_pr − t_specify_start` — астрономическое (календарное)
   время в минутах от отметки старта `specify` до отметки готовности проверенного PR (все
@@ -95,10 +96,10 @@ read_tier: 3   # ярус чтения: 3 по явной необходимос
 - **current baseline:** ещё не измерено — снимается первым живым прогоном (часть 2).
 
 ## Metric relationships
-<!-- дерево: North Star ← input metrics ← события -->
+<!-- дерево вспомогательных метрик скорости и качества -->
 
 ```
-North Star: intent→verified-PR time   (время идея→проверенный PR; меньше — лучше)
+Скорость: intent→verified-PR time     (время идея→проверенный PR; меньше — лучше)
   ← input: verified-PR rate            (доля работ до проверенного PR без ручной доводки; больше — лучше)
   ← input: human-intervention rate     (доля работ с вмешательством человека; меньше — лучше)
       ── ограждают (скорость не в ущерб качеству) ──
@@ -106,18 +107,17 @@ North Star: intent→verified-PR time   (время идея→проверен�
   ← guardrail: post-merge defect rate  (дефекты после слияния; меньше — лучше)
 ```
 
-Чтение дерева: north star (intent→verified-PR time) объясняется входными метриками —
+Чтение дерева вспомогательного семейства: TTVO (intent→verified-PR time) объясняется входными метриками —
 verified-PR rate и human-intervention rate (быстрее и без ручной доводки → короче путь). Обе
-guardrail-метрики ограждают north star: улучшение времени засчитывается только при неухудшении
+guardrail-метрики ограждают скорость: улучшение времени засчитывается только при неухудшении
 rework rate и post-merge defect rate — иначе скорость куплена ценой качества.
 
 ## Scorecard headline rate — evidence_backed_outcome_rate (с 2026-10-28)
 
-TTVO выше — north star СКОРОСТИ (время идея→проверенный PR). Отдельно от него карта продукта кита
-(`intelligence/product_scorecard`) ведёт ГЛАВНУЮ МЕРУ ПРОДУКТ-ЗДОРОВЬЯ (решение владельца
-`ep-2026-10-28-evidence-backed-north-star`). Это ДВЕ разные главные меры (скорость против
-продукт-здоровья), у каждой ОДНО определение; расхождение формулировок между каталогом, документацией
-и scorecard — дефект (#1400), который эта секция и закрывает.
+**evidence_backed_outcome_rate — единственная главная мера продукта**, которую ведёт карта
+(`intelligence/product_scorecard`; решение владельца `ep-2026-10-28-evidence-backed-north-star`).
+TTVO выше — вспомогательная метрика скорости (время идея→проверенный PR). Её улучшение помогает
+оценить доставку, но не заменяет непрерывную цепочку до измеренного результата.
 
 - **name:** evidence_backed_outcome_rate (метрика 1 карты продукта)
 - **единица учёта:** ФИЧА с паспортом (`features/<id>/blueprint.yaml`). Называется «доля фич», не
