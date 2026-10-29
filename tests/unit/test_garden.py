@@ -43,3 +43,73 @@ def test_render_names_candidates_and_clean_state():
 
     clean = {"stale_duplicate_baseline_keys": [], "dishonest_gate_rows": [], "duplicate_group_count": 0}
     assert "сад чист" in garden.render(clean)
+
+
+def _plant_inventory(tmp_path, monkeypatch):
+    from ai_ops_kit.devtools import capability_inventory as inventory
+
+    module = "ai_ops_kit.engine.garden_orphan"
+    source = tmp_path / "ai_ops_kit/engine/garden_orphan.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(f"import {module}\n", encoding="utf-8")
+    (tmp_path / "test_probe.py").write_text(f"import {module}\n", encoding="utf-8")
+    copy = tmp_path / ".ai/worktrees/copy/probe.py"
+    copy.parent.mkdir(parents=True)
+    copy.write_text(f"import {module}\n", encoding="utf-8")
+    monkeypatch.setattr(inventory, "PKG", tmp_path)
+    monkeypatch.setattr(inventory, "INTENTIONAL_DORMANT_REASON", {module: "PARK: ждать проверки"})
+    from ai_ops_kit.devtools import arch_gate_reconciliation as recon
+    from ai_ops_kit.devtools import code_duplication as dup
+    monkeypatch.setattr(recon, "dishonest_rows", lambda: [])
+    monkeypatch.setattr(dup, "stale_baseline_keys", lambda: [])
+    monkeypatch.setattr(dup, "duplicate_groups", lambda: [])
+    return module, source
+
+
+def test_collect_names_real_dormant_source_and_preserves_quarantine(tmp_path, monkeypatch):
+    module, source = _plant_inventory(tmp_path, monkeypatch)
+    assert source.is_file() and f"import {module}" in source.read_text()
+    report = garden.collect()
+    assert report["dormant_modules"] == [{
+        "module": module, "path": "ai_ops_kit/engine/garden_orphan.py",
+        "reason": "PARK: ждать проверки",
+    }]
+    rendered = garden.render(report)
+    assert "ai_ops_kit/engine/garden_orphan.py" in rendered
+    assert "PARK: ждать проверки" in rendered
+    assert "сад чист" not in rendered
+
+
+def test_real_working_import_removes_candidate_without_changing_sources(tmp_path, monkeypatch):
+    module, _ = _plant_inventory(tmp_path, monkeypatch)
+    assert garden.collect()["dormant_modules"]
+    importer = tmp_path / "worker.py"
+    importer.write_text(f"import {module}\n", encoding="utf-8")
+    assert importer.read_text() == f"import {module}\n"
+    before = {str(p.relative_to(tmp_path)): p.read_bytes()
+              for p in tmp_path.rglob("*") if p.is_file()}
+    report = garden.collect()
+    assert report["dormant_modules"] == []
+    assert "сад чист" in garden.render(report)
+    after = {str(p.relative_to(tmp_path)): p.read_bytes()
+             for p in tmp_path.rglob("*") if p.is_file()}
+    assert after == before
+
+
+def test_inventory_failure_does_not_print_clean_report(monkeypatch, capsys):
+    from ai_ops_kit.devtools import capability_inventory as inventory
+
+    def fail():
+        raise OSError("inventory unavailable")
+
+    monkeypatch.setattr(inventory, "dormant_modules", fail)
+    with pytest.raises(OSError, match="inventory unavailable"):
+        garden.main(["--json"])
+    assert capsys.readouterr().out == ""
+
+
+def test_successful_json_names_dormant_source(tmp_path, monkeypatch, capsys):
+    module, _ = _plant_inventory(tmp_path, monkeypatch)
+    assert garden.main(["--json"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["dormant_modules"][0]["module"] == module
