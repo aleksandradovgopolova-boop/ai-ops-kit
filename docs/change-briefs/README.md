@@ -85,3 +85,4 @@
 - [Advisory CRAP-измеритель — #1387](1387-crap-score-advisory.md).
 
 - [Негодный числовой замер не увеличивает долю результата — #1399](1399-finite-outcome-evidence.md).
+- [Одна главная мера продукта — #1400](1400-single-headline-metric.md).
