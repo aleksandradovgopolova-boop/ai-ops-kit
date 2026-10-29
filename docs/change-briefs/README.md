@@ -15,6 +15,7 @@
 ## Что здесь есть
 
 - [Передача runtime и сессии через фасад — #1434](1434-runtime-session-identity.md).
+- [Экспериментальное командное подключение — #1434](1434-team-kit-autostart.md).
 
 - [`3.34-distribution-boundary-cleanup.md`](3.34-distribution-boundary-cleanup.md) — срез 3.34:
   `validation` переехал в `ai_ops_kit/`, замер циклов ядра стал ратчетом.

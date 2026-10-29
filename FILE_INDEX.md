@@ -286,6 +286,9 @@
 - `templates/blueprint/FeatureBlueprint.yaml`
 - `templates/planning/ROADMAP.md`, `templates/planning/plan.yaml` — контур планирования для child (v3.35)
 - `templates/runtime/claude-communication.md` — адаптер политики коммуникации для CLAUDE.md (v3.35)
+- `templates/runtime/team-session.md`, `templates/runtime/team_hook.py` — общий канон и bootstrap экспериментального проектного подключения Claude/Codex (#1434)
+- `ai_ops_kit/lifecycle/project_session.py` — привязка постановки, checkout и наблюдаемого запуска; локальное подтверждение не заменяет CI
+- `ai_ops_kit/cli/project_session.py`, `installer/team_setup.py` — lifecycle hooks и доставка ограниченных блоков/собственных hook-записей
 - `templates/ci/ai-ops-record.yml` — CI-нетто автонакопления срезов эффекта (v2.30)
 - `templates/ci/ai-ops-validate.yml` — child-CI валидации: пин kit = installed_version, без protected-трения (v2.35)
 - `templates/ci/ai-ops-update.yml`
