@@ -23,7 +23,7 @@ def staged_files(root: Path) -> list[str]:
         return override.split()
     result = subprocess.run(
         ["git", "-C", str(root), "diff", "--cached", "--name-only", "--diff-filter=ACMR", "-z"],
-        capture_output=True, check=True,
+        capture_output=True, check=True, timeout=30,
     )
     return [os.fsdecode(name) for name in result.stdout.split(b"\0") if name]
 
@@ -39,13 +39,15 @@ def warn_claims(root: Path, files: list[str]) -> None:
         areas = sorted({name.split("/", 1)[0] + ("/" if "/" in name else "") for name in files})
         output = io.StringIO()
         with contextlib.redirect_stdout(output):
-            active_work.check_cmd(registry, areas)
+            active_work.check_cmd(registry, areas, child_root=root,
+                                  published=active_work.publication_enabled(root))
         for line in output.getvalue().splitlines():
             if "пересечений по зонам" not in line:
                 print(line)
-    except (OSError, ValueError, RuntimeError, active_work.ActiveWorkCorrupt):
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError, active_work.ActiveWorkCorrupt) as exc:
         # Недоступная координация никогда не отключает сам CommitContract.
-        pass
+        print(f"CommitContract: координация недоступна ({type(exc).__name__}); проверка коммита продолжается.",
+              file=sys.stderr)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -61,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0  # merge/amend без изменений индекса
         message = "\n".join(line for line in Path(argv[0]).read_text(encoding="utf-8").splitlines()
                             if not line.startswith("#") and line.strip())
-    except (OSError, UnicodeError, subprocess.CalledProcessError) as exc:
+    except (OSError, UnicodeError, subprocess.SubprocessError) as exc:
         print(f"CommitContract НЕ ВЫПОЛНЕН: индекс/сообщение не прочитаны ({type(exc).__name__}).",
               file=sys.stderr)
         return 1

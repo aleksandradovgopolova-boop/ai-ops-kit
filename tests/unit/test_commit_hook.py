@@ -69,3 +69,71 @@ def test_comment_only_message_does_not_disable_contract(index, capsys):
 def test_missing_message_has_original_usage_status(index, capsys):
     assert commit_hook.main([]) == 2
     assert "не передан файл" in capsys.readouterr().err
+
+
+def test_git_timeout_is_a_named_failure(index, monkeypatch, capsys):
+    message = index / "message"
+    message.write_text("test: Git timeout CI #1410\n")
+
+    def timeout(argv, **kwargs):
+        assert kwargs["timeout"] == 30
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+
+    monkeypatch.setattr(commit_hook.subprocess, "run", timeout)
+    assert commit_hook.main([str(message)]) == 1
+    output = capsys.readouterr()
+    assert "НЕ ВЫПОЛНЕН" in output.err
+    assert "TimeoutExpired" in output.err and "commit:" not in output.out
+
+
+def test_claim_forecast_keeps_cli_repository_and_publication_context(index, monkeypatch):
+    monkeypatch.delenv("COMMIT_CONTRACT_SKIP_CLAIMS", raising=False)
+    registry = index / "claims.yaml"
+    registry.write_text("schema_version: 1\nkind: active-work\nactive: []\n")
+    (index / ".ai-ops.yaml").write_text("team_coordination:\n  publish: true\n")
+    monkeypatch.setattr(commit_hook.active_work, "shared_registry_path", lambda root: registry)
+    seen = []
+    monkeypatch.setattr(commit_hook.active_work, "check_cmd", lambda *a, **kw: seen.append((a, kw)))
+    commit_hook.warn_claims(index, ["src/a.py", "src/b.py", "README.md"])
+    assert seen == [((registry, ["README.md", "src/"]), {"child_root": index, "published": True})]
+
+
+def test_unavailable_claims_warns_and_still_runs_contract(index, monkeypatch, capsys):
+    monkeypatch.delenv("COMMIT_CONTRACT_SKIP_CLAIMS", raising=False)
+    stage(index, "code.py")
+    registry = index / "claims.yaml"
+    registry.write_text("fixture")
+    monkeypatch.setattr(commit_hook.active_work, "shared_registry_path", lambda root: registry)
+
+    def corrupt(*args, **kwargs):
+        raise commit_hook.active_work.ActiveWorkCorrupt("fixture")
+
+    monkeypatch.setattr(commit_hook.active_work, "check_cmd", corrupt)
+    message = index / "message"
+    message.write_text("test: advisory coordination CI #1410\n")
+    assert commit_hook.main([str(message)]) == 0
+    output = capsys.readouterr()
+    assert "координация недоступна" in output.err
+    assert "commit: ДОПУСТИМ" in output.out
+
+
+def test_merged_foreign_claim_stays_silent_and_registry_is_unchanged(index, monkeypatch, capsys):
+    stage(index, "src/code.py")
+    for args in (("config", "user.email", "fixture@example.invalid"),
+                 ("config", "user.name", "Fixture"), ("branch", "-M", "main"),
+                 ("commit", "-qm", "test: own fixture"), ("branch", "ai-ops/already-merged")):
+        subprocess.run(["git", *args], check=True, capture_output=True)
+    aw = commit_hook.active_work
+    registry = aw.shared_registry_path(index)
+    aw.save(registry, {"schema_version": 1, "kind": "active-work", "active": [{
+        "id": "already-merged", "branch": "ai-ops/already-merged", "status": "in-progress",
+        "affected_areas": ["src/"], "owner_session": "foreign-session", "machine": aw._machine(),
+    }]})
+    before = registry.read_bytes()
+    monkeypatch.delenv("COMMIT_CONTRACT_SKIP_CLAIMS", raising=False)
+    assert aw.main(["check", str(registry), "--areas", "src/"]) == 0
+    assert "пересечений по зонам src/ нет" in capsys.readouterr().out
+    commit_hook.warn_claims(index, ["src/code.py"])
+    output = capsys.readouterr().out
+    assert "возможны пересечения" not in output and "already-merged" not in output
+    assert registry.read_bytes() == before
