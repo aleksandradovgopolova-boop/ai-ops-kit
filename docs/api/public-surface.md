@@ -234,6 +234,9 @@ experimental:
   # Ключи `.ai-ops.yaml`, объявленные, но ещё не устоявшиеся.
   config_keys:
     - product_operating_model
+    # #1403: opt-in источники compiled payload и бюджет прогона; без ключей обычный отбор.
+    - context
+    - context_budget.run_tokens
     # #1183: `standard.identifiers: latin | any` — имена в коде латиницей (умолчание, ключа нет) или
     # явный отказ. Незнакомое значение не выключает правило, а остаётся latin с пометкой.
     - standard.identifiers
