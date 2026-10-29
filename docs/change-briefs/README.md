@@ -77,3 +77,5 @@
 - [Отказы и очистка контейнерного wrapper — #1410](1410-wrapper-failures.md).
 
 - [`1405-garden-dormant-report.md`](1405-garden-dormant-report.md) — неподключённые модули и причины карантина в отчёте уборки.
+
+- [Advisory CRAP-измеритель — #1387](1387-crap-score-advisory.md).
