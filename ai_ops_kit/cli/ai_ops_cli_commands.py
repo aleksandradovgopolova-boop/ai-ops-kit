@@ -675,7 +675,8 @@ def _main_run_execute(intent, task, child_root, signals, a, pv):
         # (аудит P0.1: раньше уходило в mock). v3.22: `do` добавляет review_fix_attempts=2.
         review_fix = 2 if intent == "do" else getattr(a, "review_fix_attempts", 0)
         rep = ai_ops_run.run(task, signals, Path(child_root), engine=flags["engine"],
-                             session=_session_identity(child_root),
+                             runtime=getattr(a, "runtime", "claude-code"),
+                             session=getattr(a, "session", None) or _session_identity(child_root),
                              feature=a.feature, execute=True, sandbox=flags["sandbox"],
                              baseline_diff=flags["baseline_diff"], review=flags["review"],
                              author=flags["author"], provider_name=provider, model=a.model,

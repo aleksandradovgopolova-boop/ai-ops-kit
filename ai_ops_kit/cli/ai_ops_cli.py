@@ -409,6 +409,9 @@ def _build_cli_arg_parser():
                     help="model: первый час одним нарративом (понял → знаю/не знаю → направление и "
                          "план → следующая работа); с --apply записывает направление и план")
     ap.add_argument("--execute", action="store_true")
+    ap.add_argument("--runtime", default="claude-code",
+                    help="фактический runtime проектной сессии (передаётся штатному движку)")
+    ap.add_argument("--session", help="идентификатор проектной сессии runtime")
     ap.add_argument("--force", action="store_true",
                     help="resume: продолжить даже при нужной ревалидации (осознанно)")
     ap.add_argument("--takeover", action="store_true",
