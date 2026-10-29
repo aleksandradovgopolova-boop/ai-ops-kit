@@ -23,11 +23,11 @@ CURRENT_REFS="$(git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:s
 while read -r sha ref; do
   [ -n "$ref" ] || continue
   before="$(awk -v r="$ref" '$2==r{print $1}' "$SNAP")"
-  if [ "$before" != "$sha" ]; then            # новая ветка ИЛИ SHA изменился этим прогоном
+  if [ "$before" != "$sha" ]; then # новая ветка ИЛИ SHA изменился этим прогоном
     REFSPECS+=("+refs/heads/${ref}:refs/heads/${ref}")
     NAMES+=("$ref")
   fi
-done <<< "$CURRENT_REFS"
+done <<<"$CURRENT_REFS"
 
 if [ "${#REFSPECS[@]}" -eq 0 ]; then
   echo "DELIVER: nothing (прогон не создал/не изменил ai-ops/*)"

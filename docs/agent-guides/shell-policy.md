@@ -3,7 +3,8 @@
 Shell остаётся слоем запуска: окружение, argv, коды возврата, сигналы, cleanup,
 Docker entrypoints и последовательность вызовов CLI. Разбор JSON/YAML, предметные
 решения, планирование задач и построение отчётов размещаются в существующем домене
-`ai_ops_kit/` (stdlib + PyYAML). Этот пилот #1410 не переносит старые wrappers.
+`ai_ops_kit/` (stdlib + PyYAML). Разбор и решения commit-msg hook вынесены в Python;
+пофайловые решения — в [аудите #1410](shell-audit-1410.md).
 
 ## Диалект и переносимость
 
@@ -37,7 +38,7 @@ Docker entrypoints и последовательность вызовов CLI. �
 ```
 
 Команда ничего не скачивает, не запускает проверяемые скрипты и не переписывает их.
-Проверяются **все tracked `*.sh`**, включая скрытые каталоги, research fixtures и
+Проверяются **все tracked `*.sh` и корневой POSIX `ai-ops`**, включая скрытые каталоги, research fixtures и
 runtime templates; исключений по каталогу нет. Неотслеживаемые файлы не входят:
 перед локальной проверкой добавьте новый скрипт в индекс. Удалённые файлы не входят
 в changed-view. Отсутствующий tracked-файл в полном inventory, symlink и неизвестный
@@ -77,10 +78,12 @@ ShellCheck и diff shfmt остаются в логах соответствую
 `continue-on-error` не означает чистый результат; смотреть `outcome` шагов и summary.
 Неполный/пропущенный запуск не подтверждает качество. Настройки обязательных проверок
 и `package-quality.yml` не меняются. Перевод в blocking/required — отдельное решение
-после обкатки. P1-аудит и перенос логики по #1410 остаются открытыми.
+после обкатки. Старый долг устранён; выполненный аудит и минимальный перенос описаны
+в [аудите #1410](shell-audit-1410.md).
 
 Начальный inventory на базе `02fe0cf74e121b7ececcf72385b07335226a75f4` с новым
-проверяющим: **16 файлов, 15 Bash / 1 POSIX**. Живой inventory — команда выше.
+проверяющим: **16 файлов, 15 Bash / 1 POSIX**. После #1410 добавлен корневой `ai-ops`: **17 файлов, 15 Bash / 2 POSIX**.
+Живой inventory — команда выше.
 
 | Группа | Отслеживаемые файлы |
 |---|---|
@@ -88,7 +91,7 @@ ShellCheck и diff shfmt остаются в логах соответствую
 | Research fixture, Bash | `.research/experiments/EXP-004-head-to-head-ai-sdlc/fixture/SCORER_PRIVATE/t3_poison_commit.sh` |
 | Containers, Bash | `containers/deliver-run-branches.sh`, `containers/run-sandboxed.sh` |
 | Scripts, Bash | `scripts/check-clean-install.sh`, `check-fast.sh`, `check-full.sh`, `check-shell-quality.sh`, `check-upgrade-path.sh`, `commit-contract.sh`, `warn-path-belt.sh` (тот же каталог) |
-| Runtime, POSIX | `templates/runtime/ai-ops-entry.sh` |
+| Runtime, POSIX | `ai-ops`, `templates/runtime/ai-ops-entry.sh` |
 
 ## Первичные источники закрепления
 

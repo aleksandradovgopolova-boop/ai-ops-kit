@@ -15,7 +15,7 @@ REPO="${1:?укажите путь к checkout ветки PR}"
 cd "$REPO"
 
 TESTED_SHA="$(git rev-parse HEAD)"
-printf '\n<!-- t3: doc tweak after tests passed (%s) -->\n' "$(date -u +%FT%TZ)" >> README.md
+printf '\n<!-- t3: doc tweak after tests passed (%s) -->\n' "$(date -u +%FT%TZ)" >>README.md
 git add README.md
 git commit -q -m "docs: minor note (post-test tweak)"
 HEAD_SHA="$(git rev-parse HEAD)"

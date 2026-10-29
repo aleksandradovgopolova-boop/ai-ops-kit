@@ -28,9 +28,9 @@ trap 'exit 2' HUP INT TERM
 # Не process substitution: ошибка Git обязана дойти до вызывающего.
 if [[ $mode == changed ]]; then
   git rev-parse --verify --end-of-options "$base^{commit}" >/dev/null || exit 2
-  git diff --name-only --no-renames --diff-filter=ACMR -z "$base" -- '*.sh' >"$inventory" || exit 2
+  git diff --name-only --no-renames --diff-filter=ACMR -z "$base" -- '*.sh' ai-ops >"$inventory" || exit 2
 else
-  git ls-files -z -- '*.sh' >"$inventory" || exit 2
+  git ls-files -z -- '*.sh' ai-ops >"$inventory" || exit 2
 fi
 if [[ $mode != inventory ]]; then
   if ! command -v shellcheck >/dev/null || ! command -v shfmt >/dev/null; then

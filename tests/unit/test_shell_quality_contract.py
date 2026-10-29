@@ -232,3 +232,19 @@ def test_workflow_keeps_full_debt_separate_and_advisory():
     assert "--changed" in changed["run"]
     assert any(step.get("if") == "always()" and "GITHUB_STEP_SUMMARY" in step.get("run", "") for step in steps)
     assert {row["os"] for row in job["strategy"]["matrix"]["include"]} == {"ubuntu-24.04", "macos-15-intel"}
+
+
+def test_extensionless_root_entrypoint_is_in_all_and_changed_inventory(project, cli):
+    path = tracked(project, "ai-ops", "#!/bin/sh\n# BAD_SHELLCHECK\ntrue\n")
+    assert path.is_file()
+    for args in ((), ("--changed", "HEAD")):
+        cli[1].unlink(missing_ok=True)
+        result = run(project, cli, *args)
+        assert result.returncode == 1
+        assert any(argv[-1] == "./ai-ops" for _, argv in calls(cli))
+
+
+def test_shell_workflow_also_triggers_for_extensionless_entrypoint():
+    workflow = yaml.load((ROOT / ".github/workflows/shell-quality.yml").read_text(), Loader=yaml.BaseLoader)
+    for event in ("pull_request", "push"):
+        assert "ai-ops" in workflow["on"][event]["paths"]

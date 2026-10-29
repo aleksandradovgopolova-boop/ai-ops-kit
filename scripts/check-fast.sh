@@ -56,7 +56,6 @@ fi
 
 # -n auto: параллель по ядрам (набор параллель-безопасен — проверено на полном прогоне). Без
 # pytest-xdist прогон идёт последовательно — быстрый профиль не обязан падать из-за его отсутствия.
-XNUM=""
-if "$PYTHON" -c 'import xdist' >/dev/null 2>&1; then XNUM="-n auto --dist loadfile"; fi
-# shellcheck disable=SC2086 — XNUM намеренно либо два слова (-n auto), либо пусто
-"$PYTHON" -m pytest tests/ -q -m "not slow" $XNUM "$@"
+XNUM=()
+if "$PYTHON" -c 'import xdist' >/dev/null 2>&1; then XNUM=(-n auto --dist loadfile); fi
+"$PYTHON" -m pytest tests/ -q -m "not slow" ${XNUM[@]+"${XNUM[@]}"} "$@"
