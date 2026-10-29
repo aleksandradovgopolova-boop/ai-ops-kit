@@ -81,3 +81,5 @@
 - [Наблюдающие ShellCheck/shfmt и shell policy — #1410](1410-shell-quality-pilot.md).
 
 - [Негативные security-evals существующих ограничений — #1407](1407-agent-security-evals.md).
+
+- [Advisory CRAP-измеритель — #1387](1387-crap-score-advisory.md).

@@ -1,0 +1,13 @@
+# Advisory-пилот #1387; dp-002. Это НЕ глобальная заморозка измеренного долга.
+# Полный coverage-run кита ещё NOT_RUN. Пустой список не означает нулевой долг:
+# без привязанного покрытия команда возвращает 1/incomplete и CRAP=null.
+# Запись: python3 -m ai_ops_kit.devtools.crap_score --coverage coverage.json \
+#   --coverage-binding coverage-binding.json --write-baseline --allow-raise 'reviewed debt'
+# Новые/выросшие записи в существующем файле требуют явного обоснования и review.
+schema_version: 1
+kind: crap-score-advisory
+algorithm: python-ast-line-v1
+threshold: 10
+coverage_mode: line-approximation
+measurement: null
+functions: {}
