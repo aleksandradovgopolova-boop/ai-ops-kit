@@ -125,6 +125,8 @@ def test_an_unavailable_validator_stays_unknown_not_ok(tmp_path):
     rep = child_doctor.assess(root)
     unknown = [c for c in rep["checks"] if c["ok"] is None]
     assert unknown, "ни один пункт не остался «не проверено» — состояние потеряно"
+    team = next(c for c in unknown if c["check"] == "проектное подключение Claude/Codex")
+    assert ".ai-ops.yaml" in team["detail"]
     assert all("проверить нечем" in c["detail"] or "не запустился" in c["detail"] for c in unknown)
     assert "не проверено" in rep["verdict"], rep["verdict"]
     # Сравниваем с ВЕРДИКТОМ ЗДОРОВОЙ установки, а не ищем подстроку: текст «это не „в порядке“»
@@ -213,3 +215,14 @@ def test_a_broken_install_really_blocks(installed):
         assert "работать нельзя" in rep["verdict"], rep["verdict"]
     finally:
         victim.write_text(before, encoding="utf-8")
+
+
+@pytest.mark.unit
+def test_malformed_session_config_is_diagnosed_instead_of_raising(tmp_path):
+    (tmp_path / ".ai/managed").mkdir(parents=True)
+    (tmp_path / ".ai-ops.yaml").write_text("standard: [broken\n")
+    report = child_doctor.assess(tmp_path)
+    check = next(c for c in report["checks"] if c["check"] == "проектное подключение Claude/Codex")
+    assert check["ok"] is False
+    assert ".ai-ops.yaml" in check["detail"]
+    assert check["check"] in report["blocking"]

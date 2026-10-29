@@ -355,7 +355,11 @@ def _footprint_paths():
             # запись о поставленных навыках откатывается ВМЕСТЕ с ними: иначе после отката
             # прежний текст кита сверялся бы с отпечатком новой версии и читался как правка
             _ao().REPO_ROOT / SKILL_PRINTS_REL,
-            _ao().CHILD_CONFIG]
+            _ao().CHILD_CONFIG,
+            _ao().REPO_ROOT / "AGENTS.md",
+            _ao().REPO_ROOT / "CLAUDE.md",
+            _ao().REPO_ROOT / ".claude" / "settings.json",
+            _ao().REPO_ROOT / ".codex" / "hooks.json"]
 
 
 def snapshot_footprint(dest: Path):

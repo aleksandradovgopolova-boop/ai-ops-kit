@@ -31,6 +31,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import yaml
+
 from ai_ops_kit.lifecycle import project_session
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
@@ -143,10 +145,19 @@ def assess(child_root) -> dict:
     checks.append(_run_validator(root, "validate_ai_ops_child"))
     checks.append(_run_validator(root, "validate_child_config_filled"))
     checks += _policy_form_checks(root)
-    if project_session.required(root):
-        problems = project_session.configuration_problems(root)
-        checks.append({"check": "проектное подключение Claude/Codex", "ok": not problems,
-                       "detail": "; ".join(problems) or "файлы целы; доверие runtime ещё не проверено"})
+    try:
+        team_required = project_session.required(root)
+    except OSError as exc:
+        checks.append({"check": "проектное подключение Claude/Codex", "ok": None,
+                       "detail": f"не запустился: не прочитан .ai-ops.yaml: {exc}"})
+    except (yaml.YAMLError, AttributeError, TypeError, ValueError) as exc:
+        checks.append({"check": "проектное подключение Claude/Codex", "ok": False,
+                       "detail": f"некорректный .ai-ops.yaml: {exc}"})
+    else:
+        if team_required:
+            problems = project_session.configuration_problems(root)
+            checks.append({"check": "проектное подключение Claude/Codex", "ok": not problems,
+                           "detail": "; ".join(problems) or "файлы целы; доверие runtime ещё не проверено"})
 
     bad = [c for c in checks if c["ok"] is False]
     blockers = [c for c in bad if c["check"] in BLOCKING]
