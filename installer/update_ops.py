@@ -395,6 +395,12 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
 
+    # Снимок ДО первой записи assets: новые project hooks не должны переживать
+    # откат managed к версии без их bootstrap. Даже при той же версии assets обновляются.
+    backup = _ao().AI_DIR / "runtime" / "backups" / (inst or "unknown")
+    footprint = _core().snapshot_footprint(backup)
+    report["backup_ref"] = backup.relative_to(_ao().REPO_ROOT).as_posix()
+
     # ВСЯ ДОСТАВКА АССЕТОВ — ДО РАННЕГО ВЫХОДА. Ниже стоит `if not changes and inst == target:
     # return`, и до 3.36.2 за ним оставались CI-шаблоны, точка входа, блок политики общения, засев
     # планирования и маркеры зон. Ребёнок с совпадающей версией не получал НИЧЕГО из этого — а это
@@ -413,12 +419,6 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
         report.update(report=msg); _core().write_report(report)
         print(msg); return 0
 
-    # backup: снимок ВСЕГО install footprint (managed + .claude/skills + .claude/commands
-    # + .ai/generated + .ai-ops.yaml) — чтобы откат был транзакционным, а не частичным.
-    backup = _ao().AI_DIR / "runtime" / "backups" / (inst or "unknown")
-    footprint = _core().snapshot_footprint(backup)
-    report["backup_ref"] = backup.relative_to(_ao().REPO_ROOT).as_posix()
-
     # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
     # Раньше цепочка лишь переписывалась в отчёт как "applied" — теперь помечаем applied
     # только по факту успешного запуска up.py; при падении откатываемся из backup и стоп.
@@ -427,6 +427,7 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     for step in chain:
         up = _ao().PKG / "migrations" / step / "up.py"
         if not up.exists():
+            _core().restore_footprint(backup, footprint)
             report.update(status="failed", migrations_applied=applied,
                           report=f"миграция {step}: нет {up} — обновление прервано.")
             out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")
