@@ -219,3 +219,12 @@ def test_dirty_result_is_rejected_before_receipt(project):
     assert (project / "unchecked.txt").read_text() == "unchecked"
     assert result["status"] == "blocked"
     assert "рабочая копия изменена" in result["blocker"]
+
+
+def test_source_digest_preserves_filename_whitespace(project):
+    path = project / " source with spaces.txt "
+    path.write_text("before")
+    before = sessions.source_digest(project)
+    path.write_text("after")
+    assert path.read_text() == "after"
+    assert sessions.source_digest(project) != before

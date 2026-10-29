@@ -40,7 +40,7 @@ def git(root, *args):
                           text=True, timeout=10, check=False)
     if proc.returncode:
         raise ValueError(f"git {' '.join(args)} недоступен: {proc.stderr.strip()[:200]}")
-    return proc.stdout.strip()
+    return proc.stdout.removesuffix("\n")
 
 
 def project_root(cwd):
