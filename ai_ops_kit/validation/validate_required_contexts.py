@@ -137,6 +137,42 @@ def load_declared_contexts(root: Path) -> list[str] | None:
     return contexts
 
 
+def mandatory_contexts(root: Path) -> tuple[set[str], list[str]]:
+    """Состав обязательных CI из premerge + required-contexts, с тем же resolver aliases/matrix.
+
+    Только чтение объявлений; это не проверка actual protection и не доказательство CI-успеха.
+    Повреждённый источник возвращает ошибки, не пустой успешный состав.
+    """
+    root = Path(root)
+    try:
+        doc = json.loads((root / "quality/premerge-checks.json").read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        return set(), [f"premerge-checks: {exc}"]
+    jobs, aliases, errors = _workflow_inventory(_workflow_dir(root))
+    actual = {format_context(w, name) for w, names in jobs.items() for name in names}
+    required = set()
+    if not isinstance(doc, dict) or not doc:
+        return required, ["premerge-checks: неверная декларация"]
+    for workflow, names in doc.items():
+        if (not isinstance(workflow, str) or Path(workflow).name != workflow
+                or Path(workflow).suffix not in {".yml", ".yaml"}
+                or not isinstance(names, list) or not names or any(not isinstance(n, str) for n in names)
+                or len(set(names)) != len(names)):
+            errors.append(f"{workflow}: неверные имена проверок")
+            continue
+        required.update(format_context(Path(workflow).stem, name) for name in names)
+    declared = load_declared_contexts(root)
+    if declared is None:
+        errors.append("required-contexts: нет годной декларации")
+    for name in declared or []:
+        matches = aliases.get(name, set())
+        if len(matches) != 1:
+            errors.append(f"{name}: неизвестный/неоднозначный required context")
+        required.update(matches)
+    errors.extend(f"{name}: отсутствует CI job" for name in sorted(required - actual))
+    return required, errors
+
+
 def read_github_snapshot(repository: str, branch: str = "main") -> dict:
     """Два bounded GET, без изменений настройки, credentials или fallback при отказе."""
     if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):

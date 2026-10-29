@@ -22,6 +22,9 @@ mvp_blocking_gates:
   - security
   - spec_synchronization
 
+# Жизненный цикл (#1405): responsible_role — владелец, retirement_condition — условие вывода.
+# Для blocking оба обязательны в существующем tests/contracts/test_gate_prevents.py; новые гейты
+# без них краснеют. Удаление требует решения владельца и evidence эквивалентной замены/снятия риска.
 # prevents/evidence (#636, поверх прополки #616) — машиночитаемый ответ КАЖДОГО гейта на вопрос
 # «какую конкретную ошибку он предотвращает». Гейт без ответа — кандидат на снятие (не будет «Gate
 # Garden» через год). Проверяет ратчет `tests/contracts/test_gate_prevents.py`: новый гейт без
@@ -45,6 +48,7 @@ gates:
     stage: intake
     blocking: true
     responsible_role: intake-classifier
+    retirement_condition: "Классификация до старта снята из контракта intake либо полностью проверяется его заменой."
     review_mode: writer
     validator: validate-intake
     human_approval: false
@@ -223,6 +227,7 @@ gates:
                              # не тронут: гейт доменный (по applicability), не в SDLC-хребте.
     enforced_by: ai-ops-feature-coverage      # доставляемый child-CI workflow (templates/ci/ai-ops-feature-coverage.yml): внешний путь enforcement, делающий гейт достижимым и блокировку реальной
     responsible_role: solution-architect
+    retirement_condition: "Поверхности продукта учитываются эквивалентной проверкой с доказанным обнаружением незаявленной фичи."
     review_mode: writer                       # детерминированный гейт: вердикт судьи, не ревью
     validator: validate-feature-coverage      # runnable: ai_ops_kit/validation/validate_feature_coverage.py (судья: ai_ops_kit/checks/feature_coverage.py)
     human_approval: false
@@ -243,6 +248,7 @@ gates:
     stage: requirements-review
     blocking: true
     responsible_role: requirements-reviewer
+    retirement_condition: "Критерии проверяемости требований полностью перенесены в обязательный контракт спецификации."
     review_mode: read-only
     validator: validate-requirements
     human_approval: false
@@ -262,6 +268,7 @@ gates:
     stage: specification
     blocking: true
     responsible_role: final-verifier
+    retirement_condition: "Контракт спецификации упразднён решением об архитектуре либо его полноту проверяет эквивалентная замена."
     review_mode: read-only
     validator: openspec-validate-strict
     human_approval: false
@@ -278,6 +285,7 @@ gates:
     stage: plan-critique
     blocking: true
     responsible_role: plan-reviewer
+    retirement_condition: "План больше не является входом исполнения либо исполнимость проверяет эквивалентный валидатор."
     review_mode: read-only
     validator: validate-plan
     human_approval: false
@@ -294,6 +302,7 @@ gates:
     stage: verify
     blocking: true
     responsible_role: final-verifier
+    retirement_condition: "Сборку и применимые тесты гарантирует эквивалентная обязательная проверка с evidence прогона."
     review_mode: read-only
     validator: validate-evidence
     human_approval: false
@@ -328,6 +337,7 @@ gates:
     stage: review
     blocking: true
     responsible_role: code-reviewer
+    retirement_condition: "Риск непроверенного кода закрыт эквивалентным независимым review в обязательном delivery-контракте."
     review_mode: read-only
     human_approval: false
     checklist: rules/quality/code-review-etiquette.yaml
@@ -344,6 +354,7 @@ gates:
     stage: review
     blocking: true
     responsible_role: security-reviewer
+    retirement_condition: "Риск небезопасного изменения закрыт эквивалентной обязательной security-проверкой; согласовано владельцем безопасности."
     review_mode: read-only
     human_approval: {required_when: [privileged, destructive, secret_boundary_change]}
     applicability: [ENGINEERING, CRITICAL, PRODUCT]   # v3.27.1 WP2: PRODUCT добавлен; INCIDENT — post-MVP (не определён); инциденты идут через CRITICAL
@@ -363,6 +374,7 @@ gates:
     stage: review
     blocking: true
     responsible_role: architecture-reviewer
+    retirement_condition: "Изменения архитектуры исключены из применимости либо их независимо проверяет эквивалентный review."
     review_mode: read-only
     human_approval: false
     required_when: [architecture_change, new_service, cross_boundary_change, breaking_api, data_migration, new_integration, deployment_change]
@@ -385,6 +397,7 @@ gates:
     stage: verify
     blocking: true
     responsible_role: devops-engineer
+    retirement_condition: "Доставка исключена из заявленного результата либо зрелость доставки проверяет эквивалентный контракт."
     review_mode: writer                        # детерминированный гейт: вердикт инструмента, не ревью
     validator: validate-deploy-readiness       # runnable: ai_ops_kit/gates/deploy_readiness.py
     human_approval: false
@@ -403,6 +416,7 @@ gates:
     stage: sync
     blocking: true
     responsible_role: documentation-steward
+    retirement_condition: "Отдельная спецификация снята из модели либо рассинхрон ловит эквивалентная обязательная проверка."
     review_mode: writer
     validator: openspec-validate-and-guard
     # Детерминированный OpenSpec-гейт: enforced НЕ per-task gate_executor'ом, а OpenSpec CLI
@@ -424,6 +438,7 @@ gates:
     stage: fact-check
     blocking: true
     responsible_role: final-verifier
+    retirement_condition: "Обязательные утверждения снабжаются проверяемыми источниками эквивалентным контрактом доказательств."
     review_mode: read-only
     applicability: [RESEARCH, INSIGHTS]
     required_evidence: [source_per_claim, capability_status]
@@ -452,6 +467,7 @@ gates:
     stage: archive
     blocking: true
     responsible_role: final-verifier
+    retirement_condition: "Архивация исключена из workflow либо преждевременное завершение блокирует эквивалентная проверка."
     review_mode: read-only
     validator: validate-archive-readiness
     # Детерминированный OpenSpec archive-гейт: enforced OpenSpec CLI archive-шагом в CI, не
@@ -474,6 +490,7 @@ gates:
     stage: discovery-review
     blocking: true
     responsible_role: product-reviewer
+    retirement_condition: "Discovery исключён из применимости либо полнота исходов проверяется эквивалентным продуктовым контрактом."
     review_mode: read-only
     applicability: [PRODUCT]
     stale_detection: {bind_to: artifact_hashes}
@@ -488,6 +505,7 @@ gates:
     stage: design-review
     blocking: true
     responsible_role: ux-reviewer
+    retirement_condition: "Пользовательский интерфейс исключён из применимости либо его независимо оценивает эквивалентный UX review."
     review_mode: read-only
     checklist: rules/design/ux-heuristics.yaml
     applicability: [PRODUCT, VISUAL]
@@ -506,6 +524,7 @@ gates:
     stage: accessibility-review
     blocking: true
     responsible_role: accessibility-reviewer
+    retirement_condition: "Интерфейс исключён из применимости либо недоступность выявляет эквивалентная проверка с регрессиями."
     review_mode: read-only
     checklist: rules/design/accessibility-checklist.yaml
     applicability: [VISUAL, PRODUCT]
@@ -524,6 +543,7 @@ gates:
     blocking: true
     applies_when: "изменены экраны/компоненты с визуальным представлением; иначе гейт неприменим"
     responsible_role: final-verifier
+    retirement_condition: "Визуальные изменения исключены из применимости либо регрессию выявляет эквивалентное сравнение."
     review_mode: read-only
     applicability: [VISUAL]
     stale_detection: {bind_to: tested_revision}
@@ -538,6 +558,7 @@ gates:
     stage: design-system-review
     blocking: true
     responsible_role: design-system-reviewer
+    retirement_condition: "Дизайн-система больше не применяется либо обход её правил выявляет эквивалентный контроль."
     review_mode: read-only
     checklist: rules/design/design-system-checklist.yaml
     source_of_truth: context/product/DesignSystem.md
@@ -557,6 +578,7 @@ gates:
     stage: analytics-review
     blocking: true
     responsible_role: analytics-reviewer
+    retirement_condition: "Аналитика исключена из изменения либо план измерения проверяет эквивалентный продуктовый контракт."
     review_mode: read-only
     source_of_truth: context/product/MetricCatalog.md
     applicability: [PRODUCT, ANALYTICS, ADOPTION]
@@ -575,6 +597,7 @@ gates:
     stage: post-release
     blocking: true
     responsible_role: analytics-reviewer
+    retirement_condition: "Работа аналитики не заявляется либо фактическую доставку событий подтверждает эквивалентный runtime-контроль."
     review_mode: read-only
     source_of_truth: context/product/MetricCatalog.md
     applicability: [PRODUCT, ANALYTICS, ADOPTION]
@@ -630,6 +653,7 @@ gates:
     blocking: true
     applies_when: "функция содержит LLM/агентный компонент, видимый пользователю; иначе гейт неприменим"
     responsible_role: ai-evaluator
+    retirement_condition: "AI-поведение исключено из изменения либо его качество проверяет эквивалентный набор воспроизводимых evals."
     review_mode: read-only
     checklist: rules/ai/EvalPolicy.md
     applicability: [ENGINEERING, PRODUCT, VISUAL, AI_FEATURE]
@@ -646,6 +670,7 @@ gates:
     blocking: true          # Ф0: безопасность AI-фичи — блокирующая по применимости (jailbreak/injection/PII)
     applies_when: "LLM/агентный компонент, доступный пользователю; иначе гейт неприменим"
     responsible_role: ai-red-teamer
+    retirement_condition: "Агентная поверхность исключена из применимости либо угрозы проверяет эквивалентный adversarial-контроль."
     review_mode: read-only
     checklist: rules/ai/red-team-checklist.yaml
     applicability: [AI_FEATURE, ENGINEERING, PRODUCT]
@@ -686,6 +711,7 @@ gates:
     stage: decision-review
     blocking: true           # ENFORCE (#746): детерминированный by_construction-гейт (closed_by validator + review_mode writer) — вердикт МЕХАНИЗМА, а не эвристика judge с false-positive-риском, поэтому дисциплина «advisory до обкатки» (для judge-гейтов) к нему не относится. Прецедент: десяток блокирующих by_construction-валидаторов без field_evidence (intake_completeness, requirements, specification, plan_readiness, implementation_verification, deploy_readiness, spec_synchronization, archive_readiness). Фичит только kind:feature-decision; для не-фич — explainable skip, поэтому обычную работу не блокирует.
     responsible_role: product-reviewer
+    retirement_condition: "Решения о фичах сняты из применимости либо измеримость решения гарантирует эквивалентный продуктовый контракт."
     review_mode: writer                       # детерминированный гейт: вердикт механизма, не ревью
     validator: validate-feature-decisions     # runnable: ai_ops_kit/checks/feature_decision.gate_feature_decisions (через gate_executor.deterministic_run)
     human_approval: false
@@ -775,3 +801,59 @@ advisory_review:
     feature_decision_quality:   {decision: enforced,            field_evidence: false}  # ENFORCE #746: детерминированный by_construction-гейт проведён в блокирующий контур; field_evidence остаётся false, т.к. evidence.field=by_construction (не proven) — синхрон с test_gate_prevents (proven<->field_evidence)
     documentation_updated:      {decision: owner_decision,      field_evidence: false}  # enforce vs park: машинный+трек DOCUMENTATION
     surface_wiring_consistency: {decision: owner_decision,      field_evidence: false}  # снять vs park: child-only, ни разу не сработал
+
+
+# Владелец/условие вывода обязательных CI-контекстов: состав берётся из premerge/required-contexts,
+# это только метаданные, не второй список допуска. Биекцию проверяет существующий gate-контракт.
+required_checks_lifecycle:
+  "docs / build":
+    responsible_role: documentation-steward
+    retirement_condition: "Документация больше не публикуется либо её сборку и ссылки проверяет эквивалентная замена."
+  "package-quality / clean-install":
+    responsible_role: devops-engineer
+    retirement_condition: "Эквивалентный чистый прогон ставит wheel вне клона и исполняет реальные пользовательские команды."
+  "package-quality / delivered-footprint":
+    responsible_role: devops-engineer
+    retirement_condition: "Объём поставки контролирует эквивалентное сравнение итогового управляемого набора файлов."
+  "package-quality / lint":
+    responsible_role: code-reviewer
+    retirement_condition: "Те же классы ошибок ловит эквивалентный обязательный линтер на всём применимом коде."
+  "package-quality / pipeline-e2e (3.12)":
+    responsible_role: final-verifier
+    retirement_condition: "Версия pipeline-e2e (3.12) снята из поддержки либо её сквозной процесс проверяет эквивалентный обязательный сценарий."
+  "package-quality / pipeline-e2e (3.13)":
+    responsible_role: final-verifier
+    retirement_condition: "Версия pipeline-e2e (3.13) снята из поддержки либо её сквозной процесс проверяет эквивалентный обязательный сценарий."
+  "package-quality / quality (contracts, .github/ci-groups/contracts.sh)":
+    responsible_role: final-verifier
+    retirement_condition: "Набор quality (contracts, .github/ci-groups/contracts.sh) полностью перенесён в другие обязательные группы без потери применимых тестов."
+  "package-quality / quality (fast-1, .github/ci-groups/fast-1.sh)":
+    responsible_role: final-verifier
+    retirement_condition: "Набор quality (fast-1, .github/ci-groups/fast-1.sh) полностью перенесён в другие обязательные группы без потери применимых тестов."
+  "package-quality / quality (fast-2, .github/ci-groups/fast-2.sh)":
+    responsible_role: final-verifier
+    retirement_condition: "Набор quality (fast-2, .github/ci-groups/fast-2.sh) полностью перенесён в другие обязательные группы без потери применимых тестов."
+  "package-quality / quality (selftests-a, .github/ci-groups/selftests-a.sh)":
+    responsible_role: final-verifier
+    retirement_condition: "Набор quality (selftests-a, .github/ci-groups/selftests-a.sh) полностью перенесён в другие обязательные группы без потери применимых тестов."
+  "package-quality / quality (selftests-m, .github/ci-groups/selftests-m.sh)":
+    responsible_role: final-verifier
+    retirement_condition: "Набор quality (selftests-m, .github/ci-groups/selftests-m.sh) полностью перенесён в другие обязательные группы без потери применимых тестов."
+  "package-quality / security-scan":
+    responsible_role: security-reviewer
+    retirement_condition: "Риски диффа проверяет эквивалентный обязательный сканер; замену согласовал владелец безопасности."
+  "package-quality / smoke-macos":
+    responsible_role: final-verifier
+    retirement_condition: "macOS снята из поддержки либо тот же критический путь на macOS исполняет эквивалентный набор."
+  "package-quality / upgrade-path":
+    responsible_role: devops-engineer
+    retirement_condition: "Обновление предыдущего выпуска не поддерживается либо его реально проверяет эквивалентный сценарий."
+  "pr-smoke / parallel-safety":
+    responsible_role: devops-engineer
+    retirement_condition: "Параллельная работа снята из поддержки либо её ограничения проверяет эквивалентный контроль."
+  "pr-smoke / pr-size":
+    responsible_role: code-reviewer
+    retirement_condition: "Размер и обозримость изменения проверяются эквивалентным ограничением процесса review."
+  "pr-smoke / smoke":
+    responsible_role: final-verifier
+    retirement_condition: "Критический путь целиком проверяется эквивалентным быстрым набором с доказательством охвата."
