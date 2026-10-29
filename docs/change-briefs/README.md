@@ -75,3 +75,5 @@
 
 - [Проверка обязательных контекстов защиты main — #1401](1401-required-contexts.md).
 - [Отказы и очистка контейнерного wrapper — #1410](1410-wrapper-failures.md).
+
+- [`1405-garden-dormant-report.md`](1405-garden-dormant-report.md) — неподключённые модули и причины карантина в отчёте уборки.

@@ -15,13 +15,14 @@
     можно сократить (`code_duplication.stale_baseline_keys`);
   * `dishonest_gate_rows` — статьи, чья метка обещает дочке гейт, который её не видит
     (`arch_gate_reconciliation.dishonest_rows`): метку надо честно поправить/свести;
+  * `dormant_modules` — неподключённые модули, пути исходников и причины намеренного карантина
+    (существующий `capability_inventory.dormant_modules`);
   * `duplicate_group_count` — сколько структурных дублей функций всего (контекст, не призыв удалять
     заморожённое базой).
 
-ЧЕГО ПОКА НЕТ (честный долг #1405): дормантные (built≠wired) модули живут логикой в
-`tests/contracts/test_dormant_inventory.py`; их вынос в переиспользуемый детектор и подключение сюда —
-отдельный срез. Дубли skills/workflows, неиспользуемые агенты и устаревшие доки — тоже следующие
-сигналы. Садовник расширяется композицией, не переписыванием.
+ЧЕГО ПОКА НЕТ (честный долг #1405): дубли skills/workflows, неиспользуемые агенты и устаревшие
+доки. Садовник расширяется композицией, не переписыванием. Неподключённый модуль — кандидат на
+разбор: намеренный карантин нельзя снимать или удалять автоматически.
 
 Запуск:  python3 -m ai_ops_kit.devtools.garden [--json]
 """
@@ -36,6 +37,7 @@ def collect() -> dict:
     """Собрать отчёт уборки из существующих сигналов. Read-only: ничего не пишет."""
     from ai_ops_kit.devtools import arch_gate_reconciliation as recon
     from ai_ops_kit.devtools import code_duplication as dup
+    from ai_ops_kit.devtools import capability_inventory as inventory
 
     return {
         "schema_version": 1,
@@ -43,12 +45,18 @@ def collect() -> dict:
         "stale_duplicate_baseline_keys": sorted(dup.stale_baseline_keys()),
         "dishonest_gate_rows": [r.get("id") for r in recon.dishonest_rows()],
         "duplicate_group_count": len(dup.duplicate_groups()),
+        "dormant_modules": [
+            {"module": module, "path": module.replace(".", "/") + ".py",
+             "reason": inventory.INTENTIONAL_DORMANT_REASON.get(module)}
+            for module in inventory.dormant_modules()
+        ],
     }
 
 
 def _candidate_count(report: dict) -> int:
     """Сколько реальных кандидатов на уборку (не контекстных счётчиков)."""
-    return len(report["stale_duplicate_baseline_keys"]) + len(report["dishonest_gate_rows"])
+    return (len(report["stale_duplicate_baseline_keys"]) + len(report["dishonest_gate_rows"])
+            + len(report.get("dormant_modules", [])))
 
 
 def render(report: dict) -> str:
@@ -61,6 +69,10 @@ def render(report: dict) -> str:
     if dishonest:
         lines.append(f"  нечестные метки гейтов ({len(dishonest)}) — поправить/свести: "
                      + ", ".join(dishonest))
+    for module in report.get("dormant_modules", []):
+        lines.append(f"  неподключённый модуль — проверить назначение: {module['path']}")
+        if module["reason"]:
+            lines.append(f"    причина сохранения: {module['reason']}")
     lines.append(f"  (контекст: всего структурных дублей функций — {report['duplicate_group_count']})")
     if _candidate_count(report) == 0:
         lines.append("  уборочных кандидатов нет — сад чист.")
