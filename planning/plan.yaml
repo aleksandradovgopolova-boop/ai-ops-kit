@@ -1123,6 +1123,62 @@ current_milestone:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
+  - id: next-kit-release-4-12-0
+    title: Проверенные исправления и накопленные возможности доставлены выпуском 4.12.0
+    type: delivery
+    goal: kit-release-strategy
+    status: todo
+    owner_role: delivery
+    value: high
+    write_scope:
+      - VERSION
+      - CHANGELOG.md
+      - README.md
+      - ROADMAP.md
+      - manifest/
+      - registry/release-claims.yaml
+      - registry/release-notes.yaml
+      - .ai/project/context/product/PRODUCT_PASSPORT.md
+      - newsfragments/
+      - qualification/
+      - docs/
+    evidence: docs/change-briefs/next-release-4.12.0.md
+    rationale: >-
+      29.10.2026 зафиксирован план от v4.11.4 до main 3d0a2ede после merge
+      #1437/#1438; живая приёмка #1434 остаётся отдельной. Minor 4.12.0 выведен штатным
+      release_assembly из feat-фрагментов. Это план, не readiness и не разрешение
+      публикации: нужны freeze, owner notes/bump, проверка установленного артефакта,
+      независимый review, exact-head/base CI и stock release gates до тега.
+      #1412/#1403 и автоматизация #1439 выпуск не задерживают. Обновление дочек
+      только по их политике и отдельным разрешениям; поле нового minor не выдумывать.
+
+  - id: kit-plans-own-releases
+    title: Кит автоматически пересчитывает план выпуска по выполненной работе
+    type: engineering
+    goal: kit-release-strategy
+    status: todo
+    owner_role: engineer
+    value: high
+    issue: 1439
+    write_scope:
+      - ai_ops_kit/devtools/
+      - ai_ops_kit/planning/
+      - .github/workflows/
+      - tests/
+      - docs/
+      - newsfragments/
+    evidence: docs/change-briefs/next-release-4.12.0.md
+    rationale: >-
+      P1, следующая независимая реализация после фиксации ближайшего релизного плана,
+      не блокер 4.12.0. Продолжить release_assembly, существующие события/reconcile,
+      delivery plan и release workflow. План строится по issue→PR→commit→release,
+      зависимостям, версии и evidence; CI/смена статуса автоматически пересчитывают
+      состав и blockers. Закрытое issue без реализации не даёт ready. Нужны
+      идемпотентность, отсутствие дублей, границы доставки/восстановления дочек и
+      уведомления только по значимому исходу/решению. Не менять исторический зачёт
+      #750/#771 и не строить вторую систему. План не предоставляет прав publish,
+      paid actions, settings/credentials или обхода согласований.
+
   # Независимая техническая очередь. Полевые исходы ниже остаются открытыми.
   # (Работа verification-cycle-performance-baseline закрыта 2026-10-26 и уехала в
   # history/plan-history.yaml вместе со всем направлением #1321 — исходы достигнуты.)
