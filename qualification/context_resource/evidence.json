@@ -1,0 +1,544 @@
+{
+  "source_sha256": {
+    "ai_ops_kit/context/context_compiler.py": "91197d1a0f73d2b815d3301bb963dcb0d9834f548ed3e7092c9fe8f220269b77",
+    "ai_ops_kit/context/context_resource.py": "f492cd708d3dd58ad2fe2c2147c849e76537c3c75caef4810aa6cec52c1bf382",
+    "ai_ops_kit/gates/preflight.py": "9f1536667336fe3fdaf1790990784a312f52206a37fc21b7e8dba38742ad1ba8",
+    "ai_ops_kit/engine/ai_ops_run_reporting.py": "5228a15152245cacb0679e3a93747a3a5c51ad1a3e268f63cfe1d42bcf5d25e3",
+    "qualification/context_resource/run.py": "88594beb4805a7192212ed995f32873719f50687526fd1ac7b478ac1f912adfd"
+  },
+  "scenarios": [
+    {
+      "scope": "local-pipeline-controlled-proposer",
+      "external_model_calls": 0,
+      "mode": "positive",
+      "writer_calls": [
+        {
+          "required_present": true,
+          "forbidden_present": false
+        },
+        {
+          "required_present": true,
+          "forbidden_present": false
+        }
+      ],
+      "output": "LOCAL_CONTEXT_1403\n",
+      "loop": {
+        "stopped": "done",
+        "steps": 2,
+        "applied_writes": 1,
+        "denied": 0,
+        "denied_reasons": [],
+        "transcript": [
+          {
+            "step": 0,
+            "op": "write",
+            "allowed": true,
+            "ok": true,
+            "reason": "запись в пределах write_scope"
+          },
+          {
+            "step": 1,
+            "done": true
+          }
+        ]
+      },
+      "commit": {
+        "branch": "ai-ops/context-resource",
+        "sha": "aa38280018ff6eb173a1d51b6ef0b954c56d01e8",
+        "evidence_revision": "aa38280018ff6eb173a1d51b6ef0b954c56d01e8",
+        "evidence_on_exact_sha": true,
+        "changed_files": [
+          "src/result.txt"
+        ],
+        "produced_by": "broker",
+        "tree_clean_before_checks": true,
+        "tree_clean_after_checks": true
+      },
+      "overall_status": "delivered",
+      "preflight": {
+        "schema_version": 1,
+        "kind": "PreflightTruth",
+        "ok": true,
+        "blocked": false,
+        "task_type": "QUICK",
+        "checks": {
+          "classification": {
+            "ok": true,
+            "task_type": "QUICK"
+          },
+          "context_payload": {
+            "ok": true,
+            "built": true
+          },
+          "context_resource": {
+            "ok": true,
+            "errors": []
+          },
+          "spec": {
+            "ok": true,
+            "artifact_present": false,
+            "missing": [
+              "goal",
+              "scope",
+              "expected_behavior",
+              "acceptance_criteria",
+              "constraints",
+              "affected_files"
+            ],
+            "required_for_heavy": false,
+            "author_stage": false
+          },
+          "atomic": {
+            "ok": true,
+            "should_decompose": false,
+            "selected_package": null,
+            "selected_valid": false
+          },
+          "context_budget": {
+            "ok": true,
+            "overflow": false
+          },
+          "approvals": {
+            "ok": true,
+            "required": [],
+            "missing": []
+          },
+          "lifecycle": {
+            "ok": true,
+            "errors": []
+          },
+          "economic_budget": {
+            "ok": true,
+            "verdict": "proceed_unknown",
+            "estimate_status": "unavailable",
+            "cost_median": null,
+            "cost_max": null,
+            "sample_tasks": 0,
+            "advisories": [
+              "estimate_unavailable"
+            ]
+          }
+        },
+        "reasons": []
+      },
+      "context": {
+        "schema_version": 1,
+        "kind": "ContextPayload",
+        "workitem_id": "context-resource",
+        "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+        "model": null,
+        "context_budget": 20000,
+        "payload_budget": 12000,
+        "output_reserve": 5000,
+        "tool_loop_reserve": 3000,
+        "payload_tokens": 169,
+        "compiled_text_tokens_estimate": 288,
+        "resource_check": {
+          "ok": true,
+          "errors": [],
+          "missing_required": [],
+          "within_budget": true
+        },
+        "source_policy": {
+          "configured": true,
+          "required": [
+            "docs/needed.md"
+          ],
+          "optional": [
+            "docs/forbidden.md",
+            "docs/noise.md"
+          ],
+          "forbidden": [
+            "docs/forbidden.md",
+            "rules/",
+            "skills"
+          ],
+          "run_tokens": 20000
+        },
+        "metrics": {
+          "status": "measured",
+          "precision": 0.6666666666666666,
+          "waste": 0.8284023668639053,
+          "miss": 0.3333333333333333,
+          "basis": "explicit-source-labels",
+          "unlabelled_sources": [],
+          "evidence": "qualification/context_resource/run.py: ручная source-разметка fixture до прогона; не семантическая оценка проекта",
+          "missing_relevant": [
+            "docs/not-selected.md"
+          ],
+          "loaded_sources": 3,
+          "relevant_sources": 3,
+          "time_to_context_ms": 147.414,
+          "timing_scope": "compile_bundle + build_payload"
+        },
+        "included_items": [
+          {
+            "source": "docs/needed.md",
+            "kind": "required",
+            "hash": "9ce11db45fc9",
+            "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+            "tokens": 14,
+            "reason": "context.required",
+            "truncated": false
+          },
+          {
+            "source": "task",
+            "kind": "project_context",
+            "hash": "3f28a71a357f",
+            "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+            "tokens": 15,
+            "reason": "текст задачи",
+            "truncated": false
+          },
+          {
+            "source": "docs/noise.md",
+            "kind": "optional",
+            "hash": "073e1f30a8db",
+            "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+            "tokens": 140,
+            "reason": "context.optional",
+            "truncated": false
+          }
+        ],
+        "excluded_for_policy": [
+          {
+            "source": "rules/core/AIWorkingAgreement.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ContextManagement.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/DefinitionOfDone.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/DelegationPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/EngineeringOperatingModel.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/EvidencePolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/FreshnessPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/HumanApproval.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ProductStatusPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ScopeControl.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/SessionEconomyPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/SourceOfTruth.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/APICompatibility.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/Architecture.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/CodeStyle.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/ConcurrencyAwareness.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/DatabaseChanges.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/DependencyPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/ErrorHandling.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/EventNamingConvention.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "docs/forbidden.md",
+            "reason": "context.forbidden"
+          }
+        ],
+        "excluded_for_budget": []
+      }
+    },
+    {
+      "scope": "local-pipeline-controlled-proposer",
+      "external_model_calls": 0,
+      "mode": "over-budget",
+      "writer_calls": [],
+      "output": null,
+      "loop": null,
+      "commit": {
+        "sha": null
+      },
+      "overall_status": "blocked-preflight",
+      "preflight": {
+        "schema_version": 1,
+        "kind": "PreflightTruth",
+        "ok": false,
+        "blocked": true,
+        "task_type": "QUICK",
+        "checks": {
+          "classification": {
+            "ok": true,
+            "task_type": "QUICK"
+          },
+          "context_payload": {
+            "ok": true,
+            "built": true
+          },
+          "context_resource": {
+            "ok": false,
+            "errors": [
+              "required отсутствует в payload: docs/needed.md",
+              "payload превышает бюджет: 98/60"
+            ]
+          },
+          "spec": {
+            "ok": true,
+            "artifact_present": false,
+            "missing": [
+              "goal",
+              "scope",
+              "expected_behavior",
+              "acceptance_criteria",
+              "constraints",
+              "affected_files"
+            ],
+            "required_for_heavy": false,
+            "author_stage": false
+          },
+          "atomic": {
+            "ok": true,
+            "should_decompose": false,
+            "selected_package": null,
+            "selected_valid": false
+          },
+          "context_budget": {
+            "ok": true,
+            "overflow": false
+          },
+          "approvals": {
+            "ok": true,
+            "required": [],
+            "missing": []
+          },
+          "lifecycle": {
+            "ok": true,
+            "errors": []
+          },
+          "economic_budget": {
+            "ok": true,
+            "verdict": "proceed_unknown",
+            "estimate_status": "unavailable",
+            "cost_median": null,
+            "cost_max": null,
+            "sample_tasks": 0,
+            "advisories": [
+              "estimate_unavailable"
+            ]
+          }
+        },
+        "reasons": [
+          "context-resource: required отсутствует в payload: docs/needed.md; payload превышает бюджет: 98/60"
+        ]
+      },
+      "context": {
+        "schema_version": 1,
+        "kind": "ContextPayload",
+        "workitem_id": "context-resource",
+        "revision": "d9d5cdba7375cddd240211392efa1422ed54b87b",
+        "model": null,
+        "context_budget": 100,
+        "payload_budget": 60,
+        "output_reserve": 25,
+        "tool_loop_reserve": 15,
+        "payload_tokens": 15,
+        "compiled_text_tokens_estimate": 98,
+        "resource_check": {
+          "ok": false,
+          "errors": [
+            "required отсутствует в payload: docs/needed.md",
+            "payload превышает бюджет: 98/60"
+          ],
+          "missing_required": [
+            "docs/needed.md"
+          ],
+          "within_budget": false
+        },
+        "source_policy": {
+          "configured": true,
+          "required": [
+            "docs/needed.md"
+          ],
+          "optional": [
+            "docs/forbidden.md",
+            "docs/noise.md"
+          ],
+          "forbidden": [
+            "docs/forbidden.md",
+            "rules/",
+            "skills"
+          ],
+          "run_tokens": 100
+        },
+        "metrics": {
+          "status": "measured",
+          "precision": 1.0,
+          "waste": 0.0,
+          "miss": 0.6666666666666666,
+          "basis": "explicit-source-labels",
+          "unlabelled_sources": [],
+          "evidence": "qualification/context_resource/run.py: ручная source-разметка fixture до прогона; не семантическая оценка проекта",
+          "missing_relevant": [
+            "docs/needed.md",
+            "docs/not-selected.md"
+          ],
+          "loaded_sources": 1,
+          "relevant_sources": 3,
+          "time_to_context_ms": 145.635,
+          "timing_scope": "compile_bundle + build_payload"
+        },
+        "included_items": [
+          {
+            "source": "task",
+            "kind": "project_context",
+            "hash": "3f28a71a357f",
+            "revision": "d9d5cdba7375cddd240211392efa1422ed54b87b",
+            "tokens": 15,
+            "reason": "текст задачи",
+            "truncated": false
+          }
+        ],
+        "excluded_for_policy": [
+          {
+            "source": "rules/core/AIWorkingAgreement.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ContextManagement.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/DefinitionOfDone.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/DelegationPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/EngineeringOperatingModel.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/EvidencePolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/FreshnessPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/HumanApproval.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ProductStatusPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ScopeControl.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/SessionEconomyPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/SourceOfTruth.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/APICompatibility.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/Architecture.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/CodeStyle.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/ConcurrencyAwareness.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/DatabaseChanges.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/DependencyPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/ErrorHandling.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/EventNamingConvention.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "docs/forbidden.md",
+            "reason": "context.forbidden"
+          }
+        ],
+        "excluded_for_budget": [
+          {
+            "source": "docs/needed.md",
+            "kind": "required",
+            "tokens": 14,
+            "reason": "вытеснено бюджетом payload"
+          },
+          {
+            "source": "docs/noise.md",
+            "kind": "optional",
+            "tokens": 140,
+            "reason": "вытеснено бюджетом payload"
+          }
+        ]
+      }
+    }
+  ]
+}

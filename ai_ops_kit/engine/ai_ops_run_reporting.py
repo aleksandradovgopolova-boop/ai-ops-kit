@@ -9,6 +9,8 @@ engine), а не из ai_ops_run — иначе получился бы цикл
 """
 from __future__ import annotations
 
+import time
+
 import yaml
 
 
@@ -78,6 +80,7 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
     # v2.107 (finding аудита): ошибки слоя контекста больше НЕ гаснут молча — фиксируем в
     # lifecycle_errors и в отчёт (критический слой не должен исчезать без следа).
     lifecycle_errors = []
+    context_started = time.perf_counter()
     # v2.97 Context Compiler: минимальный релевантный ContextBundle для WorkItem (детерминированно).
     from ai_ops_kit.context import context_compiler
     try:
@@ -90,9 +93,8 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
     payload = None
     try:
         payload = context_compiler.build_payload(signals, child_root, plan=plan, bundle=bundle, model=model)
-        (features_dir / fid / "context-payload.yaml").write_text(
-            yaml.safe_dump({k: v for k, v in payload.items() if k != "text"},
-                           allow_unicode=True, sort_keys=False), encoding="utf-8")
+        payload["metrics"]["time_to_context_ms"] = round((time.perf_counter() - context_started) * 1000, 3)
+        payload["metrics"]["timing_scope"] = "compile_bundle + build_payload"
     except Exception as e:  # noqa: BLE001
         payload = None; lifecycle_errors.append(f"context_payload: {type(e).__name__}: {e}")
     # v3.7.16 Live Context Hybrid FED_TO_MODEL: при --context-hybrid собираем hybrid (mandatory v1 +
@@ -101,8 +103,16 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
     # -> v1-only (fail-safe, additions=[]). Раньше hybrid только фиксировался в отчёте post-hoc.
     _hybrid_prelude = (payload or {}).get("text")
     _hybrid_fed = None
-    if context_hybrid and payload:
+    # Retrieval hybrid читает каталог раньше feed-фильтра. Пока у него нет pre-read фильтра,
+    # непустой forbidden оставляет только уже проверенный v1, без запуска retrieval.
+    _has_forbidden = bool((payload or {}).get("source_policy", {}).get("forbidden"))
+    if context_hybrid and payload and _has_forbidden:
+        _hybrid_fed = {"kind": "ContextHybrid", "mode": "v1-only", "fed_to_model": False,
+                       "fed_additions": [], "reason": "context.forbidden: hybrid retrieval не имеет pre-read фильтра"}
+    if context_hybrid and payload and not _has_forbidden:
         try:
+            from ai_ops_kit.context import context_resource, context_cost
+            _source_policy = context_resource.load_policy(child_root)
             from ai_ops_kit.context import context_hybrid as _chyb
             from ai_ops_kit.context import context_engine as _ce
             _mand = None
@@ -124,35 +134,63 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
             _adds = _hyb.get("v2_additions") or []
             # не кормим модель служебными артефактами кита (features/lifecycle, .ai/) — только реальный код/доки
             _adds = [f for f in _adds if not (f.startswith("features/") or f.startswith(".ai/"))]
-            _fed, _dropped = [], []
+            _fed, _dropped, _denied = [], [], []
             if _hyb.get("mode") == "hybrid" and _adds:
                 # v3.7.1 (#3) ПОЛНЫЙ token budget: считаем весь prompt (v1 payload + additions) против
                 # hard-window; additions, не влезающие в бюджет, ДРОПАЕМ (не раздуваем hard-window).
                 _base_txt = (payload or {}).get("text") or ""
                 _used = len(_base_txt) // 4
                 _hard = _budget if isinstance(_budget, int) and _budget > 0 else 20000
-                _extra = []
+                _extra, _hybrid_items = [], []
                 for _f in _adds:
+                    if context_resource.forbidden(_source_policy, _f, child_root):
+                        _denied.append(_f); continue
                     _p = child_root / _f
                     if not _p.is_file():
                         continue
-                    _c = _p.read_text(encoding="utf-8", errors="replace")[:8000]
+                    _raw = _p.read_text(encoding="utf-8", errors="replace")
+                    _c = _raw[:8000]
                     _t = len(_c) // 4
                     if _used + _t > _hard:
                         _dropped.append(_f); continue
                     _used += _t; _fed.append(_f); _extra.append(f"### {_f}\n{_c}")
+                    _hybrid_items.append({"source": _f, "kind": "hybrid", "tokens": context_cost.estimate_tokens(_c),
+                                          "hash": context_compiler._sha(_raw), "revision": _base_sha,
+                                          "truncated": _c != _raw, "reason": "hybrid v2-addition"})
                 if _extra:
                     _hybrid_prelude = _base_txt + "\n\n## Hybrid v2-additions (fed_to_model)\n" + "\n\n".join(_extra)
+                    _total = context_cost.estimate_tokens(_hybrid_prelude)
+                    if _total > payload["payload_budget"]:
+                        _dropped.extend(_fed); _fed = []
+                        _hybrid_prelude = _base_txt
+                    if _fed:
+                        payload["included_items"].extend(_hybrid_items)
+                        payload["text"] = _hybrid_prelude
+                        payload["payload_tokens"] = sum(i["tokens"] for i in payload["included_items"])
+                        payload["compiled_text_tokens_estimate"] = _total
+                        payload["metrics"] = {**context_resource.relevance_metrics(
+                            payload["included_items"], signals.get("context_relevance")),
+                                              "time_to_context_ms": round((time.perf_counter() - context_started) * 1000, 3),
+                                              "timing_scope": "compile_bundle + build_payload + hybrid"}
             _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"),
                            "v2_additions": _adds, "fed_additions": _fed, "dropped_over_budget": _dropped,
+                           "dropped_for_policy": _denied,
                            "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _fed),
                            "prompt_tokens_est": (len(_hybrid_prelude or "") // 4), "hard_window": (_budget or 20000),
                            "exact_snapshot": True,
                            "mandatory_references": _hyb.get("mandatory_references"),
                            "promotion_ready": _hyb.get("promotion_ready"), "base_sha": _base_sha}
         except Exception as _e:  # noqa: BLE001 — hybrid feed не должен ронять прогон
+            _hybrid_prelude = payload.get("text")
             _hybrid_fed = {"kind": "ContextHybrid", "error": f"hybrid feed failed: {type(_e).__name__}: {_e}"[:300],
                            "fed_to_model": False}
+    if payload:
+        try:
+            (features_dir / fid / "context-payload.yaml").write_text(
+                yaml.safe_dump({k: v for k, v in payload.items() if k != "text"},
+                               allow_unicode=True, sort_keys=False), encoding="utf-8")
+        except OSError as e:
+            lifecycle_errors.append(f"context_payload.write: {type(e).__name__}: {e}")
     # v2.98 Adaptive Spec-First: уровень спецификации (L0..L3) по сигналам + эскалация по риску.
     from ai_ops_kit.gates import spec_levels
     try:
@@ -223,7 +261,10 @@ def _add_context_reports(rep, *, bundle, payload, spec_cov, work_pkg, context_sh
                                   "context_budget": payload["context_budget"],
                                   "included_items": len(payload["included_items"]),
                                   "excluded_for_budget": len(payload["excluded_for_budget"]),
-                                  "fed_to_model": bool(payload.get("text"))}
+                                  "fed_to_model": bool(payload.get("text")),
+                                  "compiled_text_tokens_estimate": payload.get("compiled_text_tokens_estimate"),
+                                  "resource_check": payload.get("resource_check"),
+                                  "metrics": payload.get("metrics")}
     if spec_cov:
         rep["spec_coverage"] = {"level": spec_cov["level"], "level_name": spec_cov["level_name"],
                                 "escalated_from": spec_cov["escalated_from"],

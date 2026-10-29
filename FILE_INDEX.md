@@ -604,7 +604,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   после K5, шим — `engine/ai_route`), `path_hygiene` (остаточный `.pth`-пояс кита в
   site-packages: `doctor` блокирует и говорит, чем удалять)
 - `ai_ops_kit/context/` — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
-  `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `repo_graph`,
+  `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `context_resource` (политика источников и измерения), `repo_graph`,
   `semantic_lite`
 - `ai_ops_kit/engine/` — исполнение: `ai_ops_run` (+`ai_ops_run_{exec,lifecycle,print,reporting}`),
   `execution_pipeline` (+`pipeline_*`), `tool_broker`, `tool_loop`, `worktree`, `run_context`,
@@ -853,3 +853,6 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `docs/agent-guides/shell-audit-1410.md` — пофайловый аудит всех shell-входов, границы переноса и проверяемые решения.
 - `docs/change-briefs/1410-shell-thin-completion.md` — инварианты и проверка закрытия shell-долга.
 - `tests/unit/test_commit_hook.py` — реальные Git/FS регрессии перенесённого commit-msg hook.
+
+- `docs/agent-guides/context-resource.md` — политика и измерения compiled payload (#1403).
+- `qualification/context_resource/` — воспроизводимый локальный pipeline с явной разметкой источников.

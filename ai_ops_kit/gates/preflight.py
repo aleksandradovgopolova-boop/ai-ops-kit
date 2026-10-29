@@ -25,6 +25,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import yaml
+
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.gates import spec_levels   # noqa: E402
 from ai_ops_kit.gates import approvals     # noqa: E402
@@ -62,6 +64,21 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     checks["context_payload"] = {"ok": payload_ok or (not heavy), "built": payload is not None}
     if heavy and not payload_ok:
         block("context_payload: compiled payload не собран для heavy-задачи (fail-closed)")
+
+    # #1403: декларация контекста обязательна и для QUICK; ошибка политики не разрешение.
+    from ai_ops_kit.context import context_resource
+    try:
+        policy = context_resource.load_policy(child_root)
+        resource = (payload or {}).get("resource_check")
+        required_check = policy["configured"] or policy["run_tokens"] is not None
+        resource_ok = ((not required_check) if resource is None else
+                       isinstance(resource, dict) and resource.get("ok") is True)
+        resource_errors = list(resource.get("errors") or []) if isinstance(resource, dict) else []
+    except (ValueError, OSError, yaml.YAMLError) as e:
+        resource_ok, resource_errors = False, [str(e)]
+    checks["context_resource"] = {"ok": resource_ok, "errors": resource_errors}
+    if not resource_ok and not reevaluate_only:
+        block("context-resource: " + ("; ".join(resource_errors) or "нет проверки compiled payload"))
 
     # 3. spec достаточна. Два условия (v2.121 P1.1 — обязательность спеки ДО tool loop для heavy):
     #    (a) существующая, но неполная спека НЕ пускает в реализацию (фикс #1, все workflow);

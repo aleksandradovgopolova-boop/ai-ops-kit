@@ -92,3 +92,5 @@
 - [Одна главная мера продукта — #1400](1400-single-headline-metric.md).
 
 - [Закрытие shell-долга и перенос решений commit-msg hook — #1410](1410-shell-thin-completion.md).
+
+- [Контекст как измеряемый ресурс — #1403](1403-context-resource.md).
