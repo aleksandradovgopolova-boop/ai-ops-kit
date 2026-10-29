@@ -34,7 +34,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import project_detector    # noqa: E402
 from ai_ops_kit.shared.gitio import git           # noqa: E402
-from ai_ops_kit.context import context_cost, context_resource
+from ai_ops_kit.context import context_cost
 
 CONTEXT_BUDGET_DEFAULT = 120_000   # токенов; override через signals["context_budget"] или config
 
@@ -121,7 +121,7 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
     """
     child_root = Path(child_root)
     signals = dict(signals or {})
-    policy = context_resource.load_policy(child_root)
+    policy = context_cost.load_policy(child_root)
     if plan is None:
         if build_plan is None:
             raise ValueError(
@@ -185,7 +185,7 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
         if base.is_dir():
             for name in ("requirements.md", "requirements.yaml", "plan.md", "plan.yaml", "spec.md"):
                 rel = (base / name).relative_to(child_root).as_posix()
-                if not context_resource.forbidden(policy, rel, child_root) and (base / name).is_file():
+                if not context_cost.forbidden(policy, rel, child_root) and (base / name).is_file():
                     specs.append(rel)
     # --- decisions: relevance-фильтр (v2.108 finding аудита: раньше включались ВСЕ разом). Берём те,
     #     чей текст пересекается с affected_areas/ключевыми словами задачи; иначе — 3 самых свежих ---
@@ -197,12 +197,12 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
         kws |= {w.lower() for w in re.findall(r"\w{4,}", signals.get("task_text", ""))}
         relevant = []
         for p in all_dec:
-            if context_resource.forbidden(policy, p.relative_to(child_root).as_posix(), child_root):
+            if context_cost.forbidden(policy, p.relative_to(child_root).as_posix(), child_root):
                 continue
             txt = p.read_text(encoding="utf-8", errors="ignore").lower()
             if any(k in txt for k in kws):
                 relevant.append(p)
-        allowed = [p for p in all_dec if not context_resource.forbidden(
+        allowed = [p for p in all_dec if not context_cost.forbidden(
             policy, p.relative_to(child_root).as_posix(), child_root)]
         chosen = relevant or allowed[-3:]     # релевантные; иначе 3 самых свежих (не все разом)
         decisions = [str(p.relative_to(child_root)) for p in chosen]
@@ -222,12 +222,12 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
     tok += _est_tokens(signals.get("task_text", ""))
     for aid in included_agents:
         rel = agent_idx[aid].get("file", "")
-        if not context_resource.forbidden(policy, rel):
+        if not context_cost.forbidden(policy, rel):
             tok += _file_tokens(rel)
     for c in included_rules:
         for p in sorted((PKG / "rules" / c).glob("*.md")):
             rel = p.relative_to(PKG).as_posix()
-            if not context_resource.forbidden(policy, rel):
+            if not context_cost.forbidden(policy, rel):
                 tok += _file_tokens(rel)
     for rel in specs:
         tok += _est_tokens((child_root / rel).read_text(encoding="utf-8", errors="ignore")) if (child_root / rel).is_file() else 0
@@ -344,7 +344,7 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
     started = time.perf_counter()
     child_root = Path(child_root)
     signals = dict(signals or {})
-    policy = context_resource.load_policy(child_root)
+    policy = context_cost.load_policy(child_root)
     if bundle is None:
         bundle = compile_bundle(signals, child_root, plan=plan, context_budget=context_budget,
                                 build_plan=build_plan)
@@ -360,7 +360,7 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
     excluded_for_policy = []
 
     def allowed(source, root=None):
-        if context_resource.forbidden(policy, source, root):
+        if context_cost.forbidden(policy, source, root):
             excluded_for_policy.append({"source": source, "reason": "context.forbidden"})
             return False
         return True
@@ -456,7 +456,7 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
     missing_required = sorted(set(policy["required"]) - {i["source"] for i in included_items})
     resource_errors = ([f"required отсутствует в payload: {p}" for p in missing_required]
                        + ([f"payload превышает бюджет: {total}/{payload_budget}"] if total > payload_budget else []))
-    metrics = context_resource.relevance_metrics(
+    metrics = context_cost.relevance_metrics(
         included_items, relevance if relevance is not None else signals.get("context_relevance"))
     metrics["time_to_context_ms"] = round((time.perf_counter() - started) * 1000, 3)
     metrics["timing_scope"] = "build_payload (включая compile_bundle, если bundle не передан)"

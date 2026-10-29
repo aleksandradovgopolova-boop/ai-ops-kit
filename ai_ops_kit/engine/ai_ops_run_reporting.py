@@ -111,8 +111,8 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
                        "fed_additions": [], "reason": "context.forbidden: hybrid retrieval не имеет pre-read фильтра"}
     if context_hybrid and payload and not _has_forbidden:
         try:
-            from ai_ops_kit.context import context_resource, context_cost
-            _source_policy = context_resource.load_policy(child_root)
+            from ai_ops_kit.context import context_cost
+            _source_policy = context_cost.load_policy(child_root)
             from ai_ops_kit.context import context_hybrid as _chyb
             from ai_ops_kit.context import context_engine as _ce
             _mand = None
@@ -143,7 +143,7 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
                 _hard = _budget if isinstance(_budget, int) and _budget > 0 else 20000
                 _extra, _hybrid_items = [], []
                 for _f in _adds:
-                    if context_resource.forbidden(_source_policy, _f, child_root):
+                    if context_cost.forbidden(_source_policy, _f, child_root):
                         _denied.append(_f); continue
                     _p = child_root / _f
                     if not _p.is_file():
@@ -168,7 +168,7 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
                         payload["text"] = _hybrid_prelude
                         payload["payload_tokens"] = sum(i["tokens"] for i in payload["included_items"])
                         payload["compiled_text_tokens_estimate"] = _total
-                        payload["metrics"] = {**context_resource.relevance_metrics(
+                        payload["metrics"] = {**context_cost.relevance_metrics(
                             payload["included_items"], signals.get("context_relevance")),
                                               "time_to_context_ms": round((time.perf_counter() - context_started) * 1000, 3),
                                               "timing_scope": "compile_bundle + build_payload + hybrid"}

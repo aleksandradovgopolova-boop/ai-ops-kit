@@ -604,7 +604,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   после K5, шим — `engine/ai_route`), `path_hygiene` (остаточный `.pth`-пояс кита в
   site-packages: `doctor` блокирует и говорит, чем удалять)
 - `ai_ops_kit/context/` — сборка контекста: `context_compiler`, `context_engine`, `context_hybrid`,
-  `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost`, `context_resource` (политика источников и измерения), `repo_graph`,
+  `context_retrieval`, `context_shadow`, `context_promotion_gate`, `context_cost` (стоимость, политика источников и измерения), `repo_graph`,
   `semantic_lite`
 - `ai_ops_kit/engine/` — исполнение: `ai_ops_run` (+`ai_ops_run_{exec,lifecycle,print,reporting}`),
   `execution_pipeline` (+`pipeline_*`), `tool_broker`, `tool_loop`, `worktree`, `run_context`,

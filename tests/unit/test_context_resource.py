@@ -10,7 +10,7 @@ import sys
 import pytest
 import yaml
 
-from ai_ops_kit.context import context_compiler as compiler, context_resource as resource
+from ai_ops_kit.context import context_compiler as compiler, context_cost as resource
 from ai_ops_kit.engine.run_plan import build_plan
 from ai_ops_kit.gates import preflight
 

@@ -1,10 +1,10 @@
 {
   "source_sha256": {
-    "ai_ops_kit/context/context_compiler.py": "91197d1a0f73d2b815d3301bb963dcb0d9834f548ed3e7092c9fe8f220269b77",
-    "ai_ops_kit/context/context_resource.py": "f492cd708d3dd58ad2fe2c2147c849e76537c3c75caef4810aa6cec52c1bf382",
-    "ai_ops_kit/gates/preflight.py": "9f1536667336fe3fdaf1790990784a312f52206a37fc21b7e8dba38742ad1ba8",
-    "ai_ops_kit/engine/ai_ops_run_reporting.py": "5228a15152245cacb0679e3a93747a3a5c51ad1a3e268f63cfe1d42bcf5d25e3",
-    "qualification/context_resource/run.py": "88594beb4805a7192212ed995f32873719f50687526fd1ac7b478ac1f912adfd"
+    "ai_ops_kit/context/context_compiler.py": "9f223269e7c08259c349300fcb444a07cc1cbb9d665066a6a134738b92e09380",
+    "ai_ops_kit/context/context_cost.py": "03e8e122ac51bbd014e7cb6cb020258740dd4cc98b00e163a0b12b95f63c2149",
+    "ai_ops_kit/gates/preflight.py": "67549bea2085a717f9e030d50590601d54881fe30217bc1dbd535b72772cca26",
+    "ai_ops_kit/engine/ai_ops_run_reporting.py": "db4d77f532f6caace42b1ee9ff34e2193f73bd12d4c952ea5bf09ac7cd80fa26",
+    "qualification/context_resource/run.py": "48242fbb61d5db9f6feeb6c4562b41eb3c86aa8dee386d17a51c669a1b3717f5"
   },
   "scenarios": [
     {
@@ -44,8 +44,8 @@
       },
       "commit": {
         "branch": "ai-ops/context-resource",
-        "sha": "aa38280018ff6eb173a1d51b6ef0b954c56d01e8",
-        "evidence_revision": "aa38280018ff6eb173a1d51b6ef0b954c56d01e8",
+        "sha": "14b028c78195a63575bc164f43a5343ce73e7160",
+        "evidence_revision": "14b028c78195a63575bc164f43a5343ce73e7160",
         "evidence_on_exact_sha": true,
         "changed_files": [
           "src/result.txt"
@@ -70,10 +70,6 @@
             "ok": true,
             "built": true
           },
-          "context_resource": {
-            "ok": true,
-            "errors": []
-          },
           "spec": {
             "ok": true,
             "artifact_present": false,
@@ -93,6 +89,10 @@
             "should_decompose": false,
             "selected_package": null,
             "selected_valid": false
+          },
+          "context_resource": {
+            "ok": true,
+            "errors": []
           },
           "context_budget": {
             "ok": true,
@@ -125,7 +125,7 @@
         "schema_version": 1,
         "kind": "ContextPayload",
         "workitem_id": "context-resource",
-        "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+        "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
         "model": null,
         "context_budget": 20000,
         "payload_budget": 12000,
@@ -168,7 +168,7 @@
           ],
           "loaded_sources": 3,
           "relevant_sources": 3,
-          "time_to_context_ms": 147.414,
+          "time_to_context_ms": 216.213,
           "timing_scope": "compile_bundle + build_payload"
         },
         "included_items": [
@@ -176,7 +176,7 @@
             "source": "docs/needed.md",
             "kind": "required",
             "hash": "9ce11db45fc9",
-            "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+            "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
             "tokens": 14,
             "reason": "context.required",
             "truncated": false
@@ -185,7 +185,7 @@
             "source": "task",
             "kind": "project_context",
             "hash": "3f28a71a357f",
-            "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+            "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
             "tokens": 15,
             "reason": "текст задачи",
             "truncated": false
@@ -194,7 +194,7 @@
             "source": "docs/noise.md",
             "kind": "optional",
             "hash": "073e1f30a8db",
-            "revision": "52238e88c0bdf91c672b48628cf1c62279461b03",
+            "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
             "tokens": 140,
             "reason": "context.optional",
             "truncated": false
@@ -315,13 +315,6 @@
             "ok": true,
             "built": true
           },
-          "context_resource": {
-            "ok": false,
-            "errors": [
-              "required отсутствует в payload: docs/needed.md",
-              "payload превышает бюджет: 98/60"
-            ]
-          },
           "spec": {
             "ok": true,
             "artifact_present": false,
@@ -341,6 +334,13 @@
             "should_decompose": false,
             "selected_package": null,
             "selected_valid": false
+          },
+          "context_resource": {
+            "ok": false,
+            "errors": [
+              "required отсутствует в payload: docs/needed.md",
+              "payload превышает бюджет: 98/60"
+            ]
           },
           "context_budget": {
             "ok": true,
@@ -375,7 +375,7 @@
         "schema_version": 1,
         "kind": "ContextPayload",
         "workitem_id": "context-resource",
-        "revision": "d9d5cdba7375cddd240211392efa1422ed54b87b",
+        "revision": "a609966e0fd4d311e9cd03de192098d90818d8ed",
         "model": null,
         "context_budget": 100,
         "payload_budget": 60,
@@ -424,7 +424,7 @@
           ],
           "loaded_sources": 1,
           "relevant_sources": 3,
-          "time_to_context_ms": 145.635,
+          "time_to_context_ms": 177.564,
           "timing_scope": "compile_bundle + build_payload"
         },
         "included_items": [
@@ -432,7 +432,7 @@
             "source": "task",
             "kind": "project_context",
             "hash": "3f28a71a357f",
-            "revision": "d9d5cdba7375cddd240211392efa1422ed54b87b",
+            "revision": "a609966e0fd4d311e9cd03de192098d90818d8ed",
             "tokens": 15,
             "reason": "текст задачи",
             "truncated": false

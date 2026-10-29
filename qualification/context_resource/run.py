@@ -78,7 +78,7 @@ def main():
     args.output.mkdir(parents=True, exist_ok=False)
     results = [scenario(args.output / mode, mode) for mode in ("positive", "over-budget")]
     package = Path(__file__).resolve().parents[2]
-    sources = ["ai_ops_kit/context/context_compiler.py", "ai_ops_kit/context/context_resource.py",
+    sources = ["ai_ops_kit/context/context_compiler.py", "ai_ops_kit/context/context_cost.py",
                "ai_ops_kit/gates/preflight.py", "ai_ops_kit/engine/ai_ops_run_reporting.py",
                "qualification/context_resource/run.py"]
     evidence = {"source_sha256": {p: hashlib.sha256((package / p).read_bytes()).hexdigest() for p in sources},
