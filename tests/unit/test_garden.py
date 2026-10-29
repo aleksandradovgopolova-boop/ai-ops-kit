@@ -21,6 +21,9 @@ def test_collect_composes_existing_signals_on_real_kit():
     assert isinstance(r["stale_duplicate_baseline_keys"], list)
     assert isinstance(r["dishonest_gate_rows"], list)
     assert isinstance(r["duplicate_group_count"], int)
+    for group in r["duplicate_functions"]:
+        assert group["members"] and group["sources"]
+        assert len(group["sources"]) == len(group["members"])
 
 
 def test_report_not_gate_main_always_returns_zero(capsys):
@@ -63,6 +66,8 @@ def _plant_inventory(tmp_path, monkeypatch):
     monkeypatch.setattr(recon, "dishonest_rows", lambda: [])
     monkeypatch.setattr(dup, "stale_baseline_keys", lambda: [])
     monkeypatch.setattr(dup, "duplicate_groups", lambda: [])
+    # Здесь изолируется dormant-сигнал; реальные структурные входы проверяет test_garden_inventory.
+    monkeypatch.setattr(garden, "inventory_signals", lambda root: {})
     return module, source
 
 
