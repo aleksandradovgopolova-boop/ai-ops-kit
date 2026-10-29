@@ -14,21 +14,28 @@ cd "$(dirname "$0")/.."
 # --pr обещает конкретный набор: пользовательский selector не может сузить его молча.
 HOST_ARGS=("$@")
 PROFILE=full-current-python
-if [[ "${1:-}" == "--pr" ]]; then PROFILE=pr-current-python; shift; fi
+if [[ "${1:-}" == "--pr" ]]; then
+  PROFILE=pr-current-python
+  shift
+fi
 CUSTOM=0
 COLLECTION=0
 if [[ -n "${PYTEST_ADDOPTS:-}" ]]; then CUSTOM=1; fi
 ARGS=("$@")
-for ((i=0; i<${#ARGS[@]}; i++)); do
+for ((i = 0; i < ${#ARGS[@]}; i++)); do
   case "${ARGS[i]}" in
-    -n|--numprocesses|--dist|--durations|--durations-min|--tb|--capture|--color)
-      if ((i+1 < ${#ARGS[@]})) && [[ "${ARGS[i+1]}" != -* ]]; then
-        i=$((i+1))
-      else CUSTOM=1; fi ;;
-    --numprocesses=*|--dist=*|--durations=*|--durations-min=*|--tb=*|--capture=*|--color=*|-n[0-9]*|-nauto|-nlogical)
+    -n | --numprocesses | --dist | --durations | --durations-min | --tb | --capture | --color)
+      if ((i + 1 < ${#ARGS[@]})) && [[ "${ARGS[i + 1]}" != -* ]]; then
+        i=$((i + 1))
+      else CUSTOM=1; fi
       ;;
-    -q|-v|-vv|-s|--disable-warnings|--strict-markers|--strict-config) ;;
-    --collect-only|--co) COLLECTION=1; CUSTOM=1 ;;
+    --numprocesses=* | --dist=* | --durations=* | --durations-min=* | --tb=* | --capture=* | --color=* | -n[0-9]* | -nauto | -nlogical)
+      ;;
+    -q | -v | -vv | -s | --disable-warnings | --strict-markers | --strict-config) ;;
+    --collect-only | --co)
+      COLLECTION=1
+      CUSTOM=1
+      ;;
     *) CUSTOM=1 ;;
   esac
 done
@@ -93,7 +100,7 @@ if command -v ruff >/dev/null 2>&1; then
   ruff check .
   # Битая директива `# noqa` не подавляет ничего, а ruff говорит об этом ПРЕДУПРЕЖДЕНИЕМ и
   # выходит с кодом 0: подавление объявлено и не работает. Поднимаем до ошибки.
-  if ruff check . --select ALL 2>&1 | grep -F 'Invalid `# noqa`'; then
+  if ruff check . --select ALL 2>&1 | grep -F "Invalid \`# noqa\`"; then
     echo "ОШИБКА: битая директива # noqa — подавление объявлено, но не работает." >&2
     exit 1
   fi
@@ -116,8 +123,9 @@ fi
 
 echo
 case "$PROFILE" in
-  full-current-python|pr-current-python)
-    echo "ЗЕЛЁНЫЙ ОХВАТ: ${PROFILE} (${CURRENT}). Совместимость и release gates подтверждает отдельный CI." ;;
+  full-current-python | pr-current-python)
+    echo "ЗЕЛЁНЫЙ ОХВАТ: ${PROFILE} (${CURRENT}). Совместимость и release gates подтверждает отдельный CI."
+    ;;
   collection-only) echo "СБОР ЗАВЕРШЁН: collection-only; тесты НЕ исполнялись, зелёного evidence нет." ;;
   *) echo "КОД 0: custom-current-python; пользовательский выбор НЕ подтверждает полный охват." ;;
 esac

@@ -848,3 +848,8 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/devtools/codex_stage_hook.py` — private SessionStart/deny-all tool hook.
 - `ai_ops_kit/devtools/codex_stage_cli.py` — внутренний opt-in вход, не shipped CLI intent.
 - `qualification/codex-product-stage/` — настоящий CLI capture одной стадии, вход, артефакт, gate report и source hashes.
+
+- `ai_ops_kit/devtools/commit_hook.py` — адаптер commit-msg: индекс Git, сообщение и координация перед существующим CommitContract (#1410).
+- `docs/agent-guides/shell-audit-1410.md` — пофайловый аудит всех shell-входов, границы переноса и проверяемые решения.
+- `docs/change-briefs/1410-shell-thin-completion.md` — инварианты и проверка закрытия shell-долга.
+- `tests/unit/test_commit_hook.py` — реальные Git/FS регрессии перенесённого commit-msg hook.

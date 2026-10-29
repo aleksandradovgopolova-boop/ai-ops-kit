@@ -1,11 +1,11 @@
-# Наблюдающий пилот #1410; обязательные проверки и wrappers не меняются.
+# Наблюдающая проверка всех shell-входов; обязательные проверки не меняются.
 name: shell-quality-advisory
 on:
   pull_request:
-    paths: ['**/*.sh', '.github/workflows/shell-quality.yml', 'docs/agent-guides/shell-policy.md', 'tests/unit/test_shell_quality_contract.py']
+    paths: ['ai-ops', '**/*.sh', '.github/workflows/shell-quality.yml', 'docs/agent-guides/shell-policy.md', 'tests/unit/test_shell_quality_contract.py']
   push:
     branches: [main]
-    paths: ['**/*.sh', '.github/workflows/shell-quality.yml', 'docs/agent-guides/shell-policy.md', 'tests/unit/test_shell_quality_contract.py']
+    paths: ['ai-ops', '**/*.sh', '.github/workflows/shell-quality.yml', 'docs/agent-guides/shell-policy.md', 'tests/unit/test_shell_quality_contract.py']
   workflow_dispatch: {}
 permissions:
   contents: read
@@ -54,7 +54,7 @@ jobs:
           mv "$tools/shellcheck-v0.11.0/shellcheck" "$tools/shellcheck"
           chmod +x "$tools/shellcheck" "$tools/shfmt"
           echo "$tools" >> "$GITHUB_PATH"
-      - name: Все отслеживаемые .sh — полный долг
+      - name: Все shell-входы — полный inventory
         id: all
         continue-on-error: true
         shell: bash
@@ -78,9 +78,9 @@ jobs:
         run: |
           {
             echo '## Shell quality — advisory'
-            echo "Все tracked .sh (включая старый долг): $ALL_OUTCOME"
+            echo "Все tracked shell-входы: $ALL_OUTCOME"
             echo "Изменённые скрипты (полный файл): $CHANGED_OUTCOME"
             echo 'Диагностика и форматирующие diff — в двух отдельных шагах выше.'
             echo 'Failure/skipped не означают clean; нарушения и неполный запуск различаются кодами 1/2 в логах.'
-            echo 'Пилот не является обязательным допуском к merge и не закрывает #1410 целиком.'
+            echo 'Advisory workflow не является обязательным допуском к merge.'
           } >> "$GITHUB_STEP_SUMMARY"

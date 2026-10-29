@@ -86,3 +86,5 @@
 
 - [Негодный числовой замер не увеличивает долю результата — #1399](1399-finite-outcome-evidence.md).
 - [Одна главная мера продукта — #1400](1400-single-headline-metric.md).
+
+- [Закрытие shell-долга и перенос решений commit-msg hook — #1410](1410-shell-thin-completion.md).

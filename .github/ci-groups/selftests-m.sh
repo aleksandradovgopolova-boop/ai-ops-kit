@@ -4,7 +4,7 @@
 # и именам, чтобы джобы шли параллельно и примерно равно по времени. Добавленная проверка попадает
 # в свою группу сама.
 set -euo pipefail
-export PYTHONDONTWRITEBYTECODE=1   # байткод в дереве ломает проверку целостности managed
+export PYTHONDONTWRITEBYTECODE=1 # байткод в дереве ломает проверку целостности managed
 cd "$(dirname "$0")/../.."
 # ЗАМЕР ЦЕНЫ (2026-09-07, #465). Подробный разбор — в selftests-a.sh. Здесь остаётся всё, чего нет
 # в группе a: кластеры `test_update_*`/`test_upgrade_*` (u) и `test_validate_*`/`test_validator_*` (v,

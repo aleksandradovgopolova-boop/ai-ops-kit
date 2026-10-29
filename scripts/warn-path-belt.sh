@@ -11,7 +11,7 @@
 # Только предупреждение, без падения: чинить машину — не работа этого скрипта, а `ai-ops doctor`
 # (там проверка блокирующая) и `ai-ops doctor --remove-path-belt`.
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 2
 python3 -c 'import sys
 sys.path.insert(0, ".")
 from ai_ops_kit.shared import path_hygiene as ph

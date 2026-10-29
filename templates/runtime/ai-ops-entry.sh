@@ -29,12 +29,16 @@ fi
 # пригодности. AI_OPS_PYTHON — явное слово владельца, оно сильнее перебора.
 find_python() {
   if [ -n "${AI_OPS_PYTHON:-}" ]; then
-    if "$AI_OPS_PYTHON" -c 'import yaml' 2>/dev/null; then echo "$AI_OPS_PYTHON"; return 0; fi
+    if "$AI_OPS_PYTHON" -c 'import yaml' 2>/dev/null; then
+      echo "$AI_OPS_PYTHON"
+      return 0
+    fi
     return 1
   fi
   for cand in python3 python3.14 python3.13 python3.12 python; do
     if command -v "$cand" >/dev/null 2>&1 && "$cand" -c 'import yaml' 2>/dev/null; then
-      echo "$cand"; return 0
+      echo "$cand"
+      return 0
     fi
   done
   return 1
@@ -78,7 +82,10 @@ export PYTHONPATH="$managed:$PYTHONPATH"
 # переменная окружения -> типовое место клона. Если не нашли — говорим прямо, а не молчим.
 find_installer() {
   for cand in "$AI_OPS_HOME/installer/ai_ops.py" "$HOME/ai-ops-kit/installer/ai_ops.py"; do
-    [ -f "$cand" ] && { echo "$cand"; return 0; }
+    [ -f "$cand" ] && {
+      echo "$cand"
+      return 0
+    }
   done
   return 1
 }
@@ -102,14 +109,21 @@ try:
 except Exception as e:
     print('', end=''); sys.exit(0)
 print(s[4:] if s.startswith('git+') else s, end='')" 2>/dev/null)
-  [ -n "$src" ] || { echo "в .ai-ops.yaml не назван parent.source — откуда брать кит, неизвестно" >&2; return 1; }
-  command -v git >/dev/null 2>&1 || { echo "нужен git, чтобы получить кит по адресу $src" >&2; return 1; }
+  [ -n "$src" ] || {
+    echo "в .ai-ops.yaml не назван parent.source — откуда брать кит, неизвестно" >&2
+    return 1
+  }
+  command -v git >/dev/null 2>&1 || {
+    echo "нужен git, чтобы получить кит по адресу $src" >&2
+    return 1
+  }
   tmp=$(mktemp -d) || return 1
   echo "кита рядом нет — беру по адресу из .ai-ops.yaml: $src" >&2
   echo "  временный клон: $tmp (будет удалён после команды)" >&2
   if ! git clone --quiet --filter=blob:none "$src" "$tmp/kit" 2>/dev/null; then
     echo "не удалось склонировать $src — проверьте адрес и доступ к сети" >&2
-    rm -rf "$tmp"; return 1
+    rm -rf "$tmp"
+    return 1
   fi
   chan=$("$py" -c "import yaml
 try: print(yaml.safe_load(open('.ai-ops.yaml'))['parent'].get('update_channel','stable'), end='')
@@ -121,7 +135,8 @@ except Exception: print('stable', end='')" 2>/dev/null)
     echo "  канал '$chan' -> ${ref:-ветка по умолчанию}" >&2
   else
     echo "  под канал '$chan' брать нечего — обновление не выполняется" >&2
-    rm -rf "$tmp"; return 1
+    rm -rf "$tmp"
+    return 1
   fi
   # ПУТЬ САМ НЕСЁТ, ЧТО УБИРАТЬ. Здесь стояло `FETCHED_TMP="$tmp"` — и переменная наружу НЕ
   # выходила: функция вызывается в подстановке команды `inst=$(fetch_installer)`, то есть в
@@ -144,14 +159,16 @@ case "$cmd" in
   # каркасы и рабочие валидаторы, и САМА НАЗЫВАЕТ, чего не видит без кита. Полная — `kit-doctor`,
   # по той же логике, что `status` / `kit-status`.
   kit-doctor)
-    shift; set -- doctor "$@"
+    shift
+    set -- doctor "$@"
     if inst=$(find_installer); then exec "$py" "$inst" "$@"; fi
     echo "Полную проверку делает сам кит, а его исходник рядом не найден." >&2
     echo "Изнутри репозитория: ./ai-ops doctor · полная: AI_OPS_HOME=/путь/к/ai-ops-kit ./ai-ops kit-doctor" >&2
     exit 2
     ;;
   kit-status)
-    shift; set -- status "$@"
+    shift
+    set -- status "$@"
     if inst=$(find_installer); then exec "$py" "$inst" "$@"; fi
     echo "Состояние кита показывает сам кит, а его исходник рядом не найден." >&2
     echo "Укажите: AI_OPS_HOME=/путь/к/ai-ops-kit ./ai-ops kit-status" >&2
@@ -172,7 +189,7 @@ case "$cmd" in
   # установщика звалась `onboard` и в дочку не выводилась вовсе — то же имя носит интент движка
   # «определить стек», и `./ai-ops onboard` вёл именно в движок. После переименования столкновения
   # имён нет, и команду можно честно вести в установщик наравне с прочими kit-командами.
-  init|setup|update|diff|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|subsession|engops|method|ui-status)
+  init | setup | update | diff | validate | migrate | verify-capabilities | selftest | delivery-proof | usage | audit | drift | subsession | engops | method | ui-status)
     if inst=$(find_installer); then
       exec "$py" "$inst" "$@"
     fi
@@ -184,8 +201,10 @@ case "$cmd" in
         # переживший Ctrl-C, — мусор, о котором человек не узнает.
         tmpdir=${inst%/kit/installer/ai_ops.py}
         trap 'rm -rf "$tmpdir"' EXIT INT TERM
-        "$py" "$inst" "$@"; rc=$?
-        rm -rf "$tmpdir"; trap - EXIT INT TERM
+        "$py" "$inst" "$@"
+        rc=$?
+        rm -rf "$tmpdir"
+        trap - EXIT INT TERM
         exit $rc
       fi
       # Причину уже назвал `fetch_installer` — дописывать сверху «исходник рядом не найден»
@@ -196,7 +215,7 @@ case "$cmd" in
     echo "Укажите, где он лежит: AI_OPS_HOME=/путь/к/ai-ops-kit ./ai-ops $cmd" >&2
     exit 2
     ;;
-  ""|-h|--help|help)
+  "" | -h | --help | help)
     exec "$py" "$managed/ai_ops_kit/cli/ai_ops_cli.py"
     ;;
   *)
@@ -209,7 +228,8 @@ case "$cmd" in
     # `error: unrecognized arguments: <путь>` и код 2, то есть ИСПОЛНИТЬ задачу через обёртку было
     # нельзя вовсе — работал только сухой прогон. Причина в argparse: позиционные `intent` + `rest`
     # набираются одной непрерывной группой, и хвостовой аргумент после флагов в неё уже не попадает.
-    intent="$1"; shift
+    intent="$1"
+    shift
     exec "$py" "$managed/ai_ops_kit/cli/ai_ops_cli.py" "$intent" "$here" "$@"
     ;;
 esac
