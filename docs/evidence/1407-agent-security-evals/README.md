@@ -2,7 +2,7 @@
 
 База: `02fe0cf74e121b7ececcf72385b07335226a75f4` (main после #1427, сверено через GitHub API 29.10.2026). #1407 открыт, без assignees/comments; открытого PR и remote-ветки с 1407 не найдено. #1402 и PR #1425/#1426 принадлежат Claude и не изменялись. Основная dirty-копия не использовалась для записи. [Change Brief](../../change-briefs/1407-agent-security-evals.md) составлен до тестов.
 
-Исполняемый контракт: [test_agent_security_evals.py](../../../tests/contracts/test_agent_security_evals.py). Семь новых `evaluations/gates/cases/agent-security-*.yaml` совместимы со штатным gate-evals replay. Их `host_probe` исполняет тест; сам CLI replay проверяет только отсутствие независимого судьи. Эти два результата нельзя смешивать.
+Исполняемый контракт: [test_agent_security_evals.py](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/d0a6271ffa36f9debc27e5d0139a89a7f8ae16fa/tests/contracts/test_agent_security_evals.py). Семь новых `evaluations/gates/cases/agent-security-*.yaml` совместимы со штатным gate-evals replay. Их `host_probe` исполняет тест; сам CLI replay проверяет только отсутствие независимого судьи. Эти два результата нельзя смешивать.
 
 | Класс | Что действительно исполняется | Граница доказательства |
 |---|---|---|
