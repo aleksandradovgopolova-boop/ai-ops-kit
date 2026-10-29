@@ -69,6 +69,8 @@
       "type": "object",
       "description": "Версия стандарта репозитория, ОТДЕЛЬНАЯ от версии пакета (SR-4), и override требований (SR-21..23).",
       "properties": {
+        "team_session": {"type": ["string", "boolean"], "enum": ["off", "required", false], "default": "off",
+          "description": "Эксперимент #1434: проектные hooks Claude/Codex. Доверие runtime и живая квалификация проверяются отдельно."},
         "version": {"type": "integer", "description": "какой версии стандарта соответствует репозиторий"},
         "profile": {"type": "string", "description": "профиль требований (пока один: ai-product)"},
         "invariants": {"type": "array", "items": {"type": "string"},
