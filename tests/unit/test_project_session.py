@@ -207,7 +207,6 @@ def test_existing_execution_claim_prevents_second_process(project):
 
 def test_dirty_result_is_rejected_before_receipt(project):
     fixture_producer(project)
-    task = sessions.begin(project, "codex", "a", "task")
     # Имитация конкурентной правки до завершения наблюдаемого процесса.
     # binding ещё совпадает на входе, правку делает сам отдельный процесс.
     script = project / "ai-ops"
@@ -215,7 +214,7 @@ def test_dirty_result_is_rejected_before_receipt(project):
     script.write_text(source)
     sessions.git(project, "add", "ai-ops")
     sessions.git(project, "commit", "-qm", "controlled concurrent mutation")
-    task = sessions.begin(project, "codex", "a", "task")
+    sessions.begin(project, "codex", "a", "task")
     result = sessions.execute(project, "codex", "a", {})
     assert (project / "unchecked.txt").read_text() == "unchecked"
     assert result["status"] == "blocked"
