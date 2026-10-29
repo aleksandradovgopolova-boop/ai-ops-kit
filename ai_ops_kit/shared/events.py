@@ -25,15 +25,15 @@ from typing import Any, Callable
 logger = logging.getLogger(__name__)
 
 # Глобальный реестр подписчиков: event_type -> [handler, ...]
-_subscribers: dict[str, list[Callable]] = {}
+_subscribers: dict[str, list[Callable[[dict[str, Any]], object]]] = {}
 
 
-def subscribe(event_type: str, handler: Callable) -> None:
+def subscribe(event_type: str, handler: Callable[[dict[str, Any]], object]) -> None:
     """Подписать handler на события типа event_type. Handler вызывается с одним аргументом — dict."""
     _subscribers.setdefault(event_type, []).append(handler)
 
 
-def unsubscribe(event_type: str, handler: Callable) -> None:
+def unsubscribe(event_type: str, handler: Callable[[dict[str, Any]], object]) -> None:
     """Отписать handler от событий типа event_type."""
     handlers = _subscribers.get(event_type, [])
     if handler in handlers:

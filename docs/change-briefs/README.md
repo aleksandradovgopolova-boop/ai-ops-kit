@@ -92,3 +92,5 @@
 - [Одна главная мера продукта — #1400](1400-single-headline-metric.md).
 
 - [Закрытие shell-долга и перенос решений commit-msg hook — #1410](1410-shell-thin-completion.md).
+
+- [Strict mypy на независимом срезе контрактов — #1412](1412-strict-contracts.md).
