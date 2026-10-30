@@ -11,6 +11,7 @@ STRICT_FLOOR = {
     "ai_ops_kit.kernel.ports",
     "ai_ops_kit.shared.contracts",
     "ai_ops_kit.shared.events",
+    "ai_ops_kit.shared.budget",
     "ai_ops_kit.engine.run_context",
 }
 # --strict из закреплённого в CI mypy 2.3.1; warn_redundant_casts — global-only.
