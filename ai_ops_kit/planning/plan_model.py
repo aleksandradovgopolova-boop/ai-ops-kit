@@ -45,6 +45,7 @@ CLOSED_DECLARABLE = ("done", "dropped")
 # честно откатывается к прежнему прокси. Статус берём из того же объявляемого набора, что и работа
 # (`DECLARABLE`): вторую правду о состоянии заводить не нужно.
 MILESTONE_KEY = "current_milestone"
+RELEASE_INTENT_KEY = "release_intent"
 MILESTONE_STATUSES = DECLARABLE
 # Поля-связки: чем работа привязана к реальности. Не обязательны, но их СМЫСЛ проверяется ниже.
 LINK_KEYS = ("pr", "branch", "commit", "evidence", "decision", "finding")
@@ -103,6 +104,11 @@ def is_template(plan) -> bool:
 
 def items(plan) -> list:
     return [w for w in (plan or {}).get("work") or [] if isinstance(w, dict)]
+
+
+def release_intent(plan):
+    """Необязательные параметры собственного релиза; malformed-present судит validate."""
+    return (plan or {}).get(RELEASE_INTENT_KEY)
 
 
 def goals(plan) -> list:

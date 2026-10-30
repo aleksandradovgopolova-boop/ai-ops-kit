@@ -18,6 +18,7 @@ from ai_ops_kit.planning.plan_model import (
     FORBIDDEN_ITEM_KEYS, OWNER_WAIT_STATUS, OWNER_WAIT_KEY, HISTORY_REL,
     GOAL_STATUSES, FREEZE_RELATIONS, FREEZE_DECISION,
     MILESTONE_KEY, MILESTONE_STATUSES,
+    RELEASE_INTENT_KEY,
 )
 
 
@@ -218,6 +219,35 @@ def _goal_errors(plan, gl, root) -> list:
     return errors
 
 
+def _release_intent_errors(value):
+    """Опциональный release intent не хранит выводимые состояния или права публикации."""
+    prefix = RELEASE_INTENT_KEY + ": "
+    if not isinstance(value, dict):
+        return [prefix + "ожидался mapping; присутствующий битый блок не является отсутствующим"]
+    errors = []
+    if set(value) - {"id", "milestone", "candidate_limit", "deferred"}:
+        errors.append(prefix + "неизвестные поля; readiness/permissions здесь не объявляются")
+    if not isinstance(value.get("id"), str) or not _engine_id_ok(value["id"]):
+        errors.append(prefix + "id должен быть устойчивым slug цикла")
+    if not isinstance(value.get("milestone"), str) or not value["milestone"].strip():
+        errors.append(prefix + "milestone должен быть непустой строкой")
+    # Первый срез поддерживает только уже влитый состав; будущих кандидатов не выдумываем.
+    if type(value.get("candidate_limit")) is not int or value["candidate_limit"] != 0:
+        errors.append(prefix + "candidate_limit поддерживает только 0 (completed-only)")
+    deferred = value.get("deferred", {})
+    if not isinstance(deferred, dict) or set(deferred) - {"cycle_version", "issues"}:
+        errors.append(prefix + "deferred: неизвестный или повреждённый блок")
+    elif deferred:
+        if not isinstance(deferred.get("cycle_version"), str) or not re.fullmatch(
+                r"\d+\.\d+\.\d+", deferred["cycle_version"]):
+            errors.append(prefix + "deferred.cycle_version должен быть точной версией")
+        numbers = deferred.get("issues")
+        if (not isinstance(numbers, list) or any(type(n) is not int or n <= 0 for n in numbers)
+                or len(set(numbers)) != len(numbers)):
+            errors.append(prefix + "deferred.issues должен содержать уникальные номера issue")
+    return errors
+
+
 def validate(plan, model=None, closed=None, root=None):
     """Структура + семантика плана. -> {"errors": [...], "warnings": [...]}.
 
@@ -232,7 +262,8 @@ def validate(plan, model=None, closed=None, root=None):
     model = model or _contours.load_model()
     closed = list(closed or [])
     closed_ids = {w.get("id") for w in closed if w.get("id")}
-    errors, warns = [], []
+    errors = _release_intent_errors(plan[RELEASE_INTENT_KEY]) if RELEASE_INTENT_KEY in (plan or {}) else []
+    warns = []
     if (plan or {}).get("kind") != KIND:
         errors.append(f"kind должен быть '{KIND}', получен '{(plan or {}).get('kind')}'")
     if not isinstance((plan or {}).get("schema_version"), int):
