@@ -1,5 +1,9 @@
 # Change Brief'ы — по одному на изменение
 
+- [Автоматическое планирование выпуска по фактам — #1439](1439-release-replanning.md).
+
+- [План следующего выпуска 4.12.0 и автоматического планирования](next-release-4.12.0.md).
+
 Инженерный цикл требует Change Brief ДО кода (`AGENTS.md` → «Инженерный цикл», шаблон —
 `templates/quality/ChangeBrief.md`). Заполненным брифам до 2026-08-12 не было отведено места, и
 это ломало сам смысл артефакта: два лежали в корне как `.ai-change-brief.md` и
@@ -15,6 +19,7 @@
 ## Что здесь есть
 
 - [Передача runtime и сессии через фасад — #1434](1434-runtime-session-identity.md).
+- [Экспериментальное командное подключение — #1434](1434-team-kit-autostart.md).
 
 - [`3.34-distribution-boundary-cleanup.md`](3.34-distribution-boundary-cleanup.md) — срез 3.34:
   `validation` переехал в `ai_ops_kit/`, замер циклов ядра стал ратчетом.
@@ -94,3 +99,4 @@
 - [Закрытие shell-долга и перенос решений commit-msg hook — #1410](1410-shell-thin-completion.md).
 
 - [Strict mypy на независимом срезе контрактов — #1412](1412-strict-contracts.md).
+- [Контекст как измеряемый ресурс — #1403](1403-context-resource.md).

@@ -24,6 +24,7 @@ ai_ops_kit/devtools/context_compile_cli.py.
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 import yaml
@@ -33,6 +34,7 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import project_detector    # noqa: E402
 from ai_ops_kit.shared.gitio import git           # noqa: E402
+from ai_ops_kit.context import context_cost
 
 CONTEXT_BUDGET_DEFAULT = 120_000   # токенов; override через signals["context_budget"] или config
 
@@ -96,8 +98,7 @@ def _gate_roles(gate_ids):
 
 
 def _est_tokens(text):
-    # грубая, детерминированная оценка: ~4 символа на токен
-    return (len(text) + 3) // 4
+    return context_cost.estimate_tokens(text)
 
 
 def _file_tokens(rel):
@@ -120,6 +121,7 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
     """
     child_root = Path(child_root)
     signals = dict(signals or {})
+    policy = context_cost.load_policy(child_root)
     if plan is None:
         if build_plan is None:
             raise ValueError(
@@ -182,8 +184,9 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
     for base in (child_root / "features" / wid, child_root / ".ai" / "runplan" / wid):
         if base.is_dir():
             for name in ("requirements.md", "requirements.yaml", "plan.md", "plan.yaml", "spec.md"):
-                if (base / name).is_file():
-                    specs.append(str((base / name).relative_to(child_root)))
+                rel = (base / name).relative_to(child_root).as_posix()
+                if not context_cost.forbidden(policy, rel, child_root) and (base / name).is_file():
+                    specs.append(rel)
     # --- decisions: relevance-фильтр (v2.108 finding аудита: раньше включались ВСЕ разом). Берём те,
     #     чей текст пересекается с affected_areas/ключевыми словами задачи; иначе — 3 самых свежих ---
     decisions = []
@@ -194,10 +197,14 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
         kws |= {w.lower() for w in re.findall(r"\w{4,}", signals.get("task_text", ""))}
         relevant = []
         for p in all_dec:
+            if context_cost.forbidden(policy, p.relative_to(child_root).as_posix(), child_root):
+                continue
             txt = p.read_text(encoding="utf-8", errors="ignore").lower()
             if any(k in txt for k in kws):
                 relevant.append(p)
-        chosen = relevant or all_dec[-3:]     # релевантные; иначе 3 самых свежих (не все разом)
+        allowed = [p for p in all_dec if not context_cost.forbidden(
+            policy, p.relative_to(child_root).as_posix(), child_root)]
+        chosen = relevant or allowed[-3:]     # релевантные; иначе 3 самых свежих (не все разом)
         decisions = [str(p.relative_to(child_root)) for p in chosen]
 
     # --- excluded (с причиной): агенты не из RunPlan, правила и skills не по задаче ---
@@ -214,10 +221,14 @@ def compile_bundle(signals, child_root, plan=None, context_budget=None, build_pl
     tok = 0
     tok += _est_tokens(signals.get("task_text", ""))
     for aid in included_agents:
-        tok += _file_tokens(agent_idx[aid].get("file", ""))
+        rel = agent_idx[aid].get("file", "")
+        if not context_cost.forbidden(policy, rel):
+            tok += _file_tokens(rel)
     for c in included_rules:
         for p in sorted((PKG / "rules" / c).glob("*.md")):
-            tok += _file_tokens(str(p.relative_to(PKG)))
+            rel = p.relative_to(PKG).as_posix()
+            if not context_cost.forbidden(policy, rel):
+                tok += _file_tokens(rel)
     for rel in specs:
         tok += _est_tokens((child_root / rel).read_text(encoding="utf-8", errors="ignore")) if (child_root / rel).is_file() else 0
 
@@ -325,17 +336,19 @@ def _sha(text):
 
 
 def build_payload(signals, child_root, plan=None, bundle=None, context_budget=None, model=None,
-                  build_plan=None):
+                  build_plan=None, relevance=None):
     """v2.108 Operational Context: собрать РЕАЛЬНЫЙ compiled payload для prompt модели из ContextBundle
     (содержимое правил/решений/спек/repo+project context), с бюджетом (output/tool-loop reserve + окно
     модели) и манифестом (source, hash, revision, tokens, reason). Превышение НЕ обрезает молча —
     вытесненное фиксируется в excluded_for_budget. -> dict с text (для инъекции) + манифест."""
+    started = time.perf_counter()
     child_root = Path(child_root)
     signals = dict(signals or {})
+    policy = context_cost.load_policy(child_root)
     if bundle is None:
         bundle = compile_bundle(signals, child_root, plan=plan, context_budget=context_budget,
                                 build_plan=build_plan)
-    budget = context_budget or bundle.get("context_budget") or CONTEXT_BUDGET_DEFAULT
+    budget = context_budget or policy["run_tokens"] or bundle.get("context_budget") or CONTEXT_BUDGET_DEFAULT
     if model and model in MODEL_CONTEXT:
         budget = min(budget, MODEL_CONTEXT[model])
     payload_budget = int(budget * (1 - _OUTPUT_RESERVE_FRAC - _TOOLLOOP_RESERVE_FRAC))
@@ -344,6 +357,19 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
     # источники в порядке приоритета: (kind, source_id, loader) -> текст
     inc = bundle.get("included", {})
     candidates = []
+    excluded_for_policy = []
+
+    def allowed(source, root=None):
+        if context_cost.forbidden(policy, source, root):
+            excluded_for_policy.append({"source": source, "reason": "context.forbidden"})
+            return False
+        return True
+
+    # Required читается первым и целиком; optional — после обычного детерминированного отбора.
+    for rel in policy["required"]:
+        p = child_root / rel
+        if allowed(rel, child_root) and p.is_file():
+            candidates.append(("required", rel, p.read_text(encoding="utf-8"), "context.required"))
     task_text = signals.get("task_text", "")
     if task_text:
         candidates.append(("project_context", "task", task_text, "текст задачи"))
@@ -352,16 +378,18 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
                            "Стек: " + "; ".join(inc["repository_context"]), "профиль репозитория"))
     for rel in inc.get("specifications", []):
         p = child_root / rel
-        if p.is_file():
+        if allowed(rel, child_root) and p.is_file():
             candidates.append(("specification", rel, p.read_text(encoding="utf-8", errors="ignore"),
                                "спецификация задачи"))
     for rel in inc.get("decisions", []):
         p = child_root / rel
-        if p.is_file():
+        if allowed(rel, child_root) and p.is_file():
             candidates.append(("decision", rel, p.read_text(encoding="utf-8", errors="ignore"),
                                "архитектурное решение"))
     for cat in inc.get("rules", []):
         for p in sorted((PKG / "rules" / cat).glob("*.md")):
+            if not allowed(p.relative_to(PKG).as_posix()):
+                continue
             candidates.append(("rule", str(p.relative_to(PKG)),
                                p.read_text(encoding="utf-8", errors="ignore"),
                                f"правило категории {cat} (из RunPlan)"))
@@ -372,7 +400,7 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
     # связанные с затронутыми файлами), чтобы он ПЕРЕИСПОЛЬЗОВАЛ существующие компоненты/варианты/a11y,
     # а не изобретал заново. Живой потребитель storybook_query (был built-not-wired). Guarded и дёшев:
     # None, если у дочки нет Storybook — на не-UI дочке не шумим.
-    if signals.get("ui_changed"):
+    if signals.get("ui_changed") and not policy["forbidden"]:
         try:
             from ai_ops_kit.ui import storybook_query as _sbq
             _nav = _sbq.navigation_context(child_root, changed_files=signals.get("changed_files"))
@@ -382,27 +410,56 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
         except Exception:  # noqa: BLE001,S110 — навигация это КОНТЕКСТ, не гейт: её сбой не должен ронять сборку контекста
             pass
 
+    for rel in policy["optional"]:
+        p = child_root / rel
+        if allowed(rel, child_root) and p.is_file():
+            candidates.append(("optional", rel, p.read_text(encoding="utf-8"), "context.optional"))
+
+    prefix = ("=== СОБРАННЫЙ КОНТЕКСТ (Context Compiler) ===\n"
+              "Ниже — контекст, отобранный из RunPlan и декларации .ai-ops.yaml. "
+              "Релевантность без отдельной разметки не измерена.\n\n")
     included_items, excluded_for_budget, parts, used = [], [], [], 0
+    seen = set()
     for kind, source, text, reason in candidates:
+        if source in seen or not allowed(source):
+            continue
+        seen.add(source)
         capped = text
         tok = _est_tokens(capped)
-        if tok > _PER_FILE_TOKEN_CAP:                 # обрезаем ОДИН источник до кэпа (честно помечаем)
-            capped = capped[: _PER_FILE_TOKEN_CAP * 4] + "\n…[обрезано до кэпа]"
+        if tok > _PER_FILE_TOKEN_CAP and kind != "required":
+            suffix = "\n…[обрезано до кэпа]"
+            low, high = 0, len(text)
+            while low < high:
+                mid = (low + high + 1) // 2
+                if _est_tokens(text[:mid] + suffix) <= _PER_FILE_TOKEN_CAP:
+                    low = mid
+                else:
+                    high = mid - 1
+            capped = text[:low] + suffix
             tok = _est_tokens(capped)
-        if used + tok > payload_budget and kind not in ("project_context",):
+        part = f"=== [{kind}] {source} (причина: {reason}) ===\n{capped}"
+        if _est_tokens(prefix + "\n\n".join([*parts, part])) > payload_budget and kind != "project_context":
             excluded_for_budget.append({"source": source, "kind": kind, "tokens": tok,
                                         "reason": "вытеснено бюджетом payload"})
             continue
         used += tok
         included_items.append({"source": source, "kind": kind, "hash": _sha(text),
-                               "revision": rev, "tokens": tok, "reason": reason})
-        parts.append(f"=== [{kind}] {source} (причина: {reason}) ===\n{capped}")
+                               "revision": rev, "tokens": tok, "reason": reason,
+                               "truncated": capped != text})
+        parts.append(part)
 
-    text = ("=== СОБРАННЫЙ КОНТЕКСТ (Context Compiler) ===\n"
-            "Ниже — только релевантный этому WorkItem контекст (правила/решения/спеки/стек), "
-            "отобранный из RunPlan и урезанный по бюджету. Учитывай его при работе.\n\n"
-            + "\n\n".join(parts)) if parts else ""
+    text = (prefix + "\n\n".join(parts)) if parts else ""
 
+    # Бюджет проверяет весь сформированный текст, включая заголовки; это всё ещё ОЦЕНКА,
+    # не usage провайдера и не полный native-runtime prompt.
+    total = _est_tokens(text)
+    missing_required = sorted(set(policy["required"]) - {i["source"] for i in included_items})
+    resource_errors = ([f"required отсутствует в payload: {p}" for p in missing_required]
+                       + ([f"payload превышает бюджет: {total}/{payload_budget}"] if total > payload_budget else []))
+    metrics = context_cost.relevance_metrics(
+        included_items, relevance if relevance is not None else signals.get("context_relevance"))
+    metrics["time_to_context_ms"] = round((time.perf_counter() - started) * 1000, 3)
+    metrics["timing_scope"] = "build_payload (включая compile_bundle, если bundle не передан)"
     return {
         "schema_version": 1, "kind": "ContextPayload", "workitem_id": bundle.get("workitem_id"),
         "revision": rev, "model": model,
@@ -410,7 +467,13 @@ def build_payload(signals, child_root, plan=None, bundle=None, context_budget=No
         "output_reserve": int(budget * _OUTPUT_RESERVE_FRAC),
         "tool_loop_reserve": int(budget * _TOOLLOOP_RESERVE_FRAC),
         "payload_tokens": used,
+        "compiled_text_tokens_estimate": total,
+        "resource_check": {"ok": not resource_errors, "errors": resource_errors,
+                           "missing_required": missing_required, "within_budget": total <= payload_budget},
+        "source_policy": policy,
+        "metrics": metrics,
         "included_items": included_items,
+        "excluded_for_policy": excluded_for_policy,
         "excluded_for_budget": excluded_for_budget,
         "text": text,
     }

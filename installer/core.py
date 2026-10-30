@@ -15,7 +15,7 @@ _HERE = Path(__file__).resolve()
 _AO_NS = None
 
 # от слабого к сильному по зависимостям тут неважно — фасад ищет имя во всех
-_SUBHUBS = ("version_ops", "delivery_ops", "managed_state", "asset_ops")
+_SUBHUBS = ("version_ops", "delivery_ops", "managed_state", "asset_ops", "team_setup")
 _loaded = {}
 
 
