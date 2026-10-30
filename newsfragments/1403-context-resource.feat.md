@@ -1,1 +1,0 @@
-Compiled контекст проверяет required/optional/forbidden и оценочный бюджет до исполнителя; сохраняет время сборки и precision/waste/miss по явной разметке. Без разметки качество остаётся неизвестным. Воспроизводимый локальный pipeline: `qualification/context_resource/run.py`; границы — `docs/agent-guides/context-resource.md`.

@@ -1,1 +1,0 @@
-Hybrid применяет context.forbidden до full-text/graph/semantic и mandatory-чтения: разрешённые additions доступны при пройденном promotion и точном snapshot. Case-alias больше не обходит запрет на Mac; native runtime, Storybook-агрегат и полевая релевантность остаются за границами. Проверка: qualification/context_resource/run.py; описание: docs/agent-guides/context-resource.md.
