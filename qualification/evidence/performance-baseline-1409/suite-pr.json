@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "ci-replica-pr-current-python",
+      "domain": "ci",
+      "command": [
+        "bash",
+        "scripts/check-full.sh",
+        "--pr",
+        "-n",
+        "1"
+      ],
+      "timeout_seconds": 3600
+    }
+  ]
+}
