@@ -36,6 +36,11 @@ from ai_ops_kit.shared.contracts import PreflightResult  # noqa: E402
 _HEAVY = {"ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"}
 
 
+def requires_spec(signals, plan=None):
+    """Та же обязательность Spec-First для подготовки входа и итогового preflight."""
+    return (signals.get("task_type") or (plan or {}).get("base_workflow") or "QUICK").upper() in _HEAVY
+
+
 def _context_checks(checks, block, child_root, bundle, payload, reevaluate_only):
     # #1403: декларация контекста обязательна и для QUICK; ошибка политики не разрешение.
     from ai_ops_kit.context import context_cost
@@ -69,7 +74,7 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
     signals = dict(signals or {})
     child_root = Path(child_root)
     tt = (signals.get("task_type") or (plan or {}).get("base_workflow") or "QUICK").upper()
-    heavy = tt in _HEAVY
+    heavy = requires_spec(signals, plan)
     lifecycle_errors = list(lifecycle_errors or [])
     checks, reasons = {}, []
 
