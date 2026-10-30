@@ -98,6 +98,10 @@ def _intent_reach(task, child_root, signals, a):
     sub = (task or "").strip().lower()
     root = child_root
 
+    if sub == "adoption":
+        from ai_ops_kit.engops import adoption
+        return adoption.main(["status", str(root)])
+
     if sub in ("", "status"):
         rep = cr.registration_state(root)
         print(json.dumps(rep, ensure_ascii=False, indent=2) if js else cr.render_state(rep))
@@ -161,7 +165,7 @@ def _intent_reach(task, child_root, signals, a):
         return 2
 
     print(f"неизвестная подкоманда '{sub}'. Есть: register | decline | forget | status | "
-          "summary (в дочке) · coverage (в ките)")
+          "summary | adoption (в дочке) · coverage (в ките)")
     return 1
 
 
