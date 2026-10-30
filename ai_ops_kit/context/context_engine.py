@@ -40,6 +40,7 @@ from ai_ops_kit.shared.gitio import git   # noqa: E402
 from ai_ops_kit.context import context_retrieval as cr   # noqa: E402
 from ai_ops_kit.context import repo_graph                # noqa: E402
 from ai_ops_kit.context import semantic_lite             # noqa: E402
+from ai_ops_kit.context import context_cost              # noqa: E402
 
 SEMANTIC_RECALL_FLOOR = 3        # < столько детерминированных кандидатов -> recall недостаточен
 DEFAULT_BUDGET_TOKENS = 20000
@@ -163,6 +164,53 @@ def _invalid_view(role, query, sha, reasons, snapshot_verified):
             "cache": {"enabled": False, "reason": "view invalid"}, "cache_key": None}
 
 
+def _source_path_filter(root, allowed, dcp, policy):
+    def allowed_path(rel):
+        try:
+            if context_cost.forbidden(policy, rel, root):
+                return False
+        except (ValueError, OSError, RuntimeError):
+            return False  # escape, broken/cyclic symlink: до чтения не допускается
+        pc = cr.classify("", path=rel, policy=dcp)
+        return pc != "secret" and bool(allowed) and pc in allowed
+    return allowed_path
+
+
+def _metadata_read_allowed(root, policy):
+    if not (root / ".gitignore").is_file():
+        return True
+    try:
+        return not context_cost.forbidden(policy, ".gitignore", root)
+    except (ValueError, OSError, RuntimeError):
+        return False
+
+
+def _resolve_sources(root, candidates, allowed, dcp, sha, path_filter):
+    resolved, excluded, missing, read_paths = [], [], [], []
+    for rel, c in candidates.items():
+        if not path_filter(rel):
+            excluded.append({"file": rel, "data_class": cr.classify("", path=rel, policy=dcp),
+                             "mandatory": c["mandatory"], "sources": sorted(c["sources"]),
+                             "reason": "path pre-filter", "read": False})
+            continue
+        try:
+            content = (root / rel).read_text(encoding="utf-8")
+        except OSError:
+            if c["mandatory"]:
+                missing.append(rel)
+            continue
+        read_paths.append(rel)
+        data_class = cr.classify(content, path=rel, policy=dcp)
+        if data_class == "secret" or data_class not in allowed:
+            excluded.append({"file": rel, "data_class": data_class, "mandatory": c["mandatory"],
+                             "sources": sorted(c["sources"]), "read": True})
+            continue
+        resolved.append({"file": rel, "sources": sorted(c["sources"]), "mandatory": c["mandatory"],
+                         "score": c["score"], "data_class": data_class,
+                         "tokens": cr._tokens(content), "content_hash": _hash(content), "sha": sha})
+    return resolved, excluded, missing, sorted(read_paths)
+
+
 def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=DEFAULT_BUDGET_TOKENS,
                   v1_mandatory=None, repo_id=None, semantic_recall_floor=SEMANTIC_RECALL_FLOOR,
                   require_snapshot=False):
@@ -183,6 +231,10 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
         if not oks:
             return _invalid_view(role, query, sha, [f"snapshot не доказан: {sreason}"], False)
 
+    source_policy = context_cost.load_policy(root)
+    if not _metadata_read_allowed(root, source_policy):
+        return _invalid_view(role, query, sha, ["context.forbidden блокирует .gitignore: retrieval не выполнен"],
+                             snapshot_verified)
     allowed = cr.role_allowed_classes(afp, role) if afp else set()   # deny-by-default
     exclude = set(cr.SCAN_EXCLUDE_DIRS) | _gitignore_dirs(root)      # vendored/build + .gitignore-aware
 
@@ -190,13 +242,11 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
     # ТОЛЬКО разрешённые пути. Denied-путь НЕ передаётся в full-text/graph/semantic (не читается, имя не
     # раскрывается role-facing). Content-scanner потом может ТОЛЬКО повысить класс. Privileged-audit ведёт
     # список pre_filtered (знать denied-файлы можно только привилегированному слою, не role-facing).
-    def _allowed_path(rel):
-        pc = cr.classify("", path=rel, policy=dcp)   # path-based класс (content="" -> без scanner/marker)
-        return pc != "secret" and (bool(allowed) and pc in allowed)
+    _allowed_path = _source_path_filter(root, allowed, dcp, source_policy)
     pre_filtered_denied = sorted(p for p in _list_rel_paths(root, exclude) if not _allowed_path(p))
 
-    # --- источник 1: обязательный контекст v1 (policy/spec/decisions) — нельзя потерять (НЕ pre-filter'ится;
-    #     доступ проверяется при чтении: denied mandatory -> excluded_access -> view invalid) ---
+    # --- источник 1: mandatory не теряется: запрещённый путь НЕ читается,
+    #     но остаётся в excluded_access и делает view invalid. ---
     cand = {}   # rel -> {"file","sources":set,"score","mandatory"}
     for rel in (v1_mandatory or []):
         cand[rel] = {"file": rel, "sources": {"mandatory-v1"}, "score": 10_000, "mandatory": True}
@@ -253,24 +303,9 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
             semantic_reason += f" (semantic-индекс не построен: {type(_se).__name__}: {_se})"[:220]
 
     # --- access-filter (AFP роли + DataClassificationPolicy child) + классификация ---
-    included, excl_access, excl_budget, mandatory_missing = [], [], [], []
-    resolved = []
-    for rel, c in cand.items():
-        f = root / rel
-        try:
-            content = f.read_text(encoding="utf-8")
-        except OSError:
-            if c["mandatory"]:
-                mandatory_missing.append(rel)
-            continue
-        data_class = cr.classify(content, path=rel, policy=dcp)
-        if data_class == "secret" or data_class not in allowed:
-            excl_access.append({"file": rel, "data_class": data_class, "mandatory": c["mandatory"],
-                                "sources": sorted(c["sources"])})
-            continue
-        resolved.append({"file": rel, "sources": sorted(c["sources"]), "mandatory": c["mandatory"],
-                         "score": c["score"], "data_class": data_class,
-                         "tokens": cr._tokens(content), "content_hash": _hash(content), "sha": sha})
+    included, excl_budget = [], []
+    resolved, excl_access, mandatory_missing, read_paths = _resolve_sources(
+        root, cand, allowed, dcp, sha, _allowed_path)
 
     # --- rerank: обязательные первыми (стабильно), затем по score desc, файл для детерминизма ---
     resolved.sort(key=lambda x: (0 if x["mandatory"] else 1, -x["score"], x["file"]))
@@ -294,6 +329,7 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
     afp_id, afp_hash = cr._policy_fingerprint(afp)
     dcp_id, dcp_hash = cr._policy_fingerprint(dcp)
     allowed_h = hashlib.sha256(",".join(sorted(allowed)).encode()).hexdigest()[:8]
+    source_h = hashlib.sha256(json.dumps(source_policy, sort_keys=True).encode()).hexdigest()[:12]
     repo = cr._repo_identity(root, repo_id)
 
     # v3.6.7d: обязательный контекст, потерянный -> view НЕВАЛИДЕН (execution не получает неполный
@@ -306,7 +342,8 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
         invalid_reasons.append(f"обязательный контекст v1 запрещён access-policy: {mandatory_excluded_access}")
     cache_key = "|".join([f"repo:{repo}", f"sha:{sha}", f"afp:{afp_id}:{afp_hash}",
                           f"dcp:{dcp_id}:{dcp_hash}", f"allowed:{allowed_h}", f"role:{role}",
-                          f"q:{query}", f"b:{budget_tokens}", f"idx:{cr.RETRIEVAL_INDEX_VERSION}"])
+                          f"q:{query}", f"b:{budget_tokens}", f"idx:{cr.RETRIEVAL_INDEX_VERSION}",
+                          f"context:{source_h}"])
     return {
         "kind": "context-engine-view", "schema": "v2-orchestrated", "role": role, "query": query,
         "repo": repo, "sha": sha,
@@ -321,7 +358,7 @@ def build_context(child_root, query, role, *, sha, afp, dcp=None, budget_tokens=
         "mandatory_excluded_access": mandatory_excluded_access,
         # privileged-audit: denied-пути, отсеянные ДО чтения (role-facing их не видит; execution не читал)
         "pre_filtered_denied": pre_filtered_denied,
-        "read_paths": sorted(i["file"] for i in included) + sorted(e["file"] for e in excl_access),
+        "read_paths": read_paths,
         "total_tokens": total, "budget_tokens": budget_tokens,
         # v3.6.7d: orchestrated cache честно ВЫКЛЮЧЕН для полного view до live-квалификации (v3.6.8).
         # cache_key считается (для shadow-сравнения/дедупа), но RetrievalCache к orchestrated view пока
