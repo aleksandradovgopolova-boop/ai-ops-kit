@@ -235,7 +235,10 @@ def execute(root, runtime, session, signals, *, provider=None):
     write(path, task)
     try:
         # stdout остаётся у вызывающего runtime. Подтверждение берётся с диска и из exit code.
-        result = subprocess.run(command, cwd=root, check=False)
+        result = subprocess.run(command, cwd=root, check=False, capture_output=True, text=True)
+        if not report_path.is_file():
+            detail = (result.stderr or result.stdout or "нет диагностики процесса").strip()[-4096:]
+            raise ValueError(f"штатный запуск завершился (exit={result.returncode}), отчёт не создан: {detail}")
         report = json.loads(report_path.read_text(encoding="utf-8"))
         if (result.returncode != 0 or report.get("kind") != "execution-pipeline"
                 or report.get("ready_for_pr") is not True or report.get("provider") in (None, "mock")

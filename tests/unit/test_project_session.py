@@ -11,6 +11,43 @@ from ai_ops_kit.cli.project_session import hook
 from ai_ops_kit.lifecycle import project_session as sessions
 
 
+def test_cli_incomplete_intake_can_be_corrected_without_consuming_attempt(project, monkeypatch, capsys):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "recover", "исследуй архитектуру")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "codex", "--session", "recover", "--signals"]
+    assert cli.main(args + ['{"task_type":"research","risk":"medium"}']) == 2
+    assert "size" in capsys.readouterr().err
+    assert sessions.load(project, "codex", "recover")["status"] == "pending"
+    assert not list(sessions.session_dir(project, "codex", "recover").glob("*.execution-claim"))
+    assert not (project / ".ai/runtime/process-observed").exists()
+    assert cli.main(args + ['{"task_type":"research","risk":"medium","size":"large"}']) == 0
+    assert (project / ".ai/runtime/process-observed").read_text() == task["prompt"]
+    assert sessions.load(project, "codex", "recover")["request_id"] == task["request_id"]
+    assert sessions.verify(project, "codex", "recover")["accepted"]
+
+
+@pytest.mark.parametrize("padding", ["", "x" * 5000], ids=["short", "bounded-tail"])
+def test_missing_run_report_preserves_actual_process_diagnostic(project, padding):
+    (project / "ai-ops").write_text("#!/bin/sh\nmkdir -p .ai/runtime\n"
+                                    "touch .ai/runtime/process-observed\n"
+                                    f"echo '{padding}runtime unavailable: explicit failure' >&2\nexit 2\n")
+    sessions.git(project, "add", "ai-ops")
+    sessions.git(project, "commit", "-qm", "failing process fixture")
+    sessions.begin(project, "codex", "diagnostic", "research")
+    task = sessions.execute(project, "codex", "diagnostic", {"task_type": "research"})
+    assert (project / ".ai/runtime/process-observed").exists()
+    assert task["status"] == "blocked"
+    assert "runtime unavailable: explicit failure" in task["blocker"]
+    assert "exit=2" in task["blocker"]
+    assert "No such file" not in task["blocker"]
+    assert len(task["blocker"].split("отчёт не создан: ", 1)[1]) <= 4096
+    assert not sessions.verify(project, "codex", "diagnostic")["accepted"]
+    with pytest.raises(ValueError, match="запуск уже учтён"):
+        sessions.execute(project, "codex", "diagnostic", {"task_type": "research"})
+
+
 @pytest.fixture
 def project(tmp_path):
     root = tmp_path / "project"
@@ -83,6 +120,7 @@ def test_process_and_artifacts_are_created_before_acceptance(project):
     assert (project / f"features/session-{task['request_id']}/run-report.json").is_file()
     assert task["status"] == "accepted"
     assert sessions.verify(project, "codex", "a")["accepted"]
+    assert hook("codex", {"cwd": str(project), "session_id": "a", "hook_event_name": "Stop"}) == {}
 
 
 @pytest.mark.parametrize("mode", ("mock", "error"))
@@ -170,10 +208,47 @@ def test_resume_keeps_original_task_and_stop_detects_skip(project):
     payload = {"cwd": str(project), "session_id": "a", "hook_event_name": "SessionStart", "source": "compact"}
     assert "Сохранённая задача" in hook("codex", payload)["hookSpecificOutput"]["additionalContext"]
     payload["hook_event_name"] = "Stop"
-    assert hook("codex", payload)["decision"] == "block"
+    assert hook("codex", payload)["continue"] is False
     payload["stop_hook_active"] = True
     assert "не подтвердил" in hook("codex", payload)["systemMessage"]
     assert sessions.load(project, "codex", "a")["prompt"] == "original"
+
+
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+@pytest.mark.parametrize("case", ["pending", "binding-drift", "missing-task", "malformed-config"])
+def test_stop_refuses_without_creating_a_model_continuation(project, runtime, case, monkeypatch, capsys):
+    from ai_ops_kit.cli import project_session as cli
+    task = sessions.begin(project, runtime, "bounded-stop", "original research")
+    if case == "binding-drift":
+        (project / "unrelated.txt").write_text("new source")
+    elif case == "missing-task":
+        (sessions.session_dir(project, runtime, "bounded-stop") / f"{task['request_id']}.json").unlink()
+    elif case == "malformed-config":
+        (project / ".ai-ops.yaml").write_text("standard: [broken")
+    import io
+    payload = {"cwd": str(project), "session_id": "bounded-stop", "hook_event_name": "Stop"}
+    for active in [False, True, False]:
+        payload["stop_hook_active"] = active
+        monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(json.dumps(payload).encode())))
+        assert cli.main(["--runtime", runtime]) == 0
+        result = json.loads(capsys.readouterr().out)
+        assert result["continue"] is False
+        assert "decision" not in result
+        assert "не подтвердил" in result["stopReason"]
+    assert len(list(sessions.session_dir(project, runtime, "bounded-stop").glob("*.json"))) <= 2
+
+
+@pytest.mark.parametrize("raw", [b'{"hook_event_name":"Stop"', b'[]', b'x' * 262145],
+                         ids=["truncated-json", "wrong-shape", "oversized"])
+def test_invalid_hook_payload_cannot_request_a_paid_continuation(raw, monkeypatch, capsys):
+    import io
+    from ai_ops_kit.cli import project_session as cli
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw)))
+    assert cli.main(["--runtime", "codex"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["continue"] is False
+    assert "decision" not in result
+    assert "не считается принятой" in result["stopReason"]
 
 
 def test_disabled_hooks_are_diagnosed(project):

@@ -400,6 +400,7 @@ _GITIGNORE_RULES = """
 .ai/runtime/backups/
 .ai/runtime/last-update-report.json
 .ai/runtime/setup/
+.ai/runtime/sessions/
 
 # Локальный учёт стоимости прогонов: цифры этой машины, а не общий факт. ЕДИНСТВЕННОЕ правило
 # здесь, о котором можно спорить: если команде нужна общая история стоимости — снимите эту
@@ -455,9 +456,11 @@ def ensure_gitignore(root: Path = None):
         return "created"
     current = path.read_text(encoding="utf-8")
     if _GITIGNORE_MARK in current:
-        if ".ai/runtime/setup/" not in current.splitlines():
-            path.write_text(current + "\n# Локальные журналы установки (owner-led прогон 2026-10-19).\n"
-                            ".ai/runtime/setup/\n", encoding="utf-8")
+        missing = [rule for rule in (".ai/runtime/setup/", ".ai/runtime/sessions/")
+                   if rule not in current.splitlines()]
+        if missing:
+            path.write_text(current + "\n# Локальные журналы установки и проектных сессий.\n"
+                            + "\n".join(missing) + "\n", encoding="utf-8")
             return "appended"
         return "present"
     sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")
