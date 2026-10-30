@@ -105,3 +105,5 @@
 - [Восстановление project session после неполного intake — #1434](1434-live-session-recovery.md).
 
 - [Проектная сессия на detached checkout — #1434](1434-detached-checkout.md).
+
+- [Добровольный учёт проектов — #1451](adoption-opt-in.md).

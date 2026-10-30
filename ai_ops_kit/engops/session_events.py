@@ -49,3 +49,11 @@ def _on_run_completed(data: dict) -> None:
 
 # Регистрация при импорте модуля
 subscribe("run_completed", _on_run_completed)
+
+# Добровольный локальный учёт — спутник ядра; без согласия не пишет ничего.
+def _on_adoption_completed(data):
+    from ai_ops_kit.engops import adoption
+    adoption.observe_completed(data)
+
+
+subscribe("run_completed", _on_adoption_completed)
