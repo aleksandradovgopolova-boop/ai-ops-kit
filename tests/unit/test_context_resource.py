@@ -210,22 +210,130 @@ def test_real_pipeline_context_failure_never_calls_writer(tmp_path, policy):
     assert report["commit"]["sha"] is None
 
 
-def test_hybrid_cannot_feed_forbidden_addition(tmp_path, monkeypatch):
-    from ai_ops_kit.context import context_hybrid
+@pytest.mark.parametrize("required_source", ["needed.md", "required-alias.md", "NEEDED.MD"])
+def test_hybrid_feeds_allowed_addition_without_reading_forbidden(tmp_path, monkeypatch, required_source):
     from ai_ops_kit.engine.ai_ops_run_reporting import _compile_context_artifacts
-    (tmp_path / "denied.md").write_text("HYBRID_DENIED_MARKER")
-    (tmp_path / "allowed.md").write_text("HYBRID_ALLOWED_MARKER")
-    config(tmp_path, forbidden=["denied.md"])
+    from _ai_ops_run_helpers import _git_init_commit
+    (tmp_path / "src").mkdir()
+    denied = tmp_path / "src/denied.py"
+    denied.write_text("# ticketlookup HYBRID_DENIED_MARKER\n")
+    (tmp_path / "src/allowed.py").write_text("# ticketlookup HYBRID_ALLOWED_MARKER\n")
+    (tmp_path / "needed.md").write_text("ticketlookup REQUIRED_SOURCE_MARKER\n")
+    (tmp_path / ".gitignore").write_text("features/\n.ai/runtime/\n.ai/worktrees/\n__pycache__/\n")
+    if required_source == "required-alias.md":
+        (tmp_path / required_source).symlink_to("needed.md")
+    if not (tmp_path / required_source).is_file():
+        pytest.skip("native case alias unavailable on this FS")
+    config(tmp_path, required=[required_source], forbidden=["src/denied.py", "rules/", "skills"])
+    policies = tmp_path / ".ai/policies"
+    policies.mkdir(parents=True)
+    (policies / "access-filter.yaml").write_text(yaml.safe_dump({"id":"test-afp", "rules":[
+        {"role":"executor", "allowed_classes":["public", "internal"]}]}))
+    (policies / "data-classification.yaml").write_text(yaml.safe_dump(
+        {"id":"test-dcp", "default_class":"internal", "rules":[]}))
+    _git_init_commit(tmp_path)
+    sha = subprocess.check_output(["git", "-C", str(tmp_path), "rev-parse", "HEAD"], text=True).strip()
     features = tmp_path / "features"
     (features / "demo").mkdir(parents=True)
-    def forbidden_retrieval(*args, **kwargs):
-        pytest.fail("hybrid retrieval не должен читать файлы при непустом forbidden")
+    read = Path.read_text
+    calls = []
 
-    monkeypatch.setattr(context_hybrid, "build_hybrid_from_child", forbidden_retrieval)
-    result = _compile_context_artifacts(SIGNALS, tmp_path, features, "demo",
-        build_plan(SIGNALS, workitem_id="demo"), None, True, {}, SIGNALS["task_text"])
-    prelude, hybrid = result[3:5]
-    assert "HYBRID_ALLOWED_MARKER" not in prelude
-    assert "HYBRID_DENIED_MARKER" not in prelude
-    assert hybrid["fed_additions"] == []
-    assert hybrid["mode"] == "v1-only" and "context.forbidden" in hybrid["reason"]
+    def guarded(path, *args, **kwargs):
+        if path == denied:
+            calls.append(str(path))
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded)
+    signals = {**SIGNALS, "task_text":"ticketlookup"}
+    result = _compile_context_artifacts(signals, tmp_path, features, "demo",
+        build_plan(signals, workitem_id="demo"), None, True, {"base_sha":sha}, signals["task_text"])
+    errors, _, pay, prelude, hybrid = result[:5]
+    assert calls == [] and not errors
+    assert "HYBRID_ALLOWED_MARKER" in prelude
+    assert "REQUIRED_SOURCE_MARKER" in prelude and "HYBRID_DENIED_MARKER" not in prelude
+    assert hybrid["mode"] == "hybrid" and hybrid["fed_to_model"]
+    assert hybrid["exact_snapshot"] and hybrid["snapshot_verified"] and hybrid["promotion_ready"]
+    assert "context:" in hybrid["cache_key"]
+    assert hybrid["fed_additions"] == ["src/allowed.py"]
+    assert pay["metrics"]["status"] == "unknown"
+    assert sum(i["source"] == required_source for i in pay["included_items"]) == 1
+    assert prelude.count("REQUIRED_SOURCE_MARKER") == 1
+    stored = yaml.safe_load((features / "demo/context-payload.yaml").read_text())
+    assert stored["included_items"] == pay["included_items"]
+
+
+def test_native_case_alias_cannot_bypass_forbidden(tmp_path, monkeypatch):
+    denied = tmp_path / "secret.py"
+    denied.write_text("CASE_ALIAS_PRIVATE_MARKER")
+    alias = tmp_path / "alias.py"
+    alias.symlink_to("SECRET.PY")
+    if not alias.exists():
+        pytest.skip("FS is case-sensitive; native case-alias is unavailable")
+    assert alias.read_text() == "CASE_ALIAS_PRIVATE_MARKER"
+    config(tmp_path, optional=["alias.py"], forbidden=["secret.py"])
+    assert resource.forbidden(resource.load_policy(tmp_path), "alias.py", tmp_path)
+    read = Path.read_text
+    calls = []
+
+    def guarded(path, *args, **kwargs):
+        if path.is_file() and path.samefile(denied):
+            calls.append(str(path))
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", guarded)
+    result = payload(tmp_path)
+    assert calls == [] and "CASE_ALIAS_PRIVATE_MARKER" not in result["text"]
+
+
+def test_native_case_matching_preserves_distinct_files(tmp_path):
+    upper, lower = tmp_path / "SECRET.py", tmp_path / "secret.py"
+    upper.write_text("UPPER")
+    lower.write_text("lower")
+    if upper.samefile(lower):
+        pytest.skip("FS is case-insensitive; distinct case-only files are unavailable")
+    assert upper.read_text() != lower.read_text()
+    config(tmp_path, optional=["SECRET.py"], forbidden=["secret.py"])
+    assert not resource.forbidden(resource.load_policy(tmp_path), "SECRET.py", tmp_path)
+    assert "UPPER" in payload(tmp_path)["text"]
+
+
+def test_possible_case_alias_is_denied_when_native_metadata_unavailable(tmp_path, monkeypatch):
+    source = tmp_path / 'SECRET.py'
+    source.write_text('SOURCE_BODY')
+    assert source.read_text() == 'SOURCE_BODY'
+    iterdir = Path.iterdir
+
+    def denied_directory(path):
+        if path == tmp_path.resolve():
+            raise PermissionError('controlled directory metadata failure')
+        return iterdir(path)
+
+    monkeypatch.setattr(Path, 'iterdir', denied_directory)
+    assert resource.forbidden({'forbidden':['secret.py']}, 'SECRET.py', tmp_path)
+
+
+@pytest.mark.parametrize('real_name,target', [
+    ('sécret.py','SE\u0301CRET.PY'), ('se\u0301cret.py','SÉCRET.PY')])
+def test_unicode_normalization_case_alias_is_forbidden(tmp_path, real_name, target):
+    real = tmp_path / real_name
+    real.write_text('UNICODE_PRIVATE_MARKER')
+    alias = tmp_path / 'alias.py'
+    alias.symlink_to(target)
+    if not alias.exists():
+        pytest.skip('FS does not support this normalization/case alias')
+    assert alias.read_text() == 'UNICODE_PRIVATE_MARKER'
+    config(tmp_path, optional=['alias.py'], forbidden=['sécret.py'])
+    assert resource.forbidden(resource.load_policy(tmp_path), 'alias.py', tmp_path)
+    assert 'UNICODE_PRIVATE_MARKER' not in payload(tmp_path)['text']
+
+
+def test_normalization_does_not_merge_distinct_linux_names(tmp_path):
+    nfc, nfd = tmp_path / 'sécret.py', tmp_path / 'se\u0301cret.py'
+    nfc.write_text('NFC')
+    nfd.write_text('ALLOWED_NFD_MARKER')
+    if nfc.samefile(nfd):
+        pytest.skip('FS normalizes these names to one file')
+    assert nfc.read_text() != nfd.read_text()
+    config(tmp_path, optional=[nfd.name], forbidden=[nfc.name])
+    assert not resource.forbidden(resource.load_policy(tmp_path), nfd.name, tmp_path)
+    assert 'ALLOWED_NFD_MARKER' in payload(tmp_path)['text']
