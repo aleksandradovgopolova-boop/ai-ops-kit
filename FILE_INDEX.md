@@ -863,3 +863,4 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `docs/change-briefs/1434-live-session-recovery.md` — восстановление intake и локальные журналы #1434.
 
 - `docs/change-briefs/1434-detached-checkout.md` — привязка сессии к pinned checkout без именованной ветки.
+- `docs/change-briefs/1434-session-preparation-resume.md` — подготовка спецификации до execution-claim и продолжение сохранённой постановки.
