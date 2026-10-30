@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import sys
+import unicodedata
 from fnmatch import fnmatchcase
 from pathlib import Path, PurePosixPath
 
@@ -193,6 +194,50 @@ def load_policy(root):
     return result
 
 
+def _matches_forbidden(name, patterns):
+    for pattern in patterns:
+        if fnmatchcase(name, pattern) or name == pattern.rstrip("/"):
+            return True
+        if any(fnmatchcase(str(parent), pattern.rstrip("/"))
+               for parent in PurePosixPath(name).parents if str(parent) != "."):
+            return True
+    return False
+
+
+def _fold_path(value):
+    return unicodedata.normalize("NFC", value).casefold()
+
+
+def _native_relative(base, rel):
+    """Реальное написание пути через метаданные, без чтения содержимого.
+
+    Path.resolve на case-insensitive FS сохраняет регистр alias. На case-sensitive FS
+    точное существующее имя имеет приоритет: разные файлы SECRET/secret не смешиваются.
+    """
+    current, names = base, []
+    for part in PurePosixPath(rel).parts:
+        entries = list(current.iterdir())
+        found = next((p for p in entries if p.name == part), None)
+        if found is None:
+            wanted = current / part
+            found = next((p for p in entries if _fold_path(p.name) == _fold_path(part)
+                          and p.samefile(wanted)), None)
+        if found is None:
+            raise FileNotFoundError(rel)
+        names.append(found.name)
+        current = found
+    return PurePosixPath(*names).as_posix()
+
+
+def _native_pattern(base, pattern):
+    parts = PurePosixPath(pattern.rstrip("/")).parts
+    literal = next((i for i, part in enumerate(parts) if any(c in part for c in "*?[]")), len(parts))
+    if not literal:
+        return pattern
+    prefix = _native_relative(base, PurePosixPath(*parts[:literal]).as_posix())
+    return "/".join([prefix, *parts[literal:]])
+
+
 def forbidden(policy, source, root=None):
     """Сопоставление до чтения: имя, целевой путь symlink и каталоги-предки."""
     names = {source}
@@ -203,13 +248,30 @@ def forbidden(policy, source, root=None):
         if not target.is_relative_to(base):
             raise ValueError(f"context: источник выходит за репозиторий: {source}")
         names.add(target.relative_to(base).as_posix())
-    for name in names:
-        for pattern in policy["forbidden"]:
-            if fnmatchcase(name, pattern) or name == pattern.rstrip("/"):
-                return True
-            if any(fnmatchcase(str(parent), pattern.rstrip("/"))
-                   for parent in PurePosixPath(name).parents if str(parent) != "."):
-                return True
+    patterns = policy["forbidden"]
+    if any(_matches_forbidden(name, patterns) for name in names):
+        return True
+    # Только возможный case-alias требует directory metadata; обычный отбор не сканирует
+    # каталоги дополнительно. Финальное сопоставление по реальным именам CASE-SENSITIVE.
+    folded = [_fold_path(p) for p in patterns]
+    if root is not None:
+        for name in sorted(names):
+            if _matches_forbidden(_fold_path(name), folded):
+                try:
+                    native = _native_relative(base, name)
+                except (OSError, RuntimeError):
+                    return True  # не удалось доказать, что alias безопасен
+                for pattern in patterns:
+                    if not _matches_forbidden(_fold_path(name), [_fold_path(pattern)]):
+                        continue
+                    try:
+                        native_pattern = _native_pattern(base, pattern)
+                    except FileNotFoundError:
+                        native_pattern = pattern  # отсутствующий literal не объединяет разные Linux-файлы
+                    except (OSError, RuntimeError):
+                        return True
+                    if _matches_forbidden(native, [native_pattern]):
+                        return True
     return False
 
 

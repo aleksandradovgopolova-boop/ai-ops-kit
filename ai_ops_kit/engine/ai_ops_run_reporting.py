@@ -73,6 +73,18 @@ def _review_fix_context(rep):
             "ломая уже пройденное), затем заверши:\n\n" + "\n\n".join(parts))
 
 
+def _payload_contains_child_file(root, source, items):
+    for item in items:
+        if item.get("kind") not in {"required", "optional", "specification", "decision"}:
+            continue
+        try:
+            if (root / source).samefile(root / item["source"]):
+                return True
+        except OSError:
+            continue  # идентичность не доказана; следующий этап всё равно проверит путь до чтения
+    return False
+
+
 def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, model,
                                context_hybrid, base_binding, task_text):
     """Артефакты контекста (bundle/payload/hybrid/spec/work-package); ошибки не гаснут —
@@ -103,13 +115,9 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
     # -> v1-only (fail-safe, additions=[]). Раньше hybrid только фиксировался в отчёте post-hoc.
     _hybrid_prelude = (payload or {}).get("text")
     _hybrid_fed = None
-    # Retrieval hybrid читает каталог раньше feed-фильтра. Пока у него нет pre-read фильтра,
-    # непустой forbidden оставляет только уже проверенный v1, без запуска retrieval.
-    _has_forbidden = bool((payload or {}).get("source_policy", {}).get("forbidden"))
-    if context_hybrid and payload and _has_forbidden:
-        _hybrid_fed = {"kind": "ContextHybrid", "mode": "v1-only", "fed_to_model": False,
-                       "fed_additions": [], "reason": "context.forbidden: hybrid retrieval не имеет pre-read фильтра"}
-    if context_hybrid and payload and not _has_forbidden:
+    # Context Engine применяет context.forbidden в существующем path pre-filter ДО всех
+    # retrieval-этапов; feed-фильтр ниже остаётся вторым барьером, snapshot/promotion обязательны.
+    if context_hybrid and payload:
         try:
             from ai_ops_kit.context import context_cost
             _source_policy = context_cost.load_policy(child_root)
@@ -143,6 +151,8 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
                 _hard = _budget if isinstance(_budget, int) and _budget > 0 else 20000
                 _extra, _hybrid_items = [], []
                 for _f in _adds:
+                    if _payload_contains_child_file(child_root, _f, payload["included_items"]):
+                        continue
                     if context_cost.forbidden(_source_policy, _f, child_root):
                         _denied.append(_f); continue
                     _p = child_root / _f
@@ -173,6 +183,8 @@ def _compile_context_artifacts(signals, child_root, features_dir, fid, plan, mod
                                               "time_to_context_ms": round((time.perf_counter() - context_started) * 1000, 3),
                                               "timing_scope": "compile_bundle + build_payload + hybrid"}
             _hybrid_fed = {"kind": "ContextHybrid", "mode": _hyb.get("mode"),
+                           "reason": _hyb.get("reason"), "snapshot_verified": _hyb.get("snapshot_verified"),
+                           "cache_key": _hyb.get("cache_key"),
                            "v2_additions": _adds, "fed_additions": _fed, "dropped_over_budget": _dropped,
                            "dropped_for_policy": _denied,
                            "fed_to_model": bool(_hyb.get("mode") == "hybrid" and _fed),

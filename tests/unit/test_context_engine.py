@@ -461,3 +461,150 @@ class TestSnapshotVerification:
 
         view = ce.build_context(root, "discount", "executor", sha=head, afp=afp, require_snapshot=True)
         assert view["valid"] is False
+
+
+@pytest.mark.unit
+def test_forbidden_precedes_real_fulltext_graph_semantic_and_resolution(tmp_path, monkeypatch):
+    import hashlib
+    from ai_ops_kit.context import context_cost
+    (tmp_path / 'src').mkdir()
+    (tmp_path / 'src/main.py').write_text('import helper\nimport denied\n# discount calculation\n')
+    (tmp_path / 'src/helper.py').write_text('# fulfillment\n')
+    secret = '# discount FORBIDDEN_REAL_SOURCE\n'
+    denied = tmp_path / 'src/denied.py'
+    denied.write_text(secret)
+    (tmp_path / 'src/alias.py').symlink_to('denied.py')
+    _setup_child_policies(tmp_path)
+    afp, dcp, _ = ce.load_child_policies(tmp_path)
+    baseline = ce.build_context(tmp_path, 'discount', 'executor', sha='a'*40, afp=afp, dcp=dcp)
+    original = next(i for i in baseline['included'] if i['file'] == 'src/denied.py')
+    assert original['content_hash'] == hashlib.sha256(secret.encode()).hexdigest()[:12]
+    assert context_cost.forbidden({'forbidden': []}, 'src/denied.py', tmp_path) is False
+    (tmp_path / '.ai-ops.yaml').write_text(yaml.safe_dump({'context': {'forbidden': ['src/denied.py']}}))
+    read = Path.read_text
+    calls = []
+
+    def guarded(path, *args, **kwargs):
+        if path.is_file() and path.samefile(denied):
+            calls.append(str(path))
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded)
+    view = ce.build_context(tmp_path, 'discount', 'executor', sha='a'*40, afp=afp, dcp=dcp,
+                            semantic_recall_floor=100)
+    assert calls == []
+    assert view['valid']
+    items = {i['file']: i for i in view['included']}
+    assert 'graph' in items['src/helper.py']['sources']
+    assert 'semantic' in items['src/main.py']['sources']
+    assert {'src/denied.py', 'src/alias.py'}.isdisjoint(items)
+    assert {'src/denied.py', 'src/alias.py'} <= set(view['pre_filtered_denied'])
+    assert 'src/denied.py' not in view['read_paths']
+
+
+@pytest.mark.unit
+def test_forbidden_mandatory_is_unread_and_blocks_promotion(tmp_path, monkeypatch):
+    from ai_ops_kit.context import context_hybrid
+    (tmp_path / 'denied.md').write_text('FORBIDDEN_MANDATORY')
+    (tmp_path / '.ai-ops.yaml').write_text('context:\n  forbidden: [denied.md]\n')
+    _setup_child_policies(tmp_path)
+    afp, dcp, _ = ce.load_child_policies(tmp_path)
+    read = Path.read_text
+    calls = []
+
+    def guarded(path, *args, **kwargs):
+        if path == tmp_path / 'denied.md':
+            calls.append(str(path))
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded)
+    view = ce.build_context(tmp_path, 'FORBIDDEN', 'executor', sha='a'*40, afp=afp, dcp=dcp,
+                            v1_mandatory=['denied.md'])
+    assert calls == [] and view['valid'] is False
+    assert view['mandatory_excluded_access'] == ['denied.md']
+    assert view['excluded_access'][0]['read'] is False
+    assert view['read_paths'] == []
+    hybrid = context_hybrid.build_hybrid(['denied.md'], view, ['public','internal'])
+    assert hybrid['mode'] == 'v1-only' and not hybrid['promotion_ready']
+
+
+@pytest.mark.unit
+def test_source_policy_fingerprint_changes_without_view_content_change(tmp_path):
+    _setup_child_policies(tmp_path)
+    (tmp_path / 'main.py').write_text('# discount\n')
+    afp, dcp, _ = ce.load_child_policies(tmp_path)
+    first = ce.build_context(tmp_path, 'discount', 'executor', sha='a'*40, afp=afp, dcp=dcp)
+    (tmp_path / '.ai-ops.yaml').write_text('context:\n  forbidden: [unrelated.md]\n')
+    second = ce.build_context(tmp_path, 'discount', 'executor', sha='a'*40, afp=afp, dcp=dcp)
+    assert first['included'] == second['included']
+    assert first['cache_key'] != second['cache_key']
+    assert 'context:' in second['cache_key']
+
+
+@pytest.mark.unit
+def test_external_symlink_is_unread_even_for_mandatory(tmp_path, monkeypatch):
+    root = tmp_path / 'child'
+    root.mkdir()
+    outside = tmp_path / 'outside.py'
+    outside.write_text('# discount OUTSIDE_SOURCE\n')
+    (root / 'alias.py').symlink_to(outside)
+    _setup_child_policies(root)
+    afp, dcp, _ = ce.load_child_policies(root)
+    read = Path.read_text
+    calls = []
+
+    def guarded(path, *args, **kwargs):
+        if path.is_file() and path.samefile(outside):
+            calls.append(str(path))
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded)
+    view = ce.build_context(root, 'discount', 'executor', sha='a'*40, afp=afp, dcp=dcp,
+                            v1_mandatory=['alias.py', '../outside.py'])
+    assert calls == [] and view['valid'] is False
+    assert view['mandatory_excluded_access'] == ['../outside.py', 'alias.py']
+
+
+@pytest.mark.unit
+def test_malformed_source_policy_stops_before_retrieval(tmp_path, monkeypatch):
+    source = tmp_path / 'main.py'
+    source.write_text('# discount source\n')
+    _setup_child_policies(tmp_path)
+    afp, dcp, _ = ce.load_child_policies(tmp_path)
+    (tmp_path / '.ai-ops.yaml').write_text('context:\n  forbidden: wrong-shape\n')
+    read = Path.read_text
+    calls = []
+
+    def guarded(path, *args, **kwargs):
+        if path == source:
+            calls.append(str(path))
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded)
+    with pytest.raises(ValueError, match='context.forbidden'):
+        ce.build_context(tmp_path, 'discount', 'executor', sha='a'*40, afp=afp, dcp=dcp)
+    assert calls == []
+
+
+@pytest.mark.unit
+def test_forbidden_gitignore_stops_retrieval_without_reading_it(tmp_path, monkeypatch):
+    control = tmp_path / '.gitignore'
+    control.write_text('private-build/\n')
+    (tmp_path / 'private-build').mkdir()
+    hidden = tmp_path / 'private-build/source.py'
+    hidden.write_text('# discount PRIVATE_IGNORED_SOURCE\n')
+    _setup_child_policies(tmp_path)
+    afp, dcp, _ = ce.load_child_policies(tmp_path)
+    (tmp_path / '.ai-ops.yaml').write_text('context:\n  forbidden: [.gitignore]\n')
+    read = Path.read_text
+    calls = []
+
+    def guarded(path, *args, **kwargs):
+        if path in (control, hidden):
+            calls.append(str(path))
+        return read(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', guarded)
+    view = ce.build_context(tmp_path, 'discount', 'executor', sha='a'*40, afp=afp, dcp=dcp)
+    assert not view['valid'] and view['included'] == [] and calls == []
+    assert '.gitignore' in view['invalid_reasons'][0]
