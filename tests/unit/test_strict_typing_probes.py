@@ -21,6 +21,7 @@ from ai_ops_kit.engine.run_context import RunContext
 from ai_ops_kit.kernel.ports import ExecutorPort, ExecutionSpec, ExecutionResult
 from ai_ops_kit.shared.contracts import GateResultV2
 from ai_ops_kit.shared.events import subscribe
+from ai_ops_kit.shared.budget import Budget, resolve_budget
 
 ctx = RunContext.from_run_args(
     task_text="bounded task", signals={"risk": "low"}, child_root=Path("/tmp/child"),
@@ -35,6 +36,15 @@ ctx.rev_prop = lambda prompt: {"kind": "reviewer-result", "status": "pass"}
 ctx.auth_prop = lambda prompt: "kind: requirements-artifact"
 ctx.auth_prop = lambda prompt: {"kind": "requirements-artifact"}
 ctx.writer_prov = lambda prompt: "raw model response"
+budget = Budget(max_model_calls=3, max_cost=1.5, max_duration="1m")
+budget.max_model_calls = 4
+budget.max_cost = 2.5
+budget.max_duration = "2m"
+budget.model_calls = 1
+budget.cost = 0.25
+resolved: Budget = resolve_budget(budget, {"max_model_calls": 4, "max_cost": 2.5, "max_duration": "2m"})
+remaining: int | None = resolved.remaining_calls()
+snapshot: dict[str, Any] = resolved.to_dict()
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -68,6 +78,13 @@ def test_real_contract_consumer_passes_strict(tmp_path):
 
 
 @pytest.mark.parametrize(("before", "after", "error"), [
+    ('budget.max_model_calls = 4', 'budget.max_model_calls = "four"', '[assignment]'),
+    ('budget.max_cost = 2.5', 'budget.max_cost = "quoted"', '[assignment]'),
+    ('budget.max_duration = "2m"', 'budget.max_duration = []', '[assignment]'),
+    ('budget.model_calls = 1', 'budget.model_calls = "one"', '[assignment]'),
+    ('budget.cost = 0.25', 'budget.cost = "unknown"', '[assignment]'),
+    ('max_model_calls=3', 'max_model_calls="three"', '[arg-type]'),
+    ('remaining: int | None', 'remaining: str', '[assignment]'),
     ('ctx.max_steps = 5', 'ctx.max_steps = "five"', '[assignment]'),
     ('max_steps=4', 'max_steps="four"', '[arg-type]'),
     ('ctx.prop = lambda prompt: {"done": True}', 'ctx.prop = lambda prompt: "done"', '[assignment]'),
@@ -94,10 +111,10 @@ def test_effective_options_match_strict_without_leaking_to_other_modules():
     _, configured = process_options(["--config-file", str(ROOT / "pyproject.toml")])
     _, strict = process_options(["--config-file", str(ROOT / "pyproject.toml"), "--strict"])
     for module in ("ai_ops_kit.kernel.ports", "ai_ops_kit.shared.contracts",
-                   "ai_ops_kit.shared.events", "ai_ops_kit.engine.run_context"):
+                   "ai_ops_kit.shared.events", "ai_ops_kit.shared.budget", "ai_ops_kit.engine.run_context"):
         effective = configured.clone_for_module(module)
         reference = strict.clone_for_module(module)
         for flag in PER_MODULE_OPTIONS | {"warn_redundant_casts"}:
             assert getattr(effective, flag) == getattr(reference, flag), (module, flag)
     # Сосед не был частью среза: strict=true в override дал бы здесь True.
-    assert configured.clone_for_module("ai_ops_kit.shared.budget").disallow_any_generics is False
+    assert configured.clone_for_module("ai_ops_kit.shared.gitio").disallow_any_generics is False
