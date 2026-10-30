@@ -98,4 +98,5 @@
 
 - [Закрытие shell-долга и перенос решений commit-msg hook — #1410](1410-shell-thin-completion.md).
 
+- [Strict mypy на независимом срезе контрактов — #1412](1412-strict-contracts.md).
 - [Контекст как измеряемый ресурс — #1403](1403-context-resource.md).

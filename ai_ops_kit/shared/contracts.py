@@ -119,7 +119,7 @@ class GateResultV2(TypedDict, total=False):
     review_mode: Literal["read-only", "writer"]
     created_at: Optional[str]
     expires_at: Optional[str]
-    override: Optional[dict]
+    override: Optional[dict[str, Any]]
     reviewer_outcome: Optional[Literal["pass", "warn", "fail", "abstain"]]
     resolution: Optional[Literal["resolved", "pending_human"]]
     delivery_allowed: bool

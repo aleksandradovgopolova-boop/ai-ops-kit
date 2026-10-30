@@ -208,29 +208,43 @@ select = [
 # дал ни одной: механизма не было вовсе. Это тот же класс «объявлено и не исполняется», только с
 # другой стороны — здесь не было объявлено и не исполнялось.
 
-# mypy: ОБЪЯВЛЕН И ТЕПЕРЬ ИСПОЛНЯЕТСЯ (F-05 внешнего аудита 2026-09-09). Стоял в [dev] и не
-# запускался нигде — тот же класс «объявлено, но не исполняется», что кит вычистил у ruff; инвентарь
-# `registry/enforcement-inventory.yaml` его подсветил. Замер решил спор «включить vs убрать»:
-# обычный проход нашёл 8 РЕАЛЬНЫХ проблем на фундаменте (implicit-Optional, рассогласование возврата
-# с TypedDict, необъявленные переменные) — типы окупаются, поэтому включён, а не удалён.
-# ОБЛАСТЬ — фундамент (kernel+shared), где контракты объявлены Protocol/TypedDict и цена типизации
-# ниже всего. Полная аннотация всего пакета (`disallow_untyped_defs`, ~107 подписей на фундаменте) —
-# отдельный ратчет-ВВЕРХ, не этот шаг: сейчас держим уровень «реальные типовые ошибки = 0».
-# `follow_imports = silent` — ошибки из НЕ-фундамента (его импортов) не краснят гейт: область строгая.
-# `py.typed` НЕ добавлен намеренно: пакет типизирован лишь на фундаменте, и маркер «весь пакет
-# типизирован» был бы над-заявлением — появится, когда покрытие вырастет.
+# Mypy: базовый охват kernel+shared сохраняется; strict растёт по независимым срезам.
+# #1412: порты, TypedDict, события и состояние RunContext. JSON Schema остаётся источником
+# внешних форматов, Any явно оставлен только на открытых словарях расширений.
+# follow_imports=silent ограничивает диагностику названными targets; импортированные типы
+# доступны потребителям. Это НЕ strict всего пакета; py.typed пока не объявляем.
+# Ратчет охвата и подавлений: tests/contracts/test_strict_typing_scope.py.
 [tool.mypy]
-files = ["ai_ops_kit/shared", "ai_ops_kit/kernel"]
+files = ["ai_ops_kit/shared", "ai_ops_kit/kernel", "ai_ops_kit/engine/run_context.py"]
 ignore_missing_imports = true
 follow_imports = "silent"
+warn_redundant_casts = true
 
-# Ратчет-ВВЕРХ (F-05 доводка 2026-09-10): kernel уже ПОЛНОСТЬЮ типизирован, поэтому на нём включён
-# строгий `disallow_untyped_defs` — новая функция без аннотаций в ядре краснит. shared: ВСЕ файлы под строгим disallow (99 подписей + каскад ошибок тел закрыты,
-# реальными типами, не Any). Дальше по коду — отдельный
-# шаг ратчета, когда охват вырастет. Так граница «где типы обязательны» ходит только вверх.
 [[tool.mypy.overrides]]
 module = ["ai_ops_kit.kernel.*", "ai_ops_kit.shared.*"]
 disallow_untyped_defs = true
+
+[[tool.mypy.overrides]]
+module = [
+    "ai_ops_kit.kernel.ports",
+    "ai_ops_kit.shared.contracts",
+    "ai_ops_kit.shared.events",
+    "ai_ops_kit.engine.run_context",
+]
+# Полный набор --strict mypy 2.3.1, развёрнутый по модулям: strict=true в override
+# этой версии протекает в global options. warn_redundant_casts — только global (выше).
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_untyped_calls = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+warn_unused_ignores = true
+warn_return_any = true
+implicit_reexport = false
+strict_equality = true
+extra_checks = true
 
 # towncrier: ЕДИНСТВЕННЫЙ из шести рассмотренных инструментов, у кого есть гейт «в этой ветке
 # добавлена запись для changelog» (EV-1137). В CI зовём ТОЛЬКО `check` (см. package-quality.yml):
