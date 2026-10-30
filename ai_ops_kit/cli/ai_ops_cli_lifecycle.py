@@ -99,8 +99,8 @@ def _intent_reach(task, child_root, signals, a):
     root = child_root
 
     if sub == "adoption":
-        from ai_ops_kit.engops import adoption
-        return adoption.main(["status", str(root)])
+        from ai_ops_kit.cli import adoption as adoption_cli
+        return adoption_cli.main(["status", str(root)])
 
     if sub in ("", "status"):
         rep = cr.registration_state(root)

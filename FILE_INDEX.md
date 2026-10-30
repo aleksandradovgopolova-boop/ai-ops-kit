@@ -866,3 +866,5 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/engops/adoption.py` — добровольный локальный учёт проектов и наблюдаемой активности;
   `docs/architecture/adoption-opt-in.md` — границы доверия и приватности;
   `docs/agent-guides/adoption-measurement.md` — согласие, экспорт, импорт и сводка.
+
+- `ai_ops_kit/cli/adoption.py` — процессный вход добровольного учёта; библиотека engops возвращает данные без печати.

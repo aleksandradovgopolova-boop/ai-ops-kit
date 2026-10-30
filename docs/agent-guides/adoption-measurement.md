@@ -11,7 +11,7 @@ Kit по умолчанию ничего не отправляет и не за�
 Создайте ID один раз и сохраните файл в истории проекта обычным процессом PR:
 
 ```bash
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption identity .
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption identity .
 # Включите .ai/project/adoption-id.json в обычный коммит/PR проекта.
 ```
 
@@ -23,7 +23,7 @@ PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption identity .
 Только владелец конкретного проекта включает учёт на этой копии:
 
 ```bash
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption consent . --owner
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption consent . --owner
 ./ai-ops reach adoption . --json
 ```
 
@@ -36,8 +36,8 @@ PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption consent . --owner
 получателю сами:
 
 ```bash
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption preview . --start 2026-10-01 --end 2026-10-30
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption export . \
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption preview . --start 2026-10-01 --end 2026-10-30
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption export . \
   --start 2026-10-01 --end 2026-10-30 --output /tmp/adoption-october.json
 ```
 
@@ -48,8 +48,8 @@ PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption export . \
 Отзыв очищает локальные даты и останавливает учёт:
 
 ```bash
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption revoke . --owner
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption export . \
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption revoke . --owner
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption export . \
   --start 2026-10-01 --end 2026-10-30 --output /tmp/adoption-revoked.json
 ```
 
@@ -63,8 +63,8 @@ PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption export . \
 известным оператору фактам, по умолчанию unknown:
 
 ```bash
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption import . /tmp/adoption-october.json --relationship external
-PYTHONPATH=.ai/managed python3 -m ai_ops_kit.engops.adoption report . \
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption import . /tmp/adoption-october.json --relationship external
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption report . \
   --start 2026-10-01 --end 2026-10-30 \
   --owned /path/to/owned-project --external /path/to/known-external-project
 ```

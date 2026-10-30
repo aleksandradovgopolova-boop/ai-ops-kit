@@ -9,6 +9,7 @@ import subprocess
 import pytest
 
 from ai_ops_kit.engops import adoption as a
+from ai_ops_kit.cli import adoption as adoption_cli
 from ai_ops_kit.shared.events import emit
 
 pytestmark = pytest.mark.unit
@@ -303,7 +304,7 @@ def test_cli_reach_status_does_not_enable_consent(repo, capsys):
 
 
 def test_cli_errors_are_sanitized(repo, capsys):
-    assert a.main(["consent", str(repo)]) == 2
+    assert adoption_cli.main(["consent", str(repo)]) == 2
     output = capsys.readouterr().out
     assert repo.name not in output
     assert '"error"' in output
@@ -312,7 +313,7 @@ def test_cli_errors_are_sanitized(repo, capsys):
 def test_preview_shows_export_fields_without_saving(repo, capsys):
     a.consent(repo, owner=True)
     before = set(a._store(repo).rglob("*"))
-    assert a.main(["preview", str(repo), "--start", window()[0], "--end", window()[1]]) == 0
+    assert adoption_cli.main(["preview", str(repo), "--start", window()[0], "--end", window()[1]]) == 0
     doc = json.loads(capsys.readouterr().out)
     assert doc["project_id"] == a.identity(repo)
     assert set(a._store(repo).rglob("*")) == before

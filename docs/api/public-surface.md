@@ -127,7 +127,7 @@ experimental:
     # collect`). Регистрация несёт только имя проекта + версию кита + дату + анонимный id (без путей/
     # почты/кода). Форма записи и сводки ещё уточняется — дочка вправе пользоваться, зная это.
     # reach adoption: только локальное состояние нового добровольного учёта.
-    # Полный экспериментальный CLI: python3 -m ai_ops_kit.engops.adoption
+    # Полный экспериментальный CLI: python3 -m ai_ops_kit.cli.adoption
     # identity|consent|revoke|status|preview|export|import|report. Записи псевдонимны, сети нет.
     - reach
     # roadmap: без подкоманды — Now/Next/Later из плана (read-only); `roadmap sync-issues`
@@ -336,7 +336,7 @@ audience:
     - replan
     - readout
     # reach adoption: только локальное состояние нового добровольного учёта.
-    # Полный экспериментальный CLI: python3 -m ai_ops_kit.engops.adoption
+    # Полный экспериментальный CLI: python3 -m ai_ops_kit.cli.adoption
     # identity|consent|revoke|status|preview|export|import|report. Записи псевдонимны, сети нет.
     - reach
     - scorecard

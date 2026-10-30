@@ -59,6 +59,7 @@ AI сопровождает продукт на всём жизненном ци
 - [decision-boundary.md](decision-boundary.md) — что кит решает сам, а что всегда за человеком:
   почему одно идёт в `inbox` на ваше решение, а другое кит делает без вопроса.
 - [adoption-guide.md](adoption-guide.md) — гайд внедрения по ролям.
+- [Учёт проектов](agent-guides/adoption-measurement.md) — добровольное согласие, просмотр выгрузки и отзыв без сети.
 - [platform-model.md](platform-model.md) — модель платформы на одном экране.
 - [release-channels.md](release-channels.md) — каналы релиза и как зарабатывается `stable`.
 - [parallel-work.md](parallel-work.md) — параллельная работа над одним репозиторием без «беговой дорожки».
