@@ -153,3 +153,30 @@ JSON Schema остаётся источником формата, а TypedDict �
 не измерялась. Перед возможным переходом нужен отдельный план с одним источником и
 корпусом одинаковых positive/negative документов, включая missing/extra/null/enum,
 вложенные поля и прежние совместимые документы; затем решение о зависимости.
+
+## Результат маршрутизации: следующий срез #1412
+
+`shared.ai_route.route()` возвращает `shared.contracts.RouteResult`: статическую
+проекцию фактического Python-словаря. Потребитель видит типы workflow, выбранных
+provider/runtime, причин, capabilities, fallbacks и `human_approval_required`.
+Сам `shared.ai_route` включён в существующий strict-ратчет. Проверяются настоящие
+импорты по текущему адресу и через старый `engine.ai_route`; реэкспорт сохраняется.
+Signals и YAML registry остаются открытыми границами с явным `Any`. Их содержимое
+этот статический срез полностью не проверяет.
+
+Политика выбора остаётся в registry, внешний формат — в
+`schemas/route-decision.schema.json`. `RouteResult` не вводит runtime-валидацию,
+нормализацию или отдельные enum/const-правила. Существующий `kernel.ports.Classification`
+описывает другой интерфейс с ключами `provider`/`runtime` и строковыми fallbacks;
+он не подменяет фактический словарь `route()`.
+
+До этого изменения Python-вывод уже расходился с текущей JSON Schema:
+при пустом доступном выборе provider/runtime могут быть `None`, а вывод содержит
+`classification_confidence`, которого в схеме с `additionalProperties: false` нет.
+Nullable runtime возможен также в fallback. Проекция честно отражает эти значения;
+она не доказывает, что такой словарь проходит JSON Schema. Схема и runtime-поведение
+в этом срезе не меняются. Их согласование — отдельная работа, не условие выпуска 4.12.
+
+Compiler-пробы отвергают неверные типы выбранных значений, причин и approval;
+проверяют nullable provider у потребителя. Сценарии роутера, пустой выбор и approval
+проверяются существующим runtime-путём. [Change Brief](../change-briefs/1412-strict-routing.md).
