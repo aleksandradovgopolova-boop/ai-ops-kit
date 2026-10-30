@@ -295,3 +295,43 @@ def test_changed_code_without_release_notes_does_not_look_like_idle(release_case
     assert report["cycle_state"] != "idle"
     assert "unreleased_changes_without_fragments" in report["blockers"]
     assert not report["release_ready"]
+
+
+def test_cleared_merged_ci_association_and_spoofed_run_title_stay_unknown(release_case):
+    root, snap = release_case
+    for run in snap['ci']['10']:
+        run['pull_requests'] = []
+        # GitHub drops the association after merge. An untrusted title cannot restore it.
+        run['display_title'] = f'ci-src:v1 pr=10 h={PRHEAD} b={BASE} m={HEAD} w={HEAD}'
+        run['source_proof'] = {'verified': True, 'tested_merge': HEAD,
+                               'head': PRHEAD, 'base': BASE, 'workflow_path': run['path'],
+                               'producer_sha256': 'a'*64}
+    result = rp.build(root, snap)
+    assert result['composition_available'] and result['plan_ready']
+    assert not result['implementation_evidence_complete'] and not result['release_ready']
+    assert 'implementation_ci_incomplete' in result['blockers']
+
+
+def test_unknown_dependency_still_blocks_plan_with_lost_ci_associations(release_case):
+    root, snap = release_case
+    for run in snap['ci']['10']:
+        run['pull_requests'] = []
+    (root / 'planning/plan.yaml').write_text(yaml.safe_dump({'work': [
+        {'id': 'next-kit-release-4-12-0', 'depends_on': ['missing-acceptance']}]}))
+    snap['input_digests'] = rp.input_digests(root)
+    result = rp.build(root, snap)
+    assert result['composition_available'] and not result['plan_ready']
+    assert result['dependency_gaps'] == ['missing-acceptance']
+    assert not result['release_ready']
+
+
+def test_defining_plan_with_lost_ci_associations_preserves_inputs(release_case):
+    root, snap = release_case
+    for run in snap['ci']['10']:
+        run['pull_requests'] = []
+    before = deepcopy(snap)
+    files = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file()}
+    result = rp.build(root, snap)
+    assert result['plan_ready'] and not result['release_ready']
+    assert snap == before
+    assert files == {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file()}

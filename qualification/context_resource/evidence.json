@@ -1,10 +1,14 @@
 {
   "source_sha256": {
     "ai_ops_kit/context/context_compiler.py": "9f223269e7c08259c349300fcb444a07cc1cbb9d665066a6a134738b92e09380",
-    "ai_ops_kit/context/context_cost.py": "03e8e122ac51bbd014e7cb6cb020258740dd4cc98b00e163a0b12b95f63c2149",
+    "ai_ops_kit/context/context_cost.py": "96d195abb077d6d040fd78d1de74c8f329df99575583fad25cc343aa38e621ff",
     "ai_ops_kit/gates/preflight.py": "67549bea2085a717f9e030d50590601d54881fe30217bc1dbd535b72772cca26",
-    "ai_ops_kit/engine/ai_ops_run_reporting.py": "db4d77f532f6caace42b1ee9ff34e2193f73bd12d4c952ea5bf09ac7cd80fa26",
-    "qualification/context_resource/run.py": "48242fbb61d5db9f6feeb6c4562b41eb3c86aa8dee386d17a51c669a1b3717f5"
+    "ai_ops_kit/engine/ai_ops_run_reporting.py": "d9f9d5f49730c430e104a579f1698565d72bd893cb7eb88bdf38bd6ebe6b9ffe",
+    "ai_ops_kit/context/context_engine.py": "bcfc875eb6518e66a6f20579932754eb8f3050cd91d494d9d1f696a9ee78988c",
+    "ai_ops_kit/context/context_hybrid.py": "f6da476e780fb4bf78e2363dffd25d112928cc9ea356fa2630a4d3a7918b8c99",
+    "ai_ops_kit/context/repo_graph.py": "55cf726fd87704660ef4c3a79216178a29147debbc2752c999f5bb4cba9f8b09",
+    "ai_ops_kit/context/semantic_lite.py": "ab7e0e8c4907275b3e9493bc28305b8395b28207532ee5dd83c3d14d7efa0bc5",
+    "qualification/context_resource/run.py": "cf589ef27932606d067ddea675045cdb864313fab60a60c9e52b5162a207cf41"
   },
   "scenarios": [
     {
@@ -14,11 +18,13 @@
       "writer_calls": [
         {
           "required_present": true,
-          "forbidden_present": false
+          "forbidden_present": false,
+          "hybrid_present": false
         },
         {
           "required_present": true,
-          "forbidden_present": false
+          "forbidden_present": false,
+          "hybrid_present": false
         }
       ],
       "output": "LOCAL_CONTEXT_1403\n",
@@ -44,8 +50,8 @@
       },
       "commit": {
         "branch": "ai-ops/context-resource",
-        "sha": "14b028c78195a63575bc164f43a5343ce73e7160",
-        "evidence_revision": "14b028c78195a63575bc164f43a5343ce73e7160",
+        "sha": "a5181766f94e53b239e049eb3caea335873afdde",
+        "evidence_revision": "a5181766f94e53b239e049eb3caea335873afdde",
         "evidence_on_exact_sha": true,
         "changed_files": [
           "src/result.txt"
@@ -125,7 +131,7 @@
         "schema_version": 1,
         "kind": "ContextPayload",
         "workitem_id": "context-resource",
-        "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
+        "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
         "model": null,
         "context_budget": 20000,
         "payload_budget": 12000,
@@ -168,7 +174,7 @@
           ],
           "loaded_sources": 3,
           "relevant_sources": 3,
-          "time_to_context_ms": 216.213,
+          "time_to_context_ms": 79.905,
           "timing_scope": "compile_bundle + build_payload"
         },
         "included_items": [
@@ -176,7 +182,7 @@
             "source": "docs/needed.md",
             "kind": "required",
             "hash": "9ce11db45fc9",
-            "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
+            "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
             "tokens": 14,
             "reason": "context.required",
             "truncated": false
@@ -185,7 +191,7 @@
             "source": "task",
             "kind": "project_context",
             "hash": "3f28a71a357f",
-            "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
+            "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
             "tokens": 15,
             "reason": "текст задачи",
             "truncated": false
@@ -194,7 +200,7 @@
             "source": "docs/noise.md",
             "kind": "optional",
             "hash": "073e1f30a8db",
-            "revision": "96be3ad0121ab02ebc421a5b72bc9fddd591afc6",
+            "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
             "tokens": 140,
             "reason": "context.optional",
             "truncated": false
@@ -287,7 +293,10 @@
           }
         ],
         "excluded_for_budget": []
-      }
+      },
+      "context_hybrid": null,
+      "forbidden_read_calls": [],
+      "hybrid_fixture": null
     },
     {
       "scope": "local-pipeline-controlled-proposer",
@@ -375,7 +384,7 @@
         "schema_version": 1,
         "kind": "ContextPayload",
         "workitem_id": "context-resource",
-        "revision": "a609966e0fd4d311e9cd03de192098d90818d8ed",
+        "revision": "4b5ab9bafccf3f8e31e839f1f55a619b5c8a6ce1",
         "model": null,
         "context_budget": 100,
         "payload_budget": 60,
@@ -424,7 +433,7 @@
           ],
           "loaded_sources": 1,
           "relevant_sources": 3,
-          "time_to_context_ms": 177.564,
+          "time_to_context_ms": 68.312,
           "timing_scope": "compile_bundle + build_payload"
         },
         "included_items": [
@@ -432,7 +441,7 @@
             "source": "task",
             "kind": "project_context",
             "hash": "3f28a71a357f",
-            "revision": "a609966e0fd4d311e9cd03de192098d90818d8ed",
+            "revision": "4b5ab9bafccf3f8e31e839f1f55a619b5c8a6ce1",
             "tokens": 15,
             "reason": "текст задачи",
             "truncated": false
@@ -538,6 +547,333 @@
             "reason": "вытеснено бюджетом payload"
           }
         ]
+      },
+      "context_hybrid": null,
+      "forbidden_read_calls": [],
+      "hybrid_fixture": null
+    },
+    {
+      "scope": "local-pipeline-controlled-proposer",
+      "external_model_calls": 0,
+      "mode": "hybrid",
+      "writer_calls": [
+        {
+          "required_present": true,
+          "forbidden_present": false,
+          "hybrid_present": true
+        },
+        {
+          "required_present": true,
+          "forbidden_present": false,
+          "hybrid_present": true
+        }
+      ],
+      "output": "LOCAL_CONTEXT_1403\nHYBRID_ALLOWED_1403\n",
+      "loop": {
+        "stopped": "done",
+        "steps": 2,
+        "applied_writes": 1,
+        "denied": 0,
+        "denied_reasons": [],
+        "transcript": [
+          {
+            "step": 0,
+            "op": "write",
+            "allowed": true,
+            "ok": true,
+            "reason": "запись в пределах write_scope"
+          },
+          {
+            "step": 1,
+            "done": true
+          }
+        ]
+      },
+      "commit": {
+        "branch": "ai-ops/context-resource",
+        "sha": "000a88bcbf8ff0e497564607e761d24071933cbb",
+        "evidence_revision": "000a88bcbf8ff0e497564607e761d24071933cbb",
+        "evidence_on_exact_sha": true,
+        "changed_files": [
+          "src/result.txt"
+        ],
+        "produced_by": "broker",
+        "tree_clean_before_checks": true,
+        "tree_clean_after_checks": true
+      },
+      "overall_status": "delivered",
+      "preflight": {
+        "schema_version": 1,
+        "kind": "PreflightTruth",
+        "ok": true,
+        "blocked": false,
+        "task_type": "QUICK",
+        "checks": {
+          "classification": {
+            "ok": true,
+            "task_type": "QUICK"
+          },
+          "context_payload": {
+            "ok": true,
+            "built": true
+          },
+          "spec": {
+            "ok": true,
+            "artifact_present": false,
+            "missing": [
+              "goal",
+              "scope",
+              "expected_behavior",
+              "acceptance_criteria",
+              "constraints",
+              "affected_files"
+            ],
+            "required_for_heavy": false,
+            "author_stage": false
+          },
+          "atomic": {
+            "ok": true,
+            "should_decompose": false,
+            "selected_package": null,
+            "selected_valid": false
+          },
+          "context_resource": {
+            "ok": true,
+            "errors": []
+          },
+          "context_budget": {
+            "ok": true,
+            "overflow": false
+          },
+          "approvals": {
+            "ok": true,
+            "required": [],
+            "missing": []
+          },
+          "lifecycle": {
+            "ok": true,
+            "errors": []
+          },
+          "economic_budget": {
+            "ok": true,
+            "verdict": "proceed_unknown",
+            "estimate_status": "unavailable",
+            "cost_median": null,
+            "cost_max": null,
+            "sample_tasks": 0,
+            "advisories": [
+              "estimate_unavailable"
+            ]
+          }
+        },
+        "reasons": []
+      },
+      "context": {
+        "schema_version": 1,
+        "kind": "ContextPayload",
+        "workitem_id": "context-resource",
+        "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+        "model": null,
+        "context_budget": 20000,
+        "payload_budget": 12000,
+        "output_reserve": 5000,
+        "tool_loop_reserve": 3000,
+        "payload_tokens": 37,
+        "compiled_text_tokens_estimate": 153,
+        "resource_check": {
+          "ok": true,
+          "errors": [],
+          "missing_required": [],
+          "within_budget": true
+        },
+        "source_policy": {
+          "configured": true,
+          "required": [
+            "docs/needed.md"
+          ],
+          "optional": [
+            "docs/forbidden.md",
+            "docs/noise.md"
+          ],
+          "forbidden": [
+            "docs/forbidden.md",
+            "docs/noise.md",
+            "docs/not-selected.md",
+            "labels.json",
+            "rules/",
+            "skills",
+            "src/denied.py",
+            "src/sécret.py"
+          ],
+          "run_tokens": 20000
+        },
+        "metrics": {
+          "status": "unknown",
+          "precision": null,
+          "waste": null,
+          "miss": null,
+          "basis": "explicit-source-labels",
+          "unlabelled_sources": [
+            "docs/needed.md",
+            "src/hybrid.py",
+            "task"
+          ],
+          "time_to_context_ms": 111.541,
+          "timing_scope": "compile_bundle + build_payload + hybrid"
+        },
+        "included_items": [
+          {
+            "source": "docs/needed.md",
+            "kind": "required",
+            "hash": "9ce11db45fc9",
+            "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+            "tokens": 14,
+            "reason": "context.required",
+            "truncated": false
+          },
+          {
+            "source": "task",
+            "kind": "project_context",
+            "hash": "3f28a71a357f",
+            "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+            "tokens": 15,
+            "reason": "текст задачи",
+            "truncated": false
+          },
+          {
+            "source": "src/hybrid.py",
+            "kind": "hybrid",
+            "tokens": 8,
+            "hash": "b7accb0e0e62",
+            "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+            "truncated": false,
+            "reason": "hybrid v2-addition"
+          }
+        ],
+        "excluded_for_policy": [
+          {
+            "source": "rules/core/AIWorkingAgreement.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ContextManagement.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/DefinitionOfDone.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/DelegationPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/EngineeringOperatingModel.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/EvidencePolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/FreshnessPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/HumanApproval.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ProductStatusPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/ScopeControl.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/SessionEconomyPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/core/SourceOfTruth.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/APICompatibility.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/Architecture.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/CodeStyle.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/ConcurrencyAwareness.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/DatabaseChanges.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/DependencyPolicy.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/ErrorHandling.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "rules/engineering/EventNamingConvention.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "docs/forbidden.md",
+            "reason": "context.forbidden"
+          },
+          {
+            "source": "docs/noise.md",
+            "reason": "context.forbidden"
+          }
+        ],
+        "excluded_for_budget": []
+      },
+      "context_hybrid": {
+        "kind": "ContextHybrid",
+        "mode": "hybrid",
+        "reason": "promotion gate ready -> mandatory (v1 файлы + rules/policy refs) + v2-additions",
+        "snapshot_verified": true,
+        "cache_key": "repo:/private/tmp/ai-ops-1403-hybrid-reviewed-20261030/hybrid|sha:739febd7bf6bd3fb78da3e0d31e0517f3d993ba4|afp:fixture-afp:ea5bbf673f966eca|dcp:fixture-dcp:8986a9207379b44c|allowed:0e047226|role:executor|q:Запиши ответ из docs/needed.md в src/result.txt|b:20000|idx:1|context:25888bb5ff74",
+        "v2_additions": [
+          "docs/needed.md",
+          "src/hybrid.py"
+        ],
+        "fed_additions": [
+          "src/hybrid.py"
+        ],
+        "dropped_over_budget": [],
+        "dropped_for_policy": [],
+        "fed_to_model": true,
+        "prompt_tokens_est": 114,
+        "hard_window": 20000,
+        "exact_snapshot": true,
+        "mandatory_references": [
+          "rule:core",
+          "rule:engineering",
+          "policy:fixture-afp",
+          "policy:fixture-dcp"
+        ],
+        "promotion_ready": true,
+        "base_sha": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4"
+      },
+      "forbidden_read_calls": [],
+      "hybrid_fixture": {
+        "case_alias_exists": true,
+        "unicode_alias_exists": true
       }
     }
   ]

@@ -215,6 +215,7 @@ def semantic_fingerprint(report):
     return digest({"target": report.get("target_version"),
                    "commits": [r["sha"] for r in report.get("included_commits", [])],
                    "composition": report.get("composition_available"),
+                   "plan": report.get("plan_ready"),
                    "evidence": report.get("implementation_evidence_complete"),
                    "blockers": report.get("blockers"),
                    "deferred": report.get("deferred_issues"), "channel": report.get("channel"),
@@ -307,7 +308,7 @@ def build(root, snapshot):
         if channel_errors:
             report["blockers"].append("channel_evidence_missing")
         report["final_release_checks_observed"] = final_ok
-        report["plan_ready"] = bool(report["composition_available"] and report["implementation_evidence_complete"] and not missing_deps)
+        report["plan_ready"] = bool(report["composition_available"] and not unlinked and not missing_deps)
         report["release_ready"] = bool(report["plan_ready"] and final_ok and target == current
                                        and not report["blockers"])
         if not final_ok:
