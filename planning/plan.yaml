@@ -1174,11 +1174,13 @@ work:
     write_scope:
       - ai_ops_kit/devtools/
       - ai_ops_kit/planning/
+      - ai_ops_kit/integrations/github.py
+      - dashboard/
       - .github/workflows/
       - tests/
       - docs/
       - newsfragments/
-    evidence: docs/change-briefs/next-release-4.12.0.md
+    evidence: docs/change-briefs/1439-release-replanning.md
     rationale: >-
       P1, следующая независимая реализация после фиксации ближайшего релизного плана,
       не блокер 4.12.0. Продолжить release_assembly, существующие события/reconcile,
