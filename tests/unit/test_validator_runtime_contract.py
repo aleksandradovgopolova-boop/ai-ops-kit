@@ -17,6 +17,7 @@
 """
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -86,7 +87,7 @@ STANDALONE = [
     "validate_references",
     "validate_regression_corpus",
     "validate_release_claims",
-    "validate_required_contexts",   # standalone: сверяет required-статусы защиты с CI-джобами (fail-open без gh API)
+    "validate_required_contexts",   # без GitHub evidence — explicit unknown, exit 2
     "validate_research_artifacts",
     "validate_runtime_surface",
     "validate_sandbox_boundary",
@@ -236,9 +237,16 @@ def _run(copy, name, *args, timeout=300):
 
 @pytest.mark.slow
 @pytest.mark.parametrize("name", STANDALONE)
-def test_standalone_validator_is_green_from_a_copy(repo_copy, name):
-    r = _run(repo_copy, name)
-    assert r.returncode == 0, (r.stdout + r.stderr).decode("utf-8", "replace")[-800:]
+def test_standalone_validator_runs_from_a_copy(repo_copy, name):
+    args = ("--json",) if name == "validate_required_contexts" else ()
+    r = _run(repo_copy, name, *args)
+    if name == "validate_required_contexts":
+        assert r.returncode == 2, (r.stdout + r.stderr).decode("utf-8", "replace")[-800:]
+        result = json.loads(r.stdout)
+        assert result["workflow_ok"]
+        assert result["status"] == "unknown" and result["ok"] is False
+    else:
+        assert r.returncode == 0, (r.stdout + r.stderr).decode("utf-8", "replace")[-800:]
 
 
 @pytest.mark.slow

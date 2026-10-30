@@ -434,6 +434,29 @@ def test_update_report_whats_new_failure_is_not_nothing(update_ops, monkeypatch)
     assert data["status"] == "failed" and "НЕ УДАЛОСЬ" in data["text"]
 
 
+def test_update_report_whats_new_degrades_gracefully_without_devtools(update_ops, monkeypatch):
+    """#1380: в дочке `ai_ops_kit/devtools/` не поставлен (DEV_ONLY), импорт генератора release-notes
+    закономерно падает ModuleNotFoundError. Шаг косметический — обёртка обязана вернуть well-formed
+    dict со статусом «здесь не формируется», ЧИСТОЙ заметкой (без трейсбека и без имени исключения) и
+    диапазоном версий, а не ронять применённое обновление и не выдавать ожидаемое за «НЕ УДАЛОСЬ»."""
+    import builtins
+    real_import = builtins.__import__
+
+    def blocker(name, *a, **k):                         # имитируем отсутствие devtools у дочки
+        if name == "ai_ops_kit.devtools" or name.startswith("ai_ops_kit.devtools."):
+            raise ModuleNotFoundError("No module named 'ai_ops_kit.devtools'")
+        return real_import(name, *a, **k)
+
+    monkeypatch.setattr(builtins, "__import__", blocker)
+    data = update_ops._whats_new("4.11.1", "4.11.4")
+    assert data["status"] == "unavailable"             # не «failed»: отсутствие генератора ожидаемо
+    assert data["versions"] == []
+    assert "4.11.1 → 4.11.4" in data["text"]            # честный диапазон версий назван
+    assert "НЕ УДАЛОСЬ" not in data["text"]             # не выдаём ожидаемое за отказ
+    assert "ModuleNotFoundError" not in data["text"]    # имя исключения наружу не течёт
+    json.dumps(data, ensure_ascii=False)               # well-formed, сериализуемо для отчёта
+
+
 def _pr_step():
     doc = yaml.safe_load((KIT / "templates" / "ci" / "ai-ops-update.yml").read_text(encoding="utf-8"))
     return next(s for s in doc["jobs"]["update"]["steps"] if s.get("name") == "Открыть PR с обновлением")
@@ -553,12 +576,15 @@ def test_released_version_owner_layer_passes_the_strict_check():
 
 def test_release_workflow_runs_the_owner_layer_gate_before_the_tag():
     wf = yaml.safe_load((KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
-    steps = wf["jobs"]["release"]["steps"]
+    job = wf["jobs"]["release"]
+    steps = job["steps"]
     gate = next(i for i, s in enumerate(steps)
                 if "test_release_owner_layer.py" in str(s.get("run")) and "-m release_gate" in str(s.get("run")))
     tag = next(i for i, s in enumerate(steps) if "gh release create" in str(s.get("run")))
     assert gate < tag, "проверка слоя владельца стоит после создания тега"
-    assert str(steps[gate].get("if")) == "steps.check_release.outputs.needed == 'true'"
+    # 2026-10-26 (#1376): триггер release теперь push в main; вся джоба release условна на нужде
+    # выпуска (per-step `if` заменён условием джобы), поэтому гейт не тратится на обычных merge.
+    assert "needs.check.outputs.needed == 'true'" in str(job.get("if"))
 
 
 def test_kit_own_policy_and_template_titles_build_a_clean_layer(tmp_path):

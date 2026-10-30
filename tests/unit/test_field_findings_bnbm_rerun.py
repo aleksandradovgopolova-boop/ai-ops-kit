@@ -52,7 +52,8 @@ def test_wrapper_shifts_the_intent_before_passing_the_rest():
     """`shift` обязателен: без него интент уедет в аргументы дважды."""
     text = WRAPPER.read_text(encoding="utf-8")
 
-    assert re.search(r'intent="\$1";\s*shift', text), "интент не снят со списка аргументов"
+    assert re.search(r'intent="\$1"(?:;[ \t]*|[ \t]*\n[ \t]*)shift\b', text), (
+        "интент не снят со списка аргументов")
 
 
 # ─── B2-16 ─────────────────────────────────────────────────────────────────────────────────────
@@ -184,9 +185,9 @@ def test_every_installer_command_is_routed_by_the_wrapper():
     wrapper = WRAPPER.read_text(encoding="utf-8")
     routed = set()
     for line in wrapper.splitlines():
-        m = re.match(r"\s{2}([a-z|-]+)\)\s*$", line)
+        m = re.match(r"\s+([a-z-]+(?:\s*\|\s*[a-z-]+)*)\)\s*$", line)
         if m:
-            routed |= set(m.group(1).split("|"))
+            routed |= {name.strip() for name in m.group(1).split("|")}
     # ОСОЗНАННЫЕ ПЕРЕСЕЧЕНИЯ: команда есть и у установщика, и у движка, и в дочке её обслуживает
     # ДВИЖОК — потому что установщик в поставку не едет, а движок едет.
     #   status — у владельца это вопрос к работе, а не к киту (для состояния кита есть

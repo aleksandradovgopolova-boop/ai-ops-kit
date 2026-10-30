@@ -86,10 +86,29 @@ def _whats_new(from_version, to_version):
 
     -> {status, versions, text}. Тонкая обёртка над `devtools.release_bump.whats_new`: текст идёт в
     тело PR ТЕКСТОМ, а не внутри JSON. Версия без слоя A показана заголовком раздела, и это сказано.
-    Любой сбой -> status=failed и честное «прочитать НЕ УДАЛОСЬ» — не «ничего нового»."""
+
+    Три исхода, и их РАЗЛИЧИЕ важно (#1380):
+      • status=ok/empty — генератор отработал;
+      • status=unavailable — генератора здесь нет, и это ОЖИДАЕМО, а не отказ (см. ниже);
+      • status=failed — генератор есть, но сломался: честное «прочитать НЕ УДАЛОСЬ», не «ничего нового».
+    Шаг необязателен: managed-доставка от него не зависит, поэтому любой исход — well-formed dict,
+    а не исключение."""
+    _range = f"{from_version or '—'} → {to_version}"
     try:
         from ai_ops_kit.devtools import release_bump
         return release_bump.whats_new(from_version, to_version)
+    except (ModuleNotFoundError, ImportError):
+        # ОЖИДАЕМО, НЕ СБОЙ (#1380). Генератор release-notes живёт в `ai_ops_kit/devtools/` — DEV-ONLY
+        # слое, который `delivery_ops.DEV_ONLY_PREFIXES` НАМЕРЕННО не поставляет в дочку (инвариант
+        # no-product-depends-on-devtools). Значит, в update-окружении дочки импорт закономерно не
+        # проходит. Это косметический шаг: managed-слой доставлен и судится отдельно (doctor,
+        # ai_managed_checksums, detect_drift), а человекочитаемое описание выпуска — необязательная
+        # надстройка. Деградируем ЧИСТО: статус «здесь не формируется» + честный диапазон версий,
+        # БЕЗ трейсбека и без утечки имени исключения — caller печатает одну строку-заметку, не ошибку.
+        return {"status": "unavailable", "versions": [],
+                "text": (f"Что нового для вас: описание выпусков здесь не формируется — его генератор "
+                         f"входит в инструменты разработки кита и в дочку не поставляется. "
+                         f"Диапазон версий: {_range}; полное описание — в CHANGELOG кита.")}
     except Exception as e:                             # noqa: BLE001 — сбой описания не должен
         return {"status": "failed", "versions": [],     #   ронять применённое обновление
                 "text": (f"Что нового для вас: прочитать описание выпусков НЕ УДАЛОСЬ "
@@ -376,6 +395,12 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
 
+    # Снимок ДО первой записи assets: новые project hooks не должны переживать
+    # откат managed к версии без их bootstrap. Даже при той же версии assets обновляются.
+    backup = _ao().AI_DIR / "runtime" / "backups" / (inst or "unknown")
+    footprint = _core().snapshot_footprint(backup)
+    report["backup_ref"] = backup.relative_to(_ao().REPO_ROOT).as_posix()
+
     # ВСЯ ДОСТАВКА АССЕТОВ — ДО РАННЕГО ВЫХОДА. Ниже стоит `if not changes and inst == target:
     # return`, и до 3.36.2 за ним оставались CI-шаблоны, точка входа, блок политики общения, засев
     # планирования и маркеры зон. Ребёнок с совпадающей версией не получал НИЧЕГО из этого — а это
@@ -394,12 +419,6 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
         report.update(report=msg); _core().write_report(report)
         print(msg); return 0
 
-    # backup: снимок ВСЕГО install footprint (managed + .claude/skills + .claude/commands
-    # + .ai/generated + .ai-ops.yaml) — чтобы откат был транзакционным, а не частичным.
-    backup = _ao().AI_DIR / "runtime" / "backups" / (inst or "unknown")
-    footprint = _core().snapshot_footprint(backup)
-    report["backup_ref"] = backup.relative_to(_ao().REPO_ROOT).as_posix()
-
     # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
     # Раньше цепочка лишь переписывалась в отчёт как "applied" — теперь помечаем applied
     # только по факту успешного запуска up.py; при падении откатываемся из backup и стоп.
@@ -408,6 +427,7 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     for step in chain:
         up = _ao().PKG / "migrations" / step / "up.py"
         if not up.exists():
+            _core().restore_footprint(backup, footprint)
             report.update(status="failed", migrations_applied=applied,
                           report=f"миграция {step}: нет {up} — обновление прервано.")
             out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")

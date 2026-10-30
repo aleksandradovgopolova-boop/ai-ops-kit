@@ -293,19 +293,35 @@ class TestReleaseRefusesWithoutChangelogSection:
         assert "что изменилось" in notes and "старое" not in notes, notes
 
     def test_the_release_step_is_actually_wired(self):
-        """ШОВ: ворота на выпуске существуют, только если шаг ВЫЗЫВАЕТСЯ. Проверку потребовал сам кит
-        (`validate_mutation_probes`: «есть охранные пробы, но НЕТ пробы шва»), и он прав — снятие
-        условия шага не поймал бы ни один тест выше."""
+        """ШОВ: ворота на выпуске существуют, только если выпуск ПРИВЯЗАН к зелёному полному набору
+        на релизном SHA. Проверку потребовал сам кит (`validate_mutation_probes`: «есть охранные
+        пробы, но НЕТ пробы шва»), и он прав — снятие привязки не поймал бы ни один тест выше.
+
+        2026-10-26 (#1376): дубль полного набора PR↔merge снят — package-quality больше не гоняется
+        на КАЖДЫЙ push в main. Финальный полный гейт на точном релизном SHA перенесён в release.yml:
+        джоба `full-gate` вызывает ТОТ ЖЕ package-quality как reusable (`workflow_call`), а джоба
+        `release` зависит от неё и идёт только при её успехе. Per-step `if` заменён условием джобы.
+        """
         wf = yaml.safe_load((KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
         job = wf["jobs"]["release"]
-        step = next(s for s in job["steps"]
-                    if "CHANGELOG" in str(s.get("name", "")) and s.get("run"))
-        assert str(step.get("if")) == "steps.check_release.outputs.needed == 'true'", \
-            f"шаг выпуска перестал быть условным на своей проверке: {step.get('if')!r}"
-        # `on` в YAML разбирается как True (ключ-булево) — берём оба варианта ключа
+        # ИНВАРИАНТ ШВА (сильнее прежнего): тег выходит только когда выпуск нужен И полный
+        # обязательный набор ЗЕЛЁНЫЙ на релизном SHA. Оба условия — в `if` джобы release.
+        job_if = str(job.get("if"))
+        assert "needs.check.outputs.needed == 'true'" in job_if, \
+            f"release перестал быть условным на нужде выпуска: {job_if!r}"
+        assert "needs.full-gate.result == 'success'" in job_if, \
+            f"release больше не привязан к зелёному полному набору на релизном SHA: {job_if!r}"
+        # Полный набор на релизном SHA — вызов того же package-quality, что отдаёт обязательные
+        # контексты на PR (одно определение job'ов, релизный гейт не расходится с PR-гейтом).
+        full = wf["jobs"]["full-gate"]
+        assert str(full.get("uses", "")).endswith("package-quality.yml"), full
+        assert "full-gate" in job["needs"], job["needs"]
+        # full-gate поднимается ТОЛЬКО когда выпуск нужен — обычные merge полный набор не платят.
+        assert "needs.check.outputs.needed == 'true'" in str(full.get("if")), full.get("if")
+        # Триггер — push в main (каждый merge рассматривается дешёвой джобой check); привязка к
+        # зелёному набору держится через needs/if выше, а не через слепой workflow_run.
         trig = wf.get("on") or wf.get(True) or {}
-        assert "workflow_run" in trig, "выпуск больше не привязан к успешному прогону проверок"
-        assert "package-quality" in str(trig["workflow_run"].get("workflows")), trig["workflow_run"]
+        assert "push" in trig and "main" in str(trig["push"].get("branches")), trig
 
     def test_the_old_shrug_is_gone(self):
         """Проверяем ИСПОЛНЯЕМЫЕ строки, а не текст файла: первая версия этого теста поймала мой же
@@ -323,10 +339,15 @@ class TestMutationGateIsAPreconditionOfRelease:
 
     ЗАМЕР: `test_every_declared_probe_of_the_kit_kills_its_mutant` (~6 мин) доказывает, что тесты кита
     вообще ловят регрессии. Он жил ТОЛЬКО в nightly-quality.yml (cron + push в main), а release.yml
-    триггерится по `workflow_run` от package-quality и его не дожидался — то есть тег/Release могли
-    выйти на коммите, для которого гейт не прогонялся (ночь на расписании может лечь на другой SHA).
-    Ждать nightly нельзя: расписание не гарантирует прогон ИМЕННО релизного коммита. Значит гейт
+    раньше триггерился по `workflow_run` от package-quality и его не дожидался — то есть тег/Release
+    могли выйти на коммите, для которого гейт не прогонялся (ночь на расписании может лечь на другой
+    SHA). Ждать nightly нельзя: расписание не гарантирует прогон ИМЕННО релизного коммита. Значит гейт
     обязан гнаться в самом release.yml, синхронно, на релизном SHA, и его падение обязано ронять джобу.
+
+    2026-10-26 (#1376): release.yml теперь триггерится по push в main и сам вызывает полный набор на
+    релизном SHA (джоба `full-gate`, `workflow_call`); мутационный гейт по-прежнему стоит синхронно в
+    джобе `release` на том же релизном коммите. Вся джоба условна на нужде выпуска, поэтому per-step
+    `if` на мутационном шаге больше не нужен — 6 минут не тратятся на обычных merge.
 
     Проверяется СТРУКТУРА workflow (какой шаг с каким `if` и в каком порядке), а не текст файла:
     достаточно, чтобы снятие условия или самого шага поймал хотя бы один assert."""
@@ -352,9 +373,10 @@ class TestMutationGateIsAPreconditionOfRelease:
             f"гейт зовётся не тем маркером, что в nightly-quality — гарантии синхронности нет: {run}")
 
     def test_the_mutation_gate_is_conditional_on_need_release(self):
-        """6 минут не тратятся, когда выпуск не нужен: шаг под тем же условием, что и создание тега."""
-        assert str(self._mutation_step().get("if")) == "steps.check_release.outputs.needed == 'true'", \
-            self._mutation_step().get("if")
+        """6 минут не тратятся, когда выпуск не нужен: вся джоба release условна на нужде выпуска
+        (#1376: per-step `if` заменён условием джобы, под которым стоит и создание тега)."""
+        assert "needs.check.outputs.needed == 'true'" in str(self._release_job().get("if")), \
+            self._release_job().get("if")
 
     def test_the_mutation_gate_runs_before_the_tag_is_created(self):
         """ПОРЯДОК — суть предусловия: гейт обязан стоять ДО создания тега/Release, иначе выпуск уже
@@ -368,9 +390,10 @@ class TestMutationGateIsAPreconditionOfRelease:
             "мутационный гейт стоит ПОСЛЕ создания тега — тег вышел бы до проверки")
 
     def test_the_gate_shares_the_release_commit(self):
-        """Гейт гонится на релизном SHA: та же джоба, тот же `checkout` на `workflow_run.head_sha`."""
+        """Гейт гонится на релизном SHA: та же джоба, тот же `checkout` на `github.sha` — релизный
+        merge-коммит (#1376: больше не `workflow_run.head_sha`, т.к. триггер теперь push в main)."""
         checkout = next(s for s in self._steps() if "checkout" in str(s.get("uses", "")))
-        assert "workflow_run.head_sha" in str(checkout.get("with", {}).get("ref", "")), checkout
+        assert "github.sha" in str(checkout.get("with", {}).get("ref", "")), checkout
 
 
 @pytest.mark.unit

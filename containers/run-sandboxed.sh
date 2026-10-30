@@ -33,12 +33,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-CHILD="${1:?укажи путь к child-репозиторию}"; shift
-TASK="${1:?укажи текст задачи}"; shift
+CHILD="${1:?укажи путь к child-репозиторию}"
+shift
+TASK="${1:?укажи текст задачи}"
+shift
 IMAGE="${AI_OPS_IMAGE:-ai-ops-engine:latest}"
 MEM="${AI_OPS_MEM:-2g}"
 CPUS="${AI_OPS_CPUS:-2}"
-NET="${AI_OPS_NETWORK:-bridge}"   # bridge (нужен egress к модели/реестрам) | none (всё локально)
+NET="${AI_OPS_NETWORK:-bridge}" # bridge (нужен egress к модели/реестрам) | none (всё локально)
 
 CHILD_ABS="$(cd "$CHILD" && pwd)"
 
@@ -52,6 +54,15 @@ fi
 #    базу под клоны (по умолчанию системный tmp).
 WORKBASE="${AI_OPS_WORKDIR:-${TMPDIR:-/tmp}}"
 DISPOSABLE="$(mktemp -d "${WORKBASE%/}/ai-ops-run.XXXXXX")"
+KEEP_DISPOSABLE=0
+# ShellCheck не распознаёт вызов EXIT/INT/TERM trap через строку в Bash 3.2.
+# shellcheck disable=SC2329
+cleanup() {
+  if [ "$KEEP_DISPOSABLE" -eq 0 ]; then
+    rm -rf "$DISPOSABLE" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT
 CLONE="$DISPOSABLE/repo"
 echo "worktree-only: клонирую child в одноразовый checkout $CLONE (основной репо не монтируется)…" >&2
 git clone --quiet --no-hardlinks --local "$CHILD_ABS" "$CLONE"
@@ -61,9 +72,7 @@ git clone --quiet --no-hardlinks --local "$CHILD_ABS" "$CLONE"
 # Так параллельные ai-ops/* ветки в основном репо не будут перезаписаны устаревшей версией из клона.
 SNAP_BEFORE="$DISPOSABLE/ai-ops-refs.before"
 git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:short)' 'refs/heads/ai-ops/*' \
-  > "$SNAP_BEFORE" 2>/dev/null || : > "$SNAP_BEFORE"
-
-cleanup() { rm -rf "$DISPOSABLE" 2>/dev/null || true; }
+  >"$SNAP_BEFORE" 2>/dev/null || : >"$SNAP_BEFORE"
 
 # Пробрасываем ТОЛЬКО имена секрет-переменных (значения берутся из окружения, не в образ).
 # GITHUB_TOKEN/GH_TOKEN нужны для ЧТЕНИЯ GitHub (integrations: issues/PR как operational source) и
@@ -75,7 +84,7 @@ cleanup() { rm -rf "$DISPOSABLE" 2>/dev/null || true; }
 # host-side — отдельное решение владельца.
 ENVFLAGS=()
 for v in OPENAI_COMPATIBLE_BASE_URL OPENAI_COMPATIBLE_API_KEY ANTHROPIC_API_KEY \
-         OPENAI_API_KEY GITHUB_TOKEN GH_TOKEN; do
+  OPENAI_API_KEY GITHUB_TOKEN GH_TOKEN; do
   [ -n "${!v:-}" ] && ENVFLAGS+=(-e "$v")
 done
 
@@ -101,6 +110,24 @@ CREDLESS_ENV=(
 )
 
 # 2. Запуск движка в jail'е над ОДНОРАЗОВЫМ клоном (не над основным репо).
+# wait над фоновым Docker позволяет Bash обработать сигнал wrapper немедленно.
+# Сигнал пересылается только собственному Docker PID; до удаления клона ждём его выхода.
+DOCKER_PID=
+# Обработчик вызывается trap ниже; subprocess-тесты проверяют INT и TERM.
+# shellcheck disable=SC2329
+interrupt_run() {
+  trap '' INT TERM
+  if [ -n "$DOCKER_PID" ]; then
+    kill -s "$1" "$DOCKER_PID" 2>/dev/null || true
+    wait "$DOCKER_PID" 2>/dev/null || true
+  fi
+  if [ "$KEEP_DISPOSABLE" -eq 1 ]; then
+    echo "ВНИМАНИЕ: прогон прерван при доставке; работа сохранена в $CLONE (не удаляю)." >&2
+  fi
+  exit "$2"
+}
+trap 'interrupt_run INT 130' INT
+trap 'interrupt_run TERM 143' TERM
 set +e
 docker run --rm \
   --read-only \
@@ -112,21 +139,24 @@ docker run --rm \
   --memory "$MEM" --cpus "$CPUS" --pids-limit 512 \
   --cap-drop ALL --security-opt no-new-privileges \
   "${CREDLESS_ENV[@]}" \
-  "${ENVFLAGS[@]}" \
+  ${ENVFLAGS[@]+"${ENVFLAGS[@]}"} \
   "$IMAGE" \
-  run "$TASK" /work "$@"
+  run "$TASK" /work "$@" &
+DOCKER_PID=$!
+wait "$DOCKER_PID"
 RC=$?
+DOCKER_PID=
 set -e
 
 # 3. Доставка доверенным host-слоем: ТОЛЬКО ветки, которые создал/изменил ЭТОТ прогон (диф снимка
 #    ai-ops/* до/после), а не все ai-ops/*. Логика — в отдельном deliver-run-branches.sh (тестируется
 #    валидатором без docker). Модель этого сделать НЕ могла — была заперта в клоне.
+KEEP_DISPOSABLE=1 # До подтверждённого успеха доставки клон — единственная копия работы.
 if "$SCRIPT_DIR/deliver-run-branches.sh" "$CLONE" "$CHILD_ABS" "$SNAP_BEFORE" >&2; then
-  :
+  KEEP_DISPOSABLE=0
 else
   echo "ВНИМАНИЕ: доставка веток прогона не удалась; работа сохранена в $CLONE (не удаляю)." >&2
-  trap - EXIT; exit "$RC"
+  exit "$RC"
 fi
 
-cleanup
 exit "$RC"

@@ -1,26 +1,37 @@
-# release.yml — автоматический выпуск: успешный package-quality на main
-# создаёт тег vX.Y.Z и GitHub Release с текстом из соответствующего раздела CHANGELOG.
-# v3.27.6: stable Release создаётся ТОЛЬКО после успешного package-quality на том же SHA.
-# Проверка: package-quality успешен AND VERSION содержит версию AND тег ещё отсутствует.
-# Идемпотентен: если тег/Release уже существуют — шаг спокойно завершается.
+# release.yml — автоматический выпуск: при merge в main, когда появилась новая версия,
+# создаётся тег vX.Y.Z и GitHub Release с текстом из соответствующего раздела CHANGELOG.
+# v3.27.6: stable Release создаётся ТОЛЬКО после успешного полного набора на том же SHA.
+# 2026-10-26 (#1376): раньше полный обязательный набор гонялся на КАЖДЫЙ merge в main (триггер
+# `push: [main]` в package-quality), а release стартовал по его `workflow_run`. Этот дубль снят:
+# package-quality на main больше не гоняется на каждый merge. Финальный полный гейт на ТОЧНОМ
+# релизном SHA сохранён ЗДЕСЬ: release триггерится на push в main, дешёвой джобой `check` решает,
+# нужен ли выпуск (тег для текущей VERSION ещё не существует), и ТОЛЬКО если нужен — джоба
+# `full-gate` вызывает package-quality (`workflow_call`) на этом самом SHA. Джоба `release`
+# (мутационный гейт, дренаж очереди, слой владельца, создание тега/Release) зависит от `full-gate`
+# и выполняется лишь при его успехе. ЖЁСТКИЙ ИНВАРИАНТ: тег/Release не появляются, если полный
+# обязательный набор не прошёл на точном итоговом SHA. На обычных merge (без новой версии) полный
+# набор НЕ запускается — только дешёвый `check`.
+# Идемпотентен: если тег/Release уже существуют — `check` ставит needed=false, выпуск пропускается.
 name: release
 on:
-  workflow_run:
-    workflows: ["package-quality"]
-    types: [completed]
+  push:
     branches: [main]
   workflow_dispatch: {}
 permissions:
   contents: write
 jobs:
-  release:
-    # Запускается только если package-quality завершился успешно
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+  # Дешёвое решение «нужен ли выпуск»: без тестов, только VERSION + наличие тега. Гоняется на каждый
+  # push в main, но стоит секунды. Только при needed=true ниже поднимается полный гейт.
+  check:
     runs-on: ubuntu-latest
+    outputs:
+      needed: ${{ steps.check_release.outputs.needed }}
+      version: ${{ steps.check_release.outputs.version }}
+      tag: ${{ steps.check_release.outputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.workflow_run.head_sha }}
+          ref: ${{ github.sha }}
       - name: Проверить, нужен ли release
         id: check_release
         env:
@@ -43,22 +54,40 @@ jobs:
             echo "needed=true" >> $GITHUB_OUTPUT
             echo "Тег $TAG отсутствует — release нужен"
           fi
+
+  # ФИНАЛЬНЫЙ ПОЛНЫЙ ГЕЙТ НА ТОЧНОМ РЕЛИЗНОМ SHA (#1376/#1321). Вызывает ТОТ ЖЕ package-quality,
+  # что отдаёт обязательные контексты на PR, как reusable (`workflow_call`) — поэтому релизный гейт
+  # не может разойтись с PR-гейтом (одно определение job'ов). Запускается на github.sha (релизный
+  # merge-коммит) и ТОЛЬКО когда выпуск нужен: обычные merge полный набор не платят.
+  full-gate:
+    needs: check
+    if: ${{ needs.check.outputs.needed == 'true' }}
+    uses: ./.github/workflows/package-quality.yml
+
+  release:
+    # ИНВАРИАНТ: тег/Release создаются, только если выпуск нужен И полный набор ЗЕЛЁНЫЙ на этом SHA.
+    # Явная проверка `full-gate.result == 'success'` намеренна: при падении полного набора эта джоба
+    # не выполнится и тег не выйдет; при скипе full-gate (needed=false) условие тоже ложно.
+    needs: [check, full-gate]
+    if: ${{ needs.check.outputs.needed == 'true' && needs.full-gate.result == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
       # МУТАЦИОННЫЙ ГЕЙТ — ПРЕДУСЛОВИЕ ВЫПУСКА, И ИМЕННО СИНХРОННОЕ (работа `mutation-gate-on-release`).
       # `test_every_declared_probe_of_the_kit_kills_its_mutant` доказывает, что тесты кита ЛОВЯТ
       # регрессии (применяет объявленные мутации и проверяет, что охрана краснеет). Раньше он жил
-      # только в nightly-quality.yml — на cron ~03:37 UTC и на push в main, — а выпуск триггерится по
+      # только в nightly-quality.yml — на cron ~03:37 UTC и на push в main, — а выпуск триггерился по
       # `workflow_run` от package-quality и НЕ дожидался его. Итог: тег/Release могли выйти на коммите,
       # для которого этот гейт не прогонялся вовсе (ночь идёт по расписанию и может лечь на ДРУГОЙ
       # SHA). Ждать nightly здесь нельзя: расписание не гарантирует прогон ИМЕННО релизного коммита.
       # Поэтому гейт гонится ЗДЕСЬ, синхронно, на релизном SHA (тот же checkout), тем же маркером
       # `-m nightly`, что и nightly-quality. Падение гейта = падение джобы: тег/Release НЕ создаются.
-      # Стоит ПОСЛЕ проверки need_release — 6 минут не тратятся, если выпуск не нужен (идемпотентность).
       - name: Установить Python для мутационного гейта
-        if: steps.check_release.outputs.needed == 'true'
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with: {python-version: "3.12"}
       - name: Мутационный гейт на релизном коммите (предусловие выпуска)
-        if: steps.check_release.outputs.needed == 'true'
         env:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
@@ -73,9 +102,8 @@ jobs:
       # (сборка не выполнялась/не добежала), тег НЕ создаётся. Гейт бежит ЧЕРЕЗ pytest (инвариант
       # PYTEST-ONLY, validate_agents_checklist) — тем же образцом, что мутационный гейт выше: маркер
       # `release_gate` держит тест вне обычного и ночного CI (там очередь непуста и это норма), а
-      # здесь он гоняется явно. Стоит ДО создания тега и под тем же условием needed.
+      # здесь он гоняется явно. Стоит ДО создания тега.
       - name: Очередь заявлений пуста на релизе (гейт дренажа newsfragments)
-        if: steps.check_release.outputs.needed == 'true'
         run: python3 -m pytest tests/unit/test_changelog_queue_release_gate.py -q -m release_gate
 
       # ГЕЙТ СЛОЯ ВЛАДЕЛЬЦА (#1210). `release_bump` уже проверяет слой A при сборке, но CHANGELOG можно
@@ -83,16 +111,14 @@ jobs:
       # из реестра) на слое выпускаемой версии, на релизном SHA: замечание, нет слоя или нет правил ->
       # тег не создаётся. Через pytest (PYTEST-ONLY) с маркером `release_gate`, как гейт очереди выше.
       - name: Описание выпуска для владельца проходит проверку (гейт слоя A)
-        if: steps.check_release.outputs.needed == 'true'
         run: python3 -m pytest tests/unit/test_release_owner_layer.py -q -m release_gate
 
       - name: Создать тег и Release из CHANGELOG
-        if: steps.check_release.outputs.needed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.check_release.outputs.version }}
-          TAG: ${{ steps.check_release.outputs.tag }}
-          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          VERSION: ${{ needs.check.outputs.version }}
+          TAG: ${{ needs.check.outputs.tag }}
+          HEAD_SHA: ${{ github.sha }}
         run: |
           # ТЕЛО RELEASE — СЛОЙ ВЛАДЕЛЬЦА, А НЕ ВЕСЬ ЖУРНАЛ (#1210). Раньше сюда копировался раздел
           # CHANGELOG целиком, вместе со «Служебным» (план, история). Теперь тело — слой A между

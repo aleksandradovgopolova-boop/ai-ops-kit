@@ -23,6 +23,11 @@ if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
   exit 2
 fi
 
+# Честность версии: тот же интерпретатор ведёт цикл, а блокирующий CI считает пол requires-python.
+# Расходится minor (машина владельца: local 3.14 vs CI 3.12) — зелёное здесь не предсказывает
+# зелёное в CI; предупреждаем ДО пуша. Advisory: `|| true` — разница версий НЕ блокирует итерацию.
+"$PYTHON" -m ai_ops_kit.devtools.python_drift || true
+
 # Обычная итерация использует impact и receipts. База обязательна: иначе после коммита
 # чистая рабочая папка скрыла бы изменения ветки. Нет origin/main → явный отказ с возможностью
 # назвать реальную базу через --impact --base REF. Сеть автоматически не вызывается.
@@ -51,7 +56,6 @@ fi
 
 # -n auto: параллель по ядрам (набор параллель-безопасен — проверено на полном прогоне). Без
 # pytest-xdist прогон идёт последовательно — быстрый профиль не обязан падать из-за его отсутствия.
-XNUM=""
-if "$PYTHON" -c 'import xdist' >/dev/null 2>&1; then XNUM="-n auto --dist loadfile"; fi
-# shellcheck disable=SC2086 — XNUM намеренно либо два слова (-n auto), либо пусто
-"$PYTHON" -m pytest tests/ -q -m "not slow" $XNUM "$@"
+XNUM=()
+if "$PYTHON" -c 'import xdist' >/dev/null 2>&1; then XNUM=(-n auto --dist loadfile); fi
+"$PYTHON" -m pytest tests/ -q -m "not slow" ${XNUM[@]+"${XNUM[@]}"} "$@"

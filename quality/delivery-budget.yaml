@@ -378,7 +378,7 @@ ceilings:
   #   См. `raises`.
   # 2026-09-29: 681 -> 682 под единый формат issue `planning/issue_format.py` (issues-one-format).
   #   См. `raises`.
-  substantive_files: 686
+  substantive_files: 690
   # 2026-10-26: 685 -> 686 под verify-scope-delivered-command (#1321): один доставляемый модуль
   #   ai_ops_kit/cli/verify_scope_cli.py. Реальная установка 684 -> 685. См. запись в `raises`.
 
@@ -3893,3 +3893,28 @@ raises:
       до этого был только dev-only у кита (devtools/impact_check_cli), в дочку не ехал. Без доставки
       этого модуля интент в дочке падал бы импортом. Реальная установка 684 -> 685; строгий предел
       <685 больше не пропускает этот файл. Подъём ровно на один, новой пакетной границы нет.
+
+  - at: '2026-10-29'
+    what: substantive_files
+    from_bytes: null
+    to_bytes: null
+    from_count: 686
+    to_count: 690
+    measured_before: 685
+    measured_after: 689
+    work: team-kit-autostart protocol (#1434, PR #1437)
+    files:
+      - ai_ops_kit/lifecycle/project_session.py
+      - ai_ops_kit/cli/project_session.py
+      - templates/runtime/team-session.md
+      - templates/runtime/team_hook.py
+    why_it_works_in_the_child: >-
+      Протокол сохраняет постановку и привязку к текущему checkout в существующей зоне
+      sessions; внутренний CLI вызывает доставленный ./ai-ops run --execute и проверяет
+      фактический исход. team_hook.py импортирует этот CLI из managed, общий канон
+      team-session.md читается обоими runtime. Bootstrap и FS/Git/process-пробы работают
+      в изолированной дочке; автоматическая доставка hook-записей следует в PR #1438,
+      эксперимент по умолчанию выключен, живая командная приёмка не заявлена.
+      Измерено обязательным CI: main после #1436 — 685 файлов; PR #1437 — 689,
+      в том числе .checksums.json и .provenance.json. Подъём ровно на четыре рабочих
+      файла, строгий предел <690; новые пакеты и запас не добавляются.

@@ -17,14 +17,17 @@ SNAP="${3:?нужен файл-снимок до прогона}"
 
 REFSPECS=()
 NAMES=()
+# Ошибка git внутри process substitution не передаётся циклу while. Сначала читаем refs
+# обычным присваиванием: set -e остановит доставку при ошибке, а не объявит «nothing».
+CURRENT_REFS="$(git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:short)' 'refs/heads/ai-ops/*')"
 while read -r sha ref; do
   [ -n "$ref" ] || continue
   before="$(awk -v r="$ref" '$2==r{print $1}' "$SNAP")"
-  if [ "$before" != "$sha" ]; then            # новая ветка ИЛИ SHA изменился этим прогоном
+  if [ "$before" != "$sha" ]; then # новая ветка ИЛИ SHA изменился этим прогоном
     REFSPECS+=("+refs/heads/${ref}:refs/heads/${ref}")
     NAMES+=("$ref")
   fi
-done < <(git -C "$CLONE" for-each-ref --format='%(objectname) %(refname:short)' 'refs/heads/ai-ops/*' 2>/dev/null)
+done <<<"$CURRENT_REFS"
 
 if [ "${#REFSPECS[@]}" -eq 0 ]; then
   echo "DELIVER: nothing (прогон не создал/не изменил ai-ops/*)"

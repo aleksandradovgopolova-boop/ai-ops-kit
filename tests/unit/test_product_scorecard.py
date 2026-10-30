@@ -1,16 +1,18 @@
 """Карта продукта кита из 5 метрик — ДОКАЗАТЕЛЬСТВО, что кит мерит себя как продукт, честно.
 
-Суть работы не «есть карта», а: три метрики (1 доля фич идея->релиз, 2 доля утверждений с evidence,
-3 доля фич с полной историей жизни) СЧИТАЮТСЯ на реальных данных, а две (4 результат после релиза,
-5 уроки->решения) честно рапортуют «не измерено» — потому что живой аналитики у самого кита нет, и
-выдуманное число было бы враньём. Тест собирает синтетический репозиторий во временном каталоге и
-проверяет каждое звено по отдельности и карту как целое.
+Суть работы не «есть карта», а: метрики (1 непрерывная цепочка до ИЗМЕРЕННОГО результата — главная
+мера с 2026-10-28, 2 доля утверждений с evidence, 3 доля фич с полной историей жизни) СЧИТАЮТСЯ на
+реальных данных и честно показывают НОЛЬ, где петля не замкнута, а пятая (уроки->решения) рапортует
+«не измерено», когда считать не от чего. Тест собирает синтетический репозиторий во временном
+каталоге и проверяет каждое звено по отдельности и карту как целое. Прежняя метрика 1 (доля фич
+идея->релиз, feature_completion_rate) осталась вспомогательной функцией и проверяется отдельно.
 
 Инвариант, который здесь и стережётся: ЧЕСТНОСТЬ ПРЕВЫШЕ ПОЛНОТЫ — нет данных -> `measured=False` с
 причиной, НИКОГДА выдуманное значение.
 """
 from __future__ import annotations
 
+import math
 import sys
 from pathlib import Path
 
@@ -104,6 +106,124 @@ def test_feature_completion_rate_unmeasured_without_features(tmp_path: Path):
     assert m["measured"] is False
     assert m["value"] is None
     assert m["reason"]
+
+
+# ── Главная мера: непрерывная цепочка идея→постройка→ИЗМЕРЕННЫЙ результат (с 2026-10-28) ───────────
+
+
+def test_evidence_backed_outcome_rate_honest_zero_without_measured_outcome(child: Path):
+    """Фичи дошли идея→релиз, но результат ни у одной НЕ замерен -> ЧЕСТНЫЙ НОЛЬ (не «не измерено»):
+    в этом и смысл строгой меры — идея→релиз без замера не засчитывается."""
+    graph = kg.build_graph(child)
+    m = ps.evidence_backed_outcome_rate(graph, child)
+    assert m["measured"] is True
+    assert m["denominator"] == 2 and m["numerator"] == 0 and m["value"] == 0.0
+    assert "caveat" in m
+
+
+def test_evidence_backed_outcome_rate_counts_only_unbroken_chain(child: Path):
+    """Снимаем измеренный результат для f-full (у неё есть идея+постройка) -> цепочка замкнута,
+    засчитана одна из двух. f-partial без замера не входит."""
+    _write(child / "features" / "f-full" / "outcome-readout.yaml", {
+        "schema_version": 1, "kind": "OutcomeReadout", "feature": "f-full",
+        "measured": {"value": 19}, "target_met": "yes",
+    })
+    m = ps.evidence_backed_outcome_rate(kg.build_graph(child), child)
+    assert m["measured"] is True
+    assert m["numerator"] == 1 and m["denominator"] == 2 and m["value"] == 0.5
+
+
+def test_evidence_backed_outcome_rate_unknown_target_is_not_a_measurement(child: Path):
+    """`target_met: unknown` — честное «мерили, но не узнали»: в числитель цепочки НЕ идёт."""
+    _write(child / "features" / "f-full" / "outcome-readout.yaml", {
+        "schema_version": 1, "kind": "OutcomeReadout", "feature": "f-full",
+        "measured": {"value": 19}, "target_met": "unknown",
+    })
+    m = ps.evidence_backed_outcome_rate(kg.build_graph(child), child)
+    assert m["numerator"] == 0 and m["value"] == 0.0
+
+
+def test_evidence_backed_outcome_rate_unmeasured_without_features(tmp_path: Path):
+    """Нет паспортов фич -> честное «не измерено» с причиной, а не 0."""
+    _write(tmp_path / "planning" / "plan.yaml", {"schema_version": 1, "kind": "delivery-plan"})
+    m = ps.evidence_backed_outcome_rate(kg.build_graph(tmp_path), tmp_path)
+    assert m["measured"] is False and m["value"] is None and m["reason"]
+
+
+def test_evidence_counts_valid_negative_result(child: Path):
+    """Годный отрицательный результат (target_met: no) — замер, идёт в числитель наравне с yes."""
+    _write(child / "features" / "f-full" / "outcome-readout.yaml", {
+        "schema_version": 1, "kind": "OutcomeReadout", "feature": "f-full",
+        "measured": {"value": 3}, "target_met": "no",
+    })
+    m = ps.evidence_backed_outcome_rate(kg.build_graph(child), child)
+    assert m["numerator"] == 1 and m["value"] == 0.5
+
+
+@pytest.mark.parametrize("bad", [
+    pytest.param({"feature": "someone-else", "measured": {"value": 19}, "target_met": "yes"},
+                 id="foreign-feature-id"),
+    pytest.param({"feature": "f-full", "measured": {"value": "not-a-number"}, "target_met": "yes"},
+                 id="non-number-value"),
+    pytest.param({"feature": "f-full", "measured": {"value": 19}, "target_met": "made-up"},
+                 id="made-up-target_met"),
+    pytest.param({"feature": "f-full", "measured": {"value": True}, "target_met": "yes"},
+                 id="bool-is-not-a-number"),
+])
+def test_invalid_evidence_is_not_counted(child: Path, bad: dict):
+    """#1399: негодное evidence (чужой id, нечисловое значение, выдуманный verdict, bool) НЕ
+    увеличивает числитель — наличия полей мало, проверяется ДОПУСТИМОСТЬ и принадлежность фиче."""
+    _write(child / "features" / "f-full" / "outcome-readout.yaml",
+           {"schema_version": 1, "kind": "OutcomeReadout", **bad})
+    m = ps.evidence_backed_outcome_rate(kg.build_graph(child), child)
+    assert m["numerator"] == 0 and m["value"] == 0.0
+    # и в метрике 4 (тот же помощник) негодное evidence тоже не засчитано
+    assert ps.outcome_coverage(kg.build_graph(child), child)["numerator"] == 0
+
+
+@pytest.mark.parametrize("value", [float("nan"), float("inf"), -float("inf")],
+                         ids=["nan", "positive-infinity", "negative-infinity"])
+def test_nonfinite_measurement_does_not_increase_either_numerator(child: Path, value: float):
+    path = child / "features" / "f-full" / "outcome-readout.yaml"
+    _write(path, {"kind": "OutcomeReadout", "feature": "f-full",
+                  "measured": {"value": value}, "target_met": "yes"})
+    # Проверяем настоящий YAML round-trip, а не подготовленное значение только в памяти.
+    assert not math.isfinite(yaml.safe_load(path.read_text())["measured"]["value"])
+    graph = kg.build_graph(child)
+    for measure in (ps.outcome_coverage, ps.evidence_backed_outcome_rate):
+        result = measure(graph, child)
+        assert result["numerator"] == 0
+        assert result["denominator"] == 2 and result["value"] == 0.0
+
+
+@pytest.mark.parametrize("value", [0, -3, 0.0, 1e308, 10 ** 400],
+                         ids=["zero", "negative", "float-zero", "large-float", "large-int"])
+def test_finite_measurement_counts_even_when_target_was_not_met(child: Path, value):
+    _write(child / "features" / "f-full" / "outcome-readout.yaml",
+           {"kind": "OutcomeReadout", "feature": "f-full",
+            "measured": {"value": value}, "target_met": "no"})
+    graph = kg.build_graph(child)
+    for measure in (ps.outcome_coverage, ps.evidence_backed_outcome_rate):
+        assert measure(graph, child)["numerator"] == 1
+
+
+def test_replacing_real_measurement_with_nan_removes_it_without_writing(child: Path):
+    path = child / "features" / "f-full" / "outcome-readout.yaml"
+    doc = {"kind": "OutcomeReadout", "feature": "f-full",
+           "measured": {"value": 19}, "target_met": "yes"}
+    _write(path, doc)
+    graph = kg.build_graph(child)
+    assert ps.evidence_backed_outcome_rate(graph, child)["numerator"] == 1
+    previous = path.read_bytes()
+    doc["measured"]["value"] = float("nan")
+    _write(path, doc)
+    assert path.read_bytes() != previous
+    assert math.isnan(yaml.safe_load(path.read_text())["measured"]["value"])
+    before = {str(p.relative_to(child)): p.read_bytes() for p in child.rglob("*") if p.is_file()}
+    for measure in (ps.outcome_coverage, ps.evidence_backed_outcome_rate):
+        assert measure(graph, child)["numerator"] == 0
+    assert before == {str(p.relative_to(child)): p.read_bytes()
+                      for p in child.rglob("*") if p.is_file()}
 
 
 # ── Метрика 2: доля утверждений с evidence — ДОЛЕЙ, не pass/fail ──────────────────────────────────
@@ -227,13 +347,13 @@ def test_scorecard_assembles_five_metrics_and_only_the_unmeasurable_stays_unmeas
     card = ps.build_scorecard(child, claim_results=results)
     assert card["kind"] == "kit-product-scorecard"
     ids = [m["id"] for m in card["metrics"]]
-    assert ids == ["feature_completion_rate", "evidence_coverage", "product_memory_coverage",
+    assert ids == ["evidence_backed_outcome_rate", "evidence_coverage", "product_memory_coverage",
                    "outcome_coverage", "learning_to_decision_rate"]
     assert card["measured_count"] == 4
     assert card["unmeasured_count"] == 1
     # Каждая считаемая несёт число; неизмеренная — причину, а не значение.
     by_id = {m["id"]: m for m in card["metrics"]}
-    for mid in ("feature_completion_rate", "evidence_coverage", "product_memory_coverage",
+    for mid in ("evidence_backed_outcome_rate", "evidence_coverage", "product_memory_coverage",
                 "outcome_coverage"):
         assert by_id[mid]["value"] is not None
     assert by_id["learning_to_decision_rate"]["value"] is None

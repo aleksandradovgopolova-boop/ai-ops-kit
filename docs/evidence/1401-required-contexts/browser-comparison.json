@@ -1,0 +1,18 @@
+{
+  "source_kind": "authenticated-browser-ui-observation",
+  "observed_at_utc": "2026-10-28T11:44:35Z",
+  "local_source_revision": "083bcf3cfbb25b2e526672c0c2be588b992d7213",
+  "declared_count": 12,
+  "ui_required_count": 10,
+  "required_status_checks_enabled": true,
+  "missing_required": [
+    "docs / build",
+    "package-quality / security-scan"
+  ],
+  "unexpected_required": [],
+  "unresolved_required": [],
+  "comparison_status": "fail",
+  "not_an_api_snapshot": true,
+  "api_validator_status": "unknown",
+  "scope": "Configured classic protection contexts confirmed by UI; no rulesets visible. Named bypass grants and runtime enforcement remain unknown."
+}

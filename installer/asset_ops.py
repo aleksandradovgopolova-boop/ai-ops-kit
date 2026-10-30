@@ -185,6 +185,7 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
         "plan_merge_driver": _ao()._plan_merge_setup().ensure_plan_merge_driver(root),
         "entry_point": _install_entry_point(root),
         "communication_adapter": _install_communication_adapter(root),
+        "team_session": _core().ensure_team_session(root),
         # #1183: линт дочки в момент правки агента — своя запись в `.claude/settings.json`
         # (чужие ключи не трогаются; опт-аут `standard.lint_hook: off`).
         "lint_hook": _ao()._lint_hook_setup().ensure_lint_hook(root),
@@ -235,6 +236,13 @@ def _assets_report_line(assets: dict) -> str:
                 "текст вне них не тронут).")
     out += _ao()._lint_hook_setup().lint_hook_report_line(assets.get("lint_hook"))
     out += _ao()._lint_hook_setup().lint_hook_report_line(assets.get("codex_lint_hook"))
+    team = assets.get("team_session") or {}
+    if team.get("actions"):
+        out += ("\nПроектные точки входа Claude/Codex подготовлены (эксперимент #1434). "
+                "Доверие хукам и живое выполнение не подтверждены; разрешения не изменены.")
+        for action in team["actions"]:
+            if action["action"] == "blocked":
+                out += f"\nНе доставлено: {action['path']} — {action['reason']}."
     migrated = [x["artifact"] for x in (assets.get("roadmap_migrated") or [])
                 if x.get("action") == "migrated-from-legacy"]
     if migrated:
@@ -392,6 +400,7 @@ _GITIGNORE_RULES = """
 .ai/runtime/backups/
 .ai/runtime/last-update-report.json
 .ai/runtime/setup/
+.ai/runtime/sessions/
 
 # Локальный учёт стоимости прогонов: цифры этой машины, а не общий факт. ЕДИНСТВЕННОЕ правило
 # здесь, о котором можно спорить: если команде нужна общая история стоимости — снимите эту
@@ -447,9 +456,11 @@ def ensure_gitignore(root: Path = None):
         return "created"
     current = path.read_text(encoding="utf-8")
     if _GITIGNORE_MARK in current:
-        if ".ai/runtime/setup/" not in current.splitlines():
-            path.write_text(current + "\n# Локальные журналы установки (owner-led прогон 2026-10-19).\n"
-                            ".ai/runtime/setup/\n", encoding="utf-8")
+        missing = [rule for rule in (".ai/runtime/setup/", ".ai/runtime/sessions/")
+                   if rule not in current.splitlines()]
+        if missing:
+            path.write_text(current + "\n# Локальные журналы установки и проектных сессий.\n"
+                            + "\n".join(missing) + "\n", encoding="utf-8")
             return "appended"
         return "present"
     sep = "" if current.endswith("\n\n") else ("\n" if current.endswith("\n") else "\n\n")

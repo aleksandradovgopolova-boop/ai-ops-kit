@@ -21,6 +21,27 @@ INSTALLER = KIT / "installer" / "ai_ops.py"
 pytestmark = pytest.mark.unit
 
 
+@pytest.mark.parametrize("legacy", [False, True])
+def test_session_requests_do_not_enter_git_add_all(child, ai_ops, legacy):
+    owner = "# собственные правила\nnode_modules/\n"
+    if legacy:
+        owner += "# --- AI Ops Kit: служебное состояние (не история продукта) ---\n.ai/runtime/setup/\n"
+    ignore = child / ".gitignore"
+    ignore.write_text(owner)
+    session = child / ".ai/runtime/sessions/project-real-observation/request.json"
+    session.parent.mkdir(parents=True)
+    session.write_text('{"prompt":"локальная постановка"}')
+    assert _git(child, "check-ignore", str(session)).returncode == 1
+    assert ai_ops.ensure_gitignore(child) == "appended"
+    after = ignore.read_text()
+    assert after.startswith(owner)
+    assert ai_ops.ensure_gitignore(child) == "present"
+    assert ignore.read_text() == after
+    assert _git(child, "add", "-A").returncode == 0
+    assert _git(child, "ls-files", ".ai/runtime/sessions").stdout == ""
+    assert "src/calc.py" in _git(child, "ls-files").stdout
+
+
 def _load_installer():
     """Импортировать installer/ai_ops.py как модуль (он не пакет — грузим по пути)."""
     spec = importlib.util.spec_from_file_location("installer_ai_ops_under_test", INSTALLER)

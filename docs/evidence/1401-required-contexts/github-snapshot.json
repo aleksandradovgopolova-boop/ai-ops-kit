@@ -1,0 +1,89 @@
+{
+  "repository": "aleksandradovgopolova-boop/ai-ops-kit",
+  "branch": "main",
+  "captured_date": "2026-10-28",
+  "source_revision": "083bcf3cfbb25b2e526672c0c2be588b992d7213",
+  "branch_response": {
+    "status": 200,
+    "body": {
+      "name": "main",
+      "commit": {
+        "sha": "083bcf3cfbb25b2e526672c0c2be588b992d7213"
+      },
+      "protected": true,
+      "protection": {
+        "enabled": true,
+        "required_status_checks": {
+          "enforcement_level": "non_admins",
+          "contexts": [
+            "smoke",
+            "lint",
+            "clean-install",
+            "pipeline-e2e (3.12)",
+            "quality (contracts, .github/ci-groups/contracts.sh)",
+            "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+            "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+            "upgrade-path",
+            "quality (fast-1, .github/ci-groups/fast-1.sh)",
+            "quality (fast-2, .github/ci-groups/fast-2.sh)"
+          ],
+          "checks": [
+            {
+              "context": "smoke",
+              "app_id": 15368
+            },
+            {
+              "context": "lint",
+              "app_id": 15368
+            },
+            {
+              "context": "clean-install",
+              "app_id": 15368
+            },
+            {
+              "context": "pipeline-e2e (3.12)",
+              "app_id": 15368
+            },
+            {
+              "context": "quality (contracts, .github/ci-groups/contracts.sh)",
+              "app_id": 15368
+            },
+            {
+              "context": "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+              "app_id": 15368
+            },
+            {
+              "context": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+              "app_id": 15368
+            },
+            {
+              "context": "upgrade-path",
+              "app_id": 15368
+            },
+            {
+              "context": "quality (fast-1, .github/ci-groups/fast-1.sh)",
+              "app_id": 15368
+            },
+            {
+              "context": "quality (fast-2, .github/ci-groups/fast-2.sh)",
+              "app_id": 15368
+            }
+          ]
+        }
+      }
+    }
+  },
+  "protection_response": {
+    "status": 403,
+    "body": {
+      "message": "Resource not accessible by integration",
+      "documentation_url": "https://docs.github.com/rest/branches/branch-protection#get-branch-protection",
+      "status": "403"
+    }
+  },
+  "scope": "Classic branch protection context names only. Full settings unavailable; rulesets, bypasses and exceptions unknown.",
+  "sources": {
+    "branch": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit/branches/main",
+    "protection": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit/branches/main/protection"
+  }
+}

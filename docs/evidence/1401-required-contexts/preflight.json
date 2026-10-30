@@ -1,0 +1,55 @@
+{
+  "captured_date": "2026-10-28",
+  "issue": {
+    "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1401",
+    "title": "required-contexts-match-github-protection: объявленные обязательные проверки сходятся с защитой main",
+    "state": "open",
+    "body": "**Что.** В quality/required-contexts.yaml обязательны security-scan и docs/build, но в сводке branch protection main этих контекстов нет (там 10 других). Валидатор сверяет декларацию с workflow-файлами, а не с фактическими настройками GitHub — расхождение не ловится.\n\n**Зачем.** Декларация обязательных ворот расходится с фактической защитой ветки: «обязательное» может не блокировать merge, и это незаметно.\n\n**Проверяемо.** Подтверждены фактические required checks; security-scan и build либо обязательны, либо отклонение явно оформлено решением; неизвестные настройки не показываются как проверенные.\n\n**Границы/Источник.** Ревью main@55d8d8fa, п.6. Админ-endpoint вернул 403 — исключения/права обхода не подтверждены."
+  },
+  "open_pr_search": "repo:aleksandradovgopolova-boop/ai-ops-kit is:open",
+  "open_prs": [
+    {
+      "number": 1419,
+      "title": "fix(clean-install,cli): гейт ловит сломанную команду; флаги CLI в любом порядке (#1397, #1398)",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/pull/1419"
+    },
+    {
+      "number": 1395,
+      "title": "chore(deps): update ruff requirement from >=0.16.8 to >=0.17.2",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/pull/1395"
+    },
+    {
+      "number": 1394,
+      "title": "chore(deps): update hypothesis requirement from >=6.168.0 to >=6.170.9",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/pull/1394"
+    },
+    {
+      "number": 1371,
+      "title": "perf(security): убрать повторные обходы AST внутри update",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/pull/1371"
+    },
+    {
+      "number": 1361,
+      "title": "ci: еженедельный авто-снос влитых codex-веток",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/pull/1361"
+    },
+    {
+      "number": 1352,
+      "title": "chore(deps): update pre-commit requirement from >=3.5 to >=4.7.0",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/pull/1352"
+    },
+    {
+      "number": 1274,
+      "title": "chore(deps): update mypy requirement from >=1.8 to >=2.4.0",
+      "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/pull/1274"
+    }
+  ],
+  "duplicate_for_1401_found": false,
+  "blocked_read": {
+    "action": "GET",
+    "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit/rules/branches/main",
+    "status": "denied-by-connector",
+    "reason": "HTTPError: 400: GitHub Fetch URL is not an allowed public GitHub repository or search endpoint. (Response: None)",
+    "no_fallback_attempted": true
+  }
+}

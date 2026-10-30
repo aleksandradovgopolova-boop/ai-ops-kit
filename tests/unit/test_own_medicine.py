@@ -422,3 +422,20 @@ def test_codex_hook_own_medicine_requires_delivery_or_real_lint_replacement(tmp_
     settings.parent.mkdir()
     settings.write_text('{"command":"ai-ops-kit:lint-hook"}')
     assert check(tmp_path, None)[0] == checks.APPLIED
+
+
+@pytest.mark.unit
+def test_team_session_exemption_requires_sources_and_no_recursive_install(tmp_path):
+    from ai_ops_kit.validation import own_medicine_checks as checks
+    check = checks.DELIVERY_CHECKS["team_session"]
+    assert check(tmp_path, None)[0] == checks.NOT_APPLIED
+    for name in ("templates/runtime/team-session.md", "templates/runtime/team_hook.py",
+                 "ai_ops_kit/lifecycle/project_session.py"):
+        path = tmp_path / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("source")
+    outcome, reason, replacement = check(tmp_path, None)
+    assert outcome == checks.NOT_APPLICABLE
+    assert "managed" in reason and "источники" in replacement
+    (tmp_path / ".ai/managed").mkdir(parents=True)
+    assert check(tmp_path, None)[0] == checks.NOT_APPLIED

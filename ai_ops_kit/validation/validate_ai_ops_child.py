@@ -142,6 +142,14 @@ def main():
             if g not in known_gates:
                 fail(".ai-ops.yaml", f"blocking gate '{g}' не найден в quality/gates.yaml")
 
+    # #1434: существующий child CI видит удаление/повреждение проектного подключения.
+    # Это проверка конфигурации; она не доказывает доверие runtime или использование
+    # кита конкретной сессией (для этого нужна привязанная запись запуска).
+    if (cfg.get("standard") or {}).get("team_session") == "required":
+        from ai_ops_kit.lifecycle import project_session
+        for problem in project_session.configuration_problems(REPO_ROOT):
+            fail("проектное подключение Claude/Codex", problem)
+
     if errors:
         print(f"НАЙДЕНЫ ПРОБЛЕМЫ В CHILD-УСТАНОВКЕ ({len(errors)}):")
         for e in errors:

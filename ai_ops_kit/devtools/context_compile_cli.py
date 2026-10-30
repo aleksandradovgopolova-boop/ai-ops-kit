@@ -18,6 +18,8 @@ import json
 import sys
 from pathlib import Path
 
+import yaml
+
 from ai_ops_kit.context import context_compiler
 from ai_ops_kit.engine.run_plan import build_plan
 
@@ -30,14 +32,29 @@ def main(argv):
     ap.add_argument("--budget", type=int)
     ap.add_argument("--json", action="store_true")
     ap.add_argument("--strict", action="store_true", help="ненулевой код при overflow")
+    ap.add_argument("--payload", action="store_true", help="собрать текст, ограничения и измерения payload")
+    ap.add_argument("--relevance", type=Path, help="JSON-разметка relevant/irrelevant + evidence (только с --payload)")
     a = ap.parse_args(argv)
     signals = json.loads(a.signals)
     if a.feature:
         signals["feature"] = a.feature
-    b = context_compiler.compile_bundle(signals, Path(a.child_root), context_budget=a.budget,
-                                        build_plan=build_plan)
+    if a.relevance and not a.payload:
+        ap.error("--relevance требует --payload")
+    try:
+        if a.payload:
+            relevance = json.loads(a.relevance.read_text(encoding="utf-8")) if a.relevance else None
+            b = context_compiler.build_payload(signals, Path(a.child_root), context_budget=a.budget,
+                                               build_plan=build_plan, relevance=relevance)
+        else:
+            b = context_compiler.compile_bundle(signals, Path(a.child_root), context_budget=a.budget,
+                                                build_plan=build_plan)
+    except (ValueError, OSError, yaml.YAMLError) as exc:
+        print(f"context compilation failed: {exc}", file=sys.stderr)
+        return 1
     if a.json:
         print(json.dumps(b, ensure_ascii=False, indent=2))
+    elif a.payload:
+        print(json.dumps({k: v for k, v in b.items() if k != "text"}, ensure_ascii=False, indent=2))
     else:
         inc = b["included"]
         print(f"CONTEXT-BUNDLE {b['workitem_id']} ({b['base_workflow']}) · ~{b['estimated_tokens']}/"
@@ -48,7 +65,8 @@ def main(argv):
         print(f"  исключено источников: {len(b['excluded'])}")
         for q in b["open_questions"]:
             print(f"  ? {q}")
-    return 1 if (a.strict and b["overflow"]) else 0
+    failed = not b["resource_check"]["ok"] if a.payload else b["overflow"]
+    return 1 if (a.strict and failed) else 0
 
 
 if __name__ == "__main__":

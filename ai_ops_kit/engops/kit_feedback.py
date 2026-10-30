@@ -51,7 +51,10 @@ from ai_ops_kit.shared.gitio import git  # noqa: E402
 OBSERVATION_CLASSES = ("defect", "friction", "question", "idea")
 SEVERITIES = ("p0", "p1", "p2")
 # Состояния наблюдения. `new` живёт в дочке, `delivered` ставит сборка, остальные — решение по киту.
-STATES = ("new", "delivered", "accepted", "became_work", "rejected")
+# `resolved` — наблюдение СНЯТО как неактуальное (уже исправлено в текущей версии кита / протухло):
+# замечание было верным, но действовать по нему больше не нужно. Это НЕ `rejected` («кит не согласен»)
+# и НЕ `became_work` («завели работу») — отдельный честный исход, у него своя причина (обязательна).
+STATES = ("new", "delivered", "accepted", "became_work", "rejected", "resolved")
 EVIDENCE_KINDS = ("file", "command", "note")
 
 # ЯРЛЫКИ СОСТОЯНИЙ ЕДУТ В ОТЧЁТЕ. Слой человеческого языка (`ui/presenter`) лежит НИЖЕ ядра и
@@ -60,7 +63,7 @@ EVIDENCE_KINDS = ("file", "command", "note")
 # канала напечатала их человеку в ответе «что стало с твоими замечаниями».
 STATE_NAMES = {"new": "записано", "delivered": "дошло до кита",
                "accepted": "принято", "became_work": "стало работой",
-               "rejected": "отклонено"}
+               "rejected": "отклонено", "resolved": "снято (неактуально)"}
 
 # Класс, для которого улика ОБЯЗАТЕЛЬНА. Остальные классы — законные без улик: трение и вопрос это
 # впечатление и незнание, им нечего цитировать, и требовать от них доказательство значило бы просто
@@ -170,6 +173,9 @@ def check(obs):
         e.append(f"state ∉ {STATES} (got {obs.get('state')!r})")
     if obs.get("state") == "rejected" and not str(obs.get("state_reason") or "").strip():
         e.append("rejected без причины: отклонение без объяснения останавливает канал")
+    if obs.get("state") == "resolved" and not str(obs.get("state_reason") or "").strip():
+        e.append("resolved без причины: снятие наблюдения без объяснения стирает запись решения — "
+                 "скажи, почему оно больше не актуально (например «исправлено в <версии>»)")
     ev = obs.get("evidence")
     if ev is None or not isinstance(ev, list):
         e.append("evidence должен быть списком (пустым — тоже, но списком)")
@@ -360,7 +366,8 @@ def status(child_root):
                          "state_name": STATE_NAMES.get(o["state"], o["state"]),
                          "statement": o["statement"][:120],
                          "reason": o.get("state_reason")}
-                        for o in obs if o.get("state") in ("accepted", "became_work", "rejected")],
+                        for o in obs
+                        if o.get("state") in ("accepted", "became_work", "rejected", "resolved")],
             "errors": errors}
 
 

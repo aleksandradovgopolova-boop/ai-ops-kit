@@ -21,26 +21,60 @@ rate — булевым `field_evidence` + числом в комментари�
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 
 import pytest
 import yaml
 
 from ai_ops_kit.gates.gate_executor import load_gates
+from ai_ops_kit.validation import validate_required_contexts as contexts
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
 
 VOCAB = {"proven", "by_construction", "human_by_nature", "pending"}
 
 GATES = load_gates()
+OWNERS = {a["id"] for a in yaml.safe_load((PKG_ROOT / "registry/agents.yaml").read_text())["agents"]}
 _DOC = yaml.safe_load((PKG_ROOT / "quality" / "gates.yaml").read_text(encoding="utf-8"))
 DECISIONS = (_DOC.get("advisory_review") or {}).get("decisions") or {}
+
+
+def lifecycle_errors(ident, record):
+    if not isinstance(record, dict):
+        return [f"{ident}: нет метаданных владельца/вывода"]
+    errors = []
+    for key in ("responsible_role", "retirement_condition"):
+        if not isinstance(record.get(key), str) or not record[key].strip():
+            errors.append(f"{ident}: обязательная проверка без {key}")
+        elif record[key].strip().casefold() in {"todo", "tbd", "unknown", "unavailable"}:
+            errors.append(f"{ident}: {key} содержит заглушку")
+    if isinstance(record.get("responsible_role"), str) and record["responsible_role"] not in OWNERS:
+        errors.append(f"{ident}: responsible_role не объявлена в registry/agents.yaml")
+    return errors
+
+
+mandatory_ci_checks = contexts.mandatory_contexts
+
+
+def audit_ci_lifecycle(required, metadata):
+    if not isinstance(metadata, dict):
+        return ["required_checks_lifecycle: нет метаданных CI"]
+    errors = []
+    for name in sorted(required | set(metadata)):
+        if name not in required:
+            errors.append(f"{name}: метаданные снятой обязательной проверки надо удалить")
+        else:
+            errors.extend(lifecycle_errors(name, metadata.get(name)))
+    return errors
 
 
 def audit(gates: dict, decisions: dict) -> list[str]:
     """Единая проверка: и живые тесты, и пробы прогоняют её. Возвращает список ошибок."""
     errs: list[str] = []
     for gid, g in gates.items():
+        if g.get("blocking"):
+            errs.extend(lifecycle_errors(gid, g))
         prevents = g.get("prevents")
         if not (isinstance(prevents, str) and prevents.strip()):
             kind = "blocking" if g.get("blocking") else "advisory"
@@ -110,6 +144,84 @@ def test_a_blocking_gate_without_prevents_is_caught():
     g = copy.deepcopy(GATES)
     g["security"]["prevents"] = ""
     assert any("security" in e and "prevents" in e for e in audit(g, DECISIONS))
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("field", ["responsible_role", "retirement_condition"])
+def test_new_blocking_gate_without_owner_or_retirement_is_caught(field):
+    gates = copy.deepcopy(GATES)
+    gates["new_blocking_gate"] = {**gates["security"], "id": "new_blocking_gate",
+                                  "retirement_condition": "После снятия риска и решения владельца."}
+    gates["new_blocking_gate"].pop(field, None)
+    assert field not in gates["new_blocking_gate"]  # реестр действительно испорчен
+    assert any("new_blocking_gate" in e and field in e for e in audit(gates, DECISIONS))
+
+
+@pytest.mark.contract
+def test_new_blocking_gate_with_real_owner_and_retirement_passes():
+    gates = copy.deepcopy(GATES)
+    gates["new_blocking_gate"] = {**gates["security"], "id": "new_blocking_gate",
+                                  "retirement_condition": "Риск устранён эквивалентной проверкой."}
+    assert audit(gates, DECISIONS) == []
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("condition", ["", " ", None, False, "TODO", "unknown"])
+def test_retirement_is_a_condition_not_a_placeholder(condition):
+    gates = copy.deepcopy(GATES)
+    gates["security"]["retirement_condition"] = condition
+    assert any("security" in e and "retirement_condition" in e for e in audit(gates, DECISIONS))
+
+
+@pytest.mark.contract
+def test_gate_owner_must_be_a_declared_role():
+    gates = copy.deepcopy(GATES)
+    gates["security"]["responsible_role"] = "nonexistent-owner"
+    assert any("security" in e and "responsible_role" in e for e in audit(gates, DECISIONS))
+
+
+@pytest.mark.contract
+def test_declared_mandatory_ci_checks_have_owner_and_retirement():
+    required, errors = mandatory_ci_checks(PKG_ROOT)
+    assert errors == []
+    assert audit_ci_lifecycle(required, _DOC.get("required_checks_lifecycle")) == []
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("field", ["responsible_role", "retirement_condition"])
+def test_new_mandatory_ci_check_needs_owner_and_retirement(field):
+    metadata = {"new / check": dict(_DOC["required_checks_lifecycle"]["docs / build"])}
+    metadata["new / check"].pop(field)
+    assert field not in metadata["new / check"]
+    assert any(field in e for e in audit_ci_lifecycle({"new / check"}, metadata))
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("declaration", ["premerge", "required-contexts"])
+def test_real_ci_declaration_change_requires_lifecycle_without_writing(tmp_path, declaration):
+    quality = tmp_path / "quality"
+    quality.mkdir()
+    wf = tmp_path / ".github/workflows"
+    wf.mkdir(parents=True)
+    (wf / "docs.yml").write_text(yaml.safe_dump({"jobs": {"build": {}, "new": {}}}))
+    (quality / "required-contexts.yaml").write_text(yaml.safe_dump({"contexts": ["docs / build"]}))
+    path = quality / "premerge-checks.json"
+    path.write_text(json.dumps({"docs.yml": ["build"]}))
+    metadata = {"docs / build": _DOC["required_checks_lifecycle"]["docs / build"]}
+    required, errors = mandatory_ci_checks(tmp_path)
+    assert errors == [] and audit_ci_lifecycle(required, metadata) == []
+    target = path if declaration == "premerge" else quality / "required-contexts.yaml"
+    old = target.read_bytes()
+    if declaration == "premerge":
+        target.write_text(json.dumps({"docs.yml": ["build", "new"]}))
+    else:
+        target.write_text(yaml.safe_dump({"contexts": ["docs / build", "docs / new"]}))
+    assert target.read_bytes() != old
+    before = {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
+    required, errors = mandatory_ci_checks(tmp_path)
+    assert errors == [] and "docs / new" in required
+    assert any("docs / new" in e for e in audit_ci_lifecycle(required, metadata))
+    assert before == {p: p.read_bytes() for p in tmp_path.rglob("*") if p.is_file()}
 
 
 @pytest.mark.contract

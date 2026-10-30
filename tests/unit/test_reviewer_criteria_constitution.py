@@ -64,6 +64,16 @@ def test_code_review_checklist_names_semantic_articles_from_kit_registry():
 
 
 @pytest.mark.unit
+def test_criteria_warns_reviewer_about_transliteration():
+    """Ревьюеру прямо сказано: имя-транслитерация (`proverka` вместо `check`) — нарушение, которое
+    линтер судит по алфавиту и пропускает, а язык слова — критерий ревьюера (CODE-004)."""
+    out = ph._gate_checklist(_CODE_REVIEW)
+    assert "транслит" in out.lower(), "ревьюеру не сказано про транслитерацию имени"
+    assert "proverka" in out and "check" in out, "нет конкретного примера (proverka/check)"
+    assert "CODE-004" in out
+
+
+@pytest.mark.unit
 def test_only_parts_one_and_two_are_selected():
     """В критерии идут ВСЕ статьи частей I–II реестра (число берётся из реестра, не зашито), а
     преамбула HON-*, SEC-* (свой гейт) и DATA-* — нет. Весь набор влезает в лимит без хвоста."""

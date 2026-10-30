@@ -34,13 +34,16 @@ trap 'rm -rf "$WORK"' EXIT
 export PYTHONDONTWRITEBYTECODE=1
 unset PYTHONPATH || true
 
-fail() { echo "UPGRADE-PATH FAIL: $*" >&2; exit 1; }
+fail() {
+  echo "UPGRADE-PATH FAIL: $*" >&2
+  exit 1
+}
 note() { echo "OK  $*"; }
 
 # ------------------------------------------------------------------ 1. с какой версии обновляемся
 # Предыдущий выпуск берём из тегов САМОГО репозитория, а не вписываем числом: вписанное устаревает
 # на следующем релизе и проверка начинает мерить не то.
-CURRENT="$(tr -d '[:space:]' < "$KIT/VERSION")"
+CURRENT="$(tr -d '[:space:]' <"$KIT/VERSION")"
 # Базой берём НОВЕЙШИЙ релизный тег репозитория. Прежде отсюда исключался тег текущей версии, но
 # после намеренной чистки истории на stable (2026-09-08) единственный тег — v4.0.0, и он равен
 # текущему номеру: рабочее дерево ушло вперёд на десятки коммитов при том же номере, поэтому
@@ -61,8 +64,8 @@ git -C "$KIT" archive "$PREV_TAG" | tar -x -C "$WORK/kit-prev"
 
 # ------------------------------------------------------------------ 2. дочка с файлами ВЛАДЕЛЬЦА
 mkdir -p "$WORK/child/src"
-printf 'export const answer = 42\n' > "$WORK/child/src/app.ts"
-printf '{"name":"demo","version":"0.1.0"}\n' > "$WORK/child/package.json"
+printf 'export const answer = 42\n' >"$WORK/child/src/app.ts"
+printf '{"name":"demo","version":"0.1.0"}\n' >"$WORK/child/package.json"
 git -C "$WORK/child" init -q .
 git -C "$WORK/child" config user.email ci@example.com
 git -C "$WORK/child" config user.name ci
@@ -71,8 +74,11 @@ git -C "$WORK/child" commit -qm init
 OWNER_SHA_BEFORE="$(shasum "$WORK/child/src/app.ts" | cut -d' ' -f1)"
 
 cd "$WORK/child"
-python3 "$WORK/kit-prev/installer/ai_ops.py" init . > "$WORK/init.log" 2>&1 \
-  || { tail -30 "$WORK/init.log" >&2; fail "установка предыдущего выпуска не прошла"; }
+python3 "$WORK/kit-prev/installer/ai_ops.py" init . >"$WORK/init.log" 2>&1 \
+  || {
+    tail -30 "$WORK/init.log" >&2
+    fail "установка предыдущего выпуска не прошла"
+  }
 git add -A && git commit -qm "ai-ops init $PREV_TAG"
 note "установлен $PREV_TAG"
 
@@ -88,15 +94,19 @@ INSTALLED_BEFORE="$(python3 -c "import yaml;print(yaml.safe_load(open('.ai-ops.y
 # major авто-обновлять дочку (breaking-изменение — решение владельца, не побочный эффект). Здесь
 # моделируем документированный путь major-обновления (MIGRATION_GUIDE_4.0.md): при смене мажора
 # обновляемся с `--force`, при минор/патч — как обычно.
-PREV_MAJOR="${PREV_TAG#v}"; PREV_MAJOR="${PREV_MAJOR%%.*}"
+PREV_MAJOR="${PREV_TAG#v}"
+PREV_MAJOR="${PREV_MAJOR%%.*}"
 CUR_MAJOR="${CURRENT%%.*}"
-UPDATE_FLAGS="--in-place"
+UPDATE_FLAGS=(--in-place)
 if [ "${CUR_MAJOR}" -gt "${PREV_MAJOR}" ]; then
-  UPDATE_FLAGS="--in-place --force"
+  UPDATE_FLAGS=(--in-place --force)
   note "major-переход ${PREV_MAJOR}.x -> ${CUR_MAJOR}.x: обновление с --force (осознанный major)"
 fi
-python3 "$KIT/installer/ai_ops.py" update ${UPDATE_FLAGS} > "$WORK/update.log" 2>&1 \
-  || { tail -40 "$WORK/update.log" >&2; fail "обновление вернуло ненулевой код"; }
+python3 "$KIT/installer/ai_ops.py" update "${UPDATE_FLAGS[@]}" >"$WORK/update.log" 2>&1 \
+  || {
+    tail -40 "$WORK/update.log" >&2
+    fail "обновление вернуло ненулевой код"
+  }
 grep -q . "$WORK/update.log" || fail "обновление ничего не напечатало — код возврата не показатель"
 note "обновление прошло: $(head -1 "$WORK/update.log" | cut -c1-70)"
 
@@ -106,28 +116,35 @@ INSTALLED_AFTER="$(python3 -c "import yaml;print(yaml.safe_load(open('.ai-ops.ya
   || fail "после обновления конфиг объявляет $INSTALLED_AFTER, а пакет $CURRENT — копия лжёт о себе (класс F-032)"
 note "объявленная версия сошлась с пакетом: $INSTALLED_AFTER"
 
-python3 .ai/managed/ai_ops_kit/validation/ai_managed_checksums.py verify > "$WORK/drift.log" 2>&1 \
-  || { tail -20 "$WORK/drift.log" >&2; fail "целостность managed-слоя после обновления нарушена"; }
+python3 .ai/managed/ai_ops_kit/validation/ai_managed_checksums.py verify >"$WORK/drift.log" 2>&1 \
+  || {
+    tail -20 "$WORK/drift.log" >&2
+    fail "целостность managed-слоя после обновления нарушена"
+  }
 note "целостность managed-слоя: сошлась"
 
 # ------------------------------------------------------------------ 5. дочка ОТВЕЧАЕТ владельцу
 # Ровно то, что сломала F-030: после обновления `next` отказывался отвечать. Требуем непустой
 # вывод, а не код возврата.
 answers() {
-  local label="$1"; shift
+  local label="$1"
+  shift
   local out
   out="$("$@" 2>&1 || true)"
   [ -n "${out//[[:space:]]/}" ] || fail "$label: пустой вывод после обновления"
   case "$out" in
-    *"Traceback"*) echo "$out" | tail -20 >&2; fail "$label: трейсбек после обновления" ;;
+    *"Traceback"*)
+      echo "$out" | tail -20 >&2
+      fail "$label: трейсбек после обновления"
+      ;;
   esac
   note "$label: $(printf '%s' "$out" | head -1 | cut -c1-64)"
 }
 
-answers "ai-ops next"   python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py next .
+answers "ai-ops next" python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py next .
 answers "ai-ops status" python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py status .
-answers "ai-ops model"  python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py model .
-answers "doctor"        python3 "$KIT/installer/ai_ops.py" doctor
+answers "ai-ops model" python3 .ai/managed/ai_ops_kit/cli/ai_ops_cli.py model .
+answers "doctor" python3 "$KIT/installer/ai_ops.py" doctor
 
 # ------------------------------------------------------------------ 6. файлы ВЛАДЕЛЬЦА не тронуты
 OWNER_SHA_AFTER="$(shasum "$WORK/child/src/app.ts" | cut -d' ' -f1)"

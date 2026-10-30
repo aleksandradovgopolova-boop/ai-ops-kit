@@ -136,6 +136,40 @@ class TestDirectIntentActions:
         assert "можно вливать" not in out
 
 
+@pytest.mark.parametrize("arguments", [
+    ["plan", "Добавить выгрузку", "--json"],
+    ["plan", "--json", "Добавить выгрузку"],
+])
+def test_console_plan_accepts_flags_around_task(arguments, tmp_path, monkeypatch, capsys):
+    """#1398: настоящий console entry сохраняет cwd и создаёт артефакты при обоих порядках."""
+    import json
+    import sys
+    from ai_ops_kit.cli import entry
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["ai-ops", *arguments, "--feature", "console-plan"])
+    with pytest.raises(SystemExit) as result:
+        entry.main()
+    assert result.value.code == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["workitem_id"] == "console-plan" and report["context_error"] is None
+    plan = tmp_path / report["plan"]
+    assert plan.is_file()
+    assert (plan.parent / "context-bundle.yaml").is_file()
+
+
+def test_console_plan_rejects_unknown_flag_without_creating_plan(tmp_path, monkeypatch):
+    import sys
+    from ai_ops_kit.cli import entry
+
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(sys, "argv", ["ai-ops", "plan", "Задача", "--unknown-flag"])
+    with pytest.raises(SystemExit) as result:
+        entry.main()
+    assert result.value.code == 2
+    assert not (tmp_path / "features").exists()
+
+
 @pytest.mark.unit
 @pytest.mark.slow
 class TestRunExecuteWiresModel:

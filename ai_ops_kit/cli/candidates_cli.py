@@ -14,9 +14,17 @@
   candidates list       — то же;
   candidates accept <id> [<id>...]  — принять выбранных (пишет plan.yaml);
   candidates accept --all           — принять всех;
+  candidates decline <id> [<id>...] --why "<причина>" — СНЯТЬ наблюдение-кандидат как неактуальное
+                                      (уже исправлено / протухло). Причина ОБЯЗАТЕЛЬНА. Решение
+                                      персистится переводом наблюдения-источника в `resolved`
+                                      (`planning.candidate_intake.decline_candidates` → `kit_feedback`):
+                                      кандидат уходит из активной очереди И НЕ деривируется снова, пока
+                                      источник не изменится. План НЕ трогается (decline — не accept);
   candidates sync-issues [--apply]  — завести открытых кандидатов задачами в трекере (issue —
                                       ПРЕДЛОЖЕНИЕ; план не пишется, приём — по-прежнему `accept`).
-Без глагола приёмки план НЕ меняется.
+Без глагола приёмки план НЕ меняется. `decline` отклоняет ТОЛЬКО наблюдения-кандидаты (`cand-obs-…`):
+у них есть устойчивый источник-ключ; кандидаты направлений роадмапа и недобравших исходов
+ре-деривируются из живого состояния — их «снять» нечем.
 """
 from __future__ import annotations
 
@@ -142,6 +150,9 @@ def _list_candidates(child_root, cands, js: bool) -> int:
         if c.get("rationale"):
             print(f"    почему: {c['rationale']}")
         print(f"    принять: ./ai-ops candidates accept {c.get('id')}")
+        if str(c.get("source") or "") == "child-finding":
+            # Наблюдение-кандидат можно СНЯТЬ как неактуальное (уже исправлено/протухло) — с причиной.
+            print(f"    снять:   ./ai-ops candidates decline {c.get('id')} --why \"уже исправлено\"")
     print("\nПринять всех: ./ai-ops candidates accept --all")
     return 0
 
@@ -196,6 +207,49 @@ def _accept_candidates(child_root, cands, ids, take_all: bool, js: bool, goal=No
     if not (added or skipped or no_goal or collision):
         print("Ничего не добавлено: названные кандидаты не найдены среди актуальных.")
     return 0
+
+
+def _reason_from(a) -> str:
+    """Причина отклонения из `--why` (флаг повторяем — action=append). Склеиваем непустые в одну
+    строку: `--why a --why b` → «a; b». Нет ни одного → пусто (decline_candidates это отвергнет)."""
+    parts = [str(w).strip() for w in (getattr(a, "why", None) or []) if str(w).strip()]
+    return "; ".join(parts)
+
+
+def _decline_candidates(child_root, cands, ids, reason: str, js: bool) -> int:
+    """Снять наблюдения-кандидаты как неактуальные (с обязательной причиной). План НЕ трогается:
+    отклонение персистится в канале наблюдений (перевод источника в `resolved`), а не в plan.yaml."""
+    from ai_ops_kit.planning import candidate_intake
+    if not ids:
+        msg = ("candidates decline: назовите id наблюдения-кандидата(ов) и причину --why.\n"
+               "Пример: ./ai-ops candidates decline cand-obs-… --why \"уже исправлено в текущей версии\"\n"
+               "Список: ./ai-ops candidates")
+        if js:
+            print(json.dumps({"ok": False, "reason": "нет id кандидата"}, ensure_ascii=False))
+        else:
+            print(msg)
+        return 2
+    rep = candidate_intake.decline_candidates(child_root, list(ids), cands, reason=reason)
+    if js:
+        print(json.dumps(rep, ensure_ascii=False, indent=2))
+        return 1 if rep.get("errors") else 0
+    declined = rep.get("declined") or []
+    unknown = rep.get("skipped_unknown") or []
+    unsupported = rep.get("skipped_unsupported") or []
+    errors = rep.get("errors") or []
+    if declined:
+        print(f"Снято как неактуальное ({len(declined)}): {', '.join(declined)}")
+        print("Причина записана; эти наблюдения ушли из очереди и не вернутся, пока источник не изменится.")
+    for u in unknown:
+        print(f"Пропущено (нет среди актуальных кандидатов): {u}")
+    for us in unsupported:
+        print(f"Пропущено ({us['id']}): отклонять можно только наблюдения-кандидаты (cand-obs-…); "
+              f"источник «{us.get('source') or '—'}» ре-деривируется из живого состояния — снять нечем.")
+    for e in errors:
+        print(f"Не удалось снять — {e}")
+    if not (declined or unknown or unsupported or errors):
+        print("Ничего не снято: названные кандидаты не найдены среди актуальных.")
+    return 1 if errors else 0
 
 
 def _sync_issues(child_root, cands, apply: bool, js: bool) -> int:
@@ -257,15 +311,19 @@ def run_candidates(child_root, a) -> int:
         take_all = bool(getattr(a, "all", False))
         ids = args[1:]
         return _accept_candidates(root, cands, ids, take_all, js, goal=getattr(a, "goal", None))
+    if verb in ("decline", "dismiss", "resolve"):
+        # Три слова-синонима на одну операцию — чтобы владелец не угадывал точный глагол.
+        return _decline_candidates(root, cands, args[1:], _reason_from(a), js)
     if verb == "sync-issues":
         return _sync_issues(root, cands, bool(getattr(a, "apply", False)), js)
     # Неизвестный глагол — назвать, что умеет, а не молча вернуть успех.
     if js:
         print(json.dumps({"ok": False, "reason": f"неизвестная подкоманда: {verb}",
-                          "subcommands": ["list", "accept", "sync-issues"]}, ensure_ascii=False))
+                          "subcommands": ["list", "accept", "decline", "sync-issues"]},
+                         ensure_ascii=False))
     else:
         print(f"candidates: неизвестная подкоманда «{verb}». "
-              f"Доступно: list, accept <id..>|--all, sync-issues [--apply].")
+              f"Доступно: list, accept <id..>|--all, decline <id..> --why \"…\", sync-issues [--apply].")
     return 2
 
 

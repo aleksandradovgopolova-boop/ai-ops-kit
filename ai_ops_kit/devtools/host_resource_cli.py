@@ -19,6 +19,13 @@ DEFAULT_LOCK = Path("/tmp/ai-ops-kit-heavy.lock")
 _HEAVY = re.compile(r"\bpytest\b|\bvitest\b|\bplaywright\s+test\b|check-full\.sh|"
                     r"(?:npm|pnpm|yarn)\s+(?:run\s+)?(?:build|test|typecheck)|(?:^|/)tsc(?:\s|$)")
 
+# Порог «реальной нагрузки» для совпавшего процесса: % одного ядра, усреднённый за короткое окно.
+# Имя совпадает ещё не значит, что процесс работает: постоянные self-hosted раннеры и простаивающие
+# тест-контейнеры сидят у ~0 %, а настоящий pytest/vitest/build держит CPU заметно выше. 10 % одного
+# ядра отсекает блипы поллящих демонов, но любой идущий тяжёлый прогон остаётся выше порога.
+IDLE_CPU_PERCENT = 10.0
+_CPU_SAMPLE_WINDOW_SECONDS = 0.3
+
 
 class ResourceBlocked(RuntimeError):
     pass
@@ -41,6 +48,58 @@ def heavy_processes() -> list[dict[str, int | str]]:
     return [{"pid": int(pid), "class": "observed_heavy_command"}
             for pid, _, command in rows if int(pid) not in ignored and _HEAVY.search(command)
             and "-m ai_ops_kit.devtools.host_resource_cli" not in command]
+
+
+def _cpu_seconds(pid: int) -> float | None:
+    """Накопленное CPU-время процесса в секундах; None — измерить не удалось."""
+    try:
+        result = subprocess.run(["ps", "-p", str(pid), "-o", "cputime="],
+                                capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    raw = result.stdout.strip()
+    if result.returncode != 0 or not raw:
+        return None
+    try:  # Формат [ЧЧ:]ММ:СС.сс — младшее поле секунды, старшие минуты/часы.
+        parts = [float(p) for p in raw.split(":")]
+    except ValueError:
+        return None
+    total = 0.0
+    for part in parts:
+        total = total * 60.0 + part
+    return total
+
+
+def _sample_cpu_percent(pid: int, *, window: float = _CPU_SAMPLE_WINDOW_SECONDS) -> float | None:
+    """Мгновенная загрузка (% одного ядра) по дельте CPU-времени за короткое окно.
+
+    Два снимка `ps cputime`, без чтения command/env. None — процесс исчез или ps не прочитан;
+    вызывающий трактует None консервативно (считает процесс занятым), чтобы не ослабить защиту.
+    """
+    first = _cpu_seconds(pid)
+    if first is None:
+        return None
+    time.sleep(max(0.0, window))
+    second = _cpu_seconds(pid)
+    if second is None:
+        return None
+    return max(0.0, (second - first) / window * 100.0)
+
+
+def busy_heavy_processes(matched: list[dict[str, int | str]], *,
+                         sampler=_sample_cpu_percent,
+                         idle_threshold: float = IDLE_CPU_PERCENT) -> list[dict[str, int | str]]:
+    """Из совпавших по имени оставляет только реально нагруженные.
+
+    Простаивающий (CPU ниже порога) процесс не блокирует допуск. Неизмеримый (sampler → None)
+    трактуется консервативно как занятый: допуск по-прежнему закрывается, защита не слабеет.
+    """
+    busy: list[dict[str, int | str]] = []
+    for proc in matched:
+        cpu = sampler(int(proc["pid"]))
+        if cpu is None or cpu >= idle_threshold:
+            busy.append({**proc, "cpu_percent": "unmeasured" if cpu is None else round(cpu, 1)})
+    return busy
 
 
 def inherited_slot(path: str | Path | None = None, *,
@@ -92,15 +151,17 @@ def host_slot(owner: str, kind: str, *, path: str | Path = DEFAULT_LOCK) -> Iter
 
 
 
-def execute(command, owner, kind, *, path=DEFAULT_LOCK, probe=heavy_processes):
+def execute(command, owner, kind, *, path=DEFAULT_LOCK, probe=heavy_processes,
+            load_filter=busy_heavy_processes):
     inherited = inherited_slot()
     if "AI_OPS_HOST_SLOT_FD" in os.environ and inherited is None:
         raise InheritedSlotLost("унаследованный fd потерян; нужен pass_fds, slot не освобождён")
     if inherited is not None and inherited_slot(path) == inherited:
         return subprocess.call(command, pass_fds=(inherited,))
     with host_slot(owner, kind, path=path) as fd:
-        if probe():
-            raise ResourceBlocked("ps наблюдает другой тяжёлый процесс; он не остановлен")
+        if load_filter(probe()):
+            raise ResourceBlocked("ps наблюдает другой тяжёлый процесс под реальной нагрузкой; "
+                                  "он не остановлен")
         # Этот fd сохраняет один и тот же flock через Bash/Python child; env без fd не годится.
         return subprocess.call(command, env={**os.environ, "AI_OPS_HOST_SLOT_FD": str(fd),
                                              "AI_OPS_HOST_SLOT_PATH": str(path)}, pass_fds=(fd,))

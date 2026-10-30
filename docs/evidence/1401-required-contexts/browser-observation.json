@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "source_kind": "authenticated-browser-ui",
+  "observed_at_utc": "2026-10-28T11:44:35Z",
+  "browser": "Google Chrome on Mac, native CUA accessibility interface",
+  "repository": "aleksandradovgopolova-boop/ai-ops-kit",
+  "account": {
+    "login": "aleksandradovgopolova-boop",
+    "verification": "GitHub user navigation menu showed this login; settings breadcrumb matched the target repository",
+    "admin_privilege_not_assumed_from_login": true
+  },
+  "authorization": "User explicitly authorized read-only viewing through the existing Chrome GitHub session",
+  "branch_protection": {
+    "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/settings/branch_protection_rules/81759903",
+    "list_url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/settings/branches",
+    "rule_id": "81759903",
+    "branch_name_pattern": "main",
+    "applies_to_branches": ["main"],
+    "visible_applicability_label": "Currently applies to 1 branch",
+    "rule_state": "classic protection currently applies to main; classic UI exposes no separate active/evaluate selector",
+    "required_status_checks_enabled": true,
+    "required_status_checks": [
+      "smoke",
+      "lint",
+      "clean-install",
+      "pipeline-e2e (3.12)",
+      "quality (contracts, .github/ci-groups/contracts.sh)",
+      "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+      "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+      "upgrade-path",
+      "quality (fast-1, .github/ci-groups/fast-1.sh)",
+      "quality (fast-2, .github/ci-groups/fast-2.sh)"
+    ],
+    "accepted_source_for_each_check": "GitHub Actions",
+    "require_pull_request_before_merging": false,
+    "require_branches_up_to_date": false,
+    "require_conversation_resolution": false,
+    "require_signed_commits": false,
+    "require_linear_history": false,
+    "require_deployments": false,
+    "lock_branch": false,
+    "do_not_allow_bypassing_above_settings": false,
+    "bypass_control_description": "The above settings will apply to administrators and custom roles with the \"bypass branch protections\" permission.",
+    "visible_bypass_categories": ["administrators", "custom roles with bypass branch protections permission"],
+    "bypass_interpretation": "The control applying protection to these categories is unchecked; no assertion about any particular actor's actual grant or a successful bypass",
+    "named_bypass_actors": null,
+    "named_bypass_actors_status": "unknown: no individual actor list rendered in this rule form; broader collaborator/role grants were not inspected",
+    "allow_force_pushes": false,
+    "allow_deletions": false
+  },
+  "rulesets": {
+    "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/settings/rules",
+    "visible_empty_state": "You haven't created any rulesets",
+    "visible_rulesets": [],
+    "active": [],
+    "evaluate": [],
+    "disabled": [],
+    "scope": "Repository rulesets UI shows no rulesets, including no active, evaluate or disabled rows; no separate organization/enterprise policy administration was inspected"
+  },
+  "local_comparison_basis": {
+    "revision": "083bcf3cfbb25b2e526672c0c2be588b992d7213",
+    "file": "quality/required-contexts.yaml",
+    "github_head_at_ui_observation": "not re-read; this is an observation of settings, not a claim about current main source SHA"
+  },
+  "remaining_unknown": [
+    "Actual named holders of admin/custom bypass permissions and other effective grants outside the rendered settings",
+    "Runtime enforcement behavior was not tested by any write, merge or bypass attempt",
+    "Integration API full branch-protection endpoint remains 403; no new API calls were made"
+  ],
+  "mutations": [],
+  "save_changes_clicked": false,
+  "credentials_or_cookies_exported": false,
+  "new_api_calls": false,
+  "browser_site_denials": [],
+  "tool_availability_notes": [
+    "Chrome browser-provider binding was unavailable; inventory showed the running Google Chrome native app",
+    "A coordinate click returned noWindowsAvailable; native accessibility/keyboard navigation subsequently worked without permission or security changes"
+  ]
+}

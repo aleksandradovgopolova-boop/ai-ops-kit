@@ -69,6 +69,8 @@
       "type": "object",
       "description": "Версия стандарта репозитория, ОТДЕЛЬНАЯ от версии пакета (SR-4), и override требований (SR-21..23).",
       "properties": {
+        "team_session": {"type": ["string", "boolean"], "enum": ["off", "required", false], "default": "off",
+          "description": "Эксперимент #1434: проектные hooks Claude/Codex. Доверие runtime и живая квалификация проверяются отдельно."},
         "version": {"type": "integer", "description": "какой версии стандарта соответствует репозиторий"},
         "profile": {"type": "string", "description": "профиль требований (пока один: ai-product)"},
         "invariants": {"type": "array", "items": {"type": "string"},
@@ -212,6 +214,37 @@
       "type": "object",
       "additionalProperties": true
     },
+    "context": {
+      "type": "object",
+      "description": "#1403: источники compiled payload. required/optional — точные относительные пути файлов дочки, forbidden — пути/каталоги/glob (также для источников кита). Без ключа обычный отбор. Это декларация доступа, не разметка релевантности.",
+      "properties": {
+        "required": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "optional": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        },
+        "forbidden": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "uniqueItems": true
+        }
+      },
+      "additionalProperties": false
+    },
     "context_budget": {
       "type": "object",
       "description": "v3.13.0 Startup Context Budget: наблюдаемый бюджет стоимости стартового набора (tools/context_cost.py).",
@@ -219,6 +252,11 @@
         "session_start_tokens": {
           "type": "integer",
           "minimum": 1
+        },
+        "run_tokens": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Бюджет compiled payload до резервов output/tool-loop; оценка context_cost."
         }
       },
       "additionalProperties": false

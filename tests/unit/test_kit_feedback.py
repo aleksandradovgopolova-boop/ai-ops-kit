@@ -164,6 +164,30 @@ class TestAnswerComesBack:
         in_child = yaml.safe_load(kf.child_path(child, oid).read_text(encoding="utf-8"))
         assert in_child["state"] == "delivered", "неудачное решение не должно портить состояние"
 
+    def test_resolved_records_the_decision_and_closes_the_observation(self, tmp_path):
+        """#1386: `resolved` — наблюдение снято как неактуальное (уже исправлено/протухло). Решение
+        с причиной едет и в кит, и обратно в дочку; наблюдение закрыто (показано среди decided)."""
+        child, kit = _child(tmp_path), _kit(tmp_path)
+        kf.record(child, STATEMENT, evidence=kf.evidence_from_args(["src/a.py=строка"], None, None))
+        oid = kf.collect(kit, [child])["delivered"][0]["id"]
+        doc, errors = kf.set_state(kit, child, oid, "resolved",
+                                   reason="исправлено в текущей версии кита")
+        assert errors == [] and doc["state"] == "resolved"
+        in_child = yaml.safe_load(kf.child_path(child, oid).read_text(encoding="utf-8"))
+        assert in_child["state"] == "resolved"
+        assert in_child["state_reason"] == "исправлено в текущей версии кита"
+        assert [d["state"] for d in kf.status(child)["decided"]] == ["resolved"]
+
+    def test_resolving_without_a_reason_is_impossible(self, tmp_path):
+        """`resolved` без причины стёр бы запись решения — отвергается, состояние не портится."""
+        child, kit = _child(tmp_path), _kit(tmp_path)
+        kf.record(child, STATEMENT, evidence=kf.evidence_from_args(["src/a.py=строка"], None, None))
+        oid = kf.collect(kit, [child])["delivered"][0]["id"]
+        doc, errors = kf.set_state(kit, child, oid, "resolved")
+        assert doc is None and any("resolved без причины" in e for e in errors)
+        in_child = yaml.safe_load(kf.child_path(child, oid).read_text(encoding="utf-8"))
+        assert in_child["state"] == "delivered"
+
     def test_status_shows_waiting_and_decided(self, tmp_path):
         child, kit = _child(tmp_path), _kit(tmp_path)
         kf.record(child, STATEMENT, evidence=kf.evidence_from_args(["src/a.py=строка"], None, None))

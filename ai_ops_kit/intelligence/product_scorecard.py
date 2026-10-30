@@ -7,7 +7,11 @@
 метрик 2/3/4 разрознено (`validate_claims`, `knowledge_graph.gaps`), 1 и 5 не считаются вовсе.
 
 ЧТО СЧИТАЕТСЯ И ЧТО ЧЕСТНО «НЕ ИЗМЕРЕНО».
-  1. feature_completion_rate  — доля фич, дошедших от идеи до релиза (из графа знаний). СЧИТАЕТСЯ.
+  1. evidence_backed_outcome_rate — ГЛАВНАЯ МЕРА продукт-здоровья (с 2026-10-28): доля ФИЧ (единица
+     учёта — фича с паспортом), дошедших до ИЗМЕРЕННОГО результата с непрерывной цепочкой
+     идея→постройка→замер. СЧИТАЕТСЯ. Строже прежней
+     feature_completion_rate (идея→релиз, ~100%): та осталась вспомогательной функцией, но из карты
+     ушла — лёгкая мера мерой быть перестала (решение владельца ep-2026-10-28-evidence-backed-north-star).
   2. evidence_coverage        — доля утверждений кита с реальным evidence, ДОЛЕЙ, не pass/fail. Долю
      считает этот слой; сырые результаты проверок реестра честности даёт `validate_claims` (из
      `validation`, entrypoints), поэтому передаются СНАРУЖИ — intelligence её не импортирует (это была
@@ -43,6 +47,7 @@
 """
 from __future__ import annotations
 
+import math
 from pathlib import Path
 
 
@@ -138,6 +143,51 @@ def feature_completion_rate(graph: dict) -> dict:
                "дошедших до релиза с записанным провенансом идея+постройка, не доля автономных прогонов")
 
 
+def evidence_backed_outcome_rate(graph: dict, child_root) -> dict:
+    """Метрика 1 (единственная ГЛАВНАЯ МЕРА продукта с 2026-10-28, решение владельца
+    ep-2026-10-28-evidence-backed-north-star): доля ФИЧ (единица учёта — фича с паспортом), дошедших до
+    ИЗМЕРЕННОГО результата с НЕПРЕРЫВНОЙ цепочкой доказательств. TTVO (время идея→проверенный PR) и
+    «доля фич идея→релиз» (feature_completion_rate) — вспомогательные показатели. Контракт метрик —
+    context/product/MetricCatalog.md; скорость доставки не заменяет измеренный результат.
+
+    Строже прежней метрики 1 (`feature_completion_rate`, идея→релиз, бралась на ~100% и потому мерой
+    быть перестала): здесь должна быть замкнута ВСЯ цепочка идея (`motivates`) → постройка (`builds`) →
+    ИЗМЕРЕННЫЙ результат (`features/<id>/outcome-readout.yaml` со снятым числом и названным
+    `target_met`, см. `_measured_readouts`). Разрыв на любом звене — не засчитано.
+
+    Знаменатель — реальные фичи с паспортом; нет ни одной -> «не измерено». Фичи есть, ни у одной
+    цепочка не замкнута -> ЧЕСТНЫЙ НОЛЬ, а не «не измерено»: «ни одна фича не дошла до измеренного
+    результата» — это знание (тот же разбор, что у `outcome_coverage`). Ровно к этому смена меры и
+    ведёт: заглавное число честно низкое, пока петля не замкнута на измеренном результате.
+
+    ОГОВОРКА: «результат измерен» не равно «цель взята» (`target_met: no` входит наравне с `yes` —
+    мера про НАЛИЧИЕ непрерывной цепочки до замера, не про знак итога). Идея→релиз без замера сюда НЕ
+    попадает — это и есть разница с прежней «долей фич идея→релиз».
+    """
+    feats = _real_features(graph)
+    if not feats:
+        return _metric(
+            "evidence_backed_outcome_rate",
+            "Доля фич с непрерывной цепочкой до измеренного результата",
+            measured=False,
+            reason="в проекте нет паспортов фич (features/<id>/blueprint.yaml) — долю считать не от чего")
+    es = _story_edges(graph)
+    measured = _measured_readouts(child_root)
+    chained = [f for f in feats if f in es["decision"] and f in es["work"] and f in measured]
+    return _metric(
+        "evidence_backed_outcome_rate",
+        "Доля фич с непрерывной цепочкой до измеренного результата",
+        measured=True, value=len(chained) / len(feats),
+        numerator=len(chained), denominator=len(feats),
+        detail="единица учёта — ФИЧА с паспортом (features/<id>/blueprint.yaml); знаменатель — все "
+               "такие фичи, числитель — те, у кого замкнута ВСЯ цепочка идея (motivates) -> постройка "
+               "(builds) -> измеренный результат (outcome-readout со снятым числом и target_met ∈ "
+               "{yes,no}); окно — на момент сборки карты; исключения — учебные demo-паспорта examples/",
+        caveat="«результат измерен» не равно «цель взята» (target_met: no входит наравне с yes); "
+               "идея→релиз без замера сюда не входит — мера строже прежней «доли фич идея→релиз» "
+               "(feature_completion_rate остаётся вспомогательным сигналом, заглавной мерой быть перестал)")
+
+
 def evidence_coverage(claim_results) -> dict:
     """Метрика 2: доля утверждений кита с реальным evidence — ДОЛЕЙ, а не pass/fail.
 
@@ -189,12 +239,30 @@ def product_memory_coverage(graph: dict) -> dict:
         detail="фича засчитана, если в графе замкнуты все четыре звена: решение, работа, ревью, результат")
 
 
-def _measured_readouts(child_root) -> dict:
-    """{id фичи: отчёт} для фич, у которых результат ДЕЙСТВИТЕЛЬНО замерен.
+# Засчитываемый вердикт замера. `unknown` — честное «мерили, но не узнали» — сюда НЕ входит.
+# Зеркалит `validation.validate_product_objects.TARGET_MET` минус unknown; импортировать оттуда
+# нельзя — это зависимость вверх на слой `validation` (инвариант слоёв, см. docstring модуля).
+_COUNTED_TARGET_MET = ("yes", "no")
 
-    Замерен = есть `features/<id>/outcome-readout.yaml` (kind OutcomeReadout) со снятым значением и
-    названным `target_met`. `target_met: unknown` НЕ считается замером: это и есть честное «мерили,
-    но не узнали», и подмешивать его в долю «результат есть» значило бы выдать незнание за знание.
+
+def _is_number(v) -> bool:
+    """Конечный замер: bool/NaN/∞ не числа результата, большие int сохраняют точность."""
+    return (isinstance(v, int) and not isinstance(v, bool)
+            or isinstance(v, float) and math.isfinite(v))
+
+
+def _measured_readouts(child_root) -> dict:
+    """{id фичи: отчёт} для фич, у которых результат ДЕЙСТВИТЕЛЬНО замерен и evidence ГОДНОЕ.
+
+    Замерен = есть `features/<id>/outcome-readout.yaml` (kind OutcomeReadout), и его evidence проходит
+    проверку ДОПУСТИМОСТИ, а не только наличия (#1399):
+      * `measured.value` — конечное число (строка, bool, NaN/∞, пусто — НЕ замер);
+      * `target_met` ∈ {yes, no} — объявленный исход; `unknown` не считается (честное «не узнали»),
+        выдуманное значение («made-up») отвергается;
+      * отчёт ПРИНАДЛЕЖИТ своей фиче: если объявлено поле `feature`, оно обязано совпасть с именем
+        каталога — чужой feature id не засчитывается за эту фичу.
+    Проверка наличия без проверки годности раньше завышала долю (отчёт с чужим id, нечисловым
+    значением и выдуманным target_met давал 1/1).
 
     Читается напрямую с диска, а не через `validation`: тот слой выше (инвариант модуля).
     """
@@ -212,10 +280,13 @@ def _measured_readouts(child_root) -> dict:
         if not isinstance(doc, dict) or doc.get("kind") != "OutcomeReadout":
             continue
         measured = doc.get("measured")
-        if not isinstance(measured, dict) or measured.get("value") in (None, ""):
+        if not isinstance(measured, dict) or not _is_number(measured.get("value")):
             continue
-        if doc.get("target_met") in (None, "", "unknown"):
+        if doc.get("target_met") not in _COUNTED_TARGET_MET:
             continue
+        declared = _text(doc.get("feature"))
+        if declared and declared != path.parent.name:
+            continue  # чужой feature id — отчёт не принадлежит этой фиче, за неё не засчитываем
         out[path.parent.name] = doc
     return out
 
@@ -400,7 +471,7 @@ def build_scorecard(child_root, *, claim_results=None) -> dict:
     from ai_ops_kit.intelligence import knowledge_graph as kg
     graph = kg.build_graph(child_root)
     metrics = [
-        feature_completion_rate(graph),
+        evidence_backed_outcome_rate(graph, child_root),
         evidence_coverage(claim_results),
         product_memory_coverage(graph),
         outcome_coverage(graph, child_root),

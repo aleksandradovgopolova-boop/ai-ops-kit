@@ -1,5 +1,9 @@
 # Change Brief'ы — по одному на изменение
 
+- [Автоматическое планирование выпуска по фактам — #1439](1439-release-replanning.md).
+
+- [План следующего выпуска 4.12.0 и автоматического планирования](next-release-4.12.0.md).
+
 Инженерный цикл требует Change Brief ДО кода (`AGENTS.md` → «Инженерный цикл», шаблон —
 `templates/quality/ChangeBrief.md`). Заполненным брифам до 2026-08-12 не было отведено места, и
 это ломало сам смысл артефакта: два лежали в корне как `.ai-change-brief.md` и
@@ -13,6 +17,9 @@
 больше нет — бриф это документ, а не служебное состояние.
 
 ## Что здесь есть
+
+- [Передача runtime и сессии через фасад — #1434](1434-runtime-session-identity.md).
+- [Экспериментальное командное подключение — #1434](1434-team-kit-autostart.md).
 
 - [`3.34-distribution-boundary-cleanup.md`](3.34-distribution-boundary-cleanup.md) — срез 3.34:
   `validation` переехал в `ai_ops_kit/`, замер циклов ядра стал ратчетом.
@@ -60,3 +67,41 @@
 - [Замер: локальная правка получает более быстрый feedback без ослабления гейтов — #1321](local-feedback-targeted-selection.md).
 - [Baseline CI всего пути — #1321](ci-end-to-end-baseline.md).
 - [Доставляемая команда объёма проверки `verify-scope` — #1321](verify-scope-delivered-command.md).
+- [Закрытие направления цикла проверок (3/3) — #1321](1321-verification-cycle-performance-closeout.md).
+
+- [Допуск host-slot учитывает реальную нагрузку, а не имя процесса — #1377](host-slot-load-aware-admission.md).
+- [Предупреждение о дрейфе версии Python local↔CI перед пушем — #1378](1378-python-version-drift-warning.md).
+
+- [Дубль обязательного набора PR↔merge убран; финальный полный гейт перенесён на релиз (Вариант 1) — #1376](ci-pr-merge-duplication-design.md).
+
+- [Описание выпуска деградирует чисто, когда devtools нет в дочке — #1380](1380-release-notes-degrade-without-devtools.md).
+
+- [Стухшие наблюдения-кандидаты можно снять (`candidates decline --why`) — #1386](decline-stale-observation-candidates.md).
+
+- [Установленный wheel работает вне клона — #1398](1398-wheel-runtime-data.md).
+
+- [Проверка обязательных контекстов защиты main — #1401](1401-required-contexts.md).
+- [Отказы и очистка контейнерного wrapper — #1410](1410-wrapper-failures.md).
+
+- [`1405-garden-dormant-report.md`](1405-garden-dormant-report.md) — неподключённые модули и причины карантина в отчёте уборки.
+
+- [Наблюдающие ShellCheck/shfmt и shell policy — #1410](1410-shell-quality-pilot.md).
+
+- [Негативные security-evals существующих ограничений — #1407](1407-agent-security-evals.md).
+
+- [Advisory CRAP-измеритель — #1387](1387-crap-score-advisory.md).
+
+- [Негодный числовой замер не увеличивает долю результата — #1399](1399-finite-outcome-evidence.md).
+
+- [Уборка объявлений и жизненный цикл обязательных проверок — #1405](1405-garden-completion.md).
+- [Одна главная мера продукта — #1400](1400-single-headline-metric.md).
+
+- [Закрытие shell-долга и перенос решений commit-msg hook — #1410](1410-shell-thin-completion.md).
+
+- [Strict mypy на независимом срезе контрактов — #1412](1412-strict-contracts.md).
+- [Контекст как измеряемый ресурс — #1403](1403-context-resource.md).
+
+- [Strict mypy для состояния Budget — #1412](1412-strict-budget.md).
+- [Восстановление project session после неполного intake — #1434](1434-live-session-recovery.md).
+
+- [Проектная сессия на detached checkout — #1434](1434-detached-checkout.md).

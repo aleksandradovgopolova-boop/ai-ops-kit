@@ -5,7 +5,7 @@
 # напрямую, а installer/ai_ops.py — для команд самого кита (init, update, doctor и т.д.).
 #
 # Для дочек шаблон другой: templates/runtime/ai-ops-entry.sh (берёт из .ai/managed/).
-set -e
+set -eu
 here=$(cd "$(dirname "$0")" && pwd)
 
 # Интерпретатор с pyyaml (единственная зависимость) И НЕ НИЖЕ ПОЛА 3.12 (F-10).
@@ -15,12 +15,16 @@ here=$(cd "$(dirname "$0")" && pwd)
 _ok() { "$1" -c 'import sys, yaml; sys.exit(0 if sys.version_info >= (3, 12) else 1)' 2>/dev/null; }
 find_python() {
   if [ -n "${AI_OPS_PYTHON:-}" ]; then
-    if _ok "$AI_OPS_PYTHON"; then echo "$AI_OPS_PYTHON"; return 0; fi
+    if _ok "$AI_OPS_PYTHON"; then
+      echo "$AI_OPS_PYTHON"
+      return 0
+    fi
     return 1
   fi
   for cand in python3.13 python3.12 python3 python; do
     if command -v "$cand" >/dev/null 2>&1 && _ok "$cand"; then
-      echo "$cand"; return 0
+      echo "$cand"
+      return 0
     fi
   done
   return 1
@@ -35,7 +39,7 @@ else
 fi
 
 export PYTHONDONTWRITEBYTECODE=1
-export PYTHONPATH="$here:$PYTHONPATH"
+export PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}"
 
 cli="$here/ai_ops_kit/cli/ai_ops_cli.py"
 installer="$here/installer/ai_ops.py"
@@ -43,15 +47,16 @@ installer="$here/installer/ai_ops.py"
 cmd=${1:-}
 case "$cmd" in
   # Команды самого кита — через installer.
-  init|setup|update|diff|doctor|validate|migrate|verify-capabilities|selftest|delivery-proof|usage|audit|drift|session|subsession|engops|method|status|ui-status)
+  init | setup | update | diff | doctor | validate | migrate | verify-capabilities | selftest | delivery-proof | usage | audit | drift | session | subsession | engops | method | status | ui-status)
     exec "$py" "$installer" "$@"
     ;;
-  ""|-h|--help|help)
+  "" | -h | --help | help)
     exec "$py" "$cli"
     ;;
   *)
     # Интенты движка: next, model, plan, run, specify, review, health, new, discuss, …
-    intent="$1"; shift
+    intent="$1"
+    shift
     exec "$py" "$cli" "$intent" "$here" "$@"
     ;;
 esac

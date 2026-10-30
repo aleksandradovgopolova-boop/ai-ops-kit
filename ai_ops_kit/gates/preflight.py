@@ -25,6 +25,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import yaml
+
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.gates import spec_levels   # noqa: E402
 from ai_ops_kit.gates import approvals     # noqa: E402
@@ -32,6 +34,29 @@ from ai_ops_kit.shared.contracts import PreflightResult  # noqa: E402
 
 # Уровни, для которых слой контекста обязан быть здоров (ошибки -> fail-closed, не «продолжаем молча»).
 _HEAVY = {"ENGINEERING", "PRODUCT", "CRITICAL", "AI_FEATURE", "RESEARCH"}
+
+
+def _context_checks(checks, block, child_root, bundle, payload, reevaluate_only):
+    # #1403: декларация контекста обязательна и для QUICK; ошибка политики не разрешение.
+    from ai_ops_kit.context import context_cost
+    try:
+        policy = context_cost.load_policy(child_root)
+        resource = (payload or {}).get("resource_check")
+        required_check = policy["configured"] or policy["run_tokens"] is not None
+        resource_ok = ((not required_check) if resource is None else
+                       isinstance(resource, dict) and resource.get("ok") is True)
+        resource_errors = list(resource.get("errors") or []) if isinstance(resource, dict) else []
+    except (ValueError, OSError, yaml.YAMLError) as e:
+        resource_ok, resource_errors = False, [str(e)]
+    checks["context_resource"] = {"ok": resource_ok, "errors": resource_errors}
+    if not resource_ok and not reevaluate_only:
+        block("context-resource: " + ("; ".join(resource_errors) or "нет проверки compiled payload"))
+
+    # 5. context budget не превышен -> блок ДО исполнения
+    overflow = bool((bundle or {}).get("overflow"))
+    checks["context_budget"] = {"ok": (not overflow) or reevaluate_only, "overflow": overflow}
+    if overflow and not reevaluate_only:
+        block("context-budget: контекст задачи превышает бюджет — декомпозируй до исполнения")
 
 
 def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
@@ -106,11 +131,7 @@ def assess(signals, child_root, wid, plan=None, bundle=None, payload=None,
             block(f"atomic-planning: задача не атомарна ({n} пакетов) — исполняй через sequential "
                   f"executor (ai-ops run … --sequential) ИЛИ выбери СУЩЕСТВУЮЩИЙ work_package_id из плана")
 
-    # 5. context budget не превышен -> блок ДО исполнения
-    overflow = bool((bundle or {}).get("overflow"))
-    checks["context_budget"] = {"ok": (not overflow) or reevaluate_only, "overflow": overflow}
-    if overflow and not reevaluate_only:
-        block("context-budget: контекст задачи превышает бюджет — декомпозируй до исполнения")
+    _context_checks(checks, block, child_root, bundle, payload, reevaluate_only)
 
     # 6. human approvals: доменные условия через ApprovalRecord (+ destructive)
     appr = approvals.check(signals, child_root, wid, domains=domains)

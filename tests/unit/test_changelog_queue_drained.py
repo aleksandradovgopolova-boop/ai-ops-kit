@@ -76,7 +76,11 @@ class TestGateIsWiredIntoRelease:
             f"гейт зовётся не через pytest с маркером release_gate: {run}"
 
     def test_gate_is_conditional_on_need_release(self):
-        assert str(self._gate_step().get("if")) == "steps.check_release.outputs.needed == 'true'"
+        # 2026-10-26 (#1376): триггер release теперь push в main (а не workflow_run), и вся джоба
+        # release условна на нужде выпуска — per-step `if` заменён условием джобы. Гейт по-прежнему
+        # гонится только когда выпуск нужен.
+        wf = yaml.safe_load((KIT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8"))
+        assert "needs.check.outputs.needed == 'true'" in str(wf["jobs"]["release"].get("if"))
 
     def test_gate_runs_before_the_tag_is_created(self):
         steps = self._release_steps()

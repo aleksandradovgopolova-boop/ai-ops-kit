@@ -23,8 +23,11 @@ evidence:
 - kind: note
   text: Проверить соответствие языка проекту при доставке workflow. Универсальная
     замена default на Python не следует из одного кейса.
-state: delivered
-state_reason: null
+state: resolved
+state_reason: 'уже исправлено: текущий ai-ops-codeql.yml детектит язык (.py→python)
+  и пропускает analyze при пустом наборе.'
 delivered_to:
   kit_root: /Users/sasad/.codex/worktrees/garden-field-accounting/ai-ops-kit
   at: '2026-10-05T11:39:32+00:00'
+decided_at: '2026-10-27T08:14:48+00:00'
+became_work: null

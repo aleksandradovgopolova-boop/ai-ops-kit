@@ -436,6 +436,23 @@ def check_codex_lint_hook(root, mod):
     return check_lint_hook(root, mod, runtime="codex")
 
 
+def check_team_session(root, mod):
+    """Parent поставляет канон из исходников; child bootstrap требует managed-копии."""
+    root = Path(root)
+    sources = ("templates/runtime/team-session.md", "templates/runtime/team_hook.py",
+               "ai_ops_kit/lifecycle/project_session.py")
+    missing = [name for name in sources if not (root / name).is_file()]
+    if missing:
+        return NOT_APPLIED, f"нет источников проектного подключения: {', '.join(missing)}", ""
+    if (root / ".ai/managed").exists():
+        return NOT_APPLIED, "в parent обнаружена managed-копия самого себя", ""
+    return (NOT_APPLICABLE,
+            "проектные hooks дочки запускают bootstrap из `.ai/managed/`; kit — его источник, "
+            "а не установленная child-копия. Самоустановка создала бы рекурсию managed-слоя. "
+            "Эксперимент opt-in для дочерних проектов и ещё не квалифицирован живыми сессиями",
+            "источники общего канона, hook и протокола проверены: " + ", ".join(sources))
+
+
 DELIVERY_CHECKS = {
     "context_backfilled": check_context_backfilled,
     "ci_workflows": check_ci_workflows,
@@ -451,4 +468,5 @@ DELIVERY_CHECKS = {
     "product_layer_seeded": check_product_layer_seeded,
     "lint_hook": check_lint_hook,
     "codex_lint_hook": check_codex_lint_hook,
+    "team_session": check_team_session,
 }
