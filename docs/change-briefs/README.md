@@ -100,3 +100,5 @@
 
 - [Strict mypy на независимом срезе контрактов — #1412](1412-strict-contracts.md).
 - [Контекст как измеряемый ресурс — #1403](1403-context-resource.md).
+
+- [Восстановление project session после неполного intake — #1434](1434-live-session-recovery.md).

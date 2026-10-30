@@ -69,6 +69,11 @@ def main(argv=None):
                 signals = json.loads(args.signals or "{}")
                 if not isinstance(signals, dict):
                     raise ValueError("signals должен быть JSON object")
+                from ai_ops_kit.engine import pipeline_helpers
+                missing = pipeline_helpers.missing_intake_signals(signals)
+                if missing:
+                    raise ValueError("; ".join(pipeline_helpers.intake_signals_hint(missing))
+                                     + ". Запуск не начат; уточни signals той же сохранённой задачи.")
                 result = sessions.execute(root, args.runtime, args.session, signals)
             print(json.dumps(result, ensure_ascii=False))
             return 0 if result.get("accepted") or result.get("status") == "accepted" else 1
