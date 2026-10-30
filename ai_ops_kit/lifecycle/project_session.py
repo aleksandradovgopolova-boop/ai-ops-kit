@@ -9,7 +9,6 @@ import hashlib
 import json
 import os
 import subprocess
-import sys
 import uuid
 from pathlib import Path
 
@@ -237,10 +236,6 @@ def execute(root, runtime, session, signals, *, provider=None):
     try:
         # stdout остаётся у вызывающего runtime. Подтверждение берётся с диска и из exit code.
         result = subprocess.run(command, cwd=root, check=False, capture_output=True, text=True)
-        if result.stdout:
-            print(result.stdout, end="")
-        if result.stderr:
-            print(result.stderr, end="", file=sys.stderr)
         if not report_path.is_file():
             detail = (result.stderr or result.stdout or "нет диагностики процесса").strip()[-4096:]
             raise ValueError(f"штатный запуск завершился (exit={result.returncode}), отчёт не создан: {detail}")
