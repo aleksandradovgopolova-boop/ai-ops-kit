@@ -20,10 +20,19 @@ def prepare(root, runtime, session, task, signals):
     classified = dict(signals, task_type=plan["base_workflow"])
     relative = f"features/{fid}/spec.yaml"
     path = sessions.within(root, relative)
+    if path.resolve() != root.resolve() / relative:
+        raise ValueError("запись спецификации через symlink не разрешена")
     if not preflight.requires_spec(classified) and not path.exists():
         return None
     errors, coverage = [], {}
     try:
+        # create_spec дописывает разделы/сигналы. Чужой документ нельзя менять
+        # даже если последующая проверка всё равно отказала бы в запуске.
+        if path.exists():
+            existing = yaml.safe_load(path.read_text(encoding="utf-8"))
+            if (not isinstance(existing, dict) or existing.get("kind") != "spec"
+                    or existing.get("workitem_id") != fid or not isinstance(existing.get("sections"), dict)):
+                raise ValueError("спецификация не принадлежит сохранённой задаче или имеет неверную форму")
         _, _, created = spec_levels.create_spec(root, fid, classified)
         if created["error"]:
             errors.append(created["error"])

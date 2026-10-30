@@ -99,7 +99,7 @@ def complete_prepared_spec(root, task):
 
 
 @pytest.mark.parametrize("case", ["empty-content", "numeric-content", "foreign-spec", "needs-human",
-                                 "foreign-report", "claim", "source-drift", "symlink"])
+                                 "foreign-report", "claim", "source-drift", "symlink", "local-symlink"])
 def test_prepared_session_cannot_bypass_guards(project, monkeypatch, case):
     from ai_ops_kit.cli import project_session as cli
     fixture_producer(project)
@@ -135,8 +135,8 @@ def test_prepared_session_cannot_bypass_guards(project, monkeypatch, case):
         (project / "unexpected-result.md").write_text("real source change")
         assert sessions.binding(project, "session-" + task["request_id"]) != task["binding"]
         expected = 2
-    elif case == "symlink":
-        outside = project.parent / "outside-spec.yaml"
+    elif case in ("symlink", "local-symlink"):
+        outside = project.parent / "outside-spec.yaml" if case == "symlink" else feature / "other-spec.yaml"
         outside.write_bytes(spec_path.read_bytes())
         spec_path.unlink()
         spec_path.symlink_to(outside)
@@ -147,6 +147,26 @@ def test_prepared_session_cannot_bypass_guards(project, monkeypatch, case):
     assert spec_path.read_bytes() == before
     assert not (project / ".ai/runtime/process-observed").exists()
     assert sessions.load(project, "codex", "guards")["status"] == "pending"
+
+
+def test_foreign_partial_spec_is_rejected_before_any_rewrite(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "foreign-partial", "Исследуй архитектуру")
+    path = project / "features" / ("session-" + task["request_id"]) / "spec.yaml"
+    path.parent.mkdir(parents=True)
+    foreign = {"kind": "spec", "workitem_id": "some-other-task", "level": 0,
+               "signals": {"task_type": "QUICK"},
+               "sections": {"goal": {"status": "complete", "content": "Чужое описание, не менять"}}}
+    path.write_text(yaml.safe_dump(foreign, allow_unicode=True))
+    before = path.read_bytes()
+    monkeypatch.chdir(project)
+    assert cli.main(["run", "--runtime", "codex", "--session", "foreign-partial", "--signals",
+                     '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    assert path.read_bytes() == before  # ни sections, ни level/signals не дописаны
+    assert sessions.load(project, "codex", "foreign-partial")["status"] == "pending"
+    assert not (project / ".ai/runtime/process-observed").exists()
+    assert not list(sessions.session_dir(project, "codex", "foreign-partial").glob("*.execution-claim"))
 
 
 def test_quick_task_without_spec_keeps_existing_light_path(project, monkeypatch):
