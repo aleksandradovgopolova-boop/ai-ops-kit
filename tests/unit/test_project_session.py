@@ -120,6 +120,7 @@ def test_process_and_artifacts_are_created_before_acceptance(project):
     assert (project / f"features/session-{task['request_id']}/run-report.json").is_file()
     assert task["status"] == "accepted"
     assert sessions.verify(project, "codex", "a")["accepted"]
+    assert hook("codex", {"cwd": str(project), "session_id": "a", "hook_event_name": "Stop"}) == {}
 
 
 @pytest.mark.parametrize("mode", ("mock", "error"))
@@ -207,10 +208,47 @@ def test_resume_keeps_original_task_and_stop_detects_skip(project):
     payload = {"cwd": str(project), "session_id": "a", "hook_event_name": "SessionStart", "source": "compact"}
     assert "Сохранённая задача" in hook("codex", payload)["hookSpecificOutput"]["additionalContext"]
     payload["hook_event_name"] = "Stop"
-    assert hook("codex", payload)["decision"] == "block"
+    assert hook("codex", payload)["continue"] is False
     payload["stop_hook_active"] = True
     assert "не подтвердил" in hook("codex", payload)["systemMessage"]
     assert sessions.load(project, "codex", "a")["prompt"] == "original"
+
+
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+@pytest.mark.parametrize("case", ["pending", "binding-drift", "missing-task", "malformed-config"])
+def test_stop_refuses_without_creating_a_model_continuation(project, runtime, case, monkeypatch, capsys):
+    from ai_ops_kit.cli import project_session as cli
+    task = sessions.begin(project, runtime, "bounded-stop", "original research")
+    if case == "binding-drift":
+        (project / "unrelated.txt").write_text("new source")
+    elif case == "missing-task":
+        (sessions.session_dir(project, runtime, "bounded-stop") / f"{task['request_id']}.json").unlink()
+    elif case == "malformed-config":
+        (project / ".ai-ops.yaml").write_text("standard: [broken")
+    import io
+    payload = {"cwd": str(project), "session_id": "bounded-stop", "hook_event_name": "Stop"}
+    for active in [False, True, False]:
+        payload["stop_hook_active"] = active
+        monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(json.dumps(payload).encode())))
+        assert cli.main(["--runtime", runtime]) == 0
+        result = json.loads(capsys.readouterr().out)
+        assert result["continue"] is False
+        assert "decision" not in result
+        assert "не подтвердил" in result["stopReason"]
+    assert len(list(sessions.session_dir(project, runtime, "bounded-stop").glob("*.json"))) <= 2
+
+
+@pytest.mark.parametrize("raw", [b'{"hook_event_name":"Stop"', b'[]', b'x' * 262145],
+                         ids=["truncated-json", "wrong-shape", "oversized"])
+def test_invalid_hook_payload_cannot_request_a_paid_continuation(raw, monkeypatch, capsys):
+    import io
+    from ai_ops_kit.cli import project_session as cli
+    monkeypatch.setattr(sys, "stdin", io.TextIOWrapper(io.BytesIO(raw)))
+    assert cli.main(["--runtime", "codex"]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["continue"] is False
+    assert "decision" not in result
+    assert "не считается принятой" in result["stopReason"]
 
 
 def test_disabled_hooks_are_diagnosed(project):
