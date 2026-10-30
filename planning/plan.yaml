@@ -1140,6 +1140,7 @@ work:
     goal: evidence-backed-release-planning
     status: todo
     owner_role: delivery
+    issue: 1445
     value: high
     write_scope:
       - VERSION
@@ -1167,10 +1168,11 @@ work:
     title: Кит автоматически пересчитывает план выпуска по выполненной работе
     type: engineering
     goal: evidence-backed-release-planning
-    status: todo
+    status: in_progress
     owner_role: engineer
     value: high
-    issue: 1439
+    issue: 1446
+    pr: 1449
     write_scope:
       - ai_ops_kit/devtools/
       - ai_ops_kit/planning/
@@ -1191,6 +1193,7 @@ work:
       уведомления только по значимому исходу/решению. Не менять исторический зачёт
       #750/#771 и не строить вторую систему. План не предоставляет прав publish,
       paid actions, settings/credentials или обхода согласований.
+    note: "Исходная полная приёмка сохранена в архиве #1439; текущая работа #1446, реализация PR #1449 уже идёт."
 
   # Независимая техническая очередь. Полевые исходы ниже остаются открытыми.
   # (Работа verification-cycle-performance-baseline закрыта 2026-10-26 и уехала в
@@ -1202,7 +1205,7 @@ work:
     status: todo
     owner_role: qa
     value: high
-    issue: 1322
+    issue: 1348
     depends_on:
       - delegation-owner-fencing
     write_scope:
@@ -1220,6 +1223,7 @@ work:
       записи — подготовка и наблюдение; production fixes требуют отдельного Change
       Brief, новые paid/native вызовы, релиз и deploy ею не разрешены. Полевая #1278
       остаётся отдельной, независимые технические задачи не зависят от набора #1243.
+    note: "Полная приёмка направления сохранена в архиве #1322; эпик #1346, этот отдельный proof ведётся в #1348."
 
   - id: child-value-twenty-real-works
     title: На двадцати–тридцати настоящих работах измерены результат и цена сопровождения
@@ -1227,24 +1231,30 @@ work:
     goal: prove-the-loop-not-add-capabilities
     status: todo
     owner_role: qa
+    issue: 1243
     value: high
     depends_on:
     - child-value-comparison-protocol
     write_scope:
     - qualification/
     rationale: P0. Провести проспективные наблюдения 20–30 реальных работ суммарно в двух дочках по утверждённым определениям; сохранять запрос/время/результат, вмешательства, review/CI возвраты, evidence и принятые решения после окна. Отделить установку/инструментальный счёт от бизнес-эффекта, открытое окно от неуспеха. Журнал и сопоставимая историческая выборка доступны; потери наблюдений показаны. Без нового блокирующего гейта. qualification/PRODUCT-REVIEW-NEXT-WAVE-2026-10-05.md
+    note: "Исходная приёмка направления сохранена в архиве #1116; эпик #1145, эта работа #1243."
+
   - id: child-value-pilot-verdict
     title: Польза кита оценена сравнением с исходной базой и её ограничениями
     type: research
     goal: prove-the-loop-not-add-capabilities
     status: todo
     owner_role: product
+    issue: 1244
     value: high
     depends_on:
     - child-value-twenty-real-works
     write_scope:
     - qualification/
     rationale: P0. Свести пять показателей по дочкам и типам работ с числителями/знаменателями, объёмом выборки и пропусками; сопоставить baseline. Показать пользу, ухудшения, цену и что сравнение не позволяет заключить; смешение исполнителей/сложности не выдавать за причинность. Принять следующее продуктовое решение из фактов, подшить связь child_value только где есть источник улучшения; отрицательный результат допустим. qualification/PRODUCT-REVIEW-NEXT-WAVE-2026-10-05.md
+    note: "Исходная приёмка сохранена в архиве #1116; эпик #1145, итоговый вывод #1244."
+
   # ── Направление one-feature-end-to-end ДОСТИГНУТО 2026-09-16 (засчёт владельца, 5/5) ───────────
   # Хронология: продуктовое ревью (ep-2026-09-16) держало product-freeze до живого внешнего прогона;
   # весь КОД-P0 закрыт (№1 #983 propose, №2 #984 сценарий, №5 #985 Verified, №6 #987 Outcome, №4 #988
@@ -1314,7 +1324,7 @@ work:
     status: waiting_on_owner
     owner_role: qa
     value: high
-    issue: 1183
+    issue: 1193
     depends_on:
     - lint-profile-per-stack-with-baseline
     - lint-runs-at-edit-and-in-child-ci
@@ -1332,6 +1342,7 @@ work:
     human_decision: Решить способ подтверждения обязательной серверной защиты приватного репозитория;
       покупка тарифа или публикация репозитория автоматически не разрешены.
     evidence: qualification/COORDINATION-SESSION04-2026-10-19.md
+    note: "Исходные восемь критериев сохранены в архиве #1183; текущий эпик #1193. Python-профиль/import-linter и formatter не засчитывать без собственного evidence."
 
   - id: measure-first-hour-with-a-stranger
     # Исторический id; текущая приёмка изменена прямым решением владельца 05.10.
@@ -1340,6 +1351,7 @@ work:
     goal: first-hour-for-a-stranger
     status: in_progress
     owner_role: product
+    issue: 1256
     value: high
     write_scope:
     - qualification/
@@ -1347,9 +1359,7 @@ work:
     depends_on:
     - first-hour-three-strangers-protocol
     evidence: qualification/COORDINATION-SESSION04-2026-10-19.md
-    note: Локальная правка школы принята владельцем и опубликована session05; это одна отдельная работа.
-      Полезное объяснение и doctor дали ограниченные временные сигналы, setup timeout сохранён;
-      три полных first-hour исхода не доказаны, primary двух экономических дочек не пополняется.
+    note: "Локальная правка школы принята владельцем и опубликована session05; это одна отдельная работа. Полезное объяснение и doctor дали ограниченные временные сигналы, setup timeout сохранён; три полных first-hour исхода не доказаны, primary двух экономических дочек не пополняется. Полная приёмка сохранена в архиве #1115; эпик #1144, единственный трекер полевой работы #1256."
 
   # ══ Направление prove-the-loop-not-add-capabilities — взято 2026-09-23 (мандат ревью) ════════════
 
