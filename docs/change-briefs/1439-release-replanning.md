@@ -39,7 +39,8 @@ skipped/cancelled/rerun, API403/truncation, corrupt prior state и смена и
 Независимый review, core и применимый CI точного final head/base. Для workflow/API/
 publisher нужны прямые own-medicine наблюдения: fixture не заменяет Actions token
 или действительный deploy. До такого доказательства соответствующий критерий
-#1439 остаётся незакрытым, а проблема не уходит в молчаливый fallback.
+#1446 остаётся незакрытым (исходная #1439 закрыта как дубль), а проблема не уходит
+в молчаливый fallback.
 
 **Публикация плана.** Использовать существующий status-dashboard workflow/Pages с
 его текущими правами. Доверенный checkout default branch; metadata событий не
@@ -77,3 +78,18 @@ association исторического CI блокировала даже опр
 release PR и прямое own-medicine остаются незавершённой частью #1439.
 Positive — известный состав при утраченной association; fail-closed — неизвестная
 зависимость; side-effect proof — неизменность файлов и входного snapshot.
+
+## Уточнение до правки: применимость release checks
+
+Фактический stock release run `41065592704` на `7acca17f` выявил ещё один разрыв
+read model: `security-scan` и `delivered-footprint` имеют условие только для PR и
+штатно пропускаются на release push. Их PASS перед merge уже подтверждён в 17 CI
+PR #1458. Требовать повторный PASS этих двух неприменимых jobs означает неверно
+запретить штатный выпуск. Сам pipeline и гейты менять не требуется.
+
+Модель читает применимость из существующего `package-quality.yml`; этот файл
+становится входом fingerprint. Только поддержанное условие с доказанно ложным
+результатом разрешает ожидаемый SKIP. Неизвестное условие, отсутствующий job,
+неожиданный SKIP, failure/cancel и смена политики остаются блокирующими.
+Тесты фиксируют фактический профиль push, fail-closed при изменённом условии и
+неизменность policy/snapshot. Fixture не заменяет реальный release evidence.

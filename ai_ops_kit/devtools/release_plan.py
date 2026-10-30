@@ -14,7 +14,8 @@ from ai_ops_kit.validation import validate_release_claims
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
 _INPUTS = ("VERSION", "planning/plan.yaml", "quality/premerge-checks.json",
-           "registry/release-claims.yaml", ".github/workflows/release.yml", "history/plan-history.yaml",
+           "registry/release-claims.yaml", ".github/workflows/release.yml",
+           ".github/workflows/package-quality.yml", "history/plan-history.yaml",
            "registry/communication-policy.yaml", ".github/workflows/status-dashboard.yml",
            "ai_ops_kit/devtools/release_plan.py", "ai_ops_kit/devtools/release_plan_sources.py",
            "ai_ops_kit/devtools/release_plan_state.py", "ai_ops_kit/devtools/release_assembly.py",
@@ -322,6 +323,25 @@ def build(root, snapshot):
     return finalize(report)
 
 
+def _release_job_results(root, policy):
+    """Только известные условия stock workflow на push/dispatch; неизвестность блокирует."""
+    workflow = yaml.safe_load((Path(root) / ".github/workflows/package-quality.yml").read_text())
+    expected = {"check": "success", "release": "success"}
+    for name in policy["package-quality.yml"]:
+        job = workflow["jobs"].get(name.split(" (", 1)[0])
+        if not isinstance(job, dict):
+            raise ValueError("release job declaration missing")
+        condition = job.get("if")
+        if "if" not in job or condition == "github.event_name != 'pull_request' || github.event.pull_request.draft == false":
+            result = "success"
+        elif condition == "github.event_name == 'pull_request'":
+            result = "skipped"
+        else:
+            raise ValueError("release job condition unsupported")
+        expected["full-gate / " + name] = result
+    return expected
+
+
 def final_release_observed(root, snapshot, policy, target):
     """Наблюдает actual stock release SHA/attempt/jobs/шаги; не даёт прав публикации."""
     if snapshot["source"]["version"] != target or release_assembly.pending_fragments(Path(root)):
@@ -343,13 +363,12 @@ def final_release_observed(root, snapshot, policy, target):
     jobs = run.get("jobs", [])
     if type(run.get("total_jobs")) is not int or run["total_jobs"] != len(jobs):
         return False
-    names = ["check", "release", *["full-gate / " + n for n in policy["package-quality.yml"]]]
-    for name in names:
+    for name, conclusion in _release_job_results(root, policy).items():
         found = [j for j in jobs if j.get("name") == name]
         if len(found) != 1:
             return False
         job = found[0]
-        success = job.get("status") == "completed" and job.get("conclusion") == "success"
+        success = job.get("status") == "completed" and job.get("conclusion") == conclusion
         publishing = name == "release" and job.get("status") == "in_progress" and job.get("conclusion") is None
         if not (success or publishing):
             return False

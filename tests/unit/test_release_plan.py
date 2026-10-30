@@ -180,6 +180,10 @@ def release_run(root, *, publishing=True):
     expected = [s["name"] for s in workflow["jobs"]["release"]["steps"] if "pytest" in s.get("run", "")]
     jobs = [{"name": name, "status": "completed", "conclusion": "success"} for name in
             ["check", *["full-gate / " + n for n in policy["package-quality.yml"]]]]
+    # Фактический профиль stock release run 41065592704: две PR-only jobs неприменимы.
+    for job in jobs:
+        if job["name"] in {"full-gate / security-scan", "full-gate / delivered-footprint"}:
+            job["conclusion"] = "skipped"
     jobs.append({"name": "release", "status": "in_progress" if publishing else "completed",
                  "conclusion": None if publishing else "success", "steps": [
                      {"name": n, "status": "completed", "conclusion": "success"} for n in expected]})
@@ -200,6 +204,53 @@ def test_ready_can_be_observed_after_actual_gates_before_publication(release_cas
     assert result["target_version"] == "4.12.0"
     assert result["publication_authorized"] is None
     assert result["published"]["version"] == "4.11.4"
+
+
+@pytest.mark.parametrize("event", ["push", "workflow_dispatch"])
+def test_release_applicability_is_read_from_policy_without_writing_inputs(release_case, event):
+    root, snap = release_case
+    (root / "VERSION").write_text("4.12.0\n")
+    snap["source"]["version"] = "4.12.0"
+    (root / "newsfragments/new.feat.md").unlink()
+    run = release_run(root, publishing=False)
+    run["event"] = event
+    snap["release_ci"] = [run]
+    snap["input_digests"] = rp.input_digests(root)
+    before = deepcopy(snap)
+    files = {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    assert rp.build(root, snap)["final_release_checks_observed"]
+    assert snap == before
+    assert files == {str(p.relative_to(root)): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+
+
+@pytest.mark.parametrize("condition", [None, "always()", "github.event_name == 'push'"])
+def test_unproven_release_skip_cannot_be_accepted(release_case, condition):
+    root, snap = release_case
+    (root / "VERSION").write_text("4.12.0\n")
+    snap["source"]["version"] = "4.12.0"
+    (root / "newsfragments/new.feat.md").unlink()
+    snap["release_ci"] = [release_run(root)]
+    path = root / ".github/workflows/package-quality.yml"
+    workflow = yaml.safe_load(path.read_text())
+    if condition is None:
+        workflow["jobs"]["security-scan"].pop("if")
+    else:
+        workflow["jobs"]["security-scan"]["if"] = condition
+    path.write_text(yaml.safe_dump(workflow))
+    # Обновлённый snapshot не делает неизвестное условие или неожиданный SKIP успешным.
+    snap["input_digests"] = rp.input_digests(root)
+    result = rp.build(root, snap)
+    assert not result["release_ready"]
+    assert not result.get("final_release_checks_observed", False)
+    if condition is not None:
+        assert "source_unknown_or_invalid" in result["blockers"]
+
+
+def test_changed_release_applicability_invalidates_old_snapshot(release_case):
+    root, snap = release_case
+    path = root / ".github/workflows/package-quality.yml"
+    path.write_text(path.read_text() + "\n# changed applicability input\n")
+    assert "source_unknown_or_invalid" in rp.build(root, snap)["blockers"]
 
 
 @pytest.mark.parametrize("failure", ["old_sha", "cancelled", "failed", "skipped_gate", "mutation_pending", "wrong_attempt", "truncated"])
