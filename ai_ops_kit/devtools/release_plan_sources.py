@@ -343,5 +343,3 @@ def verify_projection(root, report, client):
         raise SnapshotError("projection release evidence changed")
     if _object(client, f"{prefix}/commits/{quote(repo['default_branch'], safe='')}")["sha"] != head:
         raise SnapshotError("projection source changed during final validation")
-
-
