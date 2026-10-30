@@ -1,4 +1,5 @@
 {
+  "scenario_set": "baseline",
   "source_sha256": {
     "ai_ops_kit/context/context_compiler.py": "9f223269e7c08259c349300fcb444a07cc1cbb9d665066a6a134738b92e09380",
     "ai_ops_kit/context/context_cost.py": "96d195abb077d6d040fd78d1de74c8f329df99575583fad25cc343aa38e621ff",
@@ -8,7 +9,7 @@
     "ai_ops_kit/context/context_hybrid.py": "f6da476e780fb4bf78e2363dffd25d112928cc9ea356fa2630a4d3a7918b8c99",
     "ai_ops_kit/context/repo_graph.py": "55cf726fd87704660ef4c3a79216178a29147debbc2752c999f5bb4cba9f8b09",
     "ai_ops_kit/context/semantic_lite.py": "ab7e0e8c4907275b3e9493bc28305b8395b28207532ee5dd83c3d14d7efa0bc5",
-    "qualification/context_resource/run.py": "cf589ef27932606d067ddea675045cdb864313fab60a60c9e52b5162a207cf41"
+    "qualification/context_resource/run.py": "e398e11a206cc418d067e4d00e5b36c68d744319d908af832d6d5593a912c148"
   },
   "scenarios": [
     {
@@ -50,8 +51,8 @@
       },
       "commit": {
         "branch": "ai-ops/context-resource",
-        "sha": "a5181766f94e53b239e049eb3caea335873afdde",
-        "evidence_revision": "a5181766f94e53b239e049eb3caea335873afdde",
+        "sha": "7e1200b217af1e436a8f2079ee8c644fce7ee417",
+        "evidence_revision": "7e1200b217af1e436a8f2079ee8c644fce7ee417",
         "evidence_on_exact_sha": true,
         "changed_files": [
           "src/result.txt"
@@ -131,7 +132,7 @@
         "schema_version": 1,
         "kind": "ContextPayload",
         "workitem_id": "context-resource",
-        "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
+        "revision": "590ac8e5beb33624591c5b5dbdacfce0334c515d",
         "model": null,
         "context_budget": 20000,
         "payload_budget": 12000,
@@ -174,7 +175,7 @@
           ],
           "loaded_sources": 3,
           "relevant_sources": 3,
-          "time_to_context_ms": 79.905,
+          "time_to_context_ms": 430.234,
           "timing_scope": "compile_bundle + build_payload"
         },
         "included_items": [
@@ -182,7 +183,7 @@
             "source": "docs/needed.md",
             "kind": "required",
             "hash": "9ce11db45fc9",
-            "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
+            "revision": "590ac8e5beb33624591c5b5dbdacfce0334c515d",
             "tokens": 14,
             "reason": "context.required",
             "truncated": false
@@ -191,7 +192,7 @@
             "source": "task",
             "kind": "project_context",
             "hash": "3f28a71a357f",
-            "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
+            "revision": "590ac8e5beb33624591c5b5dbdacfce0334c515d",
             "tokens": 15,
             "reason": "текст задачи",
             "truncated": false
@@ -200,7 +201,7 @@
             "source": "docs/noise.md",
             "kind": "optional",
             "hash": "073e1f30a8db",
-            "revision": "bd470b4e7ff634bf4c5a2e458d1ef2b459ce28e7",
+            "revision": "590ac8e5beb33624591c5b5dbdacfce0334c515d",
             "tokens": 140,
             "reason": "context.optional",
             "truncated": false
@@ -296,7 +297,71 @@
       },
       "context_hybrid": null,
       "forbidden_read_calls": [],
-      "hybrid_fixture": null
+      "hybrid_fixture": null,
+      "observed_source_reads": {
+        ".ai-ops.yaml": 10,
+        ".ai/runtime/active-work.yaml": 3,
+        ".ai/worktrees/context-resource/.ai-ops.yaml": 6,
+        ".git/ai-ops/active-work.yaml": 3,
+        "docs/needed.md": 1,
+        "docs/noise.md": 1,
+        "features/context-resource/lifecycle-journal.jsonl": 2,
+        "features/context-resource/lifecycle-journal.jsonl.head": 3,
+        "features/context-resource/run-handoff.yaml": 1,
+        "features/context-resource/run-history/run-001.yaml": 1,
+        "features/context-resource/run-plan.yaml": 1,
+        "features/context-resource/run-report.json": 1,
+        "features/context-resource/run-settings.yaml": 1
+      },
+      "source_revision": "590ac8e5beb33624591c5b5dbdacfce0334c515d",
+      "source_labels": {
+        "relevant": [
+          "task",
+          "docs/needed.md",
+          "docs/not-selected.md"
+        ],
+        "irrelevant": [
+          "docs/noise.md"
+        ],
+        "evidence": "qualification/context_resource/run.py: ручная source-разметка fixture до прогона; не семантическая оценка проекта"
+      },
+      "labels_sha256_before_run": "ca00aa46e6b41404dbbc0935a3c8d9b76b6ed7501c6b3e38ef881317b20506a5",
+      "writer_contexts_file": "/private/tmp/ai-ops-1403-labelled-baseline-final-20261030/positive/writer-contexts.json",
+      "writer_contexts_sha256": "c4db6ba4e7ee2f3f21603ea88a893194efb93b6c8f6705cb438185349be0f648",
+      "compiled_payload_file": "/private/tmp/ai-ops-1403-labelled-baseline-final-20261030/positive/compiled-payload.txt",
+      "compiled_payload_sha256": "729525335445d1d94000910278608f0e2cd9a5aed2ea650efc86b69176d05ebc",
+      "report_context_payload": {
+        "payload_tokens": 169,
+        "payload_budget": 12000,
+        "context_budget": 20000,
+        "included_items": 3,
+        "excluded_for_budget": 0,
+        "fed_to_model": true,
+        "compiled_text_tokens_estimate": 288,
+        "resource_check": {
+          "ok": true,
+          "errors": [],
+          "missing_required": [],
+          "within_budget": true
+        },
+        "metrics": {
+          "status": "measured",
+          "precision": 0.6666666666666666,
+          "waste": 0.8284023668639053,
+          "miss": 0.3333333333333333,
+          "basis": "explicit-source-labels",
+          "unlabelled_sources": [],
+          "evidence": "qualification/context_resource/run.py: ручная source-разметка fixture до прогона; не семантическая оценка проекта",
+          "missing_relevant": [
+            "docs/not-selected.md"
+          ],
+          "loaded_sources": 3,
+          "relevant_sources": 3,
+          "time_to_context_ms": 430.234,
+          "timing_scope": "compile_bundle + build_payload"
+        }
+      },
+      "forbidden_read_observer_scope": "Path.read_text внутри ai_ops_run.run; без подготовки fixture и native process IO"
     },
     {
       "scope": "local-pipeline-controlled-proposer",
@@ -384,7 +449,7 @@
         "schema_version": 1,
         "kind": "ContextPayload",
         "workitem_id": "context-resource",
-        "revision": "4b5ab9bafccf3f8e31e839f1f55a619b5c8a6ce1",
+        "revision": "3b53a31c8a23990092e5b9e24d0ed7077ad42ddf",
         "model": null,
         "context_budget": 100,
         "payload_budget": 60,
@@ -433,7 +498,7 @@
           ],
           "loaded_sources": 1,
           "relevant_sources": 3,
-          "time_to_context_ms": 68.312,
+          "time_to_context_ms": 356.167,
           "timing_scope": "compile_bundle + build_payload"
         },
         "included_items": [
@@ -441,7 +506,7 @@
             "source": "task",
             "kind": "project_context",
             "hash": "3f28a71a357f",
-            "revision": "4b5ab9bafccf3f8e31e839f1f55a619b5c8a6ce1",
+            "revision": "3b53a31c8a23990092e5b9e24d0ed7077ad42ddf",
             "tokens": 15,
             "reason": "текст задачи",
             "truncated": false
@@ -550,7 +615,37 @@
       },
       "context_hybrid": null,
       "forbidden_read_calls": [],
-      "hybrid_fixture": null
+      "hybrid_fixture": null,
+      "observed_source_reads": {
+        ".ai-ops.yaml": 6,
+        ".ai/runtime/attention.yaml": 1,
+        "docs/needed.md": 1,
+        "docs/noise.md": 1,
+        "features/context-resource/lifecycle-journal.jsonl.head": 1,
+        "features/context-resource/run-history/run-001.yaml": 1,
+        "features/context-resource/run-plan.yaml": 1,
+        "features/context-resource/run-report.json": 1,
+        "features/context-resource/run-settings.yaml": 1
+      },
+      "source_revision": "3b53a31c8a23990092e5b9e24d0ed7077ad42ddf",
+      "source_labels": {
+        "relevant": [
+          "task",
+          "docs/needed.md",
+          "docs/not-selected.md"
+        ],
+        "irrelevant": [
+          "docs/noise.md"
+        ],
+        "evidence": "qualification/context_resource/run.py: ручная source-разметка fixture до прогона; не семантическая оценка проекта"
+      },
+      "labels_sha256_before_run": "ca00aa46e6b41404dbbc0935a3c8d9b76b6ed7501c6b3e38ef881317b20506a5",
+      "writer_contexts_file": "/private/tmp/ai-ops-1403-labelled-baseline-final-20261030/over-budget/writer-contexts.json",
+      "writer_contexts_sha256": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570",
+      "compiled_payload_file": "/private/tmp/ai-ops-1403-labelled-baseline-final-20261030/over-budget/compiled-payload.txt",
+      "compiled_payload_sha256": "c9943850e1c66cc7f9d5599fc28c11c4b30c0e7d9f1ead28088ed901148b3590",
+      "report_context_payload": null,
+      "forbidden_read_observer_scope": "Path.read_text внутри ai_ops_run.run; без подготовки fixture и native process IO"
     },
     {
       "scope": "local-pipeline-controlled-proposer",
@@ -591,8 +686,8 @@
       },
       "commit": {
         "branch": "ai-ops/context-resource",
-        "sha": "000a88bcbf8ff0e497564607e761d24071933cbb",
-        "evidence_revision": "000a88bcbf8ff0e497564607e761d24071933cbb",
+        "sha": "2585eae556c44c5f58336c6681d0b92b8351506f",
+        "evidence_revision": "2585eae556c44c5f58336c6681d0b92b8351506f",
         "evidence_on_exact_sha": true,
         "changed_files": [
           "src/result.txt"
@@ -672,7 +767,7 @@
         "schema_version": 1,
         "kind": "ContextPayload",
         "workitem_id": "context-resource",
-        "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+        "revision": "ebd258b1ec1e9dc8c2f1b1e1a6007cadfe82ce51",
         "model": null,
         "context_budget": 20000,
         "payload_budget": 12000,
@@ -718,7 +813,7 @@
             "src/hybrid.py",
             "task"
           ],
-          "time_to_context_ms": 111.541,
+          "time_to_context_ms": 763.398,
           "timing_scope": "compile_bundle + build_payload + hybrid"
         },
         "included_items": [
@@ -726,7 +821,7 @@
             "source": "docs/needed.md",
             "kind": "required",
             "hash": "9ce11db45fc9",
-            "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+            "revision": "ebd258b1ec1e9dc8c2f1b1e1a6007cadfe82ce51",
             "tokens": 14,
             "reason": "context.required",
             "truncated": false
@@ -735,7 +830,7 @@
             "source": "task",
             "kind": "project_context",
             "hash": "3f28a71a357f",
-            "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+            "revision": "ebd258b1ec1e9dc8c2f1b1e1a6007cadfe82ce51",
             "tokens": 15,
             "reason": "текст задачи",
             "truncated": false
@@ -745,7 +840,7 @@
             "kind": "hybrid",
             "tokens": 8,
             "hash": "b7accb0e0e62",
-            "revision": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4",
+            "revision": "ebd258b1ec1e9dc8c2f1b1e1a6007cadfe82ce51",
             "truncated": false,
             "reason": "hybrid v2-addition"
           }
@@ -847,7 +942,7 @@
         "mode": "hybrid",
         "reason": "promotion gate ready -> mandatory (v1 файлы + rules/policy refs) + v2-additions",
         "snapshot_verified": true,
-        "cache_key": "repo:/private/tmp/ai-ops-1403-hybrid-reviewed-20261030/hybrid|sha:739febd7bf6bd3fb78da3e0d31e0517f3d993ba4|afp:fixture-afp:ea5bbf673f966eca|dcp:fixture-dcp:8986a9207379b44c|allowed:0e047226|role:executor|q:Запиши ответ из docs/needed.md в src/result.txt|b:20000|idx:1|context:25888bb5ff74",
+        "cache_key": "repo:/private/tmp/ai-ops-1403-labelled-baseline-final-20261030/hybrid|sha:ebd258b1ec1e9dc8c2f1b1e1a6007cadfe82ce51|afp:fixture-afp:ea5bbf673f966eca|dcp:fixture-dcp:8986a9207379b44c|allowed:0e047226|role:executor|q:Запиши ответ из docs/needed.md в src/result.txt|b:20000|idx:1|context:25888bb5ff74",
         "v2_additions": [
           "docs/needed.md",
           "src/hybrid.py"
@@ -868,13 +963,68 @@
           "policy:fixture-dcp"
         ],
         "promotion_ready": true,
-        "base_sha": "739febd7bf6bd3fb78da3e0d31e0517f3d993ba4"
+        "base_sha": "ebd258b1ec1e9dc8c2f1b1e1a6007cadfe82ce51"
       },
       "forbidden_read_calls": [],
       "hybrid_fixture": {
         "case_alias_exists": true,
         "unicode_alias_exists": true
-      }
+      },
+      "observed_source_reads": {
+        ".ai-ops.yaml": 12,
+        ".ai/policies/access-filter.yaml": 1,
+        ".ai/policies/data-classification.yaml": 1,
+        ".ai/runtime/active-work.yaml": 3,
+        ".ai/worktrees/context-resource/.ai-ops.yaml": 6,
+        ".git/ai-ops/active-work.yaml": 3,
+        ".gitignore": 1,
+        "docs/needed.md": 3,
+        "features/context-resource/lifecycle-journal.jsonl": 2,
+        "features/context-resource/lifecycle-journal.jsonl.head": 3,
+        "features/context-resource/run-handoff.yaml": 1,
+        "features/context-resource/run-history/run-001.yaml": 1,
+        "features/context-resource/run-plan.yaml": 1,
+        "features/context-resource/run-report.json": 1,
+        "features/context-resource/run-settings.yaml": 1,
+        "src/hybrid.py": 5
+      },
+      "source_revision": "ebd258b1ec1e9dc8c2f1b1e1a6007cadfe82ce51",
+      "source_labels": null,
+      "labels_sha256_before_run": "38e0b9de817f645c4bec37c0d4a3e58baecccb040f5718dc069a72c7385a0bed",
+      "writer_contexts_file": "/private/tmp/ai-ops-1403-labelled-baseline-final-20261030/hybrid/writer-contexts.json",
+      "writer_contexts_sha256": "5bd9cb2095206727a811e9d017f95b15a815742ac0c1705bab1b9cfef9d02515",
+      "compiled_payload_file": "/private/tmp/ai-ops-1403-labelled-baseline-final-20261030/hybrid/compiled-payload.txt",
+      "compiled_payload_sha256": "e83081c3b665970866254236a9d8a10740bd6bc810ccff5528619dce01751b52",
+      "report_context_payload": {
+        "payload_tokens": 37,
+        "payload_budget": 12000,
+        "context_budget": 20000,
+        "included_items": 3,
+        "excluded_for_budget": 0,
+        "fed_to_model": true,
+        "compiled_text_tokens_estimate": 153,
+        "resource_check": {
+          "ok": true,
+          "errors": [],
+          "missing_required": [],
+          "within_budget": true
+        },
+        "metrics": {
+          "status": "unknown",
+          "precision": null,
+          "waste": null,
+          "miss": null,
+          "basis": "explicit-source-labels",
+          "unlabelled_sources": [
+            "docs/needed.md",
+            "src/hybrid.py",
+            "task"
+          ],
+          "time_to_context_ms": 763.398,
+          "timing_scope": "compile_bundle + build_payload + hybrid"
+        }
+      },
+      "forbidden_read_observer_scope": "Path.read_text внутри ai_ops_run.run; без подготовки fixture и native process IO"
     }
   ]
 }
