@@ -133,7 +133,7 @@ def binding(root, feature=None):
     if POLICY not in checksums:
         raise ValueError("общая политика не доставлена; нужен штатный update")
     return {"root": str(root), "head": git(root, "rev-parse", "HEAD"),
-            "branch": git(root, "symbolic-ref", "--quiet", "--short", "HEAD"),
+            "branch": git(root, "rev-parse", "--abbrev-ref", "HEAD"),
             "version": version, "managed_sha256": digest(json.dumps(checksums, sort_keys=True)),
             "config_sha256": digest((root / ".ai-ops.yaml").read_bytes()),
             "source_sha256": source_digest(root, feature)}
