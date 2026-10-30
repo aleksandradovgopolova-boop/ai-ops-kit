@@ -6,8 +6,8 @@
 
 ## Решение и нормативная граница
 
-Запрет сетевой телеметрии из [ProductMetrics](../../context/product/ProductMetrics.md) и
-[MetricCatalog](../../context/product/MetricCatalog.md) сохраняется. Код не создаёт сервер,
+Запрет сетевой телеметрии из [ProductMetrics](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/context/product/ProductMetrics.md) и
+[MetricCatalog](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/context/product/MetricCatalog.md) сохраняется. Код не создаёт сервер,
 аккаунты, ключи или доступы, не отправляет данные. Поддерживается только локальный учёт и
 передача файла самим владельцем вне Kit. Центральный сбор пока не реализован; его нельзя
 объявлять работающим или включать на основании этого решения. Для сетевого транспорта
