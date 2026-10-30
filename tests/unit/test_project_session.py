@@ -123,6 +123,27 @@ def test_process_and_artifacts_are_created_before_acceptance(project):
     assert hook("codex", {"cwd": str(project), "session_id": "a", "hook_event_name": "Stop"}) == {}
 
 
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+def test_pinned_detached_checkout_binds_and_rejects_a_different_head(project, runtime):
+    fixture_producer(project)
+    revision = sessions.git(project, "rev-parse", "HEAD")
+    sessions.git(project, "checkout", "--detach", revision)
+    task = sessions.begin(project, runtime, "pinned", "исследуй архитектуру")
+    assert task["status"] == "pending"
+    assert task["binding"]["head"] == revision
+    assert task["binding"]["branch"] == "HEAD"
+    context = hook(runtime, {"cwd": str(project), "session_id": "pinned", "hook_event_name": "SessionStart"})
+    assert "Сохранённая задача" in context["hookSpecificOutput"]["additionalContext"]
+    result = sessions.execute(project, runtime, "pinned", {"task_type": "research"})
+    assert (project / ".ai/runtime/process-observed").read_text() == task["prompt"]
+    assert result["status"] == "accepted"
+    assert sessions.verify(project, runtime, "pinned")["accepted"]
+    sessions.git(project, "commit", "--allow-empty", "-qm", "different detached head")
+    assert sessions.git(project, "rev-parse", "HEAD") != revision
+    with pytest.raises(ValueError, match="прежнее подтверждение"):
+        sessions.verify(project, runtime, "pinned")
+
+
 @pytest.mark.parametrize("mode", ("mock", "error"))
 def test_mock_or_failed_process_is_not_accepted(project, mode):
     fixture_producer(project, mode)
