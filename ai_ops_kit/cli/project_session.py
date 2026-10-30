@@ -5,11 +5,27 @@ import argparse
 import json
 import sys
 
+import yaml
+
 from ai_ops_kit.lifecycle import project_session as sessions
 
 
 def hook(runtime, payload):
     event = payload.get("hook_event_name")
+    if event == "Stop":
+        try:
+            root = sessions.project_root(payload["cwd"])
+            if not sessions.required(root):
+                return {}
+            verdict = sessions.verify(root, runtime, payload["session_id"])
+            if verdict["accepted"]:
+                return {}
+            reason = "AI Ops не подтвердил выполнение: " + verdict["reason"]
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError) as exc:
+            reason = "AI Ops не подтвердил выполнение: " + str(exc)
+        # В Codex exit 2 / decision:block создают новый модельный ход. Ошибка
+        # проверки не должна превращаться в платный цикл или новую постановку.
+        return {"continue": False, "stopReason": reason, "systemMessage": reason}
     root = sessions.project_root(payload["cwd"])
     session = payload["session_id"]
     if not sessions.required(root):
@@ -34,16 +50,6 @@ def hook(runtime, payload):
                         "Прочитай её из .ai/runtime/sessions/; перед продолжением проверь текущую привязку. ")
         context += f"Общий канон: .ai/managed/{sessions.POLICY}."
         return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
-    if event == "Stop":
-        verdict = sessions.verify(root, runtime, session)
-        if verdict["accepted"]:
-            return {}
-        reason = "AI Ops не подтвердил выполнение: " + verdict["reason"]
-        # Не создаём бесконечный платный цикл Stop. Второй исход — отказ в приёмке,
-        # а не зелёная квитанция; runtime может честно сообщить блокер.
-        if payload.get("stop_hook_active") or verdict["status"] == "blocked":
-            return {"systemMessage": reason}
-        return {"decision": "block", "reason": reason + ". Выполни сохранённую задачу по проектному канону или сообщи проверенный блокер."}
     raise ValueError(f"неподдерживаемое событие: {event}")
 
 
@@ -69,10 +75,20 @@ def main(argv=None):
                 signals = json.loads(args.signals or "{}")
                 if not isinstance(signals, dict):
                     raise ValueError("signals должен быть JSON object")
+                from ai_ops_kit.engine import pipeline_helpers
+                missing = pipeline_helpers.missing_intake_signals(signals)
+                if missing:
+                    raise ValueError("; ".join(pipeline_helpers.intake_signals_hint(missing))
+                                     + ". Запуск не начат; уточни signals той же сохранённой задачи.")
                 result = sessions.execute(root, args.runtime, args.session, signals)
             print(json.dumps(result, ensure_ascii=False))
             return 0 if result.get("accepted") or result.get("status") == "accepted" else 1
-    except (OSError, ValueError, KeyError, TypeError) as exc:
+    except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError) as exc:
+        if args.action == "hook":
+            reason = f"AI Ops: {exc}. Сохранённая задача не считается принятой."
+            print(json.dumps({"continue": False, "stopReason": reason, "systemMessage": reason},
+                             ensure_ascii=False))
+            return 0
         print(f"AI Ops: {exc}. Сохранённая задача не считается принятой.", file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False))
