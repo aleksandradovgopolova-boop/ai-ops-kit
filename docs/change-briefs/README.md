@@ -103,3 +103,5 @@
 
 - [Strict mypy для состояния Budget — #1412](1412-strict-budget.md).
 - [Восстановление project session после неполного intake — #1434](1434-live-session-recovery.md).
+
+- [Проектная сессия на detached checkout — #1434](1434-detached-checkout.md).
