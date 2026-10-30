@@ -110,9 +110,7 @@ def route(inp: dict[str, Any]) -> RouteResult:
             reasons.append(f"unknown task_type '{inp.get('task_type')}' -> ENGINEERING (QUICK недоступен)")
 
     # 2. provider prefer/forbid + model_class (из provider_rules)
-    prefer_provider: list[str] = []
-    forbid_provider: list[str] = []
-    model_class: str | None = None
+    prefer_provider, forbid_provider, model_class = [], [], None  # type: tuple[list[str], list[str], str | None]
     for rule in policy.get("provider_rules", []):
         applies = ("default" in rule) or _match(rule.get("when", {}), inp)
         if not applies:

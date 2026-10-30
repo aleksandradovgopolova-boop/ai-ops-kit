@@ -859,3 +859,5 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 
 - `docs/agent-guides/context-resource.md` — политика и измерения compiled payload (#1403).
 - `qualification/context_resource/` — воспроизводимый локальный pipeline с явной разметкой источников.
+
+- `docs/change-briefs/1434-live-session-recovery.md` — восстановление intake и локальные журналы #1434.

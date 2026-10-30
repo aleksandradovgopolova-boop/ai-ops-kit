@@ -102,3 +102,4 @@
 - [Контекст как измеряемый ресурс — #1403](1403-context-resource.md).
 
 - [Strict mypy для состояния Budget — #1412](1412-strict-budget.md).
+- [Восстановление project session после неполного intake — #1434](1434-live-session-recovery.md).
