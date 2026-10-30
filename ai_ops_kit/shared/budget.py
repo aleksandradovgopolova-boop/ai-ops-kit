@@ -16,7 +16,7 @@ import json
 import os
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
-from typing import Any, Callable, ContextManager, Iterator
+from typing import Any, Callable, ContextManager, Iterator, cast
 
 from ai_ops_kit.shared import lifecycle_store
 import sys
@@ -41,7 +41,7 @@ def _number(value: object) -> float:
     return number
 
 
-def declared_limits(data: dict | None = None) -> dict:
+def declared_limits(data: dict[str, Any] | None = None) -> dict[str, Any]:
     """Только существующие поля контракта; неизвестные/falsey malformed не становятся unlimited."""
     if data is not None and not isinstance(data, dict):
         raise ValueError("budget должен быть словарём или None")
@@ -61,21 +61,21 @@ def declared_limits(data: dict | None = None) -> dict:
 
 
 class Budget:
-    def __init__(self, max_model_calls: int | None = None, max_cost: float | None = None, max_duration: float | None = None) -> None:
+    def __init__(self, max_model_calls: int | None = None, max_cost: float | None = None, max_duration: float | str | None = None) -> None:
         limits = declared_limits(dict(max_model_calls=max_model_calls, max_cost=max_cost, max_duration=max_duration))
-        self.max_model_calls = limits["max_model_calls"]
-        self.max_cost = limits["max_cost"]
-        self.max_duration = limits["max_duration"]
+        self.max_model_calls: int | None = limits["max_model_calls"]
+        self.max_cost: float | None = limits["max_cost"]
+        self.max_duration: float | str | None = limits["max_duration"]
         self.model_calls, self.cost, self._unknown_cost = 0, 0.0, 0
         self._lock = RLock()
-        self._ledger: tuple[Path, dict] | None = None
+        self._ledger: tuple[Path, dict[str, Any]] | None = None
         self._admission_guard: Callable[[], ContextManager[Any]] = nullcontext
 
     @classmethod
-    def from_dict(cls, d: dict | None) -> "Budget":
+    def from_dict(cls, d: dict[str, Any] | None) -> "Budget":
         return cls(**declared_limits(d))
 
-    def limits(self) -> dict:
+    def limits(self) -> dict[str, Any]:
         with self._lock:
             return {key: getattr(self, key) for key in _FIELDS}
 
@@ -125,13 +125,13 @@ class Budget:
             except Exception as exc:
                 raise BudgetExceeded("budget durable admission unavailable; callback refused") from exc
 
-    def _record(self, binding: dict, calls: int, subtotal: float, unknown: int) -> dict:
+    def _record(self, binding: dict[str, Any], calls: int, subtotal: float, unknown: int) -> dict[str, Any]:
         return {"schema_version": 1, "kind": "LogicalCallBudget", "binding": binding,
                 "limits": self.limits(), "model_calls": calls,
                 "known_cost_lower_bound": subtotal, "unknown_cost_calls": unknown,
                 "call_unit": "logical-proposer-invocation", "reservation_mode": "durable-before-callback"}
 
-    def _adopt_record(self, record: dict, binding: dict) -> None:
+    def _adopt_record(self, record: dict[str, Any], binding: dict[str, Any]) -> None:
         if (type(record.get("schema_version")) is not int or record["schema_version"] != 1
                 or record.get("kind") != "LogicalCallBudget"
                 or record.get("call_unit") != "logical-proposer-invocation"
@@ -151,7 +151,7 @@ class Budget:
             raise BudgetExceeded("budget durable mode cannot certify a known USD subtotal")
         self.model_calls, self.cost, self._unknown_cost = calls, subtotal, unknown
 
-    def bind_durable(self, path: str | Path, binding: dict, *, create: bool = False,
+    def bind_durable(self, path: str | Path, binding: dict[str, Any], *, create: bool = False,
                      guard: Callable[[], ContextManager[Any]] = nullcontext) -> None:
         """Attach existing job reservations; only proven fresh jobs may create zero state."""
         path, binding = Path(path).absolute(), json.loads(_budget_json(binding))
@@ -189,7 +189,7 @@ class Budget:
             self._refresh_durable()
             return None if self.max_model_calls is None else max(0, self.max_model_calls - self.model_calls)
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         with self._lock:
             self._refresh_durable()
             remaining = None if self.max_model_calls is None else max(0, self.max_model_calls - self.model_calls)
@@ -226,19 +226,20 @@ def _reservation_lock(path: Path) -> Iterator[None]:
         raise BudgetExceeded("budget durable lock/read unavailable") from exc
 
 
-def _reservation_read(path: Path) -> dict:
+def _reservation_read(path: Path) -> dict[str, Any]:
     loaded = lifecycle_store.load_guarded(path, kind="LogicalCallBudget")
     if loaded["state"] != "ok":
         raise BudgetExceeded("budget durable ledger missing/corrupt; no fresh fallback")
-    return loaded["data"]
+    # load_guarded(state=ok) уже проверил dict; _adopt_record проверяет binding/счётчики.
+    return cast(dict[str, Any], loaded["data"])
 
 
-def _reservation_write(path: Path, record: dict) -> None:
+def _reservation_write(path: Path, record: dict[str, Any]) -> None:
     saved = lifecycle_store.durable_write_json(path, record)
     if not saved.get("ok"):
         raise BudgetExceeded("budget reservation not confirmed durable; callback refused")
 
-def resolve_budget(explicit: Budget | dict | None = None, *declarations: dict | None) -> Budget:
+def resolve_budget(explicit: Budget | dict[str, Any] | None = None, *declarations: dict[str, Any] | None) -> Budget:
     """Один runtime object; совпадающие декларации не создают counters, конфликт не замалчивается."""
     if isinstance(explicit, Budget):
         shared, limits = explicit, explicit.limits()
