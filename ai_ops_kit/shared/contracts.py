@@ -14,7 +14,8 @@ IDE и mypy получают навигацию и проверку; стары�
   DeliveryIntent    — намерение доставки (PR)
   DeliveryReceipt   — подтверждение доставки (PR смержён/не смержён)
   ContextBundle     — пакет контекста для WorkItem
-  WorkItemState      — состояние WorkItem
+  WorkItemState     — состояние WorkItem
+  RouteResult       — статическая проекция фактического Python-вывода route()
 
 Только аннотации, без runtime-логики. Импортируется как:
   from ai_ops_kit.shared.contracts import UsageRecord, PreflightResult
@@ -275,6 +276,30 @@ class WorkItemState(TypedDict, total=False):
     run_id: Optional[str]
     branch: Optional[str]
     pr_url: Optional[str]
+
+
+# ============================================================================
+# Routing — Python-проекция, не второй валидатор route-decision.schema.json
+# ============================================================================
+
+class RouteResult(TypedDict):
+    """Фактический результат shared.ai_route.route(), включая отсутствие выбора.
+
+    Реестры задают допустимые решения; JSON Schema задаёт внешний формат.
+    Эта проекция не проверяет схему и не копирует её enum/const/ограничения.
+    """
+    schema_version: int
+    workflow: str
+    selected_provider: str | None
+    selected_runtime: str | None
+    selected_model_class: str
+    execution_mode: str
+    reasons: list[str]
+    classification_confidence: str
+    required_capabilities: list[str]
+    missing_capabilities: list[str]
+    fallbacks: list[dict[str, str | None]]
+    human_approval_required: bool
 
 
 # ============================================================================
