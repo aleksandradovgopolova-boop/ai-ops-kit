@@ -40,6 +40,62 @@ def window():
     return a._today(), a._today()
 
 
+@pytest.mark.parametrize("today,start", [
+    ("2026-01-01", "2025-12-03"),
+    ("2028-03-01", "2028-02-01"),
+    ("2026-03-01", "2026-01-31"),
+])
+def test_default_window_includes_thirty_utc_calendar_dates(monkeypatch, today, start):
+    monkeypatch.setattr(a, "_today", lambda: today)
+    assert a.reporting_window() == {"start": start, "end": today}
+
+
+def test_explicit_window_is_preserved():
+    assert a.reporting_window("2000-01-01", "2000-01-03") == {
+        "start": "2000-01-01", "end": "2000-01-03"}
+
+
+@pytest.mark.parametrize("start,end", [("2000-01-01", None), (None, "2000-01-03"),
+    ("2000-01-03", "2000-01-01"), ("2999-01-01", "2999-01-03"), ("", "2000-01-03")])
+def test_reporting_window_rejects_incomplete_or_invalid_dates(start, end):
+    with pytest.raises(ValueError):
+        a.reporting_window(start, end)
+
+
+def test_default_report_is_read_only_without_consent(repo, monkeypatch, capsys):
+    monkeypatch.setattr(a, "_today", lambda: "2026-01-01")
+    assert adoption_cli.main(["report", str(repo)]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["window"] == {"start": "2025-12-03", "end": "2026-01-01"}
+    assert result["world_total_state"] == "unknown"
+    assert not a._store(repo).exists()
+
+
+def test_default_preview_and_export_show_same_window(repo, monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(a, "_today", lambda: "2026-01-01")
+    a.consent(repo, owner=True)
+    assert adoption_cli.main(["preview", str(repo)]) == 0
+    preview = json.loads(capsys.readouterr().out)
+    path = tmp_path / "default-export.json"
+    assert adoption_cli.main(["export", str(repo), "--output", str(path)]) == 0
+    exported = json.loads(capsys.readouterr().out)
+    assert preview["window"] == exported["window"] == {
+        "start": "2025-12-03", "end": "2026-01-01"}
+    assert a.validate_receipt(json.loads(path.read_text())) == exported
+
+
+@pytest.mark.parametrize("flag", ["--start", "--end"])
+def test_incomplete_window_export_does_not_write_or_change_consent(repo, tmp_path, capsys, flag):
+    a.consent(repo, owner=True)
+    state_path = a._store(repo) / "consent.json"
+    before = state_path.read_bytes()
+    path = tmp_path / "not-exported.json"
+    assert adoption_cli.main(["export", str(repo), flag, a._today(), "--output", str(path)]) == 2
+    assert "error" in json.loads(capsys.readouterr().out)
+    assert not path.exists()
+    assert state_path.read_bytes() == before
+
+
 def observe(root):
     rep = {"kind": "execution-pipeline", "provider": "test-live", "cost": {"calls": 1}}
     a.observe_completed({"child_root": str(root), "report": rep})

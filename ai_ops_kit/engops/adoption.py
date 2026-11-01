@@ -5,7 +5,7 @@ UUID в истории проекта объединяет клоны/ветки
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
 from pathlib import Path
@@ -42,6 +42,16 @@ def _window(start, end):
     if _day(start) > _day(end) or end > _today():
         raise ValueError("период должен завершаться не позже сегодня и начинаться до завершения")
     return {"start": start, "end": end}
+
+
+def reporting_window(start=None, end=None):
+    """Обе даты явные или последние 30 дат UTC, включая текущий неполный день."""
+    if start is None and end is None:
+        end = _today()
+        start = (date.fromisoformat(end) - timedelta(days=29)).isoformat()
+    elif start is None or end is None:
+        raise ValueError("задайте обе даты периода или не задавайте ни одной")
+    return _window(start, end)
 
 
 def _read(path):
