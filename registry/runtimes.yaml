@@ -74,6 +74,11 @@ runtimes:
       entrypoint: ai_ops_kit/devtools/codex_stage_cli.py
       implementation: ai_ops_kit/devtools/codex_stage.py
       note: "opt-in text-only; internal CLI не поставляется; workflow остаётся blocked; не general executing provider"
+    pipeline_text_provider:
+      status: degraded
+      provider: codex-app-server
+      implementation: ai_ops_kit/providers/codex_native.py
+      note: "Подготовлен native text-only provider; offline regression не заменяет живую приёмку. Нужны native project/hook trust и поддерживаемая модель; права не расширяются автоматически."
     default_provider: openai
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: orchestrated

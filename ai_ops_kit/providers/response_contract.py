@@ -169,6 +169,9 @@ UNSUPPORTED = "unsupported"  # механизма нет; проза плюс р
 # «наверное умеет». Завышенная декларация здесь дала бы гейту право сказать «форма обеспечена» там,
 # где она не обеспечена, — то есть ровно ту ложь, которую весь этот срез убирает.
 SHAPE_SUPPORT = {
+    "codex-app-server": {"mode": UNSUPPORTED, "mechanism": None,
+                         "note": "native текстовая роль; форма проверяется китом после ответа. "
+                                 "Живая квалификация общего pipeline ещё не получена"},
     "anthropic": {"mode": ENFORCED, "mechanism": "output_config.format (json_schema)",
                   "note": "ответ приходит одним текстовым блоком с валидным по схеме JSON"},
     "openai": {"mode": ENFORCED, "mechanism": "response_format: json_schema (strict)",

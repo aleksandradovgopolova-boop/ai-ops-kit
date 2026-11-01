@@ -864,6 +864,10 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 
 - `docs/change-briefs/1434-detached-checkout.md` — привязка сессии к pinned checkout без именованной ветки.
 - `docs/change-briefs/1434-session-preparation-resume.md` — подготовка спецификации до execution-claim и продолжение сохранённой постановки.
+- `ai_ops_kit/providers/codex_native.py` — проверяемый native text-provider pipeline через Codex app-server; живая квалификация не заявлена.
+- `ai_ops_kit/providers/codex_transport.py` — bounded stdio JSON-RPC и завершение собственной process group.
+- `ai_ops_kit/providers/codex_native_hook.py` — изолированный workspace текстовой роли и native отказ инструментам.
+- `docs/change-briefs/1434-native-codex-provider.md` — границы реализации native Codex provider и локальные доказательства.
 - `ai_ops_kit/engops/adoption.py` — добровольный локальный учёт проектов и наблюдаемой активности;
   `docs/architecture/adoption-opt-in.md` — границы доверия и приватности;
   `docs/agent-guides/adoption-measurement.md` — согласие, экспорт, импорт и сводка.

@@ -11,6 +11,16 @@ from ai_ops_kit.lifecycle import project_session as sessions
 from ai_ops_kit.shared import lifecycle_store
 
 
+def native_provider_hook(directory):
+    """Машинный вывод отдельного native hook: библиотека providers возвращает данные."""
+    from ai_ops_kit.providers import codex_native_hook
+    try:
+        result = codex_native_hook.main(directory)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        result = codex_native_hook.denied("Native hook input/state rejected: " + type(exc).__name__)
+    print(json.dumps(result, ensure_ascii=False))
+
+
 def prepare(root, runtime, session, task, signals):
     """Штатная спецификация ДО claim/модели; текущий runtime заполняет её из запроса."""
     from ai_ops_kit.engine import run_plan
@@ -100,6 +110,9 @@ def hook(runtime, payload):
                 context += (f"Спецификация: {task['preparation']['spec']}. "
                             "Сигналы сохранены: project_session run можно продолжить без --signals. "
                             + (task.get("next_step") or ""))
+            if task.get("provider_preparation"):
+                context += ("Готовность native provider ещё не подтверждена; signals сохранены. "
+                            + (task.get("blocker") or "") + " " + (task.get("next_step") or ""))
         context += f"Общий канон: .ai/managed/{sessions.POLICY}."
         return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
     raise ValueError(f"неподдерживаемое событие: {event}")
@@ -129,7 +142,8 @@ def main(argv=None):
                 with lifecycle_store._journal_lock(lock, required=True):
                     task = sessions.pending(root, args.runtime, args.session)
                     signals = (json.loads(args.signals) if args.signals is not None else
-                               (task.get("preparation") or {}).get("signals", {}))
+                               (task.get("preparation") or {}).get("signals") or
+                               (task.get("provider_preparation") or {}).get("signals", {}))
                     if not isinstance(signals, dict):
                         raise ValueError("signals должен быть JSON object")
                     from ai_ops_kit.engine import pipeline_helpers

@@ -236,6 +236,9 @@ def make_provider(name: str, model: str = None, contract=None):
     """
     if name in (None, "mock"):
         return _tagged(mock_provider, "mock", model, contract)
+    if name == "codex-app-server":
+        from ai_ops_kit.providers import codex_native
+        return _tagged(lambda prompt: codex_native.call(prompt, model), name, model, contract)
     if name == "anthropic":
         m = model or DEFAULT_MODELS["anthropic"]
         return _tagged(lambda prompt: _anthropic_call(prompt, m, contract), name, m, contract)

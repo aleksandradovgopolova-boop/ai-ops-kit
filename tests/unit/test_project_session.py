@@ -224,6 +224,8 @@ def test_parallel_resumes_cannot_mutate_preparation_or_execute_twice(project, mo
         with lifecycle_store._journal_lock(lock, required=True):
             for i in range(2):
                 code = (f"from pathlib import Path; Path('.ai/runtime/entered-{i}').touch(); "
+                        "from ai_ops_kit.providers import codex_native; "
+                        "codex_native.readiness=lambda root: {'ready':True,'provider':codex_native.NAME}; "
                         f"from ai_ops_kit.cli.project_session import main; raise SystemExit(main({args!r}))")
                 children.append(subprocess.Popen([sys.executable, "-c", code], cwd=project, env=env,
                                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
@@ -290,7 +292,10 @@ def test_missing_run_report_preserves_actual_process_diagnostic(project, padding
 
 
 @pytest.fixture
-def project(tmp_path):
+def project(tmp_path, monkeypatch):
+    # Это fixture процесса pipeline. Настоящий native handshake отдельно в test_codex_native.
+    from ai_ops_kit.providers import codex_native
+    monkeypatch.setattr(codex_native, "readiness", lambda root: {"ready": True, "provider": codex_native.NAME})
     root = tmp_path / "project"
     root.mkdir()
     for args in (("init", "-q"), ("config", "user.name", "fixture"),
@@ -327,10 +332,13 @@ args = sys.argv[1:]
 fid = args[args.index('--feature')+1]
 runtime = args[args.index('--runtime')+1]
 workflow = (json.loads(args[args.index('--signals')+1]).get('task_type') or 'RESEARCH').upper()
+provider = args[args.index('--provider')+1] if '--provider' in args else 'controlled-fixture'
+if {mode!r} == 'mock': provider = 'mock'
+if {mode!r} == 'provider-drift': provider = 'foreign-provider'
 d = Path('features') / fid
 d.mkdir(parents=True, exist_ok=True)
 (d / 'run-report.json').write_text(json.dumps(dict(kind='execution-pipeline', ready_for_pr=True,
-    provider={'mock' if mode == 'mock' else 'controlled-fixture'!r}, runtime=runtime,
+    provider=provider, runtime=runtime,
     workitem_id=fid, child_root=str(Path.cwd()),
     commit=dict(sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()))))
 (d / 'workitem.yaml').write_text(yaml.safe_dump(dict(task=args[1],workflow=workflow)))
@@ -338,7 +346,7 @@ d.mkdir(parents=True, exist_ok=True)
 lifecycle_store.journal_append(d / 'lifecycle-journal.jsonl',dict(kind='run_end',workitem_id=fid,ready_for_pr=True))
 Path('.ai/runtime/process-observed').write_text(args[1])
 with Path('.ai/runtime/process-calls.jsonl').open('a') as calls:
-    calls.write(json.dumps(dict(feature=fid,runtime=runtime))+'\\n')
+    calls.write(json.dumps(dict(feature=fid,runtime=runtime,provider=provider,command=args))+'\\n')
 sys.exit({1 if mode == 'error' else 0})
 '''
     (root / "ai-ops").write_text(source)
@@ -365,6 +373,63 @@ def test_process_and_artifacts_are_created_before_acceptance(project):
     assert task["status"] == "accepted"
     assert sessions.verify(project, "codex", "a")["accepted"]
     assert hook("codex", {"cwd": str(project), "session_id": "a", "hook_event_name": "Stop"}) == {}
+
+
+def test_native_not_ready_preserves_light_request_and_signals_before_claim(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    from ai_ops_kit.providers import codex_native
+    fixture_producer(project)
+    task = sessions.begin(project, 'codex', 'native-ready', 'Проверь готовый материал')
+    monkeypatch.chdir(project)
+    monkeypatch.setattr(codex_native,'readiness',lambda root: {
+        'ready':False,'provider':codex_native.NAME,'reason':'native hooks untrusted',
+        'next_step':'Подтверди только подготовленный workspace штатным способом'})
+    args=['run','--runtime','codex','--session','native-ready']
+    assert cli.main(args+['--signals','{"task_type":"quick","size":"small","risk":"low"}']) == 1
+    saved=sessions.load(project,'codex','native-ready')
+    assert saved['request_id']==task['request_id'] and saved['status']=='pending'
+    assert saved['blocker']=='native hooks untrusted'
+    assert saved['provider_preparation']['signals']['size']=='small'
+    assert not list(sessions.session_dir(project,'codex','native-ready').glob('*.execution-claim'))
+    assert not (project/'.ai/runtime/process-observed').exists()
+    context=hook('codex',{'cwd':str(project),'session_id':'native-ready','hook_event_name':'SessionStart'})
+    assert 'native hooks untrusted' in context['hookSpecificOutput']['additionalContext']
+    monkeypatch.setattr(codex_native,'readiness',lambda root:{'ready':True,'provider':codex_native.NAME})
+    assert cli.main(args)==0  # ни prompt, ни signals повторно не передавались
+    result=sessions.load(project,'codex','native-ready')
+    assert result['status']=='accepted' and result['request_id']==task['request_id']
+    assert result['blocker'] is None and result['next_step'] is None
+    observed=json.loads((project/'.ai/runtime/process-calls.jsonl').read_text().splitlines()[0])
+    command=observed['command']
+    assert observed['provider']==codex_native.NAME
+    assert command[command.index('--provider')+1]==codex_native.NAME
+    assert (project/'.ai/runtime/process-observed').read_text()=='Проверь готовый материал'
+
+
+def test_native_report_cannot_silently_claim_another_provider(project):
+    fixture_producer(project, 'provider-drift')
+    sessions.begin(project,'codex','provider-drift','Проверь материал')
+    task=sessions.execute(project,'codex','provider-drift',{'task_type':'research'})
+    assert (project/'.ai/runtime/process-observed').exists()  # процесс действительно исполнился
+    assert task['status']!='accepted'
+    assert not sessions.verify(project,'codex','provider-drift')['accepted']
+
+
+@pytest.mark.parametrize('ready', [False, True])
+def test_prompt_changed_during_native_readiness_never_consumes_old_claim(project, monkeypatch, ready):
+    from ai_ops_kit.providers import codex_native
+    fixture_producer(project)
+    old=sessions.begin(project,'codex','readiness-race','OLD PROMPT')
+    def changed(root):
+        sessions.begin(root,'codex','readiness-race','NEW PROMPT')
+        return {'ready':ready,'reason':'fixture unavailable','next_step':'fixture step'}
+    monkeypatch.setattr(codex_native,'readiness',changed)
+    with pytest.raises(ValueError,match='постановка'):
+        sessions.execute(project,'codex','readiness-race',{'task_type':'research'},request=old['request_id'])
+    assert sessions.load(project,'codex','readiness-race')['prompt']=='NEW PROMPT'
+    assert sessions.load(project,'codex','readiness-race')['status']=='pending'
+    assert not (project/'.ai/runtime/process-observed').exists()
+    assert not list(sessions.session_dir(project,'codex','readiness-race').glob('*.execution-claim'))
 
 
 @pytest.mark.parametrize("runtime", sessions.RUNTIMES)
