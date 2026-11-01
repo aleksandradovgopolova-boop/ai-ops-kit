@@ -100,6 +100,18 @@ def _archived_binding(pr, run, workflow, names, prior):
     """prior поступает только из проверенного previous(), не из snapshot/локального JSON."""
     rows = [r for r in [*prior.get("implementations", []), *prior.get("dependency_implementations", [])]
             if r.get("pr") == pr["number"]]
+    if not rows:
+        rows = [r for r in prior.get("ci_archive", []) if r.get("pr") == pr["number"]]
+        if (pr.get("merged") is not True or pr.get("state") != "closed"
+                or pr.get("merge_parent") != pr["base_sha"] or len(rows) != 1):
+            return False
+        row = rows[0]
+        saved = row.get("ci_evidence", {}).get(workflow, {})
+        return (row.get("head") == pr["head_sha"] and row.get("base") == pr["base_sha"]
+                and type(saved.get("run")) is int and type(saved.get("attempt")) is int
+                and saved["run"] == run["id"] and saved["attempt"] == run["run_attempt"]
+                and saved.get("checks") == names
+                and saved.get("jobs_digest") == digest(run.get("jobs", [])))
     if len(rows) != 1:
         return False
     row = rows[0]
@@ -110,7 +122,8 @@ def _archived_binding(pr, run, workflow, names, prior):
     saved = row.get("ci_evidence", {}).get(workflow, {})
     return (type(saved.get("run")) is int and type(saved.get("attempt")) is int
             and saved["run"] == run["id"] and saved["attempt"] == run["run_attempt"]
-            and saved.get("checks") == names)
+            and saved.get("checks") == names
+            and ("jobs_digest" not in saved or saved["jobs_digest"] == digest(run.get("jobs", []))))
 
 
 def _ci_observed(pr, records, policy, prior=None):
@@ -143,7 +156,8 @@ def _ci_observed(pr, records, policy, prior=None):
             if (len(matches) != 1 or matches[0].get("status") != "completed"
                     or matches[0].get("conclusion") != "success"):
                 return False, evidence
-        evidence[workflow] = {"run": run["id"], "attempt": run["run_attempt"], "checks": names}
+        evidence[workflow] = {"run": run["id"], "attempt": run["run_attempt"], "checks": names,
+                              "jobs_digest": digest(jobs)}
     return True, evidence
 
 
@@ -159,6 +173,8 @@ def _implementation_rows(snapshot, commits, policy, prior=None):
                 or any(type(n) is not int or n < 1 for n in pr.get("closing_issues", []))):
             raise ValueError("invalid implementation identity")
     for pr in sorted(pulls, key=lambda p: p["number"]):
+        parents = commits.get(pr.get("merge_sha"), {}).get("parents", pr.get("merge_parents", []))
+        pr = {**pr, "merge_parent": parents[0] if parents else None}
         if type(pr["number"]) is not int or pr["number"] <= 0:
             raise ValueError("invalid PR number")
         merged = (pr.get("merged") is True and pr.get("state") == "closed"
@@ -272,6 +288,7 @@ def build(root, snapshot, *, prior=None):
         if (snapshot.get("complete") is not True or snapshot.get("unchanged") is not True
                 or snapshot.get("input_digests") != inputs):
             raise ValueError("incomplete or changed source")
+        report["ci_archive"] = snapshot.get("ci_archive", [])
         plan = yaml.safe_load((root / "planning/plan.yaml").read_text())
         intent = _intent(plan)
         policy = json.loads((root / "quality/premerge-checks.json").read_text())
@@ -346,7 +363,7 @@ def build(root, snapshot, *, prior=None):
         report["blockers"].append("source_unknown_or_invalid")
         if snapshot.get("reason") in ("github_read_permission_denied", "release_snapshot_unavailable_incomplete_or_changed"):
             report["unavailable_reason"] = snapshot["reason"]
-        if snapshot.get("failure_stage") in ("repository", "release_baseline", "issue_inventory", "pull_links_and_ci", "dependencies", "final_source_consistency"):
+        if snapshot.get("failure_stage") in ("repository", "release_baseline", "open_pr_ci", "issue_inventory", "pull_links_and_ci", "dependencies", "final_source_consistency"):
             report["unavailable_stage"] = snapshot["failure_stage"]
     return finalize(report)
 
