@@ -14,6 +14,27 @@ from ai_ops_kit.integrations.github import GitHubClient, GitHubError, FetchResul
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize("prior", [None, {"repository": "owner/kit"}])
+def test_refresh_supplies_only_previous_boundary_result_to_model(monkeypatch, tmp_path, prior):
+    from ai_ops_kit.devtools import release_plan_state as state
+    calls = []
+    client = type("ReadClient", (), {"repo": "owner/kit"})()
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(src, "capture", lambda root, c: {"repository": c.repo})
+    def previous(c, *, current_run):
+        assert c is client and current_run is None
+        calls.append("verified-boundary")
+        return prior
+    def build(root, snapshot, *, prior):
+        calls.append("model")
+        assert calls == ["verified-boundary", "model"]
+        return {"prior": prior}
+    monkeypatch.setattr(state, "previous", previous)
+    monkeypatch.setattr(rp, "build", build)
+    monkeypatch.setattr(state, "project", lambda report, old, publisher: report)
+    assert src.refresh(tmp_path, client) == {"prior": prior}
+
+
 class Client:
     repo = "owner/kit"
 

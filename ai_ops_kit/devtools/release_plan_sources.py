@@ -270,7 +270,6 @@ def refresh(root, client=None):
     client = client or GitHubClient(repo=parse_slug(_git(root, "remote", "get-url", "origin")))
     snapshot = capture(root, client)
     snapshot.setdefault("repository", client.repo)
-    report = release_plan.build(root, snapshot)
     publisher = None
     current_run = None
     if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -282,6 +281,7 @@ def refresh(root, client=None):
                 or client.repo != os.environ.get("GITHUB_REPOSITORY")):
             raise SnapshotError("publisher source mismatch")
     prior = release_plan_state.previous(client, current_run=current_run)
+    report = release_plan.build(root, snapshot, prior=prior)
     report = release_plan_state.project(report, prior, publisher)
     return report
 
