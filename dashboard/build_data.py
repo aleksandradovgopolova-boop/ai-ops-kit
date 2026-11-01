@@ -27,6 +27,11 @@ import subprocess
 import sys
 from pathlib import Path
 
+# Этот dev-сборщик поддерживает прежний запуск файлом из любого cwd.
+# Локальный bootstrap относится только к этой точке входа и не устанавливает path-belt.
+if __name__ == "__main__" and not __package__:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 try:
     import yaml
 except Exception:  # noqa: BLE001
@@ -753,7 +758,7 @@ def build_spine(root: Path, metrics_filled: bool):
     return out
 
 
-def build(root: Path) -> dict:
+def build(root: Path, *, release_plan=None) -> dict:
     action = next_action(root)
     plan = _plan(root, action.get("source"))
     psections = passport(root)
@@ -766,6 +771,7 @@ def build(root: Path) -> dict:
     delivery = delivery_evidence(root)
     field = field_readout(root)
     return {
+        "release_plan": release_plan,
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
         "repo": repo_slug(root),
         "version": version(root),
@@ -822,14 +828,27 @@ def main() -> int:
     ap = argparse.ArgumentParser(description="Собрать data.json для продуктового пульта AI Ops Kit")
     ap.add_argument("--repo", default=".")
     ap.add_argument("--out", default=None)
+    ap.add_argument("--release-summary", action="store_true", help="результат после подтверждённого deploy")
+    ap.add_argument("--release-plan", action="store_true", help="полная read-only сверка выпуска")
     args = ap.parse_args()
     root = Path(args.repo).resolve()
+    if args.release_summary:
+        from ai_ops_kit.devtools.release_plan_sources import emit_summary
+        return emit_summary(root)
     if not (root / "VERSION").exists():
         print(f"[build_data] не репозиторий кита: нет VERSION в {root}", file=sys.stderr)
         return 1
     out = Path(args.out) if args.out else Path(__file__).resolve().parent / "data.json"
-    data = build(root)
-    out.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    release = None
+    if args.release_plan:
+        from ai_ops_kit.devtools.release_plan_sources import refresh
+        release = refresh(root)
+    data = build(root, release_plan=release)
+    from ai_ops_kit.shared.lifecycle_store import durable_write_json
+    saved = durable_write_json(out, data, require_keys=("generated_at", "repo", "release_plan"))
+    if not saved["ok"]:
+        print("[build_data] запись показателей не подтверждена", file=sys.stderr)
+        return 1
     # Держать встроенный снимок в index.html в синхроне с data.json (актуальность вне Pages).
     synced = sync_snapshot(Path(__file__).resolve().parent / "index.html", data)
     g = data["goals"]
