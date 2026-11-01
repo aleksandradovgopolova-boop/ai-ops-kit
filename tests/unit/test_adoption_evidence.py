@@ -80,8 +80,10 @@ def test_consistent_bytes_are_local_only_not_source_authentication(project):
     assert result["world_total_state"] == "unknown"
 
 
-def test_successful_update_report_is_undated_and_never_updated_in_window(project):
-    report(project, observed_at=a._today(), installed_at=a._today(), source_at=a._today())
+@pytest.mark.parametrize("source_day", ["2000-01-01", "2999-01-01", None])
+def test_successful_update_report_is_undated_and_never_updated_in_window(project, source_day):
+    source_day = source_day or a._today()
+    report(project, observed_at=source_day, installed_at=source_day, source_at=source_day)
     path = project / ".ai/runtime/last-update-report.json"
     os.utime(path, None)
     update = inspect(project)["update"]

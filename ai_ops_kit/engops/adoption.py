@@ -283,6 +283,20 @@ def status(root):
             "observation_scope": "pipeline run_completed after consent; other runtimes unknown"}
 
 
+def _event_day(value):
+    """Время источника, не дата доставки. Без времени свежесть не доказана."""
+    if not isinstance(value, str):
+        raise ValueError("нужно время события")
+    stamp = datetime.fromisoformat(value)
+    if stamp.tzinfo is None or stamp.utcoffset() is None:
+        raise ValueError("нужен часовой пояс события")
+    stamp = stamp.astimezone(timezone.utc)
+    day = stamp.date().isoformat()
+    if stamp > datetime.now(timezone.utc) or day != _today():
+        raise ValueError("свежесть события не подтверждена")
+    return day
+
+
 def observe_completed(data):
     """Подписчик ядра. Не хранит task/model/provider/путь; максимум одна дата за день.
 
@@ -313,10 +327,12 @@ def observe_completed(data):
                 return
             if type(calls) is not int or calls <= 0:
                 return
-            state["days"] = sorted(set(state["days"]) | {_today()})[-366:]
-            _write(path, state)
+            day = _event_day(data.get("timestamp"))
+            if day not in state["days"]:
+                state["days"] = sorted(set(state["days"]) | {day})[-366:]
+                _write(path, state)
         rep["adoption_observation"] = "recorded_locally"
-    except (OSError, ValueError, TypeError, RuntimeError):
+    except (OSError, ValueError, TypeError, RuntimeError, OverflowError):
         rep["adoption_observation"] = "unavailable"
 
 
