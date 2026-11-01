@@ -202,12 +202,8 @@ def verify(root, runtime, session):
     return {"accepted": True, "status": "accepted", "request_id": task["request_id"]}
 
 
-def execute(root, runtime, session, signals, *, provider=None):
-    """Запустить СУЩЕСТВУЮЩИЙ фасад; не свой tool loop и не новая система gates.
-
-    signals классифицирует текущий runtime по общему канону. Нельзя подтвердить
-    вызов другого prompt либо принять найденный до вызова run-report.
-    """
+def pending(root, runtime, session):
+    """Читать ещё не исполненную постановку; подготовка не снимает guards запуска."""
     root = project_root(root)
     task = load(root, runtime, session)
     if task.get("binding") != binding(root, "session-" + task["request_id"]):
@@ -218,6 +214,32 @@ def execute(root, runtime, session, signals, *, provider=None):
     report_path = within(root, f"features/{fid}/run-report.json")
     if report_path.exists():
         raise ValueError("отчёт существовал до запуска: чужое/старое evidence не принимается")
+    if within(session_dir(root, runtime, session), task["request_id"] + ".execution-claim").exists():
+        raise ValueError("попытка исполнения уже закреплена; проверь сохранённый исход")
+    return task
+
+
+def save_preparation(root, runtime, session, request, preparation, reason=None):
+    task = pending(root, runtime, session)
+    if task["request_id"] != request:
+        raise ValueError("активная постановка сменилась во время подготовки")
+    task["preparation"] = preparation
+    task["blocker"] = reason
+    task["next_step"] = ("Заполни спецификацию по сохранённой постановке; затем продолжи тот же "
+                         "project_session run без нового запроса и без повторной передачи signals. "
+                         "До готовности спецификации содержательную работу не начинай.") if reason else None
+    write(session_dir(root, runtime, session) / f"{request}.json", task)
+    return task
+
+
+def execute(root, runtime, session, signals, *, provider=None, request=None):
+    """Запустить существующий фасад с теми же guards и единственной execution-claim."""
+    root = project_root(root)
+    task = pending(root, runtime, session)
+    if request is not None and task["request_id"] != request:
+        raise ValueError("активная постановка сменилась после подготовки; новая задача не исполняется со старыми signals")
+    fid = "session-" + task["request_id"]
+    report_path = within(root, f"features/{fid}/run-report.json")
     # Два параллельных вызова одной постановки не должны запустить две модели.
     claim = within(session_dir(root, runtime, session), task["request_id"] + ".execution-claim")
     try:
@@ -244,7 +266,9 @@ def execute(root, runtime, session, signals, *, provider=None):
                 or report.get("ready_for_pr") is not True or report.get("provider") in (None, "mock")
                 or report.get("workitem_id") != fid or report.get("runtime") != runtime
                 or Path(report.get("child_root", "")).resolve() != root):
-            raise ValueError(f"процесс не подтвердил готовность (exit={result.returncode}); см. {report_path.relative_to(root)}")
+            detail = str(report.get("error") or report.get("overall_status") or "нет подтверждения готовности")[-4096:]
+            raise ValueError(f"процесс не подтвердил готовность (exit={result.returncode}): {detail}; "
+                             f"см. {report_path.relative_to(root)}")
         workitem = yaml.safe_load(within(root, f"features/{fid}/workitem.yaml").read_text(encoding="utf-8"))
         plan = yaml.safe_load(within(root, f"features/{fid}/run-plan.yaml").read_text(encoding="utf-8"))
         journal_path = within(root, f"features/{fid}/lifecycle-journal.jsonl")

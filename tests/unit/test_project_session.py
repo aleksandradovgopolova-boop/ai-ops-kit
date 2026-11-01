@@ -1,7 +1,9 @@
 """FS/Git/процессные пробы протокола; fixture-процесс НЕ живая приёмка коллег."""
 import json
+import os
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -9,6 +11,64 @@ import yaml
 
 from ai_ops_kit.cli.project_session import hook
 from ai_ops_kit.lifecycle import project_session as sessions
+
+
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+def test_research_preparation_resumes_same_request_without_repeating_signals(project, monkeypatch, runtime):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    prompt = "Проверь готовое исследование; не меняй продукт"
+    task = sessions.begin(project, runtime, "resume-preparation", prompt)
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", runtime, "--session", "resume-preparation"]
+    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    feature = "session-" + task["request_id"]
+    spec_path = project / "features" / feature / "spec.yaml"
+    spec = yaml.safe_load(spec_path.read_text())
+    assert spec["level"] == 1  # RESEARCH, а не молчаливое понижение lowercase в QUICK
+    assert spec["sections"] and all(s["status"] == "missing" for s in spec["sections"].values())
+    pending = sessions.load(project, runtime, "resume-preparation")
+    assert pending["request_id"] == task["request_id"] and pending["status"] == "pending"
+    assert not (project / ".ai/runtime/process-observed").exists()
+    assert not list(sessions.session_dir(project, runtime, "resume-preparation").glob("*.execution-claim"))
+    assert not (project / "features" / feature / "run-report.json").exists()
+    context = hook(runtime, {"cwd": str(project), "session_id": "resume-preparation", "hook_event_name": "SessionStart"})
+    assert f"features/{feature}/spec.yaml" in context["hookSpecificOutput"]["additionalContext"]
+    complete_prepared_spec(project, task)
+    from ai_ops_kit.gates import preflight, spec_levels
+    from ai_ops_kit.cli.ai_ops_cli import resolve_flags
+    signals = pending["preparation"]["signals"]
+    assert resolve_flags(signals)["author"] is False  # preset не изменён ради теста
+    truth = preflight.assess(signals, project, feature, spec_cov=spec_levels.assess_from_artifacts(
+        dict(signals, task_type="RESEARCH"), project, feature))
+    assert truth["checks"]["spec"]["ok"]  # тот самый production spec-first blocker снят
+    assert cli.main(args) == 0  # имитация resume: новый вызов CLI, signals уже на диске
+    assert (project / ".ai/runtime/process-observed").read_text() == prompt
+    assert sessions.load(project, runtime, "resume-preparation")["request_id"] == task["request_id"]
+    assert sessions.verify(project, runtime, "resume-preparation")["accepted"]
+
+
+@pytest.mark.parametrize("bad", ["missing", "broken", "empty", "declined-without-note"])
+def test_incomplete_preparation_never_consumes_execution(project, monkeypatch, bad):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "bad-spec", "Исследуй архитектуру")
+    path = project / "features" / ("session-" + task["request_id"]) / "spec.yaml"
+    if bad != "missing":
+        path.parent.mkdir(parents=True)
+        path.write_text("bad: [" if bad == "broken" else yaml.safe_dump({"sections": {
+            "goal": {"status": "declined" if bad == "declined-without-note" else "complete", "content": "", "note": None}}}))
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "codex", "--session", "bad-spec", "--signals",
+            '{"task_type":"research","size":"small","risk":"low"}']
+    assert cli.main(args) == 1
+    assert path.is_file()
+    if bad == "broken":
+        assert path.read_text() == "bad: ["  # не перетирать чужой повреждённый документ
+    assert sessions.load(project, "codex", "bad-spec")["status"] == "pending"
+    assert not sessions.verify(project, "codex", "bad-spec")["accepted"]
+    assert not (project / ".ai/runtime/process-observed").exists()
+    assert not list(sessions.session_dir(project, "codex", "bad-spec").glob("*.execution-claim"))
 
 
 def test_cli_incomplete_intake_can_be_corrected_without_consuming_attempt(project, monkeypatch, capsys):
@@ -22,10 +82,191 @@ def test_cli_incomplete_intake_can_be_corrected_without_consuming_attempt(projec
     assert sessions.load(project, "codex", "recover")["status"] == "pending"
     assert not list(sessions.session_dir(project, "codex", "recover").glob("*.execution-claim"))
     assert not (project / ".ai/runtime/process-observed").exists()
-    assert cli.main(args + ['{"task_type":"research","risk":"medium","size":"large"}']) == 0
+    assert cli.main(args + ['{"task_type":"research","risk":"medium","size":"large"}']) == 1
+    complete_prepared_spec(project, task)
+    assert cli.main(args[:-1]) == 0
     assert (project / ".ai/runtime/process-observed").read_text() == task["prompt"]
     assert sessions.load(project, "codex", "recover")["request_id"] == task["request_id"]
     assert sessions.verify(project, "codex", "recover")["accepted"]
+
+
+def complete_prepared_spec(root, task):
+    path = root / "features" / ("session-" + task["request_id"]) / "spec.yaml"
+    doc = yaml.safe_load(path.read_text())
+    for section in doc["sections"].values():
+        section.update(status="complete", content="Только контроль существующего исследования по коду, без изменения продукта.")
+    path.write_text(yaml.safe_dump(doc, allow_unicode=True))
+
+
+@pytest.mark.parametrize("case", ["empty-content", "numeric-content", "foreign-spec", "needs-human",
+                                 "foreign-report", "claim", "source-drift", "symlink", "local-symlink"])
+def test_prepared_session_cannot_bypass_guards(project, monkeypatch, case):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "guards", "Проверь исследование")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "codex", "--session", "guards"]
+    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    complete_prepared_spec(project, task)
+    feature = project / "features" / ("session-" + task["request_id"])
+    spec_path = feature / "spec.yaml"
+    spec = yaml.safe_load(spec_path.read_text())
+    if case == "empty-content":
+        for section in spec["sections"].values():
+            section["content"] = ""
+    elif case == "numeric-content":
+        spec["sections"]["goal"]["content"] = 123
+    elif case == "foreign-spec":
+        spec["workitem_id"] = "another-task"
+    elif case == "needs-human":
+        spec["sections"]["goal"]["status"] = "needs_human"
+    spec_path.write_text(yaml.safe_dump(spec))
+    expected = 1
+    if case == "foreign-report":
+        (feature / "run-report.json").write_text('{"ready_for_pr":true}')
+        assert (feature / "run-report.json").is_file()
+        expected = 2
+    elif case == "claim":
+        claim = sessions.session_dir(project, "codex", "guards") / (task["request_id"] + ".execution-claim")
+        claim.write_text("already started")
+        assert claim.is_file()
+        expected = 2
+    elif case == "source-drift":
+        (project / "unexpected-result.md").write_text("real source change")
+        assert sessions.binding(project, "session-" + task["request_id"]) != task["binding"]
+        expected = 2
+    elif case in ("symlink", "local-symlink"):
+        outside = project.parent / "outside-spec.yaml" if case == "symlink" else feature / "other-spec.yaml"
+        outside.write_bytes(spec_path.read_bytes())
+        spec_path.unlink()
+        spec_path.symlink_to(outside)
+        assert spec_path.is_symlink()
+        expected = 2
+    before = spec_path.read_bytes()
+    assert cli.main(args) == expected
+    assert spec_path.read_bytes() == before
+    assert not (project / ".ai/runtime/process-observed").exists()
+    assert sessions.load(project, "codex", "guards")["status"] == "pending"
+
+
+def test_foreign_partial_spec_is_rejected_before_any_rewrite(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "foreign-partial", "Исследуй архитектуру")
+    path = project / "features" / ("session-" + task["request_id"]) / "spec.yaml"
+    path.parent.mkdir(parents=True)
+    foreign = {"kind": "spec", "workitem_id": "some-other-task", "level": 0,
+               "signals": {"task_type": "QUICK"},
+               "sections": {"goal": {"status": "complete", "content": "Чужое описание, не менять"}}}
+    path.write_text(yaml.safe_dump(foreign, allow_unicode=True))
+    before = path.read_bytes()
+    monkeypatch.chdir(project)
+    assert cli.main(["run", "--runtime", "codex", "--session", "foreign-partial", "--signals",
+                     '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    assert path.read_bytes() == before  # ни sections, ни level/signals не дописаны
+    assert sessions.load(project, "codex", "foreign-partial")["status"] == "pending"
+    assert not (project / ".ai/runtime/process-observed").exists()
+    assert not list(sessions.session_dir(project, "codex", "foreign-partial").glob("*.execution-claim"))
+
+
+def test_quick_task_without_spec_keeps_existing_light_path(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "quick", "Исправь опечатку")
+    monkeypatch.chdir(project)
+    assert cli.main(["run", "--runtime", "codex", "--session", "quick", "--signals",
+                     '{"task_type":"QUICK","size":"small","risk":"low"}']) == 0
+    assert (project / ".ai/runtime/process-observed").read_text() == task["prompt"]
+    assert not (project / "features" / ("session-" + task["request_id"]) / "spec.yaml").exists()
+
+
+def test_actual_blocked_report_diagnostic_is_preserved_and_cannot_be_retried(project):
+    script = f'''#!{sys.executable}
+import json,sys
+from pathlib import Path
+args=sys.argv[1:]
+folder=Path('features')/args[args.index('--feature')+1]
+folder.mkdir(parents=True)
+Path('.ai/runtime').mkdir(parents=True,exist_ok=True)
+Path('.ai/runtime/process-observed').write_text('real preflight process ran')
+(folder/'run-report.json').write_text(json.dumps(dict(kind='execution-pipeline',ready_for_pr=False,
+    overall_status='blocked-preflight',error='spec-first: explicit missing prerequisite')))
+sys.exit(1)
+'''
+    (project / "ai-ops").write_text(script)
+    sessions.git(project, "add", "ai-ops")
+    sessions.git(project, "commit", "-qm", "blocked report producer")
+    sessions.begin(project, "codex", "preflight-error", "research")
+    result = sessions.execute(project, "codex", "preflight-error", {"task_type": "research"})
+    assert (project / ".ai/runtime/process-observed").read_text() == "real preflight process ran"
+    assert result["status"] == "blocked"
+    assert "spec-first: explicit missing prerequisite" in result["blocker"]
+    with pytest.raises(ValueError, match="запуск уже учтён"):
+        sessions.execute(project, "codex", "preflight-error", {"task_type": "research"})
+    assert not sessions.verify(project, "codex", "preflight-error")["accepted"]
+
+
+def test_parallel_resumes_cannot_mutate_preparation_or_execute_twice(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    from ai_ops_kit.shared import lifecycle_store
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "concurrent-resume", "Проверь исследование")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "codex", "--session", "concurrent-resume"]
+    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    complete_prepared_spec(project, task)
+    spec = project / "features" / ("session-" + task["request_id"]) / "spec.yaml"
+    before = spec.read_bytes()
+    children = []
+    env = dict(os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2]))
+    lock = sessions.session_dir(project, "codex", "concurrent-resume") / "preparation"
+    try:
+        with lifecycle_store._journal_lock(lock, required=True):
+            for i in range(2):
+                code = (f"from pathlib import Path; Path('.ai/runtime/entered-{i}').touch(); "
+                        f"from ai_ops_kit.cli.project_session import main; raise SystemExit(main({args!r}))")
+                children.append(subprocess.Popen([sys.executable, "-c", code], cwd=project, env=env,
+                                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True))
+            deadline = time.monotonic() + 10
+            while not all((project / f".ai/runtime/entered-{i}").exists() for i in range(2)) and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert all((project / f".ai/runtime/entered-{i}").exists() for i in range(2))
+            assert all(p.poll() is None for p in children)
+            assert spec.read_bytes() == before
+            assert not (project / ".ai/runtime/process-observed").exists()
+        for child in children:
+            child.communicate(timeout=30)
+        assert sorted(p.returncode for p in children) == [0, 2]
+        calls = (project / ".ai/runtime/process-calls.jsonl").read_text().splitlines()
+        assert len(calls) == 1
+        assert sessions.verify(project, "codex", "concurrent-resume")["accepted"]
+    finally:
+        for child in children:
+            if child.poll() is None:
+                child.kill()
+                child.communicate(timeout=5)
+
+
+def test_new_prompt_during_preparation_cannot_execute_with_old_signals(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    fixture_producer(project)
+    task = sessions.begin(project, "codex", "replaced", "Исследуй первый вопрос")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "codex", "--session", "replaced"]
+    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    complete_prepared_spec(project, task)
+    original = cli.prepare
+    def replace_after_preparation(*args, **kwargs):
+        result = original(*args, **kwargs)
+        assert result is None
+        new_task = sessions.begin(project, "codex", "replaced", "Совсем другой запрос")
+        assert new_task["request_id"] != task["request_id"]
+        return result
+    monkeypatch.setattr(cli, "prepare", replace_after_preparation)
+    assert cli.main(args) == 2
+    assert not (project / ".ai/runtime/process-observed").exists()
+    assert sessions.load(project, "codex", "replaced")["prompt"] == "Совсем другой запрос"
+    assert not list(sessions.session_dir(project, "codex", "replaced").glob("*.execution-claim"))
 
 
 @pytest.mark.parametrize("padding", ["", "x" * 5000], ids=["short", "bounded-tail"])
@@ -85,16 +326,19 @@ from ai_ops_kit.shared import lifecycle_store
 args = sys.argv[1:]
 fid = args[args.index('--feature')+1]
 runtime = args[args.index('--runtime')+1]
+workflow = (json.loads(args[args.index('--signals')+1]).get('task_type') or 'RESEARCH').upper()
 d = Path('features') / fid
-d.mkdir(parents=True)
+d.mkdir(parents=True, exist_ok=True)
 (d / 'run-report.json').write_text(json.dumps(dict(kind='execution-pipeline', ready_for_pr=True,
     provider={'mock' if mode == 'mock' else 'controlled-fixture'!r}, runtime=runtime,
     workitem_id=fid, child_root=str(Path.cwd()),
     commit=dict(sha=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip()))))
-(d / 'workitem.yaml').write_text(yaml.safe_dump(dict(task=args[1],workflow='RESEARCH')))
-(d / 'run-plan.yaml').write_text(yaml.safe_dump(dict(workitem_id=fid,base_workflow='RESEARCH')))
+(d / 'workitem.yaml').write_text(yaml.safe_dump(dict(task=args[1],workflow=workflow)))
+(d / 'run-plan.yaml').write_text(yaml.safe_dump(dict(workitem_id=fid,base_workflow=workflow)))
 lifecycle_store.journal_append(d / 'lifecycle-journal.jsonl',dict(kind='run_end',workitem_id=fid,ready_for_pr=True))
 Path('.ai/runtime/process-observed').write_text(args[1])
+with Path('.ai/runtime/process-calls.jsonl').open('a') as calls:
+    calls.write(json.dumps(dict(feature=fid,runtime=runtime))+'\\n')
 sys.exit({1 if mode == 'error' else 0})
 '''
     (root / "ai-ops").write_text(source)
