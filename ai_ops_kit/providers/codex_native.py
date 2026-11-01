@@ -18,6 +18,14 @@ NAME = "codex-app-server"
 DISABLED = ("apps", "multi_agent", "remote_plugin", "shell_tool", "memories", "js_repl", "remote_control")
 
 
+class NativeUnavailable(ProviderEnvUnavailableError):
+    """Сохраняет общий тип отказа, но не приписывает Codex причину/советы Claude CLI."""
+
+    def human_message(self):
+        return ("Native Codex не подтвердил выполнение: " + self.detail + ". "
+                "Устрани указанную готовность той же среды и продолжи сохранённую задачу.")
+
+
 def command(binary, servers=()):
     args = [binary, "app-server", "--stdio", "-c", 'forced_login_method="chatgpt"',
             "-c", 'web_search="disabled"']
@@ -215,4 +223,4 @@ def call(prompt, model=None, **options):
     try:
         return _call(prompt, model, **options)
     except (OSError, ValueError, TypeError, KeyError) as exc:
-        raise ProviderEnvUnavailableError(NAME, str(exc)) from None
+        raise NativeUnavailable(NAME, str(exc)) from None

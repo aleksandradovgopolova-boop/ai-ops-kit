@@ -29,11 +29,18 @@ def prepare(root):
     st = directory.stat()
     if st.st_uid != os.getuid() or st.st_mode & 0o077:
         raise NativeError("native workspace не принадлежит участнику или доступен другим пользователям")
+    # macOS /var и /private/var (а также /tmp aliases) должны давать одну native identity.
+    directory = directory.resolve()
     package = Path(__file__).resolve().parents[2]
-    wrapper = (f"import sys\nsys.path.insert(0, {str(package)!r})\n"
-               "from pathlib import Path\nfrom ai_ops_kit.providers.codex_native_hook import main\n"
-               "main(Path(__file__).parent)\n")
-    command = shlex.join([sys.executable, str(directory / "hook.py")])
+    wrapper = ("import sys\ntry:\n"
+               f"    sys.path.insert(0, {str(package)!r})\n"
+               "    from pathlib import Path\n"
+               "    from ai_ops_kit.cli.project_session import native_provider_hook\n"
+               "    native_provider_hook(Path(__file__).parent)\n"
+               "except BaseException:\n"
+               "    sys.stderr.write('AI Ops native hook failed closed\\n')\n"
+               "    raise SystemExit(2)\n")
+    command = shlex.join([sys.executable, "-B", str(directory / "hook.py")])
     definitions = {"hooks": {e: [{"hooks": [{"type": "command", "command": command,
                        "timeout": 10}]}] for e in ("SessionStart", "PreToolUse")}}
     files = {"hook.py": wrapper, ".codex/hooks.json": json.dumps(definitions, ensure_ascii=False) + "\n",
@@ -59,6 +66,11 @@ def prepare(root):
     return directory, command
 
 
+def denied(reason):
+    return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+                                   "permissionDecisionReason": reason}}
+
+
 def handle(directory, payload):
     """Нет копии auth, автоматического trust и разрешения инструментов."""
     event = payload.get("hook_event_name")
@@ -70,10 +82,12 @@ def handle(directory, payload):
         (directory / "ack.json").write_text(json.dumps(ack), encoding="utf-8")
         return {}
     if event == "PreToolUse":
-        (directory / "tool-attempt").write_text("denied", encoding="utf-8")
-        return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
-                "permissionDecisionReason": "AI Ops text provider: tools are forbidden"}}
-    return {"continue": False, "stopReason": "Unexpected native hook event"}
+        try:
+            (directory / "tool-attempt").write_text("denied", encoding="utf-8")
+        except OSError:
+            return denied("AI Ops text provider: tools denied; diagnostic marker unavailable")
+        return denied("AI Ops text provider: tools are forbidden")
+    return denied("Unexpected native hook event; tools denied")
 
 
 def main(directory=None):
@@ -83,4 +97,4 @@ def main(directory=None):
     payload = json.loads(raw)
     if not isinstance(payload, dict):
         raise ValueError("native hook payload must be object")
-    print(json.dumps(handle(directory or Path.cwd(), payload)))
+    return handle(directory or Path.cwd(), payload)

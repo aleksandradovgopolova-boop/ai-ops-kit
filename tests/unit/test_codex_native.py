@@ -19,7 +19,7 @@ from ai_ops_kit.providers.provider_errors import ProviderEnvUnavailableError
 
 
 STUB = r'''
-import json, os, signal, subprocess, sys, time
+import json, os, shlex, signal, subprocess, sys, time
 from pathlib import Path
 MODE = __MODE__
 LOG = Path(__LOG__)
@@ -52,7 +52,9 @@ for line in sys.stdin:
     elif m=='thread/start':
         cwd=Path.cwd()
         if MODE!='no-ack':
-            subprocess.run([sys.executable,str(cwd/'hook.py')],cwd=cwd,input=json.dumps({'hook_event_name':'SessionStart','session_id':'thread-fixture'}),text=True,check=True,capture_output=True)
+            hook_command=shlex.split(defs['SessionStart'][0]['hooks'][0]['command'])
+            hook_result=subprocess.run(hook_command,cwd=cwd,input=json.dumps({'hook_event_name':'SessionStart','session_id':'thread-fixture'}),text=True,check=True,capture_output=True)
+            assert json.loads(hook_result.stdout)=={}
         if MODE=='bad-ack':
             ack=json.loads((cwd/'ack.json').read_text());ack['nonce']='foreign';(cwd/'ack.json').write_text(json.dumps(ack))
         r={'thread':{'id':'thread-fixture'},'model':p.get('model') or 'fixture-native','approvalPolicy':'on-request',
@@ -65,6 +67,9 @@ for line in sys.stdin:
         if MODE=='approval':
             emit({'id':99,'method':'item/commandExecution/requestApproval','params':{'threadId':'thread-fixture','turnId':'turn-fixture'}})
             continue
+        if MODE=='tool':
+            denied=subprocess.run(shlex.split(defs['PreToolUse'][0]['hooks'][0]['command']),input=json.dumps({'hook_event_name':'PreToolUse','tool_name':'Bash'}),text=True,check=True,capture_output=True)
+            assert json.loads(denied.stdout)['hookSpecificOutput']['permissionDecision']=='deny'
         scope={'threadId':'foreign' if MODE=='foreign' else 'thread-fixture','turnId':'turn-fixture'}
         total={'inputTokens':17,'outputTokens':9,'cachedInputTokens':11}
         if MODE=='bad-usage':total['inputTokens']=-1
@@ -186,10 +191,49 @@ def test_unlisted_explicit_model_does_not_consume_turn(runner):
     assert not any(e.get('method') == 'turn/start' for e in events(marker))
 
 
+def test_native_failure_names_actual_reason_without_claude_or_api_advice(runner):
+    root,binary,marker=runner('trust')
+    with pytest.raises(ProviderEnvUnavailableError) as error:
+        native.call('роль','fixture-native',root=root,binary=binary)
+    text=str(error.value)
+    assert 'native project/hooks trust' in text
+    assert 'Claude' not in text and '--provider' not in text
+    assert not any(e.get('method')=='turn/start' for e in events(marker))
+
+
 def test_native_hook_denies_real_tool_attempt_without_executing_it(tmp_path):
     verdict=hook.handle(tmp_path,{'hook_event_name':'PreToolUse','tool_name':'Bash'})
     assert (tmp_path/'tool-attempt').read_text() == 'denied'
     assert verdict['hookSpecificOutput']['permissionDecision'] == 'deny'
+
+
+@pytest.mark.parametrize('bad',['marker-directory','malformed','oversize','non-object','unknown-event'])
+def test_real_hook_process_denies_even_when_input_or_diagnostic_storage_fails(runner,bad):
+    root,_,_=runner()
+    directory,command=hook.prepare(root)
+    payload=json.dumps({'hook_event_name':'PreToolUse','tool_name':'Bash'})
+    if bad=='marker-directory':(directory/'tool-attempt').mkdir()
+    if bad=='malformed':payload='{'
+    if bad=='oversize':payload='x'*262145
+    if bad=='non-object':payload='[]'
+    if bad=='unknown-event':payload=json.dumps({'hook_event_name':'unknown'})
+    import shlex
+    proc=subprocess.run(shlex.split(command),cwd=directory,input=payload,text=True,capture_output=True,timeout=10)
+    assert proc.returncode==0,proc.stderr
+    verdict=json.loads(proc.stdout)
+    assert verdict['hookSpecificOutput']['hookEventName']=='PreToolUse'
+    assert verdict['hookSpecificOutput']['permissionDecision']=='deny'
+    assert 'continue' not in verdict
+
+
+def test_hook_dependency_failure_exits_with_supported_blocking_code(runner):
+    root,_,_=runner()
+    directory,_=hook.prepare(root)
+    proc=subprocess.run([sys.executable,'-S',str(directory/'hook.py')],cwd=directory,
+        input=json.dumps({'hook_event_name':'PreToolUse'}),text=True,capture_output=True,timeout=10)
+    assert proc.returncode==2
+    assert 'failed closed' in proc.stderr
+    assert proc.stdout==''
 
 
 def test_modified_workspace_is_not_overwritten(runner):
@@ -200,6 +244,16 @@ def test_modified_workspace_is_not_overwritten(runner):
     with pytest.raises(NativeError,match='изменён'):
         hook.prepare(root)
     assert target.read_text() == 'foreign'
+
+
+def test_native_metadata_matches_canonical_paths_through_tmp_alias(runner, tmp_path, monkeypatch):
+    root,binary,marker=runner()
+    physical=tmp_path/'physical';physical.mkdir()
+    alias=tmp_path/'tmp-alias';alias.symlink_to(physical,target_is_directory=True)
+    monkeypatch.setattr(hook.tempfile,'gettempdir',lambda:str(alias))
+    assert native.call('роль','fixture-native',root=root,binary=binary)=='native reply: роль'
+    assert any(e.get('method')=='turn/start' for e in events(marker))
+    assert_cleaned(marker)
 
 
 def test_workspace_config_symlink_is_refused_without_external_write(runner,tmp_path):

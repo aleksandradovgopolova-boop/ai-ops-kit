@@ -11,6 +11,16 @@ from ai_ops_kit.lifecycle import project_session as sessions
 from ai_ops_kit.shared import lifecycle_store
 
 
+def native_provider_hook(directory):
+    """Машинный вывод отдельного native hook: библиотека providers возвращает данные."""
+    from ai_ops_kit.providers import codex_native_hook
+    try:
+        result = codex_native_hook.main(directory)
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+        result = codex_native_hook.denied("Native hook input/state rejected: " + type(exc).__name__)
+    print(json.dumps(result, ensure_ascii=False))
+
+
 def prepare(root, runtime, session, task, signals):
     """Штатная спецификация ДО claim/модели; текущий runtime заполняет её из запроса."""
     from ai_ops_kit.engine import run_plan

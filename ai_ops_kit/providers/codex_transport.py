@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import selectors
 import signal
@@ -129,7 +130,7 @@ class RPC:
             try:
                 os.killpg(self.process.pid, signal.SIGTERM)
             except ProcessLookupError:
-                pass
+                logging.getLogger(__name__).debug("Native process group %s already exited", self.process.pid)
             except PermissionError:
                 if self.group_alive():
                     raise NativeError("нет разрешения завершить собственную native process group") from None
@@ -137,7 +138,7 @@ class RPC:
             try:
                 os.killpg(self.process.pid, signal.SIGKILL)
             except ProcessLookupError:
-                pass
+                logging.getLogger(__name__).debug("Native process group %s already exited", self.process.pid)
             except PermissionError:
                 if self.group_alive():
                     raise NativeError("не удалось завершить живую собственную native process group") from None
