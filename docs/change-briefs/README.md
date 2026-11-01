@@ -106,3 +106,5 @@
 
 - [Проектная сессия на detached checkout — #1434](1434-detached-checkout.md).
 - [Спецификация до учёта исполнения и продолжение той же задачи — #1434](1434-session-preparation-resume.md).
+
+- [Добровольный учёт проектов — #1451](adoption-opt-in.md).
