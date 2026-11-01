@@ -18,6 +18,15 @@ NAME = "codex-app-server"
 DISABLED = ("apps", "multi_agent", "remote_plugin", "shell_tool", "memories", "js_repl", "remote_control")
 
 
+class NativeLifecycleUnavailable(NativeError):
+    """Trusted definitions не доказывают dispatch SessionStart до модельного turn."""
+
+    next_step = ("Нужен runtime, подтверждающий SessionStart до turn/start. "
+                 "В Codex 0.147.0 hook отложен до run_turn; повторное доверие не исправляет это. "
+                 "Проверка через turn/start требует отдельного согласования: это не metadata-only. "
+                 "Сохранённую задачу не запускай автоматически.")
+
+
 class NativeUnavailable(ProviderEnvUnavailableError):
     """Сохраняет общий тип отказа, но не приписывает Codex причину/советы Claude CLI."""
 
@@ -101,8 +110,9 @@ def start(binary, directory, expected_command, timeout, prompt, model=None):
                 or result.get("sandbox") != {"type": "readOnly", "networkAccess": False}):
             raise NativeError("native thread не подтвердил readOnly/on-request")
         if not (directory / "ack.json").is_file():
-            raise NativeError("SessionStart после thread/start не подтверждён; turn не запущен. "
-                              "Проверь поддержку native lifecycle hooks в этой версии CLI")
+            raise NativeLifecycleUnavailable(
+                "Доверие native hooks подтверждено, но SessionStart до turn/start не подтверждён; "
+                "это несовместимость lifecycle handshake, а не запрос повторного доверия. Turn не запущен")
         ack = json.loads((directory / "ack.json").read_text())
         if ack != dict(context, session_id=thread):
             raise NativeError("SessionStart не подтвердил текущую native session/policy; turn не запущен")
@@ -139,9 +149,13 @@ def readiness(root, *, binary="codex", timeout=15):
             rpc.close()
         return {"ready": True, "provider": NAME, "workspace": str(directory)}
     except (OSError, ValueError, TypeError, KeyError) as exc:
-        return {"ready": False, "provider": NAME, "reason": str(exc),
-                "next_step": "Устрани указанную готовность native Codex; затем продолжи сохранённую задачу. "
-                             "Execution claim и модельная попытка не расходованы."}
+        result = {"ready": False, "provider": NAME, "reason": str(exc),
+                  "next_step": "Устрани указанную готовность native Codex; затем продолжи сохранённую задачу. "
+                               "Execution claim и модельная попытка не расходованы."}
+        if isinstance(exc, NativeLifecycleUnavailable):
+            result.update(blocker_code="native-lifecycle-unconfirmed", hook_trust="confirmed",
+                          next_step=exc.next_step)
+        return result
 
 
 def answer(rpc, thread, prompt, model, directory, observed):

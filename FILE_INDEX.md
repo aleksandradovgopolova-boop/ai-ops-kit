@@ -868,6 +868,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/providers/codex_transport.py` — bounded stdio JSON-RPC и завершение собственной process group.
 - `ai_ops_kit/providers/codex_native_hook.py` — изолированный workspace текстовой роли и native отказ инструментам.
 - `docs/change-briefs/1434-native-codex-provider.md` — границы реализации native Codex provider и локальные доказательства.
+- `docs/change-briefs/1434-native-sessionstart-compat.md` — подтверждённая граница SessionStart в Codex 0.147.0 и честный отказ до модели.
 - `ai_ops_kit/engops/adoption.py` — добровольный локальный учёт проектов и наблюдаемой активности;
   `docs/architecture/adoption-opt-in.md` — границы доверия и приватности;
   `docs/agent-guides/adoption-measurement.md` — согласие, экспорт, импорт и сводка.

@@ -118,3 +118,4 @@
 - [Актуализация карточек, плана и архитектурных границ02.11.2026](2026-11-02-repository-reconciliation.md).
 
 - [Точная граница CI после реконструкции истории](history-exact-ci-cutoff.md).
+- [Граница SessionStart в native Codex 0.147.0 — #1434](1434-native-sessionstart-compat.md).

@@ -30,6 +30,11 @@ def stop(*args):
 signal.signal(signal.SIGTERM,stop)
 record({'pid':os.getpid(),'api_keys':[k for k in ('OPENAI_API_KEY','CODEX_API_KEY','ANTHROPIC_API_KEY') if k in os.environ]})
 def emit(data): print(json.dumps(data),flush=True)
+def session_start():
+    hook_command=shlex.split(defs['SessionStart'][0]['hooks'][0]['command'])
+    hook_result=subprocess.run(hook_command,cwd=Path.cwd(),input=json.dumps({'hook_event_name':'SessionStart','session_id':'thread-fixture'}),text=True,check=True,capture_output=True)
+    assert json.loads(hook_result.stdout)=={}
+    record({'hook_executed':'SessionStart'})
 for line in sys.stdin:
     msg=json.loads(line);m=msg.get('method');p=msg.get('params') or {}
     record({'method':m,'params':p})
@@ -51,16 +56,15 @@ for line in sys.stdin:
         r={'data':[{'cwd':str(cwd),'errors':[],'warnings':[],'hooks':hs}]}
     elif m=='thread/start':
         cwd=Path.cwd()
-        if MODE!='no-ack':
-            hook_command=shlex.split(defs['SessionStart'][0]['hooks'][0]['command'])
-            hook_result=subprocess.run(hook_command,cwd=cwd,input=json.dumps({'hook_event_name':'SessionStart','session_id':'thread-fixture'}),text=True,check=True,capture_output=True)
-            assert json.loads(hook_result.stdout)=={}
+        if MODE not in ('no-ack','deferred-startup'):
+            session_start()
         if MODE=='bad-ack':
             ack=json.loads((cwd/'ack.json').read_text());ack['nonce']='foreign';(cwd/'ack.json').write_text(json.dumps(ack))
         r={'thread':{'id':'thread-fixture'},'model':p.get('model') or 'fixture-native','approvalPolicy':'on-request',
            'sandbox':{'type':'readOnly','networkAccess':MODE=='sandbox'}}
     elif m=='model/list':r={'data':[{'id':'fixture-native','model':'fixture-native'}],'nextCursor':None}
     elif m=='turn/start':
+        if MODE=='deferred-startup':session_start()
         emit({'id':msg['id'],'result':{'turn':{'id':'turn-fixture'}}})
         if MODE=='hang':time.sleep(30);continue
         if MODE=='eof':sys.exit(0)
@@ -126,6 +130,9 @@ def test_native_factory_really_sends_turn_and_records_subscription_usage(runner,
     sent = events(marker)
     turn = [e for e in sent if e.get('method') == 'turn/start']
     assert len(turn) == 1 and turn[0]['params']['input'][0]['text'] == prompt
+    # Synthetic pre-turn-capable runtime: настоящий wrapper выполнен ДО turn, не CLI0.147 qualification.
+    assert next(i for i,e in enumerate(sent) if e.get('method')=='thread/start') < next(
+        i for i,e in enumerate(sent) if e.get('hook_executed')=='SessionStart') < sent.index(turn[0])
     assert all(not e.get('api_keys') for e in sent if 'pid' in e)
     rec, = usage.drain_call_stats()
     assert (rec['input_tokens'],rec['output_tokens']) == (17,9)  # total, не last
@@ -161,6 +168,39 @@ def test_unready_native_never_starts_model(runner, mode):
     assert result['ready'] is False and result['reason'] and result['next_step']
     assert not any(e.get('method') == 'turn/start' for e in events(marker))
     assert usage.drain_call_stats() == []
+    assert_cleaned(marker)
+
+
+def test_deferred_lifecycle_has_specific_blocker_without_repeating_trust(runner):
+    root,binary,marker=runner('deferred-startup')
+    result=native.readiness(root,binary=binary)
+    assert result['ready'] is False
+    assert result['blocker_code']=='native-lifecycle-unconfirmed' and result['hook_trust']=='confirmed'
+    assert '0.147.0' in result['next_step'] and 'отдельного согласования' in result['next_step']
+    assert 'повторное доверие не исправляет' in result['next_step']
+    sent=events(marker)
+    assert any(e.get('method')=='thread/start' for e in sent)  # реальный subprocess дошёл до создания thread
+    assert not any(e.get('method')=='turn/start' or e.get('hook_executed') for e in sent)
+    directory,_=hook.prepare(root)
+    assert not (directory/'ack.json').exists()  # нет синтеза ack самим adapter
+    assert usage.drain_call_stats()==[]
+    assert_cleaned(marker)
+
+
+def test_deferred_lifecycle_direct_call_does_not_spend_attempt_or_dispatch_hook(runner):
+    root,binary,marker=runner('deferred-startup')
+    with pytest.raises(native.NativeUnavailable,match='несовместимость lifecycle handshake'):
+        native.call('Готовый материал','fixture-native',root=root,binary=binary)
+    assert not any(e.get('method')=='turn/start' or e.get('hook_executed') for e in events(marker))
+    assert usage.drain_call_stats()==[]
+    assert_cleaned(marker)
+
+
+def test_untrusted_hooks_do_not_get_lifecycle_confirmed_diagnosis(runner):
+    root,binary,marker=runner('trust')
+    result=native.readiness(root,binary=binary)
+    assert result['ready'] is False and 'blocker_code' not in result and 'hook_trust' not in result
+    assert not any(e.get('method')=='thread/start' for e in events(marker))
     assert_cleaned(marker)
 
 
