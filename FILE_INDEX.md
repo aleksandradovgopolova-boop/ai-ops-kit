@@ -864,3 +864,8 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 
 - `docs/change-briefs/1434-detached-checkout.md` — привязка сессии к pinned checkout без именованной ветки.
 - `docs/change-briefs/1434-session-preparation-resume.md` — подготовка спецификации до execution-claim и продолжение сохранённой постановки.
+- `ai_ops_kit/engops/adoption.py` — добровольный локальный учёт проектов и наблюдаемой активности;
+  `docs/architecture/adoption-opt-in.md` — границы доверия и приватности;
+  `docs/agent-guides/adoption-measurement.md` — согласие, экспорт, импорт и сводка.
+
+- `ai_ops_kit/cli/adoption.py` — процессный вход добровольного учёта; библиотека engops возвращает данные без печати.
