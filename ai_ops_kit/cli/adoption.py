@@ -17,8 +17,8 @@ def main(argv=None):
         if action in ("consent", "revoke"):
             p.add_argument("--owner", action="store_true", help="подтверждаю решение владельца проекта")
         if action in ("preview", "export", "report"):
-            p.add_argument("--start", required=True)
-            p.add_argument("--end", required=True)
+            p.add_argument("--start", help="первая дата UTC; без пары дат — последние 30 дней")
+            p.add_argument("--end", help="последняя дата UTC, включая текущий неполный день")
         if action == "export":
             p.add_argument("--output", type=Path, required=True)
         if action == "import":
@@ -29,6 +29,9 @@ def main(argv=None):
                 p.add_argument(f"--{flag}", action="append", type=Path, default=[])
     a = ap.parse_args(argv)
     try:
+        if a.action in ("preview", "export", "report"):
+            window = adoption.reporting_window(a.start, a.end)
+            a.start, a.end = window["start"], window["end"]
         if a.action == "identity":
             result = {"project_id": adoption.identity(a.root, create=True), "next": f"сохраните {adoption.IDENTITY} в git; учёт ещё выключен"}
         elif a.action in ("consent", "revoke"):
