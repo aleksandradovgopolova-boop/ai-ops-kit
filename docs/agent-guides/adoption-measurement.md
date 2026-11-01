@@ -32,10 +32,13 @@ PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption consent . --owner
 отмечает дату завершённого прогона с фактическими вызовами; mock и preview не учитываются.
 Другие способы работы пока не наблюдаются. Пустой след активности означает «неизвестно».
 
-Сначала просмотрите состав за явный период UTC, затем подготовьте файл и передайте его
-получателю сами:
+Сначала просмотрите состав, затем подготовьте файл и передайте его получателю сами.
+Без дат preview/export/report выбирают последние 30 календарных дней UTC, включая
+текущий неполный день. Выбранные даты видны в результате. Для другого периода задайте
+обе даты `--start` и `--end`; одна дата без второй отклоняется до записи:
 
 ```bash
+PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption preview .
 PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption preview . --start 2026-10-01 --end 2026-10-30
 PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.adoption export . \
   --start 2026-10-01 --end 2026-10-30 --output /tmp/adoption-october.json

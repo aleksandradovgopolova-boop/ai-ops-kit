@@ -129,6 +129,8 @@ experimental:
     # reach adoption: только локальное состояние нового добровольного учёта.
     # Полный экспериментальный CLI: python3 -m ai_ops_kit.cli.adoption
     # identity|consent|revoke|status|preview|export|import|report. Записи псевдонимны, сети нет.
+    # preview/export/report: без обеих дат — последние 30 календарных дней UTC;
+    # явные start/end передаются парой. Формат receipt не меняется.
     - reach
     # roadmap: без подкоманды — Now/Next/Later из плана (read-only); `roadmap sync-issues`
     # [--apply] сводит GitHub Issues с роадмапом (эпик на направление + подзадача на открытую
@@ -338,6 +340,8 @@ audience:
     # reach adoption: только локальное состояние нового добровольного учёта.
     # Полный экспериментальный CLI: python3 -m ai_ops_kit.cli.adoption
     # identity|consent|revoke|status|preview|export|import|report. Записи псевдонимны, сети нет.
+    # preview/export/report: без обеих дат — последние 30 календарных дней UTC;
+    # явные start/end передаются парой. Формат receipt не меняется.
     - reach
     - scorecard
     - candidates
