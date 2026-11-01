@@ -1,0 +1,16 @@
+# #1434 — native Codex как текстовый provider штатного pipeline
+
+- Результат: общий pipeline получает текстовые ответы ролей через официальный локальный app-server и существующий вход ChatGPT; runtime=codex не переключается молча на Claude/API.
+- Источник: сохранённая диагностика #1434, source 08b1acf3: Codex авторизован, но общего adapter нет, PATH Claude ошибочно означает готовность.
+- Пути: фабрика/выбор provider, project_session до execution claim, native JSON-RPC handshake/turn, общий учёт usage, честные registry-декларации и поставка managed-модулей.
+- Инварианты: внешний runtime владеет модельным циклом; кит сохраняет workflow/gates/evidence; роли возвращают только текст, actions применяет существующий control plane; API-key fallback, копирование credentials и изменение глобальных настроек запрещены.
+- Граница разрешений: read-only sandbox, обычные on-request approvals; ни один запрос расширения прав не принимается автоматически. Инструменты запрещает проверенный native PreToolUse hook в отдельном подготовленном workspace; отсутствие доверия/подтверждённого SessionStart блокирует ДО turn/model и сохраняет задачу pending. Новое доверие здесь не устанавливается.
+- Failure modes: чужой/неполный RPC outcome; потеря session/turn binding; инструмент/approval/неожиданный hook; нет подписочной auth/подменённая конфигурация; timeout/EOF и выживший дочерний процесс.
+- Positive proof: детерминированный внешний stub JSON-RPC действительно получает turn/start и возвращает текст/usage; существующий factory/pipeline использует этот ответ.
+- Fail-closed proof: отсутствующие auth/hook/протокол и запросы прав не запускают turn либо не дают принятого ответа; API и Claude не вызываются, execution claim не расходуется на неготовую среду.
+- Side-effect/environment proof: реальный отдельный stub-процесс пишет marker принятых RPC и завершения; native metadata/schema/handshake проверяются отдельно БЕЗ turn/start и модели. Контролируемые fixtures не являются живой командной приёмкой.
+- Не входит: новые модельные вызовы, бюджет/credentials/trust, live pair, повтор исследования Марка, активация child #1243, production, #1449 и обещание всех app/cloud/SSH режимов. Статус capability до живой квалификации — degraded/не квалифицирована.
+
+Проверка перед моделью: существующий ChatGPT account → effective features/MCP → native hooks/list с текущими определениями и доверием → свежий ephemeral thread, SessionStart с nonce/policy hash → модель в native model/list. Отсутствующий/чужой ack останавливает путь до turn/start. Никакой записи trust автоматически. Поставляемый CLI 0.147.0 не подтвердил project hooks в новом пробном workspace; это NOT_READY, а не квалификация.
+
+Модель берётся из явного параметра factory либо текущего native thread. Неизвестная модели каталогу/подмена останавливают запуск без выбора другой. Учёт использует total нового ephemeral thread, включая внутренние вызовы; стоимость подписки unavailable, а не API estimate. После отправленного turn неуспешная попытка также остаётся в учёте.

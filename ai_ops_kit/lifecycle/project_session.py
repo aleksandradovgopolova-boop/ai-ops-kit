@@ -238,6 +238,21 @@ def execute(root, runtime, session, signals, *, provider=None, request=None):
     task = pending(root, runtime, session)
     if request is not None and task["request_id"] != request:
         raise ValueError("активная постановка сменилась после подготовки; новая задача не исполняется со старыми signals")
+    if runtime == "codex" and provider in (None, "codex-app-server"):
+        from ai_ops_kit.providers import codex_native
+        provider = codex_native.NAME
+        readiness = codex_native.readiness(root)
+        current = pending(root, runtime, session)
+        if current["request_id"] != task["request_id"]:
+            raise ValueError("активная постановка сменилась во время native readiness; исполнение не начато")
+        task = current
+        if not readiness["ready"]:
+            readiness["signals"] = dict(signals)
+            task.update(provider_preparation=readiness, blocker=readiness["reason"],
+                        next_step=readiness["next_step"])
+            write(session_dir(root, runtime, session) / f"{task['request_id']}.json", task)
+            return task
+        task.update(provider_preparation=dict(readiness, signals=dict(signals)), blocker=None, next_step=None)
     fid = "session-" + task["request_id"]
     report_path = within(root, f"features/{fid}/run-report.json")
     # Два параллельных вызова одной постановки не должны запустить две модели.
@@ -264,6 +279,7 @@ def execute(root, runtime, session, signals, *, provider=None, request=None):
         report = json.loads(report_path.read_text(encoding="utf-8"))
         if (result.returncode != 0 or report.get("kind") != "execution-pipeline"
                 or report.get("ready_for_pr") is not True or report.get("provider") in (None, "mock")
+                or (provider == "codex-app-server" and report.get("provider") != provider)
                 or report.get("workitem_id") != fid or report.get("runtime") != runtime
                 or Path(report.get("child_root", "")).resolve() != root):
             detail = str(report.get("error") or report.get("overall_status") or "нет подтверждения готовности")[-4096:]

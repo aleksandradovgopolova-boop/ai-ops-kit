@@ -106,3 +106,4 @@
 
 - [Проектная сессия на detached checkout — #1434](1434-detached-checkout.md).
 - [Спецификация до учёта исполнения и продолжение той же задачи — #1434](1434-session-preparation-resume.md).
+- [Native Codex как текстовый provider pipeline — #1434](1434-native-codex-provider.md).
