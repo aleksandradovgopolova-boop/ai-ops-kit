@@ -1,0 +1,6 @@
+test_greets_a_person_by_name (test_greeting.GreetingTest.test_greets_a_person_by_name) ... ok
+
+----------------------------------------------------------------------
+Ran 1 test in 0.000s
+
+OK

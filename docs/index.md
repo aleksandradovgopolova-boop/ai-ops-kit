@@ -78,6 +78,7 @@ AI сопровождает продукт на всём жизненном ци
 - [architecture/registry.md](architecture/registry.md) — реестр как источник истины.
 - [architecture/quality-gates.md](architecture/quality-gates.md) — как устроены гейты и их контракты.
 - [agent-guides/engineering-cycle.md](agent-guides/engineering-cycle.md) — инженерный цикл для контрибьютора.
+- [Первый внешний запуск: инженерный остаток](guides/first-users-backlog.md) — что ещё нужно проверить и упростить после двуязычного старта.
 - [agent-guides/context-resource.md](agent-guides/context-resource.md) — стоимость, ограничения и измерения compiled контекста.
 - [agent-guides/pre-commit-checklist.md](agent-guides/pre-commit-checklist.md) — обязательные проверки перед коммитом.
 - [container-isolation.md](container-isolation.md) — изоляция рантайма движка.
