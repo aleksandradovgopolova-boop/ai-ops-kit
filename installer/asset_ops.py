@@ -167,41 +167,7 @@ def deliver_assets(root: Path = None, refresh_ci: bool = False) -> dict:
     ребёнка, — поэтому вызываются до замены managed-файлов.
     """
     root = Path(root or _ao().REPO_ROOT)
-    return {
-        # `root` явно: backfill обязан писать в ПЕРЕДАННЫЙ корень, а не в модульный AI_DIR
-        # (= Path.cwd()). Без этого `deliver_assets(<чужой корень>)` in-process сеял контекст в
-        # корень рабочего репозитория кита — единственный доставляющий шаг, писавший мимо цели.
-        "context_backfilled": _ao()._child_scaffolding()._backfill_required_context(root),
-        "ci_workflows": _ao()._ci_setup().sync_ci_workflows(root, refresh=refresh_ci),
-        "zone_markers": ensure_zone_markers(root),
-        # Здесь, а не в `cmd_init`: иначе существующие дочки — те самые, на которых находка и
-        # случилась, — не получили бы правило никогда. Функция идемпотентна, повторный update
-        # молчит.
-        "gitignore": ensure_gitignore(root),
-        # Рядом с `gitignore` и по той же причине: существующие дочки — те, на которых находка
-        # и случилась, — получают правило обновлением, а не переустановкой.
-        "gitattributes": ensure_gitattributes(root),
-        # Атрибут merge=ai-ops-plan без записи в git config бездействует — прописываем драйвер локально.
-        "plan_merge_driver": _ao()._plan_merge_setup().ensure_plan_merge_driver(root),
-        "entry_point": _install_entry_point(root),
-        "communication_adapter": _install_communication_adapter(root),
-        "team_session": _core().ensure_team_session(root),
-        # #1183: линт дочки в момент правки агента — своя запись в `.claude/settings.json`
-        # (чужие ключи не трогаются; опт-аут `standard.lint_hook: off`).
-        "lint_hook": _ao()._lint_hook_setup().ensure_lint_hook(root),
-        "codex_lint_hook": _ao()._lint_hook_setup().ensure_lint_hook(
-            root, runtime="codex", active="codex" in (_core()._configured_runtimes() or [])),
-        # ДО посева планирования (SR-2): перенести заполненный уходящий `.ai-ops/ROADMAP.md` в
-        # канонический корень, иначе посев дал бы пустой корневой поверх заполненного уходящего.
-        "roadmap_migrated": _ao()._child_scaffolding()._migrate_legacy_roadmap(root),
-        # ДО посева (SR-7): перенести заполненные уходящие context/system/* в ARCHITECTURE.md,
-        # иначе посев дал бы пустой канонический поверх заполненного архитектурного знания.
-        "architecture_migrated": _ao()._child_scaffolding()._migrate_legacy_architecture(root),
-        "planning_seeded": _ao()._child_scaffolding()._seed_planning_contour(root),
-        # PR-3: Product Operating Layer `.ai-ops/` (Passport из фактов, ROADMAP/DELIVERY/POLICY из
-        # официальных шаблонов, templates/ — копия версий кита). Читает состав из реестра артефактов.
-        "product_layer_seeded": _ao()._child_scaffolding()._seed_product_layer(root),
-    }
+    return {name: action() for name, action, _ in _core().asset_inventory(root, refresh_ci)}
 
 
 def _assets_report_line(assets: dict) -> str:

@@ -340,6 +340,21 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
     return 0
 
 
+def _update_smoke(backup, footprint, report, inst, smoke_checks):
+    report["smoke_tests"] = _core().run_validators(smoke_checks or _core().SMOKE_CHECKS)
+    if any(t["status"] == "fail" for t in report["smoke_tests"]):
+        _core().restore_footprint(backup, footprint)
+        report.update(status="rolled_back",
+                      report=f"Smoke-валидаторы упали после применения — обновление ОТКАЧЕНО: "
+                             f"весь install footprint (managed + runtime-ассеты + версия) "
+                             f"восстановлен к {inst or '—'} из backup ({report['backup_ref']}). "
+                             f"Полу-обновлённого состояния не осталось.")
+        out = _core().write_report(report)
+        print(report["report"]); print(f"отчёт: {out}")
+        return False
+    return True
+
+
 def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False):
     inst, target = _core().installed_version(), _core().pkg_version()
     # F-022: политика дочки ЧИТАЕТСЯ и исполняется. `pr` -> обновление уходит в ветку, а не в
@@ -398,130 +413,144 @@ def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False)
     # Снимок ДО первой записи assets: новые project hooks не должны переживать
     # откат managed к версии без их bootstrap. Даже при той же версии assets обновляются.
     backup = _ao().AI_DIR / "runtime" / "backups" / (inst or "unknown")
-    footprint = _core().snapshot_footprint(backup)
+    try:
+        footprint = _core().snapshot_footprint(backup)
+    except OSError as exc:
+        report.update(status="blocked", human_approval_required=True,
+                      report=f"Не удалось снять безопасный снимок установки. {exc}")
+        out = _core().write_report(report)
+        print(report["report"]); print(f"отчёт: {out}")
+        return 2
     report["backup_ref"] = backup.relative_to(_ao().REPO_ROOT).as_posix()
 
-    # ВСЯ ДОСТАВКА АССЕТОВ — ДО РАННЕГО ВЫХОДА. Ниже стоит `if not changes and inst == target:
-    # return`, и до 3.36.2 за ним оставались CI-шаблоны, точка входа, блок политики общения, засев
-    # планирования и маркеры зон. Ребёнок с совпадающей версией не получал НИЧЕГО из этого — а это
-    # состояние любого репозитория, где кит уже стоит: именно так исправленный шаблон CI и не
-    # доехал ни до кого. Все шаги идемпотентны и читают исходник кита, а не managed-слой ребёнка,
-    # поэтому их порядок относительно замены managed-файлов роли не играет.
-    _assets = _core().deliver_assets(_ao().REPO_ROOT, refresh_ci=refresh_ci)
-    report.update(_assets)
-    _ci_line = _core()._assets_report_line(_assets)
+    try:
+        # ВСЯ ДОСТАВКА АССЕТОВ — ДО РАННЕГО ВЫХОДА. Ниже стоит `if not changes and inst == target:
+        # return`, и до 3.36.2 за ним оставались CI-шаблоны, точка входа, блок политики общения, засев
+        # планирования и маркеры зон. Ребёнок с совпадающей версией не получал НИЧЕГО из этого — а это
+        # состояние любого репозитория, где кит уже стоит: именно так исправленный шаблон CI и не
+        # доехал ни до кого. Все шаги идемпотентны и читают исходник кита, а не managed-слой ребёнка,
+        # поэтому их порядок относительно замены managed-файлов роли не играет.
+        _assets = _core().deliver_assets(_ao().REPO_ROOT, refresh_ci=refresh_ci)
+        report.update(_assets)
+        _ci_line = _core()._assets_report_line(_assets)
 
-    # Первый диф — только для РЕШЕНИЯ «есть ли что делать». Исполнять по нему нельзя: миграции
-    # ниже переносят файлы, и список удаляемых, посчитанный до них, указывает на старые пути.
-    changes = _core().build_diff()
-    if not changes and inst == target:
-        msg = "Обновление не требуется." + _ci_line
-        report.update(report=msg); _core().write_report(report)
-        print(msg); return 0
+        # Первый диф — только для РЕШЕНИЯ «есть ли что делать». Исполнять по нему нельзя: миграции
+        # ниже переносят файлы, и список удаляемых, посчитанный до них, указывает на старые пути.
+        changes = _core().build_diff()
+        if not changes and inst == target:
+            if not _update_smoke(backup, footprint, report, inst, smoke_checks):
+                return 1
+            msg = "Обновление не требуется." + _ci_line
+            report.update(report=msg); _core().write_report(report)
+            print(msg); return 0
 
-    # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
-    # Раньше цепочка лишь переписывалась в отчёт как "applied" — теперь помечаем applied
-    # только по факту успешного запуска up.py; при падении откатываемся из backup и стоп.
-    chain = _core().manifest().get("package_migrations", {}).get("chain", []) or []
-    applied = []
-    for step in chain:
-        up = _ao().PKG / "migrations" / step / "up.py"
-        if not up.exists():
-            _core().restore_footprint(backup, footprint)
-            report.update(status="failed", migrations_applied=applied,
-                          report=f"миграция {step}: нет {up} — обновление прервано.")
-            out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")
+        # миграции: реально исполнить цепочку из манифеста (после backup, до замены файлов).
+        # Раньше цепочка лишь переписывалась в отчёт как "applied" — теперь помечаем applied
+        # только по факту успешного запуска up.py; при падении откатываемся из backup и стоп.
+        chain = _core().manifest().get("package_migrations", {}).get("chain", []) or []
+        applied = []
+        for step in chain:
+            up = _ao().PKG / "migrations" / step / "up.py"
+            if not up.exists():
+                _core().restore_footprint(backup, footprint)
+                report.update(status="failed", migrations_applied=applied,
+                              report=f"миграция {step}: нет {up} — обновление прервано.")
+                out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")
+                return 1
+            r = subprocess.run([sys.executable, str(up), str(_ao().REPO_ROOT)])
+            if r.returncode != 0:
+                _core().restore_footprint(backup, footprint)
+                report.update(status="failed", migrations_applied=applied,
+                              report=f"миграция {step} провалена — install footprint восстановлен из "
+                                     f"backup, обновление прервано.")
+                out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")
+                return 1
+            applied.append(step)
+        report["migrations_applied"] = applied
+
+        # ДИФ ПЕРЕСЧИТЫВАЕТСЯ ПОСЛЕ МИГРАЦИЙ. Прежде удаление шло по списку, посчитанному ДО них: если
+        # миграция переносила файл (3.33->3.34 перенесла `validation/` в `ai_ops_kit/validation/`),
+        # запись «удалить validation/x.py» указывала на путь, которого уже нет, а копия по новому пути
+        # оставалась навсегда — и попадала под контроль целостности как managed. У ии-среды так осталось
+        # 47 валидаторов кита (8152 строки мёртвого груза), и вычистило их только СЛЕДУЮЩЕЕ обновление.
+        changes = _core().build_diff()
+        # заменить managed-файлы
+        for src, rel in _core().managed_set():
+            dst = _ao().MANAGED / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            _core().copy_managed_file(src, dst, rel)
+        # удалить исключённые
+        for c in changes:
+            if c["action"] == "remove":
+                p = _ao().REPO_ROOT / c["path"]
+                if p.exists():
+                    p.unlink()
+        # В отчёт идёт то, что РЕАЛЬНО применено, а не то, что планировалось до миграций.
+        report["managed_changes"] = changes
+
+        n = _core().write_checksums()
+        _core().write_provenance(target, note=f"Updated {inst} -> {target} by ai-ops CLI.")
+        _core().bump_child_config(target)
+        # МАЖОР-ПЕРЕХОД ЧЕРЕЗ --force СОГЛАСУЕТ И ДИАПАЗОН, А НЕ ТОЛЬКО installed_version (замер
+        # 06.09.2026, дочка cockpit 3.39.0 -> 4.0.0). Иначе installed=4.0.0 остаётся ВНЕ своего же
+        # allowed_version_range '>=3.0.0 <4.0.0': следующий штатный in-range апдейт молча пропустится
+        # как вне диапазона, а `doctor` скажет «в порядке» — тихая заморозка обновлений. Делаем это
+        # ТОЛЬКО на форс-мажорном пути (`incompatible-forced`); штатный in-range апдейт диапазон не
+        # трогает. Порядок относительно backup важен: снимок footprint снят ВЫШЕ (с прежним диапазоном),
+        # поэтому при откате по упавшему smoke `restore_footprint` вернёт и installed, и диапазон вместе.
+        # Отложенный PR-путь применяет обновление вложенным `--in-place` в worktree, где REPO_ROOT — тот
+        # worktree, так что расширенный диапазон попадает и в подготовленную ветку.
+        if report["compatibility"] == "incompatible-forced":
+            _new_range = _core().widen_allowed_range(target)
+            if _new_range:
+                report["allowed_range_widened"] = _new_range
+                print(f"⚠ allowed_version_range расширен до \"{_new_range}\" — мажор-переход "
+                      f"осознанный (--force). Без этого установленная {target} осталась бы вне своего "
+                      f"же диапазона, и следующее обновление молча пропустилось бы как несовместимое.")
+        # `inst` — выпуск ДО обновления: по нему сверяются навыки установок без записи о поставке (#1224)
+        report["skills_synced"] = _core().sync_skills(_ao().REPO_ROOT, previous_version=inst)
+        report["commands_installed"] = _core().materialize_runtime(_ao().REPO_ROOT)
+        # v3.35: блок политики общения обновляется вместе с китом — «правьте политику и
+        # перегенерируйте» стало правдой, а не обещанием в шаблоне. Текст вне маркеров не трогается.
+
+        # smoke: валидаторы. При провале — ТРАНЗАКЦИОННЫЙ ОТКАТ всего footprint (managed,
+        # .claude/skills, .claude/commands, .ai/generated, .ai-ops.yaml) к снимку из backup.
+        if not _update_smoke(backup, footprint, report, inst, smoke_checks):
             return 1
-        r = subprocess.run([sys.executable, str(up), str(_ao().REPO_ROOT)])
-        if r.returncode != 0:
+        # СМЫСЛ «ЧТО НОВОГО» — В ОТЧЁТ. Число изменённых файлов не говорит владельцу, ЧТО нового; срез
+        # заголовков CHANGELOG между from->to называет фактические изменения. Пусто -> `propose` честно
+        # откатится на «версия + число файлов». CHANGELOG кита в дочку не едет — отчёт единственный носитель.
+        report["changelog_slice"] = _changelog_slice(inst, target)
+        # ЧТО МЕНЯЕТСЯ ДЛЯ ВЛАДЕЛЬЦА — В ОТЧЁТ И НА ЭКРАН (#1210): слой A каждой версии между from и to,
+        # текстом. Его выводит тело PR CI-шаблона и коммит отложенного пути; заголовки выше — для `propose`.
+        report["whats_new"] = _whats_new(inst, target)
+        # РАЗДЕЛ БЕЗОПАСНОСТИ — В ОТЧЁТ (#1157): его читает тело PR CI-шаблона и коммит отложенного пути.
+        report["security_surface"] = security_surface(_ao().REPO_ROOT, [c["path"] for c in changes])
+        report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
+                            f"{n} файлов под контролем."
+                            # v3.35.1: back-fill МОДЕЛИ назывался в отчёте, но не в сообщении — человек
+                            # видел в diff новые ROADMAP.md/planning/plan.yaml/CLAUDE.md без объяснения,
+                            # а файл, о котором не сказано, читается как подложенный молча.
+                            + _ci_line
+                            + " Создайте PR с этим diff — silent update запрещён.")
+        out = _core().write_report(report)
+        print(report["report"]); print(f"отчёт: {out}")
+        print("\n" + report["whats_new"]["text"] + "\n")
+        # ПРИГЛАШЕНИЕ К БРИФИНГУ ПО ФУНДАМЕНТУ — ровно после «N изменений, создайте PR». Раньше здесь
+        # путь обрывался: владелец обновлённой дочки не знал ни что нового, ни что делать дальше.
+        if report["status"] == "ok":
+            print(_PROPOSE_INVITE)
+        return 0 if report["status"] == "ok" else 1
+    except Exception as exc:  # noqa: BLE001 — транзакционная граница, откат обязателен
+        # Любая ошибка после снимка (включая частичную delivery) требует того же отката.
+        try:
             _core().restore_footprint(backup, footprint)
-            report.update(status="failed", migrations_applied=applied,
-                          report=f"миграция {step} провалена — install footprint восстановлен из "
-                                 f"backup, обновление прервано.")
-            out = _core().write_report(report); print(report["report"]); print(f"отчёт: {out}")
-            return 1
-        applied.append(step)
-    report["migrations_applied"] = applied
-
-    # ДИФ ПЕРЕСЧИТЫВАЕТСЯ ПОСЛЕ МИГРАЦИЙ. Прежде удаление шло по списку, посчитанному ДО них: если
-    # миграция переносила файл (3.33->3.34 перенесла `validation/` в `ai_ops_kit/validation/`),
-    # запись «удалить validation/x.py» указывала на путь, которого уже нет, а копия по новому пути
-    # оставалась навсегда — и попадала под контроль целостности как managed. У ии-среды так осталось
-    # 47 валидаторов кита (8152 строки мёртвого груза), и вычистило их только СЛЕДУЮЩЕЕ обновление.
-    changes = _core().build_diff()
-    # заменить managed-файлы
-    for src, rel in _core().managed_set():
-        dst = _ao().MANAGED / rel
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        _core().copy_managed_file(src, dst, rel)
-    # удалить исключённые
-    for c in changes:
-        if c["action"] == "remove":
-            p = _ao().REPO_ROOT / c["path"]
-            if p.exists():
-                p.unlink()
-    # В отчёт идёт то, что РЕАЛЬНО применено, а не то, что планировалось до миграций.
-    report["managed_changes"] = changes
-
-    n = _core().write_checksums()
-    _core().write_provenance(target, note=f"Updated {inst} -> {target} by ai-ops CLI.")
-    _core().bump_child_config(target)
-    # МАЖОР-ПЕРЕХОД ЧЕРЕЗ --force СОГЛАСУЕТ И ДИАПАЗОН, А НЕ ТОЛЬКО installed_version (замер
-    # 06.09.2026, дочка cockpit 3.39.0 -> 4.0.0). Иначе installed=4.0.0 остаётся ВНЕ своего же
-    # allowed_version_range '>=3.0.0 <4.0.0': следующий штатный in-range апдейт молча пропустится
-    # как вне диапазона, а `doctor` скажет «в порядке» — тихая заморозка обновлений. Делаем это
-    # ТОЛЬКО на форс-мажорном пути (`incompatible-forced`); штатный in-range апдейт диапазон не
-    # трогает. Порядок относительно backup важен: снимок footprint снят ВЫШЕ (с прежним диапазоном),
-    # поэтому при откате по упавшему smoke `restore_footprint` вернёт и installed, и диапазон вместе.
-    # Отложенный PR-путь применяет обновление вложенным `--in-place` в worktree, где REPO_ROOT — тот
-    # worktree, так что расширенный диапазон попадает и в подготовленную ветку.
-    if report["compatibility"] == "incompatible-forced":
-        _new_range = _core().widen_allowed_range(target)
-        if _new_range:
-            report["allowed_range_widened"] = _new_range
-            print(f"⚠ allowed_version_range расширен до \"{_new_range}\" — мажор-переход "
-                  f"осознанный (--force). Без этого установленная {target} осталась бы вне своего "
-                  f"же диапазона, и следующее обновление молча пропустилось бы как несовместимое.")
-    # `inst` — выпуск ДО обновления: по нему сверяются навыки установок без записи о поставке (#1224)
-    report["skills_synced"] = _core().sync_skills(_ao().REPO_ROOT, previous_version=inst)
-    report["commands_installed"] = _core().materialize_runtime(_ao().REPO_ROOT)
-    # v3.35: блок политики общения обновляется вместе с китом — «правьте политику и
-    # перегенерируйте» стало правдой, а не обещанием в шаблоне. Текст вне маркеров не трогается.
-
-    # smoke: валидаторы. При провале — ТРАНЗАКЦИОННЫЙ ОТКАТ всего footprint (managed,
-    # .claude/skills, .claude/commands, .ai/generated, .ai-ops.yaml) к снимку из backup.
-    report["smoke_tests"] = _core().run_validators(smoke_checks or _core().SMOKE_CHECKS)
-    if any(t["status"] == "fail" for t in report["smoke_tests"]):
-        _core().restore_footprint(backup, footprint)
-        report.update(status="rolled_back",
-                      report=f"Smoke-валидаторы упали после применения — обновление ОТКАЧЕНО: "
-                             f"весь install footprint (managed + runtime-ассеты + версия) "
-                             f"восстановлен к {inst or '—'} из backup ({report['backup_ref']}). "
-                             f"Полу-обновлённого состояния не осталось.")
+        except Exception as rollback_exc:  # noqa: BLE001 — неполный откат не становится успехом
+            report.update(status="rollback_failed", report="Ошибка обновления; восстановление не завершено.",
+                          error_type=type(exc).__name__, rollback_error_type=type(rollback_exc).__name__)
+        else:
+            report.update(status="rolled_back", report="Ошибка обновления — install footprint восстановлен из backup.",
+                          error_type=type(exc).__name__)
         out = _core().write_report(report)
         print(report["report"]); print(f"отчёт: {out}")
         return 1
-    # СМЫСЛ «ЧТО НОВОГО» — В ОТЧЁТ. Число изменённых файлов не говорит владельцу, ЧТО нового; срез
-    # заголовков CHANGELOG между from->to называет фактические изменения. Пусто -> `propose` честно
-    # откатится на «версия + число файлов». CHANGELOG кита в дочку не едет — отчёт единственный носитель.
-    report["changelog_slice"] = _changelog_slice(inst, target)
-    # ЧТО МЕНЯЕТСЯ ДЛЯ ВЛАДЕЛЬЦА — В ОТЧЁТ И НА ЭКРАН (#1210): слой A каждой версии между from и to,
-    # текстом. Его выводит тело PR CI-шаблона и коммит отложенного пути; заголовки выше — для `propose`.
-    report["whats_new"] = _whats_new(inst, target)
-    # РАЗДЕЛ БЕЗОПАСНОСТИ — В ОТЧЁТ (#1157): его читает тело PR CI-шаблона и коммит отложенного пути.
-    report["security_surface"] = security_surface(_ao().REPO_ROOT, [c["path"] for c in changes])
-    report["report"] = (f"Обновление {inst} -> {target}: {len(changes)} изменений, "
-                        f"{n} файлов под контролем."
-                        # v3.35.1: back-fill МОДЕЛИ назывался в отчёте, но не в сообщении — человек
-                        # видел в diff новые ROADMAP.md/planning/plan.yaml/CLAUDE.md без объяснения,
-                        # а файл, о котором не сказано, читается как подложенный молча.
-                        + _ci_line
-                        + " Создайте PR с этим diff — silent update запрещён.")
-    out = _core().write_report(report)
-    print(report["report"]); print(f"отчёт: {out}")
-    print("\n" + report["whats_new"]["text"] + "\n")
-    # ПРИГЛАШЕНИЕ К БРИФИНГУ ПО ФУНДАМЕНТУ — ровно после «N изменений, создайте PR». Раньше здесь
-    # путь обрывался: владелец обновлённой дочки не знал ни что нового, ни что делать дальше.
-    if report["status"] == "ok":
-        print(_PROPOSE_INVITE)
-    return 0 if report["status"] == "ok" else 1
