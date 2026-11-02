@@ -1158,10 +1158,14 @@ work:
       становится обязательным для4.13 по факту существования. Нужны достоверный
       source snapshot, точные CI-привязки применимых входов, установленный артефакт,
       независимое review, все17 PR checks и stock release gates точного release SHA.
-      Текущий source подтверждён, plan_ready=true, но release_ready=false:
+      В snapshot12:01 source подтверждён, plan_ready=true, но release_ready=false:
       implementation_ci_incomplete, final_release_evidence_required и release_bump_pending.
       Старые bindings нельзя заменить предположением или ослабить политикой.
-      Этот план не разрешает release, trust или rollout.
+      Последующий snapshot12:33:34UTC снова source=null/plan_ready=false на
+      final_source_consistency; причина неизвестна, target4.13 — последний
+      подтверждённый, не текущий готовый план. Diagnostics draft1473 отдельным
+      владельцем не означает исправления main. Этот план не разрешает release,
+      trust или rollout.
 
   - id: kit-plans-own-releases
     title: Кит автоматически пересчитывает план выпуска по выполненной работе
@@ -1187,8 +1191,10 @@ work:
       существующие события/Pages, без новых permissions. Срез1465 не восстановил
       восемь прежних bindings. Pages02.11 в12:01:11UTC подтверждает source073d1bfb,
       target4.13.0 и plan_ready=true, но release_ready=false: CI evidence всех11
-      post-tag implementation записей неполно. Утренний source=null больше не
-      текущий статус; причина того временного отказа не доказана. Полная приёмка включает
+      post-tag implementation записей неполно. Финальный snapshot12:33:34UTC снова
+      source=null/plan_ready=false на final_source_consistency; причина неизвестна,
+      старый target не подставляется. Diagnostics draft1473 не исправление main.
+      Полная приёмка включает
       interruption, проверенную историю, уведомления и per-child delivery/recovery;
       частичный merge не означает done. Найденные workflow logs/Git parents —
       кандидаты evidence, не принятый recovery-контракт. Диагностика ведётся

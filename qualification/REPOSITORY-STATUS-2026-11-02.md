@@ -38,6 +38,22 @@ Pages-план содержит13 фрагментов и выводит
 
 ## Release-critical и P1 диагностика
 
+### Последующее наблюдение 12:33:34 UTC
+
+После полного GitHub-среза выше выполнены11 audit updates и встроены13 findings:
+11 новых конкретных задач #1474–#1484, переиспользованы #1406/#1411.
+Readback:43 open issues,18 PR (10 draft).
+Pages [run41445266366](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/41445266366)
+с checkout073d1bfb снова публикует source=null, target=null, plan_ready=false,
+release_ready=false, source_unknown_or_invalid / final_source_consistency.
+Срез12:01 ниже остаётся историческим успешным наблюдением, не текущим планом.
+Причина последующего отказа не доказана; временная близость GitHub updates не
+доказывает причинную связь. Diagnostics draft #1473 head50af9406 — отдельный
+владелец; это не исправление main и не восстановление CI-привязок.
+Последний подтверждённый target4.13.0 не подставляется в unknown payload.
+Это финальный наблюдаемый срез данного audit; исправления findings ведутся отдельно.
+
+
 1. Подтвердить стабильный source snapshot и exact CI-связи по действующему
    контракту. Старые восемь bindings после1453/1452/1457/1449/1455/1459/1460/1462
    не восстановлены текущим validator.1465 сохраняет будущий архив до потери
@@ -55,7 +71,7 @@ Pages-план содержит13 фрагментов и выводит
    что не восстанавливает CI-связи этих11 реализаций.
 3. Исторический Pages snapshot09:35:26 на146e0c3f действительно имел
    `source=null`, `source_unknown_or_invalid`, `final_source_consistency`.
-   Это больше не текущий статус. Причина конкретного утреннего отказа не доказана;
+   Утренний отказ и последующий отказ12:33 — отдельные наблюдения. Причина конкретного утреннего отказа не доказана;
    из последующего успеха нельзя вывести, какое сравнение ранее не прошло.
    Старый read-only capture оборвался с executor-key transport error и не сохранил
    финальный receipt; его исход остаётся uncertain. Отдельный diagnostics-owner
@@ -121,8 +137,8 @@ Pages-план содержит13 фрагментов и выводит
 | [#1417 — кит поднимается профилем под стек (CORE + capabilities + presets + bundles)](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1417) | Базовые presets есть; полный capability/bundle add сценарий не реализован. |
 | [#1434 — Вся команда работает по киту в Claude и Codex без ручного контроля](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1434) | 1462 merged, child1243 merged/required. Codex0.147 SessionStart внутри run_turn; pre-turn ack/tool-deny не подтверждены, readiness=false.1468 diagnostics и1469 design — drafts. |
 | [#1445 — Проверенные исправления и накопленные возможности доставлены выпуском 4.12.0](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1445) | ФАКТИЧЕСКИ DONE: v4.12.0 опубликован, stock run41065592704 success на7acca17f. План todo устарел; переносится в историю. |
-| [#1446 — автоматически пересчитывать выпуск; приёмка #1439](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1446) | 1449/1465 merged, общий контракт не завершён. Pages12:01: source073d1bfb, plan_ready=true, release_ready=false; CI evidence11 post-tag реализаций неполно. Утренний source=null исторический; причина не доказана. Diagnostics отдельным owner. |
-| [#1447 — эпик проверенного состава и доставки выпуска](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1447) | Первый исход4.12 подтверждён; второй полный verified-reconcile не завершён. Текущий машинный план4.13 доступен; release_ready=false. |
+| [#1446 — автоматически пересчитывать выпуск; приёмка #1439](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1446) | 1449/1465 merged, общий контракт не завершён. Pages12:01 подтвердил source/plan; финальный12:33 снова source=null/plan_ready=false. CI evidence11 post-tag реализаций неполно. Причина неизвестна; diagnostics draft1473 отдельным owner. |
+| [#1447 — эпик проверенного состава и доставки выпуска](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1447) | Первый исход4.12 подтверждён; второй полный verified-reconcile не завершён. Последний подтверждённый target4.13; финальный12:33 машинный план unknown, release_ready=false. |
 | [#1451 — Кит показывает число установленных и активных проектов с проверяемым охватом](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1451) | 1455/1459 merged;1463 draft local consistency не authenticity/activity proof. Provenance/dated update/product activity/coverage остаются. |
 
 ## Открытые PR свежего среза
@@ -164,8 +180,8 @@ PR #1466 содержит одно уточнение ROADMAP; его смысл
   автоматизация ссылается на1446 и остаётся in_progress, следующий delivery —4.13.
 - ROADMAP: будущий4.12 и оба исхода недостигнуты; первый fencing тоже описывался
   как предстоящий. Исторические диагнозы стиля29.09 недостаточно отделены от текущего.
-- Утренний диагноз source=null устарел: свежий source073d1bfb и plan_ready=true
-  подтверждены, но source recovery и release readiness не смешиваются.
+- В12:01 source073d1bfb и plan_ready=true были подтверждены; финальный12:33 снова
+  unknown. Наблюдения разных срезов и release readiness не смешиваются.
 - Карточки:1452/1453/1455 названы открытыми; child1243 назван draft;
   performance локальные серии ошибочно NOT_RUN. Исправляется факт без снятия остатка.
 - ARCHITECTURE: outcome→learning ещё назван future; нет различия native adapter
