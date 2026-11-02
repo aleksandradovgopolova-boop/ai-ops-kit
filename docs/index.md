@@ -1,6 +1,6 @@
 # AI Ops Kit
 
-**AI Product Operating System** — открытая система для продуктово-технологических команд.
+**AI Product Operating System** — система для продуктово-технологических команд.
 
 AI сопровождает продукт на всём жизненном цикле: Discovery → Delivery → Release → Measurement → Insights → Discovery.
 
