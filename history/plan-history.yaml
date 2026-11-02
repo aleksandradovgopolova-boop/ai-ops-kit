@@ -19,6 +19,47 @@ kind: delivery-plan-history
 
 
 work:
+  - id: next-kit-release-4-12-0
+    title: Проверенные исправления и накопленные возможности доставлены выпуском 4.12.0
+    type: delivery
+    goal: evidence-backed-release-planning
+    status: done
+    owner_role: delivery
+    issue: 1445
+    pr: 1458
+    commit: 7acca17f9602c04fc2ec71b04c82544bc9846123
+    closed_at: '2026-10-30'
+    value: high
+    write_scope:
+      - VERSION
+      - CHANGELOG.md
+      - README.md
+      - ROADMAP.md
+      - manifest/
+      - registry/release-claims.yaml
+      - registry/release-notes.yaml
+      - .ai/project/context/product/PRODUCT_PASSPORT.md
+      - newsfragments/
+      - qualification/
+      - docs/
+    evidence: qualification/REPOSITORY-STATUS-2026-11-02.md
+    rationale: >-
+      30.10.2026 план актуализирован от v4.11.4 до main 0c6b9b4c после merge
+      #1437/#1438/#1442; живая приёмка #1434 остаётся отдельной. Minor 4.12.0 выведен штатным
+      release_assembly из feat-фрагментов. Это план, не readiness и не разрешение
+      публикации: нужны freeze, owner notes/bump, проверка установленного артефакта,
+      независимый review, exact-head/base CI и stock release gates до тега.
+      #1403 уже в составе; #1412 и автоматизация #1439 выпуск не задерживают. Обновление дочек
+      только по их политике и отдельным разрешениям; поле нового minor не выдумывать.
+    result: >-
+      Выпуск v4.12.0 опубликован30.10.2026 в14:01:49UTC, tag commit7acca17f,
+      release PR1458 слит. Stock run41065592704 на точном release SHA завершён
+      success: full-gate, actual mutation, drain queue и owner-layer до тега
+      подтверждены. Security-scan/delivered-footprint неприменимы release push,
+      не названы прошедшими повторно. Это qualification, не stable нового minor;
+      живая приёмка1434 и обновление дочек не засчитаны. Исторический результат
+      не восстанавливает PR-CI associations последующих merge и не даёт готовность4.13.
+
   - id: north-star-becomes-evidence-backed-outcome
     title: >-
       Главная мера меняется с «идея → релиз» на «доля изменений, дошедших до ИЗМЕРЕННОГО результата

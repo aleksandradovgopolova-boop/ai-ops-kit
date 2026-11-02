@@ -334,7 +334,7 @@ evidence_scopes:
       Выпуск требует actual mutation CI на точном release SHA до тега и все release gates;
       обычный зелёный PR или локальный профиль не подтверждают готовность выпуска.
   compatibility-matrix:
-    obtained_by: "CI: джобы python39-compat, pipeline-e2e (3.9/3.12), clean-install"
+    obtained_by: "CI: pipeline-e2e (3.12/3.13), clean-install, upgrade-path"
     covers: >
       объявленный пол requires-python и установку туда, где нет ни кита, ни pytest, ни PYTHONPATH.
     does_not_cover: >

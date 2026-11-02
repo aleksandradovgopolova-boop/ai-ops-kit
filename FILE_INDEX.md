@@ -874,3 +874,8 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `docs/change-briefs/adoption-utc-window.md` — период добровольного учёта по умолчанию, 30 календарных дат UTC.
 
 - `ai_ops_kit/cli/adoption.py` — процессный вход добровольного учёта; библиотека engops возвращает данные без печати.
+
+## Актуализация02.11.2026
+
+- `docs/change-briefs/2026-11-02-repository-reconciliation.md` — границы актуализации без policy/runtime changes.
+- `qualification/REPOSITORY-STATUS-2026-11-02.md` — датированный реестр issues/PR, выпуска и оставшихся доказательств.
