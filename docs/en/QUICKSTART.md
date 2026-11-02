@@ -14,8 +14,8 @@ You need a Git repository with an initial commit, Python 3.12+ and PyYAML 6.0.3+
 [Installation](installation.md) shows the new three-command path: clone, bootstrap
 and activate an isolated environment. Git, Python with venv and access to the existing
 dependency are required. The original five-command path and a single `setup` call
-from a prepared environment remain available. The new entry has local macOS
-verification; Linux qualification is pending. `setup` creates and commits its
+from a prepared environment remain available. The new entry has local macOS/Python
+3.14 verification; CI pipeline-e2e checks Linux/Python 3.12 and 3.13 on the exact revision. `setup` creates and commits its
 own kit files; save your project changes first.
 
 If the AI Ops plugin is already installed in Claude Code, say “Install AI Ops”.

@@ -16,8 +16,11 @@ Git, Python 3.12+ с модулем `venv`/`pip`, существующий Git-�
 3.12+ с `venv`/`ensurepip` должны быть установлены; требуется доступ к PyPI для
 существующей зависимости PyYAML. Устанавливаются только готовые wheel, без сборки
 нового ПО. Если для платформы нет подходящего wheel, подготовка остановится.
-Локальная проверка проведена на macOS arm64/Python 3.14; Linux и другие версии
-Python ещё ждут проверки. Это не установка Python/Git на чистую ОС.
+Локальная проверка проведена на macOS arm64/Python 3.14. В CI pipeline-e2e
+для Linux/Python 3.12 и 3.13 добавлены unit-проверки и реальный прогон: чистый
+Python без PyYAML → setup → повтор RU/EN → активация → demo. Результат проверяйте
+на точной ревизии; остальные версии/платформы этим не подтверждены. Это не установка
+Python/Git на чистую ОС.
 
 Из каталога, рядом с которым можно разместить кит (замените путь к проекту):
 
@@ -47,7 +50,7 @@ source ai-ops-kit/.ai/runtime/bootstrap/venv/bin/activate
 python3 ai-ops-kit/installer/bootstrap.py --demo
 ```
 
-Он готовит ту же среду и запускает существующий [offline-пример](../../examples/first-session/README.md)
+Он готовит ту же среду и запускает существующий [offline-пример](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/first-session/README.md)
 на временном sample; модель не вызывается. Активация нужна позже, если вы вызываете CLI вручную.
 
 Если есть доверенный локальный кеш wheel, добавьте `--wheelhouse /absolute/path/to/cache`:

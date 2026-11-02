@@ -66,7 +66,8 @@ and commits its own files to Git. It asks for owner decisions when facts are mis
 activating the environment; the dependency is installed automatically. The original
 five-command manual path remains available. Git, Python with venv and dependency
 access are required; executor configuration is separate. The new entry has local
-macOS verification; Linux verification is pending.
+macOS/Python 3.14 verification; CI pipeline-e2e checks Linux/Python 3.12 and 3.13
+on the exact revision.
 [Complete path and limitations](docs/en/installation.md).
 
 ## What has been checked

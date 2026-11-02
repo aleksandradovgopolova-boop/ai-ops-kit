@@ -16,8 +16,10 @@ An experimental macOS/Linux entry from a reviewed checkout. Git and Python 3.12+
 with `venv`/`ensurepip` must already be installed; PyPI access is needed for the
 existing PyYAML dependency. It installs only ready-made wheels, without building
 new software. Preparation stops if no matching wheel is available. Local verification
-covers macOS arm64/Python 3.14; Linux and other Python versions are pending. This
-does not install Python/Git on an otherwise empty operating system.
+covers macOS arm64/Python 3.14. CI pipeline-e2e adds unit checks and a real run on
+Linux/Python 3.12 and 3.13: clean Python without PyYAML → setup → RU/EN retry →
+activation → demo. Check its result on the exact revision; other versions/platforms
+are not established by it. This does not install Python/Git on an empty operating system.
 
 From a directory next to which you can keep the kit (replace the project path):
 
@@ -49,7 +51,7 @@ python3 ai-ops-kit/installer/bootstrap.py --demo --language en
 ```
 
 It prepares the same environment and runs the existing
-[offline example](../../examples/first-session/README.en.md) in a temporary sample;
+[offline example](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/first-session/README.en.md) in a temporary sample;
 no model is called. Activate later if you need to call the CLI manually.
 
 For a trusted local wheel cache, add `--wheelhouse /absolute/path/to/cache`: packages
