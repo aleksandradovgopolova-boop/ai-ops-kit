@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -14,6 +15,33 @@ import pytest
 import yaml
 
 from tests.unit._installer_helpers import INSTALLER, _git, _make_child_repo, _run_cli
+
+
+def test_preflight_keeps_previous_backup_and_owner_target(tmp_path, monkeypatch):
+    """Отказ ДО snapshot не должен уничтожить уже существующий страховочный backup."""
+    root = _make_child_repo(tmp_path / "child")
+    backup = root / ".ai/runtime/backups/previous"
+    backup.mkdir(parents=True)
+    (backup / "saved").write_bytes(b"previous backup\\r\\n")
+    (backup / "saved").chmod(0o640)
+    owner = tmp_path / "owner"
+    owner.write_bytes(b"owner bytes\\r\\n")
+    (root / ".gitignore").symlink_to(owner)
+    spec = importlib.util.spec_from_file_location("r5_preflight_installer", INSTALLER)
+    installer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = installer
+    spec.loader.exec_module(installer)
+    monkeypatch.delenv("CODEX_HOME", raising=False)
+    for name, path in {"REPO_ROOT": root, "AI_DIR": root / ".ai",
+                       "MANAGED": root / ".ai/managed", "CHILD_CONFIG": root / ".ai-ops.yaml"}.items():
+        monkeypatch.setattr(installer, name, path)
+    before, backup_before = _tree(root), _tree(backup)
+    with pytest.raises(OSError, match="символическая ссылка"):
+        installer._core().snapshot_footprint(backup)
+    assert _tree(root) == before
+    assert _tree(backup) == backup_before
+    assert owner.read_bytes() == b"owner bytes\\r\\n"
+    assert (root / ".gitignore").is_symlink()
 
 
 @pytest.fixture(scope="module")

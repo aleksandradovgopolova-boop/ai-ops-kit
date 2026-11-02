@@ -80,12 +80,16 @@ def test_real_inherited_fd_is_checked_and_child_action_runs(tmp_path):
     assert target.read_text() == "ran"
 
 
-def test_observed_unwrapped_heavy_process_blocks_action(tmp_path):
+def test_observed_unmeasurable_heavy_process_blocks_action(tmp_path):
     target = tmp_path / "must-not-exist"
     command = [sys.executable, "-c", f"open({str(target)!r},'w').write('ran')"]
     with pytest.raises(hr.ResourceBlocked, match="ps наблюдает"):
         cli.execute(command, "local", "local", path=tmp_path / "shared.lock",
-                    probe=lambda: [{"pid": 999, "class": "observed_heavy_command"}])
+                    probe=lambda: [{"pid": 999, "class": "observed_heavy_command"}],
+                    # PID 999 может существовать на CI и быть idle. Моделируем именно
+                    # неизвестный CPU: отсутствие измерения обязано закрывать допуск.
+                    load_filter=lambda matched: hr.busy_heavy_processes(
+                        matched, sampler=lambda pid: None))
     assert not target.exists()
 
 
