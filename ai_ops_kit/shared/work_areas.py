@@ -1,32 +1,40 @@
 #!/usr/bin/env python3
-"""Зоны работы: ВЫВОДЯТСЯ из `write_scope`, а не остаются `unspecified` (заявка #138).
+"""Области работы и безопасные пути её артефактов.
 
-ПОЛЕ 17.08.2026, дочка ИИ-Среда: регистрация работы предупредила о пересечении зон СО ВСЕМИ четырьмя
-активными записями сразу, при том что не пересекалось ни с одной. ЗАМЕР С КОНТРОЛЕМ на 3.36.12:
-`active_work.classify` на двух работах с зонами `["unspecified"]` возвращает пересечение
-(`kind: area, detail: [unspecified]`); те же две работы с РЕАЛЬНЫМИ разными зонами — пустой список.
-То есть предупреждение создавало само ЗАПОЛНЕНИЕ, а не совпадение зон. Причина точно: `ai_ops_run`
-подставлял `["unspecified"]`, а `affected_areas` в сигналы на одиночном пути не кладёт НИКТО.
-
-ВЫВОД БЫЛ УЖЕ НАПИСАН И РАБОТАЛ РЯДОМ — на пакетном пути (`parallel_live._pkg_signals`). Не хватало
-не механизма, а его применения там, где идёт человек. Поэтому формула здесь ОДНА для обоих путей:
-две копии разошлись бы, и «зона» стала бы значить разное в зависимости от пути.
-
-ГРАНУЛЯРНОСТЬ ВЫБРАНА ЗАМЕРОМ, а не вкусом. Прежняя формула брала ПЕРВЫЙ сегмент пути
-(`p.split("/")[0]`). На плане самого кита (36 работ с `write_scope`, 630 пар) это даёт 498 пар с
-пересечением — почти всё со всем, потому что у кита первый сегмент почти всегда `ai_ops_kit`. Зона
-как КАТАЛОГ (`ai_ops_kit/engine`, `ai_ops_kit/ui`) даёт 380 пар. Разбор остатка: 250 пар чистые,
-223 пересекаются ТОЛЬКО по `tests`/`quality` (их трогает почти каждая работа — по построению, а не
-по конфликту), 157 — по настоящей подсистеме. Остаток НАЗВАН и не выдаётся за решённое: вопрос
-«всеобщие зоны не должны читаться как конфликт» относится к `next-offers-work-nobody-holds`.
+Зоны выводятся из write_scope; неизвестная зона не считается пересечением.
+ID и пути WorkItem проверяются до записи; существующие escaping links запрещены.
+Конкурентная враждебная подмена symlink требует отдельной изоляции.
 """
 from __future__ import annotations
 
+import os
+import re
+from pathlib import Path
 from collections.abc import Iterable
 from typing import Any
 
 # Честный ответ «зоны неизвестны». Значение ОСТАЁТСЯ — но неизвестность не является пересечением,
 # и это стережёт `active_work.classify` (там же — почему).
+# Зоны работы: ВЫВОДЯТСЯ из `write_scope`, а не остаются `unspecified` (заявка #138).
+#
+# ПОЛЕ 17.08.2026, дочка ИИ-Среда: регистрация работы предупредила о пересечении зон СО ВСЕМИ четырьмя
+# активными записями сразу, при том что не пересекалось ни с одной. ЗАМЕР С КОНТРОЛЕМ на 3.36.12:
+# `active_work.classify` на двух работах с зонами `["unspecified"]` возвращает пересечение
+# (`kind: area, detail: [unspecified]`); те же две работы с РЕАЛЬНЫМИ разными зонами — пустой список.
+# То есть предупреждение создавало само ЗАПОЛНЕНИЕ, а не совпадение зон. Причина точно: `ai_ops_run`
+# подставлял `["unspecified"]`, а `affected_areas` в сигналы на одиночном пути не кладёт НИКТО.
+#
+# ВЫВОД БЫЛ УЖЕ НАПИСАН И РАБОТАЛ РЯДОМ — на пакетном пути (`parallel_live._pkg_signals`). Не хватало
+# не механизма, а его применения там, где идёт человек. Поэтому формула здесь ОДНА для обоих путей:
+# две копии разошлись бы, и «зона» стала бы значить разное в зависимости от пути.
+#
+# ГРАНУЛЯРНОСТЬ ВЫБРАНА ЗАМЕРОМ, а не вкусом. Прежняя формула брала ПЕРВЫЙ сегмент пути
+# (`p.split("/")[0]`). На плане самого кита (36 работ с `write_scope`, 630 пар) это даёт 498 пар с
+# пересечением — почти всё со всем, потому что у кита первый сегмент почти всегда `ai_ops_kit`. Зона
+# как КАТАЛОГ (`ai_ops_kit/engine`, `ai_ops_kit/ui`) даёт 380 пар. Разбор остатка: 250 пар чистые,
+# 223 пересекаются ТОЛЬКО по `tests`/`quality` (их трогает почти каждая работа — по построению, а не
+# по конфликту), 157 — по настоящей подсистеме. Остаток НАЗВАН и не выдаётся за решённое: вопрос
+# «всеобщие зоны не должны читаться как конфликт» относится к `next-offers-work-nobody-holds`.
 UNSPECIFIED = "unspecified"
 
 
@@ -97,3 +105,46 @@ def areas_overlap(mine: Iterable[str] | None, theirs: Iterable[str] | None) -> l
             if x == y or x.startswith(y + "/") or y.startswith(x + "/"):
                 shared.add(x if len(x) >= len(y) else y)
     return sorted(shared)
+
+
+WORKITEM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
+
+
+def validate_workitem_id(wid: object) -> str:
+    """Reject path separators, traversal and non-slug identifiers before any I/O."""
+    if not isinstance(wid, str) or not WORKITEM_ID_RE.fullmatch(wid):
+        raise ValueError(
+            f"недопустимый workitem_id {wid!r}: разрешён slug {WORKITEM_ID_RE.pattern} "
+            "(нижний регистр, [a-z0-9._-], без '/', '\\', '..', 1..64 символа)")
+    if wid.startswith(".") or ".." in wid:
+        raise ValueError(f"недопустимый workitem_id {wid!r}: '.' в начале или '..' запрещены")
+    return wid
+
+
+def artifact_path(features_dir: str | Path, wid: object, filename: str) -> Path:
+    """Reject existing escaping links; concurrent hostile link replacement is not isolated."""
+    features = Path(features_dir)
+    path = features / validate_workitem_id(wid) / filename
+    try:
+        within = path.resolve().is_relative_to(features.parent.resolve())
+    except (OSError, RuntimeError) as exc:
+        raise ValueError("путь артефакта нельзя проверить в пределах проекта") from exc
+    if not within:
+        raise ValueError("путь артефакта выходит за пределы проекта")
+    return path
+
+
+def validate_feature_links(features_dir: str | Path, wid: object) -> None:
+    """Check existing artifact links before CLI processes can write sibling outputs."""
+    directory = artifact_path(features_dir, wid, ".")
+    if not directory.exists():
+        return
+
+    def refuse_scan(exc: OSError) -> None:
+        raise ValueError("пути фичи нельзя проверить в пределах проекта") from exc
+
+    for parent, dirs, files in os.walk(directory, onerror=refuse_scan, followlinks=False):
+        for name in [*dirs, *files]:
+            path = Path(parent) / name
+            if path.is_symlink():
+                artifact_path(features_dir, wid, path.relative_to(directory).as_posix())

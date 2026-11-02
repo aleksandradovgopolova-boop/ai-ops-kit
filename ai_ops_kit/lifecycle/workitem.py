@@ -50,7 +50,7 @@ from ai_ops_kit.gates import gate_executor          # noqa: E402
 from ai_ops_kit.lifecycle import run_report             # noqa: E402
 # v3.38 (K5): ai_route загружается лениво — lifecycle не импортирует engine.
 from ai_ops_kit.lifecycle import lifecycle_intent       # noqa: E402  v3.27.0 WP1
-from ai_ops_kit.shared.workitem_paths import artifact_path  # noqa: E402
+from ai_ops_kit.shared.work_areas import artifact_path  # noqa: E402
 
 STATUS_ACTION = {
     "done": "готово — блокирующих гейтов нет, blueprint в порядке",

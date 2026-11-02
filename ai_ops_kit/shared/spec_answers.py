@@ -143,7 +143,7 @@ def apply_answers(child_root: str | Path, wid: str, text: str) -> dict:
     import yaml
 
     matched, unmatched = parse_plain_answers(text)
-    from ai_ops_kit.shared.workitem_paths import artifact_path
+    from ai_ops_kit.shared.work_areas import artifact_path
     try:
         sp = artifact_path(Path(child_root) / "features", wid, "spec.yaml")
     except ValueError as exc:

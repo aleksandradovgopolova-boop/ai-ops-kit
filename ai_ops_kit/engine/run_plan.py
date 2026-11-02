@@ -34,7 +34,7 @@ from pathlib import Path
 import yaml
 
 from ai_ops_kit.shared.budget import declared_limits
-from ai_ops_kit.shared.workitem_paths import WORKITEM_ID_RE, validate_workitem_id  # noqa: F401 — прежние импорты публичного валидатора сохранены
+from ai_ops_kit.shared.work_areas import WORKITEM_ID_RE, validate_workitem_id  # noqa: F401 — прежние импорты публичного валидатора сохранены
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])

@@ -496,7 +496,7 @@ def _intent_discuss(task, child_root, signals, a):
     js = a.json
     from ai_ops_kit.cli.ai_ops_cli import _say, _wid_for   # инфраструктура, живёт в ai_ops_cli
     wid = _wid_for(task, signals, a.feature)
-    from ai_ops_kit.shared.workitem_paths import artifact_path
+    from ai_ops_kit.shared.work_areas import artifact_path
     draft = artifact_path(child_root / "features", wid, "discovery-draft.md")
     draft.parent.mkdir(parents=True, exist_ok=True)
     if not draft.is_file():

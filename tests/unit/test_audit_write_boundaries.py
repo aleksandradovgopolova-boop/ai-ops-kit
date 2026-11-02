@@ -12,7 +12,7 @@ from ai_ops_kit.lifecycle import workitem
 
 
 @pytest.mark.parametrize("intent", ["new", "specify"])
-@pytest.mark.parametrize("feature", ["../../escaped", "/absolute", "../escape", "valid\n"])
+@pytest.mark.parametrize("feature", ["../../escaped", "/absolute", "../escape", "valid\n", "нет-такого"])
 def test_cli_rejects_feature_before_any_project_write(tmp_path, intent, feature, capsys):
     root = tmp_path / "repo"
     root.mkdir()

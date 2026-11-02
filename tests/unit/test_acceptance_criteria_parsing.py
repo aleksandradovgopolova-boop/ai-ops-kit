@@ -230,4 +230,4 @@ def test_an_unreadable_spec_is_named_not_silently_empty(tmp_path):
 
 def test_no_spec_at_all_is_not_a_problem(tmp_path):
     """Границы: спеки нет — это «сверять нечего», а не поломка. Иначе предупреждение обесценится."""
-    assert av.criteria_from_spec(tmp_path, "нет-такого") == ("", [], None)
+    assert av.criteria_from_spec(tmp_path, "missing-spec") == ("", [], None)

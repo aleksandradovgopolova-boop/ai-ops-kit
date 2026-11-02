@@ -571,7 +571,7 @@ def main(argv):
     task, child_root = _parse_task_and_root(intent, rest)
     # Проверка feature предшествует чтению спеки и записи процессного следа.
     if a.feature is not None:
-        from ai_ops_kit.shared.workitem_paths import validate_feature_links
+        from ai_ops_kit.shared.work_areas import validate_feature_links
         try:
             validate_feature_links(Path(child_root) / "features", a.feature)
         except ValueError as exc:

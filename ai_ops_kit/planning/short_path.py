@@ -268,7 +268,7 @@ def assess(task, signals, child_root, wid):
 
 
 def record_path(child_root, wid):
-    from ai_ops_kit.shared.workitem_paths import artifact_path
+    from ai_ops_kit.shared.work_areas import artifact_path
     return artifact_path(Path(child_root) / "features", wid, "short-path.yaml")
 
 
