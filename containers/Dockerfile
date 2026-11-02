@@ -46,4 +46,5 @@ WORKDIR /work
 
 # По умолчанию — единый контроллер движка. Аргументы (run <task> /work --engine pipeline --sandbox …)
 # передаёт run-sandboxed.sh.
-ENTRYPOINT ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]
+# -P исключает /work из начала sys.path: child не может подменить пакет контроллера.
+ENTRYPOINT ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]

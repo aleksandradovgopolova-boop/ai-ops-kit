@@ -20,6 +20,8 @@ from __future__ import annotations
 import sys
 import json
 import shlex
+import re
+import posixpath
 from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
@@ -80,6 +82,37 @@ def _instructions(text):
         yield "INCOMPLETE", pending.strip()
 
 
+def _check_launch_context(root, target_rel):
+    root = Path(root).resolve()
+    target = root / target_rel
+    errors = []
+    if not target.is_file() or not target.resolve().is_relative_to(root):
+        errors.append(f"Dockerfile: нет launch target {target_rel} внутри build context")
+    ignore = root / "containers/Dockerfile.dockerignore"
+    if not ignore.is_file():
+        ignore = root / ".dockerignore"
+    if not ignore.is_file():
+        return errors
+    # Консервативный контракт: потенциальное исключение target запрещено даже с поздним !.
+    # Это не полный Docker evaluator. Классы/однозвёздочные пути расширяются, а не сужаются.
+    candidates = [target_rel.as_posix(), *(p.as_posix() for p in target_rel.parents if str(p) != ".")]
+    for line in ignore.read_text(encoding="utf-8").splitlines():
+        rule = line.strip()
+        if not rule or rule.startswith(("#", "!")) or rule == ".":
+            continue
+        if "\\" in rule:
+            errors.append("Dockerfile: .dockerignore с escape-паттерном требует отдельной проверки launch target")
+            continue
+        rule = posixpath.normpath(rule.strip("/"))
+        tokens = re.findall(r"\*\*/|\*|\?|\[[^\]]*\]|.", rule)
+        pattern = "(?:.*/)?" + "".join(
+            "(?:.*/)?" if t == "**/" else ".*" if t == "*" else "." if t == "?" or t.startswith("[")
+            else re.escape(t) for t in tokens)
+        if any(re.fullmatch(pattern, candidate) for candidate in candidates):
+            errors.append(f"Dockerfile: .dockerignore может исключать launch target {target_rel}: {line}")
+    return errors
+
+
 def _check_launch_target(text, root):
     """Узкий контракт эталонного Dockerfile, без импорта/исполнения его target."""
     errors = []
@@ -87,7 +120,7 @@ def _check_launch_target(text, root):
     if sum(op == "FROM" for op, _ in instructions) != 1:
         errors.append("Dockerfile: контракт запуска поддерживает ровно один FROM (без multi-stage)")
     entries = [arg for op, arg in instructions if op == "ENTRYPOINT"]
-    expected = ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]
+    expected = ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]
     try:
         entry = json.loads(entries[-1]) if entries else None
     except ValueError:
@@ -118,10 +151,7 @@ def _check_launch_target(text, root):
     if not copied_root:
         errors.append("Dockerfile: нет инструкции COPY . /opt/ai-ops-kit для launch target")
     target_rel = Path("ai_ops_kit/engine/ai_ops_run.py")
-    root = Path(root).resolve()
-    target = root / target_rel
-    if not target.is_file() or not target.resolve().is_relative_to(root):
-        errors.append(f"Dockerfile: нет launch target {target_rel} внутри build context")
+    errors += _check_launch_context(root, target_rel)
     if any(op == "INCOMPLETE" for op, _ in instructions):
         errors.append("Dockerfile: незавершённая инструкция контракта запуска")
     return errors

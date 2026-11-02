@@ -24,7 +24,7 @@ GOOD_DOCKERFILE = (
     "USER runner\n"
     "ENV GIT_ASKPASS=/bin/false GIT_TERMINAL_PROMPT=0 "
     'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=""\n'
-    'ENTRYPOINT ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
+    'ENTRYPOINT ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
 )
 
 GOOD_WRAPPER = (
@@ -136,6 +136,7 @@ def test_removed_launch_target_fails_despite_all_markers(container_root):
     'python3 -m ai_ops_kit.engine.ai_ops_run',
     '["python3", "-m",',
     '["python3", "-m", "ai_ops_kit.engine.ai_ops_run", "--help"]',
+    '["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]',  # cwd может подменить controller
 ])
 def test_invalid_launch_command_fails_closed(entrypoint):
     text = GOOD_DOCKERFILE.rsplit("ENTRYPOINT", 1)[0] + f"ENTRYPOINT {entrypoint}\n"
@@ -143,7 +144,7 @@ def test_invalid_launch_command_fails_closed(entrypoint):
 
 
 def test_last_entrypoint_is_validated_not_a_comment_or_old_instruction():
-    text = GOOD_DOCKERFILE + '# ENTRYPOINT ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
+    text = GOOD_DOCKERFILE + '# ENTRYPOINT ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
     assert check_dockerfile(text) == []
     text += 'ENTRYPOINT ["missing"]\n'
     assert any("ENTRYPOINT" in e for e in check_dockerfile(text))
@@ -172,7 +173,7 @@ def test_comment_does_not_copy_launch_source():
 
 
 def test_new_build_stage_cannot_reuse_previous_launch_contract():
-    text = GOOD_DOCKERFILE + 'FROM node:22-slim\nENTRYPOINT ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
+    text = GOOD_DOCKERFILE + 'FROM node:22-slim\nENTRYPOINT ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
     assert any("FROM" in e for e in check_dockerfile(text))
 
 
@@ -217,7 +218,7 @@ def test_shipped_launch_command_reaches_cli_from_work_directory(tmp_path):
     entry = next(line.removeprefix("ENTRYPOINT ") for line in text.splitlines()
                  if line.startswith("ENTRYPOINT "))
     command = json.loads(entry)
-    assert command == ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]
+    assert command == ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]
     env = {"PATH": os.defpath, "HOME": str(tmp_path), "PYTHONPATH": str(PKG),
            "PYTHONDONTWRITEBYTECODE": "1"}
     result = subprocess.run([sys.executable, *command[1:], "--help"], cwd=tmp_path,
@@ -225,3 +226,55 @@ def test_shipped_launch_command_reaches_cli_from_work_directory(tmp_path):
     assert result.returncode == 0, result.stderr
     assert "run" in result.stdout and "resume" in result.stdout
     assert list(tmp_path.iterdir()) == []
+
+
+def test_child_package_cannot_shadow_shipped_controller(tmp_path):
+    package = tmp_path / "ai_ops_kit/engine"
+    package.mkdir(parents=True)
+    (package.parent / "__init__.py").write_text("")
+    (package / "__init__.py").write_text("")
+    target = package / "ai_ops_run.py"
+    target.write_text("print('CHILD_CONTROLLED_ENTRYPOINT')\n")
+    assert target.is_file()  # подмена действительно присутствует в child cwd
+    text = (PKG / "containers/Dockerfile").read_text()
+    command = json.loads(next(line.removeprefix("ENTRYPOINT ") for line in text.splitlines()
+                              if line.startswith("ENTRYPOINT ")))
+    env = {"PATH": os.defpath, "HOME": str(tmp_path), "PYTHONPATH": str(PKG),
+           "PYTHONDONTWRITEBYTECODE": "1"}
+    result = subprocess.run([sys.executable, *command[1:], "--help"], cwd=tmp_path,
+                            env=env, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert "CHILD_CONTROLLED_ENTRYPOINT" not in result.stdout
+    assert "resume" in result.stdout
+
+
+@pytest.mark.parametrize("rule", [
+    "ai_ops_kit/engine/ai_ops_run.py", "/ai_ops_kit/", "**/*.py", "ai_ops_kit/**",
+    "ai_ops_kit/**/engine/**/ai_ops_run.py", "ai_ops_k[i]t", "./ai_ops_kit", "**/engine",
+    "other/../ai_ops_kit",
+])
+def test_dockerignore_cannot_exclude_launch_target(container_root, rule):
+    ignore = container_root / ".dockerignore"
+    ignore.write_text(rule + "\n")
+    assert ignore.read_text() == rule + "\n"
+    assert any(".dockerignore" in e for e in check_assets(container_root))
+
+
+def test_negation_does_not_bypass_conservative_launch_context_contract(container_root):
+    (container_root / ".dockerignore").write_text("**/*.py\n!ai_ops_kit/engine/ai_ops_run.py\n")
+    assert any(".dockerignore" in e for e in check_assets(container_root))
+
+
+def test_shipped_dockerignore_keeps_launch_source(container_root):
+    (container_root / ".dockerignore").write_bytes((PKG / ".dockerignore").read_bytes())
+    assert check_assets(container_root) == []
+
+
+def test_dockerfile_specific_ignore_overrides_root_file(container_root):
+    (container_root / ".dockerignore").write_text("**/node_modules\n")
+    specific = container_root / "containers/Dockerfile.dockerignore"
+    specific.write_text("ai_ops_kit\n")
+    assert any(".dockerignore" in e for e in check_assets(container_root))
+    (container_root / ".dockerignore").write_text("ai_ops_kit\n")
+    specific.write_text("**/node_modules\n")
+    assert check_assets(container_root) == []
