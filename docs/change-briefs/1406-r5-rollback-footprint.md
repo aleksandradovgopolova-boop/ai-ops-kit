@@ -9,3 +9,6 @@ Failure modes: неполный inventory; исключение посреди d
 Не входит: scripts/check-upgrade-path.sh; YAML/traversal/diagnostics соседних срезов; реальные дочки; models; push/PR/merge/release; закрытие всей fleet qualification #1406.
 
 Независимое review выявило ссылки в footprint: delivery пишет сквозь них в owner-target вне снимка. Принято fail-closed: файл, каталог или ancestor-ссылка в области снимка блокируют update ДО backup/delivery с rc2/status=blocked; содержимое targets, ссылки и settings остаются прежними. Это ограничение поддерживаемого install footprint, а не доказательство fleet qualification.
+
+Полный ready CI выявил связанный AST-разбор самоприменения: own_medicine должен читать ключи нового asset_inventory вместо прежнего словаря. Тесты доставки теперь различают same-version no-op и policy skip; mutation proofs добавляют/удаляют реальные tuple-записи inventory и отдельно подтверждают видимость мутации. Гейты и набор checks сохраняются.
+Существующая mutation-проба gitattributes перенесена на новый callback inventory с тем же отключением вызова и теми же интеграционными тестами; baseline PASS и killed-пруф обязательны. Brief подключён к существующему индексу docs.
