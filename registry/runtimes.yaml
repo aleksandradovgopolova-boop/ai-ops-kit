@@ -24,16 +24,15 @@ runtimes:
       при install. Стадии, handoff и enforcement гейтов исполняет сам Claude Code,
       следуя командам; код кита их в этом раннтайме не оркестрирует. Полное
       исполнение контракта с блокировкой гейтов — через generic-orchestrator.
-    # v3.9.0 (rc, in progress): KIT-DRIVEN executing путь — кит сам оркестрирует Claude Code как
-    # СИЛЬНОГО writer'а через локальный `claude -p --tools ""` (orchestrator.make_claude_cli_provider,
-    # provider=claude-cli). Claude только ПРЕДЛАГАЕТ действия текстом; кит владеет worktree/diff/evidence/
-    # gates/delivery (Claude не пушит/не создаёт PR/не меняет основной checkout/не закрывает свой review|
-    # security/не владеет lifecycle). Доказано live (full-stack -> draft PR). Codex-адаптер — позже.
+    # #1476: прежний live end-to-end не квалифицировал effective read-only tool/config boundary.
+    # KIT-DRIVEN Claude subprocess закрыт до отдельной квалификации. Native generated-commands
+    # выше и возможности самого внешнего Claude Code ниже — отдельные поверхности.
     kit_driven_executing:
-      status: verified          # v3.9.0: доказан live end-to-end через shipped-путь (не monkeypatch)
-      via: "provider=claude-cli (orchestrator.make_claude_cli_provider), read-only Read/Grep/Glob"
+      status: unsupported
+      via: "provider=claude-cli (orchestrator.make_claude_cli_provider); live BLOCKED"
+      note: "#1476: readonly_runtime_unqualified до subprocess; квалифицированного runtime нет. См. docs/claude-readonly-contract.md."
       contract: "AI Ops = control plane; Claude Code = сильный заменяемый исполнитель"
-      proven_live: "complexity-routing->writer=claude-cli; green build/typecheck/test; независимый deepseek-ревьюер поймал реальный дефект claude (writer≠judge, 0 false-green); security->human #5"
+      proven_live: "Историческое evidence v3.9.0, не текущая read-only квалификация: complexity-routing->writer=claude-cli; green build/typecheck/test; независимый deepseek-ревьюер поймал реальный дефект claude (writer≠judge, 0 false-green); security->human #5"
       routing: "complexity-aware: ENGINEERING/PRODUCT/AI_FEATURE/CRITICAL/RESEARCH или risk high/critical -> strong-executor сразу; QUICK -> дешёвый API writer"
     default_provider: anthropic
     execution_modes: [native, orchestrated, sequential]

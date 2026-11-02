@@ -345,20 +345,17 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
     БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
 
-    БЕЗОПАСНОСТЬ (executing-adapter контракт): `--allowedTools Read Grep Glob` — ТОЛЬКО read-only инструменты.
-    Claude ЧИТАЕТ репо (информированное предложение), но НЕ может писать/исполнять (нет Write/Edit/Bash/git) ->
-    НЕ трогает FS/git/сеть, НЕ пушит, НЕ создаёт PR, НЕ меняет checkout, НЕ владеет исполнением/lifecycle.
-    Модель ПРЕДЛАГАЕТ действия ТЕКСТОМ (JSON tool-loop); применяет их КИТ через свой sandbox/broker
-    (scope-enforced, exact-SHA, gates, delivery) — это policy enforcement, не security isolation:
-    брокер управляет операцией и областью записи, но сеть и ресурсы им не ограничены. AI Ops = control plane, Claude Code = сильный ЗАМЕНЯЕМЫЙ
-    исполнитель. (Полный tool-less `--tools ""` авторит вслепую -> невалидная спека; read-only даёт контекст
-    без права действия — доказано fs-rc3.)
+    БЕЗОПАСНОСТЬ (#1476): live subprocess пока BLOCKED до квалификации effective runtime.
+    `--allowedTools` задаёт autoapproval, `--tools` — builtin set; ни один из них не является
+    OS sandbox и не доказывает отсутствие MCP/plugins/hooks из наследуемой конфигурации.
+    Граница адаптера — policy enforcement, не security isolation; OS-изоляция не квалифицирована.
+    Наличие бинаря или совпадение версии не снимает отказ. См. docs/claude-readonly-contract.md.
 
     v3.10.0 Usage Truth: `--output-format json` -> claude usage (input/output_tokens) + total_cost_usd
     ИЗМЕРЯЮТСЯ и пишутся в _record_call (provider=claude-cli). Claude CLI usage больше НЕ исчезает.
 
-    runner инъектируется (офлайн-selftest без вызова CLI); заменяет subprocess.run, а не весь вызов —
-    production-path (time.monotonic, json parse, _record_call, retries) проходит полностью. Ключ не требуется.
+    runner — доверенная офлайн-инъекция для тестов; её callable НЕ изолирован этим адаптером.
+    Разбор ответа, usage и retries проверяются через неё, но это НЕ квалификация subprocess.
 
     Устойчивость к транзиентам (находка F-011, Real-Product Qualification): транзиентные сбои API
     (5xx/429/**529 Overloaded**, сетевые, subprocess-timeout) ретраятся с экспоненциальным backoff+jitter,
@@ -390,7 +387,19 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
         binary = claude_binary()
         if not binary:
             raise RuntimeError(claude_missing_message())
+        # Нет квалифицированного профиля: help/metadata и argv-only fixture не доказывают
+        # effective tool/config boundary. Отказ ДО любых subprocess (включая preflight),
+        # writer-lock, retry и usage. Env/версия/parent allow не служат обходом.
+        raise ProviderRefusal(
+            "readonly_runtime_unqualified",
+            "Read-only ограничения Claude runtime не подтверждены: builtin tools, MCP, "
+            "plugins и наследуемые settings/hooks. Отказ до запуска subprocess; "
+            "нужна отдельная квалификация runtime (docs/claude-readonly-contract.md). "
+            "Для офлайн-проверки используйте --provider mock; для живой работы явно выберите "
+            "настроенный API-провайдер (--provider anthropic|openai|qwen).",
+            "claude-cli", model or "")
     cmd = [binary, "-p", "--output-format", "json",
+           "--tools", "Read,Grep,Glob",
            "--allowedTools", "Read", "Grep", "Glob"]
     if model:
         cmd += ["--model", model]
@@ -502,8 +511,10 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
 
 
 def make_claude_cli_provider(model=None, runner=None):
-    """callable(prompt)->text через локальный `claude -p` (tool-less). См. _claude_cli_call: executing-adapter
-    контракт — Claude предлагает, кит исполняет и блокирует по гейтам."""
+    """Текст-провайдер; live Claude BLOCKED до read-only квалификации (#1476).
+
+    runner — доверенная офлайн-инъекция; она не доказывает изоляцию реального CLI.
+    """
     return lambda prompt: _claude_cli_call(prompt, model=model, runner=runner)
 
 
