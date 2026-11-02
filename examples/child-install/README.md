@@ -7,8 +7,8 @@
 механизм обнаружения ручной правки managed-файлов:
 
 ```
-python3 02_tools/ci/ai_managed_checksums.py verify \
-  02_tools/ai-first-system/examples/child-install/.ai/managed
+python3 ai_ops_kit/validation/ai_managed_checksums.py verify \
+  examples/child-install/.ai/managed
 ```
 
 - `.ai/managed/` — обновляется parent; правка вручную запрещена. Содержит

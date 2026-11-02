@@ -1,239 +1,86 @@
-# Quickstart — первый день с AI Ops Kit
+# Начать с AI Ops Kit
 
-## Обычная работа — в чате исполнителя
+**Русский · [English](en/QUICKSTART.md)** · [Главная](../README.md)
 
-Если Kit уже подключён к репозиторию, опишите нужный результат обычными словами:
+## Сначала увидеть результат
+
+[Локальный пример](../examples/first-session/README.md) устанавливает кит в отдельный
+учебный репозиторий и показывает реальные проверки и разбор проекта. Модель и подписка
+не нужны. Это проверка подключения, а не демонстрация выполненной AI-задачи.
+
+## Подключить один раз
+
+Вам нужен Git-репозиторий с первым коммитом, Python 3.12+ и PyYAML 6.0.3+.
+[Установка](guides/installation.md) показывает весь путь: пять команд с чистой машины
+или одна команда `setup` из подготовленной среды. `setup` создаёт и коммитит свои
+служебные файлы; сначала сохраните изменения проекта.
+
+Если плагин AI Ops уже установлен в Claude Code, напишите «установи AI Ops».
+Скилл выполняет установку и диагностику, затем помогает с первыми вопросами.
+Это путь через инструкцию агенту, которому нужны доступ к репозиторию и разрешения.
+
+После установки один раз вместе с техническим участником команды:
+
+- Проверьте вывод `doctor`, факты о продукте и вопросы, которые кит не смог вывести из файлов.
+- Выберите доступный поддерживаемый исполнитель, настройте его авторизацию и бюджет.
+  Использование модели может расходовать подписку/API-бюджет; offline-пример этого не делает.
+- Убедитесь, что новая сессия читает проектные инструкции. Для Claude Code доступны
+  поставленные команды/скиллы; наличие плагина не следует из установки кита в проект.
+  Для Codex задайте явную инструкцию ниже, если автоматическое подключение не настроено.
+- Согласуйте правила публикации и настройте проверки CI по [инструкции](guides/ci.md).
+  Локальный успех не заменяет CI.
+
+## Открыть сессию и написать задачу
+
+Откройте корень **своего продукта**, где находятся `.ai-ops.yaml` и `ai-ops`.
+В первой сессии Codex или Claude Code без готового подключения вставьте:
+
+> Работай через установленный AI Ops Kit. Сначала прочитай
+> `.ai/managed/commands/task/ai-session-start.md` и
+> `.ai/managed/commands/task/ai-run.md`, проверь доступный путь исполнения.
+> Для пустого имени верни «Hello, friend!» и добавь тест.
+> Покажи результат, чем он проверен и что осталось. Отвечай по-русски.
+> Если нужный исполнитель недоступен, сохрани задачу и назови конкретный блокер.
+
+Приветствие относится к [учебному проекту](../examples/first-session/README.md);
+в своём продукте замените это предложение своей задачей. Не нужно каждый раз
+повторять техническую часть: после проверки подключения команда может сохранить
+ссылки на эти инструкции в своих `AGENTS.md`/`CLAUDE.md`, вне блоков установщика.
+Чтение инструкций агентом — механизм общения, а не независимая блокировка инструментов.
+
+В следующих подключённых сессиях достаточно задачи обычными словами:
 
 - «Посмотри проект и предложи следующую полезную задачу».
-- «Исправь поиск; покажи, что он работает после перезагрузки».
-- «Проверь качество результата и составь план улучшений».
-- «Продолжи начатую работу и покажи, что осталось».
+- «Исправь поиск и проверь его после перезагрузки».
+- «Продолжи начатое и покажи, что ещё осталось».
 
-Исполнитель читает источники проекта, выбирает существующий путь Kit, собирает
-план и проверки, делает разрешённую работу и показывает результат с доказательствами.
-Вам не нужно выбирать роль, workflow, модель или gate и редактировать внутренние YAML.
-Указанный вами репозиторий задаёт границы: очередь родительского Kit и очередь
-продукта-дочки — разные очереди. Если дано разрешение выполнить всё, исполнитель
-проверяет эту очередь и ведёт задачи по зависимостям, сохраняя незавершённые критерии.
+Добавьте «отвечай по-английски», если это язык команды. Язык ответа — требование
+к сессии; технические команды, сохранённые шаблоны и часть сообщений CLI остаются
+на исходном языке. Полной локализации CLI мы пока не заявляем.
 
-Глубина автоматизации зависит от исполнителя:
-[подтверждённые границы](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/qualification/RUNTIME-QUALIFICATION-MATRIX-2026-10-15.md).
-Созданный план ещё не означает выполненную работу; отсутствие доступа к среде
-не превращается в успешный результат. Известные из запроса сведения не запрашиваются снова.
+## Как принять результат
 
-Ниже — **технический справочник** для самостоятельной установки, CI и прямого CLI.
-Он остаётся доступным; проходить его вручную перед каждой задачей не требуется.
+Попросите показать изменённые файлы, результат применимых тестов и оставшиеся
+ограничения. При работе через движок отчёты сохраняются в `features/<id>/`;
+сверяйте их с текущей задачей и версией файлов. План, запись «готово» или старый
+отчёт не подтверждают выполнение. Нужные проверки, независимое ревью и CI должны
+относиться к итоговым изменениям. Без доступа к модели/среде ожидается конкретный
+блокер, а не успешный отчёт.
 
-## Технический путь
+## Если сессия не подхватила кит
 
-Требования: python3 (3.12+) и pyyaml. Node.js нужен только для OpenSpec-опции
-(включена по умолчанию, выключается `openspec.enabled: false` в `.ai-ops.yaml`).
+Проверьте корень проекта и наличие `.ai-ops.yaml`, затем попросите исполнителя
+прочитать две инструкции выше и выполнить `./ai-ops doctor` из активированного
+Python-окружения. Нет `yaml` — вернитесь к [установке зависимостей](guides/installation.md).
+Повреждена установка — сохраните вывод диагностики и разберите его до выполнения задачи;
+не удаляйте managed-файлы и не переустанавливайте кит поверх незавершённой работы.
 
-## 1. Установка в ваш репозиторий (child)
+Проектные hooks для двух исполнителей — эксперимент #1434, по умолчанию `off`.
+Их установка не означает, что runtime их загрузил. Native Codex adapter имеет
+`readiness=false`: в Codex 0.147.0 не подтверждён независимый запрет инструмента
+при сбое hook. Это отдельное ограничение от чтения `AGENTS.md`/`CLAUDE.md`.
+[Статус интеграции](agent-guides/team-session-integration.md) ·
+[матрица исполнителей](../qualification/RUNTIME-QUALIFICATION-MATRIX-2026-10-15.md).
 
-```bash
-git clone https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git
-cd <ваш-репозиторий>
-python3 <путь>/ai-ops-kit/installer/ai_ops.py init .
-python3 <путь>/ai-ops-kit/installer/ai_ops.py doctor
-```
-
-Появятся: `.ai/` (managed-слой с реестрами и контрактами; не редактируйте — правки
-кладите в `.ai/custom/`), `.ai-ops.yaml` (отредактируйте `project.name` и providers)
-и `.github/workflows/ai-ops-update.yml` (ежедневный PR с обновлением кита).
-
-## 1a. Задача одной командой (intent UX, v2.117)
-
-Движок управляется **намерениями**, а не флагами — не нужно помнить
-`--engine`/`--author`/`--review`/`--sandbox`. Один вход:
-
-```bash
-./ai-ops <intent> "<задача>" [--feature NAME] [--execute]
-```
-
-Типовой поток продуктовой задачи:
-
-```bash
-# 1. один раз на репозиторий — определить стек и команды
-./ai-ops onboard
-
-# 2. спецификация нужной глубины (создаёт features/<id>/spec.yaml — заполните разделы)
-./ai-ops specify "добавить фильтр заказов по статусу" --feature orders-filter
-
-# 3. план без правок кода (RunPlan + контекст + WorkPackages)
-./ai-ops plan "добавить фильтр заказов по статусу" --feature orders-filter
-
-# 4. исполнить (preflight → tool-loop → commit → evidence → гейты → draft PR)
-./ai-ops run "добавить фильтр заказов по статусу" --feature orders-filter --execute
-
-# 5. независимый read-only ревью действующей ветки (writer ≠ judge)
-./ai-ops review "проверь ветку" --feature orders-filter --provider openai-compatible --model deepseek-chat
-```
-
-Другие намерения: `new` (каркас фичи), `discuss` (черновик discovery), `status` (активная работа),
-`health` (Product Health), `resume … --execute [--force]` (продолжить прерванную работу поверх коммита,
-**не рестарт**), `preview <intent> …` (показать план без выполнения).
-
-**Preflight Truth (v2.115):** перед запуском модели проверяются classification → контекст → достаточность
-спеки → атомарность/декомпозиция → бюджет → human-approvals. Если спека неполна или нужен человек
-(secret-boundary/деструктив/новая зависимость) — **модель не запускается, правок и коммита нет**. Одобрение —
-настоящий `ApprovalRecord` (`ai_ops_kit/gates/approvals.py record …`: автор/scope/причина), не флаг.
-
-Крупную неатомарную задачу можно исполнить **по WorkPackages последовательно** (пакет→commit→
-evidence→gates→следующий): добавьте `--sequential`.
-
-## 2. Первая фича
-
-Задача запускается каноническим входом **`ai-run`** (в раннтайме — `/ai-run`): опиши задачу
-словами → классификация/маршрут → RunPlan → WorkItem → исполнение → отчёт. `/ai-start-task`
-остаётся совместимым алиасом того же потока. Артефакты фичи готовятся так:
-
-```bash
-# прототип/MVP — lean-профиль (5 стадий, 10 артефактов);
-# зрелый продукт — без --profile (full: 11 стадий)
-PYTHONPATH=<kit> python3 -m ai_ops_kit.shared.generate_artifacts new features my-feature "Моя фича" --profile lean
-PYTHONPATH=<kit> python3 -m ai_ops_kit.shared.generate_artifacts scaffold features/my-feature --stage discovery
-```
-
-Заполните `discovery/problem-statement.md` и `discovery/hypotheses.md` по существу
-(шаблон подсказывает разделы). Дальше двигайтесь по стадиям: `scaffold --stage <стадия>`
-→ заполнить → поднять `feature.current_stage`.
-
-Два железных правила:
-- каждый артефакт достигнутой стадии **заполнен или declined с причиной** —
-  молчаливых пропусков нет;
-- blueprint закрывается **в том же PR, что и релиз кода** — иначе «реальность
-  обогнала blueprint» (см. типовые ошибки).
-
-## 3. Проверка «хорошо или плохо» — одной командой
-
-```bash
-PYTHONPATH=<kit> python3 -m ai_ops_kit.lifecycle.run_report features/my-feature --graph knowledge/graph.yaml
-```
-
-Вердикт OK / WARN / PROBLEM: валидность blueprint, покрытие стадий, незаполненные
-скелеты, согласованность tracking plan ↔ dashboard-spec, сверка с knowledge graph,
-напоминание о ретроспективе. PROBLEM = exit 1 — ставьте в CI.
-
-## 3a. История прогонов и метрики эффекта (v2.5)
-
-Перед коммитом PR запускайте отчёт с записью среза:
-
-```bash
-PYTHONPATH=<kit> python3 -m ai_ops_kit.lifecycle.run_report features/my-feature --graph knowledge/graph.yaml --record
-```
-
-Срез (дата, вердикт, стадия, покрытие) допишется в `.ai/project/report-history/<фича>.jsonl`
-и закоммитится вместе с PR. По накопленной истории считаются метрики эффекта:
-
-```bash
-PYTHONPATH=<kit> python3 -m ai_ops_kit.intelligence.effect_metrics    # PROBLEM-rate, динамика покрытия, дни до retrospective
-```
-
-Инструмент честен: пока нет 3+ фич с 3+ срезами, он явно пишет «baseline не готов».
-
-## 3b. Исполнение движком без клона кита (v2.82)
-
-После `ai-ops init` движок лежит **внутри репозитория** в `.ai/managed/` — клонировать
-parent-кит для `ai-ops run` не нужно:
-
-```bash
-python3 .ai/managed/ai_ops_kit/engine/ai_ops_run.py run "почини падающий тест даты" . \
-  --engine pipeline --provider openai-compatible --model deepseek-chat \
-  --execute --baseline-diff --sandbox --json
-```
-
-`--sandbox` (v2.81) ограничивает shell модели allowlist'ом dev-инструментов и запрещает `git push`
-из петли. ВАЖНО (v2.93, честно): `--sandbox` **НЕ отключает сеть** — `sandbox_policy()` по умолчанию
-`allow_network=True` (движку нужен egress к API модели и реестрам npm/pip); произвольные сетевые
-бинарники (curl/wget) не в allowlist, но пакет-менеджеры сеть используют. Настоящий сетевой контроль
-даёт контейнер (`AI_OPS_NETWORK=none`) или egress-allowlist прокси — см. `docs/container-isolation.md`.
-`--json` даёт машиночитаемый отчёт (прогресс идёт в stderr). Проверить,
-что движок установлен целиком: `python3 .ai/managed/ai_ops_kit/validation/validate_standalone_engine.py .`
-или `ai-ops doctor` (строка «движок (standalone)»).
-
-Для ENGINEERING/PRODUCT-задач добавьте `--review` (v2.83) и `--author` (v2.86): `--review` даёт
-независимый read-only вердикт по ai-review гейтам (code_review/ux_review/...) — writer ≠ judge;
-`--author` производит артефакты requirements/plan и **specification** (OpenSpec-изменение) и
-подтверждает их детерминированно: requirements/plan — по форме; specification — рендерит OpenSpec-
-markdown и валидирует настоящим `openspec validate --strict` (нужен `npm i -g @fission-ai/openspec`).
-Закрывает гейты requirements/plan_readiness/specification. Честно: эти гейты детерминированные,
-поэтому **качество** требований судит **человек**, а не in-loop `--review` (ревьюер закрывает только
-ai-review гейты вроде code_review/ux_review). Нет `openspec` CLI или битый артефакт → гейт остаётся
-блокирующим; human-approval-гейты тоже — движок не выдаёт ложный «готово».
-
-Новые флаги пути исполнения (v2.109–2.117):
-- `--resume [--force]` — продолжить прерванную работу того же `--feature` **поверх коммита** (не
-  рестарт): переиспользует ветку/worktree, подаёт состояние из RunHandoff в prompt. Устаревшая база
-  (main ушёл вперёд) → блок без `--force` (не продолжаем молча на старом evidence).
-- `--sequential` — неатомарную задачу исполнить по WorkPackages последовательно; у каждого пакета свой
-  коммит/SHA/гейты/точка resume; зависимый пакет не стартует без подтверждённого предыдущего; блок
-  пакета останавливает последовательность. Отчёты — `features/<id>/work-packages/<pkg>/report.json`.
-- **Preflight**: неполная `features/<id>/spec.yaml`, превышение context-budget, неподтверждённая
-  декомпозиция или отсутствие нужного `ApprovalRecord` → прогон останавливается **до** tool-loop
-  (`status=blocked`, коммита нет). Одобрение создаётся:
-  `python3 .ai/managed/ai_ops_kit/gates/approvals.py record . <feature> --approval secrets --by you@x --scope config --reason "…"`.
-
-Граница: child-CI (раздел 4) по-прежнему клонирует kit по тегу — это пин версии для проверки
-установки, отдельный от пути исполнения движка.
-
-## 4. CI child-репозитория (проверенный набор)
-
-```yaml
-  ai-ops:
-    # Раннер выбирается переменной: `ubuntu-latest` есть только у GitHub, и в организации со
-    # своими раннерами джоба с этим ярлыком просто висит в очереди.
-    runs-on: ${{ vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
-    steps:
-      - uses: actions/checkout@v4
-      # Python ставим только на раннерах GitHub: на своей машине tool cache уходит в
-      # `/Users/runner`, которого нет, а `pip install` в системный python Ubuntu 24.04
-      # запрещён (PEP 668). На своём раннере python 3.12 + pyyaml должны быть предустановлены.
-      - uses: actions/setup-python@v5
-        if: ${{ !vars.CI_RUNNER_LINUX }}
-        with: {python-version: "3.12"}
-      - run: pip install pyyaml
-        if: ${{ !vars.CI_RUNNER_LINUX }}
-      - name: Clone ai-ops-kit (пин на installed_version из .ai-ops.yaml)
-        run: |
-          VER=$(python3 -c "import yaml; print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
-          # $RUNNER_TEMP, а не /tmp: свой раннер не одноразовый, и клон падает на
-          # «destination path already exists».
-          git clone --depth 1 --branch "v$VER" https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git "$RUNNER_TEMP"/ai-ops-kit
-      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py validate
-      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/installer/ai_ops.py doctor
-      - run: python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/validation/validate_knowledge_graph.py knowledge/graph.yaml
-      - name: Blueprint + оценка прогона (все фичи)
-        run: |
-          for f in features/*/blueprint.yaml; do
-            d="$(dirname "$f")"
-            python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/validation/validate_feature_blueprint.py "$d"
-            PYTHONPATH="$RUNNER_TEMP/ai-ops-kit" python3 -m ai_ops_kit.lifecycle.run_report "$d" --graph knowledge/graph.yaml
-          done
-```
-
-> Пути валидаторов — `ai_ops_kit/validation/…`. Корневого `validation/` нет с 3.34; рецепт со
-> старым путём разошёлся по репозиториям и ломал их CI молча, поэтому теперь существование каждого
-> пути из документации проверяется тестом.
-
-## 5. Обновления
-
-`ai-ops-update.yml` раз в день сам откроет PR с новой версией кита (managed-слой
-обновится, `.ai/project/` и `.ai/custom/` не тронет). Вручную:
-`python3 <kit>/installer/ai_ops.py update`.
-
-## Типовые ошибки (все — из реальных прогонов)
-
-| Сообщение | Причина и что делать |
-|---|---|
-| `feature.status 'in_progress' вне ['in-progress', ...]` | Статусы пишутся через дефис: `in-progress` |
-| `реальность обогнала blueprint: ... delivered-by, а current_stage=...` | Код выпущен, а blueprint не закрыт. Дозаполните/declined стадии и поднимите current_stage — в том же PR, что и релиз |
-| `НЕЗАПОЛНЕННЫЕ СКЕЛЕТЫ достигнутых стадий` | Артефакт создан scaffold'ом, но не заполнен. Заполните по существу или пометьте `status: declined` c `declined_reason` |
-| `declined без declined_reason` | Отказ от артефакта должен быть обоснован — одна честная строка почему |
-| `стадия '...' достигнута (profile=full), но артефактов для неё нет` | Либо добавьте артефакты стадии, либо фиче место в lean-профиле (`feature.profile: lean`) |
-| `dashboard-spec использует событие '...', не объявленное в tracking plan` | Кросс-артефактное расхождение: объявите событие в tracking plan или уберите из дашборда |
-| `Обнаружена прямая правка managed-слоя; обновление остановлено` | Не редактируйте `.ai/managed/` — перенесите правку в `.ai/custom/` (overlay) и повторите update |
-| `openspec CLI: — (не найден...)` в doctor | Установите `npm i -g @fission-ai/openspec` или выключите `openspec.enabled: false` |
-
-Дальше: воспроизводимый сквозной сценарий — [WALKTHROUGH.md](WALKTHROUGH.md);
-кто чем пользуется в команде — [adoption-guide.md](adoption-guide.md).
+Дальше: [примеры](../examples/README.md) · [глоссарий](glossary.md) ·
+[прямой CLI и подробные шаги](guides/cli-workflow.md).
