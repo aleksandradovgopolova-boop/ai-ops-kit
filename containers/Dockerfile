@@ -23,6 +23,7 @@ RUN apt-get update \
 # Кит (движок + валидаторы + данные). Child-репозиторий МОНТИРУЕТСЯ в /work на запуске, не в образ.
 COPY . /opt/ai-ops-kit
 ENV AI_OPS_KIT=/opt/ai-ops-kit \
+    PYTHONPATH=/opt/ai-ops-kit \
     PYTHONDONTWRITEBYTECODE=1 \
     OPENSPEC_TELEMETRY=0
 
@@ -45,4 +46,4 @@ WORKDIR /work
 
 # По умолчанию — единый контроллер движка. Аргументы (run <task> /work --engine pipeline --sandbox …)
 # передаёт run-sandboxed.sh.
-ENTRYPOINT ["python3", "/opt/ai-ops-kit/tools/ai_ops_run.py"]
+ENTRYPOINT ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]

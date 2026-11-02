@@ -6,18 +6,20 @@
 стережёт, чтобы ассеты не растеряли ключевые гарантии jail'а: если кто-то уберёт `--cap-drop`,
 `--read-only`, лимиты или non-root — тест упадёт (декларация проверяется, как везде в ките).
 
-ЧЕСТНО: валидатор проверяет ПРИСУТСТВИЕ флагов изоляции в ассетах, а не поднимает контейнер.
+ЧЕСТНО: валидатор проверяет маркеры изоляции и статический контракт запуска (COPY, import root,
+последний ENTRYPOINT, наличие файла модуля в build context), а не поднимает контейнер.
 Сборку/запуск образа выполняет Docker-хост пользователя (в CI-песочнице кита pull базового образа
 может быть закрыт egress-прокси).
 
 Использование:
   validate_container_assets.py            # проверить поставляемые containers/*
-  validate_container_assets.py --selftest
 Возврат 0 — ок, 1 — ошибки.
 """
 from __future__ import annotations
 
 import sys
+import json
+import shlex
 from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
@@ -61,8 +63,73 @@ WRAPPER_FORBIDDEN = {
 }
 
 
-def check_dockerfile(text):
-    return [f"Dockerfile: нет '{k}' ({why})" for k, why in DOCKERFILE_REQUIRED.items() if k not in text]
+def _instructions(text):
+    """Только логические инструкции; комментарий не считается настройкой запуска."""
+    pending = ""
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        pending += line.removesuffix("\\") + " "
+        if line.endswith("\\"):
+            continue
+        parts = pending.strip().split(None, 1)
+        yield parts[0].upper(), parts[1] if len(parts) == 2 else ""
+        pending = ""
+    if pending.strip():
+        yield "INCOMPLETE", pending.strip()
+
+
+def _check_launch_target(text, root):
+    """Узкий контракт эталонного Dockerfile, без импорта/исполнения его target."""
+    errors = []
+    instructions = list(_instructions(text))
+    if sum(op == "FROM" for op, _ in instructions) != 1:
+        errors.append("Dockerfile: контракт запуска поддерживает ровно один FROM (без multi-stage)")
+    entries = [arg for op, arg in instructions if op == "ENTRYPOINT"]
+    expected = ["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]
+    try:
+        entry = json.loads(entries[-1]) if entries else None
+    except ValueError:
+        entry = None
+    if entry != expected:
+        errors.append(f"Dockerfile: ENTRYPOINT должен быть {json.dumps(expected)}")
+    pythonpath = None
+    copied_root = False
+    try:
+        for op, arg in instructions:
+            if op not in {"ENV", "COPY"}:
+                continue
+            words = shlex.split(arg)
+            if op == "COPY" and words == [".", "/opt/ai-ops-kit"]:
+                copied_root = True
+            if op == "ENV":
+                if words and words[0] == "PYTHONPATH":  # legacy ENV key value
+                    pythonpath = " ".join(words[1:])
+                else:
+                    for word in words:
+                        key, sep, value = word.partition("=")
+                        if key == "PYTHONPATH" and sep:
+                            pythonpath = value
+    except ValueError:
+        errors.append("Dockerfile: не удалось разобрать ENV/COPY контракта запуска")
+    if pythonpath != "/opt/ai-ops-kit":
+        errors.append("Dockerfile: PYTHONPATH должен быть /opt/ai-ops-kit для запуска из /work")
+    if not copied_root:
+        errors.append("Dockerfile: нет инструкции COPY . /opt/ai-ops-kit для launch target")
+    target_rel = Path("ai_ops_kit/engine/ai_ops_run.py")
+    root = Path(root).resolve()
+    target = root / target_rel
+    if not target.is_file() or not target.resolve().is_relative_to(root):
+        errors.append(f"Dockerfile: нет launch target {target_rel} внутри build context")
+    if any(op == "INCOMPLETE" for op, _ in instructions):
+        errors.append("Dockerfile: незавершённая инструкция контракта запуска")
+    return errors
+
+
+def check_dockerfile(text, root=PKG):
+    errors = [f"Dockerfile: нет '{k}' ({why})" for k, why in DOCKERFILE_REQUIRED.items() if k not in text]
+    return errors + _check_launch_target(text, root)
 
 
 def check_wrapper(text):
@@ -80,7 +147,7 @@ def check_assets(root=PKG):
     if not df.exists():
         errors.append("нет containers/Dockerfile")
     else:
-        errors += check_dockerfile(df.read_text(encoding="utf-8"))
+        errors += check_dockerfile(df.read_text(encoding="utf-8"), root)
     if not wr.exists():
         errors.append("нет containers/run-sandboxed.sh")
     else:
@@ -106,7 +173,8 @@ def main(argv):
         for e in errs:
             print(f"  - {e}")
         return 1
-    print("CONTAINER-ASSETS-OK: Dockerfile и run-sandboxed.sh декларируют изоляцию (P0.2 jail).")
+    print("CONTAINER-ASSETS-OK: статический контракт запуска и маркеры изоляции проверены; "
+          "сборка/запуск образа и реальная изоляция НЕ проверены.")
     return 0
 
 
