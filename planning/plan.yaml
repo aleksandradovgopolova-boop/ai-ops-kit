@@ -1141,6 +1141,7 @@ work:
     goal: evidence-backed-release-planning
     status: todo
     owner_role: delivery
+    issue: 1445
     value: high
     write_scope:
       - VERSION
@@ -1153,14 +1154,15 @@ work:
       - docs/
     evidence: qualification/REPOSITORY-STATUS-2026-11-02.md
     rationale: >-
-      На main146e0c3f штатный release_assembly по12 фрагментам выводит minor4.13.0;
+      На main073d1bfb текущий Pages snapshot12:01:11UTC по13 фрагментам выводит minor4.13.0;
       это целевая версия, не release_ready и не дата выпуска. Открытый draft не
       становится обязательным для4.13 по факту существования. Нужны достоверный
       source snapshot, точные CI-привязки применимых входов, установленный артефакт,
       независимое review, все17 PR checks и stock release gates точного release SHA.
-      Pages source_unknown/final_source_consistency и старые bindings нельзя
-      заменить предположением или ослабить политикой. Новая реализация recovery
-      требует отдельного разрешения. Этот план не разрешает release, trust или rollout.
+      Текущий source подтверждён, plan_ready=true, но release_ready=false:
+      implementation_ci_incomplete, final_release_evidence_required и release_bump_pending.
+      Старые bindings нельзя заменить предположением или ослабить политикой.
+      Этот план не разрешает release, trust или rollout.
 
   - id: kit-plans-own-releases
     title: Кит автоматически пересчитывает план выпуска по выполненной работе
@@ -1184,13 +1186,15 @@ work:
     rationale: >-
       PR1449 и1465 слиты: read model и producer будущего CI-архива используют
       существующие события/Pages, без новых permissions. Срез1465 не восстановил
-      восемь прежних bindings. Pages02.11 показывает source_unknown_or_invalid
-      на final_source_consistency, plan_ready=false. Причина диагностируется
-      чтением, не заменой source или снятием гейта. Полная приёмка включает
+      восемь прежних bindings. Pages02.11 в12:01:11UTC подтверждает source073d1bfb,
+      target4.13.0 и plan_ready=true, но release_ready=false: CI evidence всех11
+      post-tag implementation записей неполно. Утренний source=null больше не
+      текущий статус; причина того временного отказа не доказана. Полная приёмка включает
       interruption, проверенную историю, уведомления и per-child delivery/recovery;
       частичный merge не означает done. Найденные workflow logs/Git parents —
-      кандидаты evidence, не принятый recovery-контракт. Новая реализация требует
-      отдельного решения владельца.
+      кандидаты evidence, не принятый recovery-контракт. Диагностика ведётся
+      отдельной работой; этот audit не меняет runtime, recovery/trust policy,
+      настройки или полномочия публикации/paid actions.
     note: "Полная приёмка в архиве #1439, текущий трекер #1446, эпик #1447. PR1466 объединяется с PR1456."
 
   # Независимая техническая очередь. Полевые исходы ниже остаются открытыми.

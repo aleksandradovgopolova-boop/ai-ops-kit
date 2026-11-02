@@ -31,7 +31,9 @@ GitHub taskcards; `planning/plan.yaml`, `history/plan-history.yaml`, `ROADMAP.md
 
 Полный новый срез issues/PR/releases с пагинацией; исходные SHA и существующие jobs;
 read-only диагностика текущего Pages snapshot; целевые plan/roadmap/docs проверки,
-core smoke и независимое review итоговой delta. Источники и точный охват — в
+core smoke и независимое review итоговой delta. При восстановлении12:07 сохранён
+commit058c6ee2, подтверждён interrupted старого owner; новые факты сведены на073d1bfb.
+Pages12:01 подтверждает source/plan_ready, но не release readiness. Источники и точный охват — в
 [датированном отчёте](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/codex/issue-tracker-cleanup-20261030/qualification/REPOSITORY-STATUS-2026-11-02.md).
 
 ## Не входит

@@ -2,18 +2,23 @@
 
 ## Источники и охват
 
-Первичный полный срез GitHub **09:36:23 UTC / 12:36:23 МСК**: **32 open issues,
-17 open PR (9 draft, 8 non-draft)**. Это новый запрос с пагинацией, не перенос
-числа32 из предыдущего аудита. Реестр ниже описывает именно эти32 карточки;
-#1445 отдельно признана фактически завершённой. Последующие административные
-изменения отражает PR #1456; числа среза не переименовываются в текущие.
+Свежая полная сверка GitHub **2026-11-02T12:10:32.496468+00:00**: **32 open issues,
+17 open PR (9 draft, 8 non-draft)**. Коллекции issues/PR прочитаны с per_page=100:
+49 записей issues включают 17 PR, отдельный PR endpoint возвращает те же17;
+лимит страницы не достигнут. Сверены все32 карточки и свежие check-runs каждого
+открытого head. Утренний полный audit09:36 с timeline/comments сохранён как
+источник исторической приёмки, но его изменяемые факты обновлены.
 
-Main: `146e0c3f9586281833a50b25a07b9837c181d630`, после #1465/#1470.
-Сверены все open issues, их timeline/comments, все open PR, последние merged PR,
-реестры, план/история, ROADMAP, README, AGENTS и ARCHITECTURE. В readout нет новых
-тестов моделей, rollout, изменения trust, merge или релиза. Не редактируются
-отклонённые PR descriptions #1425/#1455/#1458. README/EN/RU/CONTRIBUTING и
-коммерческий контакт #1471 принадлежат отдельным владельцам.
+Main: `073d1bfb3ab0cabc884f58fca69e8563b357edeb`, после merge #1472 в11:56:23UTC.
+RU/EN README, onboarding и примеры #1472 сохранены без изменений; #1471 с контактом
+остаётся отдельным draft. Сверены план/история, ROADMAP, README, AGENTS и ARCHITECTURE.
+Нет новых модельных вызовов, rollout, изменения trust, merge в main или релиза.
+Отклонённые descriptions #1425/#1455/#1458 не редактируются.
+
+Прежний audit-owner был остановлен пользователем: штатный read_thread подтвердил
+turn01a19b9d со status=interrupted, error=null. Работа продолжена с сохранённого
+commit058c6ee2; исходный temp-каталог и автономный bundle сохранены отдельно.
+PR #1456 продолжается с сохранением его истории, без новой дублирующей карточки/PR.
 
 ## Опубликовано и следующий состав
 
@@ -25,8 +30,8 @@ owner-layer и создание тега подтверждены. Всего13 
 jobs skipped; последние не названы повторным PASS на release push. Это qualification,
 а не доказательство stable нового minor или завершение командной приёмки #1434.
 
-На указанном main после тега10 first-parent merge. Штатный read-only
-`release_assembly.assemble(..., milestone=...)` видит12 фрагментов и выводит
+На указанном main после тега11 first-parent merge. Текущий машинный
+Pages-план содержит13 фрагментов и выводит
 **4.13.0 (minor)**. Его legacy `ready=true` означает наличие материала для сборки;
 это **не** `plan_ready`, `release_ready`, дата или разрешение публикации. Изменения
 из открытых PR не становятся обязательными для4.13 лишь потому, что открыты.
@@ -39,19 +44,22 @@ jobs skipped; последние не названы повторным PASS н�
    association, а не восстанавливает утраченную историю. Найденные24 исходных
    workflow logs и synthetic merge/Git parents — кандидаты evidence, не принятый
    новый recovery-контракт. Его реализация требует отдельного решения владельца.
-2. [Pages snapshot09:35:26 UTC](https://aleksandradovgopolova-boop.github.io/ai-ops-kit/data.json)
-   на publisher run41421563179 / main146e0c3f: `source=null`,
-   `plan_ready=false`, `source_unknown_or_invalid`,
-   `unavailable_stage=final_source_consistency`. Успех deploy job не означает
-   успех release projection. Старое известное значение target4.13 нельзя выдавать
-   за текущий подтверждённый машинный план при таком snapshot.
-3. Код collector объединяет несколько финальных проверок в один stage и не
-   сохраняет текст пойманного исключения. Поэтому из опубликованного payload
-   нельзя доказать, какое именно сравнение/чтение вызвало отказ. Отдельное
-   read-only воспроизведение не дало подтверждённого финального receipt после
-   потери exec-транспорта; его исход остаётся uncertain, повтор не выполнялся.
-   Источник не подставлялся, проверки не отключались. Нужна завершённая диагностика,
-   затем решение о разрешённом исправлении; это не повод переписывать policy.
+2. [Свежий Pages snapshot12:01:11 UTC](https://aleksandradovgopolova-boop.github.io/ai-ops-kit/data.json)
+   ([publisher run41440750899](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/41440750899))
+   подтверждает `source.sha=073d1bfb`, target `4.13.0`, `plan_ready=true`,
+   `composition_available=true`, но `release_ready=false` и
+   `implementation_evidence_complete=false`. Blockers:
+   `implementation_ci_incomplete`, `final_release_evidence_required`,
+   `release_bump_pending`. Все11 post-tag implementation записей имеют
+   `merged_change_observed=true`, `ci_observed=false`; архив содержит1361/1425,
+   что не восстанавливает CI-связи этих11 реализаций.
+3. Исторический Pages snapshot09:35:26 на146e0c3f действительно имел
+   `source=null`, `source_unknown_or_invalid`, `final_source_consistency`.
+   Это больше не текущий статус. Причина конкретного утреннего отказа не доказана;
+   из последующего успеха нельзя вывести, какое сравнение ранее не прошло.
+   Старый read-only capture оборвался с executor-key transport error и не сохранил
+   финальный receipt; его исход остаётся uncertain. Отдельный diagnostics-owner
+   исследует этот контур; audit не меняет collector, source, gates или recovery policy.
 4. Для конкретного release-кандидата остаются установленный артефакт,
    согласованные owner notes/bump, независимое review, все17 PR checks точных
    head/base и штатные full-gate/actual mutation/release_gate на точном release SHA
@@ -68,14 +76,17 @@ jobs skipped; последние не названы повторным PASS н�
 - #1434/#1468/#1469: диагностика и неактивный дизайн, не runtime compatibility fix.
   Для Codex0.147.0 readiness=false; независимый tool-deny при hook failure не доказан.
   Trust и required-установка дочки не заменяют natural-language приёмку двух аккаунтов.
-- #1193: server merge-block приватной ИИ-среды не доказан; свежий GET02.11 — HTTP403.
+- #1193: server merge-block приватной ИИ-среды не доказан; утренний GET02.11 — HTTP403.
+- #1401: утренний PAT-срез classic protection показал actual10/declared12. Свежая
+  проверка через GitHub connector получила403 Resource not accessible by integration;
+  текущее admin-состояние этим доступом не подтверждено, изменение защиты не заявляется.
 - First-hour/экономические/learning/delegation field proofs не закрыты. Последний
   полный экономический readout19.10 имел primary0; отсутствие новых доказательств
   не позволяет засчитать exploratory/CI-only работы проспективной выборкой.
 
-## Реестр карточек исходного среза
+## Реестр карточек свежего среза
 
-Все32 имели GitHub OPEN на момент среза. DONE ниже — фактический результат,
+Все32 имеют GitHub OPEN на момент свежей сверки. DONE ниже — фактический результат,
 не синоним слитого отдельного PR. Исторические дубли #1115/#1116/#1183/#1322/#1439
 сохраняют полную приёмку и не открываются заново.
 
@@ -93,7 +104,7 @@ jobs skipped; последние не названы повторным PASS н�
 | [#1346 — эпик распределения и восстановления; приёмка #1322](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1346) | Эпик0/3; технические срезы не доказывают весь автоматический путь. |
 | [#1348 — доказать восстановление прерванной работы без дублей](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1348) | Следующий proof прерывания/resume; prerequisite fencing уже выполнен. |
 | [#1387 — запутанные плохо-покрытые функции краснеют как и крупные](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1387) | Advisory CRAP слит; глобальный measured baseline, coverage/unknown и gate wiring остаются. |
-| [#1401 — объявленные обязательные проверки сходятся с защитой main](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1401) | Расхождение защиты сохраняется: actual10/declared12, docs/build и security-scan отсутствуют. Штатные17 checks не отменены. |
+| [#1401 — объявленные обязательные проверки сходятся с защитой main](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1401) | Последний доступный admin-срез09:36: actual10/declared12, docs/build и security-scan отсутствуют. Свежий connector403; изменение настроек не подтверждено. Штатные17 checks не отменены. |
 | [#1402 — версия Ruff одна в CI, hooks и dev](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1402) | CI/hooks Ruff0.16.2 против dev>=0.16.8; PR1395 открыт, lint failure. Единого pin/сторожа нет. |
 | [#1403 — кит измеряет и ограничивает стоимость контекста](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1403) | 1453 уже merged, HOLD4.12 устарел. Полевая relevance/native prompt+tool reads/Storybook aggregate остаются. |
 | [#1404 — спецификация сходится с кодом и тестами, фантомных отметок нет](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1404) | Нет полного converge→работы по недостающим AC и phantom-completion proof. |
@@ -110,14 +121,15 @@ jobs skipped; последние не названы повторным PASS н�
 | [#1417 — кит поднимается профилем под стек (CORE + capabilities + presets + bundles)](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1417) | Базовые presets есть; полный capability/bundle add сценарий не реализован. |
 | [#1434 — Вся команда работает по киту в Claude и Codex без ручного контроля](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1434) | 1462 merged, child1243 merged/required. Codex0.147 SessionStart внутри run_turn; pre-turn ack/tool-deny не подтверждены, readiness=false.1468 diagnostics и1469 design — drafts. |
 | [#1445 — Проверенные исправления и накопленные возможности доставлены выпуском 4.12.0](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1445) | ФАКТИЧЕСКИ DONE: v4.12.0 опубликован, stock run41065592704 success на7acca17f. План todo устарел; переносится в историю. |
-| [#1446 — автоматически пересчитывать выпуск; приёмка #1439](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1446) | 1449/1465 merged, общий контракт не завершён. Старые8 CI bindings не приняты; Pages source=null/final_source_consistency. Recovery implementation не разрешена. |
-| [#1447 — эпик проверенного состава и доставки выпуска](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1447) | Первый исход4.12 подтверждён; второй автоматический verified-reconcile не завершён. Целевой4.13 не готов. |
+| [#1446 — автоматически пересчитывать выпуск; приёмка #1439](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1446) | 1449/1465 merged, общий контракт не завершён. Pages12:01: source073d1bfb, plan_ready=true, release_ready=false; CI evidence11 post-tag реализаций неполно. Утренний source=null исторический; причина не доказана. Diagnostics отдельным owner. |
+| [#1447 — эпик проверенного состава и доставки выпуска](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1447) | Первый исход4.12 подтверждён; второй полный verified-reconcile не завершён. Текущий машинный план4.13 доступен; release_ready=false. |
 | [#1451 — Кит показывает число установленных и активных проектов с проверяемым охватом](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1451) | 1455/1459 merged;1463 draft local consistency не authenticity/activity proof. Provenance/dated update/product activity/coverage остаются. |
 
-## Открытые PR исходного среза
+## Открытые PR свежего среза
 
 Последние check-runs каждого имени на зафиксированном head, не merge admission:
-base/политика/независимое review должны оцениваться заново. Девять draft имеют
+base/политика/независимое review должны оцениваться заново. Таблица фиксирует
+состояние до публикации продолжения #1456; новый head проверяется отдельно в PR. Девять draft имеют
 11 success/2 штатных skip и не прошли полный17-check маршрут. Два non-draft
 имеют17 success; у шести есть failure. Эти числа не делают их обязательными4.13.
 
@@ -152,6 +164,8 @@ PR #1466 содержит одно уточнение ROADMAP; его смысл
   автоматизация ссылается на1446 и остаётся in_progress, следующий delivery —4.13.
 - ROADMAP: будущий4.12 и оба исхода недостигнуты; первый fencing тоже описывался
   как предстоящий. Исторические диагнозы стиля29.09 недостаточно отделены от текущего.
+- Утренний диагноз source=null устарел: свежий source073d1bfb и plan_ready=true
+  подтверждены, но source recovery и release readiness не смешиваются.
 - Карточки:1452/1453/1455 названы открытыми; child1243 назван draft;
   performance локальные серии ошибочно NOT_RUN. Исправляется факт без снятия остатка.
 - ARCHITECTURE: outcome→learning ещё назван future; нет различия native adapter
