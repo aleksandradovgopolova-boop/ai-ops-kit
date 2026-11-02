@@ -14,6 +14,27 @@ from ai_ops_kit.integrations.github import GitHubClient, GitHubError, FetchResul
 ROOT = Path(__file__).resolve().parents[2]
 
 
+@pytest.mark.parametrize("prior", [None, {"repository": "owner/kit"}])
+def test_refresh_supplies_only_previous_boundary_result_to_model(monkeypatch, tmp_path, prior):
+    from ai_ops_kit.devtools import release_plan_state as state
+    calls = []
+    client = type("ReadClient", (), {"repo": "owner/kit"})()
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.setattr(src, "capture", lambda root, c: {"repository": c.repo})
+    def previous(c, *, current_run):
+        assert c is client and current_run is None
+        calls.append("verified-boundary")
+        return prior
+    def build(root, snapshot, *, prior):
+        calls.append("model")
+        assert calls == ["verified-boundary", "model"]
+        return {"prior": prior}
+    monkeypatch.setattr(state, "previous", previous)
+    monkeypatch.setattr(rp, "build", build)
+    monkeypatch.setattr(state, "project", lambda report, old, publisher: report)
+    assert src.refresh(tmp_path, client) == {"prior": prior}
+
+
 class Client:
     repo = "owner/kit"
 
@@ -47,6 +68,8 @@ class Client:
             if self.mode == "issue_changed" and reads > 1:
                 rows[0]["state"] = "open"
             return rows
+        if tail == "/pulls":
+            return []
         if tail == "/issues/9/events":
             return [{"id": 1, "event": "closed", "commit_id": self.head}]
         if tail == "/issues/99/events":
@@ -69,6 +92,200 @@ class Client:
         if tail == "/actions/workflows/release.yml/runs":
             return {"total_count": 0, "workflow_runs": []}
         raise AssertionError((path, params))
+
+
+class ProducerClient(Client):
+    """Платформа до/после реального fixture merge; никаких внешних API."""
+    def __init__(self, original, feature):
+        super().__init__(original.head, original.base, original.policy)
+        self.original, self.feature, self.phase = original.head, feature, "open"
+        self.foreign = False
+        self.spoof = False
+
+    def read_page(self, path, params=None):
+        params = params or {}
+        tail = path.removeprefix("repos/owner/kit")
+        if tail == "/pulls":
+            return [{"id": 11, "number": 11}] if self.phase == "open" else []
+        if tail == "/pulls/11":
+            repo = "foreign/kit" if self.foreign else self.repo
+            return {"number": 11, "merged": self.phase == "merged", "state": "closed" if self.phase == "merged" else "open",
+                    "merge_commit_sha": self.head if self.phase == "merged" else None,
+                    "head": {"sha": self.feature, "repo": {"full_name": repo}},
+                    "base": {"sha": self.original, "ref": "main", "repo": {"full_name": self.repo}},
+                    "changed_files": 1}
+        if tail == f"/commits/{self.original}/pulls":
+            return [{"id": 10, "number": 10}]
+        if self.phase == "merged" and tail == f"/commits/{self.head}/pulls":
+            return [{"id": 11, "number": 11}]
+        if tail == "/pulls/10":
+            return {"number": 10, "merged": True, "state": "closed", "merge_commit_sha": self.original,
+                    "head": {"sha": "3" * 40}, "base": {"ref": "main", "sha": self.base}, "changed_files": 1}
+        for i, (workflow, names) in enumerate(self.policy.items(), start=1):
+            if tail == f"/actions/workflows/{workflow}/runs" and params.get("head_sha") == self.feature:
+                origin = "https://api.github.com/repos/" + ("foreign/kit" if self.spoof else self.repo)
+                assoc = {"number": 11, "head": {"sha": self.feature, "repo": {"url": origin}},
+                         "base": {"sha": self.original, "repo": {"url": origin}}}
+                return {"total_count": 1, "workflow_runs": [{"id": 100+i, "run_attempt": 1,
+                    "path": ".github/workflows/"+workflow, "head_sha": self.feature,
+                    "event": "pull_request", "status": "completed", "conclusion": "success",
+                    "pull_requests": [assoc] if self.phase == "open" else []}]}
+            if tail == f"/actions/runs/{100+i}/attempts/1/jobs":
+                jobs = [{"id": 1000+i*100+j, "name": n, "status": "completed", "conclusion": "success"}
+                        for j, n in enumerate(names)]
+                return {"total_count": len(jobs), "jobs": jobs}
+        return super().read_page(path, params)
+
+
+@pytest.fixture
+def producer_case(source_case):
+    root, original = source_case
+    def git(*args):
+        return subprocess.check_output(["git", *args], cwd=root, text=True, stderr=subprocess.DEVNULL).strip()
+    git("checkout", "-b", "fixture-feature")
+    (root / "feature.txt").write_text("actual fixture change\n")
+    git("add", "feature.txt")
+    git("commit", "-m", "feat: future change")
+    feature = git("rev-parse", "HEAD")
+    git("checkout", "main")
+    return root, ProducerClient(original, feature), git
+
+
+def _verified_fixture_archive(report, *, forged=False, tampered=False):
+    from ai_ops_kit.devtools import release_plan_state as state
+    publisher = {"run_id": 900, "attempt": 1, "checkout_sha": report["source"]["sha"], "branch": "main"}
+    payload = state.project(report, None, publisher)
+    if tampered:
+        payload["ci_archive"][0]["head"] = "f" * 40
+    class Deployment:
+        repo = "owner/kit"
+        def read_page(self, path, params=None):
+            if path == "repos/owner/kit":
+                return {"default_branch": "main"}
+            if path.endswith("/runs"):
+                return {"workflow_runs": [{"id": 900, "run_attempt": 1, "path": ".github/workflows/status-dashboard.yml",
+                    "event": "push", "head_branch": "main", "head_sha": publisher["checkout_sha"]}]}
+            return {"total_count": 1, "jobs": [{"id": 901, "steps": [{"name": "Опубликовать на GitHub Pages",
+                            "status": "completed", "conclusion": "failure" if forged else "success"}]}]}
+    # Моделируется реальный trust boundary, а не самостоятельный verified:true/digest.
+    return state.previous(Deployment(), read=lambda _: {"release_plan": payload})
+
+
+def test_producer_published_archive_and_lost_association_lookup_end_to_end(producer_case):
+    root, client, git = producer_case
+    before = src.capture(root, client)
+    assert before["complete"] and len(before["ci_archive"]) == 1
+    report = rp.build(root, before)
+    prior = _verified_fixture_archive(report)
+    assert prior is not None and prior["ci_archive"][0]["head"] == client.feature
+    git("merge", "--no-ff", "--no-edit", "fixture-feature")
+    client.head, client.phase = git("rev-parse", "HEAD"), "merged"
+    assert git("show", "-s", "--format=%P", "HEAD").split()[0] == client.original
+    after = src.capture(root, client)
+    assert after["complete"] and after["ci"]["11"][0]["pull_requests"] == []
+    saved = deepcopy(after), deepcopy(prior)
+    assert not rp.build(root, after)["implementation_evidence_complete"]
+    recovered = rp.build(root, after, prior=prior)
+    assert recovered["implementation_evidence_complete"]
+    assert not recovered["release_ready"] and recovered["publication_authorized"] is None
+    assert (after, prior) == saved and not git("status", "--porcelain")
+
+
+@pytest.mark.parametrize("failure", ["untrusted_deploy", "tampered_archive", "base", "parent", "head", "policy", "rerun", "jobs"])
+def test_premerge_archive_never_authenticates_changed_or_untrusted_history(producer_case, failure):
+    root, client, git = producer_case
+    report = rp.build(root, src.capture(root, client))
+    prior = _verified_fixture_archive(report, forged=failure == "untrusted_deploy", tampered=failure == "tampered_archive")
+    git("merge", "--no-ff", "--no-edit", "fixture-feature")
+    client.head, client.phase = git("rev-parse", "HEAD"), "merged"
+    snap = src.capture(root, client)
+    if failure in ("untrusted_deploy", "tampered_archive"):
+        assert prior is None
+    elif failure in ("base", "head"):
+        prior["ci_archive"][0][failure] = "f" * 40
+    elif failure == "parent":
+        # Preserve complete ancestry but place another base before the actual merge.
+        merged = next(c for c in snap["commits"] if c["sha"] == client.head)
+        merged["parents"][0] = client.base
+        snap["commits"] = [merged]
+    elif failure == "policy":
+        prior["input_digests"]["quality/premerge-checks.json"] = "f" * 64
+    elif failure == "rerun":
+        snap["ci"]["11"][0]["run_attempt"] = snap["ci"]["11"][0]["queried_attempt"] = 2
+    else:
+        snap["ci"]["11"][0]["jobs"][0]["id"] += 1
+    assert not rp.build(root, snap, prior=prior)["implementation_evidence_complete"]
+    assert not rp.build(root, snap, prior=prior)["release_ready"]
+
+
+@pytest.mark.parametrize("spoof", [False, True])
+def test_producer_rejects_foreign_repository_and_spoofed_native_association(producer_case, spoof):
+    root, client, _ = producer_case
+    client.spoof, client.foreign = spoof, not spoof
+    snap = src.capture(root, client)
+    assert snap["complete"] and snap["ci_archive"] == []
+
+
+@pytest.mark.parametrize("change", ["head", "closed", "job_id", "job_failed", "job_missing"])
+def test_producer_final_barrier_detects_identity_and_job_mutation(producer_case, monkeypatch, change):
+    root, client, _ = producer_case
+    snap = src.capture(root, client)
+    assert len(snap["ci_archive"]) == 1
+    original = client.read_page
+    def changed(path, params=None):
+        value = deepcopy(original(path, params))
+        if path.endswith("/pulls/11"):
+            if change == "head":
+                value["head"]["sha"] = "f" * 40
+            elif change == "closed":
+                value["state"], value["merged"] = "closed", True
+        if "/actions/runs/101/" in path:
+            if change == "job_id":
+                value["jobs"][0]["id"] += 1
+            elif change == "job_failed":
+                value["jobs"][0]["conclusion"] = "failure"
+            elif change == "job_missing":
+                value["jobs"] = []
+                value["total_count"] = 0
+        return value
+    monkeypatch.setattr(client, "read_page", changed)
+    with pytest.raises(src.SnapshotError):
+        src._verify_open(client, "main", snap["validation"]["open_ci_queries"], client.policy)
+
+
+def test_archive_predeploy_verification_is_wired_to_existing_publisher(producer_case, monkeypatch):
+    root, client, _ = producer_case
+    snap = src.capture(root, client)
+    report = rp.build(root, snap)
+    def barrier(c, branch, queries, policy):
+        assert c is client and branch == "main" and len(queries) == 1
+        raise src.SnapshotError("fixture proves final producer barrier executed")
+    monkeypatch.setattr(src, "_verify_open", barrier)
+    with pytest.raises(src.SnapshotError, match="producer barrier executed"):
+        src.verify_projection(root, report, client)
+
+
+@pytest.mark.parametrize("failure", ["run_failed", "job_failed", "missing_id", "duplicate_id"])
+def test_producer_does_not_archive_incomplete_or_failed_ci(producer_case, monkeypatch, failure):
+    root, client, _ = producer_case
+    original = client.read_page
+    def changed(path, params=None):
+        value = deepcopy(original(path, params))
+        if failure == "run_failed" and isinstance(value, dict) and value.get("workflow_runs"):
+            value["workflow_runs"][0]["conclusion"] = "failure"
+        if "/actions/runs/101/" in path:
+            if failure == "job_failed":
+                value["jobs"][0]["conclusion"] = "failure"
+            elif failure == "missing_id":
+                value["jobs"][0].pop("id")
+            elif failure == "duplicate_id":
+                value["jobs"].append(deepcopy(value["jobs"][0]))
+                value["total_count"] += 1
+        return value
+    monkeypatch.setattr(client, "read_page", changed)
+    snap = src.capture(root, client)
+    assert snap.get("ci_archive", []) == []
+    assert not rp.build(root, snap)["release_ready"]
 
 
 @pytest.fixture

@@ -13,6 +13,11 @@ from ai_ops_kit.planning import plan_model, plan_validate
 from ai_ops_kit.validation import validate_release_claims
 
 _SHA = re.compile(r"^[0-9a-f]{40}$")
+_CI_INPUTS = ("quality/premerge-checks.json", ".github/workflows/package-quality.yml",
+              ".github/workflows/docs.yml", ".github/workflows/pr-smoke.yml",
+              "pyproject.toml", "pytest.ini", "scripts/check-full.sh",
+              *[".github/ci-groups/" + n + ".sh" for n in
+                ("fast-1", "fast-2", "selftests-a", "selftests-m", "contracts")])
 _INPUTS = ("VERSION", "planning/plan.yaml", "quality/premerge-checks.json",
            "registry/release-claims.yaml", ".github/workflows/release.yml",
            ".github/workflows/package-quality.yml", "history/plan-history.yaml",
@@ -20,7 +25,7 @@ _INPUTS = ("VERSION", "planning/plan.yaml", "quality/premerge-checks.json",
            "ai_ops_kit/devtools/release_plan.py", "ai_ops_kit/devtools/release_plan_sources.py",
            "ai_ops_kit/devtools/release_plan_state.py", "ai_ops_kit/devtools/release_assembly.py",
            "ai_ops_kit/integrations/github.py", "ai_ops_kit/planning/plan_model.py",
-           "ai_ops_kit/planning/plan_validate.py", "ai_ops_kit/validation/validate_release_claims.py")
+           "ai_ops_kit/planning/plan_validate.py", "ai_ops_kit/validation/validate_release_claims.py", *_CI_INPUTS)
 
 
 def digest(value):
@@ -91,7 +96,37 @@ def validate_policy(policy):
             raise ValueError("invalid CI policy")
 
 
-def _ci_observed(pr, records, policy):
+def _archived_binding(pr, run, workflow, names, prior):
+    """prior поступает только из проверенного previous(), не из snapshot/локального JSON."""
+    rows = [r for r in [*prior.get("implementations", []), *prior.get("dependency_implementations", [])]
+            if r.get("pr") == pr["number"]]
+    if not rows:
+        rows = [r for r in prior.get("ci_archive", []) if r.get("pr") == pr["number"]]
+        if (pr.get("merged") is not True or pr.get("state") != "closed"
+                or pr.get("merge_parent") != pr["base_sha"] or len(rows) != 1):
+            return False
+        row = rows[0]
+        saved = row.get("ci_evidence", {}).get(workflow, {})
+        return (row.get("head") == pr["head_sha"] and row.get("base") == pr["base_sha"]
+                and type(saved.get("run")) is int and type(saved.get("attempt")) is int
+                and saved["run"] == run["id"] and saved["attempt"] == run["run_attempt"]
+                and saved.get("checks") == names
+                and saved.get("jobs_digest") == digest(run.get("jobs", [])))
+    if len(rows) != 1:
+        return False
+    row = rows[0]
+    if (row.get("head") != pr["head_sha"] or row.get("base") != pr["base_sha"]
+            or row.get("merge_sha") != pr["merge_sha"] or row.get("ci_observed") is not True
+            or row.get("merged_change_observed") is not True):
+        return False
+    saved = row.get("ci_evidence", {}).get(workflow, {})
+    return (type(saved.get("run")) is int and type(saved.get("attempt")) is int
+            and saved["run"] == run["id"] and saved["attempt"] == run["run_attempt"]
+            and saved.get("checks") == names
+            and ("jobs_digest" not in saved or saved["jobs_digest"] == digest(run.get("jobs", []))))
+
+
+def _ci_observed(pr, records, policy, prior=None):
     """Наблюдение exact PR CI, не independent review и не stock premerge admission."""
     evidence = {}
     for workflow, names in policy.items():
@@ -106,6 +141,8 @@ def _ci_observed(pr, records, policy):
                     p.get("head", {}).get("sha") == pr["head_sha"] and
                     p.get("base", {}).get("sha") == pr["base_sha"]
                     for p in run.get("pull_requests", []))
+        if not bound and run.get("pull_requests") == [] and prior is not None:
+            bound = _archived_binding(pr, run, workflow, names, prior)
         if (run.get("head_sha") != pr["head_sha"] or run.get("event") != "pull_request"
                 or not bound or run.get("status") != "completed"
                 or run.get("conclusion") != "success"
@@ -119,11 +156,12 @@ def _ci_observed(pr, records, policy):
             if (len(matches) != 1 or matches[0].get("status") != "completed"
                     or matches[0].get("conclusion") != "success"):
                 return False, evidence
-        evidence[workflow] = {"run": run["id"], "attempt": run["run_attempt"], "checks": names}
+        evidence[workflow] = {"run": run["id"], "attempt": run["run_attempt"], "checks": names,
+                              "jobs_digest": digest(jobs)}
     return True, evidence
 
 
-def _implementation_rows(snapshot, commits, policy):
+def _implementation_rows(snapshot, commits, policy, prior=None):
     pulls = snapshot["pulls"]
     numbers = [p["number"] for p in pulls]
     if len(set(numbers)) != len(numbers):
@@ -135,13 +173,15 @@ def _implementation_rows(snapshot, commits, policy):
                 or any(type(n) is not int or n < 1 for n in pr.get("closing_issues", []))):
             raise ValueError("invalid implementation identity")
     for pr in sorted(pulls, key=lambda p: p["number"]):
+        parents = commits.get(pr.get("merge_sha"), {}).get("parents", pr.get("merge_parents", []))
+        pr = {**pr, "merge_parent": parents[0] if parents else None}
         if type(pr["number"]) is not int or pr["number"] <= 0:
             raise ValueError("invalid PR number")
         merged = (pr.get("merged") is True and pr.get("state") == "closed"
                   and pr.get("base_ref") == snapshot["source"]["branch"]
                   and pr.get("merge_sha") in commits
                   and type(pr.get("changed_files")) is int and pr["changed_files"] > 0)
-        ci_ok, ci = _ci_observed(pr, snapshot.get("ci", {}).get(str(pr["number"]), []), policy)
+        ci_ok, ci = _ci_observed(pr, snapshot.get("ci", {}).get(str(pr["number"]), []), policy, prior)
         rows.append({"pr": pr["number"], "merge_sha": pr.get("merge_sha"),
                      "head": pr.get("head_sha"), "base": pr.get("base_sha"),
                      "merged_change_observed": merged, "ci_observed": ci_ok,
@@ -231,7 +271,7 @@ def finalize(report):
     return report
 
 
-def build(root, snapshot):
+def build(root, snapshot, *, prior=None):
     """Детерминированный read model; весь snapshot собирается read-only adapter отдельно."""
     root = Path(root)
     report = {"schema_version": 1, "kind": "kit-release-plan", "repository": snapshot.get("repository"),
@@ -241,9 +281,14 @@ def build(root, snapshot):
               "delivery": {"observed": "unknown", "automatic_update_or_rollback": False}}
     try:
         inputs = input_digests(root)
+        # Отсутствие новой policy-привязки в старом формате также означает unknown.
+        if prior is not None and (prior.get("repository") != snapshot.get("repository")
+                or any(prior.get("input_digests", {}).get(k) != inputs[k] for k in _CI_INPUTS)):
+            prior = None
         if (snapshot.get("complete") is not True or snapshot.get("unchanged") is not True
                 or snapshot.get("input_digests") != inputs):
             raise ValueError("incomplete or changed source")
+        report["ci_archive"] = snapshot.get("ci_archive", [])
         plan = yaml.safe_load((root / "planning/plan.yaml").read_text())
         intent = _intent(plan)
         policy = json.loads((root / "quality/premerge-checks.json").read_text())
@@ -270,12 +315,12 @@ def build(root, snapshot):
             report["blockers"].append("unreleased_changes_without_fragments")
         if target and _version(target)[0] != _version(previous)[0]:
             report["blockers"].append("major_requires_owner_decision")
-        implementations = _implementation_rows(snapshot, commits, policy)
+        implementations = _implementation_rows(snapshot, commits, policy, prior)
         historical = snapshot.get("dependency_pulls", [])
         if any(p.get("published_ancestor") != snapshot["published"]["sha"] for p in historical):
             raise ValueError("historical dependency ancestry unknown")
         historical_rows = _implementation_rows({**snapshot, "pulls": historical},
-                                               {p["merge_sha"]: p for p in historical}, policy)
+                                               {p["merge_sha"]: p for p in historical}, policy, prior)
         issues = _issue_rows(snapshot, [*implementations, *historical_rows])
         linked = {p["merge_sha"] for p in implementations if p["merged_change_observed"]}
         unlinked = sorted(set(commits) - linked)
@@ -318,7 +363,7 @@ def build(root, snapshot):
         report["blockers"].append("source_unknown_or_invalid")
         if snapshot.get("reason") in ("github_read_permission_denied", "release_snapshot_unavailable_incomplete_or_changed"):
             report["unavailable_reason"] = snapshot["reason"]
-        if snapshot.get("failure_stage") in ("repository", "release_baseline", "issue_inventory", "pull_links_and_ci", "dependencies", "final_source_consistency"):
+        if snapshot.get("failure_stage") in ("repository", "release_baseline", "open_pr_ci", "issue_inventory", "pull_links_and_ci", "dependencies", "final_source_consistency"):
             report["unavailable_stage"] = snapshot["failure_stage"]
     return finalize(report)
 

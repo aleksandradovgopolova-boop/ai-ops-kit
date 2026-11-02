@@ -151,6 +151,72 @@ def _release_ci(client, prefix, head):
     return release_runs, release_ci
 
 
+def _same_repo(side, repository, *, url=False):
+    if not isinstance(side, dict) or not isinstance(side.get("repo"), dict):
+        return False
+    value = side["repo"].get("url" if url else "full_name")
+    expected = f"https://api.github.com/repos/{repository}" if url else repository
+    return isinstance(value, str) and value.casefold() == expected.casefold()
+
+
+def _open_identity(raw, repository, branch):
+    if (raw.get("state") != "open" or raw.get("merged") is not False
+            or raw["base"]["ref"] != branch
+            or any(not _same_repo(raw.get(part), repository) for part in ("head", "base"))):
+        return None
+    number = raw["number"]
+    if type(number) is not int or number < 1:
+        raise SnapshotError("invalid open PR identity")
+    identity = {"number": number, "head_sha": raw["head"]["sha"], "base_sha": raw["base"]["sha"]}
+    if any(not isinstance(identity[k], str) or not re.fullmatch(r"[0-9a-f]{40}", identity[k])
+           for k in ("head_sha", "base_sha")):
+        raise SnapshotError("invalid open PR SHA")
+    return identity
+
+
+def _open_ci(client, branch, policy, signatures):
+    prefix = f"repos/{client.repo}"
+    candidates = collection(client, f"{prefix}/pulls", params={"state": "open"})
+    if len(candidates) > 100:
+        raise SnapshotError("open PR evidence exceeds bounded producer budget")
+    archive, queries = [], []
+    seen = set()
+    for candidate in sorted(candidates, key=lambda c: c.get("number", 0)):
+        number = candidate.get("number")
+        if type(number) is not int or number < 1 or number in seen:
+            raise SnapshotError("ambiguous open PR inventory")
+        seen.add(number)
+        identity = _open_identity(_object(client, f"{prefix}/pulls/{number}"), client.repo, branch)
+        if identity is None:
+            continue
+        runs = _ci(client, identity, policy, signatures)
+        # Native association must name the same repository, not merely the same SHA/number.
+        repository_bound = all(any(type(p.get("number")) is int and p.get("number") == number
+            and p.get("head", {}).get("sha") == identity["head_sha"]
+            and p.get("base", {}).get("sha") == identity["base_sha"]
+            and all(_same_repo(p.get(part), client.repo, url=True) for part in ("head", "base"))
+            for p in run.get("pull_requests", [])) for run in runs)
+        ok, evidence = release_plan._ci_observed(identity, runs, policy)
+        job_ids_valid = all(all(type(j.get("id")) is int and j["id"] > 0 for j in r["jobs"])
+                            and len({j["id"] for j in r["jobs"]}) == len(r["jobs"]) for r in runs)
+        if repository_bound and job_ids_valid and ok:
+            archive.append({"pr": number, "head": identity["head_sha"], "base": identity["base_sha"],
+                            "ci_evidence": evidence})
+        queries.append({"identity": identity, "jobs_digest": release_plan.digest(runs)})
+    return archive, queries
+
+
+def _verify_open(client, branch, queries, policy):
+    for query in queries:
+        identity = query["identity"]
+        raw = _object(client, f"repos/{client.repo}/pulls/{identity['number']}")
+        if _open_identity(raw, client.repo, branch) != identity:
+            raise SnapshotError("open PR identity changed")
+        runs = _ci(client, identity, policy, {})
+        if release_plan.digest(runs) != query["jobs_digest"]:
+            raise SnapshotError("open PR CI jobs changed")
+
+
 def capture(root, client=None):
     """На любой ошибке отдаёт complete=False. Никаких write API или fallback-токенов."""
     root = Path(root)
@@ -177,6 +243,8 @@ def capture(root, client=None):
         inputs = release_plan.input_digests(root)
         policy = json.loads((root / "quality/premerge-checks.json").read_text())
         release_plan.validate_policy(policy)
+        stage = "open_pr_ci"
+        ci_archive, open_queries = _open_ci(client, branch, policy, signatures={})
         # Полный реестр issues; отсутствие закрытой задачи не маскируется default limit=40.
         issue_path = f"{prefix}/issues"
         stage = "issue_inventory"
@@ -229,8 +297,10 @@ def capture(root, client=None):
                 seen.add(number)
                 item = _pull(client, number, ci, signatures, policy)
                 if item["merged"] and _ancestor(root, item["merge_sha"], baseline["sha"]):
+                    item["merge_parents"] = _git(root, "show", "-s", "--format=%P", item["merge_sha"]).split()
                     historical.append({**item, "published_ancestor": baseline["sha"]})
         stage = "final_source_consistency"
+        _verify_open(client, branch, open_queries, policy)
         release_runs, release_ci = _release_ci(client, prefix, head)
         closing_queries = [{"pr": p["number"], "issues": p["closing_issues"]} for p in [*pulls, *historical]]
         for item in closing_queries:
@@ -248,7 +318,8 @@ def capture(root, client=None):
             raise SnapshotError("release CI changed during reconciliation")
         if _object(client, path)["sha"] != head or published(client) != baseline or inputs != release_plan.input_digests(root):
             raise SnapshotError("release source changed during reconciliation")
-        validation = {"closing_queries": closing_queries, "issues_digest": release_plan.digest(raw_issues),
+        validation = {"open_ci_queries": open_queries,
+                      "closing_queries": closing_queries, "issues_digest": release_plan.digest(raw_issues),
                       "ci_queries": [{"workflow": w, "sha": sha, "signature": signature}
                                      for (w, sha), signature in sorted(signatures.items())],
                       "release_signature": _run_signature(release_runs),
@@ -256,7 +327,7 @@ def capture(root, client=None):
         snapshot.update(repository=client.repo, source={"sha": head, "branch": branch,
                         "version": (root / "VERSION").read_text().strip()}, published=baseline,
                         commits=commits, issues=issues, pulls=pulls, dependency_pulls=historical,
-                        ci=ci, input_digests=inputs,
+                        ci=ci, ci_archive=ci_archive, input_digests=inputs,
                         release_ci=release_ci, validation=validation, complete=True, unchanged=True)
     except (GitHubError, SnapshotError, ValueError, TypeError, KeyError, OSError, yaml.YAMLError) as exc:
         denied = "github_read_permission_denied" in str(exc) or "HTTP 403" in str(exc)
@@ -270,7 +341,6 @@ def refresh(root, client=None):
     client = client or GitHubClient(repo=parse_slug(_git(root, "remote", "get-url", "origin")))
     snapshot = capture(root, client)
     snapshot.setdefault("repository", client.repo)
-    report = release_plan.build(root, snapshot)
     publisher = None
     current_run = None
     if os.environ.get("GITHUB_ACTIONS") == "true":
@@ -282,6 +352,7 @@ def refresh(root, client=None):
                 or client.repo != os.environ.get("GITHUB_REPOSITORY")):
             raise SnapshotError("publisher source mismatch")
     prior = release_plan_state.previous(client, current_run=current_run)
+    report = release_plan.build(root, snapshot, prior=prior)
     report = release_plan_state.project(report, prior, publisher)
     return report
 
@@ -327,6 +398,8 @@ def verify_projection(root, report, client):
             or report["published"] != {k: baseline[k] for k in report["published"]}):
         raise SnapshotError("projection source changed")
     validation = report["validation"]
+    _verify_open(client, repo['default_branch'], validation.get("open_ci_queries", []),
+                 json.loads((Path(root) / "quality/premerge-checks.json").read_text()))
     raw_issues = collection(client, f"{prefix}/issues", params={"state": "all"})
     if release_plan.digest(raw_issues) != validation["issues_digest"]:
         raise SnapshotError("projection issue source changed")

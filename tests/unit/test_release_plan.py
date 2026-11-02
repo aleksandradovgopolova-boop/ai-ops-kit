@@ -57,6 +57,61 @@ def test_machine_plan_uses_existing_semver_and_preserves_authority_boundary(rele
     assert snap == before
 
 
+def test_verified_prior_preserves_only_lost_ci_association(release_case):
+    root, snap = release_case
+    prior = rp.build(root, snap)
+    for run in snap["ci"]["10"]:
+        run["pull_requests"] = []
+    before, old = deepcopy(snap), deepcopy(prior)
+    assert not rp.build(root, snap)["implementation_evidence_complete"]
+    result = rp.build(root, snap, prior=prior)
+    assert result["implementation_evidence_complete"]
+    assert result["implementations"][0]["ci_evidence"] == prior["implementations"][0]["ci_evidence"]
+    assert not result["release_ready"] and result["publication_authorized"] is None
+    assert snap == before and prior == old
+
+
+@pytest.mark.parametrize("failure", ["base", "head", "merge", "pr", "duplicate", "unobserved",
+                                    "checks", "run", "attempt", "policy", "repository",
+                                    "conflict", "failed", "partial", "rerun", "missing_workflow"])
+def test_historical_link_never_overrides_missing_or_conflicting_proof(release_case, failure):
+    root, snap = release_case
+    prior = rp.build(root, snap)
+    for run in snap["ci"]["10"]:
+        run["pull_requests"] = []
+    row, run = prior["implementations"][0], snap["ci"]["10"][0]
+    workflow = next(iter(row["ci_evidence"]))
+    if failure in ("base", "head"):
+        row[failure] = "f" * 40
+    elif failure == "merge":
+        row["merge_sha"] = "f" * 40
+    elif failure == "pr":
+        row["pr"] = 99
+    elif failure == "duplicate":
+        prior["implementations"].append(deepcopy(row))
+    elif failure == "unobserved":
+        row["ci_observed"] = False
+    elif failure in ("checks", "run", "attempt"):
+        row["ci_evidence"][workflow][failure] = [] if failure == "checks" else 999
+    elif failure == "policy":
+        prior["input_digests"][".github/workflows/pr-smoke.yml"] = "f" * 64
+    elif failure == "repository":
+        prior["repository"] = "foreign/repo"
+    elif failure == "conflict":
+        run["pull_requests"] = [{"number": 99}]
+    elif failure == "failed":
+        run["jobs"][0]["conclusion"] = "failure"
+    elif failure == "partial":
+        run["jobs"] = []
+    elif failure == "rerun":
+        run["run_attempt"] += 1
+        run["queried_attempt"] += 1
+    else:
+        snap["ci"]["10"].pop(0)
+    result = rp.build(root, snap, prior=prior)
+    assert not result["implementation_evidence_complete"] and not result["release_ready"]
+
+
 @pytest.mark.parametrize("failure", ["wrong_head", "wrong_base", "skipped", "cancelled", "rerun",
                                     "partial_jobs", "duplicate_job", "old_attempt", "missing_workflow", "bool_run"])
 def test_missing_or_stale_ci_does_not_confirm_implementation(release_case, failure):
