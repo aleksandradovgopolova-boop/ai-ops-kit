@@ -17,4 +17,4 @@ schema_version: 1
 kind: swallowed-exceptions-ratchet
 
 # Замер AST 2026-09-17 (B3). Потолок = текущее фактическое число молчаливых глушителей в ai_ops_kit/.
-baseline: 57
+baseline: 55

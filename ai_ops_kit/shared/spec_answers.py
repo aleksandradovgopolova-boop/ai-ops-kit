@@ -143,7 +143,11 @@ def apply_answers(child_root: str | Path, wid: str, text: str) -> dict:
     import yaml
 
     matched, unmatched = parse_plain_answers(text)
-    sp = Path(child_root) / "features" / str(wid) / "spec.yaml"
+    from ai_ops_kit.shared.workitem_paths import artifact_path
+    try:
+        sp = artifact_path(Path(child_root) / "features", wid, "spec.yaml")
+    except ValueError as exc:
+        return {"applied": [], "unmatched": unmatched, "error": str(exc)}
     if not sp.is_file():
         return {"applied": [], "unmatched": unmatched,
                 "error": f"спецификации {sp} ещё нет — сначала запусти specify"}

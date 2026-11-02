@@ -28,36 +28,16 @@ if _root is not None and str(_root) not in _sys.path:
 import argparse
 import hashlib
 import json
-import re
 import sys
 from pathlib import Path
 
 import yaml
 
 from ai_ops_kit.shared.budget import declared_limits
+from ai_ops_kit.shared.workitem_paths import WORKITEM_ID_RE, validate_workitem_id  # noqa: F401 — прежние импорты публичного валидатора сохранены
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-# finding аудита (P1.1): workitem_id доходит до путей (worktree add строит root/<wt>/<wid>).
-# Пускаем только безопасный slug — иначе `../`, абсолютные пути и разделители дают traversal.
-WORKITEM_ID_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,63}$")
-
-
-def validate_workitem_id(wid):
-    """Возвращает wid если он безопасный slug, иначе бросает ValueError.
-
-    Отвергаем всё, что может выйти за пределы каталога worktree: разделители пути,
-    `..`, абсолютные пути, пустое/слишком длинное. Точку-в-начале и '..' режем явно.
-    """
-    if not isinstance(wid, str) or not WORKITEM_ID_RE.match(wid):
-        raise ValueError(
-            f"недопустимый workitem_id {wid!r}: разрешён slug {WORKITEM_ID_RE.pattern} "
-            "(нижний регистр, [a-z0-9._-], без '/', '\\', '..', 1..64 символа)")
-    if wid.startswith(".") or ".." in wid:
-        raise ValueError(f"недопустимый workitem_id {wid!r}: '.' в начале или '..' запрещены")
-    return wid
-
-
 def load(rel):
     return yaml.safe_load((PKG / rel).read_text(encoding="utf-8"))
 
