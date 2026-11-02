@@ -323,6 +323,163 @@ def test_actual_git_and_full_read_only_api_feed_the_machine_plan(source_case):
     assert snap["pulls"][0]["closing_issues"] == [9]
     assert result["issues"][1]["implementation_observed"] is False
     assert all(path.startswith("repos/owner/kit") for path, _ in client.calls)
+    assert "diagnostic" not in snap and "unavailable_diagnostic" not in result
+
+
+@pytest.mark.parametrize("mode,code,field", [
+    ("403", "github_read_permission_denied", None),
+    ("truncated", "collection_incomplete", None),
+    ("main_changed", "default_branch_changed", "main_sha"),
+    ("issue_changed", "issues_changed", "issues"),
+    ("rerun", "ci_changed", "ci_signature"),
+])
+def test_capture_projects_safe_diagnostics_without_admitting_changed_source(source_case, mode, code, field):
+    root, client = source_case
+    client.mode = mode
+    snap = src.capture(root, client)
+    diagnostic = snap["diagnostic"]
+    assert diagnostic["code"] == code
+    if field:
+        assert diagnostic["field"] == field
+    if mode == "rerun":
+        assert diagnostic == {"code": code, "workflow": "docs.yml", "run_id": 1,
+                              "attempt": 2, "field": field}
+    result = rp.build(root, snap)
+    assert result["unavailable_diagnostic"] == diagnostic
+    assert result["blockers"] == ["source_unknown_or_invalid"]
+    assert not snap["complete"] and not snap["unchanged"]
+    assert not result["composition_available"] and not result["release_ready"]
+    assert result["publication_authorized"] is None and result["source"] is None
+    if field:
+        assert sum(p.endswith({"main_changed": "/commits/main", "issue_changed": "/issues",
+                               "rerun": "/actions/workflows/docs.yml/runs"}[mode]) for p, _ in client.calls) > 1
+
+
+@pytest.mark.parametrize("change,code,field", [
+    ("head", "open_pr_identity_changed", "head_sha"),
+    ("base", "open_pr_identity_changed", "base_sha"),
+    ("closed", "open_pr_identity_changed", "identity"),
+    ("jobs", "open_pr_ci_changed", "jobs"),
+])
+def test_open_pr_diagnostic_identifies_actual_mutation(producer_case, monkeypatch, change, code, field):
+    root, client, _ = producer_case
+    original, reads, mutations = client.read_page, {}, []
+    def read(path, params=None):
+        data = deepcopy(original(path, params))
+        reads[path] = reads.get(path, 0) + 1
+        if reads[path] > 1 and path.endswith("/pulls/11") and change != "jobs":
+            before = deepcopy(data)
+            if change == "closed":
+                data["state"], data["merged"] = "closed", True
+            else:
+                data[change]["sha"] = "f" * 40
+            assert data != before
+            mutations.append(path)
+        if reads[path] > 1 and "/actions/runs/101/" in path and change == "jobs":
+            data["jobs"][0]["id"] += 1
+            mutations.append(path)
+        return data
+    monkeypatch.setattr(client, "read_page", read)
+    snap = src.capture(root, client)
+    assert mutations and not snap["complete"]
+    assert snap["diagnostic"] == {"code": code, "pr": 11, "field": field}
+    assert not rp.build(root, snap)["release_ready"]
+
+
+@pytest.mark.parametrize("change,code,field", [
+    ("links", "closing_issues_changed", "closing_issues"),
+    ("release_ci", "release_ci_changed", "release_ci_signature"),
+    ("published", "published_release_changed", "published_release"),
+    ("inputs", "release_inputs_changed", "input_digests"),
+])
+def test_remaining_final_consistency_branches_keep_specific_diagnostics(source_case, monkeypatch, change, code, field):
+    root, client = source_case
+    reads, mutations = {}, []
+    original = client.read_page
+    def read(path, params=None):
+        data = deepcopy(original(path, params))
+        reads[path] = reads.get(path, 0) + 1
+        if change == "release_ci" and path.endswith("/workflows/release.yml/runs") and reads[path] > 1:
+            data = {"total_count": 1, "workflow_runs": [{"id": 99, "run_attempt": 1,
+                    "status": "in_progress", "conclusion": None}]}
+            mutations.append(path)
+        if change == "published" and path.endswith("/releases") and reads[path] > 1:
+            data[0]["id"] += 1
+            mutations.append(path)
+        return data
+    monkeypatch.setattr(client, "read_page", read)
+    if change == "links":
+        calls = []
+        def links(number):
+            calls.append(number)
+            items = [9] if len(calls) == 1 else []
+            if len(calls) > 1:
+                mutations.append(number)
+            return FetchResult(True, items=items)
+        monkeypatch.setattr(client, "closing_issue_numbers", links)
+    if change == "inputs":
+        verify = src._verify_open
+        def mutate(*args):
+            verify(*args)
+            (root / "VERSION").write_text("4.12.0\n")
+            assert (root / "VERSION").read_text() == "4.12.0\n"
+            mutations.append("VERSION")
+        monkeypatch.setattr(src, "_verify_open", mutate)
+    snap = src.capture(root, client)
+    assert mutations and not snap["complete"]
+    diagnostic = {"code": code, "field": field}
+    if change == "links":
+        diagnostic["pr"] = 10
+    if change == "release_ci":
+        diagnostic.update(workflow="release.yml", run_id=99, attempt=1)
+    assert snap["diagnostic"] == diagnostic
+    assert rp.build(root, snap)["unavailable_diagnostic"] == diagnostic
+    assert not rp.build(root, snap)["release_ready"]
+
+
+@pytest.mark.parametrize("error,code", [
+    (GitHubError, "github_read_failed"), (OSError, "source_io_unavailable"),
+    (ValueError, "source_invalid"), (TypeError, "source_invalid"),
+    (KeyError, "source_invalid"), (src.SnapshotError, "snapshot_invalid"),
+    (src.yaml.YAMLError, "source_invalid"),
+])
+def test_exception_text_never_escapes_diagnostics(source_case, monkeypatch, capsys, caplog, error, code):
+    root, client = source_case
+    secret = "SENSITIVE_TOKEN_person@example.invalid_title_body_api_payload"
+    def fail(*args):
+        raise error(secret)
+    monkeypatch.setattr(client, "read_page", fail)
+    snap = src.capture(root, client)
+    assert snap["diagnostic"] == {"code": code}
+    report = rp.build(root, snap)
+    assert report["unavailable_diagnostic"] == {"code": code}
+    captured = capsys.readouterr()
+    assert secret not in json.dumps([snap, report]) + captured.out + captured.err + caplog.text
+    assert not report["release_ready"]
+
+
+@pytest.mark.parametrize("mode,code", [
+    ("total", "collection_total_invalid_or_changed"),
+    ("page", "collection_page_invalid"),
+    ("duplicate", "collection_identity_duplicate"),
+    ("incomplete", "collection_incomplete"),
+    ("budget", "collection_budget_exceeded"),
+])
+def test_collection_diagnostics_never_copy_malformed_payload(mode, code):
+    class Pages:
+        def read_page(self, path, params):
+            if mode == "total":
+                return {"total_count": "SECRET", "jobs": []}
+            if mode == "page":
+                return {"total_count": 1, "jobs": ["SECRET"]}
+            if mode == "duplicate":
+                return {"total_count": 2, "jobs": [{"id": 1, "title": "SECRET"}] * 2}
+            if mode == "incomplete":
+                return {"total_count": 1, "jobs": []}
+            return {"total_count": 10001, "jobs": [{"id": params["page"] * 100 + n} for n in range(100)]}
+    with pytest.raises(src.SnapshotError) as caught:
+        src.collection(Pages(), "fixture", key="jobs")
+    assert caught.value.diagnostic == {"code": code}
 
 
 @pytest.mark.parametrize("mode", ["403", "truncated", "main_changed", "issue_changed", "rerun"])

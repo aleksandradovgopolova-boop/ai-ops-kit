@@ -13,6 +13,36 @@ ROOT = Path(__file__).resolve().parents[2]
 HEAD, BASE, PRHEAD = "1" * 40, "2" * 40, "3" * 40
 
 
+@pytest.mark.parametrize("value", [None, [], "secret", {"code": "secret"}])
+def test_invalid_snapshot_diagnostic_is_not_projected(tmp_path, monkeypatch, value):
+    monkeypatch.setattr(rp, "input_digests", lambda _: {})
+    result = rp.build(tmp_path, {"complete": False, "diagnostic": value})
+    assert "unavailable_diagnostic" not in result and not result["release_ready"]
+
+
+def test_snapshot_diagnostic_projection_has_closed_keys_and_value_allowlists(tmp_path, monkeypatch):
+    monkeypatch.setattr(rp, "input_digests", lambda _: {})
+    diagnostic = {"code": "ci_changed", "pr": 10, "workflow": "docs.yml", "run_id": 55,
+                  "attempt": 2, "field": "ci_signature", "payload": "SECRET", "message": "SECRET"}
+    result = rp.build(tmp_path, {"complete": False, "diagnostic": diagnostic})
+    assert result["unavailable_diagnostic"] == {k: v for k, v in diagnostic.items() if k not in ("payload", "message")}
+    for key, values in {"pr": [True, -1, "SECRET", 2**100], "run_id": [False, 0, "SECRET"],
+                        "attempt": [True, 0, "SECRET"], "workflow": ["SECRET.yml", "../docs.yml", []],
+                        "field": ["SECRET", "title", {}]}.items():
+        for value in values:
+            unsafe = {**diagnostic, key: value}
+            report = rp.build(tmp_path, {"complete": False, "diagnostic": unsafe})
+            assert key not in report["unavailable_diagnostic"]
+            assert not report["release_ready"] and report["publication_authorized"] is None
+
+
+def test_diagnostic_only_change_does_not_change_release_semantic_fingerprint(tmp_path, monkeypatch):
+    monkeypatch.setattr(rp, "input_digests", lambda _: {})
+    before = rp.build(tmp_path, {"complete": False})
+    after = rp.build(tmp_path, {"complete": False, "diagnostic": {"code": "ci_changed"}})
+    assert after["semantic_fingerprint"] == before["semantic_fingerprint"]
+
+
 @pytest.fixture
 def release_case(tmp_path):
     for name in rp._INPUTS:

@@ -27,6 +27,41 @@ _INPUTS = ("VERSION", "planning/plan.yaml", "quality/premerge-checks.json",
            "ai_ops_kit/integrations/github.py", "ai_ops_kit/planning/plan_model.py",
            "ai_ops_kit/planning/plan_validate.py", "ai_ops_kit/validation/validate_release_claims.py", *_CI_INPUTS)
 
+# Диагностика не является evidence и никогда не содержит текст внешнего источника.
+_SNAPSHOT_CODES = frozenset({
+    "snapshot_invalid", "github_read_permission_denied", "github_read_failed",
+    "source_io_unavailable", "source_invalid", "collection_total_invalid_or_changed",
+    "collection_page_invalid", "collection_identity_duplicate", "collection_incomplete",
+    "collection_budget_exceeded", "git_evidence_unavailable", "ancestor_identity_invalid",
+    "historical_ancestry_unavailable", "dependency_pr_invalid", "closing_issues_unavailable",
+    "api_object_missing", "published_release_unknown", "release_tag_invalid",
+    "release_tag_depth_exceeded", "release_commit_invalid", "workflow_identity_invalid",
+    "open_pr_identity_invalid", "open_pr_sha_invalid", "open_pr_budget_exceeded",
+    "open_pr_inventory_ambiguous", "open_pr_identity_changed", "open_pr_ci_changed",
+    "repository_unknown", "repository_mismatch", "checkout_not_default_branch",
+    "closing_issues_changed", "issues_changed", "ci_changed", "release_ci_changed",
+    "default_branch_changed", "published_release_changed", "release_inputs_changed",
+})
+_DIAGNOSTIC_WORKFLOWS = frozenset({"docs.yml", "pr-smoke.yml", "package-quality.yml", "release.yml"})
+_DIAGNOSTIC_FIELDS = frozenset({"identity", "head_sha", "base_sha", "jobs", "closing_issues",
+                               "issues", "ci_signature", "release_ci_signature", "main_sha",
+                               "published_release", "input_digests"})
+
+
+def snapshot_diagnostic(value):
+    """Закрытая проекция: даже подложенный snapshot не переносит произвольные строки."""
+    if not isinstance(value, dict) or type(value.get("code")) is not str or value["code"] not in _SNAPSHOT_CODES:
+        return None
+    safe = {"code": value["code"]}
+    for key in ("pr", "run_id", "attempt"):
+        number = value.get(key)
+        if type(number) is int and 0 < number < 2**63:
+            safe[key] = number
+    for key, allowed in (("workflow", _DIAGNOSTIC_WORKFLOWS), ("field", _DIAGNOSTIC_FIELDS)):
+        if type(value.get(key)) is str and value[key] in allowed:
+            safe[key] = value[key]
+    return safe
+
 
 def digest(value):
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
@@ -365,6 +400,9 @@ def build(root, snapshot, *, prior=None):
             report["unavailable_reason"] = snapshot["reason"]
         if snapshot.get("failure_stage") in ("repository", "release_baseline", "open_pr_ci", "issue_inventory", "pull_links_and_ci", "dependencies", "final_source_consistency"):
             report["unavailable_stage"] = snapshot["failure_stage"]
+        diagnostic = snapshot_diagnostic(snapshot.get("diagnostic"))
+        if diagnostic:
+            report["unavailable_diagnostic"] = diagnostic
     return finalize(report)
 
 

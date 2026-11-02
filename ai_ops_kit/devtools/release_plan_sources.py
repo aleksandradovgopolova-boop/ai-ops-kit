@@ -21,6 +21,10 @@ from ai_ops_kit.shared.gitio import git
 class SnapshotError(ValueError):
     """Полный стабильный snapshot не подтверждён."""
 
+    def __init__(self, code, **identifiers):
+        super().__init__(code)
+        self.diagnostic = release_plan.snapshot_diagnostic({"code": code, **identifiers}) or {"code": "snapshot_invalid"}
+
 
 def collection(client, path, *, key=None, params=None):
     rows, total = [], None
@@ -29,46 +33,46 @@ def collection(client, path, *, key=None, params=None):
         if key:
             count = data.get("total_count") if isinstance(data, dict) else None
             if type(count) is not int or count < 0 or (total is not None and total != count):
-                raise SnapshotError("collection total changed or invalid")
+                raise SnapshotError("collection_total_invalid_or_changed")
             total, batch = count, data.get(key)
         else:
             batch = data
         if not isinstance(batch, list) or len(batch) > 100 or any(not isinstance(r, dict) for r in batch):
-            raise SnapshotError("invalid collection page")
+            raise SnapshotError("collection_page_invalid")
         rows.extend(batch)
         identifiers = [r["id"] for r in rows if "id" in r]
         if len(set(identifiers)) != len(identifiers):
-            raise SnapshotError("duplicate collection identity")
+            raise SnapshotError("collection_identity_duplicate")
         if len(batch) < 100:
             if key and len(rows) != total:
-                raise SnapshotError("incomplete collection")
+                raise SnapshotError("collection_incomplete")
             return rows
-    raise SnapshotError("collection exceeds reconciliation budget")
+    raise SnapshotError("collection_budget_exceeded")
 
 
 def _git(root, *args):
     rc, out, _ = git(root, *args, timeout=30)
     if rc:
-        raise SnapshotError("git evidence unavailable")
+        raise SnapshotError("git_evidence_unavailable")
     return out.strip()
 
 
 def _ancestor(root, sha, target):
     if not all(isinstance(s, str) and re.fullmatch(r"[0-9a-f]{40}", s) for s in (sha, target)):
-        raise SnapshotError("invalid ancestor identity")
+        raise SnapshotError("ancestor_identity_invalid")
     rc, _, _ = git(root, "merge-base", "--is-ancestor", sha, target, timeout=30)
     if rc not in (0, 1):
-        raise SnapshotError("historical ancestry unavailable")
+        raise SnapshotError("historical_ancestry_unavailable")
     return rc == 0
 
 
 def _pull(client, number, ci, signatures, policy):
     if type(number) is not int or number < 1:
-        raise SnapshotError("invalid dependency PR")
+        raise SnapshotError("dependency_pr_invalid")
     pr = _object(client, f"repos/{client.repo}/pulls/{number}")
     links = client.closing_issue_numbers(number)
     if not links.ok:
-        raise SnapshotError(links.reason if links.reason == "github_read_permission_denied" else "canonical closing issue evidence unavailable")
+        raise SnapshotError(links.reason if links.reason == "github_read_permission_denied" else "closing_issues_unavailable", pr=number)
     item = {"number": number, "merged": pr["merged"], "state": pr["state"],
             "base_ref": pr["base"]["ref"], "base_sha": pr["base"]["sha"],
             "head_sha": pr["head"]["sha"], "merge_sha": pr["merge_commit_sha"],
@@ -80,7 +84,7 @@ def _pull(client, number, ci, signatures, policy):
 def _object(client, path):
     value = client.read_page(path)
     if not isinstance(value, dict):
-        raise SnapshotError("API object missing")
+        raise SnapshotError("api_object_missing")
     return value
 
 
@@ -89,7 +93,7 @@ def published(client):
     stable = [r for r in releases if r.get("draft") is False and r.get("prerelease") is False
               and re.fullmatch(r"v\d+\.\d+\.\d+", r.get("tag_name", ""))]
     if not stable:
-        raise SnapshotError("published stable release unknown")
+        raise SnapshotError("published_release_unknown")
     row = max(stable, key=lambda r: release_plan._version(r["tag_name"][1:]))
     tag = row["tag_name"]
     ref = _object(client, f"repos/{client.repo}/git/ref/tags/{quote(tag, safe='')}")
@@ -98,12 +102,12 @@ def published(client):
         if obj["type"] == "commit":
             break
         if obj["type"] != "tag" or not re.fullmatch(r"[0-9a-f]{40}", obj["sha"]):
-            raise SnapshotError("invalid release tag")
+            raise SnapshotError("release_tag_invalid")
         obj = _object(client, f"repos/{client.repo}/git/tags/{obj['sha']}")["object"]
     else:
-        raise SnapshotError("release tag chain too deep")
+        raise SnapshotError("release_tag_depth_exceeded")
     if not re.fullmatch(r"[0-9a-f]{40}", obj["sha"]):
-        raise SnapshotError("invalid release commit")
+        raise SnapshotError("release_commit_invalid")
     return {"version": tag[1:], "sha": obj["sha"], "tag": tag,
             "id": row["id"], "published_at": row["published_at"]}
 
@@ -115,6 +119,12 @@ def _runs(client, workflow, sha):
 
 def _run_signature(rows):
     return sorted((r["id"], r["run_attempt"], r["status"], r.get("conclusion")) for r in rows)
+
+
+def _changed_run(before, after):
+    """Один изменённый run/attempt; значения status/conclusion наружу не выводятся."""
+    changed = [r for r in after if r not in before] or [r for r in before if r not in after]
+    return {"run_id": changed[0][0], "attempt": changed[0][1]} if changed else {}
 
 
 def _ci(client, pr, policy, signatures):
@@ -129,7 +139,7 @@ def _ci(client, pr, policy, signatures):
         run = {k: row.get(k) for k in keys}
         attempt = run["run_attempt"]
         if type(run["id"]) is not int or type(attempt) is not int or attempt < 1:
-            raise SnapshotError("invalid workflow identity")
+            raise SnapshotError("workflow_identity_invalid", pr=pr["number"], workflow=workflow)
         jobs = collection(client, f"repos/{client.repo}/actions/runs/{run['id']}/attempts/{attempt}/jobs", key="jobs")
         run.update(queried_attempt=attempt, total_jobs=len(jobs),
                    jobs=[{k: j.get(k) for k in ("id", "name", "status", "conclusion")} for j in jobs])
@@ -166,11 +176,11 @@ def _open_identity(raw, repository, branch):
         return None
     number = raw["number"]
     if type(number) is not int or number < 1:
-        raise SnapshotError("invalid open PR identity")
+        raise SnapshotError("open_pr_identity_invalid")
     identity = {"number": number, "head_sha": raw["head"]["sha"], "base_sha": raw["base"]["sha"]}
     if any(not isinstance(identity[k], str) or not re.fullmatch(r"[0-9a-f]{40}", identity[k])
            for k in ("head_sha", "base_sha")):
-        raise SnapshotError("invalid open PR SHA")
+        raise SnapshotError("open_pr_sha_invalid", pr=number)
     return identity
 
 
@@ -178,13 +188,13 @@ def _open_ci(client, branch, policy, signatures):
     prefix = f"repos/{client.repo}"
     candidates = collection(client, f"{prefix}/pulls", params={"state": "open"})
     if len(candidates) > 100:
-        raise SnapshotError("open PR evidence exceeds bounded producer budget")
+        raise SnapshotError("open_pr_budget_exceeded")
     archive, queries = [], []
     seen = set()
     for candidate in sorted(candidates, key=lambda c: c.get("number", 0)):
         number = candidate.get("number")
         if type(number) is not int or number < 1 or number in seen:
-            raise SnapshotError("ambiguous open PR inventory")
+            raise SnapshotError("open_pr_inventory_ambiguous", pr=number)
         seen.add(number)
         identity = _open_identity(_object(client, f"{prefix}/pulls/{number}"), client.repo, branch)
         if identity is None:
@@ -210,11 +220,13 @@ def _verify_open(client, branch, queries, policy):
     for query in queries:
         identity = query["identity"]
         raw = _object(client, f"repos/{client.repo}/pulls/{identity['number']}")
-        if _open_identity(raw, client.repo, branch) != identity:
-            raise SnapshotError("open PR identity changed")
+        current = _open_identity(raw, client.repo, branch)
+        if current != identity:
+            field = next((k for k in ("head_sha", "base_sha") if current and current[k] != identity[k]), "identity")
+            raise SnapshotError("open_pr_identity_changed", pr=identity["number"], field=field)
         runs = _ci(client, identity, policy, {})
         if release_plan.digest(runs) != query["jobs_digest"]:
-            raise SnapshotError("open PR CI jobs changed")
+            raise SnapshotError("open_pr_ci_changed", pr=identity["number"], field="jobs")
 
 
 def capture(root, client=None):
@@ -225,16 +237,16 @@ def capture(root, client=None):
     try:
         client = client or GitHubClient(repo=parse_slug(_git(root, "remote", "get-url", "origin")))
         if not parse_slug(client.repo):
-            raise SnapshotError("repository unknown")
+            raise SnapshotError("repository_unknown")
         prefix = f"repos/{client.repo}"
         repo = _object(client, prefix)
         if repo.get("full_name", "").casefold() != client.repo.casefold():
-            raise SnapshotError("repository mismatch")
+            raise SnapshotError("repository_mismatch")
         branch = repo["default_branch"]
         path = f"{prefix}/commits/{quote(branch, safe='')}"
         head = _object(client, path)["sha"]
         if _git(root, "rev-parse", "HEAD") != head or _git(root, "status", "--porcelain", "--untracked-files=all"):
-            raise SnapshotError("checkout differs from trusted default branch")
+            raise SnapshotError("checkout_not_default_branch")
         stage = "release_baseline"
         baseline = published(client)
         _git(root, "merge-base", "--is-ancestor", baseline["sha"], head)
@@ -306,18 +318,25 @@ def capture(root, client=None):
         for item in closing_queries:
             links = client.closing_issue_numbers(item["pr"])
             if not links.ok or links.items != item["issues"]:
-                raise SnapshotError("canonical issue links changed during reconciliation")
+                raise SnapshotError("closing_issues_changed", pr=item["pr"], field="closing_issues")
         # Rerun/issue edits/main changes invalidate this read, even if all initial rows looked green.
         if collection(client, issue_path, params={"state": "all"}) != raw_issues:
-            raise SnapshotError("issues changed during reconciliation")
+            raise SnapshotError("issues_changed", field="issues")
         for (workflow, sha), signature in signatures.items():
-            if _run_signature(_runs(client, workflow, sha)) != signature:
-                raise SnapshotError("CI changed during reconciliation")
-        if _run_signature(collection(client, f"{prefix}/actions/workflows/release.yml/runs",
-                                     key="workflow_runs", params={"head_sha": head})) != _run_signature(release_runs):
-            raise SnapshotError("release CI changed during reconciliation")
-        if _object(client, path)["sha"] != head or published(client) != baseline or inputs != release_plan.input_digests(root):
-            raise SnapshotError("release source changed during reconciliation")
+            current = _run_signature(_runs(client, workflow, sha))
+            if current != signature:
+                raise SnapshotError("ci_changed", workflow=workflow, field="ci_signature", **_changed_run(signature, current))
+        current = _run_signature(collection(client, f"{prefix}/actions/workflows/release.yml/runs",
+                                           key="workflow_runs", params={"head_sha": head}))
+        previous = _run_signature(release_runs)
+        if current != previous:
+            raise SnapshotError("release_ci_changed", workflow="release.yml", field="release_ci_signature", **_changed_run(previous, current))
+        if _object(client, path)["sha"] != head:
+            raise SnapshotError("default_branch_changed", field="main_sha")
+        if published(client) != baseline:
+            raise SnapshotError("published_release_changed", field="published_release")
+        if inputs != release_plan.input_digests(root):
+            raise SnapshotError("release_inputs_changed", field="input_digests")
         validation = {"open_ci_queries": open_queries,
                       "closing_queries": closing_queries, "issues_digest": release_plan.digest(raw_issues),
                       "ci_queries": [{"workflow": w, "sha": sha, "signature": signature}
@@ -333,6 +352,15 @@ def capture(root, client=None):
         denied = "github_read_permission_denied" in str(exc) or "HTTP 403" in str(exc)
         snapshot["reason"] = "github_read_permission_denied" if denied else "release_snapshot_unavailable_incomplete_or_changed"
         snapshot["failure_stage"] = stage
+        if denied:
+            diagnostic = {"code": "github_read_permission_denied"}
+        elif isinstance(exc, SnapshotError):
+            diagnostic = exc.diagnostic
+        else:
+            code = ("github_read_failed" if isinstance(exc, GitHubError) else
+                    "source_io_unavailable" if isinstance(exc, OSError) else "source_invalid")
+            diagnostic = {"code": code}
+        snapshot["diagnostic"] = diagnostic
     return snapshot
 
 
