@@ -11,8 +11,11 @@ or subscription is needed. It checks the connection; it does not demonstrate a c
 ## Connect once
 
 You need a Git repository with an initial commit, Python 3.12+ and PyYAML 6.0.3+.
-[Installation](installation.md) shows the full path: five commands from a clean machine,
-or one `setup` command from a prepared environment. `setup` creates and commits its
+[Installation](installation.md) shows the new three-command path: clone, bootstrap
+and activate an isolated environment. Git, Python with venv and access to the existing
+dependency are required. The original five-command path and a single `setup` call
+from a prepared environment remain available. The new entry has local macOS
+verification; Linux qualification is pending. `setup` creates and commits its
 own kit files; save your project changes first.
 
 If the AI Ops plugin is already installed in Claude Code, say “Install AI Ops”.
