@@ -1,10 +1,10 @@
 # Начать с AI Ops Kit
 
-**Русский · [English](en/QUICKSTART.md)** · [Главная](../README.md)
+**Русский · [English](en/QUICKSTART.md)** · [Главная](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/README.md)
 
 ## Сначала увидеть результат
 
-[Локальный пример](../examples/first-session/README.md) устанавливает кит в отдельный
+[Локальный пример](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/first-session/README.md) устанавливает кит в отдельный
 учебный репозиторий и показывает реальные проверки и разбор проекта. Модель и подписка
 не нужны. Это проверка подключения, а не демонстрация выполненной AI-задачи.
 
@@ -42,7 +42,7 @@
 > Покажи результат, чем он проверен и что осталось. Отвечай по-русски.
 > Если нужный исполнитель недоступен, сохрани задачу и назови конкретный блокер.
 
-Приветствие относится к [учебному проекту](../examples/first-session/README.md);
+Приветствие относится к [учебному проекту](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/first-session/README.md);
 в своём продукте замените это предложение своей задачей. Не нужно каждый раз
 повторять техническую часть: после проверки подключения команда может сохранить
 ссылки на эти инструкции в своих `AGENTS.md`/`CLAUDE.md`, вне блоков установщика.
@@ -80,7 +80,7 @@ Python-окружения. Нет `yaml` — вернитесь к [устано
 `readiness=false`: в Codex 0.147.0 не подтверждён независимый запрет инструмента
 при сбое hook. Это отдельное ограничение от чтения `AGENTS.md`/`CLAUDE.md`.
 [Статус интеграции](agent-guides/team-session-integration.md) ·
-[матрица исполнителей](../qualification/RUNTIME-QUALIFICATION-MATRIX-2026-10-15.md).
+[матрица исполнителей](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/qualification/RUNTIME-QUALIFICATION-MATRIX-2026-10-15.md).
 
-Дальше: [примеры](../examples/README.md) · [глоссарий](glossary.md) ·
+Дальше: [примеры](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/README.md) · [глоссарий](glossary.md) ·
 [прямой CLI и подробные шаги](guides/cli-workflow.md).

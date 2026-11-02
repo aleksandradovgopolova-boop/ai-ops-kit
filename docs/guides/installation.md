@@ -7,7 +7,7 @@
 Git, Python 3.12+ с модулем `venv`/`pip`, существующий Git-проект с первым коммитом
 и настроенным автором Git. Сохраните текущие изменения проекта перед установкой.
 Доступ к GitHub и индексу Python нужен для получения исходников и зависимости.
-Сначала прочитайте [LICENSE](../../LICENSE); для коммерческого использования текущего
+Сначала прочитайте [LICENSE](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/LICENSE); для коммерческого использования текущего
 кода требуется отдельная лицензия. Зависимость движка — PyYAML 6.0.3+.
 
 ## Полный ручной путь: 5 команд
@@ -86,4 +86,4 @@ Node.js нужен только для OpenSpec: опция включена в 
 `./ai-ops diff`, затем применяйте штатный `./ai-ops update`. Прямые правки
 `.ai/managed/` остановят обновление; собственные правила храните в `.ai/custom/`.
 
-Для разработки самого кита — [CONTRIBUTING](../../CONTRIBUTING.md).
+Для разработки самого кита — [CONTRIBUTING](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/CONTRIBUTING.md).

@@ -18,4 +18,4 @@
 | Qualification | Версия проходит обкатку; это не обещание стабильности всех возможностей |
 
 [Карта возможностей](capability-map.md) хранит детали реализации и способы проверки.
-История выпусков — в [CHANGELOG](../CHANGELOG.md), не на первом экране.
+История выпусков — в [CHANGELOG](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/CHANGELOG.md), не на первом экране.

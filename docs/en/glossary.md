@@ -18,4 +18,4 @@
 | Qualification | A version is being qualified; it does not promise every capability is stable |
 
 The [capability map](../capability-map.md) records implementation details and checks
-(Russian reference). Release history belongs in [CHANGELOG](../../CHANGELOG.md), not the first screen.
+(Russian reference). Release history belongs in [CHANGELOG](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/CHANGELOG.md), not the first screen.

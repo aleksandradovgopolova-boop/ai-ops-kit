@@ -7,7 +7,7 @@
 Git, Python 3.12+ with `venv`/`pip`, and an existing Git project with an initial commit
 and a configured Git author. Save your project changes before installing.
 GitHub and Python package index access are needed to obtain the source and dependency.
-Read [LICENSE](../../LICENSE) first; commercial use of the current code requires a
+Read [LICENSE](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/LICENSE) first; commercial use of the current code requires a
 separate license. The engine dependency is PyYAML 6.0.3+.
 
 ## Complete manual path: 5 commands
@@ -89,4 +89,4 @@ Updating is a separate decision: review [channels](../release-channels.md) (Russ
 reference) and `./ai-ops diff`, then use the supported `./ai-ops update` path.
 Direct edits to `.ai/managed/` block updating; keep your own rules in `.ai/custom/`.
 
-To develop the kit itself, see [CONTRIBUTING](../../CONTRIBUTING.en.md).
+To develop the kit itself, see [CONTRIBUTING](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/CONTRIBUTING.en.md).

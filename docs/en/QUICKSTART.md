@@ -1,10 +1,10 @@
 # Start with AI Ops Kit
 
-**[Русский](../QUICKSTART.md) · English** · [Home](../../README.en.md)
+**[Русский](../QUICKSTART.md) · English** · [Home](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/README.en.md)
 
 ## See a result first
 
-The [local example](../../examples/first-session/README.en.md) installs the kit in a
+The [local example](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/first-session/README.en.md) installs the kit in a
 separate sample repository and shows real checks and a project assessment. No model
 or subscription is needed. It checks the connection; it does not demonstrate a completed AI task.
 
@@ -42,7 +42,7 @@ In your first Codex or Claude Code session without an existing connection, paste
 > Show the result, how it was checked and anything remaining. Reply in English.
 > If the required executor is unavailable, preserve the task and name the specific blocker.
 
-The greeting task belongs to the [sample project](../../examples/first-session/README.en.md);
+The greeting task belongs to the [sample project](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/first-session/README.en.md);
 replace that sentence with your task in your own product. You do not need to repeat
 the technical introduction every time: after checking the connection, your team can
 save references to these instructions in its `AGENTS.md`/`CLAUDE.md`, outside installer
@@ -79,8 +79,8 @@ them does not prove the runtime loaded them. The native Codex adapter has
 `readiness=false`: Codex 0.147.0 has not demonstrated independent tool denial when a
 hook fails. This limitation is separate from reading `AGENTS.md`/`CLAUDE.md`.
 [Integration status](../agent-guides/team-session-integration.md) ·
-[runtime matrix](../../qualification/RUNTIME-QUALIFICATION-MATRIX-2026-10-15.md)
+[runtime matrix](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/qualification/RUNTIME-QUALIFICATION-MATRIX-2026-10-15.md)
 (Russian references).
 
-Next: [examples](../../examples/README.en.md) · [glossary](glossary.md) ·
+Next: [examples](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/examples/README.en.md) · [glossary](glossary.md) ·
 [detailed direct CLI workflow](../guides/cli-workflow.md) (Russian reference).
