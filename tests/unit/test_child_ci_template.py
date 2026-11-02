@@ -65,7 +65,10 @@ def test_documented_recipes_call_paths_that_exist():
     починили, документацию нет, и следующий репозиторий унёс бы поломку снова. Документация —
     такая же поверхность доставки, как шаблон.
     """
-    docs = [KIT / "docs" / "QUICKSTART.md", KIT / "README.md"]
+    # Подробный CI-рецепт вынесен из короткого старта; он остаётся в проверяемой
+    # документации. Минимум ниже сохраняет защиту от пустого обхода после переезда.
+    docs = [KIT / "docs" / "QUICKSTART.md", KIT / "README.md",
+            KIT / "docs" / "guides" / "cli-workflow.md"]
     missing, checked = [], 0
     for d in docs:
         if not d.is_file():

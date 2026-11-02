@@ -1,0 +1,24 @@
+{
+  "scope": "offline installation and repository understanding; no task execution",
+  "kit_version": "4.12.0",
+  "sample_source_sha256": {
+    "README.md": "1c97a067e04f0308f0b9a191f02ce75342dd7e7993b5b984a8c7b121c70e07de",
+    "pyproject.toml": "e69180b4a775b44b6bd253a4306a6e67745ec6d2db63f1a698e4ff9458f59786",
+    "greeting.py": "1adde146e5f9a6fdb19cf96d4c0d3216da50d3a3eeac2785e7db393baa470712",
+    "tests/test_greeting.py": "e443c40d51a33617a73cb2d750bd47d35ac9dbacce2138ec7f07176030e8c31f"
+  },
+  "commands_passed": 9,
+  "checksums_document_present": true,
+  "languages": {
+    "value": [
+      "python"
+    ],
+    "status": "verified",
+    "evidence": [
+      "pyproject.toml",
+      "tests/"
+    ]
+  },
+  "owner_questions": 12,
+  "task_executed": false
+}
