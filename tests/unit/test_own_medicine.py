@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import importlib.util
+import ast
 import shutil
 import subprocess
 import sys
@@ -160,6 +161,16 @@ def _run_in(copy, *args):
                            *args], cwd=str(copy), capture_output=True, text=True)
 
 
+def _inventory_tree(copy):
+    """Мутируем сам источник доставки, а не неиспользуемую строку прежнего словаря."""
+    path = copy / "installer" / "managed_state.py"
+    tree = ast.parse(path.read_text(encoding="utf-8"))
+    fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "asset_inventory")
+    entries = next(n.value for n in ast.walk(fn)
+                   if isinstance(n, ast.Return) and isinstance(n.value, ast.List))
+    return path, tree, entries
+
+
 @pytest.mark.unit
 def test_new_delivery_step_without_a_decision_is_caught(repo_copy, tmp_path):
     """Доставка выросла — проверка обязана заметить, а не молча пропустить новый шаг.
@@ -169,12 +180,12 @@ def test_new_delivery_step_without_a_decision_is_caught(repo_copy, tmp_path):
     """
     work = tmp_path / "grown"
     shutil.copytree(repo_copy, work, ignore=_IGNORE, symlinks=True)
-    inst = work / "installer" / "asset_ops.py"   # deliver_assets вынесена в под-хаб asset_ops
-    text = inst.read_text(encoding="utf-8")
-    text = text.replace('"planning_seeded": _ao()._child_scaffolding()._seed_planning_contour(root),',
-                        '"planning_seeded": _ao()._child_scaffolding()._seed_planning_contour(root),\n'
-                        '        "brand_new_step": None,', 1)
-    inst.write_text(text, encoding="utf-8")
+    inst, tree, entries = _inventory_tree(work)
+    entries.elts.append(ast.Tuple(elts=[ast.Constant(value="brand_new_step"),
+                                       ast.Constant(value=None), ast.List(elts=[], ctx=ast.Load())],
+                                  ctx=ast.Load()))
+    inst.write_text(ast.unparse(ast.fix_missing_locations(tree)) + "\n", encoding="utf-8")
+    assert "brand_new_step" in _load().delivery_steps(work)  # мутация действительно видима gate
     r = _run_in(work)
     assert r.returncode == 1
     assert "brand_new_step" in r.stdout
@@ -191,12 +202,12 @@ def test_removed_delivery_step_makes_a_stale_check_red(repo_copy, tmp_path):
     """
     work = tmp_path / "shrunk"
     shutil.copytree(repo_copy, work, ignore=_IGNORE, symlinks=True)
-    inst = work / "installer" / "asset_ops.py"   # deliver_assets вынесена в под-хаб asset_ops
-    text = inst.read_text(encoding="utf-8")
+    inst, tree, entries = _inventory_tree(work)
     assert "planning_seeded" not in om_known_gaps(), "шаг попал в замер — тест выбирает другой"
-    assert '"planning_seeded": _ao()._child_scaffolding()._seed_planning_contour(root),' in text
-    inst.write_text(text.replace('"planning_seeded": _ao()._child_scaffolding()._seed_planning_contour(root),', "", 1),
-                    encoding="utf-8")
+    assert "planning_seeded" in _load().delivery_steps(work)
+    entries.elts = [e for e in entries.elts if e.elts[0].value != "planning_seeded"]
+    inst.write_text(ast.unparse(tree) + "\n", encoding="utf-8")
+    assert "planning_seeded" not in _load().delivery_steps(work)
     r = _run_in(work)
     assert r.returncode == 1
     assert "planning_seeded" in r.stdout

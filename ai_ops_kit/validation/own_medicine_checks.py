@@ -56,7 +56,7 @@ def _func(tree, name):
 
 
 def delivery_steps(pkg: Path = PKG):
-    """Шаги доставки — ключи словаря, который возвращает `deliver_assets`. -> список ключей.
+    """Шаги доставки — ключи общего asset inventory (legacy: словаря deliver_assets).
 
     Именно ключи, а не имена вызываемых функций: ключ — то, ЧТО доставлено, и именно он попадает в
     отчёт установки (`_assets_report_line`). Функция может быть переименована без смысловой правки,
@@ -67,6 +67,24 @@ def delivery_steps(pkg: Path = PKG):
     fn = _func(ast.parse(src), "deliver_assets")
     if fn is None:
         return []
+    if any(isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "asset_inventory"
+           for n in ast.walk(fn)):
+        source = (pkg / "installer" / "managed_state.py").read_text(encoding="utf-8")
+        inventory = _func(ast.parse(source), "asset_inventory")
+        if inventory is None:
+            return []
+        entries = [n.value for n in ast.walk(inventory)
+                   if isinstance(n, ast.Return) and isinstance(n.value, ast.List)]
+        if len(entries) != 1:
+            return []
+        out = []
+        for entry in entries[0].elts:
+            if (not isinstance(entry, ast.Tuple) or len(entry.elts) != 3
+                    or not isinstance(entry.elts[0], ast.Constant)
+                    or not isinstance(entry.elts[0].value, str)):
+                return []  # Неразобранный inventory не становится частично зелёным перечнем.
+            out.append(entry.elts[0].value)
+        return out
     out = []
     for node in ast.walk(fn):
         if isinstance(node, ast.Dict):

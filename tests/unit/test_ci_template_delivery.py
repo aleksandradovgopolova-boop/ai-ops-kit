@@ -192,7 +192,14 @@ def test_delivery_happens_even_when_the_version_matches(child):
     deliver = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
                     and (getattr(n.func, "id", "") == "deliver_assets"
                          or getattr(n.func, "attr", "") == "deliver_assets")), None)
-    early = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Return)
+    # Другие законные ранние выходы (например, версия вне allowed range) не являются no-op.
+    same_version = next(n for n in ast.walk(fn) if isinstance(n, ast.If)
+                        and any(isinstance(c, ast.Compare) and isinstance(c.left, ast.Name)
+                                and c.left.id == "inst" and len(c.ops) == 1
+                                and isinstance(c.ops[0], ast.Eq) and len(c.comparators) == 1
+                                and isinstance(c.comparators[0], ast.Name)
+                                and c.comparators[0].id == "target" for c in ast.walk(n.test)))
+    early = next((n.lineno for n in ast.walk(same_version) if isinstance(n, ast.Return)
                   and isinstance(n.value, ast.Constant) and n.value.value == 0), None)
     assert deliver and early, "не нашлось ни вызова доставки, ни раннего выхода"
     assert deliver < early, ("доставка стоит после раннего выхода — ребёнок с совпадающей версией "
@@ -234,7 +241,13 @@ def test_install_and_update_deliver_the_same_things():
                 inside.add(c.func.id)
             elif isinstance(c.func, ast.Attribute):
                 inside.add(c.func.attr)
-    assert {"sync_ci_workflows", "ensure_zone_markers"} <= inside, inside
+    assert {"asset_inventory", "action"} <= inside, inside
+    inventory_tree = ast.parse((KIT / "installer" / "managed_state.py").read_text(encoding="utf-8"))
+    inventory = next(n for n in ast.walk(inventory_tree)
+                     if isinstance(n, ast.FunctionDef) and n.name == "asset_inventory")
+    inventory_calls = {getattr(c.func, "id", "") or getattr(c.func, "attr", "")
+                       for c in ast.walk(inventory) if isinstance(c, ast.Call)}
+    assert {"sync_ci_workflows", "ensure_zone_markers"} <= inventory_calls, inventory_calls
 
 
 def test_audit_workflow_scheduled_delivered_and_runs_product_audit(tmp_path):
