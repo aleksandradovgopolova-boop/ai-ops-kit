@@ -8,7 +8,7 @@
   },
   "homepage": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit",
   "repository": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit",
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "keywords": ["ai-ops", "sdlc", "spec-driven", "quality-gates", "product", "evidence"],
   "commands": "./plugin/commands/",
   "skills": "./plugin/skills/"
