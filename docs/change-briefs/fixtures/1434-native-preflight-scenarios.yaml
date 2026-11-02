@@ -1,0 +1,387 @@
+# Только данные предложенного контракта; не команды и не live evidence.
+schema_version: 1
+status: proposed-not-active
+evidence_kind: synthetic-design-scenarios-not-runtime-qualification
+base_commit: dca2fe0e00555275c966b8227b818a6260a2296b
+source_commit: be6e8eac029b183056b7e4402879f15d2c85f61b
+loaded_by_runtime: false
+execution_permitted_by_this_file: false
+invariants:
+- configuration validation never equals native attestation
+- hard deny-all must be enforced before turn, independently of hook success
+- native tools remain denied after attestation
+- current0.147.0 cannot be admitted by this proposal without a proven hard fence
+- attempt starts at send, not successful response
+- late/foreign evidence never authorizes acceptance
+- counterexamples/control are synthetic and not successful acceptance
+cases:
+- id: config-is-not-runtime-ready
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - trust.exact
+  - fence.missing
+  expected:
+    phase: blocked
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 0
+    attempted: false
+    blocker: tool-fence-unavailable
+- id: no-consent-no-turn
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - trust.exact
+  - fence.verified
+  - consent.missing
+  expected:
+    phase: prepared
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 0
+    attempted: false
+- id: successful-text-role
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - trust.exact
+  - fence.verified
+  - consent.one_turn
+  - attempt.reserve
+  - turn.send
+  - turn.response.current
+  - hook.started.current
+  - handler.ack.current
+  - hook.completed.current.success
+  - text.KIT_NATIVE_OK
+  - usage.actual
+  - turn.completed
+  - fence.unchanged
+  - result.gates.pass
+  expected:
+    phase: accepted
+    accepted: true
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+- id: notifications-before-turn-response
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - attempt.reserve
+  - turn.send
+  - hook.started.buffered
+  - handler.ack.current
+  - hook.completed.buffered.success
+  - turn.response.current
+  - buffer.bind.current
+  - text.KIT_NATIVE_OK
+  - usage.actual
+  - turn.completed
+  - fence.unchanged
+  - result.gates.pass
+  expected:
+    phase: accepted
+    accepted: true
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+- id: handler-ack-alone-is-not-attestation
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - turn.response.current
+  - handler.ack.current
+  - hook.completed.missing
+  - attestation.timeout
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    blocker: native-attestation-incomplete
+- id: foreign-policy-nonce-or-session
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - turn.response.current
+  - hook.completed.current.success
+  - handler.ack.foreign
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    blocker: foreign-attestation
+- id: foreign-native-run-or-turn
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - turn.response.current
+  - hook.completed.foreign
+  - handler.ack.current
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    blocker: foreign-attestation
+- id: hook-executable-missing
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - hook.failed.spawn
+  - model.tool.request
+  - fence.deny.before_handler
+  - interrupt.request
+  - process_group.closed
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    marker_present: false
+- id: hook-timeout
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - hook.started.current
+  - hook.failed.timeout
+  - model.tool.request
+  - fence.deny.before_handler
+  - process_group.closed
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    marker_present: false
+- id: malformed-hook-output
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - hook.completed.failed.invalid_output
+  - model.tool.request
+  - fence.deny.before_handler
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    marker_present: false
+- id: cancel-before-send
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - attempt.reserve
+  - cancel.before_send
+  expected:
+    phase: cancelled
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 0
+    attempted: false
+- id: cancel-after-send-late-ack
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - cancel.after_send
+  - handler.ack.current.late
+  - hook.completed.current.success.late
+  - text.KIT_NATIVE_OK.late
+  - process_group.closed
+  expected:
+    phase: cancelled
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    accept_late_evidence: false
+- id: disconnect-after-send-no-retry
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - rpc.eof
+  - process_group.closed
+  expected:
+    phase: unknown
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    automatic_retry: false
+    usage: unknown
+- id: tool-after-attestation-still-denied
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - turn.response.current
+  - handler.ack.current
+  - hook.completed.current.success
+  - model.tool.request
+  - fence.deny.before_handler
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    marker_present: false
+- id: hidden-or-new-handler-also-denied
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - model.tool.request.hidden_or_unknown
+  - fence.deny.before_registry_handler
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 0
+    attempted: true
+    marker_present: false
+- id: inherited-hooks-or-context-unknown
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - trust.exact
+  - context.sources.unknown
+  expected:
+    phase: blocked
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 0
+    attempted: false
+    blocker: unapproved-inherited-context
+- id: branch-or-request-drift
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - binding.changed.before_send
+  expected:
+    phase: blocked
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 0
+    attempted: false
+    blocker: binding-drift
+- id: strict-one-model-call-without-limiter
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.max_one_model_request
+  - model_request_limit.unprovable
+  expected:
+    phase: blocked
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 0
+    attempted: false
+    blocker: model-budget-unbounded
+- id: fence-lost-during-turn
+  profile: future-hard-fence
+  events:
+  - config.valid
+  - fence.verified
+  - consent.one_turn
+  - turn.send
+  - fence.lost
+  - interrupt.request
+  expected:
+    phase: failed
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: unknown
+    attempted: true
+    safety_qualification: fail
+    side_effect_absence: not_proven
+- id: current-0147-never-admitted
+  profile: current-0.147.0
+  events:
+  - config.valid
+  - trust.exact
+  - hooks.list.verified
+  - thread.start
+  - fence.no_supported_hard_deny_all
+  expected:
+    phase: blocked
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 0
+    attempted: false
+    blocker: tool-fence-unavailable
+- id: unsafe-hooks-only-counterexample
+  profile: synthetic-unsafe-hooks-only
+  events:
+  - config.valid
+  - trust.exact
+  - turn.send.without_hard_fence
+  - hook.failed.timeout
+  - native.hook_outcome.continue
+  - native.handler.executed
+  - client.interrupt.after_side_effect
+  expected:
+    phase: unsafe
+    accepted: false
+    turn_start_count: 1
+    native_tools_executed: 1
+    attempted: true
+    marker_present: true
+    admission_under_proposed_contract: false
+- id: fixture-side-effect-positive-control
+  profile: synthetic-test-harness-only
+  events:
+  - fixture.handler.run_without_deny_profile
+  - fixture.marker.written
+  expected:
+    phase: control
+    accepted: false
+    turn_start_count: 0
+    native_tools_executed: 1
+    attempted: false
+    marker_present: true
+    admission_under_proposed_contract: false

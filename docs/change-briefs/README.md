@@ -118,3 +118,4 @@
 - [Актуализация карточек, плана и архитектурных границ02.11.2026](2026-11-02-repository-reconciliation.md).
 
 - [Точная граница CI после реконструкции истории](history-exact-ci-cutoff.md).
+- [Проект двухфазного native preflight и независимого запрета tools — #1434](1434-native-preflight-contract.md).
