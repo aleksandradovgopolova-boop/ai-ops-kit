@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import shlex
 
 from validate_container_assets import (  # noqa: F401
     check_assets,
@@ -13,13 +14,16 @@ from validate_container_assets import (  # noqa: F401
     check_wrapper,
     main,
     PKG,
+    check_runtime_versions,
+    RUNTIME_CHECK,
 )
 
 
 GOOD_DOCKERFILE = (
-    "FROM node:22-slim\n"
-    "RUN pyyaml openspec\n"
+    "FROM node:22-trixie-slim\n"
     "COPY . /opt/ai-ops-kit\n"
+    f"RUN {json.dumps(RUNTIME_CHECK)}\n"
+    "RUN pyyaml openspec && npm_config_engine_strict=true npm i package\n"
     "ENV PYTHONPATH=/opt/ai-ops-kit\n"
     "USER runner\n"
     "ENV GIT_ASKPASS=/bin/false GIT_TERMINAL_PROMPT=0 "
@@ -278,3 +282,110 @@ def test_dockerfile_specific_ignore_overrides_root_file(container_root):
     (container_root / ".dockerignore").write_text("ai_ops_kit\n")
     specific.write_text("**/node_modules\n")
     assert check_assets(container_root) == []
+
+
+@pytest.fixture
+def runtime_root(tmp_path):
+    (tmp_path / "VERSION").write_text("0.0.0\n")
+    (tmp_path / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.12"\n')
+    return tmp_path
+
+
+@pytest.mark.parametrize("version", [(3, 12, 0), (3, 13, 5), (3, 14, 0)])
+def test_runtime_accepts_declared_python_floor_and_node22(runtime_root, version):
+    assert check_runtime_versions(version, "v22.23.4", runtime_root) == []
+
+
+@pytest.mark.parametrize("version", [(3, 9, 9), (3, 11, 2), (3, 11, 99)])
+def test_runtime_rejects_python_below_declared_floor(runtime_root, version):
+    assert any("Python" in e for e in check_runtime_versions(version, "v22.23.4", runtime_root))
+
+
+def test_runtime_floor_tracks_real_manifest_change_without_writes(runtime_root):
+    manifest = runtime_root / "pyproject.toml"
+    assert check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root) == []
+    manifest.write_text('[project]\nrequires-python = ">=3.13"\n')
+    before = manifest.read_bytes()
+    assert b">=3.13" in before
+    assert any("Python" in e for e in check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root))
+    assert manifest.read_bytes() == before
+
+
+@pytest.mark.parametrize("spec", ["", '[project]\nrequires-python = "nonsense"\n', '[project]\n', 'not TOML'])
+def test_missing_or_invalid_floor_cannot_default_to_old_python(runtime_root, spec):
+    (runtime_root / "pyproject.toml").write_text(spec)
+    assert any("pyproject" in e for e in check_runtime_versions((3, 14, 0), "v22.23.4", runtime_root))
+
+
+def test_deleted_manifest_cannot_default_to_old_python(runtime_root):
+    manifest = runtime_root / "pyproject.toml"
+    assert check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root) == []
+    manifest.unlink()
+    assert not manifest.exists()
+    assert any("pyproject" in e for e in check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root))
+
+
+@pytest.mark.parametrize("node", ["v18.20.0", "v20.19.0", "v24.0.0", "broken", ""])
+def test_reference_runtime_rejects_other_or_unknown_node_line(runtime_root, node):
+    assert any("Node" in e for e in check_runtime_versions((3, 13, 5), node, runtime_root))
+
+
+def test_floating_old_base_fails_static_runtime_contract():
+    text = GOOD_DOCKERFILE.replace("node:22-trixie-slim", "node:22-slim")
+    assert any("BASE_IMAGE" in e for e in check_dockerfile(text))
+
+
+@pytest.mark.parametrize("replacement", ["", f"# RUN {json.dumps(RUNTIME_CHECK)}",
+                                         f"RUN {' '.join(RUNTIME_CHECK)} || true"])
+def test_missing_or_shell_bypassed_runtime_guard_fails_closed(replacement):
+    text = GOOD_DOCKERFILE.replace(f"RUN {json.dumps(RUNTIME_CHECK)}", replacement)
+    assert any("runtime-floor" in e for e in check_dockerfile(text))
+
+
+def test_runtime_guard_before_copy_does_not_validate_sources():
+    guard = f"RUN {json.dumps(RUNTIME_CHECK)}\n"
+    text = GOOD_DOCKERFILE.replace(guard, "").replace("COPY . /opt/ai-ops-kit", guard + "COPY . /opt/ai-ops-kit")
+    assert any("runtime-floor" in e for e in check_dockerfile(text))
+
+
+def test_npm_engine_mismatch_cannot_be_ignored():
+    text = GOOD_DOCKERFILE.replace("npm_config_engine_strict=true ", "")
+    assert any("engines" in e for e in check_dockerfile(text))
+
+
+@pytest.mark.parametrize("node_version,requires,returncode", [
+    ("v22.23.4", ">=3.12", 0), ("v18.20.0", ">=3.12", 1), ("v22.23.4", ">=99.0", 1),
+])
+def test_standalone_runtime_guard_uses_actual_probe_and_manifest(runtime_root, node_version, requires, returncode):
+    validator = runtime_root / "validate_container_assets.py"
+    validator.write_bytes((PKG / "ai_ops_kit/validation/validate_container_assets.py").read_bytes())
+    manifest = runtime_root / "pyproject.toml"
+    manifest.write_text(f'[project]\nrequires-python = "{requires}"\n')
+    before = manifest.read_bytes()
+    bin_dir = runtime_root / "bin"
+    bin_dir.mkdir()
+    seen = runtime_root / "node-probed"
+    node = bin_dir / "node"
+    node.write_text(f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(node_version)}\nprintf probe > {shlex.quote(str(seen))}\n")
+    node.chmod(0o700)
+    assert node.is_file() and not seen.exists()
+    result = subprocess.run([sys.executable, str(validator), "--runtime-floor"], cwd=runtime_root,
+                            env={"PATH": str(bin_dir), "PYTHONDONTWRITEBYTECODE": "1"},
+                            text=True, capture_output=True, timeout=10)
+    assert seen.read_text() == "probe"  # версия реально запрошена до утверждения о гейте
+    assert manifest.read_bytes() == before
+    assert result.returncode == returncode, result.stderr
+    assert ("CONTAINER-RUNTIME-VERSIONS-OK" in result.stdout) == (returncode == 0)
+    if returncode == 0:
+        assert "только версии" in result.stdout
+
+
+def test_standalone_runtime_guard_missing_node_is_not_success(runtime_root):
+    validator = runtime_root / "validate_container_assets.py"
+    validator.write_bytes((PKG / "ai_ops_kit/validation/validate_container_assets.py").read_bytes())
+    result = subprocess.run([sys.executable, str(validator), "--runtime-floor"], cwd=runtime_root,
+                            env={"PATH": str(runtime_root), "PYTHONDONTWRITEBYTECODE": "1"},
+                            text=True, capture_output=True, timeout=10)
+    assert result.returncode == 1, result.stderr
+    assert "Node version probe" in result.stdout
+    assert "CONTAINER-RUNTIME-VERSIONS-OK" not in result.stdout

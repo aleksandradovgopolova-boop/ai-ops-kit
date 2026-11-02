@@ -1,18 +1,20 @@
-# Container Isolation — полный jail рантайма (P0.2)
+# Container Isolation — контракт и квалификация рантайма (P0.2)
 
 Изоляция движка — **два слоя**, и это честно разделено:
 
-| Слой | Где | Что гарантирует | Чего НЕ может |
+| Слой | Где | Заявленная граница | Чего НЕ может |
 |---|---|---|---|
 | **Брокер** (`tool_broker`) | в процессе | allowlist shell, `block_push`, денай сети (best-effort), скраб секретов, write_scope, traversal-guard | это не песочница исполнения: `python3`/`node`/`make` исполняют код репо; лимитов ФС/ресурсов нет |
 | **Контейнер** (`containers/`) | рантайм ОС | read-only root, writable только worktree, лимиты CPU/RAM/pids, `cap-drop ALL`, non-root, no-new-privileges | не air-gap: движку нужен egress к API модели и реестрам |
 
-Брокер сужает поверхность **внутри** процесса; настоящую изоляцию ФС/ресурсов/привилегий даёт
-**контейнер**. Вместе они закрывают P0.2.
+Брокер сужает поверхность **внутри** процесса; ограничения ФС/ресурсов/привилегий должны
+обеспечиваться **контейнером**. Само наличие этих двух слоёв не закрывает P0.2: реальные
+негативные проверки изоляции остаются открытыми в #1407.
 
-## Что enforce'ит контейнер
+## Декларируемые ограничения контейнера
 
-`containers/run-sandboxed.sh` запускает образ с флагами (docker их принимает — проверено):
+`containers/run-sandboxed.sh` задаёт перечисленные ниже флаги. Статическая проверка их наличия
+и успешный запуск `--help` не заменяют реальные негативные sandbox-пробы:
 
 - `--read-only` — root-fs только для чтения; писать некуда, кроме явных точек;
 - bind `<disposable-clone> → /work` — **единственная** writable точка. Это НЕ основной child, а его
@@ -30,9 +32,9 @@
 ```bash
 # 1. Собрать образ (на вашем Docker-хосте; контекст — корень кита):
 docker build -f containers/Dockerfile -t ai-ops-engine:latest .
-# Если Docker Hub недоступен (VPN/фаервол/троттлинг реестров) — укажи доступное зеркало:
-#   docker build --build-arg BASE_IMAGE=public.ecr.aws/docker/library/node:22-slim \
-#     -f containers/Dockerfile -t ai-ops-engine:latest .
+# Default: официальный node:22-trixie-slim (Debian 13), не floating node:22-slim/bookworm.
+# BASE_IMAGE override допустим только после проверки происхождения образа;
+# сборка всё равно проверит фактические Python/Node, а npm — engines зависимостей.
 # Требуется сеть с доступом хотя бы к ОДНОМУ контейнерному реестру (base image + npm/pip на сборке).
 
 # 2. Запустить движок в jail'е против child-репозитория (ключи — из env, не в образ):
@@ -78,9 +80,36 @@ host-слой вне контейнера, а модели токен с пра�
 
 ## Статус проверки (честно)
 
-- Ассеты (`Dockerfile`, `run-sandboxed.sh`) написаны; jail-флаги приняты docker (flag-parse) и
-  их присутствие стережёт `ai_ops_kit/validation/validate_container_assets.py` (регресс любого флага — ошибка CI).
-- Команда движка, которую оборачивает wrapper (`ai-ops run … --sandbox`), подтверждена живыми
-  прогонами.
-- **Сборка образа** (pull базового образа) в CI-песочнице кита закрыта egress-прокси — её
-  выполняет Docker-хост пользователя. Флаги стандартные; сюрпризов при сборке не ожидается.
+Квалификация точки запуска и поддерживаемого runtime — разные проверки. Локальный срез
+`74ccc0638122592760520fe11b39710285a52629` (#1478) собран и запустил штатный `--help` без модели,
+с отключённой сетью и без host mounts. В том образе фактически Python **3.11.2**, ниже объявленного
+пола `pyproject.toml` (**>=3.12**): entrypoint smoke — PASS, supported-runtime qualification — FAIL.
+Он не доказывает работоспособность задач на поддерживаемом Python или свойства изоляции.
+
+### Матрица предлагаемого reference runtime
+
+| Конфигурация | Python | Node | Статус доказательства |
+|---|---|---|---|
+| Старый `node:22-slim` / bookworm, entrypoint head `74ccc063` | Фактически 3.11.2, ниже пола | 22.x | Только build/CLI `--help` PASS; supported-runtime FAIL |
+| Новый `node:22-trixie-slim` / Debian 13 | Ожидается 3.13 из Debian; фактическая версия обязана удовлетворять `pyproject.toml` | Сохраняется 22.x | Код и fixtures подготовлены; image pull/build/start **NOT_RUN**, требуется отдельное разрешение |
+| Существующий CI `pipeline-e2e` | 3.12 и 3.13 | Не квалифицирует образ | Матрица CI не меняется; её успешность на новом head требуется отдельно |
+
+Новый Dockerfile сначала ставит Python из штатного Debian-репозитория, копирует кит и выполняет
+`validate_container_assets.py --runtime-floor` отдельной exec-form `RUN`. Проверка читает
+`requires-python` из манифеста и фактический `node --version`; отсутствующий/неразбираемый вход,
+старый Python или Node вне 22.x останавливают сборку. Только затем устанавливаются прежние
+PyYAML/OpenSpec; `npm_config_engine_strict=true` запрещает проигнорировать несовместимые engines.
+Произвольный другой Node major не считается автоматически поддержанным.
+
+Источник выбора: [официальный manifest Node images](https://raw.githubusercontent.com/docker-library/official-images/master/library/node)
+содержит `22-trixie-slim` для amd64/arm64v8; [Dockerfile Node 22](https://raw.githubusercontent.com/nodejs/docker-node/main/22/trixie-slim/Dockerfile)
+основан на Debian trixie; [пакет Python в Debian trixie](https://packages.debian.org/trixie/python3)
+имеет версию 3.13. [OpenSpec 1.6.0](https://raw.githubusercontent.com/Fission-AI/OpenSpec/v1.6.0/package.json)
+объявляет Node >=20.19; выбранная ветка 22 удовлетворяет этому ограничению. Это данные upstream,
+а не локальная квалификация нового образа; фактические версии нужно записать после разрешённой сборки.
+
+Статический `CONTAINER-ASSETS-OK` подтверждает наличие launch/runtime-check контракта и маркеров
+jail-флагов. `CONTAINER-RUNTIME-VERSIONS-OK` подтверждает только версии в исполнившей проверку
+среде. Ни один из них не заменяет no-model image build/start на точном новом head. Реальные
+model/MCP injection, redaction/exfil и sandbox negatives (network/FS/mount/UID/timeouts/Docker
+отказ) остаются открытыми в [#1407](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1407).

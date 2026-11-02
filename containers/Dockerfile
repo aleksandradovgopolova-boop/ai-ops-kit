@@ -7,21 +7,25 @@
 # Сеть НЕ air-gap: движку нужен egress к API модели и пакетным реестрам (npm/pip). Для жёсткого
 # контроля ставьте egress-allowlist прокси перед контейнером — см. docs/container-isolation.md.
 #
-# BASE_IMAGE конфигурируем: если Docker Hub недоступен (VPN/фаервол/троттлинг), укажи зеркало,
-# напр. docker build --build-arg BASE_IMAGE=public.ecr.aws/docker/library/node:22-slim ...
-ARG BASE_IMAGE=node:22-slim
+# BASE_IMAGE override: только проверенный официальный образ/зеркало с Node 22.
+# Нужен Debian trixie: bookworm/22-slim ставит Python 3.11 ниже пола кита.
+# Override обязан пройти ту же проверку реальных версий Python/Node при сборке.
+ARG BASE_IMAGE=node:22-trixie-slim
 FROM ${BASE_IMAGE}
 
 # Python (stdlib + pyyaml), git, OpenSpec CLI (для гейта specification).
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 python3-pip git ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && pip3 install --no-cache-dir --break-system-packages pyyaml \
-    && npm i -g @fission-ai/openspec@^1.6.0 \
-    && npm cache clean --force
+    && rm -rf /var/lib/apt/lists/*
 
 # Кит (движок + валидаторы + данные). Child-репозиторий МОНТИРУЕТСЯ в /work на запуске, не в образ.
 COPY . /opt/ai-ops-kit
+# Проверка stdlib-only: читает пол из pyproject.toml; не импортирует движок/модель.
+# Exec-form RUN нельзя превратить в успех через shell `|| true`.
+RUN ["python3", "/opt/ai-ops-kit/ai_ops_kit/validation/validate_container_assets.py", "--runtime-floor"]
+RUN pip3 install --no-cache-dir --break-system-packages pyyaml \
+    && npm_config_engine_strict=true npm i -g @fission-ai/openspec@^1.6.0 \
+    && npm cache clean --force
 ENV AI_OPS_KIT=/opt/ai-ops-kit \
     PYTHONPATH=/opt/ai-ops-kit \
     PYTHONDONTWRITEBYTECODE=1 \
