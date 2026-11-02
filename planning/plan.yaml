@@ -1141,7 +1141,6 @@ work:
     goal: evidence-backed-release-planning
     status: todo
     owner_role: delivery
-    issue: 1445
     value: high
     write_scope:
       - VERSION
