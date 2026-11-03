@@ -272,13 +272,21 @@ def load(root, runtime, session):
 
 def verify(root, runtime, session):
     task = load(root, runtime, session)
-    if task.get("binding") != binding(root, "session-" + task["request_id"]):
+    current = binding(root, "session-" + task["request_id"])
+    receipt = task.get("execution") or {}
+    expected = receipt.get("completion_binding") or task.get("binding")
+    same = expected == current
+    if receipt.get("mode") == "current-session" and task.get("status") != "accepted":
+        same = all(current.get(k) == expected.get(k) for k in
+                   ("root", "branch", "version", "managed_sha256", "config_sha256"))
+    if not same:
         raise ValueError("checkout, ветка, версия или правила изменились; прежнее подтверждение не применимо")
     if task.get("status") != "accepted":
         return {"accepted": False, "status": task["status"],
                 "reason": task.get("blocker") or "штатный процесс ещё не выполнен"}
-    receipt = task.get("execution") or {}
-    if receipt.get("exit_code") != 0 or not receipt.get("files"):
+    success = (receipt.get("verification_ready") is True if receipt.get("mode") == "current-session"
+               else receipt.get("exit_code") == 0)
+    if not success or not receipt.get("files"):
         raise ValueError("нет подтверждения фактического успешного запуска")
     for relative, checksum in receipt["files"].items():
         if digest(within(root, relative).read_bytes()) != checksum:

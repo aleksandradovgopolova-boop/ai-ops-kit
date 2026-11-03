@@ -67,7 +67,7 @@ def _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad, spec_
 
 def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_ev, signals,
                        *, review, strict_judge_qualified, security_reviewer_proposer,
-                       reviewer_proposer, budget):
+                       reviewer_proposer, budget, base_revision=None):
     """Доменный security-вердикт (security/security-domains.yaml) -> gate_ev['security'].
     v3.38 (K6-глубина): вынесено из run_pipeline без изменения поведения.
 
@@ -85,7 +85,7 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
     if committed_sha and is_git and "security" not in gate_ev:
         from ai_ops_kit.security import security_pack
         try:
-            security_pack_result = security_pack.run_pack(work_root, base=f"{committed_sha}~1", signals=signals)
+            security_pack_result = security_pack.run_pack(work_root, base=base_revision or f"{committed_sha}~1", signals=signals)
         except Exception as _e:  # noqa: BLE001
             _security_scan_error = str(_e)
             security_pack_result = None

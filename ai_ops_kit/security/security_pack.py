@@ -113,7 +113,11 @@ def _applies(domain, signals, files_content):
         rx = re.compile(pat)
         hit = None
         for f, content in files_content.items():
-            if rx.search(f):
+            # Opaque id проектной работы не является auth/session-кодом продукта.
+            # Сопоставляем оставшийся путь; содержимое и детерминированные scans
+            # по-прежнему видят ПОЛНЫЙ файл. Реальный session.py под namespace виден.
+            domain_path = re.sub(r"^features/session-[0-9a-f]{32}/", "", str(f))
+            if rx.search(domain_path):
                 hit = f"файл {f}"; break
             # матч по содержимому — только для файлов, которые могут РЕАЛИЗОВЫВАТЬ поведение
             if content and not _is_prose(f) and rx.search(content):

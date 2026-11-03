@@ -14,13 +14,18 @@ def current_session(root, runtime, session, task, signals):
     """Штатный controller готовит работу для уже открытого tool loop, без модели."""
     from pathlib import Path
     import subprocess
+    from ai_ops_kit.gates import gate_executor
+    signals = dict(signals)
+    calibrated = gate_executor.risk_calibrated_config(root)
+    if calibrated is not None and "risk_calibrated_enforcement" not in (signals.get("gates") or {}):
+        signals["gates"] = dict(signals.get("gates") or {}, risk_calibrated_enforcement=calibrated)
     fid = "session-" + task["request_id"]
     directory = sessions.session_dir(root, runtime, session)
     command = [sys.executable, str(Path(__file__).resolve().parents[1] / "engine/ai_ops_run.py"),
                "run", task["prompt"], str(root), "--engine", "controller", "--runtime", runtime,
                "--session", session, "--feature", fid, "--signals", json.dumps(signals), "--json"]
     task = sessions.claim_execution(root, runtime, session, task,
-                {"mode": "current-session", "command": command},
+                {"mode": "current-session", "command": command, "signals": signals},
                 "Открытый агент исполняет стадии RunPlan. План не подтверждает приёмку; "
                 "нужны артефакты, обязательные gates, независимое review и применимый CI.")
     path = directory / (task["request_id"] + ".json")
@@ -32,9 +37,8 @@ def current_session(root, runtime, session, task, signals):
                 or report.get("execution") != "planned" or report.get("workitem_id") != fid
                 or report.get("runtime") != runtime or report.get("lifecycle_errors")):
             raise ValueError("controller не подтвердил подготовку: " + str(report.get("error") or result.stderr)[-4096:])
-        files = {f"features/{fid}/{name}": sessions.digest(sessions.within(root, f"features/{fid}/{name}").read_bytes())
-                 for name in ("workitem.yaml", "run-plan.yaml", "run-report.json")}
-        task["execution"].update(files=files, prepared=True)
+        from ai_ops_kit.cli.project_session_completion import record_prepared
+        record_prepared(root, task)
     except (OSError, ValueError, TypeError, AttributeError, subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
         task.update(status="blocked", blocker=f"controller: {type(exc).__name__}: {exc}",
                     next_step="Проверь сохранённые логи и артефакты. Claim сохранён; повтор автоматически не запускается.")
@@ -163,11 +167,12 @@ def hook(runtime, payload):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", default="hook", choices=("hook", "run", "verify"))
+    parser.add_argument("action", nargs="?", default="hook", choices=("hook", "run", "verify", "finalize", "reconcile"))
     parser.add_argument("--runtime", required=True, choices=tuple(sessions.RUNTIMES))
     parser.add_argument("--session")
     parser.add_argument("--signals")
     parser.add_argument("--autonomous", action="store_true", help="явно запустить отдельного провайдера")
+    parser.add_argument("--review-digests", help="JSON digests, полученные из независимого review-канала")
     args = parser.parse_args(argv)
     try:
         if args.action == "hook":
@@ -185,7 +190,15 @@ def main(argv=None):
                 lock = sessions.session_dir(root, args.runtime, args.session) / "preparation"
                 with sessions.session_lock(lock):
                     existing = sessions.load(root, args.runtime, args.session)
-                    if (not args.autonomous and existing.get("status") == "running"
+                    if args.action in ("finalize", "reconcile"):
+                        from ai_ops_kit.cli import project_session_completion as completion
+                        digests = (json.loads(args.review_digests) if args.review_digests is not None else
+                                   (existing.get("verification") or {}).get("review_digests", {}))
+                        result = (completion.finalize(root, args.runtime, args.session, digests)
+                                  if args.action == "finalize" else completion.reconcile(root, args.runtime, args.session))
+                        print(json.dumps(result, ensure_ascii=False))
+                        return 0 if result.get("status") == "accepted" else 1
+                    if (not args.autonomous and existing.get("status") in ("running", "blocked")
                             and existing.get("execution", {}).get("mode") == "current-session"
                             and existing["execution"].get("prepared")):
                         result = resume_current(root, args.runtime, args.session, existing)
