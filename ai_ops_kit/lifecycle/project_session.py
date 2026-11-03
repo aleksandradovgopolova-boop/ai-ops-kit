@@ -6,9 +6,12 @@
 from __future__ import annotations
 
 import hashlib
+import contextlib
 import json
 import os
+import signal
 import subprocess
+import time
 import uuid
 from pathlib import Path
 
@@ -151,12 +154,51 @@ def write(path, data):
         raise OSError(f"не удалось сохранить постановку/подтверждение: {result.get('error')}")
 
 
+@contextlib.contextmanager
+def session_lock(path):
+    """Не ждать чужого writer бесконечно; тот же lock-файл, что у ledger."""
+    try:
+        import fcntl
+    except ImportError as exc:
+        raise ValueError("обязательная блокировка сессии недоступна") from exc
+    path = Path(str(path) + ".lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a") as handle:
+        try:
+            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            raise ValueError("сессию уже обрабатывает другой процесс; проверь сохранённый исход, не создавай новый запрос") from None
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
+
+
 def begin(root, runtime, session, prompt, turn=None):
     root = project_root(root)
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 131072:
         raise ValueError("постановка пуста или превышает бюджет 128 KiB")
     directory = session_dir(root, runtime, session)
-    request = uuid.uuid4().hex
+    with session_lock(directory / "requests"):
+        return _begin(root, runtime, session, prompt, turn, directory)
+
+
+def _begin(root, runtime, session, prompt, turn, directory):
+    if turn is not None and (not isinstance(turn, str) or not turn.strip() or len(turn) > 1024):
+        raise ValueError("неверный turn_id")
+    # Идентичность события, не текст: одинаковые новые запросы остаются разными.
+    request = digest(json.dumps([runtime, session, turn]))[:32] if turn else uuid.uuid4().hex
+    previous = directory / f"{request}.json"
+    if previous.exists():
+        task = load(root, runtime, session)
+        if task["request_id"] != request or task.get("turn_id") != turn or task.get("prompt") != prompt:
+            raise ValueError("повтор события не совпадает с активной постановкой; сохранённые задачи не изменены")
+        return task
+    if (directory / "active.json").exists():
+        active = load(root, runtime, session)
+        claim = directory / (active["request_id"] + ".execution-claim")
+        if active.get("status") != "accepted" and claim.exists():
+            raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
     task = {"schema_version": 1, "request_id": request, "session_id": session,
             "runtime": runtime, "turn_id": turn, "prompt": prompt, "status": "pending"}
     # Постановка сохраняется ДО диагностики, в том числе при повреждённой установке.
@@ -168,6 +210,52 @@ def begin(root, runtime, session, prompt, turn=None):
         task.update(status="blocked", blocker=str(exc), next_step="Восстановить установку штатным update и повторить задачу.")
     write(directory / f"{request}.json", task)
     return task
+
+
+@contextlib.contextmanager
+def termination_guard():
+    """SIGTERM внешнего runtime должен пройти через cleanup собственной группы."""
+    def terminate(signum, frame):
+        raise InterruptedError("SIGTERM: исход исполнения неизвестен")
+    previous = signal.signal(signal.SIGTERM, terminate)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
+
+
+def run_process(command, root, directory, *, timeout=300):
+    """Ограниченный процесс с видимым прогрессом и диагностикой на диске."""
+    import sys
+    stdout, stderr = directory / "process.stdout.log", directory / "process.stderr.log"
+    started = time.monotonic()
+    with stdout.open("wb") as out, stderr.open("wb") as err, termination_guard():
+        with subprocess.Popen(command, cwd=root, stdout=out, stderr=err, start_new_session=True) as process:
+            try:
+                while True:
+                    print(f"AI Ops: процесс pid={process.pid}, прошло {int(time.monotonic() - started)} с; "
+                          f"диагностика: {stdout}, {stderr}", file=sys.stderr, flush=True)
+                    remaining = timeout - (time.monotonic() - started)
+                    if remaining <= 0:
+                        raise subprocess.TimeoutExpired(command, timeout)
+                    try:
+                        code = process.wait(timeout=min(15, remaining))
+                        break
+                    except subprocess.TimeoutExpired:
+                        continue
+            finally:
+                # Владеем всей группой: не оставляем потомков даже после выхода родителя.
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                process.wait()
+    tails = []
+    for path in (stdout, stderr):
+        with path.open("rb") as handle:
+            handle.seek(max(0, path.stat().st_size - 4096))
+            tails.append(handle.read().decode("utf-8", errors="replace"))
+    return subprocess.CompletedProcess(command, code, *tails)
 
 
 def load(root, runtime, session):
@@ -232,7 +320,22 @@ def save_preparation(root, runtime, session, request, preparation, reason=None):
     return task
 
 
-def execute(root, runtime, session, signals, *, provider=None, request=None):
+def claim_execution(root, runtime, session, task, execution, next_step=None):
+    """Активный запрос и claim фиксируются под тем же lock, что новый submit."""
+    directory = session_dir(root, runtime, session)
+    with session_lock(directory / "requests"):
+        current = pending(root, runtime, session)
+        if current["request_id"] != task["request_id"]:
+            raise ValueError("активная постановка сменилась перед claim")
+        claim = directory / (task["request_id"] + ".execution-claim")
+        descriptor = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(descriptor)
+        task.update(status="running", execution=execution, blocker=None, next_step=next_step)
+        write(directory / (task["request_id"] + ".json"), task)
+    return task
+
+
+def execute(root, runtime, session, signals, *, provider=None, request=None, timeout=300):
     """Запустить существующий фасад с теми же guards и единственной execution-claim."""
     root = project_root(root)
     task = pending(root, runtime, session)
@@ -255,24 +358,15 @@ def execute(root, runtime, session, signals, *, provider=None, request=None):
         task.update(provider_preparation=dict(readiness, signals=dict(signals)), blocker=None, next_step=None)
     fid = "session-" + task["request_id"]
     report_path = within(root, f"features/{fid}/run-report.json")
-    # Два параллельных вызова одной постановки не должны запустить две модели.
-    claim = within(session_dir(root, runtime, session), task["request_id"] + ".execution-claim")
-    try:
-        descriptor = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
-    except FileExistsError:
-        raise ValueError("попытка исполнения уже закреплена; проверь сохранённый исход") from None
-    os.close(descriptor)
     command = [str(root / "ai-ops"), "run", task["prompt"], str(root), "--execute",
                "--feature", fid, "--runtime", runtime, "--session", session,
                "--signals", json.dumps(signals, ensure_ascii=False), "--json"]
     if provider:
         command += ["--provider", provider]
-    task.update(status="running", execution={"command": command})
+    task = claim_execution(root, runtime, session, task, {"command": command})
     path = session_dir(root, runtime, session) / f"{task['request_id']}.json"
-    write(path, task)
     try:
-        # stdout остаётся у вызывающего runtime. Подтверждение берётся с диска и из exit code.
-        result = subprocess.run(command, cwd=root, check=False, capture_output=True, text=True)
+        result = run_process(command, root, session_dir(root, runtime, session), timeout=timeout)
         if not report_path.is_file():
             detail = (result.stderr or result.stdout or "нет диагностики процесса").strip()[-4096:]
             raise ValueError(f"штатный запуск завершился (exit={result.returncode}), отчёт не создан: {detail}")
@@ -307,6 +401,9 @@ def execute(root, runtime, session, signals, *, provider=None, request=None):
             files[relative] = digest(within(root, relative).read_bytes())
         task.update(status="accepted", execution={"exit_code": result.returncode, "files": files,
                     "worktree": worktree, "revision": revision, "result_sha256": source_digest(result_root, fid)})
+    except (subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+        task.update(status="blocked", blocker=f"исполнение прервано ({type(exc).__name__}); исход неизвестен",
+                    next_step="Проверь сохранённые логи, claim, worktree и отчёт. Автоматический повтор запрещён.")
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError) as exc:
         task.update(status="blocked", blocker=str(exc), next_step="Исправить названную причину; продолжить сохранённую задачу.")
     write(path, task)

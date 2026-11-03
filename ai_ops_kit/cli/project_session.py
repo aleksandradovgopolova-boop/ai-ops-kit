@@ -8,7 +8,50 @@ import sys
 import yaml
 
 from ai_ops_kit.lifecycle import project_session as sessions
-from ai_ops_kit.shared import lifecycle_store
+
+
+def current_session(root, runtime, session, task, signals):
+    """Штатный controller готовит работу для уже открытого tool loop, без модели."""
+    from pathlib import Path
+    import subprocess
+    fid = "session-" + task["request_id"]
+    directory = sessions.session_dir(root, runtime, session)
+    command = [sys.executable, str(Path(__file__).resolve().parents[1] / "engine/ai_ops_run.py"),
+               "run", task["prompt"], str(root), "--engine", "controller", "--runtime", runtime,
+               "--session", session, "--feature", fid, "--signals", json.dumps(signals), "--json"]
+    task = sessions.claim_execution(root, runtime, session, task,
+                {"mode": "current-session", "command": command},
+                "Открытый агент исполняет стадии RunPlan. План не подтверждает приёмку; "
+                "нужны артефакты, обязательные gates, независимое review и применимый CI.")
+    path = directory / (task["request_id"] + ".json")
+    try:
+        result = sessions.run_process(command, root, directory, timeout=30)
+        report_path = sessions.within(root, f"features/{fid}/run-report.json")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        if (result.returncode != 0 or report.get("kind") != "run-report" or report.get("status") != "planned"
+                or report.get("execution") != "planned" or report.get("workitem_id") != fid
+                or report.get("runtime") != runtime or report.get("lifecycle_errors")):
+            raise ValueError("controller не подтвердил подготовку: " + str(report.get("error") or result.stderr)[-4096:])
+        files = {f"features/{fid}/{name}": sessions.digest(sessions.within(root, f"features/{fid}/{name}").read_bytes())
+                 for name in ("workitem.yaml", "run-plan.yaml", "run-report.json")}
+        task["execution"].update(files=files, prepared=True)
+    except (OSError, ValueError, TypeError, AttributeError, subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
+        task.update(status="blocked", blocker=f"controller: {type(exc).__name__}: {exc}",
+                    next_step="Проверь сохранённые логи и артефакты. Claim сохранён; повтор автоматически не запускается.")
+    sessions.write(path, task)
+    return task
+
+
+def resume_current(root, runtime, session, task):
+    """Чтение handoff после compact: изменения продукта ожидаемы, смена контекста — нет."""
+    current = sessions.binding(root, "session-" + task["request_id"])
+    if any(current.get(key) != task["binding"].get(key) for key in
+           ("root", "branch", "version", "managed_sha256", "config_sha256")):
+        raise ValueError("контекст проектной сессии изменился; проверь сохранённую работу")
+    for relative, checksum in task["execution"]["files"].items():
+        if sessions.digest(sessions.within(root, relative).read_bytes()) != checksum:
+            raise ValueError("подготовленный артефакт изменён: " + relative)
+    return task
 
 
 def native_provider_hook(directory):
@@ -124,6 +167,7 @@ def main(argv=None):
     parser.add_argument("--runtime", required=True, choices=tuple(sessions.RUNTIMES))
     parser.add_argument("--session")
     parser.add_argument("--signals")
+    parser.add_argument("--autonomous", action="store_true", help="явно запустить отдельного провайдера")
     args = parser.parse_args(argv)
     try:
         if args.action == "hook":
@@ -139,7 +183,14 @@ def main(argv=None):
             else:
                 # Подготовка не должна переписать spec, пока другой вызов уже исполняет её.
                 lock = sessions.session_dir(root, args.runtime, args.session) / "preparation"
-                with lifecycle_store._journal_lock(lock, required=True):
+                with sessions.session_lock(lock):
+                    existing = sessions.load(root, args.runtime, args.session)
+                    if (not args.autonomous and existing.get("status") == "running"
+                            and existing.get("execution", {}).get("mode") == "current-session"
+                            and existing["execution"].get("prepared")):
+                        result = resume_current(root, args.runtime, args.session, existing)
+                        print(json.dumps(result, ensure_ascii=False))
+                        return 1  # handoff всё ещё не является accepted
                     task = sessions.pending(root, args.runtime, args.session)
                     signals = (json.loads(args.signals) if args.signals is not None else
                                (task.get("preparation") or {}).get("signals") or
@@ -153,7 +204,11 @@ def main(argv=None):
                                          + ". Запуск не начат; уточни signals той же сохранённой задачи.")
                     result = prepare(root, args.runtime, args.session, task, signals)
                     if result is None:
-                        result = sessions.execute(root, args.runtime, args.session, signals, request=task["request_id"])
+                        task = sessions.pending(root, args.runtime, args.session)
+                        if task["request_id"] != existing["request_id"]:
+                            raise ValueError("активная постановка сменилась после подготовки")
+                        result = (sessions.execute(root, args.runtime, args.session, signals, request=task["request_id"])
+                                  if args.autonomous else current_session(root, args.runtime, args.session, task, signals))
             print(json.dumps(result, ensure_ascii=False))
             return 0 if result.get("accepted") or result.get("status") == "accepted" else 1
     except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError) as exc:
