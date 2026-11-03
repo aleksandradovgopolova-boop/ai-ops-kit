@@ -1153,7 +1153,7 @@ work:
       - docs/
     evidence: qualification/REPOSITORY-STATUS-2026-11-02.md
     rationale: >-
-      На main073d1bfb текущий Pages snapshot12:01:11UTC по13 фрагментам выводит minor4.13.0;
+      На исходном main073d1bfb Pages snapshot12:01:11UTC по13 фрагментам выводит minor4.13.0;
       это целевая версия, не release_ready и не дата выпуска. Открытый draft не
       становится обязательным для4.13 по факту существования. Нужны достоверный
       source snapshot, точные CI-привязки применимых входов, установленный артефакт,

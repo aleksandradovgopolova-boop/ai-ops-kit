@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -346,36 +347,121 @@ def restore_managed_from(backup: Path):
     shutil.copytree(backup, _ao().MANAGED)
 
 
+def asset_inventory(root, refresh_ci=False):
+    """Шаг поставки и его footprint объявляются ВМЕСТЕ; delivery и snapshot читают это место."""
+    root, core, ao = Path(root), _core(), _ao()
+    scaffolding = ao._child_scaffolding()
+    pom = (core.manifest().get("session_orchestration") or {}).get("product_operating_model") or {}
+    ci = ao._ci_setup()
+    ci_paths = [ci._ci_dst(root, name) for name in core.CI_TEMPLATES]
+    reg = ao.PKG / "registry" / "artifact-registry.yaml"
+    artifacts = (yaml.safe_load(reg.read_text(encoding="utf-8")) or {}).get("artifacts", []) if reg.is_file() else []
+    # (report key, action, paths). Нет второго списка footprint в snapshot/restore.
+    return [
+        ("context_backfilled", lambda: scaffolding._backfill_required_context(root),
+         [root / ".ai/project/context" / doc for doc in scaffolding._required_context_docs()]),
+        ("ci_workflows", lambda: ci.sync_ci_workflows(root, refresh=refresh_ci),
+         ci_paths + [p.with_suffix(p.suffix + ".before-ai-ops-update") for p in ci_paths]
+         + [root / core.CI_PRINTS_REL]),
+        ("zone_markers", lambda: core.ensure_zone_markers(root),
+         [root / ".ai" / zone / "README.md" for zone in core._ZONE_WHY]),
+        ("gitignore", lambda: core.ensure_gitignore(root), [root / ".gitignore"]),
+        ("gitattributes", lambda: core.ensure_gitattributes(root), [root / ".gitattributes"]),
+        ("plan_merge_driver", lambda: ao._plan_merge_setup().ensure_plan_merge_driver(root), []),
+        ("entry_point", lambda: core._install_entry_point(root), [root / core.ENTRY_NAME]),
+        ("communication_adapter", lambda: core._install_communication_adapter(root), [root / "CLAUDE.md"]),
+        ("team_session", lambda: core.ensure_team_session(root),
+         [root / p for p in ("AGENTS.md", "CLAUDE.md", ".claude/settings.json", ".codex/hooks.json")]),
+        ("lint_hook", lambda: ao._lint_hook_setup().ensure_lint_hook(root), [root / ".claude/settings.json"]),
+        ("codex_lint_hook", lambda: ao._lint_hook_setup().ensure_lint_hook(
+            root, runtime="codex", active="codex" in (core._configured_runtimes() or [])),
+         [root / ".codex/hooks.json"]),
+        ("roadmap_migrated", lambda: scaffolding._migrate_legacy_roadmap(root),
+         [root / a["artifact"] for a in scaffolding._migrate_legacy_roadmap(root, dry=True)]),
+        ("architecture_migrated", lambda: scaffolding._migrate_legacy_architecture(root), [root / "ARCHITECTURE.md"]),
+        ("planning_seeded", lambda: scaffolding._seed_planning_contour(root),
+         [root / rel for rel in pom.get("required_repo_artifacts", [])]),
+        ("product_layer_seeded", lambda: scaffolding._seed_product_layer(root),
+         [root / a["path"] for a in artifacts if a.get("path")]),
+    ]
+
+
 def _footprint_paths():
-    """Весь install footprint, который меняет update: managed + runtime-ассеты + конфиг."""
-    return [_ao().MANAGED,
-            _ao().REPO_ROOT / ".claude" / "skills",
-            _ao().REPO_ROOT / ".claude" / "commands",
-            _ao().AI_DIR / "generated",
-            # запись о поставленных навыках откатывается ВМЕСТЕ с ними: иначе после отката
-            # прежний текст кита сверялся бы с отпечатком новой версии и читался как правка
-            _ao().REPO_ROOT / SKILL_PRINTS_REL,
-            _ao().CHILD_CONFIG,
-            _ao().REPO_ROOT / "AGENTS.md",
-            _ao().REPO_ROOT / "CLAUDE.md",
-            _ao().REPO_ROOT / ".claude" / "settings.json",
-            _ao().REPO_ROOT / ".codex" / "hooks.json"]
+    root = _ao().REPO_ROOT
+    paths = [_ao().MANAGED, root / ".claude/skills", root / ".claude/commands",
+             root / ".qwen/commands", _ao().AI_DIR / "generated", root / SKILL_PRINTS_REL,
+             # Миграция 3.36-to-3.37 переносит закрытые работы в историю вне managed.
+             root / "planning/plan.yaml", root / "history/plan-history.yaml",
+             _ao().AI_DIR / "runtime/backups/skills", _ao().CHILD_CONFIG]
+    if os.environ.get("CODEX_HOME"):
+        paths.append(Path(os.environ["CODEX_HOME"]).resolve() / "prompts")
+    paths += [p for _, _, footprint in asset_inventory(root) for p in footprint]
+    # Убираем вложенные области, иначе новый файл внутри восстановленного каталога удалится повторно.
+    unique = sorted(set(paths), key=lambda p: (len(p.parts), str(p)))
+    return [p for p in unique if not any(parent in unique for parent in p.parents)]
+
+
+def _merge_driver_config(root, values=None):
+    """Только два локальных ключа доставки; чужой config и глобальные настройки не копируются."""
+    if not (Path(root) / ".git").exists():
+        return {}
+    out = {}
+    for suffix in ("name", "driver"):
+        key = f"merge.{_ao()._plan_merge_setup().DRIVER_NAME}.{suffix}"
+        args = ["git", "-C", str(root), "config", "--local"]
+        if values is None:
+            r = subprocess.run(args + ["--null", "--get-all", key], capture_output=True, check=False)
+            if r.returncode not in (0, 1):
+                raise OSError(f"не прочитан локальный ключ {key}")
+            out[key] = r.stdout.decode("utf-8").split("\0")[:-1]
+        else:
+            r = subprocess.run(args + ["--unset-all", key], capture_output=True, check=False)
+            if r.returncode not in (0, 5):
+                raise OSError(f"не восстановлен локальный ключ {key}")
+            for value in values[key]:
+                subprocess.run(args + ["--add", key, value], capture_output=True, check=True)
+    return out
+
+
+def _footprint_symlink(paths):
+    """Не следовать по ссылкам ни в областях записи, ни среди их родителей в репозитории."""
+    root = _ao().REPO_ROOT
+    for p in paths:
+        candidates = [p] + [parent for parent in p.parents if root in parent.parents]
+        link = next((candidate for candidate in candidates if candidate.is_symlink()), None)
+        if link is None and p.is_dir():
+            link = next((candidate for candidate in p.rglob("*") if candidate.is_symlink()), None)
+        if link is not None:
+            return link
+    return None
 
 
 def snapshot_footprint(dest: Path):
-    """Снять полный install footprint в dest. Возвращает манифест {rel: existed}, чтобы
-    восстановление было точным — вернуть бывшее и УДАЛИТЬ появившееся при обновлении."""
+    """Снимок областей inventory, их отсутствовавших родителей и локальных ключей Git.
+
+    Нумерованные backup-пути позволяют сохранять и явно заданный внешний CODEX_HOME/prompts,
+    не подставляя абсолютные пути в dest. Фактический manifest передаётся откату в памяти.
+    """
+    paths = _footprint_paths()
+    # Delivery пишет сквозь ссылки, а copytree сохраняет лишь сами ссылки. Отказываем ДО записи.
+    link = _footprint_symlink(paths + [_ao().AI_DIR / "runtime/last-update-report.json"])
+    if link is not None:
+        raise OSError(f"В install footprint есть символическая ссылка: {link}; запись не начата.")
     if dest.exists():
         shutil.rmtree(dest)
     dest.mkdir(parents=True, exist_ok=True)
-    man = {}
-    for p in _footprint_paths():
-        rel = p.relative_to(_ao().REPO_ROOT).as_posix()
-        man[rel] = p.exists()
-        if p.exists():
-            b = dest / rel
+    man = {"paths": {}, "absent_parents": [], "git_config": _merge_driver_config(_ao().REPO_ROOT)}
+    for i, p in enumerate(paths):
+        existed = p.exists() or p.is_symlink()
+        man["paths"][str(p)] = {"existed": existed, "backup": str(i)}
+        for parent in p.parents:
+            if parent.exists():
+                break
+            man["absent_parents"].append(str(parent))
+        if existed:
+            b = dest / str(i)
             b.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(p, b) if p.is_dir() else shutil.copy2(p, b)
+            shutil.copytree(p, b, symlinks=True) if p.is_dir() and not p.is_symlink() else shutil.copy2(p, b, follow_symlinks=False)
     (dest / ".footprint.json").write_text(
         json.dumps(man, ensure_ascii=False, indent=2), encoding="utf-8")
     return man
@@ -383,14 +469,19 @@ def snapshot_footprint(dest: Path):
 
 def restore_footprint(dest: Path, man: dict):
     """Транзакционный откат всего footprint к снимку: восстановить бывшее, удалить новое."""
-    for rel, existed in man.items():
-        p = _ao().REPO_ROOT / rel
-        if p.exists():
-            shutil.rmtree(p) if p.is_dir() else p.unlink()
-        if existed:
-            b = dest / rel
+    for path, entry in man["paths"].items():
+        p = Path(path)
+        if p.exists() or p.is_symlink():
+            shutil.rmtree(p) if p.is_dir() and not p.is_symlink() else p.unlink()
+        if entry["existed"]:
+            b = dest / entry["backup"]
             p.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copytree(b, p) if b.is_dir() else shutil.copy2(b, p)
+            shutil.copytree(b, p, symlinks=True) if b.is_dir() and not b.is_symlink() else shutil.copy2(b, p, follow_symlinks=False)
+    _merge_driver_config(_ao().REPO_ROOT, man["git_config"])
+    for path in sorted(set(man["absent_parents"]), key=lambda p: len(Path(p).parts), reverse=True):
+        p = Path(path)
+        if p.is_dir() and not any(p.iterdir()):
+            p.rmdir()
 
 
 SMOKE_CHECKS = [
@@ -440,6 +531,10 @@ def run_validators(names):
 
 def write_report(report):
     out = _ao().AI_DIR / "runtime" / "last-update-report.json"
+    # Отказ по ссылке в .ai/runtime не должен сам записать отчёт сквозь эту же ссылку.
+    if _footprint_symlink([out]) is not None:
+        print("Отчёт не записан: символическая ссылка в пути отчёта; внешние файлы сохранены.")
+        return None
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     return out

@@ -284,7 +284,8 @@ _SECTION_ARTIFACT_CREDIT = {
 
 
 def _spec_path(child_root, wid):
-    return Path(child_root) / "features" / str(wid) / "spec.yaml"
+    from ai_ops_kit.shared.work_areas import artifact_path
+    return artifact_path(Path(child_root) / "features", wid, "spec.yaml")
 
 
 # Полевой замер (cockpit, 06.09.2026, фича free-tile-counter): сигналы задачи (--signals) НЕ

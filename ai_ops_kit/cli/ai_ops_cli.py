@@ -567,26 +567,26 @@ def main(argv):
     preview_mode = intent == "preview"
     if preview_mode:
         intent = rest.pop(0) if rest else "run"
-    # разбор [задача] child_root (вынесен из main: ратчет func-size). rest мутируется на месте (pop),
-    # поэтому остаток позиционных виден вызывающему (ветка resume ниже его дочитывает).
+    # Парсер оставляет неиспользованные позиционные в rest для resume.
     task, child_root = _parse_task_and_root(intent, rest)
-    # Сигналы вызова + перенос сохранённого со specify (в _build_signals: ратчет func-size). ДО
-    # процессного гейта и диспетча — одни и те же сигналы видят и short_path/потолок, и план, и движок.
+    # Проверка feature предшествует чтению спеки и записи процессного следа.
+    if a.feature is not None:
+        from ai_ops_kit.shared.work_areas import validate_feature_links
+        try:
+            validate_feature_links(Path(child_root) / "features", a.feature)
+        except ValueError as exc:
+            print(f"ОТКАЗ: {exc}", file=sys.stderr)
+            return 2
+    # Одни сигналы (включая сохранённые specify) видят process gate, план и движок.
     signals = _build_signals(intent, task, child_root, a)
-
-    # ЗАДАЧА ИЗ СПЕКИ, когда `run`/`do` вызваны без текста (только `--feature`). Движок строит задачу
-    # писателю ТОЛЬКО из позиционного аргумента (`ctx = task + профиль`), а НЕ из spec.yaml — и вызов
-    # без текста давал писателю пустой блок «=== ЗАДАЧА ===» (живой прогон #587). Спека — источник
-    # истины: собираем задачу из её разделов. Fail-closed: нет спеки/разделов -> task пуст, как раньше.
+    # Без текста run/do берут задачу из спеки (#587); без разделов task остаётся пустым.
     if intent in ("run", "do") and not (task or "").strip():
         from ai_ops_kit.gates import spec_levels as _sl
         _spec_task = _sl.task_from_spec(child_root, _wid_for(task, signals, a.feature))
         if _spec_task:
             task = _spec_task
 
-    # ПЕРЕД процессным шагом: уже описанная работа идёт коротким путём, залипший разбор
-    # останавливается вопросом владельцу. Место выбрано так, что ни один процессный шаг мимо не
-    # проходит: ниже команды расходятся по ветвям, и проверку пришлось бы повторять в каждой.
+    # Process gate общий для всех ветвей dispatch: короткий путь или вопрос владельцу.
     _gate_rc = _process_gate(intent, task, child_root, signals, a, preview_mode)
     if _gate_rc is not None:
         return _gate_rc

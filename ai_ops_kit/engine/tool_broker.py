@@ -149,6 +149,33 @@ def _is_kit_self_host(root) -> bool:
             and (root / "manifest" / "ai-ops-manifest.yaml").exists())
 
 
+class PolicyLoadError(ValueError):
+    """An existing child protection source could not establish a valid policy."""
+
+
+def _child_protected_entries(path):
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        if not path.is_symlink():
+            return []  # Only a genuinely absent optional source permits defaults.
+        raise PolicyLoadError(f"invalid child policy: {path.name}") from None
+    except (OSError, UnicodeError, yaml.YAMLError):
+        raise PolicyLoadError(f"invalid child policy: {path.name}") from None
+    if not isinstance(data, dict) or not isinstance(data.get("protected_paths", []), list):
+        raise PolicyLoadError(f"invalid child policy: {path.name}")
+    entries = data.get("protected_paths", [])
+    for entry in entries:
+        if isinstance(entry, str) and entry.strip():
+            continue
+        if (isinstance(entry, dict) and isinstance(entry.get("path"), str)
+                and entry["path"].strip() and isinstance(entry.get("approval", "required"), str)
+                and entry.get("approval", "required").strip()):
+            continue
+        raise PolicyLoadError(f"invalid child policy: {path.name}")
+    return entries
+
+
 def _protected_prefixes(child_root=None):
     """Дефолт пакета + карта child'а (MERGE, не replace): child ДОБАВЛЯЕт к
     универсально-опасным путям, не отменяя их. Источники child'а:
@@ -169,21 +196,9 @@ def _protected_prefixes(child_root=None):
             add({"path": p, "approval": "owner_required"})
     if child_root:
         child_root = Path(child_root)
-        cfg = child_root / ".ai-ops.yaml"
-        if cfg.exists():
-            try:
-                data = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
-                for e in data.get("protected_paths", []) or []:
-                    add(e)
-            except (OSError, yaml.YAMLError):
-                pass
-        cpp = child_root / "config" / "protected-paths.yaml"
-        if cpp.exists():
-            try:
-                for e in (yaml.safe_load(cpp.read_text(encoding="utf-8")) or {}).get("protected_paths", []) or []:
-                    add(e)
-            except (OSError, yaml.YAMLError):
-                pass
+        for source in (child_root / ".ai-ops.yaml", child_root / "config/protected-paths.yaml"):
+            for entry in _child_protected_entries(source):
+                add(entry)
     return out
 
 

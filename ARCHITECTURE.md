@@ -90,9 +90,12 @@ workflow-контракты, quality gates, маршрутизация моде�
 
 ### Реализация и квалификация — 02.11.2026
 
-Срез main — `073d1bfb`, последний выпуск — `v4.12.0 qualification` на `7acca17f`.
+Исторический срез main — `073d1bfb`, последний выпуск — `v4.12.0 qualification` на `7acca17f`.
 [Датированный статус](qualification/REPOSITORY-STATUS-2026-11-02.md) отделяет
 код после тега от draft и оставшейся приёмки; это не разрешение выпуска или rollout.
+На итоговой базе b1530c1f уже слиты #1485/#1486/#1487: status-aware upgrade,
+полный rollback footprint и исправления child-policy/feature write boundaries.
+Это не доказывает всю security/fleet приёмку и не меняет native readiness #1434.
 
 ## 6. Orchestration
 
