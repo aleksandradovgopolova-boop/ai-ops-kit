@@ -174,31 +174,59 @@ def session_lock(path):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
-def begin(root, runtime, session, prompt, turn=None):
+def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=None):
     root = project_root(root)
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 131072:
         raise ValueError("постановка пуста или превышает бюджет 128 KiB")
     directory = session_dir(root, runtime, session)
     with session_lock(directory / "requests"):
-        return _begin(root, runtime, session, prompt, turn, directory)
+        return _begin(root, runtime, session, prompt, turn, directory, continuation_validator)
 
 
-def _begin(root, runtime, session, prompt, turn, directory):
+def _begin(root, runtime, session, prompt, turn, directory, continuation_validator):
     if turn is not None and (not isinstance(turn, str) or not turn.strip() or len(turn) > 1024):
         raise ValueError("неверный turn_id")
     # Идентичность события, не текст: одинаковые новые запросы остаются разными.
     request = digest(json.dumps([runtime, session, turn]))[:32] if turn else uuid.uuid4().hex
+    replay = list(directory.glob(f"*.inputs/{request}.json")) if turn else []
+    if replay:
+        task = load(root, runtime, session)
+        expected = input_receipt(task, prompt, turn, request)
+        if len(replay) != 1 or json.loads(replay[0].read_text()) != expected:
+            raise ValueError("повтор пользовательского ввода конфликтует или относится к прежней задаче")
+        if task.get("status") == "accepted" or task.get("input_latest") != request or continuation_validator is None:
+            raise ValueError("поздний повтор пользовательского ввода не является новым запросом")
+        continuation_validator(root, runtime, session, task)
+        return task
     previous = directory / f"{request}.json"
     if previous.exists():
         task = load(root, runtime, session)
-        if task["request_id"] != request or task.get("turn_id") != turn or task.get("prompt") != prompt:
+        if (task["request_id"] != request or task.get("turn_id") != turn or task.get("prompt") != prompt
+                or task.get("input_latest")):
             raise ValueError("повтор события не совпадает с активной постановкой; сохранённые задачи не изменены")
         return task
     if (directory / "active.json").exists():
         active = load(root, runtime, session)
         claim = directory / (active["request_id"] + ".execution-claim")
-        if active.get("status") != "accepted" and claim.exists():
-            raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
+        if active.get("status") != "accepted" and (claim.exists() or claim.is_symlink() or active.get("status") != "pending"
+                or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation"))):
+            if continuation_validator is None:
+                raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
+            continuation_validator(root, runtime, session, active)
+            path = directory / (active["request_id"] + ".inputs") / (request + ".json")
+            relative = str(path.relative_to(root))
+            if git(root, "ls-files", "--", relative) or not git(root, "check-ignore", "--", relative):
+                raise ValueError("пользовательский ввод требует ignored runtime path вне публичного Git")
+            result = lifecycle_store.durable_create_batch(directory, {
+                str(path.relative_to(directory)): json.dumps(input_receipt(active, prompt, turn, request),
+                                                            ensure_ascii=False, indent=2)})
+            if not result.get("ok"):
+                raise ValueError("не удалось сохранить immutable пользовательский ввод: " + str(result.get("error")))
+            active.setdefault("input_receipts", {})[str(path.relative_to(root))] = digest(path.read_bytes())
+            active.setdefault("input_events", []).append(relative)
+            active["input_latest"] = request
+            write(directory / (active["request_id"] + ".json"), active)
+            return active
     task = {"schema_version": 1, "request_id": request, "session_id": session,
             "runtime": runtime, "turn_id": turn, "prompt": prompt, "status": "pending"}
     # Постановка сохраняется ДО диагностики, в том числе при повреждённой установке.
@@ -210,6 +238,14 @@ def _begin(root, runtime, session, prompt, turn, directory):
         task.update(status="blocked", blocker=str(exc), next_step="Восстановить установку штатным update и повторить задачу.")
     write(directory / f"{request}.json", task)
     return task
+
+
+def input_receipt(task, prompt, turn, event):
+    """Локальная постановка пользователя: никогда не ApprovalRecord или verdict."""
+    return {"kind": "current-session-input", "schema_version": 1, "event_id": event,
+            "request_id": task["request_id"], "runtime": task["runtime"],
+            "session_id": task["session_id"], "turn_id": turn, "prompt": prompt,
+            "identity_scope": "reliable" if turn else "unreliable"}
 
 
 @contextlib.contextmanager
@@ -281,10 +317,39 @@ def artifact_inputs(root, fid):
             if path.is_file():
                 key = str(path.relative_to(root))
                 files[key] = digest(within(root, key).read_bytes())
+    request = fid.removeprefix("session-")
+    inputs = {}
+    for directory in within(root, ".ai/runtime/sessions").glob(f"project-*/{request}.inputs"):
+        if directory.is_symlink() or directory.parent.is_symlink():
+            raise ValueError("симлинк в пользовательском вводе не подтверждён")
+        if git(root, "ls-files", "--", str(directory.relative_to(root))):
+            raise ValueError("пользовательский ввод попал в публичный Git")
+        for path in directory.rglob("*"):
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("неверный файл пользовательского ввода")
+            relative = str(path.relative_to(root))
+            git(root, "check-ignore", "--", relative)
+            inputs[relative] = digest(path.read_bytes())
+        task = json.loads((directory.parent / (request + ".json")).read_text())
+        if inputs != task.get("input_receipts", {}):
+            raise ValueError("состав пользовательского ввода изменён или запись не завершена")
+    for task_path in within(root, ".ai/runtime/sessions").glob(f"project-*/{request}.json"):
+        task = json.loads(task_path.read_text())
+        events = task.get("input_events", [])
+        if (task.get("input_receipts", {}) != inputs or not isinstance(events, list)
+                or len(events) != len(inputs) or set(events) != set(inputs)
+                or (events and Path(events[-1]).stem != task.get("input_latest"))):
+            raise ValueError("пользовательский ввод или порядок событий отсутствует/изменён")
+    files.update(inputs)
     return files
 
 
 def verify(root, runtime, session):
+    with session_lock(session_dir(root, runtime, session) / "requests"):
+        return _verify(root, runtime, session)
+
+
+def _verify(root, runtime, session):
     task = load(root, runtime, session)
     current = binding(root, "session-" + task["request_id"])
     receipt = task.get("execution") or {}
@@ -308,6 +373,9 @@ def verify(root, runtime, session):
     if (receipt.get("mode") == "current-session"
             and artifact_inputs(root, "session-" + task["request_id"]) != receipt.get("artifact_inputs")):
         raise ValueError("состав артефактов изменён после проверки")
+    if (receipt.get("mode") == "current-session"
+            and task.get("input_events", []) != receipt.get("input_events", [])):
+        raise ValueError("порядок пользовательского ввода изменён после проверки")
     result_root = within(root, receipt.get("worktree") or ".")
     if (git(result_root, "rev-parse", "HEAD") != receipt.get("revision")
             or source_digest(result_root, "session-" + task["request_id"]) != receipt.get("result_sha256")):
@@ -327,21 +395,37 @@ def pending(root, runtime, session):
     report_path = within(root, f"features/{fid}/run-report.json")
     if report_path.exists():
         raise ValueError("отчёт существовал до запуска: чужое/старое evidence не принимается")
-    if within(session_dir(root, runtime, session), task["request_id"] + ".execution-claim").exists():
+    if (within(session_dir(root, runtime, session), task["request_id"] + ".execution-claim").exists()
+            or within(session_dir(root, runtime, session), task["request_id"] + ".execution-claim").is_symlink()):
         raise ValueError("попытка исполнения уже закреплена; проверь сохранённый исход")
     return task
 
 
 def save_preparation(root, runtime, session, request, preparation, reason=None):
-    task = pending(root, runtime, session)
-    if task["request_id"] != request:
-        raise ValueError("активная постановка сменилась во время подготовки")
-    task["preparation"] = preparation
-    task["blocker"] = reason
-    task["next_step"] = ("Заполни спецификацию по сохранённой постановке; затем продолжи тот же "
-                         "project_session run без нового запроса и без повторной передачи signals. "
-                         "До готовности спецификации содержательную работу не начинай.") if reason else None
-    write(session_dir(root, runtime, session) / f"{request}.json", task)
+    with session_lock(session_dir(root, runtime, session) / "requests"):
+        task = pending(root, runtime, session)
+        if task["request_id"] != request:
+            raise ValueError("активная постановка сменилась во время подготовки")
+        task.pop("intake", None)
+        task["preparation"] = preparation
+        task["blocker"] = reason
+        task["next_step"] = ("Заполни спецификацию по сохранённой постановке; затем продолжи тот же "
+                             "project_session run без нового запроса и без повторной передачи signals. "
+                             "До готовности спецификации содержательную работу не начинай.") if reason else None
+        write(session_dir(root, runtime, session) / f"{request}.json", task)
+        return task
+
+
+def save_intake(root, runtime, session, request, signals, missing, *, autonomous=False):
+    """Факт реально запрошенных CLI данных, не догадка по пользовательскому тексту."""
+    directory = session_dir(root, runtime, session)
+    with session_lock(directory / "requests"):
+        task = pending(root, runtime, session)
+        if task["request_id"] != request:
+            raise ValueError("постановка сменилась при уточнении intake")
+        task["intake"] = {"mode": "autonomous" if autonomous else "current-session",
+                          "signals": signals, "missing": missing}
+        write(directory / (request + ".json"), task)
     return task
 
 
@@ -355,6 +439,10 @@ def claim_execution(root, runtime, session, task, execution, next_step=None):
         claim = directory / (task["request_id"] + ".execution-claim")
         descriptor = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(descriptor)
+        for key in ("input_receipts", "input_latest", "input_events"):
+            if key in current:
+                task[key] = current[key]
+        task.pop("intake", None)
         task.update(status="running", execution=execution, blocker=None, next_step=next_step)
         write(directory / (task["request_id"] + ".json"), task)
     return task
