@@ -101,6 +101,9 @@ class TestGatesAreWiredWhereTheyAreEnforced:
         r = subprocess.run(["git", "-C", str(KIT), "cat-file", "-e", f"{sha}^{{commit}}"],
                            capture_output=True, text=True)
         assert r.returncode == 0, f"точка включения {sha} не существует в истории"
+        r = subprocess.run(["git", "-C", str(KIT), "merge-base", "--is-ancestor", sha, "HEAD"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, f"точка включения {sha} существует, но не принадлежит текущей линии"
 
     def test_switch_on_point_is_read_from_config_not_hardcoded(self):
         """Точку включения читают ДВА потребителя (CI и этот тест). Если она вписана в workflow
@@ -142,6 +145,13 @@ class TestTheGateJudgesThisPrAndItsMergeMessage:
         cz = bin_dir / "cz"
         cz.write_text('#!/bin/sh\necho "CZ_ARGS: $*"\nexit 0\n', encoding="utf-8")
         cz.chmod(0o755)
+        # Здесь измеряется выбор диапазона, в том числе в mutation-copy БЕЗ .git.
+        # Отказ missing/unrelated anchors проверен отдельно реальным Git ниже.
+        git = bin_dir / "git"
+        git.write_text('''#!/bin/sh
+case "$1:$2" in cat-file:-e|merge-base:--is-ancestor) exit 0 ;; *) exit 2 ;; esac
+''', encoding="utf-8")
+        git.chmod(0o755)
         script = self._range_step().replace(
             "${{ github.event.pull_request.base.sha }}", base_sha)
         # ТОЧКА ВКЛЮЧЕНИЯ ПОДСТАВЛЯЕТСЯ, А НЕ ВЫЧИСЛЯЕТСЯ. Шаг берёт её из pyproject через
@@ -182,6 +192,169 @@ class TestTheGateJudgesThisPrAndItsMergeMessage:
         args = self._measured_range(tmp_path, "")
         assert f"{GATES['commit_format_enforced_after']}..HEAD" in args, (
             f"вне PR диапазон от точки включения потерян — гейт ослаблен: {args}")
+
+class TestHistoryQualificationFragmentBase:
+    """Реальный Git/Bash: новый корень не отключает fragment gate и не меняет PR baseline."""
+
+    def _fixture(self, tmp_path, fragment=True):
+        repo, env, root = TestHistoryAnchorFailsClosed()._repo(tmp_path)
+        (repo / "change.txt").write_text("Изменение исходников.\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(repo), "add", "change.txt"], env=env,
+                       capture_output=True, check=True)
+        if fragment:
+            folder = repo / "newsfragments"
+            folder.mkdir()
+            (folder / "new.chore.md").write_text("Изменение для владельца.\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", "newsfragments"], env=env,
+                           capture_output=True, check=True)
+        subprocess.run(["git", "-C", str(repo), "-c", "commit.gpgsign=false", "commit",
+                        "--allow-empty", "-m", "chore: pending change"], env=env,
+                       capture_output=True, check=True)
+        unrelated = subprocess.check_output(["git", "-C", str(repo), "commit-tree", "HEAD^{tree}",
+                                             "-m", "unrelated original main"], env=env,
+                                            text=True).strip()
+        subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", unrelated],
+                       env=env, capture_output=True, check=True)
+        return repo, env, root, unrelated
+
+    def _run(self, tmp_path, repo, env, anchor, qualification):
+        step = next(s for s in _lint_steps() if "towncrier check" in str(s.get("run", "")))
+        script = str(step["run"])
+        pinned = re.search(r"(?m)^  BASE=([0-9a-f]{40})$", script)
+        assert pinned, "qualification должен иметь проверяемую точную baseline"
+        script = script.replace(pinned.group(1), anchor)
+        folder = tmp_path / "bin"
+        folder.mkdir()
+        towncrier = folder / "towncrier"
+        towncrier.write_text('''#!/bin/sh
+set -e
+echo "TC_BASE:$3"
+files=$(git diff --name-only "$3"...HEAD)
+case "$files" in *newsfragments/new.chore.md*) exit 0 ;; *) exit 1 ;; esac
+''', encoding="utf-8")
+        towncrier.chmod(0o755)
+        return subprocess.run(["bash", "-c", script], cwd=repo, capture_output=True, text=True,
+                              env=dict(env, PATH=f"{folder}:{env.get('PATH', '')}",
+                                       HISTORY_QUALIFICATION=qualification))
+
+    def test_qualification_checks_fragment_against_compacted_baseline(self, tmp_path):
+        repo, env, root, _ = self._fixture(tmp_path)
+        result = self._run(tmp_path, repo, env, root, "true")
+        assert result.returncode == 0, result.stderr
+        assert "TC_BASE:" + root in result.stdout
+
+    def test_qualification_without_new_fragment_fails(self, tmp_path):
+        repo, env, root, _ = self._fixture(tmp_path, fragment=False)
+        result = self._run(tmp_path, repo, env, root, "true")
+        assert result.returncode != 0
+        assert "TC_BASE:" in result.stdout
+
+    def test_missing_qualification_baseline_stops_before_towncrier(self, tmp_path):
+        repo, env, _, _ = self._fixture(tmp_path)
+        result = self._run(tmp_path, repo, env, "0" * 40, "true")
+        assert result.returncode != 0
+        assert "TC_BASE:" not in result.stdout
+
+    def test_unrelated_qualification_baseline_stops_before_towncrier(self, tmp_path):
+        repo, env, _, unrelated = self._fixture(tmp_path)
+        result = self._run(tmp_path, repo, env, unrelated, "true")
+        assert result.returncode != 0
+        assert "TC_BASE:" not in result.stdout
+
+    def test_ordinary_pr_keeps_origin_main_comparison(self, tmp_path):
+        repo, env, root, _ = self._fixture(tmp_path)
+        subprocess.run(["git", "-C", str(repo), "update-ref", "refs/remotes/origin/main", root],
+                       env=env, capture_output=True, check=True)
+        result = self._run(tmp_path, repo, env, "0" * 40, "false")
+        assert result.returncode == 0, result.stderr
+        assert "TC_BASE:origin/main" in result.stdout
+
+    def test_qualification_flag_is_limited_to_exact_push_ref(self):
+        step = next(s for s in _lint_steps() if "towncrier check" in str(s.get("run", "")))
+        assert step["env"]["HISTORY_QUALIFICATION"] == (
+            "${{ github.event_name == 'push' && "
+            "github.ref == 'refs/heads/ci/history-cutover-qualification' }}")
+
+
+class TestHistoryAnchorFailsClosed:
+    """Реальный Bash/Git: отсутствующий и чужой anchor не превращаются в успех cz."""
+
+    def _repo(self, tmp_path):
+        repo = tmp_path / "repo"
+        repo.mkdir()
+        env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                   GIT_AUTHOR_NAME="Fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
+                   GIT_COMMITTER_NAME="Fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid")
+        subprocess.run(["git", "init", "--initial-branch=main", str(repo)],
+                       capture_output=True, check=True, env=env)
+        for message in ("chore: root", "chore: next"):
+            subprocess.run(["git", "-C", str(repo), "-c", "commit.gpgsign=false", "commit",
+                            "--allow-empty", "-m", message], capture_output=True, check=True, env=env)
+        root = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD^"],
+                                       text=True, env=env).strip()
+        return repo, env, root
+
+    def _run(self, tmp_path, repo, env, anchor, base="", cz_code=0):
+        bin_dir = tmp_path / "bin"
+        bin_dir.mkdir()
+        cz = bin_dir / "cz"
+        cz.write_text('#!/bin/sh\necho "CZ_ARGS: $*"\nexit %d\n' % cz_code, encoding="utf-8")
+        cz.chmod(0o755)
+        step = next(str(s["run"]) for s in _lint_steps()
+                    if "cz check --rev-range" in str(s.get("run", "")))
+        first, _, tail = step.partition("\n")
+        assert first.startswith("FROM=$(python3 -c")
+        script = ('FROM="%s"\n%s' % (anchor, tail)).replace(
+            "${{ github.event.pull_request.base.sha }}", base)
+        env = dict(env, PATH=f"{bin_dir}:{env.get('PATH', '')}")
+        return subprocess.run(["bash", "-c", script], cwd=str(repo), env=env,
+                              capture_output=True, text=True)
+
+    def test_missing_anchor_stops_before_cz(self, tmp_path):
+        repo, env, _ = self._repo(tmp_path)
+        result = self._run(tmp_path, repo, env, "0" * 40)
+        assert result.returncode != 0
+        assert "CZ_ARGS:" not in result.stdout
+
+    def test_existing_unrelated_anchor_stops_before_cz(self, tmp_path):
+        repo, env, _ = self._repo(tmp_path)
+        tree = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD^{tree}"],
+                                       text=True, env=env).strip()
+        raw = (f"tree {tree}\nauthor Fixture <fixture@example.invalid> 1 +0000\n"
+               "committer Fixture <fixture@example.invalid> 1 +0000\n\nunrelated fixture\n")
+        orphan = subprocess.check_output(["git", "-C", str(repo), "hash-object", "-t", "commit",
+                                          "-w", "--stdin"], input=raw, text=True, env=env).strip()
+        subprocess.run(["git", "-C", str(repo), "cat-file", "-e", orphan + "^{commit}"],
+                       capture_output=True, check=True, env=env)
+        result = self._run(tmp_path, repo, env, orphan)
+        assert result.returncode != 0
+        assert "CZ_ARGS:" not in result.stdout
+
+    def test_ancestor_anchor_checks_the_full_range(self, tmp_path):
+        repo, env, root = self._repo(tmp_path)
+        result = self._run(tmp_path, repo, env, root)
+        assert result.returncode == 0, result.stderr
+        assert f"CZ_ARGS: check --rev-range {root}..HEAD" in result.stdout
+
+    def test_pr_keeps_its_own_base_range(self, tmp_path):
+        repo, env, root = self._repo(tmp_path)
+        result = self._run(tmp_path, repo, env, "0" * 40, base=root)
+        assert result.returncode == 0, result.stderr
+        assert f"CZ_ARGS: check --rev-range {root}..HEAD" in result.stdout
+
+    def test_empty_range_code_remains_accepted(self, tmp_path):
+        repo, env, _ = self._repo(tmp_path)
+        result = self._run(tmp_path, repo, env, "HEAD", cz_code=3)
+        assert result.returncode == 0
+        assert "CZ_ARGS: check --rev-range HEAD..HEAD" in result.stdout
+
+    @pytest.mark.parametrize("cz_code", [1, 2, 128])
+    def test_cz_failures_never_become_success(self, tmp_path, cz_code):
+        repo, env, root = self._repo(tmp_path)
+        result = self._run(tmp_path, repo, env, root, cz_code=cz_code)
+        assert "CZ_ARGS:" in result.stdout
+        assert result.returncode != 0
+
 
 class TestChangelogFragmentsAreConfigured:
     def test_fragment_types_include_service_changes(self):

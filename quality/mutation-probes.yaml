@@ -1017,8 +1017,8 @@ probes:
   - .github/workflows/package-quality.yml
   - pyproject.toml
   file: .github/workflows/package-quality.yml
-  find: '        run: towncrier check --compare-with origin/main'
-  replace_with: '        run: echo "гейт не вызывается"'
+  find: '          towncrier check --compare-with "$BASE"'
+  replace_with: '          echo "гейт не вызывается"'
   tests:
   - tests/unit/test_release_gates.py
   why: 'ШОВ: гейт «в этой ветке добавлена запись» существует только пока его зовут, и зовут ИМЕННО в

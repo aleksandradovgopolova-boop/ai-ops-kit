@@ -4,6 +4,10 @@
 
 name: pr-smoke
 on:
+  # Только срез кандидата истории: eligible push CI на точном SHA до cutover.
+  # Обычный main push не возвращает полный CI; PR gates сохранены.
+  push:
+    branches: [ci/history-cutover-qualification]
   pull_request:
     branches: [main]
 

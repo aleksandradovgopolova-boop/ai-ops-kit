@@ -1,5 +1,9 @@
 name: package-quality
 on:
+  # Только срез кандидата истории: eligible push CI на точном SHA до cutover.
+  # Обычный main push не возвращает полный CI; PR gates сохранены.
+  push:
+    branches: [ci/history-cutover-qualification]
   # v3.25.1: полный CI НЕ на каждый draft PR — только когда PR готов к review/merge
   pull_request:
     # v3.30: добавлен opened. Прежде PR, созданный СРАЗУ как non-draft и смерженный без
@@ -153,7 +157,17 @@ jobs:
         # ЕДИНСТВЕННЫЙ из шести рассмотренных инструментов с таким гейтом (EV-1137). Никогда не
         # зовём `build`: старый CHANGELOG.md остаётся как есть, ретро-миграция не нужна.
         # Сравнение с origin/main требует полной истории — fetch-depth: 0 ниже в шаге checkout.
-        run: towncrier check --compare-with origin/main
+        env:
+          HISTORY_QUALIFICATION: ${{ github.event_name == 'push' && github.ref == 'refs/heads/ci/history-cutover-qualification' }}
+        run: |
+          BASE=origin/main
+          if [ "${HISTORY_QUALIFICATION:-false}" = true ]; then
+            # Точный 300-stage снимок исходной main; обычные PR сравниваются как прежде.
+            BASE=448cfa77840a8d7fdf9c90f36f47fe377f1c6365
+            git cat-file -e "$BASE^{commit}" || exit 1
+            git merge-base --is-ancestor "$BASE" HEAD || exit 1
+          fi
+          towncrier check --compare-with "$BASE"
       - name: "формат новых коммитов (cz check от точки включения)"
         # ТОЛЬКО НОВЫЕ КОММИТЫ — решение владельца 17.08.2026: в истории 72 коммита без
         # conventional-префикса из 594, и правило, требующее переписать историю, не введут никогда.
@@ -183,6 +197,10 @@ jobs:
             RANGE="${{ github.event.pull_request.base.sha }}..HEAD"
             echo "формат обязателен для коммитов ЭТОГО PR (${RANGE})"
           else
+            if ! git merge-base --is-ancestor "$FROM" HEAD; then
+              echo "::error::точка включения формата не существует в текущей линии истории"
+              exit 1
+            fi
             RANGE="$FROM..HEAD"
             echo "формат обязателен для коммитов после $FROM"
           fi

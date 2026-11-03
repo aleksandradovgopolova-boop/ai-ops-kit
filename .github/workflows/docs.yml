@@ -18,7 +18,7 @@ on:
     # Required job build сохраняется; новый SHA проверяется через synchronize.
     types: [opened, synchronize]
   push:
-    branches: [main]
+    branches: [main, ci/history-cutover-qualification]
   workflow_dispatch: {}
 
 permissions:
