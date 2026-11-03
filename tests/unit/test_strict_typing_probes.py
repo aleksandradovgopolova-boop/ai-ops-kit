@@ -16,12 +16,17 @@ pytestmark = pytest.mark.skipif(find_spec("mypy") is None,
 # Один и тот же настоящий потребитель используется для positive и каждой негативной мутации.
 CONSUMER = '''
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_type
 from ai_ops_kit.engine.run_context import RunContext
 from ai_ops_kit.kernel.ports import ExecutorPort, ExecutionSpec, ExecutionResult
-from ai_ops_kit.shared.contracts import GateResultV2
+from ai_ops_kit.shared.contracts import GateResultV2, RouteResult
 from ai_ops_kit.shared.events import subscribe
 from ai_ops_kit.shared.budget import Budget, resolve_budget
+from ai_ops_kit.shared.ai_route import route
+from ai_ops_kit.engine.ai_route import route as legacy_route
+from ai_ops_kit.shared.review_verdict import (
+    build_record, load as load_review, checked_sources, who_checked_lines, node_title, persist,
+)
 
 ctx = RunContext.from_run_args(
     task_text="bounded task", signals={"risk": "low"}, child_root=Path("/tmp/child"),
@@ -45,6 +50,31 @@ budget.cost = 0.25
 resolved: Budget = resolve_budget(budget, {"max_model_calls": 4, "max_cost": 2.5, "max_duration": "2m"})
 remaining: int | None = resolved.remaining_calls()
 snapshot: dict[str, Any] = resolved.to_dict()
+decision = route({"task_type": "QUICK", "available_providers": []})
+legacy_decision = legacy_route({"task_type": "QUICK"})
+route_contract: RouteResult = decision
+legacy_contract: RouteResult = legacy_decision
+legacy_requires_human: bool = legacy_decision["human_approval_required"]
+provider: str | None = decision["selected_provider"]
+approval: bool = decision["human_approval_required"]
+route_reasons: list[str] = decision["reasons"]
+decision["selected_provider"] = None
+decision["selected_runtime"] = "generic-orchestrator"
+decision["human_approval_required"] = True
+decision["reasons"] = ["declared routing policy"]
+review_record = build_record("bounded-review", {"verified": True, "deterministic": ["test"]})
+review_sources: list[str] = checked_sources(review_record)
+review_lines: list[str] = who_checked_lines(review_record)
+review_title: str = node_title(review_record)
+saved_review: str | None = persist(Path("/tmp/child"), "bounded-review", {})
+review_verified: bool = review_record["verified"]
+review_revision: str | None = review_record["reviewed_revision"]
+review_record["verified"] = False
+review_record["reviewed_revision"] = None
+review_record["checked_by"]["deterministic"] = ["test"]
+review_record["outcome_verdict"] = "not_met"
+loaded_review = load_review(Path("/tmp/child"), "bounded-review")
+assert_type(loaded_review, dict[Any, Any] | None)
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -64,6 +94,7 @@ def _mypy(tmp_path, source):
     probe = tmp_path / "contract_consumer.py"
     probe.write_text(source)
     # Наличие импортов в файле доказываем до запуска; stderr/код 2 не принимаем за type-error.
+    assert probe.read_text() == source
     assert "from ai_ops_kit.engine.run_context import RunContext" in probe.read_text()
     return subprocess.run(
         [sys.executable, "-m", "mypy", "--config-file", str(ROOT / "pyproject.toml"),
@@ -78,6 +109,19 @@ def test_real_contract_consumer_passes_strict(tmp_path):
 
 
 @pytest.mark.parametrize(("before", "after", "error"), [
+    ('review_verified: bool', 'review_verified: str', '[assignment]'),
+    ('review_revision: str | None', 'review_revision: str', '[assignment]'),
+    ('review_record["verified"] = False', 'review_record["verified"] = "yes"', '[typeddict-item]'),
+    ('review_record["reviewed_revision"] = None', 'review_record["reviewed_revision"] = 42', '[typeddict-item]'),
+    ('review_record["checked_by"]["deterministic"] = ["test"]', 'review_record["checked_by"]["deterministic"] = "test"', '[typeddict-item]'),
+    ('review_record["outcome_verdict"] = "not_met"', 'review_record["outcome_verdict"] = False', '[typeddict-item]'),
+    ('legacy_requires_human: bool', 'legacy_requires_human: str', '[assignment]'),
+    ('provider: str | None', 'provider: str', '[assignment]'),
+    ('approval: bool', 'approval: str', '[assignment]'),
+    ('decision["selected_provider"] = None', 'decision["selected_provider"] = 42', '[typeddict-item]'),
+    ('decision["selected_runtime"] = "generic-orchestrator"', 'decision["selected_runtime"] = False', '[typeddict-item]'),
+    ('decision["human_approval_required"] = True', 'decision["human_approval_required"] = "conditional"', '[typeddict-item]'),
+    ('decision["reasons"] = ["declared routing policy"]', 'decision["reasons"] = "default"', '[typeddict-item]'),
     ('budget.max_model_calls = 4', 'budget.max_model_calls = "four"', '[assignment]'),
     ('budget.max_cost = 2.5', 'budget.max_cost = "quoted"', '[assignment]'),
     ('budget.max_duration = "2m"', 'budget.max_duration = []', '[assignment]'),
@@ -111,7 +155,8 @@ def test_effective_options_match_strict_without_leaking_to_other_modules():
     _, configured = process_options(["--config-file", str(ROOT / "pyproject.toml")])
     _, strict = process_options(["--config-file", str(ROOT / "pyproject.toml"), "--strict"])
     for module in ("ai_ops_kit.kernel.ports", "ai_ops_kit.shared.contracts",
-                   "ai_ops_kit.shared.events", "ai_ops_kit.shared.budget", "ai_ops_kit.engine.run_context"):
+                   "ai_ops_kit.shared.events", "ai_ops_kit.shared.budget", "ai_ops_kit.shared.ai_route",
+                   "ai_ops_kit.shared.review_verdict", "ai_ops_kit.engine.run_context"):
         effective = configured.clone_for_module(module)
         reference = strict.clone_for_module(module)
         for flag in PER_MODULE_OPTIONS | {"warn_redundant_casts"}:

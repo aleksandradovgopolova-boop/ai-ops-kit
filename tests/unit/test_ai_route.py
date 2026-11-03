@@ -31,3 +31,43 @@ class TestAiRouteScenarios:
     def test_scenario_has_reasons(self, sc):
         d = route(sc["inp"])
         assert d.get("reasons"), "пустые reasons"
+
+
+def test_unavailable_choices_stay_none_in_plain_dict_after_actual_registry_reads(monkeypatch):
+    from copy import deepcopy
+    from ai_ops_kit.shared import ai_route
+
+    signals = {"task_type": "QUICK", "available_providers": [], "available_runtimes": []}
+    before = deepcopy(signals)
+    actual_load, reads = ai_route.load, []
+
+    def traced_load(name):
+        result = actual_load(name)
+        reads.append(name)
+        return result
+
+    monkeypatch.setattr(ai_route, "load", traced_load)
+    result = ai_route.route(signals)
+    assert reads == ["routing-policy.yaml", "providers.yaml", "runtimes.yaml", "workflows.yaml"]
+    assert type(result) is dict
+    assert result["selected_provider"] is None and result["selected_runtime"] is None
+    assert result["classification_confidence"] == "normal"
+    assert signals == before
+
+
+@pytest.mark.parametrize(("approval", "expected"), [(True, True), (False, False), ("conditional", False)])
+def test_approval_keeps_existing_identity_semantics(monkeypatch, approval, expected):
+    from copy import deepcopy
+    from ai_ops_kit.shared import ai_route
+
+    actual_load = ai_route.load
+
+    def policy_load(name):
+        result = deepcopy(actual_load(name))
+        if name == "routing-policy.yaml":
+            result["approval_rules"] = [{"default": True, "human_approval_required": approval}]
+        return result
+
+    monkeypatch.setattr(ai_route, "load", policy_load)
+    result = ai_route.route({"task_type": "QUICK"})
+    assert result["human_approval_required"] is expected

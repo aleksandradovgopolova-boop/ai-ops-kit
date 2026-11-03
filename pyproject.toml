@@ -10,7 +10,7 @@ requires-python = ">=3.12"   # пол = версия, на которой РЕА
                              # ни разу не пересмотрели: он EOL с окт.2025, потребителей 0, а
                              # джоба python39-compat лишь ловила современный синтаксис (решение
                              # ep-2026-08-20-python-floor-3.12). Цель — человек не думает про версию.
-license = {text = "MIT"}
+license = {text = "PolyForm-Noncommercial-1.0.0"}
 dependencies = ["pyyaml>=6.0.3"]
 
 [project.scripts]
@@ -230,6 +230,8 @@ module = [
     "ai_ops_kit.shared.contracts",
     "ai_ops_kit.shared.events",
     "ai_ops_kit.shared.budget",
+    "ai_ops_kit.shared.ai_route",
+    "ai_ops_kit.shared.review_verdict",
     "ai_ops_kit.engine.run_context",
 ]
 # Полный набор --strict mypy 2.3.1, развёрнутый по модулям: strict=true в override

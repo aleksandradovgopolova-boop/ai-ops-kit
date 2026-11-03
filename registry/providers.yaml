@@ -7,6 +7,18 @@ schema_version: 1
 registry_type: providers
 
 providers:
+  codex-app-server:
+    display_name: Codex через существующую подписку ChatGPT
+    kind: cli-agent
+    protocols: [stdio-json-rpc]
+    auth: {method: existing-chatgpt-login, env: []}
+    adoption_status: qualification-only
+    implementation: ai_ops_kit/providers/codex_native.py
+    capabilities:
+      structured_output: {status: unsupported, value: false}
+      tool_calling: {status: unsupported, value: false}
+      text_generation: {status: degraded, value: true, note: "Локальный протокол проверяется без модели; живой workflow не квалифицирован. Только POSIX."}
+    known_limitations: [native-project-and-hook-trust-required, no-api-key-fallback, no-live-team-acceptance]
   anthropic:
     display_name: Anthropic
     kind: hosted-api

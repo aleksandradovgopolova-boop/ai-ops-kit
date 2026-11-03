@@ -28,10 +28,33 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import Path
+from collections.abc import Mapping
+from typing import Any, NotRequired, TypedDict
 
 import yaml
 
 from ai_ops_kit.shared import gate_dimensions
+
+
+class CheckedBy(TypedDict):
+    """Три существующих источника; элементы входных списков остаются открытой границей."""
+    deterministic: list[Any]
+    ai_judgment: list[Any]
+    human: list[Any]
+
+
+class ReviewVerdictRecord(TypedDict):
+    """Статическая проекция build_record(), не валидация прочитанного YAML."""
+    schema_version: int
+    kind: str
+    feature: str
+    reviewed_revision: str | None
+    reviewed_at: str
+    verified: bool
+    checked_by: CheckedBy
+    reason: Any  # из открытого evidence_verdict, без проверки/нормализации
+    outcome_verdict: NotRequired[str]
+
 
 RECORD_KIND = "review-verdict"
 
@@ -52,7 +75,7 @@ def record_path(child_root: str | Path, feature: str) -> Path:
     return Path(child_root) / "features" / str(feature) / "review" / "verdict.yaml"
 
 
-def _checked_by(evidence_verdict: dict) -> dict:
+def _checked_by(evidence_verdict: Mapping[str, Any] | None) -> CheckedBy:
     """Три списка пройденных гейтов по источнику доверия — из `evidence_verdict` (веха 4.2, #588)."""
     ev = evidence_verdict or {}
     return {"deterministic": list(ev.get("deterministic") or []),
@@ -60,12 +83,12 @@ def _checked_by(evidence_verdict: dict) -> dict:
             "human": list(ev.get("human") or [])}
 
 
-def _anything_checked(checked_by: dict) -> bool:
+def _anything_checked(checked_by: CheckedBy) -> bool:
     return any(checked_by.get(k) for k, _ in _SOURCE_LABELS)
 
 
-def build_record(feature: str, evidence_verdict: dict, *, revision: str | None = None,
-                 at: str | None = None, outcome_verdict: str | None = None) -> dict:
+def build_record(feature: str, evidence_verdict: Mapping[str, Any] | None, *, revision: str | None = None,
+                 at: str | None = None, outcome_verdict: str | None = None) -> ReviewVerdictRecord:
     """Собрать запись review-вердикта из `evidence_verdict` — БЕЗ новой модели проверки.
 
     Содержание вердикта берётся как есть (какие гейты пройдены и КЕМ); запись лишь добавляет, к какой
@@ -75,7 +98,7 @@ def build_record(feature: str, evidence_verdict: dict, *, revision: str | None =
     checked_by = _checked_by(evidence_verdict)
     ev = evidence_verdict or {}
     at = at or datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-    record = {
+    record: ReviewVerdictRecord = {
         "schema_version": 1,
         "kind": RECORD_KIND,
         "feature": str(feature),
@@ -90,7 +113,7 @@ def build_record(feature: str, evidence_verdict: dict, *, revision: str | None =
     return record
 
 
-def persist(child_root: str | Path, feature: str, evidence_verdict: dict, *,
+def persist(child_root: str | Path, feature: str, evidence_verdict: Mapping[str, Any] | None, *,
             revision: str | None = None, at: str | None = None,
             outcome_verdict: str | None = None) -> str | None:
     """Записать review-вердикт рядом с функцией. -> путь записи (относительный) или None.
@@ -115,7 +138,7 @@ def persist(child_root: str | Path, feature: str, evidence_verdict: dict, *,
     return str(path.relative_to(root)) if path.is_relative_to(root) else str(path)
 
 
-def load(child_root: str | Path, feature: str) -> dict | None:
+def load(child_root: str | Path, feature: str) -> dict[Any, Any] | None:
     """Прочитать запись review-вердикта функции. -> dict или None (нет файла / нечитаемо)."""
     path = record_path(child_root, feature)
     try:
@@ -125,13 +148,13 @@ def load(child_root: str | Path, feature: str) -> dict | None:
     return data if isinstance(data, dict) and data.get("kind") == RECORD_KIND else None
 
 
-def checked_sources(record: dict) -> list[str]:
+def checked_sources(record: Mapping[str, Any] | None) -> list[str]:
     """Человеко-ярлыки источников, которые РЕАЛЬНО что-то проверили: машина / ревьюер / человек."""
     cb = (record or {}).get("checked_by") or {}
     return [label for key, label in _SOURCE_LABELS if cb.get(key)]
 
 
-def who_checked_lines(record: dict) -> list:
+def who_checked_lines(record: Mapping[str, Any] | None) -> list[str]:
     """«Кем и что проверено» продуктовыми словами -> список строк (переиспользует gate_dimensions).
 
     `checked_by` записи имеет ту же форму, что `evidence_verdict` ждёт `run_verified_lines`, поэтому
@@ -140,7 +163,7 @@ def who_checked_lines(record: dict) -> list:
     return gate_dimensions.run_verified_lines((record or {}).get("checked_by") or {})
 
 
-def node_title(record: dict) -> str:
+def node_title(record: Mapping[str, Any] | None) -> str:
     """Короткий заголовок узла review для графа: «проверили: машина, независимый ревьюер»."""
     sources = checked_sources(record)
     if not sources:

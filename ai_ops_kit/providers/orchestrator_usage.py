@@ -91,7 +91,7 @@ def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, co
     # прайс-таблице, если есть токены+цена (cost_status=estimated); иначе None (unavailable).
     if cost is not None:
         cost_status = cost_status or "measured"
-    else:
+    elif cost_status != "unavailable":
         price = _PRICE_PER_MTOK.get(model)
         if price and in_tok is not None and out_tok is not None:
             cost = round(in_tok / 1e6 * price["in"] + out_tok / 1e6 * price["out"], 6)
@@ -108,6 +108,7 @@ def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, co
     stats, context = _call_buffers()
     rec.update(context)      # role/trigger/run_id/workitem_id/package_id/runtime/provider
     stats.append(rec)
+    return rec
 
 
 def main(argv):

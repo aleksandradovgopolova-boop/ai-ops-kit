@@ -11,18 +11,24 @@ name: Пульт состояния
 
 on:
   schedule:
-    - cron: "0 6 * * *"        # каждый день в 06:00 UTC; частоту меняйте здесь
+    - cron: "17 * * * *"       # полный reconcile каждый час; events ускоряют обновление
   workflow_dispatch: {}         # ручной запуск из вкладки Actions
   workflow_run:
-    workflows: [package-quality, docs, nightly-quality, nightly-coverage]
-    types: [completed]
-    branches: [main]
+    workflows: [package-quality, docs, pr-smoke, nightly-quality, nightly-coverage, release]
+    types: [requested, in_progress, completed]
+  issues:
+    types: [opened, edited, closed, reopened, deleted, transferred, milestoned, demilestoned]
   push:
     branches: [main]
     paths:                      # пересобирать сразу, когда меняются источники чисел
       - "VERSION"
       - "registry/**"
       - "quality/gates.yaml"
+      - "quality/premerge-checks.json"
+      - "history/plan-history.yaml"
+      - "newsfragments/**"
+      - "ai_ops_kit/devtools/release_*.py"
+      - "ai_ops_kit/integrations/github.py"
       - "dashboard/**"
       # продуктовые артефакты, которые пульт читает в блоки и модалки
       - "README.md"
@@ -43,13 +49,15 @@ permissions:
   pages: write
   id-token: write
 
-# Одновременно — одна публикация; новый запуск отменяет предыдущий незавершённый.
+# Одна публикация. Не прерывать deploy; перед публикацией ещё раз проверить source SHA.
 concurrency:
   group: status-dashboard
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build-and-deploy:
+    # dispatch чужой ветки/тега не должен исполнять repo code с Pages credentials.
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -57,19 +65,22 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          fetch-depth: 3  # последние три изменения для пульта, без полной истории
+          # workflow_run не исполняет head внешнего PR: GITHUB_SHA — default branch.
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
 
       - name: Зависимости сборщика
-        run: pip install pyyaml   # для планов/решений и живых секций паспорта
+        run: pip install 'pyyaml==6.*' 'pytest==9.*' 'hypothesis==6.*'   # сборка и live pytest с conftest
 
       - name: Собрать свежие показатели
         env:
           GH_TOKEN: ${{ github.token }}   # build_data.py читает задачи через gh
-        run: python3 dashboard/build_data.py --repo .
+        run: python3 dashboard/build_data.py --repo . --release-plan
 
       - uses: actions/configure-pages@v6
 
@@ -78,6 +89,17 @@ jobs:
         with:
           path: dashboard
 
+      - name: Проверить актуальность перед публикацией
+        env:
+          GH_TOKEN: ${{ github.token }}
+          AI_OPS_RELEASE_PROJECTION_VERIFY: "1"
+        run: python3 -m pytest tests/unit/test_release_plan_sources.py::test_live_projection_is_current_before_deploy -q
+
       - name: Опубликовать на GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v5
+
+      - name: Показать только опубликованный результат
+        env:
+          AI_OPS_RELEASE_DEPLOY_CONFIRMED: ${{ steps.deploy.outcome }}
+        run: python3 dashboard/build_data.py --repo . --release-summary

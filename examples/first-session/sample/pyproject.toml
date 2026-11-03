@@ -1,0 +1,5 @@
+[project]
+name = "greeting-sample"
+version = "0.0.0"
+description = "Synthetic local onboarding example"
+requires-python = ">=3.12"

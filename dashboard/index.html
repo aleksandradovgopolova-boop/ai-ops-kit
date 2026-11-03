@@ -504,6 +504,11 @@
 </div>
   </section>
 
+  <section class="panel wide" aria-label="Следующий выпуск">
+    <div class="eyebrow">Следующий выпуск · по проверяемым источникам</div>
+    <div id="release-plan">План выпуска ещё не получен.</div>
+  </section>
+
   <section class="panel roadstrip" id="plan" aria-label="Роадмап">
     <div class="eyebrow"><span>Роадмап · направление</span>
       <button class="more" data-modal="roadmap">весь роадмап →</button></div>
@@ -1576,6 +1581,17 @@
 
     function render(d){
       DATA=d;
+      const rp=d.release_plan, rbox=$("release-plan");
+      if(rp&&rp.message){
+        const rows=rp.implementations||[];
+        rbox.innerHTML=`<p>${esc(rp.message.summary)}</p>`+
+          `<p>Состав: ${rows.length} изменений. Готовность выпуска: ${rp.cycle_state==="idle"?"новый выпуск пока не требуется":(rp.release_ready?"проверки пройдены":"ещё не подтверждена")}. Доставка дочкам: не подтверждена.</p>`+
+          `<p>${(rp.message.next||[]).map(esc).join(" ")}</p>`+
+          `<details><summary>Состав и доказательства</summary><ul>`+
+          rows.map(p=>`<li>PR #${esc(String(p.pr))} · проверки ${p.ci_observed?"подтверждены":"не подтверждены"} · ${esc(p.merge_sha||"")}</li>`).join("")+
+          `</ul><p>${esc((rp.blockers||[]).join(", "))}</p></details>`;
+      }else{rbox.textContent="План выпуска ещё не получен. Готовность не подтверждена.";}
+
       $("version").textContent=d.version||"—";
       $("channel").textContent=d.channel||"—";
       const MRU={EXISTING_PRODUCT:"существующая кодовая база",NEW_PRODUCT:"новая кодовая база",

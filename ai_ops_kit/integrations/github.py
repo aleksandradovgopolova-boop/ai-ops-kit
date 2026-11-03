@@ -11,6 +11,9 @@
 
 Оба транспорта возвращают REST-JSON одной формы, поэтому нормализатор один.
 
+Связи closing issue читаются фиксированным GraphQL query того же клиента; это чтение,
+не mutation. Для них также проверяется полная пагинация.
+
 ТРЕТЬЕ СОСТОЯНИЕ. Ни один вызов не «падает молча в пустоту» и не притворяется, что задач нет:
 если доступа к GitHub нет (нет `gh` и токена, не GitHub-репозиторий, сеть/API ответили ошибкой),
 результат — `Availability(ok=False, reason=...)` с НАЗВАННОЙ причиной. `FetchResult.ok is False`
@@ -158,20 +161,29 @@ class GitHubClient:
 
     # -- транспорты (единственное, что ходит наружу) ------------------------------------------
 
-    def _gh_api(self, path: str, params: "dict | None" = None) -> list:
+    def _gh_api(self, path: str, params: "dict | None" = None, *, paginate=True):
         """`gh api --paginate` — gh сам держит токен и пагинацию. Возвращает список объектов."""
         endpoint = path.lstrip("/")
         if params:
-            query = "&".join(f"{k}={v}" for k, v in params.items())
+            from urllib.parse import urlencode
+            query = urlencode(params)
             endpoint = f"{endpoint}?{query}"
-        cmd = ["gh", "api", "--paginate", "-H", "Accept: application/vnd.github+json", endpoint]
+        cmd = ["gh", "api", *(["--paginate"] if paginate else []),
+               "-H", "Accept: application/vnd.github+json", endpoint]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=self.timeout * 4)
         if proc.returncode != 0:
             raise GitHubError((proc.stderr or proc.stdout or "gh api failed").strip())
         # --paginate склеивает страницы как несколько JSON-массивов подряд; разбираем по одному.
-        return _decode_json_stream(proc.stdout)
+        return _decode_json_stream(proc.stdout) if paginate else json.loads(proc.stdout)
 
-    def _rest_get(self, path: str, params: "dict | None" = None) -> list:
+    def _read_headers(self):
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "ai-ops-kit",
+                   "X-GitHub-Api-Version": "2022-11-28"}
+        if self.token:
+            headers["Authorization"] = f"Bearer {self.token}"
+        return headers
+
+    def _rest_get(self, path: str, params: "dict | None" = None, *, paginate=True):
         """urllib напрямую к api.github.com, пагинация по заголовку Link (образец — orchestrator_http)."""
         import urllib.error
         import urllib.parse
@@ -180,11 +192,7 @@ class GitHubClient:
         endpoint = path.lstrip("/")
         query = urllib.parse.urlencode(params or {})
         url = f"{API_ROOT}/{endpoint}" + (f"?{query}" if query else "")
-        headers = {"Accept": "application/vnd.github+json",
-                   "User-Agent": "ai-ops-kit",
-                   "X-GitHub-Api-Version": "2022-11-28"}
-        if self.token:
-            headers["Authorization"] = f"Bearer {self.token}"
+        headers = self._read_headers()
         items: list = []
         while url:
             req = urllib.request.Request(url, headers=headers, method="GET")
@@ -201,6 +209,8 @@ class GitHubClient:
                 raise GitHubError(f"HTTP {e.code} {detail}".strip()) from e
             except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
                 raise GitHubError(f"сеть: {e}") from e
+            if not paginate:
+                return payload
             if isinstance(payload, list):
                 items.extend(payload)
             else:
@@ -223,6 +233,28 @@ class GitHubClient:
         except GitHubError as e:
             return FetchResult(False, reason=str(e))
         return FetchResult(True, items=[normalize(x) for x in raw], source=source)
+
+    def read_page(self, path: str, params: "dict | None" = None):
+        """Одна read-only REST-страница без потери wrapper/total_count.
+
+        Actions возвращает объект с коллекцией, а не массив. Полноту и стабильность
+        страниц проверяет потребитель; legacy normalized API остаётся прежним.
+        Произвольный хост/чужой репозиторий этим входом не читается.
+        """
+        prefix = f"repos/{self.repo}"
+        if not parse_slug(self.repo) or not (path == prefix or path.startswith(prefix + "/")):
+            raise GitHubError("read path outside repository")
+        if any(part in (".", "..") for part in path.split("/")) or "?" in path or "#" in path:
+            raise GitHubError("invalid read path")
+        av = self.availability()
+        if not av.ok:
+            raise GitHubError(av.reason)
+        try:
+            if av.transport == "gh":
+                return self._gh_api(path, params, paginate=False)
+            return self._rest_get(path, params, paginate=False)
+        except (ValueError, OSError, subprocess.SubprocessError) as exc:
+            raise GitHubError("read page unavailable or invalid") from exc
 
     # -- предметные чтения --------------------------------------------------------------------
 
@@ -251,6 +283,67 @@ class GitHubClient:
 
     def labels(self) -> FetchResult:
         return self._fetch("repos/%s/labels" % self.repo, {"per_page": 100}, _norm_label)
+
+    def _closing_page(self, number, cursor):
+        """Фиксированный read-only GraphQL query; mutation пользователю не передаётся."""
+        query = """query($owner:String!,$name:String!,$number:Int!,$cursor:String){
+          repository(owner:$owner,name:$name){pullRequest(number:$number){
+            closingIssuesReferences(first:100,after:$cursor){totalCount
+              nodes{number repository{nameWithOwner}} pageInfo{hasNextPage endCursor}}}}}"""
+        owner, name = self.repo.split("/")
+        body = json.dumps({"query": query, "variables": {"owner": owner, "name": name,
+                          "number": number, "cursor": cursor}}).encode()
+        av = self.availability()
+        if not av.ok:
+            raise GitHubError(av.reason)
+        if av.transport == "gh":
+            proc = subprocess.run(["gh", "api", "graphql", "--input", "-"], input=body,
+                                  capture_output=True, timeout=self.timeout * 4)
+            if proc.returncode:
+                detail = (proc.stderr or b"").decode("utf-8", "replace")
+                denied = "403" in detail or "Resource not accessible" in detail
+                raise GitHubError("github_read_permission_denied" if denied else "closing issue query unavailable")
+            data = json.loads(proc.stdout)
+        else:
+            import urllib.request
+            req = urllib.request.Request(API_ROOT + "/graphql", data=body,
+                                         headers={**self._read_headers(), "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=self.timeout) as response:
+                data = json.loads(response.read())
+        if data.get("errors"):
+            denied = any(e.get("type") == "FORBIDDEN" for e in data["errors"] if isinstance(e, dict))
+            raise GitHubError("github_read_permission_denied" if denied else "closing issue query incomplete")
+        return data["data"]["repository"]["pullRequest"]["closingIssuesReferences"]
+
+    def closing_issue_numbers(self, number):
+        """Полная каноническая PR→issue связь, без отбора по времени публикации Release."""
+        rows, cursor, total, cursors = [], None, None, set()
+        try:
+            if type(number) is not int or number < 1 or not parse_slug(self.repo):
+                raise GitHubError("invalid closing issue query identity")
+            for _ in range(100):
+                page = self._closing_page(number, cursor)
+                count, nodes, info = page["totalCount"], page["nodes"], page["pageInfo"]
+                if type(count) is not int or count < 0 or (total is not None and count != total):
+                    raise GitHubError("closing issue total changed")
+                total = count
+                if not isinstance(nodes, list) or len(nodes) > 100 or type(info["hasNextPage"]) is not bool:
+                    raise GitHubError("invalid closing issue page")
+                rows.extend((n["repository"]["nameWithOwner"], n["number"]) for n in nodes)
+                if any(type(n) is not int or n < 1 for _, n in rows) or len(set(rows)) != len(rows):
+                    raise GitHubError("ambiguous closing issue identity")
+                if not info["hasNextPage"]:
+                    if len(rows) != total:
+                        raise GitHubError("incomplete closing issues")
+                    return FetchResult(True, items=sorted(n for repo, n in rows if repo.casefold() == self.repo.casefold()), source="graphql")
+                cursor = info["endCursor"]
+                if not isinstance(cursor, str) or not cursor or cursor in cursors:
+                    raise GitHubError("invalid closing issue cursor")
+                cursors.add(cursor)
+            raise GitHubError("closing issue reconciliation budget exceeded")
+        except (GitHubError, ValueError, TypeError, KeyError, AttributeError, OSError, subprocess.SubprocessError) as exc:
+            denied = "github_read_permission_denied" in str(exc) or getattr(exc, "code", None) == 403
+            return FetchResult(False, reason="github_read_permission_denied" if denied else "closing issue query unavailable, incomplete or changed")
 
     # -- предметные ЗАПИСИ (approval-gated: выполняются только по явному одобрению человека) -------
     #

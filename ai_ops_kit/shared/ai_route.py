@@ -23,6 +23,8 @@ import yaml
 
 from typing import Any
 
+from ai_ops_kit.shared.contracts import RouteResult
+
 PKG_ROOT = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
                  Path(__file__).resolve().parents[1])
 REG = PKG_ROOT / "registry"
@@ -41,15 +43,15 @@ def _match(when: Any, ctx: dict[str, Any]) -> bool:
     return True
 
 
-def route(inp: dict[str, Any]) -> dict[str, Any]:
+def route(inp: dict[str, Any]) -> RouteResult:
     policy = load("routing-policy.yaml")
     providers = load("providers.yaml")["providers"]
     runtimes = load("runtimes.yaml")["runtimes"]
     workflows = load("workflows.yaml")["workflows"]
 
-    available_providers = inp.get("available_providers", list(providers.keys()))
-    available_runtimes = inp.get("available_runtimes", list(runtimes.keys()))
-    reasons = []
+    available_providers: list[str] = inp.get("available_providers", list(providers.keys()))
+    available_runtimes: list[str] = inp.get("available_runtimes", list(runtimes.keys()))
+    reasons: list[str] = []
     low_confidence = False   # v2.123: классификация без явного сигнала тяжести -> подтвердить preview
 
     # 1. workflow: правила policy (эскалации) -> точное имя контракта ->
@@ -58,8 +60,8 @@ def route(inp: dict[str, Any]) -> dict[str, Any]:
     # Правило, целящее в ещё не зарегистрированный контракт (напр. CRITICAL, post-MVP),
     # применяется как ЭСКАЛАЦИЯ к базовому workflow (reason + ручное одобрение), а не
     # как отдельный workflow — иначе route ссылается на несуществующую стадийную схему.
-    workflow = None
-    escalations = []
+    workflow: str | None = None
+    escalations: list[str] = []
     for rule in policy.get("workflow_rules", []):
         if "when" in rule and _match(rule["when"], inp):
             target = rule.get("workflow")
@@ -108,7 +110,7 @@ def route(inp: dict[str, Any]) -> dict[str, Any]:
             reasons.append(f"unknown task_type '{inp.get('task_type')}' -> ENGINEERING (QUICK недоступен)")
 
     # 2. provider prefer/forbid + model_class (из provider_rules)
-    prefer_provider, forbid_provider, model_class = [], [], None
+    prefer_provider, forbid_provider, model_class = [], [], None  # type: tuple[list[str], list[str], str | None]
     for rule in policy.get("provider_rules", []):
         applies = ("default" in rule) or _match(rule.get("when", {}), inp)
         if not applies:
@@ -141,7 +143,7 @@ def route(inp: dict[str, Any]) -> dict[str, Any]:
         reasons.append("no allowed provider available")
 
     # 3. runtime
-    prefer_runtime = []
+    prefer_runtime: list[str] = []
     for rule in policy.get("runtime_rules", []):
         ctx = dict(inp)
         # спец-ключ available_runtime: применимо, если рантайм доступен
@@ -167,7 +169,7 @@ def route(inp: dict[str, Any]) -> dict[str, Any]:
         execution_mode = rt.get("preferred_mode", "sequential")
 
     # 5. approval
-    human_approval = "conditional"
+    human_approval: str | bool = "conditional"
     for rule in policy.get("approval_rules", []):
         if ("default" in rule) or _match(rule.get("when", {}), inp):
             if "human_approval_required" in rule:
@@ -180,7 +182,7 @@ def route(inp: dict[str, Any]) -> dict[str, Any]:
         human_approval_required = True
 
     # 6. required/missing capabilities (из workflow-контракта)
-    required = workflows.get(workflow, {}).get("required_capabilities", [])
+    required: list[str] = workflows.get(workflow, {}).get("required_capabilities", [])
     prov_caps = providers.get(selected_provider, {}).get("capabilities", {}) if selected_provider else {}
     def provider_supports(capname: str) -> bool:
         c = prov_caps.get(capname)
@@ -193,7 +195,7 @@ def route(inp: dict[str, Any]) -> dict[str, Any]:
     missing = [c for c in required if not provider_supports(c)]
 
     # 7. fallbacks
-    fallbacks = []
+    fallbacks: list[dict[str, str | None]] = []
     for p in prefer_provider:
         if p != selected_provider and p in available_providers and p not in forbid_provider:
             fallbacks.append({"provider": p, "runtime": selected_runtime})

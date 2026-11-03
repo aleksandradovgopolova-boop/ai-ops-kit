@@ -105,3 +105,25 @@ def test_review_path_writes_nothing_when_no_reviews(tmp_path: Path):
     from ai_ops_kit.engine import review_branch
     assert review_branch._persist_review_verdict(tmp_path, "express-checkout", [], {}, None) is None
     assert not rv.record_path(tmp_path, "express-checkout").exists()
+
+
+def test_build_record_keeps_input_and_copies_checked_lists():
+    """Создание состояния не меняет исходный вердикт и отделяет списки источников."""
+    from copy import deepcopy
+    source = deepcopy(_EV)
+    before = deepcopy(source)
+    record = rv.build_record('bounded-review', source, at='2026-11-01T00:00:00+00:00')
+    assert record['checked_by']['deterministic'] == source['deterministic']
+    assert record['checked_by']['deterministic'] is not source['deterministic']
+    record['checked_by']['deterministic'].append('another-check')
+    assert source == before
+
+
+def test_load_does_not_claim_to_validate_complete_record(tmp_path):
+    """Прежняя открытая YAML-граница не дополняет и не нормализует запись."""
+    path = rv.record_path(tmp_path, 'partial')
+    path.parent.mkdir(parents=True)
+    raw = {'kind': rv.RECORD_KIND, 'verified': 'legacy-value', 7: 'numeric-key'}
+    path.write_text(yaml.safe_dump(raw), encoding='utf-8')
+    assert path.is_file() and path.read_text(encoding='utf-8')
+    assert rv.load(tmp_path, 'partial') == raw
