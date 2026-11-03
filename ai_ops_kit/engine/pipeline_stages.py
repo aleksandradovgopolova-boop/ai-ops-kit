@@ -194,7 +194,7 @@ def _pipeline_assess_readiness(gates, coll, signals, plan, child_root, wid, work
                                baseline_diff, baseline_checks, committed_sha, base_sha,
                                reviewer_proposer, budget, loop, require_fix,
                                tree_clean_before_checks, tree_clean_after_checks, prepare_ok,
-                               commit, effective_approval_signals, security_pack_result, gate_ev):
+                               commit, effective_approval_signals, security_pack_result, gate_ev, approval_base=None):
     """Фаза 8-вердикт: собирает готовность прогона к PR — evidence-ревизия, spec-depth, baseline-diff,
     квалификация окружения, перепроверка одобрений после диффа, связность контуров и итоговый ready.
     Возвращает dict полей, которые далее проецируются в отчёт и в список not_yet."""
@@ -243,7 +243,14 @@ def _pipeline_assess_readiness(gates, coll, signals, plan, child_root, wid, work
     if commit and committed_sha:
         try:
             from ai_ops_kit.gates import approvals as _appr
-            _changed = _committed_changed_files(work_root, committed_sha)
+            if approval_base:
+                from ai_ops_kit.engine.pipeline_git import _git
+                rc, names, _ = _git(work_root, "diff", "--name-only", "-z", approval_base, committed_sha)
+                if rc:
+                    raise ValueError("диапазон проверки approvals недоступен")
+                _changed = [p for p in names.split("\0") if p]
+            else:
+                _changed = _committed_changed_files(work_root, committed_sha)
             # v3.35 Product Operating Model: гейт `contour_consistency` ИСПОЛНЯЕТСЯ здесь — на том
             # же diff коммита, что и recheck одобрений. Advisory: несогласованность даёт warn.
             contour_consistency = contour_consistency_evidence(child_root, wid, _changed)
