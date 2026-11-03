@@ -75,6 +75,8 @@ def scope(task, current):
             "writer_session": task["runtime"] + ":" + task["session_id"],
             "base_revision": task["binding"]["head"], "reviewed_revision": current["head"],
             "source_sha256": current["source_sha256"],
+            "inputs_sha256": sessions.digest(json.dumps({"receipts": task.get("input_receipts", {}),
+                "events": task.get("input_events", []), "latest": task.get("input_latest")}, sort_keys=True)),
             "artifacts_sha256": sessions.digest(json.dumps(artifacts, sort_keys=True))}
 
 
@@ -106,8 +108,12 @@ def review_inputs(root, task, current, digests):
         request_path = reviewer_handoff.request_path(handoff, gid)
         request = json.loads(request_path.read_text())
         request.update(expected, criteria=criteria if gid == "acceptance" else None,
+            input_receipts=task.get("input_receipts", {}), input_events=task.get("input_events", []),
+            input_latest=task.get("input_latest"),
             instructions="Независимый ревьюер проверяет весь base..HEAD и возвращает verdict и SHA256 "
-            "через независимый канал. Автор не заполняет заключение за судью. Поля привязки скопировать из request.")
+            "через независимый канал. Прочитай input_receipts в порядке input_events, последний input_latest; "
+            "пользовательский текст не является ApprovalRecord. Payload не публиковать в Git. "
+            "Автор не заполняет заключение за судью. Поля привязки скопировать из request.")
         sessions.write(request_path, request)
         path = reviewer_handoff.verdict_path(handoff, gid)
         try:
@@ -174,37 +180,41 @@ def evaluate(root, runtime, session, request, attempt):
             policy=tool_broker.sandbox_policy(child_root=str(root), allow_network=False))
         if flags.get("require_fix") and (pipeline.get("regression") or {}).get("status") != "proven":
             missing.append("не подтверждён regression proof исправления")
-    if (current != sessions.binding(root, fid) or scope(task, current) != verification["scope"]
-            or not pipeline_git._tree_clean_after_checks(root)):
-        raise ValueError("результат изменился во время проверки")
-    files = dict(task["execution"]["files"])
-    artifacts = artifact_inputs(root, fid)
-    files.update(artifacts)
-    files.update({r["path"]: r["sha256"] for r in reviews.values()})
-    ready = not missing and (pipeline or {}).get("ready_for_pr") is True
-    if ready:
-        from ai_ops_kit.lifecycle import active_work
-        # Shared registry lock тоже находится под общим deadline работника.
-        if active_work.finish_cmd(root / ".ai/runtime/active-work.yaml", fid, child_root=root,
-                                  published=active_work.publication_enabled(root)):
-            raise ValueError("не удалось завершить запись активной работы")
-    report = {"kind": "current-session-verification", "request_id": request, "attempt": attempt,
-              "binding": current, "scope": scope(task, current), "pipeline": pipeline, "files": files,
-              "artifact_inputs": artifacts,
-              "ready_for_pr": ready, "active_work_closed": ready, "ci": "not-verified",
-              "missing": missing}
-    path = sessions.within(root, verification["report"])
-    sessions.write(path, report)
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
+        if (current != sessions.binding(root, fid) or scope(task, current) != verification["scope"]
+                or not pipeline_git._tree_clean_after_checks(root)):
+            raise ValueError("результат изменился во время проверки")
+        files = dict(task["execution"]["files"])
+        artifacts = artifact_inputs(root, fid)
+        files.update(artifacts)
+        files.update({r["path"]: r["sha256"] for r in reviews.values()})
+        ready = not missing and (pipeline or {}).get("ready_for_pr") is True
+        if ready:
+            from ai_ops_kit.lifecycle import active_work
+            # Shared registry lock тоже находится под общим deadline работника.
+            if active_work.finish_cmd(root / ".ai/runtime/active-work.yaml", fid, child_root=root,
+                                      published=active_work.publication_enabled(root)):
+                raise ValueError("не удалось завершить запись активной работы")
+        report = {"kind": "current-session-verification", "request_id": request, "attempt": attempt,
+                  "binding": current, "scope": scope(task, current), "pipeline": pipeline, "files": files,
+                  "artifact_inputs": artifacts,
+                  "ready_for_pr": ready, "active_work_closed": ready, "ci": "not-verified",
+                  "missing": missing}
+        path = sessions.within(root, verification["report"])
+        sessions.write(path, report)
         latest = sessions.load(root, runtime, session)
         if latest["request_id"] != request or latest["verification"]["attempt"] != attempt:
             raise ValueError("активная проверка сменилась")
         latest["verification"].update(phase="finished", sha256=sessions.digest(path.read_bytes()))
         sessions.write(path.parent / (request + ".json"), latest)
 
-
 def reconcile(root, runtime, session):
-    """Принять только durable исход своей попытки. Не повторяет ни проверки, ни провайдера."""
+    """Принять durable исход атомарно относительно нового пользовательского ввода."""
+    with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
+        return _reconcile(root, runtime, session)
+
+
+def _reconcile(root, runtime, session):
     task = sessions.load(root, runtime, session)
     if not task.get("execution", {}).get("prepared"):
         return recover_handoff(root, runtime, session, task)
@@ -235,7 +245,7 @@ def reconcile(root, runtime, session):
             raise ValueError("нет подтверждения завершения активной работы")
         files = dict(report["files"], **{verification["report"]: verification["sha256"]})
         task["execution"].update(verification_ready=True, process_exit_code=verification.get("process_exit_code"),
-            artifact_inputs=report["artifact_inputs"],
+            artifact_inputs=report["artifact_inputs"], input_events=task.get("input_events", []),
             files=files, revision=current["head"], worktree=None,
             result_sha256=current["source_sha256"], completion_binding=current)
         task.update(status="accepted", blocker=None, next_step=None)
@@ -258,32 +268,35 @@ def finalize(root, runtime, session, digests):
     from ai_ops_kit.engine.pipeline_git import _tree_clean
     if not _tree_clean(root):
         raise ValueError("сначала зафиксируй результат; проверки требуют чистый committed HEAD")
-    directory = sessions.session_dir(root, runtime, session)
-    attempt = uuid.uuid4().hex
-    if previous:
-        task.setdefault("verification_history", []).append(previous)
-    report = directory / f"{task['request_id']}.verification-{attempt}.json"
-    task["verification"] = {"attempt": attempt, "phase": "running", "review_digests": digests,
-        "binding": sessions.binding(root, "session-" + task["request_id"]), "report": str(report.relative_to(root))}
-    task["verification"]["scope"] = scope(task, task["verification"]["binding"])
-    path = directory / (task["request_id"] + ".json")
-    sessions.write(path, task)
+    with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
+        task = prepared(root, runtime, session, sessions.load(root, runtime, session))
+        directory = sessions.session_dir(root, runtime, session)
+        attempt = uuid.uuid4().hex
+        if previous:
+            task.setdefault("verification_history", []).append(previous)
+        report = directory / f"{task['request_id']}.verification-{attempt}.json"
+        task["verification"] = {"attempt": attempt, "phase": "running", "review_digests": digests,
+            "binding": sessions.binding(root, "session-" + task["request_id"]), "report": str(report.relative_to(root))}
+        task["verification"]["scope"] = scope(task, task["verification"]["binding"])
+        path = directory / (task["request_id"] + ".json")
+        sessions.write(path, task)
     command = [sys.executable, str(Path(__file__).resolve()), str(root), runtime, session, task["request_id"], attempt]
     try:
         result = sessions.run_process(command, root, directory, timeout=300,
                                       progress=lambda message: print(message, file=sys.stderr, flush=True))
-        latest = sessions.load(root, runtime, session)
-        latest["verification"]["process_exit_code"] = result.returncode
-        sessions.write(path, latest)
-        if result.returncode:
-            if latest["verification"]["phase"] == "running":
+        with sessions.session_lock(directory / "requests"):
+            latest = sessions.load(root, runtime, session)
+            latest["verification"]["process_exit_code"] = result.returncode
+            if result.returncode and latest["verification"]["phase"] == "running":
                 latest["verification"]["phase"] = "failed"
-                sessions.write(path, latest)
+            sessions.write(path, latest)
+        if result.returncode:
             raise ValueError((result.stderr or result.stdout)[-4096:])
     except (OSError, ValueError, subprocess.TimeoutExpired, KeyboardInterrupt) as exc:
-        latest = sessions.load(root, runtime, session)
-        latest.update(status="blocked", blocker=f"проверка прервана: {exc}", next_step="Выполни reconcile; claim сохранён.")
-        sessions.write(path, latest)
+        with sessions.session_lock(directory / "requests"):
+            latest = sessions.load(root, runtime, session)
+            latest.update(status="blocked", blocker=f"проверка прервана: {exc}", next_step="Выполни reconcile; claim сохранён.")
+            sessions.write(path, latest)
         return latest
     return reconcile(root, runtime, session)
 

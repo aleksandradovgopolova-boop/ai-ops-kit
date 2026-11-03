@@ -457,13 +457,14 @@ def test_new_prompt_during_preparation_cannot_execute_with_old_signals(project, 
     def replace_after_preparation(*args, **kwargs):
         result = original(*args, **kwargs)
         assert result is None
-        new_task = sessions.begin(project, "codex", "replaced", "Совсем другой запрос")
-        assert new_task["request_id"] != task["request_id"]
-        return result
+        # Известная автономная подготовка теперь закрыта для hook continuation
+        # и не может быть вытеснена новым запросом без явного разрешения исхода.
+        sessions.begin(project, "codex", "replaced", "Совсем другой запрос")
+        pytest.fail("autonomous preparation must not be replaced")
     monkeypatch.setattr(cli, "prepare", replace_after_preparation)
     assert cli.main(args) == 2
     assert not (project / ".ai/runtime/process-observed").exists()
-    assert sessions.load(project, "codex", "replaced")["prompt"] == "Совсем другой запрос"
+    assert sessions.load(project, "codex", "replaced")["prompt"] == task["prompt"]
     assert not list(sessions.session_dir(project, "codex", "replaced").glob("*.execution-claim"))
 
 

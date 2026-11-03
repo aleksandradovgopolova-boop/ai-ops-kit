@@ -59,6 +59,63 @@ def resume_current(root, runtime, session, task):
     return task
 
 
+def continuation(root, runtime, session, task):
+    """Разрешить только проверенную передачу текущему агенту, без запуска процесса."""
+    execution = task.get("execution") or {}
+    claim = sessions.session_dir(root, runtime, session) / (task["request_id"] + ".execution-claim")
+    if task.get("status") == "pending" and not execution and not claim.exists() and not claim.is_symlink():
+        waiting_continuation(root, runtime, session, task)
+        sessions.artifact_inputs(root, "session-" + task["request_id"])
+        return task
+    if (execution.get("mode") != "current-session" or execution.get("prepared") is not True
+            or task.get("status") not in ("running", "blocked") or claim.is_symlink()
+            or not claim.is_file() or claim.read_bytes() != b""):
+        raise ValueError("нет подтверждённой current-session передачи; неизвестный исход сохранён")
+    import copy
+    from ai_ops_kit.cli.project_session_completion import record_prepared
+    checked = copy.deepcopy(task)
+    record_prepared(root, checked)
+    if any(execution.get("files", {}).get(path) != checksum
+           for path, checksum in checked["execution"]["files"].items()):
+        raise ValueError("подготовка current-session не подтверждена")
+    sessions.artifact_inputs(root, "session-" + task["request_id"])
+    return resume_current(root, runtime, session, task)
+
+
+def waiting_continuation(root, runtime, session, task):
+    """Только зафиксированный запрос данных/spec текущего агента, не fresh pending."""
+    from ai_ops_kit.engine import pipeline_helpers, run_plan
+    sessions.pending(root, runtime, session)
+    intake, preparation = task.get("intake") or {}, task.get("preparation") or {}
+    if intake:
+        missing = pipeline_helpers.missing_intake_signals(intake.get("signals"))
+        if (intake.get("mode") != "current-session" or not isinstance(intake.get("signals"), dict)
+                or not missing or intake.get("missing") != missing):
+            raise ValueError("ожидаемый current-session intake не подтверждён")
+        return
+    fid = "session-" + task["request_id"]
+    path = f"features/{fid}/spec.yaml"
+    if (preparation.get("mode") != "current-session" or preparation.get("ready") is not False
+            or preparation.get("spec") != path or not isinstance(preparation.get("signals"), dict)):
+        raise ValueError("нет подтверждённого ожидания данных текущим агентом")
+    plan = run_plan.build_plan(dict(preparation["signals"], task_text=task["prompt"]), workitem_id=fid)
+    spec = yaml.safe_load(sessions.within(root, path).read_text())
+    if (preparation.get("workflow") != plan["base_workflow"] or not isinstance(spec, dict)
+            or spec.get("kind") != "spec" or spec.get("workitem_id") != fid
+            or not isinstance(spec.get("sections"), dict)):
+        raise ValueError("ожидающая спецификация не принадлежит сохранённой задаче")
+
+
+def intake_signals(task, raw):
+    stored = ((task.get("intake") or {}).get("signals") or
+              (task.get("preparation") or {}).get("signals") or
+              (task.get("provider_preparation") or {}).get("signals", {}))
+    provided = json.loads(raw) if raw is not None else {}
+    if not isinstance(provided, dict) or not isinstance(stored, dict):
+        raise ValueError("signals должен быть JSON object")
+    return dict(stored, **provided)
+
+
 def native_provider_hook(directory):
     """Машинный вывод отдельного native hook: библиотека providers возвращает данные."""
     from ai_ops_kit.providers import codex_native_hook
@@ -69,7 +126,7 @@ def native_provider_hook(directory):
     print(json.dumps(result, ensure_ascii=False))
 
 
-def prepare(root, runtime, session, task, signals):
+def prepare(root, runtime, session, task, signals, *, autonomous=False):
     """Штатная спецификация ДО claim/модели; текущий runtime заполняет её из запроса."""
     from ai_ops_kit.engine import run_plan
     from ai_ops_kit.gates import preflight, spec_levels
@@ -110,6 +167,7 @@ def prepare(root, runtime, session, task, signals):
     except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError) as exc:
         errors.append(str(exc))
     preparation = {"spec": relative, "signals": signals, "workflow": plan["base_workflow"],
+                   "mode": "autonomous" if autonomous else "current-session",
                    "coverage": coverage, "ready": not errors}
     saved = sessions.save_preparation(root, runtime, session, task["request_id"], preparation,
                                      "; ".join(errors) if errors else None)
@@ -137,12 +195,21 @@ def hook(runtime, payload):
     if not sessions.required(root):
         return {}
     if event == "UserPromptSubmit":
-        task = sessions.begin(root, runtime, session, payload["prompt"], payload.get("turn_id"))
-        if task["status"] == "blocked":
+        task = sessions.begin(root, runtime, session, payload["prompt"], payload.get("turn_id"),
+                              continuation_validator=continuation)
+        event_id = (sessions.digest(json.dumps([runtime, session, payload["turn_id"]]))[:32]
+                    if payload.get("turn_id") else task.get("input_latest"))
+        receipt = sessions.session_dir(root, runtime, session) / (task["request_id"] + ".inputs") / (str(event_id) + ".json")
+        if task["status"] == "blocked" and not receipt.is_file():
             return {"decision": "block", "reason": task["blocker"] + " " + task["next_step"]}
         context = (f"AI Ops сохранил задачу {task['request_id']}; runtime={runtime}; session_id={session}. "
                    f"Прочитай .ai/managed/{sessions.POLICY} и исполни штатный процесс до завершения. "
                    "Исходный запрос уже сохранён; не проси пользователя запускать CLI.")
+        if receipt.is_file() and task.get("status") != "accepted":
+            context += (f" Новый пользовательский ввод сохранён в {receipt.relative_to(root)}. "
+                        "Прочитай его и продолжи ту же задачу через project_session run. "
+                        "Исходная постановка и RunPlan сохранены; прежнее review нужно проверить заново. "
+                        "Текст пользователя не является машинным approval или приёмкой.")
         return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
     if event == "SessionStart":
         current = sessions.binding(root)
@@ -206,17 +273,15 @@ def main(argv=None):
                         print(json.dumps(result, ensure_ascii=False))
                         return 1  # handoff всё ещё не является accepted
                     task = sessions.pending(root, args.runtime, args.session)
-                    signals = (json.loads(args.signals) if args.signals is not None else
-                               (task.get("preparation") or {}).get("signals") or
-                               (task.get("provider_preparation") or {}).get("signals", {}))
-                    if not isinstance(signals, dict):
-                        raise ValueError("signals должен быть JSON object")
+                    signals = intake_signals(task, args.signals)
                     from ai_ops_kit.engine import pipeline_helpers
                     missing = pipeline_helpers.missing_intake_signals(signals)
                     if missing:
+                        sessions.save_intake(root, args.runtime, args.session, task["request_id"], signals, missing,
+                                             autonomous=args.autonomous)
                         raise ValueError("; ".join(pipeline_helpers.intake_signals_hint(missing))
                                          + ". Запуск не начат; уточни signals той же сохранённой задачи.")
-                    result = prepare(root, args.runtime, args.session, task, signals)
+                    result = prepare(root, args.runtime, args.session, task, signals, autonomous=args.autonomous)
                     if result is None:
                         task = sessions.pending(root, args.runtime, args.session)
                         if task["request_id"] != existing["request_id"]:
