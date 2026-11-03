@@ -270,7 +270,8 @@ def finalize(root, runtime, session, digests):
     sessions.write(path, task)
     command = [sys.executable, str(Path(__file__).resolve()), str(root), runtime, session, task["request_id"], attempt]
     try:
-        result = sessions.run_process(command, root, directory, timeout=300)
+        result = sessions.run_process(command, root, directory, timeout=300,
+                                      progress=lambda message: print(message, file=sys.stderr, flush=True))
         latest = sessions.load(root, runtime, session)
         latest["verification"]["process_exit_code"] = result.returncode
         sessions.write(path, latest)

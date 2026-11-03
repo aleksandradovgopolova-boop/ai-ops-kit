@@ -224,17 +224,17 @@ def termination_guard():
         signal.signal(signal.SIGTERM, previous)
 
 
-def run_process(command, root, directory, *, timeout=300):
+def run_process(command, root, directory, *, timeout=300, progress=None):
     """Ограниченный процесс с видимым прогрессом и диагностикой на диске."""
-    import sys
     stdout, stderr = directory / "process.stdout.log", directory / "process.stderr.log"
     started = time.monotonic()
     with stdout.open("wb") as out, stderr.open("wb") as err, termination_guard():
         with subprocess.Popen(command, cwd=root, stdout=out, stderr=err, start_new_session=True) as process:
             try:
                 while True:
-                    print(f"AI Ops: процесс pid={process.pid}, прошло {int(time.monotonic() - started)} с; "
-                          f"диагностика: {stdout}, {stderr}", file=sys.stderr, flush=True)
+                    if progress:
+                        progress(f"AI Ops: процесс pid={process.pid}, прошло {int(time.monotonic() - started)} с; "
+                                 f"диагностика: {stdout}, {stderr}")
                     remaining = timeout - (time.monotonic() - started)
                     if remaining <= 0:
                         raise subprocess.TimeoutExpired(command, timeout)
@@ -248,7 +248,8 @@ def run_process(command, root, directory, *, timeout=300):
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
                 except ProcessLookupError:
-                    pass
+                    # Группа уже завершилась; дождаться учёта выхода непосредственного ребёнка.
+                    process.wait()
                 process.wait()
     tails = []
     for path in (stdout, stderr):
@@ -359,7 +360,7 @@ def claim_execution(root, runtime, session, task, execution, next_step=None):
     return task
 
 
-def execute(root, runtime, session, signals, *, provider=None, request=None, timeout=300):
+def execute(root, runtime, session, signals, *, provider=None, request=None, timeout=300, progress=None):
     """Запустить существующий фасад с теми же guards и единственной execution-claim."""
     root = project_root(root)
     task = pending(root, runtime, session)
@@ -390,7 +391,7 @@ def execute(root, runtime, session, signals, *, provider=None, request=None, tim
     task = claim_execution(root, runtime, session, task, {"command": command})
     path = session_dir(root, runtime, session) / f"{task['request_id']}.json"
     try:
-        result = run_process(command, root, session_dir(root, runtime, session), timeout=timeout)
+        result = run_process(command, root, session_dir(root, runtime, session), timeout=timeout, progress=progress)
         if not report_path.is_file():
             detail = (result.stderr or result.stdout or "нет диагностики процесса").strip()[-4096:]
             raise ValueError(f"штатный запуск завершился (exit={result.returncode}), отчёт не создан: {detail}")

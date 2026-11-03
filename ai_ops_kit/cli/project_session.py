@@ -30,7 +30,8 @@ def current_session(root, runtime, session, task, signals):
                 "нужны артефакты, обязательные gates, независимое review и применимый CI.")
     path = directory / (task["request_id"] + ".json")
     try:
-        result = sessions.run_process(command, root, directory, timeout=30)
+        result = sessions.run_process(command, root, directory, timeout=30,
+                                      progress=lambda message: print(message, file=sys.stderr, flush=True))
         report_path = sessions.within(root, f"features/{fid}/run-report.json")
         report = json.loads(report_path.read_text(encoding="utf-8"))
         if (result.returncode != 0 or report.get("kind") != "run-report" or report.get("status") != "planned"
@@ -220,7 +221,8 @@ def main(argv=None):
                         task = sessions.pending(root, args.runtime, args.session)
                         if task["request_id"] != existing["request_id"]:
                             raise ValueError("активная постановка сменилась после подготовки")
-                        result = (sessions.execute(root, args.runtime, args.session, signals, request=task["request_id"])
+                        result = (sessions.execute(root, args.runtime, args.session, signals, request=task["request_id"],
+                                                   progress=lambda message: print(message, file=sys.stderr, flush=True))
                                   if args.autonomous else current_session(root, args.runtime, args.session, task, signals))
             print(json.dumps(result, ensure_ascii=False))
             return 0 if result.get("accepted") or result.get("status") == "accepted" else 1

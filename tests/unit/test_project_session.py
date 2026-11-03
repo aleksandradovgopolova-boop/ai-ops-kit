@@ -133,7 +133,8 @@ from pathlib import Path
 subprocess.Popen([sys.executable, '-c', '''import time
 from pathlib import Path
 for i in range(3000):
-    Path('.ai/runtime/heartbeat').write_text(str(i))
+    Path('.ai/runtime/heartbeat.next').write_text(str(i))
+    Path('.ai/runtime/heartbeat.next').replace('.ai/runtime/heartbeat')
     time.sleep(0.02)
 '''])
 time.sleep(60)
@@ -175,7 +176,8 @@ from pathlib import Path
 child = subprocess.Popen([sys.executable, '-c', '''import time
 from pathlib import Path
 for i in range(3000):
-    Path('.ai/runtime/child-heartbeat').write_text(str(i))
+    Path('.ai/runtime/child-heartbeat.next').write_text(str(i))
+    Path('.ai/runtime/child-heartbeat.next').replace('.ai/runtime/child-heartbeat')
     time.sleep(0.02)
 '''])
 Path('.ai/runtime/child-pid').write_text(str(child.pid))
@@ -827,3 +829,12 @@ def test_source_digest_preserves_filename_whitespace(project):
     path.write_text("after")
     assert path.read_text() == "after"
     assert sessions.source_digest(project) != before
+
+
+def test_bounded_process_reports_progress_through_caller(project, capsys):
+    messages = []
+    result = sessions.run_process([sys.executable, "-c", "print('finished')"],
+                                  project, project, progress=messages.append)
+    assert result.returncode == 0 and result.stdout.strip() == "finished"
+    assert messages and "pid=" in messages[0] and "process.stdout.log" in messages[0]
+    assert capsys.readouterr() == ("", "")
