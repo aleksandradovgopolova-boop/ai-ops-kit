@@ -101,5 +101,10 @@ def main(argv=None):
     return 0
 
 
+def test_bootstrap_compatibility():
+    """Run the real cold setup/retry/activation/demo proof through pytest in CI."""
+    assert main([]) == 0
+
+
 if __name__ == "__main__":
     raise SystemExit(main())

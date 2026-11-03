@@ -347,7 +347,7 @@ jobs:
       - name: "Bootstrap: unit checks and real isolated setup/retry/demo"
         run: |
           python3 -m pytest tests/unit/test_installer_bootstrap.py -q --tb=short
-          python3 tests/integration/bootstrap_probe.py
+          python3 -m pytest tests/integration/bootstrap_probe.py -q -s --tb=short
 
   # macOS advisory (F-10): разработка идёт на macOS, а CI её не видел — платформа владельца не
   # проверялась. Джоба НАБЛЮДАЕТ её на быстром срезе (critical_path), но НЕ блокирует
