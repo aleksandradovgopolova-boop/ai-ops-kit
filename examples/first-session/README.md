@@ -8,8 +8,11 @@
 
 ## Запустить
 
-Нужны Git, Python 3.12+ и PyYAML 6.0.3+. Если среды ещё нет, выполните первые четыре
-команды [установки](../../docs/guides/installation.md). Из корня checkout кита:
+Нужны Git, Python 3.12+ и PyYAML 6.0.3+. Без готовой зависимости новый
+`python3 installer/bootstrap.py --demo` из checkout подготовит отдельное окружение
+и вызовет этот же пример; для получения зависимости нужен PyPI либо доверенный
+локальный кеш wheel. [Полный путь](../../docs/guides/installation.md).
+Из корня checkout с уже готовыми зависимостями:
 
 ```bash
 python3 examples/first-session/demo.py
