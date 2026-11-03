@@ -268,7 +268,8 @@ def assess(task, signals, child_root, wid):
 
 
 def record_path(child_root, wid):
-    return Path(child_root) / "features" / str(wid) / "short-path.yaml"
+    from ai_ops_kit.shared.work_areas import artifact_path
+    return artifact_path(Path(child_root) / "features", wid, "short-path.yaml")
 
 
 def trace(child_root, wid, signals, decision):
@@ -282,6 +283,7 @@ def trace(child_root, wid, signals, decision):
     import yaml
     from ai_ops_kit.gates import spec_levels
     child_root, wid = Path(child_root), str(wid)
+    rp = record_path(child_root, wid)  # Both destinations checked before creating/updating spec.
     sp, created, add_rep = spec_levels.create_spec(child_root, wid, signals)
     try:
         doc = yaml.safe_load(sp.read_text(encoding="utf-8")) or {}
@@ -333,7 +335,6 @@ def trace(child_root, wid, signals, decision):
         "spec_created": created,
         "spec_sections_added": add_rep.get("added") or [],
     }
-    rp = record_path(child_root, wid)
     rp.parent.mkdir(parents=True, exist_ok=True)
     rp.write_text(yaml.safe_dump(rec, allow_unicode=True, sort_keys=False), encoding="utf-8")
     return {"spec": sp, "record": rp, "filled": filled, "declined": declined, "error": None}
