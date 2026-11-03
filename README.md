@@ -96,4 +96,6 @@ python3 installer/ai_ops.py setup /absolute/path/to/your/project
 целях (в компании, в платном продукте или услуге) и перепродажа — только по коммерческой
 лицензии: напишите автору через [профиль на GitHub](https://github.com/aleksandradovgopolova-boop).
 
+Для коммерческих запросов: [sasha@rox.one](mailto:sasha@rox.one).
+
 Версии, опубликованные до этого изменения (до 4.12.0 включительно), остаются под лицензией MIT.
