@@ -29,11 +29,17 @@ what to write in your first session and how to check the result.
 
 ## Try it without a model
 
-From a kit checkout with Python 3.12+, Git and `requirements.txt` installed:
+With Git and Python 3.12+ (including `venv`/`ensurepip`), use two commands. Inspect
+the retrieved checkout before running; PyPI access is needed if the dependency is missing:
 
 ```bash
-python3 examples/first-session/demo.py
+git clone https://github.com/aleksandradovgopolova-boop/ai-ops-kit.git
+python3 ai-ops-kit/installer/bootstrap.py --demo --language en
 ```
+
+The new entry prepares an isolated environment inside the checkout and calls the
+existing example. With dependencies already installed, the original
+`python3 examples/first-session/demo.py` from the kit root still works.
 
 The example creates a separate temporary Git project, installs the kit, checks
 installation integrity, detects Python and saves a project assessment with questions
@@ -56,8 +62,12 @@ python3 installer/ai_ops.py setup /absolute/path/to/your/project
 
 `setup` creates kit files, checks installation, gathers context and plan drafts,
 and commits its own files to Git. It asks for owner decisions when facts are missing.
-**The manual path from a clean machine currently takes 5 commands**, followed by
-executor access configuration; the goal of at most 3 commands is not yet met.
+**The new checkout path takes three commands**, including obtaining the source and
+activating the environment; the dependency is installed automatically. The original
+five-command manual path remains available. Git, Python with venv and dependency
+access are required; executor configuration is separate. The new entry has local
+macOS/Python 3.14 verification; CI pipeline-e2e checks Linux/Python 3.12 and 3.13
+on the exact revision.
 [Complete path and limitations](docs/en/installation.md).
 
 ## What has been checked

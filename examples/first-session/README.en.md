@@ -8,8 +8,11 @@ no fabricated interface, model calls or pretend “task completed” result.
 
 ## Run it
 
-You need Git, Python 3.12+ and PyYAML 6.0.3+. If the environment is not ready, run the
-first four [installation commands](../../docs/en/installation.md). From the kit checkout root:
+You need Git, Python 3.12+ and PyYAML 6.0.3+. Without the dependency, the new
+`python3 installer/bootstrap.py --demo --language en` from a checkout prepares an
+isolated environment and calls this same example. It needs PyPI or a trusted local
+wheel cache for the dependency. [Complete path](../../docs/en/installation.md).
+From a checkout with dependencies already installed:
 
 ```bash
 python3 examples/first-session/demo.py
