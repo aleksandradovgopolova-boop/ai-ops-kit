@@ -270,6 +270,19 @@ def load(root, runtime, session):
     return task
 
 
+def artifact_inputs(root, fid):
+    """Полный состав артефактов, включая ignored и отсутствие будущих файлов."""
+    files = {}
+    for relative in (f"features/{fid}", f".ai/runplan/{fid}", f"openspec/changes/{fid}"):
+        for path in within(root, relative).rglob("*"):
+            if path.is_symlink():
+                raise ValueError("симлинк в артефактах текущей задачи не подтверждён")
+            if path.is_file():
+                key = str(path.relative_to(root))
+                files[key] = digest(within(root, key).read_bytes())
+    return files
+
+
 def verify(root, runtime, session):
     task = load(root, runtime, session)
     current = binding(root, "session-" + task["request_id"])
@@ -291,6 +304,9 @@ def verify(root, runtime, session):
     for relative, checksum in receipt["files"].items():
         if digest(within(root, relative).read_bytes()) != checksum:
             raise ValueError(f"артефакт изменён после проверки: {relative}")
+    if (receipt.get("mode") == "current-session"
+            and artifact_inputs(root, "session-" + task["request_id"]) != receipt.get("artifact_inputs")):
+        raise ValueError("состав артефактов изменён после проверки")
     result_root = within(root, receipt.get("worktree") or ".")
     if (git(result_root, "rev-parse", "HEAD") != receipt.get("revision")
             or source_digest(result_root, "session-" + task["request_id"]) != receipt.get("result_sha256")):

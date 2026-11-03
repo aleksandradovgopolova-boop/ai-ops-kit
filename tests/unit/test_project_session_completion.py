@@ -346,3 +346,19 @@ def test_reconcile_recovers_controller_handoff_without_reexecuting(project, monk
         assert restored["execution"]["prepared"] and cli.main(["run", *args]) == 1
         monkeypatch.setattr(sessions, "run_process", actual)
         assert cli.main(["finalize", *args]) == 0
+
+
+def test_new_ignored_artifact_after_acceptance_invalidates_verify(project, monkeypatch):
+    task, args = start(project, monkeypatch, "codex")
+    (project / ".gitignore").write_text((project / ".gitignore").read_text() + "features/\n")
+    sessions.git(project, "add", ".gitignore")
+    sessions.git(project, "commit", "-qm", "ignored future lifecycle inputs")
+    assert cli.main(["finalize", *args]) == 0
+    assert sessions.verify(project, "codex", "complete")["accepted"]
+    current = sessions.binding(project, "session-" + task["request_id"])
+    new_spec = project / f"features/session-{task['request_id']}/spec.yaml"
+    new_spec.write_text("sections:\n  acceptance_criteria: 'new unmet criterion'\n")
+    assert sessions.binding(project, "session-" + task["request_id"]) == current
+    with pytest.raises(ValueError, match="состав артефактов изменён"):
+        sessions.verify(project, "codex", "complete")
+    assert cli.main(["finalize", *args]) == 2

@@ -66,16 +66,7 @@ def recover_handoff(root, runtime, session, task):
     return task
 
 
-def artifact_inputs(root, fid):
-    files = {}
-    for relative in (f"features/{fid}", f".ai/runplan/{fid}", f"openspec/changes/{fid}"):
-        for path in sessions.within(root, relative).rglob("*"):
-            if path.is_symlink():
-                raise ValueError("симлинк в артефактах текущей задачи не подтверждён")
-            if path.is_file():
-                key = str(path.relative_to(root))
-                files[key] = sessions.digest(sessions.within(root, key).read_bytes())
-    return files
+artifact_inputs = sessions.artifact_inputs
 
 
 def scope(task, current):
@@ -187,7 +178,8 @@ def evaluate(root, runtime, session, request, attempt):
             or not pipeline_git._tree_clean_after_checks(root)):
         raise ValueError("результат изменился во время проверки")
     files = dict(task["execution"]["files"])
-    files.update(artifact_inputs(root, fid))
+    artifacts = artifact_inputs(root, fid)
+    files.update(artifacts)
     files.update({r["path"]: r["sha256"] for r in reviews.values()})
     ready = not missing and (pipeline or {}).get("ready_for_pr") is True
     if ready:
@@ -198,6 +190,7 @@ def evaluate(root, runtime, session, request, attempt):
             raise ValueError("не удалось завершить запись активной работы")
     report = {"kind": "current-session-verification", "request_id": request, "attempt": attempt,
               "binding": current, "scope": scope(task, current), "pipeline": pipeline, "files": files,
+              "artifact_inputs": artifacts,
               "ready_for_pr": ready, "active_work_closed": ready, "ci": "not-verified",
               "missing": missing}
     path = sessions.within(root, verification["report"])
@@ -242,6 +235,7 @@ def reconcile(root, runtime, session):
             raise ValueError("нет подтверждения завершения активной работы")
         files = dict(report["files"], **{verification["report"]: verification["sha256"]})
         task["execution"].update(verification_ready=True, process_exit_code=verification.get("process_exit_code"),
+            artifact_inputs=report["artifact_inputs"],
             files=files, revision=current["head"], worktree=None,
             result_sha256=current["source_sha256"], completion_binding=current)
         task.update(status="accepted", blocker=None, next_step=None)
