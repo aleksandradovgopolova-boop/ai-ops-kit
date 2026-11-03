@@ -1,7 +1,7 @@
 ---
 read_tier: 1
 stability: evolving
-reviewed_at: 2026-09-08
+reviewed_at: 2026-11-02
 owner: architecture
 ---
 
@@ -88,6 +88,15 @@ workflow-контракты, quality gates, маршрутизация моде�
 существующем домене, а рост числа пакетов требует архитектурного решения (ADR/DP), а не привычки
 «каждая capability — свой пакет». Ратчет ходит вниз.
 
+### Реализация и квалификация — 02.11.2026
+
+Исторический срез main — `073d1bfb`, последний выпуск — `v4.12.0 qualification` на `7acca17f`.
+[Датированный статус](qualification/REPOSITORY-STATUS-2026-11-02.md) отделяет
+код после тега от draft и оставшейся приёмки; это не разрешение выпуска или rollout.
+На итоговой базе b1530c1f уже слиты #1485/#1486/#1487: status-aware upgrade,
+полный rollback footprint и исправления child-policy/feature write boundaries.
+Это не доказывает всю security/fleet приёмку и не меняет native readiness #1434.
+
 ## 6. Orchestration
 
 Продуктовая задача ведётся процессом `specify → plan → run` (intent-CLI). Прогон изолируется в
@@ -95,6 +104,12 @@ worktree, фиксируется на точном коммите (SHA) и со�
 только на существующие agent id и gate id; стадия `review_mode: read-only` не может быть writer'ом
 (writer ≠ judge). Гейты закрываются валидатором, судьёй, писателем или человеком — и отчёт называет,
 кто закрыл (`closed_by`).
+
+Native Codex text-provider внутренних ролей включён в main PR #1462, но не
+квалифицирован на всех runtime. У наблюдавшегося Codex0.147.0 SessionStart выполняется
+внутри run_turn: pre-turn ack не подтверждён, readiness=false. Независимый запрет tools
+при отказе hook не доказан. Diagnostics #1468 и двухфазный дизайн #1469 — drafts;
+они не меняют действующий guard. Командная приёмка #1434 остаётся открытой.
 
 ## 7. Data Flows
 
@@ -114,6 +129,11 @@ draft`), существующие файлы владельца не перез�
 Состояние — файлы в репозитории: реестры (yaml), managed-слой дочки (`.ai/`), журналы отчётов
 (`.ai/project/report-history/*.jsonl`, сводятся при слиянии дописыванием), провенанс и контрольные
 суммы установки (`.provenance.json`, `.checksums.json`). Отдельной СУБД нет.
+
+Слитые #1455/#1459 добавляют добровольный локальный обмен свидетельствами и UTC-окно.
+Локальная согласованность не аутентифицирует установку и не доказывает продуктовую
+активность; мировой точный счёт остаётся unknown. Evidence-срез #1463 — draft,
+не завершение #1451.
 
 ## 10. Authentication & Authorization
 
@@ -153,7 +173,9 @@ Capability-декларации честные: нельзя объявить в
 ## 16. Observability
 
 Журналы отчётов прогонов (`report-history/*.jsonl`), провенанс установки, машиночитаемые отчёты
-governance и own-medicine. Что НЕ сделано честно: сквозной трассировки OpenTelemetry в самом ките нет.
+governance и own-medicine. Что НЕ сделано честно: сквозной трассировки OpenTelemetry в самом ките нет. Read-only WorkItem trace/history
+подготовлен в draft #1467; producers ещё не дают всех package/invocation links и
+timestamps. Reader не объявляется текущим полноценным OTel-контрактом.
 
 ## 17. Failure Modes
 
@@ -183,7 +205,11 @@ built ≠ wired (дормант заморожен потолком-ратчет
 Current: пакетный движок со слоями и ратчетами; registry-driven; managed-доставка с PR-обновлением;
 контур Planning & Execution; artifact-registry Product Operating Layer. Next: инженерный стандарт как
 версионируемый объект (SR-1..4), секционная валидация артефактов (SR-5/6), governance продукта на PR.
-Future: supply-chain/OpenSSF проверки, замкнутая петля outcome→insight→work.
+Связка outcome→learning→следующее решение уже реализована, но исторический полевой
+зачёт ограничен и не закрывает новую проверку #1277. Следующая работа — доказать
+границы #1446, #1434 и отдельных #1409/#1411/#1412/#1451. Открытые drafts не становятся
+обязательным составом4.13. Supply-chain checks не закрывают реальные MCP/model/sandbox
+риски #1407.
 Триггеры миграций записываются отдельными решениями (ADR/DP), а не молча.
 
 ## 21. AI Development Contract
