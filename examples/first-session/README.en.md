@@ -48,6 +48,26 @@ Recording context: 2026-11-02, macOS, Python 3.14.7, kit 4.12.0, base `146e0c3f`
 Question/file counts can change by version; this recording does not promise future
 output. CLI output here is partly in Russian even for an English-speaking team.
 
+## Capture of an actual run
+
+![Actual offline example output: 9 commands passed, sources preserved, no model invoked](capture/offline-demo.jpg)
+
+2026-11-02, macOS, Python 3.14.7, Kit 4.12.0, base `3a3ee8ec`: the command
+`python3 examples/first-session/demo.py` exited with code 0. All 9 commands passed,
+the test ran before and after installation, sources were preserved; owner questions: 12.
+
+This is a browser capture of a [local viewer](capture/output.html) of saved output,
+not a product interface or an autonomous AI session. The capture was visually
+inspected; result text was not drawn. In [stdout](capture/stdout.txt), only the
+temporary directory path is replaced with `<temporary-demo-directory>`; the capture
+omits the path lines. [stderr](capture/stderr.txt) is empty.
+
+[Recording context](capture/capture-context.json) · [summary](capture/summary.json) ·
+[installation check](capture/06-doctor.stdout.txt) · [repeated test](capture/09-sample-test-after.stderr.txt).
+No model or provider CLI was launched. The greeting change and a complete autonomous
+process were not tested in this recording. To recapture, rerun the example, view its
+actual output and update the recording context along with the image.
+
 ## Next task in Codex/Claude
 
 Open `greeting-sample/` at the printed path and use the
