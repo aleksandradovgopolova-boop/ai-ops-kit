@@ -435,7 +435,8 @@ def _human_approval_domains_uncovered(approval_root, wid, changed_files, diff_ro
                     if p.strip() not in _CATCH_ALL]
             if not pats:
                 continue
-            matched = [f for f in (changed_files or []) if any(_re.search(p, f) for p in pats)]
+            matched = [f for f in (changed_files or [])
+                       if any(_re.search(p, security_pack.domain_path(f)) for p in pats)]
             if matched:
                 triggered[d["id"]] = matched
     except Exception:  # noqa: BLE001

@@ -257,6 +257,73 @@ def test_generated_task_namespace_does_not_hide_real_authentication_or_secrets()
     assert "secrets" in pack["blocking"]
 
 
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+def test_metadata_only_final_commit_does_not_require_auth_approval(project, monkeypatch, runtime):
+    task, args = start(project, monkeypatch, runtime)
+    metadata = project / f"features/session-{task['request_id']}/trace.yaml"
+    metadata.write_text("kind: execution-note\n")
+    sessions.git(project, "add", str(metadata.relative_to(project)))
+    sessions.git(project, "commit", "-qm", "metadata-only tail")
+    assert sessions.git(project, "diff", "--name-only", "HEAD^") == str(metadata.relative_to(project))
+    assert cli.main(["finalize", *args]) == 0
+    assert sessions.verify(project, runtime, "complete")["accepted"]
+    assert (project / ".ai/runtime/check-ran").read_text() == "real check"
+
+
+def test_separate_human_approval_scan_uses_entire_pinned_range(project, monkeypatch):
+    from ai_ops_kit.engine import pipeline_readiness
+    from ai_ops_kit.security import security_pack
+    task, _ = start(project, monkeypatch, "codex")
+    (project / "session.py").write_text("VALUE = 1\n")
+    sessions.git(project, "add", "session.py")
+    sessions.git(project, "commit", "-qm", "real auth path in earlier commit")
+    (project / "followup.md").write_text("docs tail\n")
+    sessions.git(project, "add", "followup.md")
+    sessions.git(project, "commit", "-qm", "docs tail")
+    assert sessions.git(project, "diff", "--name-only", "HEAD^") == "followup.md"
+    # Даже чистый pack/reviewer не заменяет обязательное человеческое одобрение.
+    monkeypatch.setattr(security_pack, "run_pack", lambda *a, **kw:
+        dict(overall="clear", applicable_domains=[], blocking=[], needs_review=[], advisory=[]))
+    evidence, _, _ = pipeline_readiness._evaluate_security(project, project,
+        "session-" + task["request_id"], sessions.git(project, "rev-parse", "HEAD"), True, {}, {},
+        review=False, strict_judge_qualified=False, security_reviewer_proposer=None,
+        reviewer_proposer=None, budget=None, base_revision=task["binding"]["head"])
+    assert evidence["security"]["status"] == "fail"
+    assert "authentication" in evidence["security"]["human_approval_uncovered"]
+
+
+def test_task_namespace_keeps_real_auth_path_and_local_approval_trust_barrier(project, monkeypatch):
+    from ai_ops_kit.engine import pipeline_evidence
+    from ai_ops_kit.gates import approvals
+    namespace = "features/session-" + "a" * 32 + "/"
+    monkeypatch.setattr(approvals, "load_approvals", lambda *a: [{"approval": "authentication"}])
+    monkeypatch.setattr(approvals, "_record_valid", lambda *a, **kw: True)
+    monkeypatch.setattr(approvals, "covers_paths", lambda *a: True)
+    assert pipeline_evidence._human_approval_domains_uncovered(project, "task",
+        [namespace + "run-plan.yaml"], diff_root=project) == []
+    assert "authentication" in pipeline_evidence._human_approval_domains_uncovered(project, "task",
+        [namespace + "session.py"], diff_root=project)
+
+
+@pytest.mark.parametrize("error", ["exception", "none"])
+def test_separate_security_diff_read_error_fails_closed(project, monkeypatch, error):
+    from ai_ops_kit.engine import pipeline_readiness
+    from ai_ops_kit.security import security_pack, security_scan
+    monkeypatch.setattr(security_pack, "run_pack", lambda *a, **kw:
+        dict(overall="clear", applicable_domains=[], blocking=[], needs_review=[], advisory=[]))
+    def unavailable(*a, **kw):
+        if error == "exception":
+            raise OSError("cannot read diff")
+        return None  # настоящий контракт security_scan при ошибке Git/timeout
+    monkeypatch.setattr(security_scan, "_git_changed_files", unavailable)
+    evidence, _, _ = pipeline_readiness._evaluate_security(project, project, "task",
+        sessions.git(project, "rev-parse", "HEAD"), True, {}, {}, review=False,
+        strict_judge_qualified=False, security_reviewer_proposer=None,
+        reviewer_proposer=None, budget=None)
+    assert evidence["security"]["status"] == "fail"
+    assert "security diff" in evidence["security"]["blockers"][0]
+
+
 def test_ignored_spec_change_invalidates_trusted_independent_review(project, monkeypatch):
     task, args = start(project, monkeypatch, "codex", "research")
     fid = "session-" + task["request_id"]

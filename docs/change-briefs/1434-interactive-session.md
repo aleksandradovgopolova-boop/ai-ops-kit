@@ -57,9 +57,16 @@ GitHub connector не имеет доступа к Proektnyy-ofis/ii-sreda#1274 
 
 ## Полный CI и учёт поставки
 
+Дополнительный stock-installed Claude сценарий обнаружил отдельного consumer security:
+high-risk path approval использует HEAD^ и не нормализует opaque task namespace.
+До исправления: общий helper нормализует только namespace, consumer проверяет pinned
+base..HEAD; ошибка чтения diff блокирует приёмку. Проверки: metadata-only последний
+коммит принимается, реальный session.py ранним коммитом остаётся blocked, включая
+in-tree forged approvals. Trust barrier approval store не меняется.
+
 Полный CI обнаружил новый print в lifecycle и молчаливый ProcessLookupError: вывод
 перенесён в callback CLI, завершившаяся группа явно reap-ится. Реальные stock init
-на c3be4c53 и ветке: 6271857 Б / 694 файла → 6310333 Б / 695 файлов. Новый
+на c3be4c53 и ветке: 6271857 Б / 694 файла → 6311022 Б / 695 файлов. Новый
 completion-модуль работает в установленной дочке, поэтому бюджет поставки учитывает
 один новый runtime-файл и измеренный рост, по существующей ленте raises. Требование
 10% резерва сохранено (ceil(actual/0.90) округлён до тысячи); лимиты print и swallowed

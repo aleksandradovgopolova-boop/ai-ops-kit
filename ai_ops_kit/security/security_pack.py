@@ -95,6 +95,11 @@ def load_domains():
     return data.get("domains", []), data.get("allowed_evidence_sources", [])
 
 
+def domain_path(path):
+    """Убрать только opaque namespace задачи, сохранив реальный путь продукта."""
+    return re.sub(r"^features/session-[0-9a-f]{32}/", "", str(path))
+
+
 def _applies(domain, signals, files_content):
     """Домен применим по сигналу, ИЛИ по пути изменённого файла, ИЛИ по его СОДЕРЖИМОМУ.
     v2.104 (finding самоаудита): раньше проверялся только ПУТЬ -> auth-логика в файле, чей путь
@@ -116,8 +121,7 @@ def _applies(domain, signals, files_content):
             # Opaque id проектной работы не является auth/session-кодом продукта.
             # Сопоставляем оставшийся путь; содержимое и детерминированные scans
             # по-прежнему видят ПОЛНЫЙ файл. Реальный session.py под namespace виден.
-            domain_path = re.sub(r"^features/session-[0-9a-f]{32}/", "", str(f))
-            if rx.search(domain_path):
+            if rx.search(domain_path(f)):
                 hit = f"файл {f}"; break
             # матч по содержимому — только для файлов, которые могут РЕАЛИЗОВЫВАТЬ поведение
             if content and not _is_prose(f) and rx.search(content):
