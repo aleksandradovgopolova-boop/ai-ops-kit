@@ -744,6 +744,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/engine/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `ai_ops_kit/engine/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
 - `ai_ops_kit/devtools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
+- `docs/change-briefs/1482-mutation-executed-test.md` — mutation kill требует выполненного падающего test call; ошибки запуска не засчитываются.
 - `ai_ops_kit/planning/staleness.py` — проверки протухания: мёртвые ссылки описания и отставание плана от истории (14.08.2026)
 - `ai_ops_kit/engine/acceptance_verify.py` — сверка критериев приёмки с результатом: независимый судья + вердикт с ЦИТАТОЙ, проверяемой кодом (B2-14, 2026-08-14)
 - `ai_ops_kit/engine/execution_pipeline.py` — единый движок: detect → tool-loop → [worktree] → commit → evidence → гейты → [draft PR] (v2.58–2.62)
