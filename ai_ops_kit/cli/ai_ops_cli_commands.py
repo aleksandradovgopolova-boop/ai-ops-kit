@@ -549,6 +549,7 @@ def _dispatch_parallel(task, signals, child_root, a, flags, intent, provider):
     rec = parallel_live_dispatch.run_parallel_live(
         task, sig, Path(child_root), feature=wid, provider=provider, model=a.model, base=a.base,
         open_pr=a.open_pr, max_steps=a.max_steps, repo_slug=getattr(a, "repo", None),
+        runtime=getattr(a, "runtime", "claude-code") or "claude-code",
         **_parallel_policy(flags, intent, a), **options)
     if rec is not None:
         parallel_live_dispatch.print_parallel(rec)
