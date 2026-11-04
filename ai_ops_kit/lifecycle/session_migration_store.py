@@ -35,7 +35,8 @@ def parent(path, *, create=False):
                     os.mkdir(component, 0o700, dir_fd=fd)
                     os.fsync(fd)
                 except FileExistsError:
-                    pass
+                    if not stat.S_ISDIR(os.stat(component, dir_fd=fd, follow_symlinks=False).st_mode):
+                        raise ValueError("migration parent is not a real directory") from None
             following = os.open(component, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=fd)
             os.close(fd)
             fd = following
@@ -99,7 +100,8 @@ def replace(path, entry, expected, *, staging=None, atomic=False):
             try:
                 os.unlink(temporary, dir_fd=stage)
             except FileNotFoundError:
-                pass
+                # rename consumed our staging name; the destination durability was checked above.
+                os.fsync(stage)
 
 
 def create(path, value):
@@ -123,7 +125,8 @@ def create(path, value):
             try:
                 os.unlink(temporary, dir_fd=directory)
             except FileNotFoundError:
-                pass
+                # The successful create path already unlinked this private temporary name.
+                os.fsync(directory)
     return sha(data)
 
 

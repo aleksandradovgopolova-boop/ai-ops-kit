@@ -1,5 +1,7 @@
 # Перенос ожидающих проектных сессий (experimental)
 
+[Change Brief и failure modes](../change-briefs/1434-session-state-migration.md).
+
 Локальный CLI переносит binding доказанно неисполненного pending-запроса после обновления
 managed-кода. Он не запускает задачу/модель, не меняет UUID, active pointer, signals, claims,
 результаты и статусы. Snapshot и migration receipt не являются acceptance или независимым review.
