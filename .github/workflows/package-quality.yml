@@ -88,7 +88,7 @@ jobs:
       # ruff — ТОТ ЖЕ пин, что в джобе `lint` (2026-09-29, #1183): шард `contracts` гоняет
       # `tests/contracts/test_identifier_baseline.py`, который пересчитывает ruff'ом находки PLC2401
       # в замороженных файлах. Без ruff этот сторож громко пропускается, то есть в CI не исполнялся бы.
-      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.17.3'
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -117,7 +117,7 @@ jobs:
       # и находка была настоящей (тест мог пройти при полностью сломанном бюджете).
       # Версия здесь и в хуках обязана быть ОДНА; поднимать её — отдельным осознанным шагом,
       # потому что новая версия приносит новые правила и свою уборку.
-      - run: pip install 'ruff==0.16.2'
+      - run: pip install 'ruff==0.17.3'
       - name: "ruff — правила класса «поломка» (F821/F811/B023/F841)"
         run: ruff check .
       # Битая директива `# noqa` НЕ ПОДАВЛЯЕТ НИЧЕГО, а ruff сообщает о ней предупреждением в
