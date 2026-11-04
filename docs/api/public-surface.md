@@ -28,6 +28,13 @@ breaking change: любая правка могла оказаться лома�
 завершена. Готовность модели/команды и native adapter этим не подтверждается.
 Существующая публичная поверхность ниже не меняется.
 
+## Перенос проектных сессий (experimental)
+
+`python3 -m ai_ops_kit.cli.project_session migrate capture|preview|apply|rollback` — локальный CLI
+с точными digests и согласованным окном без writers. Snapshot/plan/WAL — experimental-артефакты,
+не ApprovalRecord и не acceptance. См. [границы и восстановление](../agent-guides/session-state-migration.md).
+Коды: 0 — операция выполнена, 2 — отказ. Новый интент `./ai-ops` не добавляется.
+
 ## Как этот документ не расходится с кодом
 
 Блок ниже — не иллюстрация, а **сама декларация**: его читает

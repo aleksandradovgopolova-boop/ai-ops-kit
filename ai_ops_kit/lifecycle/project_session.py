@@ -18,6 +18,7 @@ from pathlib import Path
 import yaml
 
 from ai_ops_kit.shared import lifecycle_store
+from ai_ops_kit.lifecycle import session_migration_store
 
 MARKER = "ai-ops-kit:project-session"
 BEGIN = "<!-- AI-OPS-PROJECT-SESSION:BEGIN -->"
@@ -174,6 +175,7 @@ def session_lock(path):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+@session_migration_store.guarded
 def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=None):
     root = project_root(root)
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 131072:
@@ -209,7 +211,7 @@ def _begin(root, runtime, session, prompt, turn, directory, continuation_validat
         active = load(root, runtime, session)
         claim = directory / (active["request_id"] + ".execution-claim")
         if active.get("status") != "accepted" and (claim.exists() or claim.is_symlink() or active.get("status") != "pending"
-                or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation"))):
+                or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation", "state_migration"))):
             if continuation_validator is None:
                 raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
             continuation_validator(root, runtime, session, active)
@@ -296,6 +298,7 @@ def run_process(command, root, directory, *, timeout=300, progress=None):
 
 
 def load(root, runtime, session):
+    session_migration_store.incomplete(root)
     directory = session_dir(root, runtime, session)
     active = json.loads((directory / "active.json").read_text(encoding="utf-8"))
     request = active["request_id"]
@@ -344,6 +347,7 @@ def artifact_inputs(root, fid):
     return files
 
 
+@session_migration_store.guarded
 def verify(root, runtime, session):
     with session_lock(session_dir(root, runtime, session) / "requests"):
         return _verify(root, runtime, session)
@@ -401,6 +405,7 @@ def pending(root, runtime, session):
     return task
 
 
+@session_migration_store.guarded
 def save_preparation(root, runtime, session, request, preparation, reason=None):
     with session_lock(session_dir(root, runtime, session) / "requests"):
         task = pending(root, runtime, session)
@@ -416,6 +421,7 @@ def save_preparation(root, runtime, session, request, preparation, reason=None):
         return task
 
 
+@session_migration_store.guarded
 def save_intake(root, runtime, session, request, signals, missing, *, autonomous=False):
     """Факт реально запрошенных CLI данных, не догадка по пользовательскому тексту."""
     directory = session_dir(root, runtime, session)
@@ -429,6 +435,7 @@ def save_intake(root, runtime, session, request, signals, missing, *, autonomous
     return task
 
 
+@session_migration_store.guarded
 def claim_execution(root, runtime, session, task, execution, next_step=None):
     """Активный запрос и claim фиксируются под тем же lock, что новый submit."""
     directory = session_dir(root, runtime, session)
@@ -436,6 +443,8 @@ def claim_execution(root, runtime, session, task, execution, next_step=None):
         current = pending(root, runtime, session)
         if current["request_id"] != task["request_id"]:
             raise ValueError("активная постановка сменилась перед claim")
+        if current.get("binding") != task.get("binding"):
+            raise ValueError("binding изменена после чтения постановки; перечитай сохранённое состояние")
         claim = directory / (task["request_id"] + ".execution-claim")
         descriptor = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(descriptor)
@@ -448,6 +457,7 @@ def claim_execution(root, runtime, session, task, execution, next_step=None):
     return task
 
 
+@session_migration_store.guarded
 def execute(root, runtime, session, signals, *, provider=None, request=None, timeout=300, progress=None):
     """Запустить существующий фасад с теми же guards и единственной execution-claim."""
     root = project_root(root)

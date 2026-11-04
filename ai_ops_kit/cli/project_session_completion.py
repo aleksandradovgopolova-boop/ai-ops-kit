@@ -52,6 +52,7 @@ def record_prepared(root, task):
         for name in ("workitem.yaml", "run-plan.yaml", "run-report.json")})
 
 
+@sessions.session_migration_store.guarded
 def recover_handoff(root, runtime, session, task):
     current = sessions.binding(root, "session-" + task["request_id"])
     if any(current.get(k) != task["binding"].get(k) for k in
@@ -141,6 +142,7 @@ def review_inputs(root, task, current, digests):
     return handoff, accepted, missing
 
 
+@sessions.session_migration_store.guarded
 def evaluate(root, runtime, session, request, attempt):
     """Работник: только проверки. Создаёт attempt-specific отчёт и durable checksum."""
     from ai_ops_kit.engine import execution_pipeline, pipeline_git, tool_broker
@@ -208,6 +210,7 @@ def evaluate(root, runtime, session, request, attempt):
         latest["verification"].update(phase="finished", sha256=sessions.digest(path.read_bytes()))
         sessions.write(path.parent / (request + ".json"), latest)
 
+@sessions.session_migration_store.guarded
 def reconcile(root, runtime, session):
     """Принять durable исход атомарно относительно нового пользовательского ввода."""
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
@@ -257,6 +260,7 @@ def _reconcile(root, runtime, session):
     return task
 
 
+@sessions.session_migration_store.guarded
 def finalize(root, runtime, session, digests):
     task = prepared(root, runtime, session, sessions.load(root, runtime, session))
     if task.get("status") == "accepted":

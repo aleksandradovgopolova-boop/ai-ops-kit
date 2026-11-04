@@ -10,8 +10,10 @@ import yaml
 from ai_ops_kit.lifecycle import project_session as sessions
 
 
+@sessions.session_migration_store.guarded
 def current_session(root, runtime, session, task, signals):
     """Штатный controller готовит работу для уже открытого tool loop, без модели."""
+    task = revalidated_pending(root, runtime, session, task)
     from pathlib import Path
     import subprocess
     from ai_ops_kit.gates import gate_executor
@@ -86,6 +88,9 @@ def waiting_continuation(root, runtime, session, task):
     """Только зафиксированный запрос данных/spec текущего агента, не fresh pending."""
     from ai_ops_kit.engine import pipeline_helpers, run_plan
     sessions.pending(root, runtime, session)
+    if task.get("state_migration") and not task.get("preparation") and not task.get("intake"):
+        from ai_ops_kit.lifecycle import session_migration
+        return session_migration.continuation(root, task)
     intake, preparation = task.get("intake") or {}, task.get("preparation") or {}
     if intake:
         missing = pipeline_helpers.missing_intake_signals(intake.get("signals"))
@@ -126,8 +131,10 @@ def native_provider_hook(directory):
     print(json.dumps(result, ensure_ascii=False))
 
 
+@sessions.session_migration_store.guarded
 def prepare(root, runtime, session, task, signals, *, autonomous=False):
     """Штатная спецификация ДО claim/модели; текущий runtime заполняет её из запроса."""
+    task = revalidated_pending(root, runtime, session, task)
     from ai_ops_kit.engine import run_plan
     from ai_ops_kit.gates import preflight, spec_levels
     fid = "session-" + task["request_id"]
@@ -233,7 +240,18 @@ def hook(runtime, payload):
     raise ValueError(f"неподдерживаемое событие: {event}")
 
 
+def revalidated_pending(root, runtime, session, task):
+    current = sessions.pending(root, runtime, session)
+    if any(current.get(key) != task.get(key) for key in ("request_id", "binding", "prompt")):
+        raise ValueError("постановка/binding изменена после чтения; перечитай сохранённое состояние")
+    return current
+
+
 def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "migrate":
+        from ai_ops_kit.cli import project_session_migrate
+        return project_session_migrate.main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", nargs="?", default="hook", choices=("hook", "run", "verify", "finalize", "reconcile"))
     parser.add_argument("--runtime", required=True, choices=tuple(sessions.RUNTIMES))
@@ -256,7 +274,7 @@ def main(argv=None):
             else:
                 # Подготовка не должна переписать spec, пока другой вызов уже исполняет её.
                 lock = sessions.session_dir(root, args.runtime, args.session) / "preparation"
-                with sessions.session_lock(lock):
+                with sessions.session_migration_store.barrier(root), sessions.session_lock(lock):
                     existing = sessions.load(root, args.runtime, args.session)
                     if args.action in ("finalize", "reconcile"):
                         from ai_ops_kit.cli import project_session_completion as completion

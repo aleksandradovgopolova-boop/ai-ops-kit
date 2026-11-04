@@ -292,6 +292,8 @@
 - `docs/change-briefs/1434-user-turn-continuation.md` — новый пользовательский ход в подтверждённом native handoff; приватные квитанции и инвалидация устаревших проверок.
 - `docs/change-briefs/1434-interactive-session.md` — интерактивный controller-путь, границы приёмки, защита от повторов и безграничного ожидания.
 - `ai_ops_kit/cli/project_session_completion.py` — bounded finalize/reconcile открытого агента через существующие проверки и scoped независимые вердикты.
+- `ai_ops_kit/lifecycle/session_migration.py`, `ai_ops_kit/lifecycle/session_migration_store.py`, `ai_ops_kit/cli/project_session_migrate.py` — experimental capture/preview/CAS apply/rollback pending-state без исполнения задач.
+- `docs/agent-guides/session-state-migration.md` — приватные snapshots, границы переноса, согласованное окно и восстановление после прерывания.
 - `templates/ci/ai-ops-record.yml` — CI-нетто автонакопления срезов эффекта (v2.30)
 - `templates/ci/ai-ops-validate.yml` — child-CI валидации: пин kit = installed_version, без protected-трения (v2.35)
 - `templates/ci/ai-ops-update.yml`
