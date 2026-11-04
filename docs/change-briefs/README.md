@@ -18,6 +18,7 @@
 
 ## Что здесь есть
 
+- [Preview без побочных действий — #1477](preview-has-no-effects.md).
 - [Новый пользовательский ход после native handoff — #1434](1434-user-turn-continuation.md).
 
 - [Интерактивная сессия без вложенной модели — #1434](1434-interactive-session.md).
