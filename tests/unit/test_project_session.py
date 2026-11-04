@@ -14,13 +14,207 @@ from ai_ops_kit.lifecycle import project_session as sessions
 
 
 @pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+def test_open_agent_gets_real_controller_plan_without_nested_provider(project, monkeypatch, runtime):
+    from ai_ops_kit.cli import project_session as cli
+    task = sessions.begin(project, runtime, "open-agent", "Проведи ресерч архитектуры", "turn-1")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", runtime, "--session", "open-agent"]
+    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    complete_prepared_spec(project, task)
+    assert cli.main(args) == 1
+    saved = sessions.load(project, runtime, "open-agent")
+    assert saved["status"] == "running" and saved["execution"]["prepared"]
+    assert saved["execution"]["mode"] == "current-session"
+    command = saved["execution"]["command"]
+    assert "--execute" not in command and "--provider" not in command
+    feature = project / "features" / ("session-" + task["request_id"])
+    workitem = yaml.safe_load((feature / "workitem.yaml").read_text())
+    plan = yaml.safe_load((feature / "run-plan.yaml").read_text())
+    assert workitem["task"] == task["prompt"] and plan["base_workflow"] == "RESEARCH"
+    report = json.loads((feature / "run-report.json").read_text())
+    assert report["execution"] == "planned" and plan["gates"]
+    assert not sessions.verify(project, runtime, "open-agent")["accepted"]
+    assert hook(runtime, {"cwd": str(project), "session_id": "open-agent", "hook_event_name": "Stop"})["continue"] is False
+    before = (sessions.session_dir(project, runtime, "open-agent") / "process.stderr.log").read_bytes()
+    # Реальная правка продукта/коммит ожидаема при исполнении текущим агентом.
+    (project / "result.md").write_text("research result")
+    sessions.git(project, "add", "result.md")
+    sessions.git(project, "commit", "-qm", "research result")
+    assert cli.main(args) == 1
+    assert sessions.load(project, runtime, "open-agent")["request_id"] == task["request_id"]
+    assert (sessions.session_dir(project, runtime, "open-agent") / "process.stderr.log").read_bytes() == before
+    (feature / "run-plan.yaml").write_text("foreign plan")
+    assert cli.main(args) == 2
+    assert len(list(sessions.session_dir(project, runtime, "open-agent").glob("*.execution-claim"))) == 1
+
+
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+def test_hook_replay_keeps_preparation_signals_and_existing_claim(project, monkeypatch, runtime):
+    from ai_ops_kit.cli import project_session as cli
+    payload = {"cwd": str(project), "session_id": "replayed", "hook_event_name": "UserPromptSubmit",
+               "turn_id": "reliable-event-1", "prompt": "Проверь исследование"}
+    hook(runtime, payload)
+    task = sessions.load(project, runtime, "replayed")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", runtime, "--session", "replayed"]
+    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
+    prepared = sessions.load(project, runtime, "replayed")
+    hook(runtime, payload)
+    assert sessions.load(project, runtime, "replayed") == prepared
+    claim = sessions.session_dir(project, runtime, "replayed") / (task["request_id"] + ".execution-claim")
+    claim.write_text("unknown execution outcome")
+    hook(runtime, payload)
+    assert sessions.load(project, runtime, "replayed") == prepared
+    assert cli.main(args) == 2
+    assert claim.read_text() == "unknown execution outcome"
+    assert len(list(claim.parent.glob("*.json"))) == 2
+
+
+@pytest.mark.parametrize("turns", [("a", "b"), (None, None)])
+def test_genuine_new_identical_text_is_not_deduplicated(project, turns):
+    first = sessions.begin(project, "codex", "new-events", "same text", turns[0])
+    second = sessions.begin(project, "codex", "new-events", "same text", turns[1])
+    assert first["request_id"] != second["request_id"]
+    assert sessions.load(project, "codex", "new-events")["request_id"] == second["request_id"]
+    assert (sessions.session_dir(project, "codex", "new-events") / (first["request_id"] + ".json")).is_file()
+
+
+def test_conflicting_or_old_event_never_replaces_active_task(project):
+    sessions.begin(project, "codex", "conflict", "first", "turn-a")
+    with pytest.raises(ValueError, match="повтор события"):
+        sessions.begin(project, "codex", "conflict", "changed payload", "turn-a")
+    new = sessions.begin(project, "codex", "conflict", "new request", "turn-b")
+    with pytest.raises(ValueError, match="повтор события"):
+        sessions.begin(project, "codex", "conflict", "first", "turn-a")
+    assert sessions.load(project, "codex", "conflict") == new
+
+
+@pytest.mark.parametrize("turn", [None, "new-event"])
+def test_new_submit_never_hides_a_claimed_unknown_outcome(project, turn):
+    original = sessions.begin(project, "claude-code", "claimed", "original", "first")
+    directory = sessions.session_dir(project, "claude-code", "claimed")
+    claim = directory / (original["request_id"] + ".execution-claim")
+    claim.write_text("unknown outcome")
+    with pytest.raises(ValueError, match="предыдущая попытка"):
+        sessions.begin(project, "claude-code", "claimed", "new request", turn)
+    assert sessions.load(project, "claude-code", "claimed") == original
+    assert claim.read_text() == "unknown outcome"
+    assert len(list(directory.glob("*.json"))) == 2
+
+
+def test_current_session_missing_intake_is_recoverable_on_same_event(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    task = sessions.begin(project, "claude-code", "intake", "Проверь документ", "event")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "claude-code", "--session", "intake"]
+    assert cli.main(args) == 2
+    assert sessions.begin(project, "claude-code", "intake", task["prompt"], "event")["request_id"] == task["request_id"]
+    assert cli.main(args + ["--signals", '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+    assert sessions.load(project, "claude-code", "intake")["execution"]["prepared"]
+
+
+def test_busy_session_lock_returns_without_waiting_or_changing_request(project, monkeypatch):
+    from ai_ops_kit.cli import project_session as cli
+    task = sessions.begin(project, "codex", "busy", "Проверь документ")
+    monkeypatch.chdir(project)
+    directory = sessions.session_dir(project, "codex", "busy")
+    with sessions.session_lock(directory / "preparation"):
+        started = time.monotonic()
+        assert cli.main(["run", "--runtime", "codex", "--session", "busy"]) == 2
+        assert time.monotonic() - started < 2
+    assert sessions.load(project, "codex", "busy") == task
+    assert not list(directory.glob("*.execution-claim"))
+
+
+def test_outer_runtime_sigterm_cleans_up_owned_group_and_preserves_claim(project):
+    (project / "ai-ops").write_text(f"""#!{sys.executable}
+import subprocess, sys, time
+from pathlib import Path
+subprocess.Popen([sys.executable, '-c', '''import time
+from pathlib import Path
+for i in range(3000):
+    Path('.ai/runtime/heartbeat.next').write_text(str(i))
+    Path('.ai/runtime/heartbeat.next').replace('.ai/runtime/heartbeat')
+    time.sleep(0.02)
+'''])
+time.sleep(60)
+""")
+    sessions.git(project, "add", "ai-ops")
+    sessions.git(project, "commit", "-qm", "supervisor cancellation fixture")
+    original = sessions.begin(project, "claude-code", "cancelled", "Проверь документ")
+    code = (f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r}); "
+            "from ai_ops_kit.lifecycle import project_session as s; "
+            "from pathlib import Path; s.execute(Path.cwd(),'claude-code','cancelled',{},timeout=3)")
+    supervisor = subprocess.Popen([sys.executable, "-c", code], cwd=project,
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        heartbeat = project / ".ai/runtime/heartbeat"
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and (not heartbeat.exists() or heartbeat.read_text() in ("", "0")):
+            time.sleep(0.02)
+        assert heartbeat.exists() and int(heartbeat.read_text()) > 0
+        supervisor.terminate()
+        supervisor.communicate(timeout=5)
+        assert supervisor.returncode == 0
+        stopped = heartbeat.read_text()
+        time.sleep(0.2)
+        assert heartbeat.read_text() == stopped
+        saved = sessions.load(project, "claude-code", "cancelled")
+        assert saved["status"] == "blocked" and "SIGTERM" in saved["blocker"]
+        assert saved["request_id"] == original["request_id"]
+        assert (sessions.session_dir(project, "claude-code", "cancelled") / (original["request_id"] + ".execution-claim")).exists()
+    finally:
+        if supervisor.poll() is None:
+            supervisor.terminate()
+            supervisor.communicate(timeout=5)
+
+
+def test_silent_autonomous_process_and_descendants_are_bounded_without_retry(project):
+    (project / "ai-ops").write_text(f"""#!{sys.executable}
+import subprocess, sys, time
+from pathlib import Path
+child = subprocess.Popen([sys.executable, '-c', '''import time
+from pathlib import Path
+for i in range(3000):
+    Path('.ai/runtime/child-heartbeat.next').write_text(str(i))
+    Path('.ai/runtime/child-heartbeat.next').replace('.ai/runtime/child-heartbeat')
+    time.sleep(0.02)
+'''])
+Path('.ai/runtime/child-pid').write_text(str(child.pid))
+print('provider entered', flush=True)
+time.sleep(60)
+""")
+    sessions.git(project, "add", "ai-ops")
+    sessions.git(project, "commit", "-qm", "silent runtime fixture")
+    original = sessions.begin(project, "claude-code", "silent", "Проверь документ", "event")
+    started = time.monotonic()
+    task = sessions.execute(project, "claude-code", "silent", {}, timeout=1)
+    assert time.monotonic() - started < 5
+    assert task["status"] == "blocked" and "исход неизвестен" in task["blocker"]
+    directory = sessions.session_dir(project, "claude-code", "silent")
+    assert (directory / "process.stdout.log").read_text() == "provider entered\n"
+    assert int((project / ".ai/runtime/child-pid").read_text()) > 0
+    heartbeat = project / ".ai/runtime/child-heartbeat"
+    stopped = heartbeat.read_text()
+    assert int(stopped) > 0  # потомок действительно работал до остановки группы
+    time.sleep(0.2)
+    assert heartbeat.read_text() == stopped
+    claim = directory / (original["request_id"] + ".execution-claim")
+    assert claim.is_file()
+    assert sessions.begin(project, "claude-code", "silent", original["prompt"], "event") == task
+    with pytest.raises(ValueError, match="запуск уже учтён"):
+        sessions.execute(project, "claude-code", "silent", {}, timeout=1)
+    assert claim.is_file() and not sessions.verify(project, "claude-code", "silent")["accepted"]
+
+
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
 def test_research_preparation_resumes_same_request_without_repeating_signals(project, monkeypatch, runtime):
     from ai_ops_kit.cli import project_session as cli
     fixture_producer(project)
     prompt = "Проверь готовое исследование; не меняй продукт"
     task = sessions.begin(project, runtime, "resume-preparation", prompt)
     monkeypatch.chdir(project)
-    args = ["run", "--runtime", runtime, "--session", "resume-preparation"]
+    args = ["run", "--autonomous", "--runtime", runtime, "--session", "resume-preparation"]
     assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
     feature = "session-" + task["request_id"]
     spec_path = project / "features" / feature / "spec.yaml"
@@ -59,7 +253,7 @@ def test_incomplete_preparation_never_consumes_execution(project, monkeypatch, b
         path.write_text("bad: [" if bad == "broken" else yaml.safe_dump({"sections": {
             "goal": {"status": "declined" if bad == "declined-without-note" else "complete", "content": "", "note": None}}}))
     monkeypatch.chdir(project)
-    args = ["run", "--runtime", "codex", "--session", "bad-spec", "--signals",
+    args = ["run", "--autonomous", "--runtime", "codex", "--session", "bad-spec", "--signals",
             '{"task_type":"research","size":"small","risk":"low"}']
     assert cli.main(args) == 1
     assert path.is_file()
@@ -76,7 +270,7 @@ def test_cli_incomplete_intake_can_be_corrected_without_consuming_attempt(projec
     fixture_producer(project)
     task = sessions.begin(project, "codex", "recover", "исследуй архитектуру")
     monkeypatch.chdir(project)
-    args = ["run", "--runtime", "codex", "--session", "recover", "--signals"]
+    args = ["run", "--autonomous", "--runtime", "codex", "--session", "recover", "--signals"]
     assert cli.main(args + ['{"task_type":"research","risk":"medium"}']) == 2
     assert "size" in capsys.readouterr().err
     assert sessions.load(project, "codex", "recover")["status"] == "pending"
@@ -105,7 +299,7 @@ def test_prepared_session_cannot_bypass_guards(project, monkeypatch, case):
     fixture_producer(project)
     task = sessions.begin(project, "codex", "guards", "Проверь исследование")
     monkeypatch.chdir(project)
-    args = ["run", "--runtime", "codex", "--session", "guards"]
+    args = ["run", "--autonomous", "--runtime", "codex", "--session", "guards"]
     assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
     complete_prepared_spec(project, task)
     feature = project / "features" / ("session-" + task["request_id"])
@@ -161,7 +355,7 @@ def test_foreign_partial_spec_is_rejected_before_any_rewrite(project, monkeypatc
     path.write_text(yaml.safe_dump(foreign, allow_unicode=True))
     before = path.read_bytes()
     monkeypatch.chdir(project)
-    assert cli.main(["run", "--runtime", "codex", "--session", "foreign-partial", "--signals",
+    assert cli.main(["run", "--autonomous", "--runtime", "codex", "--session", "foreign-partial", "--signals",
                      '{"task_type":"research","size":"small","risk":"low"}']) == 1
     assert path.read_bytes() == before  # ни sections, ни level/signals не дописаны
     assert sessions.load(project, "codex", "foreign-partial")["status"] == "pending"
@@ -174,7 +368,7 @@ def test_quick_task_without_spec_keeps_existing_light_path(project, monkeypatch)
     fixture_producer(project)
     task = sessions.begin(project, "codex", "quick", "Исправь опечатку")
     monkeypatch.chdir(project)
-    assert cli.main(["run", "--runtime", "codex", "--session", "quick", "--signals",
+    assert cli.main(["run", "--autonomous", "--runtime", "codex", "--session", "quick", "--signals",
                      '{"task_type":"QUICK","size":"small","risk":"low"}']) == 0
     assert (project / ".ai/runtime/process-observed").read_text() == task["prompt"]
     assert not (project / "features" / ("session-" + task["request_id"]) / "spec.yaml").exists()
@@ -212,7 +406,7 @@ def test_parallel_resumes_cannot_mutate_preparation_or_execute_twice(project, mo
     fixture_producer(project)
     task = sessions.begin(project, "codex", "concurrent-resume", "Проверь исследование")
     monkeypatch.chdir(project)
-    args = ["run", "--runtime", "codex", "--session", "concurrent-resume"]
+    args = ["run", "--autonomous", "--runtime", "codex", "--session", "concurrent-resume"]
     assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
     complete_prepared_spec(project, task)
     spec = project / "features" / ("session-" + task["request_id"]) / "spec.yaml"
@@ -233,12 +427,14 @@ def test_parallel_resumes_cannot_mutate_preparation_or_execute_twice(project, mo
             while not all((project / f".ai/runtime/entered-{i}").exists() for i in range(2)) and time.monotonic() < deadline:
                 time.sleep(0.02)
             assert all((project / f".ai/runtime/entered-{i}").exists() for i in range(2))
-            assert all(p.poll() is None for p in children)
+            for child in children:
+                child.communicate(timeout=10)
+            assert all(p.returncode == 2 for p in children)
             assert spec.read_bytes() == before
             assert not (project / ".ai/runtime/process-observed").exists()
         for child in children:
             child.communicate(timeout=30)
-        assert sorted(p.returncode for p in children) == [0, 2]
+        assert cli.main(args) == 0
         calls = (project / ".ai/runtime/process-calls.jsonl").read_text().splitlines()
         assert len(calls) == 1
         assert sessions.verify(project, "codex", "concurrent-resume")["accepted"]
@@ -254,20 +450,21 @@ def test_new_prompt_during_preparation_cannot_execute_with_old_signals(project, 
     fixture_producer(project)
     task = sessions.begin(project, "codex", "replaced", "Исследуй первый вопрос")
     monkeypatch.chdir(project)
-    args = ["run", "--runtime", "codex", "--session", "replaced"]
+    args = ["run", "--autonomous", "--runtime", "codex", "--session", "replaced"]
     assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
     complete_prepared_spec(project, task)
     original = cli.prepare
     def replace_after_preparation(*args, **kwargs):
         result = original(*args, **kwargs)
         assert result is None
-        new_task = sessions.begin(project, "codex", "replaced", "Совсем другой запрос")
-        assert new_task["request_id"] != task["request_id"]
-        return result
+        # Известная автономная подготовка теперь закрыта для hook continuation
+        # и не может быть вытеснена новым запросом без явного разрешения исхода.
+        sessions.begin(project, "codex", "replaced", "Совсем другой запрос")
+        pytest.fail("autonomous preparation must not be replaced")
     monkeypatch.setattr(cli, "prepare", replace_after_preparation)
     assert cli.main(args) == 2
     assert not (project / ".ai/runtime/process-observed").exists()
-    assert sessions.load(project, "codex", "replaced")["prompt"] == "Совсем другой запрос"
+    assert sessions.load(project, "codex", "replaced")["prompt"] == task["prompt"]
     assert not list(sessions.session_dir(project, "codex", "replaced").glob("*.execution-claim"))
 
 
@@ -384,7 +581,7 @@ def test_native_not_ready_preserves_light_request_and_signals_before_claim(proje
     monkeypatch.setattr(codex_native,'readiness',lambda root: {
         'ready':False,'provider':codex_native.NAME,'reason':'native hooks untrusted',
         'next_step':'Подтверди только подготовленный workspace штатным способом'})
-    args=['run','--runtime','codex','--session','native-ready']
+    args=['run','--autonomous','--runtime','codex','--session','native-ready']
     assert cli.main(args+['--signals','{"task_type":"quick","size":"small","risk":"low"}']) == 1
     saved=sessions.load(project,'codex','native-ready')
     assert saved['request_id']==task['request_id'] and saved['status']=='pending'
@@ -633,3 +830,12 @@ def test_source_digest_preserves_filename_whitespace(project):
     path.write_text("after")
     assert path.read_text() == "after"
     assert sessions.source_digest(project) != before
+
+
+def test_bounded_process_reports_progress_through_caller(project, capsys):
+    messages = []
+    result = sessions.run_process([sys.executable, "-c", "print('finished')"],
+                                  project, project, progress=messages.append)
+    assert result.returncode == 0 and result.stdout.strip() == "finished"
+    assert messages and "pid=" in messages[0] and "process.stdout.log" in messages[0]
+    assert capsys.readouterr() == ("", "")

@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "issue": 1409,
+  "date": "2026-10-28",
+  "timezone": "Etc/UTC",
+  "status": "NOT_RUN",
+  "reason": "First window allocated by coordinator, but repeated CPU/memory/disk observations did not establish a quiet host. No real benchmark series started.",
+  "cpu_count": 10,
+  "shared_resource_probe": {
+    "command": "python -c 'from ai_ops_kit.devtools import host_resource_cli as h; matches=h.heavy_processes(); print(h.busy_heavy_processes(matches))'",
+    "observed_heavy_matches": [],
+    "observed_busy_matches": [],
+    "load_average": [3.52587890625, 5.12158203125, 6.35546875],
+    "limitation": "Existing regex only covers named heavy test/build commands; empty matches do not prove host quiescence."
+  },
+  "followup_command": "top -l 4 -n 0 -s 1",
+  "followup_samples_excluding_first_cumulative_cpu_sample": [
+    {"time": "14:35:40", "cpu_user_percent": 16.31, "cpu_system_percent": 13.64, "cpu_idle_percent": 70.40, "load_average": [5.95, 5.42, 6.37], "memory_compressor_MiB_display": 6570},
+    {"time": "14:35:42", "cpu_user_percent": 14.36, "cpu_system_percent": 13.13, "cpu_idle_percent": 72.49, "load_average": [5.95, 5.42, 6.37], "memory_compressor_MiB_display": 6536},
+    {"time": "14:35:43", "cpu_user_percent": 21.83, "cpu_system_percent": 16.25, "cpu_idle_percent": 61.90, "load_average": [5.96, 5.43, 6.37], "memory_compressor_MiB_display": 6520}
+  ],
+  "memory_observation": {
+    "swapins_14_35_04": 1941441,
+    "swapins_14_35_39": 1941465,
+    "swapouts_both_samples": 2741214,
+    "memory_pressure_free_percent_14_35_04": 46,
+    "interpretation": "Nonzero compression alone does not prove pressure; increasing swapins and changing CPU/disk load make a clean measurement claim unsupported."
+  },
+  "permission_observation": {
+    "initial_ps": "Operation not permitted under ordinary sandbox",
+    "standard_approval_retry": "approved; read-only ps/top/vm_stat/memory_pressure completed",
+    "unresolved_access_denial": false
+  },
+  "reservation": {
+    "shared_path": "/tmp/ai-ops-kit-heavy.lock",
+    "acquired": false,
+    "released": "not applicable: own reservation never acquired",
+    "foreign_processes_or_locks_modified": false
+  },
+  "next_window_requirements": [
+    "Coordinator holds AST and other heavy test/build work for bounded suite plus repeat.",
+    "Check real CPU, swap/compression/disk activity after any own tests finish; regex probe alone is insufficient.",
+    "Use existing host_resource_cli shared path with nonblocking lease; do not bypass a busy/denied lease.",
+    "Freeze source/toolchain/commands, save outputs outside checkout, keep warmup and all repeats.",
+    "If new external load appears, preserve artifacts as contaminated and do not adopt as baseline."
+  ]
+}

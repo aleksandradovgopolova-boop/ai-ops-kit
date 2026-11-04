@@ -88,7 +88,7 @@ jobs:
       # ruff — ТОТ ЖЕ пин, что в джобе `lint` (2026-09-29, #1183): шард `contracts` гоняет
       # `tests/contracts/test_identifier_baseline.py`, который пересчитывает ruff'ом находки PLC2401
       # в замороженных файлах. Без ruff этот сторож громко пропускается, то есть в CI не исполнялся бы.
-      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.17.3'
       - name: "Run ${{ matrix.group }} checks"
         run: bash ${{ matrix.script }}
 
@@ -117,7 +117,7 @@ jobs:
       # и находка была настоящей (тест мог пройти при полностью сломанном бюджете).
       # Версия здесь и в хуках обязана быть ОДНА; поднимать её — отдельным осознанным шагом,
       # потому что новая версия приносит новые правила и свою уборку.
-      - run: pip install 'ruff==0.16.2'
+      - run: pip install 'ruff==0.17.3'
       - name: "ruff — правила класса «поломка» (F821/F811/B023/F841)"
         run: ruff check .
       # Битая директива `# noqa` НЕ ПОДАВЛЯЕТ НИЧЕГО, а ruff сообщает о ней предупреждением в
@@ -142,7 +142,7 @@ jobs:
       # инвентарь enforcement-inventory это подсветил. Охват — фундамент + RunContext (#1412),
       # см. [tool.mypy] в pyproject. Версия пинуется по той же причине, что ruff: разные версии дают
       # разные ответы. enforcement-inventory ссылается на ЭТОТ шаг как доказательство исполнения.
-      - run: pip install 'mypy==2.3.1' 'pytest==9.*' 'pyyaml==6.*' 'hypothesis==6.*'
+      - run: pip install 'mypy==2.4.1' 'pytest==9.*' 'pyyaml==6.*' 'hypothesis==6.*'
       - name: "mypy — фундамент и strict-контракты типобезопасны"
         run: |
           mypy
@@ -344,6 +344,10 @@ jobs:
       - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
       - name: "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)"
         run: python3 -m pytest tests/contracts/ -v --tb=short
+      - name: "Bootstrap: unit checks and real isolated setup/retry/demo"
+        run: |
+          python3 -m pytest tests/unit/test_installer_bootstrap.py -q --tb=short
+          python3 -m pytest tests/integration/bootstrap_probe.py -q -s --tb=short
 
   # macOS advisory (F-10): разработка идёт на macOS, а CI её не видел — платформа владельца не
   # проверялась. Джоба НАБЛЮДАЕТ её на быстром срезе (critical_path), но НЕ блокирует

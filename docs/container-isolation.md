@@ -110,6 +110,7 @@ PyYAML/OpenSpec; `npm_config_engine_strict=true` запрещает проигн
 
 Статический `CONTAINER-ASSETS-OK` подтверждает наличие launch/runtime-check контракта и маркеров
 jail-флагов. `CONTAINER-RUNTIME-VERSIONS-OK` подтверждает только версии в исполнившей проверку
-среде. Ни один из них не заменяет no-model image build/start на точном новом head. Реальные
+среде. Проверки версий и справки не доказывают изоляцию агента: policy enforcement, не security isolation.
+Ни один из них не заменяет no-model image build/start на точном новом head. Реальные
 model/MCP injection, redaction/exfil и sandbox negatives (network/FS/mount/UID/timeouts/Docker
 отказ) остаются открытыми в [#1407](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1407).
