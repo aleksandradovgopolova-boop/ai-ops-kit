@@ -67,7 +67,7 @@ def _build_not_yet_list(commit, env_qualified, open_pr, spec_prestage_bad, spec_
 
 def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_ev, signals,
                        *, review, strict_judge_qualified, security_reviewer_proposer,
-                       reviewer_proposer, budget):
+                       reviewer_proposer, budget, base_revision=None):
     """Доменный security-вердикт (security/security-domains.yaml) -> gate_ev['security'].
     v3.38 (K6-глубина): вынесено из run_pipeline без изменения поведения.
 
@@ -85,7 +85,7 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
     if committed_sha and is_git and "security" not in gate_ev:
         from ai_ops_kit.security import security_pack
         try:
-            security_pack_result = security_pack.run_pack(work_root, base=f"{committed_sha}~1", signals=signals)
+            security_pack_result = security_pack.run_pack(work_root, base=base_revision or f"{committed_sha}~1", signals=signals)
         except Exception as _e:  # noqa: BLE001
             _security_scan_error = str(_e)
             security_pack_result = None
@@ -237,10 +237,10 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
         # после preflight-блока. Раньше и то и другое читалось из work_root -> человеческое одобрение в
         # lifecycle-каталоге отсутствовало в worktree -> ложный uncovered.
         try:
-            from ai_ops_kit.security import security_scan as _ss
-            _sec_changed = _ss._git_changed_files(work_root, committed_sha + "^") if committed_sha else []
+            _sec_changed = _security_diff_paths(work_root, committed_sha, base_revision)
         except Exception:  # noqa: BLE001
-            _sec_changed = []
+            gate_ev = dict(gate_ev, security={"status": "fail", "blockers": ["не удалось проверить пути security diff"]})
+            return gate_ev, security_pack_result, effective_approval_signals
         _hu = _human_approval_domains_uncovered(child_root, wid, _sec_changed, diff_root=work_root)
         if _hu and (gate_ev.get("security") or {}).get("status") != "fail":
             gate_ev["security"] = {"status": "fail",
@@ -249,6 +249,15 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
                                    "human_approval_uncovered": _hu,
                                    "pack": {"applicable": security_pack_result["applicable_domains"]}}
     return gate_ev, security_pack_result, effective_approval_signals
+
+
+def _security_diff_paths(root, revision, base):
+    """None означает ошибку Git, а не отсутствие изменений."""
+    from ai_ops_kit.security import security_scan
+    paths = security_scan._git_changed_files(root, base or revision + "^") if revision else []
+    if paths is None:
+        raise ValueError("security diff unavailable")
+    return paths
 
 
 def _assess_readiness(gates, coll, signals, plan, child_root, wid, work_root, *,

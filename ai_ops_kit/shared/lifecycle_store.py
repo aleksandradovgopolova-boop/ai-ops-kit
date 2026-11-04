@@ -21,6 +21,8 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.shared.contracts import GuardedLoadResult
+
 
 def _durable(path: str | Path, data: dict, serialize: Callable, parse: Callable, require_keys: tuple, keep_backup: bool) -> dict:
     """v3.0.15 (LifecycleStore v1.1, finding аудита P1): АТОМАРНАЯ + FAIL-CLOSED запись с валидацией
@@ -468,7 +470,7 @@ def _fsync_dir(directory: Path) -> None:
         os.close(dfd)
 
 
-def load_guarded(path: str | Path, required_keys: tuple = (), kind: str | None = None) -> dict:
+def load_guarded(path: str | Path, required_keys: tuple[str, ...] = (), kind: str | None = None) -> GuardedLoadResult:
     """FAIL-CLOSED чтение. Различает три состояния (а не «пусто -> дефолт»):
       * absent  — файла нет (легитимно fresh);
       * corrupt — есть, но НЕЧИТАЕМ/пуст/не dict/не тот kind/нет обязательных ключей (оборванная запись,

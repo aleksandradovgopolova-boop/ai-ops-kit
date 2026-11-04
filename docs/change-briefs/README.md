@@ -18,10 +18,17 @@
 
 ## Что здесь есть
 
+- [Новый пользовательский ход после native handoff — #1434](1434-user-turn-continuation.md).
+
+- [Интерактивная сессия без вложенной модели — #1434](1434-interactive-session.md).
 - [Безопасная диагностика неизвестного источника плана выпуска](release-snapshot-diagnostics.md).
 - [Проверка кодов возврата команд после обновления — R7](r7-upgrade-command-status.md).
 - [Полный откат неудачного обновления — #1406/R5](1406-r5-rollback-footprint.md).
 - [Первый внешний пользователь: русский и английский старт](first-users-ru-en.md).
+- [Подключение из checkout за три команды](three-command-setup.md).
+- [История существующих package receipts — #1411](1411-receipt-history.md).
+
+- [Локальная read-only трасса WorkItem — #1411](1411-local-trace.md).
 - [Передача runtime и сессии через фасад — #1434](1434-runtime-session-identity.md).
 - [Экспериментальное командное подключение — #1434](1434-team-kit-autostart.md).
 
