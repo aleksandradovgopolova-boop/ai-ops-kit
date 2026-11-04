@@ -587,6 +587,13 @@ def test_native_not_ready_preserves_light_request_and_signals_before_claim(proje
     assert saved['request_id']==task['request_id'] and saved['status']=='pending'
     assert saved['blocker']=='native hooks untrusted'
     assert saved['provider_preparation']['signals']['size']=='small'
+    # #1434: повод «Codex не готов» доходит до inbox через шину внимания, с причиной и одним шагом.
+    from ai_ops_kit.lifecycle import attention_bus
+    pending_attention=attention_bus.collect(project)
+    stall=next(r for r in pending_attention if r['work_id']==task['request_id'])
+    assert stall['kind']==attention_bus.BLOCKED
+    assert 'native hooks untrusted' in stall['reason']
+    assert 'Подтверди только подготовленный workspace' in stall['reason']
     assert not list(sessions.session_dir(project,'codex','native-ready').glob('*.execution-claim'))
     assert not (project/'.ai/runtime/process-observed').exists()
     context=hook('codex',{'cwd':str(project),'session_id':'native-ready','hook_event_name':'SessionStart'})
@@ -596,6 +603,8 @@ def test_native_not_ready_preserves_light_request_and_signals_before_claim(proje
     result=sessions.load(project,'codex','native-ready')
     assert result['status']=='accepted' and result['request_id']==task['request_id']
     assert result['blocker'] is None and result['next_step'] is None
+    # #1434: Codex снова готов — повод снят, в очереди inbox его больше нет.
+    assert not [r for r in attention_bus.collect(project) if r['work_id']==task['request_id']]
     observed=json.loads((project/'.ai/runtime/process-calls.jsonl').read_text().splitlines()[0])
     command=observed['command']
     assert observed['provider']==codex_native.NAME

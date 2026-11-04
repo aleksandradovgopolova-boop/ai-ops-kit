@@ -472,13 +472,21 @@ def execute(root, runtime, session, signals, *, provider=None, request=None, tim
         if current["request_id"] != task["request_id"]:
             raise ValueError("активная постановка сменилась во время native readiness; исполнение не начато")
         task = current
+        akey = f"codex-not-ready:{task['request_id']}"
+        from ai_ops_kit.lifecycle import attention_bus as _ab  # #1434: Codex-застревание → inbox
         if not readiness["ready"]:
             readiness["signals"] = dict(signals)
             task.update(provider_preparation=readiness, blocker=readiness["reason"],
                         next_step=readiness["next_step"])
             write(session_dir(root, runtime, session) / f"{task['request_id']}.json", task)
+            with contextlib.suppress(Exception):   # fail-safe
+                _ab.record(root, key=akey, source="запуск Codex",
+                           reason=f"Codex не готов: {readiness['reason']}. Шаг: {readiness['next_step']}",
+                           kind=_ab.BLOCKED, work_id=task["request_id"])
             return task
         task.update(provider_preparation=dict(readiness, signals=dict(signals)), blocker=None, next_step=None)
+        with contextlib.suppress(Exception):       # снова готов — снять повод
+            _ab.resolve(root, akey)
     fid = "session-" + task["request_id"]
     report_path = within(root, f"features/{fid}/run-report.json")
     command = [str(root / "ai-ops"), "run", task["prompt"], str(root), "--execute",
