@@ -48,7 +48,7 @@ dev_tools:
     # F-05 ЗАКРЫТ (2026-09-09): замер решил спор «включить vs убрать» — обычный проход нашёл 8
     # реальных проблем на фундаменте, типы окупаются. Включён на kernel+shared ([tool.mypy]), шаг в
     # джобе lint. Полная аннотация (disallow_untyped_defs) — отдельный ратчет-вверх.
-    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "mypy==2.3.1"}
+    enforced_at: {file: .github/workflows/package-quality.yml, pattern: "mypy==2.4.1"}
 
 # Каждый хук из .pre-commit-config.yaml обязан быть здесь: либо `enforced` с зеркалом в CI и
 # доказательством `enforced_at`, либо честно `local_only` с причиной. Новый хук без записи — красный.
