@@ -85,15 +85,10 @@ runtimes:
     capabilities:
       native_subagents: {status: degraded, value: "baseline TOML agents, not full parity"}
       parallel_execution: {status: degraded, value: "governed concurrent via generic path (не live-verified)",
-        note: "v4.12 (#1434): независимые работы с непересекающимся write_scope идут ОДНОВРЕМЕННО тем же
-          governed путём, что у generic-orchestrator — ai_ops_kit/engine/parallel_live.run_live_concurrent
-          (отдельный клон+ветка+прогон на пакет, fan-in на свежем integration-SHA). parallel_live_dispatch
-          прокидывает runtime=codex + provider=codex-app-server в КАЖДЫЙ пакетный прогон; гейты/writer≠judge
-          не ослаблены, основной checkout не трогается (доказано offline: concurrent, per-package-clone,
-          conflicts=0, no_checkout_damage — tests/unit/test_parallel_codex_concurrent.py). Остаётся degraded,
-          а не verified: оркестрация параллели проверена offline, но ЖИВОЙ per-work прогон Codex по-прежнему
-          fail-closed на native readiness/trust/model (см. pipeline_text_provider) и live-приёмкой не
-          подтверждён. Непересекающийся write_scope обязателен — зависимые пакеты параллель не берёт."}
+        note: "v4.12 (#1434): независимые работы с непересекающимся write_scope идут одновременно тем же
+          governed путём (parallel_live.run_live_concurrent); parallel_live_dispatch прокидывает
+          runtime+provider в каждый пакет, гейты не ослаблены. degraded, не verified: живой прогон Codex
+          остаётся fail-closed на native readiness/trust/model. Offline: test_parallel_codex_concurrent."}
       tools: {status: documented, value: true}
       mcp: {status: documented, value: true}
       function_calling: {status: documented, value: true}
