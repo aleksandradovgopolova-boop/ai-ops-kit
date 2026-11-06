@@ -20,11 +20,14 @@
           "id": {"type": "string"},
           "status": {"enum": ["pass", "warn", "fail"]},
           "evidence": {
-            "type": "object",
-            "properties": {
-              "file": {"type": "string"},
-              "lines": {"type": "string"}
-            }
+            "oneOf": [
+              {"type": "object", "properties": {
+                "file": {"type": "string"}, "lines": {"type": "string"}
+              }},
+              {"type": "array", "items": {"type": "object", "properties": {
+                "file": {"type": "string"}, "lines": {"type": "string"}
+              }}}
+            ]
           }
         }
       }

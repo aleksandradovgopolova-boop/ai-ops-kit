@@ -31,22 +31,50 @@ def _hook_version() -> str:
     return m.group(1)
 
 
-def _ci_version() -> str:
+def _ci_versions() -> list[str]:
+    """ВСЕ пины `ruff==` в CI, а не только первый. В package-quality.yml ruff ставится ДВАЖДЫ
+    (джоба `lint` и шард `contracts`); если один подняли, а другой нет — «чисто в CI» снова
+    расходится само с собой. Прежний guard читал только lines[0] и второй пин не видел (#1402)."""
     text = (KIT / ".github" / "workflows" / "package-quality.yml").read_text(encoding="utf-8")
     lines = [l for l in text.splitlines()
              if "pip install" in l and "ruff" in l and not l.strip().startswith("#")]
     assert lines, "в CI нет установки ruff"
-    m = re.search(r"ruff==([\d.]+)", lines[0])
-    assert m, (
-        f"CI ставит ruff без пина версии — «чисто в CI» перестаёт совпадать с локальным: {lines[0].strip()}")
-    return m.group(1)
+    versions = []
+    for l in lines:
+        m = re.search(r"ruff==([\d.]+)", l)
+        assert m, (
+            f"CI ставит ruff без пина версии — «чисто в CI» перестаёт совпадать с локальным: {l.strip()}")
+        versions.append(m.group(1))
+    return versions
 
 
-def _dev_floor() -> str:
+def _ci_version() -> str:
+    """Единственная версия ruff в CI. Если пины разошлись между джобами — падаем здесь."""
+    versions = _ci_versions()
+    assert len(set(versions)) == 1, (
+        f"CI пинит ruff разными версиями в разных джобах {versions} — «чисто в CI» перестаёт быть "
+        "одним утверждением: один шард найдёт то, что другой пропустит")
+    return versions[0]
+
+
+def _pyproject_dev_floor() -> str:
     text = (KIT / "pyproject.toml").read_text(encoding="utf-8")
     m = re.search(r'"ruff>=([\d.]+)"', text)
-    assert m, "в dev-зависимостях нет ruff"
+    assert m, "в dev-зависимостях pyproject нет ruff"
     return m.group(1)
+
+
+def _requirements_dev_floor() -> str:
+    """requirements-dev.txt — тоже dev-инструкция (#1402). Её нижняя граница должна держать тот же
+    пин: `pip install -r requirements-dev.txt` не должен давать линтер ниже проверочного."""
+    text = (KIT / "requirements-dev.txt").read_text(encoding="utf-8")
+    m = re.search(r"^ruff>=([\d.]+)", text, re.MULTILINE)
+    assert m, "в requirements-dev.txt нет ruff"
+    return m.group(1)
+
+
+def _to_tuple(s: str) -> tuple:
+    return tuple(int(x) for x in s.split("."))
 
 
 @pytest.mark.unit
@@ -58,9 +86,16 @@ def test_ci_and_hook_pin_the_same_ruff():
 
 
 @pytest.mark.unit
-def test_dev_floor_is_not_below_the_pin():
-    """Нижняя граница dev-зависимости не ниже пина: иначе `pip install -e .[dev]` даст третий линтер."""
-    floor, pin = _dev_floor(), _ci_version()
-    to_tuple = lambda s: tuple(int(x) for x in s.split("."))  # noqa: E731 — локальный ключ сортировки
-    assert to_tuple(floor) >= to_tuple(pin), (
+def test_all_ci_jobs_pin_the_same_ruff():
+    """Оба CI-пина ruff (lint и contracts) — одна версия: расхождение между джобами краснеет."""
+    assert len(set(_ci_versions())) == 1, f"CI-джобы пинят ruff по-разному: {_ci_versions()}"
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("floor_fn", [_pyproject_dev_floor, _requirements_dev_floor])
+def test_dev_floor_is_not_below_the_pin(floor_fn):
+    """Нижняя граница dev-инструкций (pyproject .[dev] И requirements-dev.txt) не ниже пина: иначе
+    `pip install -e .[dev]` или `-r requirements-dev.txt` даст разработчику третий линтер (#1402)."""
+    floor, pin = floor_fn(), _ci_version()
+    assert _to_tuple(floor) >= _to_tuple(pin), (
         f"dev ставит ruff>={floor}, а проверки идут на {pin} — разработчик получит другой линтер")

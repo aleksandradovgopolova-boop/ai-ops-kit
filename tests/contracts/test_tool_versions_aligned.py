@@ -8,7 +8,7 @@
 `uv.lock`), и ничто не стерегло их согласованность.
 
 ЕДИНЫЙ ИСТОЧНИК — `pyproject.toml`: `[project].dependencies` (pyyaml) и
-`[project.optional-dependencies].dev` (остальные). Пол, объявленный там, — истина; любое другое
+`[project.optional-dependencies].dev` и `tool.ai_ops.dev_tool_versions` (parent-only xdist). Пол, объявленный там, — истина; любое другое
 объявление обязано ему соответствовать:
 
   * ruff и mypy — находко-чувствительные: РОВНО та же версия везде (CI-пин, pre-commit rev,
@@ -56,6 +56,8 @@ def _floors_from_pyproject():
     data = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     specs = list(data["project"].get("dependencies", []))
     specs += data["project"].get("optional-dependencies", {}).get("dev", [])
+    specs += [name + constraint for name, constraint in
+              data["tool"]["ai_ops"].get("dev_tool_versions", {}).items()]
     floors = {}
     for spec in specs:
         m = re.match(r"([A-Za-z0-9_.-]+)\s*>=\s*([0-9][0-9.*]*)", spec)
@@ -72,9 +74,11 @@ def _observed():
     req = ROOT / "requirements-dev.txt"
     if req.is_file():
         for line in req.read_text(encoding="utf-8").splitlines():
-            m = re.match(r"\s*([A-Za-z0-9_.-]+)\s*>=\s*([0-9][0-9.*]*)", line)
+            m = re.match(r"\s*([A-Za-z0-9_.-]+)([^#;]*)", line)
             if m and m.group(1).lower() in ALIGNED:
-                seen.append((m.group(1).lower(), m.group(2), "requirements-dev.txt", False))
+                spec = m.group(2).strip()
+                raw = spec[2:].strip() if spec.startswith((">=", "==")) else spec
+                seen.append((m.group(1).lower(), raw, "requirements-dev.txt", spec.startswith("==")))
 
     # .pre-commit-config.yaml — rev хука ruff.
     pc = ROOT / ".pre-commit-config.yaml"
@@ -87,12 +91,16 @@ def _observed():
     # CI-workflow'ы — пины в строках установки (pip/uv).
     wf_re = re.compile(r"([A-Za-z0-9_.-]+)(==|>=)([0-9][0-9.*]*)")
     for wf in sorted((ROOT / ".github" / "workflows").glob("*.yml")):
-        for line in wf.read_text(encoding="utf-8").splitlines():
-            if "install" not in line:
-                continue
-            for name, op, ver in wf_re.findall(line):
-                if name.lower() in ALIGNED:
-                    seen.append((name.lower(), ver, f".github/workflows/{wf.name}", op == "=="))
+        workflow = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
+        for job in workflow.get("jobs", {}).values():
+            for step in job.get("steps", []):
+                command = str(step.get("run", "")).replace("\\\n", " ")
+                for line in command.splitlines():
+                    if "install" not in line or line.lstrip().startswith("#"):
+                        continue
+                    for name, op, ver in wf_re.findall(line):
+                        if name.lower() in ALIGNED:
+                            seen.append((name.lower(), ver, f".github/workflows/{wf.name}", op == "=="))
 
     # uv.lock — зафиксированные версии.
     lock = ROOT / "uv.lock"
@@ -116,9 +124,10 @@ def check(floors, observed):
         if tool not in floors:
             continue
         floor, floor_raw = floors[tool]
-        obs = _ver(raw)
-        if not obs:
+        if not re.fullmatch(r"v?\d+(?:\.\d+)*(?:\.\*)?", raw):
+            findings.append(f"{tool}: {source} не объявляет проверяемую версию: {raw!r}")
             continue
+        obs = _ver(raw)
         if tool in EXACT:
             # Находко-чувствительный: РОВНО пол pyproject во всех объявлениях.
             if obs != floor:
@@ -185,3 +194,38 @@ def test_drift_is_caught_fail_closed():
         ("pytest", "9.2.0", "uv.lock", True),
         ("pytest", "9.*", ".github/workflows/x.yml", True),
     ]) == []
+
+
+@pytest.mark.contract
+@pytest.mark.parametrize("spec", ["ruff==0.17.2", "ruff", "ruff~=0.17.2"])
+def test_requirements_drift_cannot_disappear(monkeypatch, tmp_path, spec):
+    """Смена оператора/отсутствие версии не прячет установленный инструмент от сверки."""
+    (tmp_path / "requirements-dev.txt").write_text(spec + "\n", encoding="utf-8")
+    monkeypatch.setitem(globals(), "ROOT", tmp_path)
+    observed = _observed()
+    assert len(observed) == 1 and observed[0][0] == "ruff"
+    assert check({"ruff": ((0, 17, 3), "ruff>=0.17.3")}, observed)
+
+
+@pytest.mark.contract
+def test_mutable_hook_revision_is_rejected(monkeypatch, tmp_path):
+    (tmp_path / ".pre-commit-config.yaml").write_text(
+        "repos:\n  - repo: https://github.com/astral-sh/ruff-pre-commit\n    rev: main\n",
+        encoding="utf-8")
+    monkeypatch.setitem(globals(), "ROOT", tmp_path)
+    observed = _observed()
+    assert observed == [("ruff", "main", ".pre-commit-config.yaml", True)]
+    assert check({"ruff": ((0, 17, 3), "ruff>=0.17.3")}, observed)
+
+
+@pytest.mark.contract
+def test_multiline_ci_install_is_observed(monkeypatch, tmp_path):
+    workflows = tmp_path / ".github" / "workflows"
+    workflows.mkdir(parents=True)
+    command = "pip install " + "\\" + "\n  'ruff==0.17.2'\n"
+    (workflows / "pilot.yml").write_text(yaml.safe_dump({"jobs": {
+        "smoke": {"steps": [{"run": command}]}}}), encoding="utf-8")
+    monkeypatch.setitem(globals(), "ROOT", tmp_path)
+    observed = _observed()
+    assert observed == [("ruff", "0.17.2", ".github/workflows/pilot.yml", True)]
+    assert check({"ruff": ((0, 17, 3), "ruff>=0.17.3")}, observed)

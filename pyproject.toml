@@ -24,12 +24,16 @@ ai-ops = "ai_ops_kit.cli.entry:main"
 [project.optional-dependencies]
 # ЕДИНЫЙ ИСТОЧНИК версий инструментов (#1402). Полы здесь — источник истины; CI-пины,
 # pre-commit rev и uv.lock обязаны ему соответствовать, расхождение краснеет проверкой
-# (validate_tool_versions.py + tests/contracts/test_tool_versions_aligned.py). pytest-пол
+# (tests/contracts/test_tool_versions_aligned.py). pytest-пол
 # был `>=8.0`, а CI и lock держат pytest 9 — пол ниже того, что реально требует CI, это тот
-# же класс дрейфа, что версии Python; выровнен к 9. pytest-xdist добавлен сюда: он нужен
-# параллельному прогону (`-n auto`) и уже стоит в CI (`==3.*`), но в объявлении его не было.
-test = ["pytest>=9.0", "pytest-cov>=7.1.0", "pytest-xdist>=3.8.0", "hypothesis>=6.170.14"]
-dev = ["pytest>=9.0", "pytest-cov>=7.1.0", "pytest-xdist>=3.8.0", "hypothesis>=6.170.14", "ruff>=0.17.3", "mypy>=2.4.1", "pre-commit>=3.5"]
+# же класс дрейфа, что версии Python; выровнен к 9.
+test = ["pytest>=9.0", "pytest-cov>=7.1.0", "hypothesis>=6.170.14"]
+dev = ["pytest>=9.0", "pytest-cov>=7.1.0", "hypothesis>=6.170.14", "ruff>=0.17.3", "mypy>=2.4.1", "pre-commit>=3.5"]
+
+# Уже используемый parent dev-инструмент; не расширяет устанавливаемые extras пакета.
+# Контракт версий сверяет этот пол с requirements-dev.txt и CI, как остальные инструменты.
+[tool.ai_ops.dev_tool_versions]
+pytest-xdist = ">=3.8.0"
 
 [tool.setuptools.dynamic]
 version = {file = "VERSION"}
