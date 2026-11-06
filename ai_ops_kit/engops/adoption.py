@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 import hashlib
 import json
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import re
 import stat
 import uuid
@@ -20,6 +20,10 @@ CAPABILITIES = {"network": False, "sends": False}
 IDENTITY = ".ai/project/adoption-id.json"
 RELATIONSHIPS = ("owned", "external", "unknown")
 MAX_BYTES = 65536
+EVIDENCE_META_BYTES = 1024 * 1024
+EVIDENCE_FILE_BYTES = 16 * 1024 * 1024
+EVIDENCE_TOTAL_BYTES = 64 * 1024 * 1024
+EVIDENCE_MAX_FILES = 4096
 
 
 def _today():
@@ -52,6 +56,145 @@ def reporting_window(start=None, end=None):
     elif start is None or end is None:
         raise ValueError("задайте обе даты периода или не задавайте ни одной")
     return _window(start, end)
+
+
+def _evidence_path(root, relative, limit):
+    """Только обычный ограниченный файл внутри явно выбранного root, без ссылок."""
+    rel = PurePosixPath(relative)
+    if (not relative or rel.is_absolute() or rel.as_posix() != relative
+            or any(p in (".", "..") for p in rel.parts) or "\\" in relative or ":" in relative):
+        raise ValueError("unsafe_evidence_path")
+    path = Path(root).resolve()
+    for part in rel.parts:
+        path /= part
+        if path.is_symlink():
+            raise ValueError("unsafe_evidence_path")
+    info = path.stat()
+    if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+        raise ValueError("unsafe_evidence_file")
+    return path
+
+
+def _evidence_bytes(root, relative, limit):
+    path = _evidence_path(root, relative, limit)
+    with path.open("rb") as stream:
+        raw = stream.read(limit + 1)
+    if len(raw) > limit:
+        raise ValueError("evidence_file_grew_over_limit")
+    return raw
+
+
+def _evidence_json(root, relative):
+    data = json.loads(_evidence_bytes(root, relative, EVIDENCE_META_BYTES))
+    if not isinstance(data, dict):
+        raise ValueError("invalid_evidence_object")
+    return data
+
+
+def _evidence_version(value):
+    return isinstance(value, str) and re.fullmatch(r"\d+\.\d+\.\d+(?:[-+][A-Za-z0-9.-]+)?", value) is not None
+
+
+def _managed_integrity(root, manifest):
+    files = manifest.get("files")
+    if (type(manifest.get("schema_version")) is not int or manifest["schema_version"] != 1
+            or manifest.get("algorithm") != "sha256" or manifest.get("managed_root") != "managed"
+            or not isinstance(files, dict) or not 0 < len(files) <= EVIDENCE_MAX_FILES or "VERSION" not in files):
+        raise ValueError("invalid_checksum_manifest")
+    actual, total = set(), 0
+    managed = Path(root).resolve() / ".ai/managed"
+    for index, path in enumerate(managed.rglob("*")):
+        if index > EVIDENCE_MAX_FILES * 4 or path.is_symlink():
+            raise ValueError("unsafe_managed_inventory")
+        rel = path.relative_to(managed)
+        if "__pycache__" in rel.parts or path.suffix in (".pyc", ".pyo"):
+            continue  # артефакты интерпретатора, как в штатном checksum-валидаторе
+        if path.is_dir() or path.name in (".checksums.json", ".provenance.json", ".update-lock", ".gitkeep"):
+            continue
+        actual.add(rel.as_posix())
+        if len(actual) > EVIDENCE_MAX_FILES:
+            raise ValueError("managed_inventory_limit")
+    if actual != set(files):
+        raise ValueError("incomplete_or_drifted_inventory")
+    for rel, expected in files.items():
+        if not isinstance(expected, str) or re.fullmatch(r"[0-9a-f]{64}", expected) is None:
+            raise ValueError("invalid_checksum")
+        path = _evidence_path(root, f".ai/managed/{rel}", EVIDENCE_FILE_BYTES)
+        if total + path.stat().st_size > EVIDENCE_TOTAL_BYTES:
+            raise ValueError("managed_bytes_limit")
+        digest = hashlib.sha256()
+        read_bytes = 0
+        with path.open("rb") as stream:
+            for chunk in iter(lambda: stream.read(65536), b""):
+                read_bytes += len(chunk)
+                total += len(chunk)
+                if read_bytes > EVIDENCE_FILE_BYTES or total > EVIDENCE_TOTAL_BYTES:
+                    raise ValueError("managed_file_grew_over_limit")
+                digest.update(chunk)
+        if digest.hexdigest() != expected:
+            raise ValueError("managed_content_drift")
+    return len(files)
+
+
+def _installation_evidence(root):
+    try:
+        version = _evidence_bytes(root, ".ai/managed/VERSION", 256).decode("utf-8").strip()
+        prov = _evidence_json(root, ".ai/managed/.provenance.json")
+        if (not _evidence_version(version) or type(prov.get("schema_version")) is not int
+                or prov["schema_version"] != 1 or prov.get("package") != "ai-first-system"
+                or prov.get("installed_version") != version or prov.get("managed_root") != ".ai/managed"
+                or prov.get("checksums_file") != ".checksums.json"):
+            raise ValueError("inconsistent_provenance")
+        count = _managed_integrity(root, _evidence_json(root, ".ai/managed/.checksums.json"))
+        return {"state": "locally_consistent", "version": version, "checked_files": count,
+                "source_authentication": "unknown", "source_at": None,
+                "reason": "checksums_do_not_authenticate_source"}
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+        return {"state": "unknown", "reason": "installation_evidence_missing_invalid_or_drifted"}
+
+
+def _update_evidence(root, installation):
+    if installation["state"] != "locally_consistent":
+        return {"state": "unknown", "updated_in_window": "unknown", "reason": "installation_not_corroborated"}
+    try:
+        rep = _evidence_json(root, ".ai/runtime/last-update-report.json")
+        smoke = rep.get("smoke_tests")
+        if (type(rep.get("schema_version")) is not int or rep["schema_version"] != 1
+                or rep.get("command") != "update" or rep.get("status") != "ok"
+                or not _evidence_version(rep.get("from_version"))
+                or rep.get("from_version") == rep.get("to_version")
+                or rep.get("to_version") != installation["version"]
+                or ("applied_in_place" in rep and rep["applied_in_place"] is not True)
+                or "deferred_to_branch" in rep
+                or not isinstance(smoke, list) or not smoke
+                or any(not isinstance(s, dict) or s.get("status") != "pass"
+                       or not isinstance(s.get("check"), str) or not s["check"].strip() for s in smoke)):
+            raise ValueError("update_not_corroborated")
+        return {"state": "local_report_consistent", "from_version": rep["from_version"],
+                "to_version": rep["to_version"], "source_at": None, "updated_in_window": "unknown",
+                "reason": "undated_local_report_is_not_authenticated_transition"}
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError):
+        return {"state": "unknown", "updated_in_window": "unknown", "reason": "update_evidence_missing_or_invalid"}
+
+
+def local_evidence(root, start, end):
+    """Read-only диагностика уже разрешённого проекта; ничего не экспортирует/не подтверждает заочно."""
+    window = _window(start, end)
+    state = _state(root)
+    result = {"schema_version": 1, "kind": "AdoptionLocalEvidence", "window": window,
+              "network": False, "writes": False, "consent": (state or {}).get("consent", "disabled")}
+    if not state or state["consent"] != "granted":
+        return dict(result, inspection="not_permitted", reason="active_project_consent_required")
+    _evidence_path(root, IDENTITY, MAX_BYTES)
+    if identity(root) != state["project_id"]:
+        raise ValueError("ID проекта изменился")
+    installed = _installation_evidence(root)
+    return dict(result, inspection="local_only", installation=installed,
+                update=_update_evidence(root, installed),
+                activity={"observed_dates_in_window": len({d for d in state["days"] if start <= d <= end}),
+                          "source": "unattributed_local_dates", "verified_product_active": "unknown",
+                          "reason": "dates_or_manual_records_do_not_bind_product_evidence"},
+                imported_receipts_used=False, world_total_state="unknown")
 
 
 def _read(path):
@@ -140,6 +283,20 @@ def status(root):
             "observation_scope": "pipeline run_completed after consent; other runtimes unknown"}
 
 
+def _event_day(value):
+    """Время источника, не дата доставки. Без времени свежесть не доказана."""
+    if not isinstance(value, str):
+        raise ValueError("нужно время события")
+    stamp = datetime.fromisoformat(value)
+    if stamp.tzinfo is None or stamp.utcoffset() is None:
+        raise ValueError("нужен часовой пояс события")
+    stamp = stamp.astimezone(timezone.utc)
+    day = stamp.date().isoformat()
+    if stamp > datetime.now(timezone.utc) or day != _today():
+        raise ValueError("свежесть события не подтверждена")
+    return day
+
+
 def observe_completed(data):
     """Подписчик ядра. Не хранит task/model/provider/путь; максимум одна дата за день.
 
@@ -170,10 +327,12 @@ def observe_completed(data):
                 return
             if type(calls) is not int or calls <= 0:
                 return
-            state["days"] = sorted(set(state["days"]) | {_today()})[-366:]
-            _write(path, state)
+            day = _event_day(data.get("timestamp"))
+            if day not in state["days"]:
+                state["days"] = sorted(set(state["days"]) | {day})[-366:]
+                _write(path, state)
         rep["adoption_observation"] = "recorded_locally"
-    except (OSError, ValueError, TypeError, RuntimeError):
+    except (OSError, ValueError, TypeError, RuntimeError, OverflowError):
         rep["adoption_observation"] = "unavailable"
 
 
