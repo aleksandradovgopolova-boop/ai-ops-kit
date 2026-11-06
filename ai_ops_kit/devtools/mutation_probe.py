@@ -21,6 +21,11 @@
 значит: он был бы убит и без мутации. Такой исход честно называется `not_verified`, а не `killed` —
 тот же инвариант, что `unavailable != 0`.
 
+ПОДТВЕРЖДЕНИЕ KILL. Нужны rc=1 и свежий JUnit failure от pytest test call без collection/fixture
+errors. unittest.TestCase пока не поддержан: его setUp/tearDown pytest тоже представляет как
+call failure, поэтому такой прогон честно not_verified. ImportError внутри обычного test call
+может убить мутанта; ошибка import при collection/setup и некомпилируемый Python — не могут.
+
 Использование:
   mutation_probe.py <repo> [--only id,id] [--json]
   mutation_probe.py --selftest        # объяснение модуля (проверки — в tests/unit/)
@@ -35,6 +40,7 @@ import subprocess
 import sys
 import tempfile
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 import yaml
 
@@ -45,6 +51,16 @@ KIND = "mutation-probes"
 #: Что не копируем в дерево прогона: история, кеши, окружения. Копия нужна только для запуска тестов.
 SKIP = shutil.ignore_patterns(".git", "__pycache__", "*.pyc", ".venv", "node_modules", ".mypy_cache",
                               ".pytest_cache", ".ruff_cache", "htmlcov", ".ai", "build", "dist")
+# JUnit не отличает тело unittest от setUp/tearDown. Отмечаем тип item ДО запуска, не парсим
+# текст traceback. Малый временный pytest plugin не входит в проверяемое дерево.
+_EVIDENCE_PLUGIN = '''import unittest
+
+def pytest_collection_modifyitems(items):
+    for item in items:
+        cls = getattr(item, "cls", None)
+        kind = "unittest" if isinstance(cls, type) and issubclass(cls, unittest.TestCase) else "pytest"
+        item.user_properties.append(("mutation_probe_kind", kind))
+'''
 
 
 def load_probes(root=None) -> list:
@@ -58,18 +74,50 @@ def load_probes(root=None) -> list:
     return [x for x in (doc.get("probes") or []) if isinstance(x, dict)]
 
 
-def _pytest(root, tests, python=None, timeout=900):
-    """Прогон названных тестов в дереве `root`. -> (rc, хвост вывода)."""
-    cmd = [python or sys.executable, "-m", "pytest", *tests, "-q", "-p", "no:cacheprovider"]
-    # probe-runner-survives-bytecode-cache: мутация той же длины в ту же секунду не перекомпилирует
-    # .pyc (mtime+size), и интерпретатор исполняет старый байткод. Подавляем запись байткода.
+def _execution_evidence(report):
+    """JUnit: failure — выполненный test call, error — collection/setup/teardown.
+
+    Считаем реальные testcase, а не строку stdout или summary counters. ImportError внутри
+    test call допустим; сломанный import на collection/setup НЕ доказывает обнаружение мутации.
+    """
     try:
-        r = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, timeout=timeout,
-                           env={**__import__("os").environ, "PYTHONPATH": str(root),
-                                "PYTHONDONTWRITEBYTECODE": "1"})
-    except subprocess.TimeoutExpired:
-        return 124, "прогон превысил таймаут"
-    return r.returncode, (r.stdout or "")[-400:]
+        doc = ET.parse(report).getroot()
+    except (OSError, ET.ParseError):
+        return None
+    if doc.tag not in {"testsuites", "testsuite"}:
+        return None
+    cases = list(doc.iter("testcase"))
+    if any(not case.get("name") for case in cases):
+        return None
+    # Отсутствующий marker тоже unknown: plugin мог быть выключен addopts или чужим hook.
+    unsupported = [case for case in cases if case.find(
+        "properties/property[@name='mutation_probe_kind'][@value='pytest']") is None]
+    executed = [case for case in cases if case not in unsupported
+                and case.find("skipped") is None and case.find("error") is None]
+    return {"executed": len(executed), "errors": len(list(doc.iter("error"))),
+            "unsupported": len(unsupported),
+            "failed_tests": [f"{case.get('classname', '')}::{case.get('name')}"
+                             for case in executed if case.find("failure") is not None]}
+
+
+def _pytest(root, tests, python=None, timeout=900):
+    """Прогон названных тестов. -> (rc, хвост вывода, execution evidence или None)."""
+    # Отдельный свежий путь ДЛЯ КАЖДОГО запуска: база/другая проба не могут оставить evidence.
+    # За пределами дерева: отчёт не меняет проверяемые файлы и не попадает в следующую копию.
+    with tempfile.TemporaryDirectory(prefix="mutation-pytest-") as tmp:
+        report = Path(tmp) / "junit.xml"
+        (Path(tmp) / "_mutation_probe_evidence.py").write_text(_EVIDENCE_PLUGIN, encoding="utf-8")
+        cmd = [python or sys.executable, "-m", "pytest", *tests, "-q", "-p", "no:cacheprovider",
+               "-p", "_mutation_probe_evidence", "--junitxml", str(report)]
+        # Равная длина мутации в ту же секунду не инвалидирует mtime+size .pyc.
+        try:
+            r = subprocess.run(cmd, cwd=str(root), capture_output=True, text=True, timeout=timeout,
+                               env={**__import__("os").environ,
+                                    "PYTHONPATH": __import__("os").pathsep.join((tmp, str(root))),
+                                    "PYTHONDONTWRITEBYTECODE": "1"})
+        except subprocess.TimeoutExpired:
+            return 124, "прогон превысил таймаут", None
+        return r.returncode, ((r.stdout or "") + (r.stderr or ""))[-400:], _execution_evidence(report)
 
 
 def _run_serial(root, probes, python=None, timeout=900) -> dict:
@@ -100,11 +148,14 @@ def _run_serial(root, probes, python=None, timeout=900) -> dict:
             key = tuple(tests)
             if key not in baseline_cache:
                 baseline_cache[key] = _pytest(work, tests, python, timeout)
-            base_rc, base_tail = baseline_cache[key]
-            if base_rc != 0:
+            base_rc, base_tail, base_evidence = baseline_cache[key]
+            if (base_rc != 0 or not base_evidence or not base_evidence["executed"]
+                    or base_evidence["errors"] or base_evidence["unsupported"]
+                    or base_evidence["failed_tests"]):
                 entry.update(outcome="not_verified",
-                            reason=f"базовый прогон КРАСНЫЙ (rc={base_rc}) — «мутант убит» ничего не "
-                                   f"значил бы: тест падал бы и без мутации. {base_tail[-160:]}")
+                            reason=f"базовый прогон КРАСНЫЙ или не подтверждён (rc={base_rc}) — "
+                                   f"нужны исполненные зелёные pytest tests (unittest не поддержан). "
+                                   f"{base_tail[-160:]}")
                 not_verified.append(pid); out.append(entry); continue
 
             # 2. Мутация в КОПИИ, с восстановлением после прогона.
@@ -119,21 +170,36 @@ def _run_serial(root, probes, python=None, timeout=900) -> dict:
                             reason=f"образец охраны встречается {hits} раз(а), ожидался ровно один — "
                                    f"мутация неоднозначна")
                 not_verified.append(pid); out.append(entry); continue
+            mutated = src.replace(find, repl, 1)
+            if target.suffix == ".py":
+                try:
+                    compile(mutated, str(pr.get("file")), "exec", dont_inherit=True)
+                except (SyntaxError, ValueError) as exc:
+                    entry.update(outcome="not_verified", reason=f"некорректная Python-мутация: {exc}")
+                    not_verified.append(pid); out.append(entry); continue
             try:
-                target.write_text(src.replace(find, repl, 1), encoding="utf-8")
-                rc, tail = _pytest(work, tests, python, timeout)
+                target.write_text(mutated, encoding="utf-8")
+                rc, tail, evidence = _pytest(work, tests, python, timeout)
             finally:
                 target.write_text(src, encoding="utf-8")
 
+            entry["execution"] = evidence
             if rc == 124:
                 entry.update(outcome="not_verified", reason="mutant run timed out; no proof of detection")
+                not_verified.append(pid)
+            elif (rc not in (0, 1) or not evidence or not evidence["executed"]
+                  or evidence["errors"] or evidence["unsupported"]
+                  or (rc == 1 and not evidence["failed_tests"])
+                  or (rc == 0 and evidence["failed_tests"])):
+                entry.update(outcome="not_verified",
+                             reason=f"нет подтверждённого результата выполненных тестов (rc={rc}). {tail[-160:]}")
                 not_verified.append(pid)
             elif rc == 0:
                 entry.update(outcome="survived",
                             reason="охрана снята, а названные тесты ЗЕЛЁНЫЕ — проверка не проверяется")
                 survived.append(pid)
             else:
-                entry.update(outcome="killed", reason=f"тест покраснел (rc={rc}), как и требуется")
+                entry.update(outcome="killed", reason="выполненный тест покраснел (rc=1), как и требуется")
             out.append(entry)
 
     return {"schema_version": 1, "kind": "mutation-probe-report", "checked": len(out),
