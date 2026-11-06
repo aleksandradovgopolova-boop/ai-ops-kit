@@ -251,3 +251,45 @@ class TestValidateTrace:
         errs = lifecycle_store.validate_trace(
             [{"kind": "run_start", "run_id": "R", "workitem_id": "R"}])
         assert any("attempt_id" in e for e in errs)
+
+
+def test_guarded_load_keeps_open_yaml_keys_and_source(tmp_path):
+    """ok подтверждает лишь существующие проверки, не типизирует весь payload."""
+    path = tmp_path / 'state.yaml'
+    raw = b'kind: TaskState\nvalue: false\n7:\n  - legacy\n  - null\n'
+    path.write_bytes(raw)
+    before = path.stat().st_mtime_ns
+    assert path.is_file() and path.read_bytes() == raw
+    result = lifecycle_store.load_guarded(path, required_keys=('kind', 'value'), kind='TaskState')
+    assert result == {'state': 'ok', 'data': {'kind': 'TaskState', 'value': False, 7: ['legacy', None]}}
+    assert path.read_bytes() == raw and path.stat().st_mtime_ns == before
+
+
+def test_guarded_load_read_error_has_reason_and_no_payload(tmp_path, monkeypatch):
+    from pathlib import Path
+    path = tmp_path / 'state.yaml'
+    raw = b'kind: TaskState\nvalue: 42\n'
+    path.write_bytes(raw)
+    before = path.stat().st_mtime_ns
+    calls = []
+    original = Path.read_text
+
+    def failed_read(target, *args, **kwargs):
+        if target == path:
+            calls.append(target)
+            raise PermissionError('bounded read denied')
+        return original(target, *args, **kwargs)
+
+    monkeypatch.setattr(Path, 'read_text', failed_read)
+    result = lifecycle_store.load_guarded(path)
+    assert calls == [path]  # доказать реальную попытку чтения прежде реакции fail-closed
+    assert result == {'state': 'corrupt', 'reason': 'не читается: PermissionError: bounded read denied'}
+    assert path.read_bytes() == raw and path.stat().st_mtime_ns == before
+
+
+def test_guarded_load_absent_keeps_parent_absent(tmp_path):
+    parent = tmp_path / 'not-created'
+    path = parent / 'state.yaml'
+    assert not parent.exists()
+    assert lifecycle_store.load_guarded(path) == {'state': 'absent'}
+    assert not parent.exists()

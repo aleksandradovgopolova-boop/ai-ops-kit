@@ -1,0 +1,6 @@
+Sample and actual outputs / Пример и реальный вывод: <temporary-demo-directory>
+PASS: 9 local commands; sample test passed before/after; source unchanged.
+Installation checked; project context saved; owner questions: 12.
+Проверено: установка и контекст проекта. Исходники не изменены; задача не исполнялась.
+No model/provider CLI invoked / Модели и CLI провайдеров не запускались.
+Evidence / Доказательства: <temporary-demo-directory>/evidence

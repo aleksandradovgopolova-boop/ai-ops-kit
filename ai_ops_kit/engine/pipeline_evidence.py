@@ -75,7 +75,7 @@ def _reevaluate_artifact_evidence(work_root, wid, gate_ids):
     return ev
 
 
-def _delivered_files(work_root, revision) -> set:
+def _delivered_files(work_root, revision, base=None) -> set:
     """Файлы, затронутые ДОСТАВЛЕННОЙ правкой на revision. Авторитет — git, не судья.
 
     Тот же источник, что уже использует `_review_security` (git show --name-only). Нужен для
@@ -83,7 +83,8 @@ def _delivered_files(work_root, revision) -> set:
     if not revision:
         return set()
     from ai_ops_kit.engine.pipeline_git import _git
-    rc, names, _ = _git(work_root, "show", "--name-only", "--format=", revision)
+    args = ("diff", "--name-only", base, revision) if base else ("show", "--name-only", "--format=", revision)
+    rc, names, _ = _git(work_root, *args)
     if rc != 0:
         return set()
     return {ln.strip().lstrip("./") for ln in names.splitlines() if ln.strip()}
@@ -239,7 +240,7 @@ def _gate_ev_from_verdict(gid, g, rv, *, revision, delivered, work_root, valid_i
 
 
 def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *, child_root=None,
-                              calibrated_enforcement=False, ui_evidence=None):
+                              calibrated_enforcement=False, ui_evidence=None, review_base=None):
     """Потребить ЗАПИСАННЫЕ оркестратором вердикты для ai-review гейтов БЕЗ вызова провайдера.
 
     #570 follow-up (живой прогон 07.09): artifact-first жил ТОЛЬКО внутри `_run_reviews`, а тот
@@ -254,7 +255,7 @@ def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *
     handoff_root = child_root or work_root
     gates = gate_executor.load_gates()
     valid_ids = set(gates)
-    delivered = _delivered_files(work_root, revision)
+    delivered = _delivered_files(work_root, revision, review_base)
     gate_ev = dict(gate_ev)
     reviews = []
     for gid in _reviewable_gates(gate_ids, signals):
@@ -434,7 +435,8 @@ def _human_approval_domains_uncovered(approval_root, wid, changed_files, diff_ro
                     if p.strip() not in _CATCH_ALL]
             if not pats:
                 continue
-            matched = [f for f in (changed_files or []) if any(_re.search(p, f) for p in pats)]
+            matched = [f for f in (changed_files or [])
+                       if any(_re.search(p, security_pack.domain_path(f)) for p in pats)]
             if matched:
                 triggered[d["id"]] = matched
     except Exception:  # noqa: BLE001

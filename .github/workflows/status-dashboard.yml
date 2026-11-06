@@ -72,7 +72,7 @@ jobs:
 
       - uses: actions/setup-python@v7
         with:
-          python-version: "3.12"
+          python-version-file: .python-version
 
       - name: Зависимости сборщика
         run: pip install 'pyyaml==6.*' 'pytest==9.*' 'hypothesis==6.*'   # сборка и live pytest с conftest

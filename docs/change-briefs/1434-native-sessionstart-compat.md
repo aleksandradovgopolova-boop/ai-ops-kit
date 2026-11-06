@@ -1,5 +1,22 @@
 # #1434 — совместимость native SessionStart до модельного turn
 
+## Актуализация 2026-11-06 перед завершением PR #1468
+
+База проверки — `cdc8934090b16e09c75d053ec98181ff78472ee2`, включая #1493, #1494,
+#1499, #1502 и #1503. Обычный `project-session run` теперь готовит исполнение
+открытым агентом (`current-session`) и не запускает вложенный native provider.
+Описанный ниже lifecycle blocker относится к явно выбранному `--autonomous`
+и прямому вызову `codex-app-server`; он не запрещает обычную работу в Codex.
+
+До изменения тестов: новый тест сохранения native blocker использует прежний
+default `run` и потому проверяет другой режим. Исправление явно выбирает
+`--autonomous`; существующая положительная проверка текущей сессии дополнительно
+запрещает вызов native readiness. Это проверяет, что диагностика вложенного
+provider не блокирует основной путь, а отказ вложенного запуска сохраняет
+постановку и не создаёт process/claim. Runtime trust, разрешения и барьер до turn
+не меняются. Исторические результаты ниже относятся к прежней базе; новые
+результаты и CI проверяются отдельно перед слиянием.
+
 - Результат: исправить подтверждённый handshake gap либо честно сохранить runtime blocker до модели.
 - Источник: реальная активация II #1243/44981f32 с parent c4be2ba4, CLI0.147.0; оба exact hooks trusted, PreToolUse component deny, SessionStart ack отсутствует после thread/start и 3 секунд; 0 model calls.
 - Пути: providers/codex_native.py, при необходимости bounded transport observation, native subprocess tests, актуальные runtime/provider ограничения. II checkout не изменяется.

@@ -483,7 +483,12 @@ def _compact_python(data):
                 continue
             for token in group:
                 row, col = token.start
-                lines[row - 1] = lines[row - 1][:col] + lines[row - 1][token.end[1]:]
+                # Это ПОЛНОСТРОЧНЫЙ комментарий (строка 471 отсеяла inline): до `#` только отступ.
+                # Срезаем и его — строка остаётся (lineno кода не съезжает, AST-с-координатами цел),
+                # но пустеет до терминатора. Экономит отступ на КАЖДОМ снятом комментарии по всей
+                # поставке — тот самый инертный вес, что держал footprint у 10%-резерва.
+                tail = lines[row - 1][token.end[1]:]
+                lines[row - 1] = tail if col and not tail.strip() else lines[row - 1][:col] + tail
         compact = "".join(lines)
         if ast.dump(ast.parse(compact, type_comments=True), include_attributes=True) != before:
             return data

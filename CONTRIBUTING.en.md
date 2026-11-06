@@ -2,7 +2,11 @@
 
 **[Русский](CONTRIBUTING.md) · English**
 
-Bug reports and documentation suggestions are welcome in Russian or English.
+**The kit is not accepting external changes at this time: the product is preparing for a commercial launch.**
+Pull requests from external contributors are not being accepted.
+
+Questions and bug reports can be submitted through
+[Issues](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues) in Russian or English.
 For a bug, include kit version, OS/Python, the command, expected result and
 redacted actual output. Do not include secrets.
 
@@ -10,6 +14,11 @@ The current license is [PolyForm Noncommercial 1.0.0](LICENSE), not MIT.
 Commercial use of the current code requires a separate license;
 see [terms and author contact](README.en.md#license). Previously published
 versions up to and including 4.12.0 remain under MIT. This page does not alter LICENSE.
+
+## For maintainers: internal change process
+
+The instructions below are retained for maintainers and work already agreed upon.
+They are not an invitation for external PRs and do not change the license terms.
 
 Before changing files, read [AGENTS.md](AGENTS.md) and the
 [engineering cycle](docs/agent-guides/engineering-cycle.md) (Russian references).

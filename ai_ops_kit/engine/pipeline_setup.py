@@ -42,7 +42,7 @@ from ai_ops_kit.engine.pipeline_readiness import _evaluate_security  # noqa: E40
 
 
 def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
-                     discard_previous, open_pr):
+                     discard_previous, open_pr, base_revision=None):
     """BASE BINDING + worktree-изоляция/resume: рабочая ветка ai-ops/<wid> форкается от РАЗРЕШЁННОГО
     base (не от HEAD), весь прогон идёт в отдельном worktree, основное дерево не трогается.
 
@@ -56,7 +56,18 @@ def _setup_isolation(child_root, wid, base, *, isolate, resume, reevaluate_only,
                    if (resume or reevaluate_only) else None)
     # v3.0.1/v3.0.7 (P0): рабочая ветка форкается от РАЗРЕШЁННОГО base (--base), а НЕ от HEAD.
     # base=None -> AUTO-резолв (upstream/remote-default/текущая ветка), не хардкод 'main'.
-    _br = _resolve_base(child_root, base)   # base может быть None (auto) или явной веткой
+    if base_revision is not None:
+        import re
+        if not reevaluate_only or isolate or open_pr:
+            raise ValueError("pinned base_revision разрешена только для локальной переоценки без доставки")
+        if (not isinstance(base_revision, str) or re.fullmatch(r"[0-9a-f]{40}", base_revision) is None
+                or _git(child_root, "rev-parse", "--verify", base_revision + "^{commit}")[:2] != (0, base_revision)
+                or _git(child_root, "merge-base", "--is-ancestor", base_revision, "HEAD")[0] != 0):
+            raise ValueError("исходная база текущей задачи недоступна или не предок результата")
+        _br = {"base_ref": None, "base_sha": base_revision, "source": "session-pinned",
+               "mode": "explicit", "resolved": True}
+    else:
+        _br = _resolve_base(child_root, base)
     base_sha = _br.get("base_sha")
     base_ref = _br.get("base_ref") or base or "HEAD"
     base_binding = {"base_ref": base_ref, "base_sha": base_sha, "mode": _br.get("mode"),
@@ -249,7 +260,7 @@ def _provision_kit_gate_tools(work_root):
                       f"— прогон судит НАСТОЯЩИМ набором (self-host), как CI"}
 
 
-def _prepare_environment(profile, work_root, pol, is_git, *, install_deps, isolate, baseline_diff):
+def _prepare_environment(profile, work_root, pol, is_git, *, install_deps, isolate, baseline_diff, read_only=False):
     """Фаза install-deps: зависимости стека + baseline-evidence + откат мутаций подготовки до правок
     модели. v3.38 (K6): вынесено из run_pipeline. -> (prepare, prepare_ok, baseline_checks, mutated).
 
@@ -257,6 +268,11 @@ def _prepare_environment(profile, work_root, pol, is_git, *, install_deps, isola
     ДОПОЛНИТЕЛЬНО получает ворота-инструменты кита (ruff/pytest/…) из координаторского venv, чтобы
     гейты исполнялись НАСТОЯЩИМ набором (как CI), а не ослабленным. Провал провижининга уходит в
     `prepare` -> prepare_ok=False -> честная деградация вердикта. Путь ДОЧЕК (не self-host) не тронут."""
+    if read_only:
+        # Эта стадия не владеет деревом автора: никогда не устанавливает/откатывает/чистит.
+        if install_deps or isolate or baseline_diff or not _tree_clean(work_root):
+            raise ValueError("локальная переоценка требует чистое дерево без install/baseline мутаций")
+        return None, True, None, False
     # P0.6/v2.93: снимок untracked ДО install/baseline — удалить только НОВЫЕ (package-lock и т.п.),
     # не тронув untracked пользователя. Игнорируемые (node_modules) сюда не попадают.
     untracked_before_prep = _untracked(work_root) if is_git else set()
@@ -354,7 +370,8 @@ def _verification_changed_files(root, base_sha, revision):
 def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, loop, *,
                        commit, is_git, committed_sha, base_sha, authored_ev, allow_missing_tests,
                        calibrated_enforcement, ui_evidence, review, reviewer_proposer, budget,
-                       strict_judge_qualified, security_reviewer_proposer, reevaluate_only, verification_intent="merge_candidate"):
+                       strict_judge_qualified, security_reviewer_proposer, reevaluate_only, verification_intent="merge_candidate",
+                       review_handoff_root=None):
     """Сбор evidence на зафиксированном SHA и наполнение gate_ev: реальный прогон проверок профиля
     через Broker, intake/regression/authored/reevaluate-seed, освобождения по неприменимым проверкам,
     UI-evidence на точном SHA, seam-scan advisory, независимые ревью и доменный security-вердикт.
@@ -462,7 +479,8 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
     ui_evidence_bundle = None
     if calibrated_enforcement and ui_evidence is None and committed_sha:
         try:
-            _changed = _committed_changed_files(work_root, committed_sha)
+            _changed = (_changed_for_verification if review_handoff_root else
+                        _committed_changed_files(work_root, committed_sha))
             # v3.11.0 UI Evidence Readiness: UI-CI ТОЛЬКО при изменении UI-файлов ИЛИ VISUAL-задаче.
             # Иначе — skip (не применимо; НЕ маскируем — просто не гоняем UI-CI зря на не-UI изменении).
             from ai_ops_kit.ui import ui_readiness as _uir
@@ -474,7 +492,10 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
                 # storybook visual). Не-UI child / нет артефактов -> build_bundle честно вернёт not_run/absent.
                 try:
                     from ai_ops_kit.ui import ui_evidence_collect
-                    ui_evidence_collect.collect(work_root, committed_sha)
+                    if review_handoff_root:
+                        ui_evidence_collect.collect(work_root, committed_sha, install_deps=False)
+                    else:
+                        ui_evidence_collect.collect(work_root, committed_sha)
                 # Причина подавления ЗАПИСАНА (срез engine ратчета 2026-08-12): сбор UI-evidence не
                 # выдаёт вердикт — вердикт выдаёт `evidence_for_gate` ниже, и он fail-closed:
                 # не собрали -> `ui_evidence=None` -> гейт НЕ освобождён. Пропущенный сбор не может
@@ -506,7 +527,8 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
         # не закрывал code_review на reevaluate, хотя load_verdict его принимает. Провайдер здесь НЕ
         # вызывается; заземление и writer≠judge — те же (0 false-green).
         gate_ev, reviews = _consume_handoff_verdicts(
-            work_root, plan["gates"], gate_ev, signals, committed_sha, child_root=child_root,
+            work_root, plan["gates"], gate_ev, signals, committed_sha, child_root=review_handoff_root or child_root,
+            review_base=base_sha if review_handoff_root else None,
             calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence)
         # Контракт `reviews`: None = ревью не проводилось. Пустой потреблённый список (вердикта-
         # артефакта не было) == ревью не было -> None, иначе `report.reviews is None`-инвариант без
@@ -519,7 +541,8 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
         work_root, child_root, wid, committed_sha, is_git, gate_ev, signals,
         review=review, strict_judge_qualified=strict_judge_qualified,
         security_reviewer_proposer=security_reviewer_proposer,
-        reviewer_proposer=reviewer_proposer, budget=budget)
+        reviewer_proposer=reviewer_proposer, budget=budget,
+        base_revision=base_sha if review_handoff_root else None)
     return {"changed_for_verification": _changed_for_verification, "coll": coll, "gate_ev": gate_ev,
             "tree_clean_after_checks": tree_clean_after_checks, "regression_proof": regression_proof,
             "exempt": exempt, "not_applicable": not_applicable, "exempt_reason": exempt_reason,

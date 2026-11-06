@@ -217,7 +217,9 @@ def test_inherited_mcp_is_disabled_in_second_process_before_any_turn(runner):
 def test_bad_execution_is_not_an_answer_and_usage_attempt_is_not_lost(runner, mode):
     root, binary, marker = runner(mode)
     with pytest.raises(ProviderEnvUnavailableError):
-        native.call('роль','fixture-native',root=root,binary=binary,timeout=1)
+        # Здесь проверяем fault ПОСЛЕ turn/start. Две загрузки stub/handshake на
+        # занятом macOS не обязаны уложиться в1с; короткие RPC deadline имеют отдельные тесты.
+        native.call('роль','fixture-native',root=root,binary=binary,timeout=5)
     assert any(e.get('method') == 'turn/start' for e in events(marker))
     rec, = usage.drain_call_stats()
     assert rec['native_outcome'] == 'failed' and rec['cost'] is None
