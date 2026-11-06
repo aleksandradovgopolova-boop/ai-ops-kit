@@ -110,4 +110,3 @@ jobs:
       - run: pip install pyyaml
       - name: "размер PR: одна работа = один малый PR (advisory)"
         run: python3 ai_ops_kit/validation/validate_pr_size.py --base origin/main
-

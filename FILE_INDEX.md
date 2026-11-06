@@ -820,6 +820,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 
 - `.github/workflows/package-quality.yml`
 - `.github/workflows/pr-smoke.yml`
+- `.github/workflows/uv-pilot.yml` — пилот воспроизводимого dev-окружения parent (advisory)
 - `.github/workflows/release.yml`
 - `.github/ci-groups/{fast-1,fast-2,contracts,selftests-a,selftests-m}.sh` — разбиение полного контура на группы
 
