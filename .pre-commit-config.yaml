@@ -80,5 +80,6 @@ repos:
         name: CommitContract (охват коммита и осмысленность сообщения)
         entry: scripts/commit-contract.sh
         language: system
-        pass_filenames: false
+        # На commit-msg единственный filename — путь к сообщению коммита; скрипту он обязателен.
+        pass_filenames: true
         stages: [commit-msg]
