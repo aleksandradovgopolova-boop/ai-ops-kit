@@ -1,5 +1,6 @@
 """Реальные controller/review requests; fixture reviewer не является живой квалификацией."""
 import json
+from pathlib import Path
 
 import pytest
 
@@ -33,6 +34,7 @@ def test_native_job_reaches_existing_acceptance_without_nested_provider(project,
     assert job["context"] == "fresh" and job["review_mode"] == "read-only"
     assert job["status"] == "awaiting_dispatch" and not (project / job["verdict"]).exists()
     assert job["result_contract"].endswith("ai_ops_kit/checks/acceptance_result.py")
+    assert job["contract_sha256"] == sessions.digest(Path(job["result_contract"]).read_bytes())
     assert "kind=acceptance-result" in job["prompt"] and "met/unmet/undetermined" in job["prompt"]
     evidence = next(j for j in handoff["jobs"] if j["gate"] == "evidence")
     assert evidence["result_contract"].endswith("schemas/reviewer-result.schema.json")
