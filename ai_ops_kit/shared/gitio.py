@@ -1,20 +1,8 @@
 #!/usr/bin/env python3
-"""Единый git-хелпер (v3.0.13, блок C самоаудита) — ОДИН источник вызова git для `ai_ops_kit/`.
+"""Единый Git-вход: run/git возвращают strip-вывод и rc=124 при timeout.
 
-Прежде идентичная функция `_git` (rc, stdout.strip(), stderr.strip()) была скопирована в 7 модулях,
-и НИ ОДНА не задавала timeout: зависший git-субпроцесс (сеть/lock/hook) вешал весь прогон навсегда.
-Здесь — один вызов с таймаутом по умолчанию; при таймауте возвращается rc=124 (соглашение GNU timeout)
-и понятный stderr, а не блокировка.
-
-Плоский слой `tools/` снят в 4.0 — единственный вход к git теперь пакет `ai_ops_kit/`, а инвариант
-«ни одного неограниченного git-субпроцесса» держит структурный тест `tests/contracts/test_no_unbounded_git.py`.
-
-`git(root, *args)` — форма `git -C <root> <args...>`; `run(args, cwd=…)` — остальные формы (clone,
-команды с `cwd=` вместо `-C`), которым `-C <root>` не подходит. Обе стягивают stdout/stderr через
-`.strip()`; где вывод нужен ДОСЛОВНО (`git show <ref>:<path>`) или значима ведущая колонка
-(`git status --porcelain`), вызывай git raw с явным `timeout=` — так задумано, тест это допускает.
-
-CLI: gitio.py --selftest
+raw_group сохраняет точный вывод, завершает собственную POSIX-группу и учитывает
+ребёнка; timeout поднимает TimeoutExpired. История переноса — Change Brief #1434.
 """
 from __future__ import annotations
 
@@ -39,7 +27,8 @@ def raw_group(args: list[str], *, cwd: str | Path | None = None,
             try:
                 os.killpg(process.pid, signal.SIGKILL)
             except ProcessLookupError:
-                pass  # собственная группа уже завершилась
+                if process.poll() is None:
+                    raise  # отсутствие группы допустимо только для завершённого ребёнка
             process.wait()
     return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
 
@@ -64,22 +53,7 @@ def git(root: str | Path, *args: str, timeout: int = GIT_TIMEOUT_DEFAULT) -> tup
 
 
 def committed_changed_files(root: str | Path, sha: str) -> list[str]:
-    """Файлы, изменённые коммитом sha относительно его первого родителя. -> [path] (пусто при ошибке).
-
-    ПЕРЕЕХАЛА СЮДА 2026-08-12 из `engine/pipeline_git.py`, где называлась `_committed_changed_files`
-    и была ПРИВАТНОЙ — а `gates/regression_evidence` импортировал её по приватному имени через
-    границу пакета. Такой доступ не описан ни одним интерфейсом: он и есть та неявная связность,
-    из-за которой менять кусок системы небезопасно — локального контекста не хватает, чтобы узнать,
-    кто ещё зависит от твоего `_`-имени. Функция — чистый git-запрос, её место рядом с остальными
-    обёртками над git.
-
-    `-z` ОБЯЗАТЕЛЕН, а не украшение. При `core.quotePath` (включён по умолчанию) git отдаёт
-    не-ASCII имена в escape-кавычках: `"context/product/\320\236..."`. Такой путь не совпадает ни с
-    одним сигнальным паттерном, и гейт связности превращал `changed` в `not_changed` — утверждение
-    вместо признания. Для русскоязычного продукта это отменяло гейт целиком. `-z` отдаёт имена как
-    есть, разделённые NUL, и попутно снимает вторую дыру: путь с переводом строки или запятой больше
-    не распадается.
-    """
+    """Пути коммита от первого родителя; -z сохраняет не-ASCII и переводы строк."""
     if not sha:
         return []
     rc, out, _ = git(root, "diff", "--name-only", "-z", f"{sha}~1", sha)
