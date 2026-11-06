@@ -78,7 +78,7 @@ runtimes:
       status: degraded
       provider: codex-app-server
       implementation: ai_ops_kit/providers/codex_native.py
-      note: "Подготовлен native text-only provider; offline regression не заменяет живую приёмку. Нужны native project/hook trust и поддерживаемая модель; права не расширяются автоматически."
+      note: "Подготовлен native text-only provider; offline regression не заменяет живую приёмку. В CLI0.147.0 SessionStart выполняется внутри run_turn, поэтому даже trusted hooks не дают требуемой no-model readiness. Без настоящего pre-turn ack provider остаётся NOT_READY; права не расширяются автоматически."
     default_provider: openai
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: orchestrated

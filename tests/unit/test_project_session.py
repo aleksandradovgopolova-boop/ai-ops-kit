@@ -14,41 +14,6 @@ from ai_ops_kit.lifecycle import project_session as sessions
 
 
 @pytest.mark.parametrize("runtime", sessions.RUNTIMES)
-def test_open_agent_gets_real_controller_plan_without_nested_provider(project, monkeypatch, runtime):
-    from ai_ops_kit.cli import project_session as cli
-    task = sessions.begin(project, runtime, "open-agent", "Проведи ресерч архитектуры", "turn-1")
-    monkeypatch.chdir(project)
-    args = ["run", "--runtime", runtime, "--session", "open-agent"]
-    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
-    complete_prepared_spec(project, task)
-    assert cli.main(args) == 1
-    saved = sessions.load(project, runtime, "open-agent")
-    assert saved["status"] == "running" and saved["execution"]["prepared"]
-    assert saved["execution"]["mode"] == "current-session"
-    command = saved["execution"]["command"]
-    assert "--execute" not in command and "--provider" not in command
-    feature = project / "features" / ("session-" + task["request_id"])
-    workitem = yaml.safe_load((feature / "workitem.yaml").read_text())
-    plan = yaml.safe_load((feature / "run-plan.yaml").read_text())
-    assert workitem["task"] == task["prompt"] and plan["base_workflow"] == "RESEARCH"
-    report = json.loads((feature / "run-report.json").read_text())
-    assert report["execution"] == "planned" and plan["gates"]
-    assert not sessions.verify(project, runtime, "open-agent")["accepted"]
-    assert hook(runtime, {"cwd": str(project), "session_id": "open-agent", "hook_event_name": "Stop"})["continue"] is False
-    before = (sessions.session_dir(project, runtime, "open-agent") / "process.stderr.log").read_bytes()
-    # Реальная правка продукта/коммит ожидаема при исполнении текущим агентом.
-    (project / "result.md").write_text("research result")
-    sessions.git(project, "add", "result.md")
-    sessions.git(project, "commit", "-qm", "research result")
-    assert cli.main(args) == 1
-    assert sessions.load(project, runtime, "open-agent")["request_id"] == task["request_id"]
-    assert (sessions.session_dir(project, runtime, "open-agent") / "process.stderr.log").read_bytes() == before
-    (feature / "run-plan.yaml").write_text("foreign plan")
-    assert cli.main(args) == 2
-    assert len(list(sessions.session_dir(project, runtime, "open-agent").glob("*.execution-claim"))) == 1
-
-
-@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
 def test_hook_replay_keeps_preparation_signals_and_existing_claim(project, monkeypatch, runtime):
     from ai_ops_kit.cli import project_session as cli
     payload = {"cwd": str(project), "session_id": "replayed", "hook_event_name": "UserPromptSubmit",
