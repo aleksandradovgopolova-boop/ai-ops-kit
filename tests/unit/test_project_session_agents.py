@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from ai_ops_kit.cli import project_session as cli
-from ai_ops_kit.cli import project_session_agents as agents
+from ai_ops_kit.cli import project_session_completion as agents
 from ai_ops_kit.lifecycle import project_session as sessions
 from test_project_session_completion import project as _project_fixture, start, reviewer_receipts
 

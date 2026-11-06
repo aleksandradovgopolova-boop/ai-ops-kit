@@ -8,7 +8,7 @@ import sys
 import yaml
 
 from ai_ops_kit.lifecycle import project_session as sessions
-from ai_ops_kit.cli.project_session_agents import response as agent_response
+from ai_ops_kit.cli.project_session_completion import response as agent_response
 
 
 @sessions.session_migration_store.guarded
