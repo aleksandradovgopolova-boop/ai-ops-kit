@@ -292,6 +292,8 @@
 - `docs/change-briefs/1434-user-turn-continuation.md` — новый пользовательский ход в подтверждённом native handoff; приватные квитанции и инвалидация устаревших проверок.
 - `docs/change-briefs/1434-interactive-session.md` — интерактивный controller-путь, границы приёмки, защита от повторов и безграничного ожидания.
 - `ai_ops_kit/cli/project_session_completion.py` — bounded finalize/reconcile открытого агента через существующие проверки и scoped независимые вердикты.
+- `ai_ops_kit/cli/project_session_agents.py` — привязанные к входам задания штатным агентам Codex и команда продолжения через прежние gates; подготовка не означает dispatch.
+- `docs/change-briefs/1434-codex-native-agent-handoff.md` — автономное продолжение review в открытой сессии без второго Codex CLI.
 - `ai_ops_kit/lifecycle/session_migration.py`, `ai_ops_kit/lifecycle/session_migration_store.py`, `ai_ops_kit/cli/project_session_migrate.py` — experimental capture/preview/CAS apply/rollback pending-state без исполнения задач.
 - `docs/agent-guides/session-state-migration.md` — приватные snapshots, границы переноса, согласованное окно и восстановление после прерывания.
 - `templates/ci/ai-ops-record.yml` — CI-нетто автонакопления срезов эффекта (v2.30)

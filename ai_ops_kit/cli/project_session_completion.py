@@ -98,7 +98,7 @@ def review_inputs(root, task, current, digests):
     if not isinstance(digests, dict) or set(digests) - set(needed):
         raise ValueError("неизвестные review digests")
     changed = sessions.git(root, "diff", "--name-only", task["binding"]["head"], current["head"]).splitlines()
-    expected, accepted, missing = scope(task, current), {}, []
+    expected, accepted, missing, pending_requests = scope(task, current), {}, [], []
     gates = gate_executor.load_gates()
     for gid in needed:
         g = gates.get(gid) or {}
@@ -139,7 +139,8 @@ def review_inputs(root, task, current, digests):
             accepted[gid] = {"path": str(path.relative_to(root)), "sha256": sessions.digest(raw)}
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             missing.append(f"{gid}: {exc}; {request_path.relative_to(root)}")
-    return handoff, accepted, missing
+            pending_requests.append(request_path)
+    return handoff, accepted, missing, pending_requests
 
 
 @sessions.session_migration_store.guarded
@@ -158,7 +159,7 @@ def evaluate(root, runtime, session, request, attempt):
         raise ValueError("результат изменился перед проверкой или не зафиксирован")
     if sessions.within(root, f".ai/reevaluate-evidence-{fid}.json").exists():
         raise ValueError("чужой кеш переоценки не подтверждает текущую сессию")
-    handoff, reviews, missing = review_inputs(root, task, current, verification["review_digests"])
+    handoff, reviews, missing, pending_requests = review_inputs(root, task, current, verification["review_digests"])
     pipeline = None
     if not missing:
         plan = yaml.safe_load(sessions.within(root, f"features/{fid}/run-plan.yaml").read_text())
@@ -202,6 +203,9 @@ def evaluate(root, runtime, session, request, attempt):
                   "artifact_inputs": artifacts,
                   "ready_for_pr": ready, "active_work_closed": ready, "ci": "not-verified",
                   "missing": missing}
+        if task["runtime"] == "codex" and pending_requests:
+            from ai_ops_kit.cli.project_session_agents import review_jobs
+            report["agent_handoff"] = review_jobs(root, task, report["scope"], pending_requests)
         path = sessions.within(root, verification["report"])
         sessions.write(path, report)
         latest = sessions.load(root, runtime, session)
