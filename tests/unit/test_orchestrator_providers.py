@@ -120,19 +120,96 @@ class TestClaudeCliProvider:
         assert last.get("latency") is not None
         assert last["latency"] >= 0
 
-    def test_read_only_tools(self):
+    def test_offline_command_requests_explicit_builtin_set(self):
+        # Проверка сборки argv, НЕ proof эффективных permissions реального runtime.
         cmd = self.seen.get("cmd") or []
-        allowed = []
-        if "--allowedTools" in cmd:
-            i = cmd.index("--allowedTools") + 1
-            while i < len(cmd) and not cmd[i].startswith("--"):
-                allowed.append(cmd[i])
-                i += 1
-        assert bool(allowed)
-        assert set(allowed) <= {"Read", "Grep", "Glob"}
-        assert "Read" in allowed
-        assert not any(t in cmd for t in ("Write", "Edit", "Bash"))
+        assert cmd[cmd.index("--tools") + 1] == "Read,Grep,Glob"
         assert "-p" in cmd
+
+
+@pytest.mark.unit
+class TestClaudeReadonlyUnqualified:
+    """Пока effective runtime не квалифицирован, доказуемая граница — отсутствие запуска."""
+
+    @pytest.mark.parametrize("provider", ["claude-cli", "claude-code-local"])
+    def test_unqualified_runtime_refuses_before_launch_retry_or_usage(self, monkeypatch, provider):
+        import subprocess
+        from ai_ops_kit.providers import orchestrator_providers as op
+        from ai_ops_kit.providers import provider_calls as pc
+        from ai_ops_kit.providers.response_contract import ProviderRefusal
+
+        launched, retries = [], []
+        monkeypatch.setattr(op, "claude_binary", lambda: "/fixture/claude")
+        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: launched.append(a))
+        monkeypatch.setattr(pc, "_backoff", lambda n: retries.append(n))
+        before = list(orchestrator_usage._CALL_STATS)
+        with pytest.raises(ProviderRefusal) as exc:
+            make_provider(provider)("верни предложение")
+        assert exc.value.reason == "readonly_runtime_unqualified"
+        assert exc.value.provider == "claude-cli"
+        assert "до запуска" in exc.value.detail
+        assert "mock" in exc.value.detail
+        assert launched == []
+        assert retries == []
+        assert orchestrator_usage._CALL_STATS == before
+
+    def test_permissive_parent_cannot_start_mutating_fixture(self, tmp_path, monkeypatch):
+        """Реальный temp subprocess пишет в control; адаптер не запускает его вообще.
+
+        Fixture не моделирует семантику флагов Claude и не квалифицирует Claude CLI.
+        """
+        import subprocess
+        import sys
+        from ai_ops_kit.providers import orchestrator_providers as op
+        from ai_ops_kit.providers.response_contract import ProviderRefusal
+
+        config = tmp_path / "settings.json"
+        config.write_text(_test_json.dumps({
+            "permissions": {"defaultMode": "bypassPermissions", "allow": ["Write", "Edit", "Bash"]},
+            "mcpServers": {"mutator": {"command": "fixture-only"}},
+            "enabledPlugins": {"mutator@fixture": True},
+            "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "fixture-only"}]}]},
+        }))
+        cli = tmp_path / "fixture-claude"
+        cli.write_text(f"#!{sys.executable}\n" + '''import json, os
+from pathlib import Path
+p = Path(os.environ["AIOPS_TEST_PARENT_CONFIG"])
+c = json.loads(p.read_text())
+effects = {
+    "builtin": c["permissions"]["defaultMode"] == "bypassPermissions",
+    "mcp": bool(c["mcpServers"]),
+    "plugin": any(c["enabledPlugins"].values()),
+    "hook": bool(c["hooks"]["SessionStart"]),
+}
+for name, enabled in effects.items():
+    if enabled:
+        (p.parent / (name + ".effect")).write_text("mutated")
+print(json.dumps({"result": "fixture mutation happened"}))
+''')
+        cli.chmod(0o700)
+        monkeypatch.setenv("AIOPS_TEST_PARENT_CONFIG", str(config))
+        monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path))
+        config_before = config.read_bytes()
+        # Доказываем, что fixture исполним и permissive config реально имеет эффект.
+        control = subprocess.run([str(cli)], capture_output=True, text=True, check=True)
+        assert _test_json.loads(control.stdout)["result"] == "fixture mutation happened"
+        effects = [tmp_path / (name + ".effect") for name in ("builtin", "mcp", "plugin", "hook")]
+        assert all(p.read_text() == "mutated" for p in effects)
+        for p in effects:
+            p.unlink()
+        monkeypatch.setenv(op.CLAUDE_BIN_ENV, str(cli))
+        real_run, attempts = subprocess.run, []
+
+        def observe_launch(*args, **kwargs):
+            attempts.append(args)
+            return real_run(*args, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", observe_launch)
+        with pytest.raises(ProviderRefusal, match="readonly_runtime_unqualified"):
+            make_claude_cli_provider()("верни предложение")
+        assert attempts == []
+        assert all(not p.exists() for p in effects)
+        assert config.read_bytes() == config_before
 
 
 @pytest.mark.unit
@@ -192,7 +269,7 @@ class TestClaudeCliYamlFrontmatter:
         assert out == "VERDICT"
 
     def test_flags_before_separator(self):
-        """Ключи стоят до разделителя (read-only политика применяется)."""
+        """Ключи offline argv стоят до разделителя; это не proof effective permissions."""
         prompt = "---\nid: intake-classifier\ntype: agent\n---\n\n## Задача\nОписать контур"
         seen = {}
 
@@ -204,7 +281,7 @@ class TestClaudeCliYamlFrontmatter:
         cmd = seen.get("cmd") or []
         sep = cmd.index("--") if "--" in cmd else -1
         assert sep >= 0
-        assert all(f in cmd[:sep] for f in ("--output-format", "--allowedTools"))
+        assert all(f in cmd[:sep] for f in ("--output-format", "--tools", "--allowedTools"))
 
 
 @pytest.mark.unit

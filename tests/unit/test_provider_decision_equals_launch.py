@@ -104,9 +104,10 @@ class TestDecisionEqualsLaunch:
         assert res["reason"] == "claude CLI найден в PATH (локальная сессия, API-ключ не нужен)"
         assert res["warning"] is None
 
-    def test_named_binary_is_what_actually_gets_launched(self, working_claude, monkeypatch):
-        """Замыкание круга: выбранный исполнитель — тот же файл, который уходит в запуск. Без этого
-        тест выше проверял бы согласие двух ПРОВЕРОК, а не проверки с запуском."""
+    def test_named_binary_is_resolved_but_unqualified_runtime_does_not_launch(self, working_claude, monkeypatch):
+        """#1476: явный путь сохраняется, но наличие бинаря не доказывает read-only контракт."""
+        from ai_ops_kit.providers.response_contract import ProviderRefusal
+
         monkeypatch.setenv(op.CLAUDE_BIN_ENV, working_claude)
         monkeypatch.setattr(op.shutil, "which", lambda n, path=None: None)
         seen = {}
@@ -116,9 +117,11 @@ class TestDecisionEqualsLaunch:
             return subprocess.CompletedProcess(cmd, 0, stdout='{"result": "ок"}', stderr="")
 
         monkeypatch.setattr(subprocess, "run", _spy)
-        op.make_claude_cli_provider()("промпт")
-        assert seen["cmd"][0] == working_claude, \
-            f"запущено не то, что выбрано: {seen['cmd'][0]}"
+        assert op.claude_binary() == working_claude
+        with pytest.raises(ProviderRefusal) as exc:
+            op.make_claude_cli_provider()("промпт")
+        assert exc.value.reason == "readonly_runtime_unqualified"
+        assert seen == {}, "наличие выбранного бинаря не должно обходить read-only отказ"
 
 
 class TestNoSecondLook:

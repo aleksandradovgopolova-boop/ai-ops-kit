@@ -120,6 +120,8 @@ def _run_controller_path(task_text, signals, child_root, features_dir, feature,
 
     # 6. исполнение
     status, run_state = "planned", f".ai/runtime/workitems/{fid}/TaskState.yaml"
+    provider_refusal = None
+    next_action = None
     run_state_materialized = False   # честно: в planned run_state — обещание пути, не файл
     if execute or runtime == "generic-orchestrator":
         from ai_ops_kit.providers import orchestrator
@@ -131,6 +133,8 @@ def _run_controller_path(task_text, signals, child_root, features_dir, feature,
             gate_ids=plan.get("gates"),            # v2.54: прогон оценивает ГЕЙТЫ RUNPLAN (base+треки)
             signals=signals)                       # v2.55: условный human_approval по сигналам задачи
         status = st["status"]
+        provider_refusal = st.get("provider_refusal")
+        next_action = st.get("next_action")
         run_state = str(Path(run_dir) / "TaskState.yaml")
         run_state_materialized = True
 
@@ -155,6 +159,12 @@ def _run_controller_path(task_text, signals, child_root, features_dir, feature,
                      "reason": "controller/planning путь: внешняя доставка не выполняется; "
                                "execution+delivery-гарантии — только engine=pipeline"},
     }
+    if (isinstance(provider_refusal, dict)
+            and provider_refusal.get("reason") == "readonly_runtime_unqualified"
+            and provider_refusal.get("provider") == "claude-cli"):
+        # #1476: та же сохранённая причина, без новой provider policy в controller.
+        report["provider_refusal"] = provider_refusal
+        report["next_action"] = next_action
     # report — write barrier: сбой durable-записи фиксируем в отчёте (не молча)
     _rw2 = _ls.durable_write_json(features_dir / fid / "run-report.json", report)
     if not _rw2.get("ok"):

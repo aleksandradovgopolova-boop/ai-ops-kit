@@ -66,6 +66,7 @@
 - `docs/WALKTHROUGH.md`
 - `docs/adoption-guide.md`
 - `docs/parallel-sessions.md`
+- `docs/claude-readonly-contract.md` — #1476: live Claude BLOCKED до квалификации builtin/MCP/plugins/settings; граница офлайн-доказательств и следующий шаг.
 - `docs/3.0-design.md` — дизайн 3.0: `ai-ops run` основным путём + сплит на 5 пакетов (план, запуск по явному решению)
 - `docs/dogfooding-metrics.md` — чеклист обкатки: как метрики (North Star/baseline) закрываются сами через `/ai-run`
 - `docs/change-briefs/` — заполненные Change Brief'ы, по одному файлу на изменение
