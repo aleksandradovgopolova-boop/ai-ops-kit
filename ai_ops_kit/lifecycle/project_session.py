@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import contextlib
+import errno
 import json
+import math
 import os
 import signal
 import subprocess
@@ -69,16 +71,22 @@ def instruction_block():
             f"{END}\n")
 
 
-def configuration_problems(root):
+def _read_path(root, relative, before_read=None):
+    if before_read:
+        before_read(Path(root) / relative)
+    return within(root, relative)
+
+
+def configuration_problems(root, *, before_read=None):
     root = Path(root)
     problems = []
     for name in ("AGENTS.md", "CLAUDE.md"):
-        path = within(root, name)
+        path = _read_path(root, name, before_read)
         if not path.is_file() or instruction_block() not in path.read_text(encoding="utf-8"):
             problems.append(f"{name}: общий проектный вход отсутствует или изменён")
     for runtime, relative in RUNTIMES.items():
         try:
-            doc = json.loads(within(root, relative).read_text(encoding="utf-8"))
+            doc = json.loads(_read_path(root, relative, before_read).read_text(encoding="utf-8"))
             if doc.get("disableAllHooks") is True:
                 problems.append(f"{relative}: хуки отключены")
             for event in EVENTS:
@@ -94,7 +102,7 @@ def required(root):
     return isinstance(cfg, dict) and (cfg.get("standard") or {}).get("team_session") == "required"
 
 
-def source_digest(root, feature=None):
+def source_digest(root, feature=None, *, before_read=None):
     ignored = (".ai/runtime/", ".ai/generated/", ".ai/usage/", ".ai/managed/", ".ai/worktrees/")
     if feature:
         ignored += (f"features/{feature}/",)
@@ -103,7 +111,7 @@ def source_digest(root, feature=None):
     for relative in sorted(set(files)):
         if not relative or relative.startswith(ignored):
             continue
-        path = within(root, relative)
+        path = _read_path(root, relative, before_read)
         values[relative] = (digest(path.read_bytes()), path.stat().st_mode & 0o111) if path.is_file() else None
     return digest(json.dumps(values, sort_keys=True))
 
@@ -116,21 +124,25 @@ def require_checked_tree(root, feature):
         raise ValueError("содержимое результата не соответствует проверенной revision: рабочая копия изменена")
 
 
-def binding(root, feature=None):
+def binding(root, feature=None, *, before_read=None):
     root = project_root(root)
     managed = within(root, ".ai/managed")
-    cfg = yaml.safe_load(within(root, ".ai-ops.yaml").read_text(encoding="utf-8"))
-    version = within(managed, "VERSION").read_text(encoding="utf-8").strip()
+    cfg = yaml.safe_load(_read_path(root, ".ai-ops.yaml", before_read).read_text(encoding="utf-8"))
+    version = _read_path(managed, "VERSION", before_read).read_text(encoding="utf-8").strip()
     if not isinstance(cfg, dict) or (cfg.get("parent") or {}).get("installed_version") != version:
         raise ValueError("версия managed не совпадает с .ai-ops.yaml; нужен штатный update")
     if not os.access(within(root, "ai-ops"), os.X_OK):
         raise ValueError("точка входа ./ai-ops отсутствует или не исполняется")
-    problems = configuration_problems(root)
+    problems = configuration_problems(root, before_read=before_read)
     if problems:
         raise ValueError("; ".join(problems))
     # Хэш всего managed включает политику и её реализацию; не только номер версии.
     checksums = {}
+    if before_read:
+        before_read(managed)
     for p in sorted(managed.rglob("*")):
+        if before_read:
+            before_read(p)
         if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc":
             relative = p.relative_to(managed).as_posix()
             checksums[relative] = digest(within(managed, relative).read_bytes())
@@ -139,8 +151,8 @@ def binding(root, feature=None):
     return {"root": str(root), "head": git(root, "rev-parse", "HEAD"),
             "branch": git(root, "rev-parse", "--abbrev-ref", "HEAD"),
             "version": version, "managed_sha256": digest(json.dumps(checksums, sort_keys=True)),
-            "config_sha256": digest((root / ".ai-ops.yaml").read_bytes()),
-            "source_sha256": source_digest(root, feature)}
+            "config_sha256": digest(_read_path(root, ".ai-ops.yaml", before_read).read_bytes()),
+            "source_sha256": source_digest(root, feature, before_read=before_read)}
 
 
 def session_dir(root, runtime, session):
@@ -262,12 +274,44 @@ def termination_guard():
         signal.signal(signal.SIGTERM, previous)
 
 
-def run_process(command, root, directory, *, timeout=300, progress=None):
+def _process_timeout(timeout):
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise ValueError("timeout процесса должен быть конечным положительным числом")
+    try:
+        seconds = float(timeout)
+    except OverflowError as exc:
+        raise ValueError("timeout процесса слишком велик") from exc
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("timeout процесса должен быть конечным положительным числом")
+    return seconds
+
+
+def run_process(command, root, directory, *, timeout=300, progress=None, env=None):
     """Ограниченный процесс с видимым прогрессом и диагностикой на диске."""
+    timeout = _process_timeout(timeout)
     stdout, stderr = directory / "process.stdout.log", directory / "process.stderr.log"
     started = time.monotonic()
     with stdout.open("wb") as out, stderr.open("wb") as err, termination_guard():
-        with subprocess.Popen(command, cwd=root, stdout=out, stderr=err, start_new_session=True) as process:
+        for attempt in range(2):
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                process = subprocess.Popen(command, cwd=root, stdout=out, stderr=err,
+                                           start_new_session=True, env=env)
+                break
+            except OSError as exc:
+                # Только отказ создания/exec ДО возврата Popen; ни wait, ни exit,
+                # ни неизвестный исход уже запущенного процесса сюда не попадают.
+                if attempt or exc.errno not in (errno.EAGAIN, errno.ETXTBSY):
+                    raise
+                message = f"AI Ops: запуск не состоялся (errno={exc.errno}); одна повторная попытка"
+                err.write((message + "\n").encode())
+                err.flush()
+                if progress:
+                    progress(message)
+                time.sleep(min(0.1, max(0, timeout - (time.monotonic() - started))))
+        with process:
             try:
                 while True:
                     if progress:
@@ -310,11 +354,13 @@ def load(root, runtime, session):
     return task
 
 
-def artifact_inputs(root, fid):
+def artifact_inputs(root, fid, *, before_read=None):
     """Полный состав артефактов, включая ignored и отсутствие будущих файлов."""
     files = {}
     for relative in (f"features/{fid}", f".ai/runplan/{fid}", f"openspec/changes/{fid}"):
-        for path in within(root, relative).rglob("*"):
+        for path in _read_path(root, relative, before_read).rglob("*"):
+            if before_read:
+                before_read(path)
             if path.is_symlink():
                 raise ValueError("симлинк в артефактах текущей задачи не подтверждён")
             if path.is_file():
@@ -322,12 +368,14 @@ def artifact_inputs(root, fid):
                 files[key] = digest(within(root, key).read_bytes())
     request = fid.removeprefix("session-")
     inputs = {}
-    for directory in within(root, ".ai/runtime/sessions").glob(f"project-*/{request}.inputs"):
+    for directory in _read_path(root, ".ai/runtime/sessions", before_read).glob(f"project-*/{request}.inputs"):
         if directory.is_symlink() or directory.parent.is_symlink():
             raise ValueError("симлинк в пользовательском вводе не подтверждён")
         if git(root, "ls-files", "--", str(directory.relative_to(root))):
             raise ValueError("пользовательский ввод попал в публичный Git")
         for path in directory.rglob("*"):
+            if before_read:
+                before_read(path)
             if path.is_symlink() or not path.is_file():
                 raise ValueError("неверный файл пользовательского ввода")
             relative = str(path.relative_to(root))
@@ -460,6 +508,7 @@ def claim_execution(root, runtime, session, task, execution, next_step=None):
 @session_migration_store.guarded
 def execute(root, runtime, session, signals, *, provider=None, request=None, timeout=300, progress=None):
     """Запустить существующий фасад с теми же guards и единственной execution-claim."""
+    timeout = _process_timeout(timeout)
     root = project_root(root)
     task = pending(root, runtime, session)
     if request is not None and task["request_id"] != request:

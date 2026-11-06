@@ -70,8 +70,8 @@ def recover_handoff(root, runtime, session, task):
 artifact_inputs = sessions.artifact_inputs
 
 
-def scope(task, current):
-    artifacts = artifact_inputs(Path(current["root"]), "session-" + task["request_id"])
+def scope(task, current, *, before_read=None):
+    artifacts = artifact_inputs(Path(current["root"]), "session-" + task["request_id"], before_read=before_read)
     return {"workitem_id": "session-" + task["request_id"], "request_id": task["request_id"],
             "writer_session": task["runtime"] + ":" + task["session_id"],
             "base_revision": task["binding"]["head"], "reviewed_revision": current["head"],
@@ -214,9 +214,15 @@ def evaluate(root, runtime, session, request, attempt):
         sessions.write(path.parent / (request + ".json"), latest)
 
 @sessions.session_migration_store.guarded
-def reconcile(root, runtime, session):
+def reconcile(root, runtime, session, *, finished_only=False):
     """Принять durable исход атомарно относительно нового пользовательского ввода."""
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
+        if finished_only:
+            task = sessions.load(root, runtime, session)
+            execution, verification = task.get("execution") or {}, task.get("verification") or {}
+            if (task.get("status") == "accepted" or verification.get("phase") != "finished"
+                    or execution.get("mode") != "current-session" or execution.get("prepared") is not True):
+                return task
         return _reconcile(root, runtime, session)
 
 
@@ -361,7 +367,7 @@ def review_jobs(root, task, expected, paths):
                 "digest_argument": "--review-digests", "digest_source": "independent-agent-result"}}
 
 
-def response(root, task):
+def response(root, task, *, before_read=None):
     """Добавить только актуальное host-действие; ничего не исполнять и не писать."""
     if (task.get("runtime") != "codex" or task.get("status") == "accepted"
             or task.get("execution", {}).get("mode") != "current-session"
@@ -372,15 +378,17 @@ def response(root, task):
     action = {"kind": "native-agent-handoff", "status": "execute_plan", "jobs": [],
               "plan": "features/session-" + task["request_id"] + "/run-plan.yaml"}
     if verification.get("phase") == "finished":
+        if before_read:
+            before_read(Path(root) / verification["report"])
         raw = sessions.within(root, verification["report"]).read_bytes()
         if sessions.digest(raw) != verification.get("sha256"):
             raise ValueError("отчёт передачи агентам изменён")
         report = json.loads(raw)
-        current = sessions.binding(root, "session-" + task["request_id"])
+        current = sessions.binding(root, "session-" + task["request_id"], before_read=before_read)
         if (report.get("request_id") != task["request_id"] or report.get("attempt") != verification.get("attempt")
                 or report.get("scope") != verification.get("scope")):
             raise ValueError("отчёт передачи относится к другой задаче/попытке")
-        if report.get("scope") != scope(task, current) or report.get("binding") != current:
+        if report.get("scope") != scope(task, current, before_read=before_read) or report.get("binding") != current:
             action.update(status="refresh_review", next_action="finalize")
         elif report.get("agent_handoff", {}).get("jobs"):
             action = report["agent_handoff"]
@@ -388,6 +396,8 @@ def response(root, task):
                 raise ValueError("задания агентов относятся к другой области review")
             paths = []
             for job in action["jobs"]:
+                if before_read:
+                    before_read(Path(root) / job["request"])
                 request = sessions.within(root, job["request"])
                 if sessions.digest(request.read_bytes()) != job["request_sha256"]:
                     raise ValueError("запрос агенту изменён; выполни finalize")
