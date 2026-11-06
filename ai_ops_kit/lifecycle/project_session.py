@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import hashlib
 import contextlib
+import contextvars
 import errno
+import functools
 import json
 import math
 import os
@@ -28,12 +30,67 @@ END = "<!-- AI-OPS-PROJECT-SESSION:END -->"
 POLICY = "templates/runtime/team-session.md"
 RUNTIMES = {"claude-code": ".claude/settings.json", "codex": ".codex/hooks.json"}
 EVENTS = ("SessionStart", "UserPromptSubmit", "Stop")
+HOOK_READ_SECONDS = 10  # внешний hook: 15 с; остаток — cleanup и ответ
+_read_deadline = contextvars.ContextVar("hook_read_deadline", default=None)
+_reading = contextvars.ContextVar("hook_reading", default=False)
+
+
+class HookReadInterrupted(BaseException):
+    """Не превращать deadline/cancel в пойманную ошибку binding и запись blocked."""
+
+
+@contextlib.contextmanager
+def hook_read_budget():
+    token = _read_deadline.set(time.monotonic() + HOOK_READ_SECONDS)
+    try:
+        yield
+    finally:
+        _read_deadline.reset(token)
+
+
+@contextlib.contextmanager
+def reading():
+    """Прерываемая read-only фаза; никогда не оборачивать durable mutation."""
+    deadline = _read_deadline.get()
+    if deadline is None or _reading.get():
+        yield
+        return
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise HookReadInterrupted("истёк общий бюджет чтения hook")
+    if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0):
+        raise HookReadInterrupted("таймер чтения hook уже занят")
+    def interrupt(signum, frame):
+        raise HookReadInterrupted("чтение hook отменено" if signum == signal.SIGTERM
+                                  else "истёк общий бюджет чтения hook")
+    alarm = signal.signal(signal.SIGALRM, interrupt)
+    termination = signal.signal(signal.SIGTERM, interrupt)
+    token = _reading.set(True)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, remaining)
+        yield
+        if time.monotonic() >= deadline:
+            raise HookReadInterrupted("истёк общий бюджет чтения hook")
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        _reading.reset(token)
+        signal.signal(signal.SIGALRM, alarm)
+        signal.signal(signal.SIGTERM, termination)
+
+
+def read_phase(function):
+    @functools.wraps(function)
+    def call(*args, **kwargs):
+        with reading():
+            return function(*args, **kwargs)
+    return call
 
 
 def digest(data):
     return hashlib.sha256(data if isinstance(data, bytes) else data.encode()).hexdigest()
 
 
+@read_phase
 def within(root, relative):
     path = Path(root) / relative
     if not path.resolve().is_relative_to(Path(root).resolve()):
@@ -41,14 +98,24 @@ def within(root, relative):
     return path
 
 
+@read_phase
 def git(root, *args):
-    proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
-                          text=True, timeout=10, check=False)
+    with subprocess.Popen(["git", "-C", str(root), *args], stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True, start_new_session=True) as proc:
+        try:
+            stdout, stderr = proc.communicate(timeout=10)
+        finally:
+            try:
+                os.killpg(proc.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # собственная группа уже завершилась
+            proc.wait()
     if proc.returncode:
-        raise ValueError(f"git {' '.join(args)} недоступен: {proc.stderr.strip()[:200]}")
-    return proc.stdout.removesuffix("\n")
+        raise ValueError(f"git {' '.join(args)} недоступен: {stderr.strip()[:200]}")
+    return stdout.removesuffix("\n")
 
 
+@read_phase
 def project_root(cwd):
     return Path(git(Path(cwd), "rev-parse", "--show-toplevel")).resolve()
 
@@ -97,6 +164,7 @@ def configuration_problems(root, *, before_read=None):
     return problems
 
 
+@read_phase
 def required(root):
     cfg = yaml.safe_load(within(root, ".ai-ops.yaml").read_text(encoding="utf-8"))
     return isinstance(cfg, dict) and (cfg.get("standard") or {}).get("team_session") == "required"
@@ -124,6 +192,7 @@ def require_checked_tree(root, feature):
         raise ValueError("содержимое результата не соответствует проверенной revision: рабочая копия изменена")
 
 
+@read_phase
 def binding(root, feature=None, *, before_read=None):
     root = project_root(root)
     managed = within(root, ".ai/managed")
@@ -198,6 +267,21 @@ def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=N
 
 
 def _begin(root, runtime, session, prompt, turn, directory, continuation_validator):
+    with reading():
+        task, fresh, receipt = _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator)
+    if receipt:
+        path, payload = receipt
+        result = lifecycle_store.durable_create_batch(directory, {str(path.relative_to(directory)): payload})
+        if not result.get("ok"):
+            raise ValueError("не удалось сохранить immutable пользовательский ввод: " + str(result.get("error")))
+    if fresh or receipt:
+        write(directory / (task["request_id"] + ".json"), task)
+    if fresh:
+        write(directory / "active.json", {"request_id": task["request_id"]})
+    return task
+
+
+def _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator):
     if turn is not None and (not isinstance(turn, str) or not turn.strip() or len(turn) > 1024):
         raise ValueError("неверный turn_id")
     # Идентичность события, не текст: одинаковые новые запросы остаются разными.
@@ -211,14 +295,14 @@ def _begin(root, runtime, session, prompt, turn, directory, continuation_validat
         if task.get("status") == "accepted" or task.get("input_latest") != request or continuation_validator is None:
             raise ValueError("поздний повтор пользовательского ввода не является новым запросом")
         continuation_validator(root, runtime, session, task)
-        return task
+        return task, False, None
     previous = directory / f"{request}.json"
     if previous.exists():
         task = load(root, runtime, session)
         if (task["request_id"] != request or task.get("turn_id") != turn or task.get("prompt") != prompt
                 or task.get("input_latest")):
             raise ValueError("повтор события не совпадает с активной постановкой; сохранённые задачи не изменены")
-        return task
+        return task, False, None
     if (directory / "active.json").exists():
         active = load(root, runtime, session)
         claim = directory / (active["request_id"] + ".execution-claim")
@@ -231,27 +315,19 @@ def _begin(root, runtime, session, prompt, turn, directory, continuation_validat
             relative = str(path.relative_to(root))
             if git(root, "ls-files", "--", relative) or not git(root, "check-ignore", "--", relative):
                 raise ValueError("пользовательский ввод требует ignored runtime path вне публичного Git")
-            result = lifecycle_store.durable_create_batch(directory, {
-                str(path.relative_to(directory)): json.dumps(input_receipt(active, prompt, turn, request),
-                                                            ensure_ascii=False, indent=2)})
-            if not result.get("ok"):
-                raise ValueError("не удалось сохранить immutable пользовательский ввод: " + str(result.get("error")))
-            active.setdefault("input_receipts", {})[str(path.relative_to(root))] = digest(path.read_bytes())
+            payload = json.dumps(input_receipt(active, prompt, turn, request), ensure_ascii=False, indent=2)
+            active.setdefault("input_receipts", {})[relative] = digest(payload)
             active.setdefault("input_events", []).append(relative)
             active["input_latest"] = request
-            write(directory / (active["request_id"] + ".json"), active)
-            return active
+            return active, False, (path, payload)
     task = {"schema_version": 1, "request_id": request, "session_id": session,
             "runtime": runtime, "turn_id": turn, "prompt": prompt, "status": "pending"}
-    # Постановка сохраняется ДО диагностики, в том числе при повреждённой установке.
-    write(directory / f"{request}.json", task)
-    write(directory / "active.json", {"request_id": request})
+    # Диагностика повреждения по-прежнему сохраняется; timeout не оставляет полупостановку.
     try:
         task["binding"] = binding(root, "session-" + request)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         task.update(status="blocked", blocker=str(exc), next_step="Восстановить установку штатным update и повторить задачу.")
-    write(directory / f"{request}.json", task)
-    return task
+    return task, True, None
 
 
 def input_receipt(task, prompt, turn, event):
@@ -341,6 +417,7 @@ def run_process(command, root, directory, *, timeout=300, progress=None, env=Non
     return subprocess.CompletedProcess(command, code, *tails)
 
 
+@read_phase
 def load(root, runtime, session):
     session_migration_store.incomplete(root)
     directory = session_dir(root, runtime, session)
@@ -354,6 +431,7 @@ def load(root, runtime, session):
     return task
 
 
+@read_phase
 def artifact_inputs(root, fid, *, before_read=None):
     """Полный состав артефактов, включая ignored и отсутствие будущих файлов."""
     files = {}
@@ -401,8 +479,9 @@ def verify(root, runtime, session):
         return _verify(root, runtime, session)
 
 
-def _verify(root, runtime, session):
-    task = load(root, runtime, session)
+@read_phase
+def _verify(root, runtime, session, *, task=None):
+    task = load(root, runtime, session) if task is None else task
     current = binding(root, "session-" + task["request_id"])
     receipt = task.get("execution") or {}
     expected = receipt.get("completion_binding") or task.get("binding")
