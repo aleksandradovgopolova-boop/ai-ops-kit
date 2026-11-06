@@ -1,0 +1,20 @@
+from pathlib import Path
+import hashlib,json,subprocess,types,ast,sys
+root=Path.cwd();out=Path(sys.argv[1]).resolve();out.mkdir(parents=True,exist_ok=True);rel='ai_ops_kit/security/scan_inline_code.py'
+head=subprocess.check_output(['git','rev-parse',sys.argv[2]],text=True).strip()
+sources=[subprocess.check_output(['git','show',head+':'+rel]),(root/rel).read_bytes()]
+modules=[]
+for i,source in enumerate(sources):
+ m=types.ModuleType('scanner_'+str(i));exec(compile(source,rel,'exec'),m.__dict__);modules.append(m)
+paths=subprocess.check_output(['git','ls-files','-z']).decode().split('\0');rows=[];largest=(0,'')
+for name in paths:
+ p=root/name
+ if not p.is_file() or p.suffix not in {'.py','.sh','.bash','.zsh'}:continue
+ data=p.read_bytes();text=data.decode('utf-8');a,b=[m.inline_code_lines(text,name) for m in modules];assert a==b,(name,a,b)
+ rows.append({'path':name,'sha256':hashlib.sha256(data).hexdigest(),'findings':a})
+ if p.suffix=='.py':
+  try:n=len(list(ast.walk(ast.parse(text))))
+  except (SyntaxError,ValueError):continue
+  largest=max(largest,(n,name))
+report={'base':head,'source_sha256':[hashlib.sha256(x).hexdigest() for x in sources],'files':len(rows),'files_with_findings':sum(bool(r['findings']) for r in rows),'largest_ast_nodes':largest,'rows':rows}
+(out/'parity.json').write_text(json.dumps(report,ensure_ascii=False,indent=2));print({k:v for k,v in report.items() if k!='rows'})
