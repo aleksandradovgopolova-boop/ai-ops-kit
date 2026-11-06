@@ -48,3 +48,14 @@ provider не блокирует основной путь, а отказ вло
 ## Локальная проверка
 
 Python3.14.7: 99 targeted native/session PASS (32.64с), 142 provider/usage/response/pipeline/public-surface/architecture smoke PASS (14.09с), Ruff и семь применимых registry/layering/package/module/print/swallowed validators PASS. Прогоны последовательны через общий resource gate. Это локальная проверка диагностического патча, не CI/merge admission, не working compatibility и не живая командная приёмка.
+
+## Коррекция после CI 06.11.2026
+
+На head `66a213b1` pipeline-e2e Python 3.12/3.13 обнаружил превышение
+потолка тестового файла: `test_project_session.py` вырос с 850 до 878 строк.
+До изменения: две проверки границы current-session/native переносятся без
+изменения assertions в отдельный `test_project_session_native_boundaries.py`.
+Общие существующие fixtures/helpers переиспользуются по уже принятому в соседних
+session-тестах способу; новые runtime-модули и зависимости не появляются.
+Лимит не повышается, проверки не удаляются. После переноса требуется новый CI
+и независимая проверка применимости review к итоговому head.
