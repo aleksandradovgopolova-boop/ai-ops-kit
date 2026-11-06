@@ -126,3 +126,4 @@
 
 - [Точная граница CI после реконструкции истории](history-exact-ci-cutoff.md).
 - [Граница SessionStart в native Codex 0.147.0 — #1434](1434-native-sessionstart-compat.md).
+- [Продолжение через штатных агентов открытой сессии — #1434](1434-codex-native-agent-handoff.md).

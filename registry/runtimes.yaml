@@ -83,7 +83,11 @@ runtimes:
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: orchestrated
     capabilities:
-      native_subagents: {status: degraded, value: "baseline TOML agents, not full parity"}
+      native_subagents: {status: degraded, value: "baseline TOML agents, not full parity",
+        note: "current-session finalize выдаёт scoped native-agent jobs и команду продолжения;
+          dispatch выполняет открытый host своими subagent tools. Пакет заданий не доказывает
+          запуск; обязательные review/gates и ограничения headless provider сохраняются.
+          Код: ai_ops_kit/cli/project_session_completion.py."}
       parallel_execution: {status: degraded, value: "governed concurrent orchestration (не live-verified)",
         note: "v4.12 (#1434): parallel_live_dispatch передаёт runtime+provider каждому пакету;
           offline доказана конкурентность package callbacks с изоляцией клонов. Native Codex turns

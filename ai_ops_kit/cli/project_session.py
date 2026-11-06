@@ -8,6 +8,7 @@ import sys
 import yaml
 
 from ai_ops_kit.lifecycle import project_session as sessions
+from ai_ops_kit.cli.project_session_completion import response as agent_response
 
 
 @sessions.session_migration_store.guarded
@@ -282,13 +283,13 @@ def main(argv=None):
                                    (existing.get("verification") or {}).get("review_digests", {}))
                         result = (completion.finalize(root, args.runtime, args.session, digests)
                                   if args.action == "finalize" else completion.reconcile(root, args.runtime, args.session))
-                        print(json.dumps(result, ensure_ascii=False))
+                        print(json.dumps(agent_response(root, result), ensure_ascii=False))
                         return 0 if result.get("status") == "accepted" else 1
                     if (not args.autonomous and existing.get("status") in ("running", "blocked")
                             and existing.get("execution", {}).get("mode") == "current-session"
                             and existing["execution"].get("prepared")):
                         result = resume_current(root, args.runtime, args.session, existing)
-                        print(json.dumps(result, ensure_ascii=False))
+                        print(json.dumps(agent_response(root, result), ensure_ascii=False))
                         return 1  # handoff всё ещё не является accepted
                     task = sessions.pending(root, args.runtime, args.session)
                     signals = intake_signals(task, args.signals)
@@ -307,7 +308,7 @@ def main(argv=None):
                         result = (sessions.execute(root, args.runtime, args.session, signals, request=task["request_id"],
                                                    progress=lambda message: print(message, file=sys.stderr, flush=True))
                                   if args.autonomous else current_session(root, args.runtime, args.session, task, signals))
-            print(json.dumps(result, ensure_ascii=False))
+            print(json.dumps(agent_response(root, result), ensure_ascii=False))
             return 0 if result.get("accepted") or result.get("status") == "accepted" else 1
     except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError) as exc:
         if args.action == "hook":
