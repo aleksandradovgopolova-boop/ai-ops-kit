@@ -52,13 +52,8 @@ def current_session(root, runtime, session, task, signals):
 
 def resume_current(root, runtime, session, task):
     """Чтение handoff после compact: изменения продукта ожидаемы, смена контекста — нет."""
-    current = sessions.binding(root, "session-" + task["request_id"])
-    if any(current.get(key) != task["binding"].get(key) for key in
-           ("root", "branch", "version", "managed_sha256", "config_sha256")):
-        raise ValueError("контекст проектной сессии изменился; проверь сохранённую работу")
-    for relative, checksum in task["execution"]["files"].items():
-        if sessions.digest(sessions.within(root, relative).read_bytes()) != checksum:
-            raise ValueError("подготовленный артефакт изменён: " + relative)
+    from ai_ops_kit.cli import project_session_resume
+    project_session_resume.check(root, task)
     return task
 
 
@@ -189,6 +184,10 @@ def hook(runtime, payload):
             root = sessions.project_root(payload["cwd"])
             if not sessions.required(root):
                 return {}
+            from ai_ops_kit.cli import project_session_completion as completion
+            # Сверить уже завершённую проверку без worker, модели и нового turn.
+            # Pending/неизвестный исход не восстанавливается предположением.
+            completion.reconcile(root, runtime, payload["session_id"], finished_only=True)
             verdict = sessions.verify(root, runtime, payload["session_id"])
             if verdict["accepted"]:
                 return {}
@@ -288,8 +287,9 @@ def main(argv=None):
                     if (not args.autonomous and existing.get("status") in ("running", "blocked")
                             and existing.get("execution", {}).get("mode") == "current-session"
                             and existing["execution"].get("prepared")):
-                        result = resume_current(root, args.runtime, args.session, existing)
-                        print(json.dumps(agent_response(root, result), ensure_ascii=False))
+                        from ai_ops_kit.cli import project_session_resume
+                        result = project_session_resume.validate(root, existing)
+                        print(json.dumps(result, ensure_ascii=False))
                         return 1  # handoff всё ещё не является accepted
                     task = sessions.pending(root, args.runtime, args.session)
                     signals = intake_signals(task, args.signals)

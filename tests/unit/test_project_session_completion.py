@@ -140,38 +140,49 @@ def test_invalid_independent_evidence_never_accepts_or_consumes_claim(project, m
         assert reviewer_handoff.request_path(handoff, "acceptance").is_file()
 
 
-def test_known_failed_check_can_be_fixed_and_reverified_without_new_execution(project, monkeypatch):
-    task, args = start(project, monkeypatch, "claude-code")
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+def test_known_failed_check_can_be_fixed_and_reverified_without_new_execution(project, monkeypatch, runtime):
+    task, args = start(project, monkeypatch, runtime)
     (project / "result.py").write_text("VALUE = 8\n")
     sessions.git(project, "add", "result.py")
     sessions.git(project, "commit", "-qm", "bad result")
     assert cli.main(["finalize", *args]) == 1
     assert (project / ".ai/runtime/check-ran").exists()
-    failed = sessions.load(project, "claude-code", "complete")
+    failed = sessions.load(project, runtime, "complete")
     assert failed["verification"]["phase"] == "finished"
+    assert failed["status"] != "accepted" and not sessions.verify(project, runtime, "complete")["accepted"]
     (project / "result.py").write_text("VALUE = 7\n")
     sessions.git(project, "add", "result.py")
     sessions.git(project, "commit", "-qm", "repair result")
     assert cli.main(["finalize", *args]) == 0
-    saved = sessions.load(project, "claude-code", "complete")
+    saved = sessions.load(project, runtime, "complete")
     assert saved["request_id"] == task["request_id"]
+    assert saved["status"] == "accepted" and saved.get("input_events") == failed.get("input_events")
     assert saved["verification_history"][0]["attempt"] == failed["verification"]["attempt"]
-    assert len(list(sessions.session_dir(project, "claude-code", "complete").glob("*.execution-claim"))) == 1
+    assert len(list(sessions.session_dir(project, runtime, "complete").glob("*.execution-claim"))) == 1
 
 
 def test_reconcile_recovers_durable_success_after_supervisor_interruption(project, monkeypatch):
     task, args = start(project, monkeypatch, "codex")
     actual = sessions.run_process
+    calls = []
     def interrupted(*a, **kw):
+        calls.append(a[0])
         actual(*a, **kw)  # проверки реально исполнились и записали durable checksum
         raise subprocess.TimeoutExpired(a[0], 300)
     monkeypatch.setattr(sessions, "run_process", interrupted)
     assert cli.main(["finalize", *args]) == 1
     saved = sessions.load(project, "codex", "complete")
     assert saved["status"] == "blocked" and saved["verification"]["phase"] == "finished"
+    assert len(calls) == 1 and (project / ".ai/runtime/check-ran").read_text() == "real check"
+    def forbidden(*a, **kw):
+        pytest.fail("durable outcome must reconcile without another process")
+    monkeypatch.setattr(sessions, "run_process", forbidden)
     assert cli.main(["reconcile", *args]) == 0  # никакого второго процесса
+    assert cli.main(["reconcile", *args]) == 0  # replay не создаёт новую попытку
     assert sessions.verify(project, "codex", "complete")["accepted"]
     assert sessions.load(project, "codex", "complete")["verification"]["attempt"] == saved["verification"]["attempt"]
+    assert sessions.load(project, "codex", "complete")["request_id"] == task["request_id"]
 
 
 def test_unknown_outcome_without_report_cannot_be_retried_or_replaced(project, monkeypatch):
@@ -184,10 +195,74 @@ def test_unknown_outcome_without_report_cannot_be_retried_or_replaced(project, m
     assert cli.main(["finalize", *args]) == 1
     assert cli.main(["finalize", *args]) == 2
     assert cli.main(["reconcile", *args]) == 2
+    assert cli.hook("codex", {"cwd": str(project), "session_id": "complete",
+                             "hook_event_name": "Stop"})["continue"] is False
     assert len(calls) == 1
     with pytest.raises(ValueError, match="предыдущая попытка"):
         sessions.begin(project, "codex", "complete", "повтор", "new-turn")
     assert sessions.load(project, "codex", "complete")["request_id"] == task["request_id"]
+
+
+@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
+def test_stop_reconciles_finished_worker_without_user_input_or_second_execution(project, monkeypatch, runtime):
+    task, args = start(project, monkeypatch, runtime)
+    actual, calls = sessions.run_process, []
+
+    def interrupted(*a, **kw):
+        calls.append(a[0])
+        actual(*a, **kw)
+        raise subprocess.TimeoutExpired(a[0], 300)
+
+    monkeypatch.setattr(sessions, "run_process", interrupted)
+    assert cli.main(["finalize", *args]) == 1
+    saved = sessions.load(project, runtime, "complete")
+    assert saved["status"] == "blocked" and saved["verification"]["phase"] == "finished"
+    assert len(calls) == 1 and (project / ".ai/runtime/check-ran").read_text() == "real check"
+
+    def forbidden(*a, **kw):
+        pytest.fail("Stop recovery must never start a process")
+
+    monkeypatch.setattr(sessions, "run_process", forbidden)
+    stop = {"cwd": str(project), "session_id": "complete", "hook_event_name": "Stop"}
+    assert cli.hook(runtime, stop) == {}
+    assert cli.hook(runtime, stop) == {}
+    accepted = sessions.load(project, runtime, "complete")
+    assert accepted["status"] == "accepted" and sessions.verify(project, runtime, "complete")["accepted"]
+    assert accepted["request_id"] == task["request_id"]
+    assert accepted["verification"]["attempt"] == saved["verification"]["attempt"]
+    assert accepted.get("input_events") == saved.get("input_events")
+    assert len(list(sessions.session_dir(project, runtime, "complete").glob("*.execution-claim"))) == 1
+
+
+@pytest.mark.parametrize("damage", ["unknown", "tampered", "changed-result"])
+def test_stop_never_accepts_unknown_or_changed_finished_outcome(project, monkeypatch, damage):
+    task, args = start(project, monkeypatch, "codex")
+    actual = sessions.run_process
+
+    def interrupted(*a, **kw):
+        actual(*a, **kw)
+        raise subprocess.TimeoutExpired(a[0], 300)
+
+    monkeypatch.setattr(sessions, "run_process", interrupted)
+    assert cli.main(["finalize", *args]) == 1
+    saved = sessions.load(project, "codex", "complete")
+    if damage == "unknown":
+        saved["verification"]["phase"] = "running"
+        sessions.write(sessions.session_dir(project, "codex", "complete") / (task["request_id"] + ".json"), saved)
+    elif damage == "tampered":
+        report = project / saved["verification"]["report"]
+        report.write_text(report.read_text() + " ")
+    else:
+        (project / "result.py").write_text("VALUE = 999\n")
+    before = sessions.load(project, "codex", "complete")
+
+    def forbidden(*a, **kw):
+        pytest.fail("unknown or changed outcome must not start another process")
+
+    monkeypatch.setattr(sessions, "run_process", forbidden)
+    response = cli.hook("codex", {"cwd": str(project), "session_id": "complete", "hook_event_name": "Stop"})
+    assert response["continue"] is False
+    assert sessions.load(project, "codex", "complete") == before
 
 
 def test_tampered_attempt_report_and_forged_reevaluate_cache_cannot_admit(project, monkeypatch):
@@ -410,7 +485,15 @@ def test_reconcile_recovers_controller_handoff_without_reexecuting(project, monk
     assert restored["request_id"] == task["request_id"]
     assert len(list(path.parent.glob("*.execution-claim"))) == 1
     if not foreign:
-        assert restored["execution"]["prepared"] and cli.main(["run", *args]) == 1
+        assert restored["execution"]["prepared"]
+        resumed = []
+        def read_only_resume(command, *a, **kw):
+            assert command[1:4] == ["-P", "-m", "ai_ops_kit.cli.project_session_resume"]
+            resumed.append(command)
+            return actual(command, *a, **kw)
+        monkeypatch.setattr(sessions, "run_process", read_only_resume)
+        assert cli.main(["run", *args]) == 1
+        assert len(resumed) == 1
         monkeypatch.setattr(sessions, "run_process", actual)
         assert cli.main(["finalize", *args]) == 0
 
