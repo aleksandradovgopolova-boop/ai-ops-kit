@@ -817,6 +817,8 @@ CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-реп�
 CI пакета (package-quality — 4 параллельные группы), быстрый слой на PR (pr-smoke) и релизный
 workflow (release.yml: VERSION в main -> тег + Release; идемпотентен — существующий релиз не пересоздаёт).
 
+- `.github/workflows/performance-baseline.yml` — ручная bounded RSS/repeat-серия на проверенном source SHA; запуск требует бесплатного runner-окна.
+- `tests/unit/test_performance_baseline_workflow.py` — positive/fail-closed/side-effect проверки CI measurement wrapper.
 - `.github/workflows/package-quality.yml`
 - `.github/workflows/pr-smoke.yml`
 - `.github/workflows/release.yml`
