@@ -21,7 +21,7 @@ from pathlib import Path
 
 import yaml
 
-from ai_ops_kit.shared import lifecycle_store
+from ai_ops_kit.shared import gitio, lifecycle_store
 from ai_ops_kit.lifecycle import session_migration_store
 
 MARKER = "ai-ops-kit:project-session"
@@ -100,19 +100,10 @@ def within(root, relative):
 
 @read_phase
 def git(root, *args):
-    with subprocess.Popen(["git", "-C", str(root), *args], stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, text=True, start_new_session=True) as proc:
-        try:
-            stdout, stderr = proc.communicate(timeout=10)
-        finally:
-            try:
-                os.killpg(proc.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                pass  # собственная группа уже завершилась
-            proc.wait()
+    proc = gitio.raw_group(["-C", str(root), *args], timeout=10)
     if proc.returncode:
-        raise ValueError(f"git {' '.join(args)} недоступен: {stderr.strip()[:200]}")
-    return stdout.removesuffix("\n")
+        raise ValueError(f"git {' '.join(args)} недоступен: {proc.stderr.strip()[:200]}")
+    return proc.stdout.removesuffix("\n")
 
 
 @read_phase

@@ -19,11 +19,29 @@ CLI: gitio.py --selftest
 from __future__ import annotations
 
 import argparse
+import os
+import signal
 import subprocess
 import sys
 from pathlib import Path
 
 GIT_TIMEOUT_DEFAULT = 90   # сек: обычные plumbing-команды завершаются мгновенно; потолок против зависаний
+
+
+def raw_group(args: list[str], *, cwd: str | Path | None = None,
+              timeout: float = GIT_TIMEOUT_DEFAULT) -> subprocess.CompletedProcess[str]:
+    """Дословный вывод, конечное ожидание и cleanup собственной POSIX Git-группы."""
+    with subprocess.Popen(["git", *args], cwd=cwd, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE, text=True, start_new_session=True) as process:
+        try:
+            stdout, stderr = process.communicate(timeout=timeout)
+        finally:
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass  # собственная группа уже завершилась
+            process.wait()
+    return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
 
 
 def run(args: list[str], *, cwd: str | Path | None = None, timeout: int = GIT_TIMEOUT_DEFAULT) -> tuple[int, str, str]:

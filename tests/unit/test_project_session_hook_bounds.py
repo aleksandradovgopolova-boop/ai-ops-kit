@@ -12,6 +12,7 @@ import pytest
 from ai_ops_kit.cli import project_session as cli
 from ai_ops_kit.cli import project_session_completion as completion
 from ai_ops_kit.lifecycle import project_session as sessions
+from ai_ops_kit.shared import gitio
 from test_project_session import project as _project_fixture
 from test_project_session_resume_bounds import state, assert_unlocked
 from test_project_session_completion import start
@@ -295,3 +296,29 @@ sessions.subprocess.Popen = spawn
                 os.killpg(json.loads(pids.read_text())[0], signal.SIGKILL)
             except ProcessLookupError:
                 pass  # наша группа уже завершилась штатным cleanup
+
+
+def test_git_group_helper_preserves_raw_output_and_return_code(project):
+    content = "  leading whitespace\ntrailing whitespace  \n\n"
+    (project / "raw.txt").write_text(content)
+    sessions.git(project, "add", "raw.txt")
+    sessions.git(project, "commit", "-qm", "raw bytes fixture")
+    result = gitio.raw_group(["-C", str(project), "show", "HEAD:raw.txt"], timeout=2)
+    assert result.returncode == 0 and result.stdout == content and result.stderr == ""
+    failed = gitio.raw_group(["-C", str(project), "show", "HEAD:missing-file"], timeout=2)
+    assert failed.returncode != 0 and failed.stderr
+
+
+def test_git_group_helper_enforces_its_own_timeout_without_hook_budget(tmp_path, monkeypatch):
+    marker = tmp_path / "git-started"
+    actual = gitio.subprocess.Popen
+    script = ("import os,time; from pathlib import Path; "
+              f"Path({str(marker)!r}).write_text(str(os.getpid())); time.sleep(60)")
+    def spawn(command, **kwargs):
+        return actual([sys.executable, "-c", script], **kwargs)
+    monkeypatch.setattr(gitio.subprocess, "Popen", spawn)
+    with pytest.raises(subprocess.TimeoutExpired):
+        gitio.raw_group(["status"], cwd=tmp_path, timeout=0.4)
+    assert marker.is_file()
+    with pytest.raises(ProcessLookupError):
+        os.kill(int(marker.read_text()), 0)
