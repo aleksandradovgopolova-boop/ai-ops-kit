@@ -474,6 +474,9 @@ update_policy:
     - "qualification/**/*"
     - "containers/*"
     - "VERSION"
+    # #1481: условия кита едут с каждой копией его кода (текст + строка Required Notice).
+    # Ни одному пакету не принадлежит — ставится при любом выборе packages.
+    - "LICENSE"
   managed_paths: [".ai/managed/**"]
   protected_paths: [".ai/project/**", ".ai/custom/**"]
   generated_paths: [".ai/generated/**"]
