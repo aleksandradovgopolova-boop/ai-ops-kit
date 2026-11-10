@@ -15,6 +15,11 @@ scripts/warn-path-belt.sh
 # `python3` из PATH и интерпретатор, которым человек на самом деле работает, — разные вещи: на
 # машине владельца `python3` это homebrew БЕЗ pytest, и быстрая проверка падала `No module named
 # pytest` вместо названного отказа. check-full это уже чинил; check-fast обязан вести себя так же.
+# Единое окружение (single-environment): по умолчанию берём закреплённый проектный .venv
+# (создаётся на версии из .python-version), чтобы локальный цикл шёл на той же версии Python,
+# что и проверки, а не на случайном `python3` из PATH. Явный PYTHON= по-прежнему главнее;
+# нет .venv (напр. в worktree) — прежний python3-фолбэк с честным отказом ниже.
+if [ -z "${PYTHON:-}" ] && [ -x ".venv/bin/python" ]; then PYTHON=".venv/bin/python"; fi
 PYTHON="${PYTHON:-python3}"
 if ! "$PYTHON" -c 'import pytest' >/dev/null 2>&1; then
   echo "ОТКАЗ: интерпретатор '${PYTHON}' есть, а pytest в нём нет — прогонять нечем." >&2
