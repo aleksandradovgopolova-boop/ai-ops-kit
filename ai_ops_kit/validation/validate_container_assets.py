@@ -162,6 +162,14 @@ def _check_launch_target(text, root):
     return errors
 
 
+
+def _exec_form(arg):
+    """Exec-форма инструкции списком; shell-форма -> None: она не доказывает запуск runtime guard."""
+    try:
+        return json.loads(arg)
+    except ValueError:
+        return None
+
 def _check_runtime_contract(text):
     instructions = list(_instructions(text))
     bases = [arg for op, arg in instructions if op == "FROM"]
@@ -179,10 +187,7 @@ def _check_runtime_contract(text):
             except ValueError:
                 errors.append("Dockerfile: не удалось разобрать COPY перед runtime guard")
         if op == "RUN":
-            try:
-                guarded |= copied and json.loads(arg) == RUNTIME_CHECK
-            except ValueError:
-                pass  # shell RUN не доказывает fail-closed запуск runtime guard
+            guarded |= copied and _exec_form(arg) == RUNTIME_CHECK
     if not guarded:
         errors.append("Dockerfile: нет exec-form RUN --runtime-floor после COPY кита")
     if not any(op == "RUN" and "npm_config_engine_strict=true npm i " in arg
