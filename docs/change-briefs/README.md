@@ -20,6 +20,7 @@
 
 - [Preview без побочных действий — #1477](preview-has-no-effects.md).
 - [Новый пользовательский ход после native handoff — #1434](1434-user-turn-continuation.md).
+- [Ограниченное чтение проектных hooks — #1434](1434-hook-read-deadlines.md).
 
 - [Интерактивная сессия без вложенной модели — #1434](1434-interactive-session.md).
 - [Безопасная диагностика неизвестного источника плана выпуска](release-snapshot-diagnostics.md).

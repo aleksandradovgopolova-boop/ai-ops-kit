@@ -226,7 +226,25 @@ def reconcile(root, runtime, session, *, finished_only=False):
         return _reconcile(root, runtime, session)
 
 
-def _reconcile(root, runtime, session):
+@sessions.session_migration_store.guarded
+def stop_verdict(root, runtime, session):
+    """Все чтения/проверки ДО записи accepted, без повторного исполнения."""
+    directory = sessions.session_dir(root, runtime, session)
+    with sessions.session_lock(directory / "requests"):
+        with sessions.reading():
+            task = sessions.load(root, runtime, session)
+            execution, verification = task.get("execution") or {}, task.get("verification") or {}
+            finished = (task.get("status") != "accepted" and verification.get("phase") == "finished"
+                        and execution.get("mode") == "current-session" and execution.get("prepared") is True)
+            if finished:
+                task = _reconcile(root, runtime, session, save=False)
+            verdict = sessions._verify(root, runtime, session, task=task)
+        if finished:
+            sessions.write(directory / (task["request_id"] + ".json"), task)
+        return verdict
+
+
+def _reconcile(root, runtime, session, *, save=True):
     task = sessions.load(root, runtime, session)
     if not task.get("execution", {}).get("prepared"):
         return recover_handoff(root, runtime, session, task)
@@ -265,7 +283,8 @@ def _reconcile(root, runtime, session):
         task.update(status="running", blocker="; ".join(report.get("missing") or []) or
                     "штатные gates не подтвердили готовность; см. " + verification["report"],
                     next_step="Устрани названную причину и повтори finalize той же задачи. Не удаляй claim.")
-    sessions.write(sessions.session_dir(root, runtime, session) / (task["request_id"] + ".json"), task)
+    if save:
+        sessions.write(sessions.session_dir(root, runtime, session) / (task["request_id"] + ".json"), task)
     return task
 
 

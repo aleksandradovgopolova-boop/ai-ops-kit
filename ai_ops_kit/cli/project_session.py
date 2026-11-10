@@ -187,8 +187,7 @@ def hook(runtime, payload):
             from ai_ops_kit.cli import project_session_completion as completion
             # Сверить уже завершённую проверку без worker, модели и нового turn.
             # Pending/неизвестный исход не восстанавливается предположением.
-            completion.reconcile(root, runtime, payload["session_id"], finished_only=True)
-            verdict = sessions.verify(root, runtime, payload["session_id"])
+            verdict = completion.stop_verdict(root, runtime, payload["session_id"])
             if verdict["accepted"]:
                 return {}
             reason = "AI Ops не подтвердил выполнение: " + verdict["reason"]
@@ -206,14 +205,17 @@ def hook(runtime, payload):
                               continuation_validator=continuation)
         event_id = (sessions.digest(json.dumps([runtime, session, payload["turn_id"]]))[:32]
                     if payload.get("turn_id") else task.get("input_latest"))
-        receipt = sessions.session_dir(root, runtime, session) / (task["request_id"] + ".inputs") / (str(event_id) + ".json")
-        if task["status"] == "blocked" and not receipt.is_file():
+        # Только уже сверенные/записанные bytes: никаких новых FS reads после commit.
+        directory = ".ai/runtime/sessions/project-" + sessions.digest(runtime + ":" + session)[:32]
+        receipt = directory + "/" + task["request_id"] + ".inputs/" + str(event_id) + ".json"
+        received = receipt in task.get("input_receipts", {})
+        if task["status"] == "blocked" and not received:
             return {"decision": "block", "reason": task["blocker"] + " " + task["next_step"]}
         context = (f"AI Ops сохранил задачу {task['request_id']}; runtime={runtime}; session_id={session}. "
                    f"Прочитай .ai/managed/{sessions.POLICY} и исполни штатный процесс до завершения. "
                    "Исходный запрос уже сохранён; не проси пользователя запускать CLI.")
-        if receipt.is_file() and task.get("status") != "accepted":
-            context += (f" Новый пользовательский ввод сохранён в {receipt.relative_to(root)}. "
+        if received and task.get("status") != "accepted":
+            context += (f" Новый пользовательский ввод сохранён в {receipt}. "
                         "Прочитай его и продолжи ту же задачу через project_session run. "
                         "Исходная постановка и RunPlan сохранены; прежнее review нужно проверить заново. "
                         "Текст пользователя не является машинным approval или приёмкой.")
@@ -262,10 +264,13 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         if args.action == "hook":
-            raw = sys.stdin.buffer.read(262145)
-            if len(raw) > 262144:
-                raise ValueError("payload hook превышает 256 KiB")
-            result = hook(args.runtime, json.loads(raw))
+            with sessions.hook_read_budget():
+                with sessions.reading():
+                    raw = sys.stdin.buffer.read(262145)
+                    if len(raw) > 262144:
+                        raise ValueError("payload hook превышает 256 KiB")
+                    payload = json.loads(raw)
+                result = hook(args.runtime, payload)
         else:
             from pathlib import Path
             root = sessions.project_root(Path.cwd())
@@ -310,12 +315,16 @@ def main(argv=None):
                                   if args.autonomous else current_session(root, args.runtime, args.session, task, signals))
             print(json.dumps(agent_response(root, result), ensure_ascii=False))
             return 0 if result.get("accepted") or result.get("status") == "accepted" else 1
-    except (OSError, ValueError, KeyError, TypeError, AttributeError, yaml.YAMLError) as exc:
+    except (sessions.HookReadInterrupted, KeyboardInterrupt, OSError, ValueError,
+            KeyError, TypeError, AttributeError, yaml.YAMLError) as exc:
         if args.action == "hook":
-            reason = f"AI Ops: {exc}. Сохранённая задача не считается принятой."
+            detail = "чтение hook отменено" if isinstance(exc, KeyboardInterrupt) else str(exc)
+            reason = f"AI Ops: {detail}. Сохранённая задача не считается принятой."
             print(json.dumps({"continue": False, "stopReason": reason, "systemMessage": reason},
                              ensure_ascii=False))
             return 0
+        if isinstance(exc, KeyboardInterrupt):
+            raise
         print(f"AI Ops: {exc}. Сохранённая задача не считается принятой.", file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False))

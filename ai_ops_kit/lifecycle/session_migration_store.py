@@ -168,6 +168,12 @@ def inventory(root, prefixes, *, exclude=()):
 
 
 def incomplete(root):
+    from ai_ops_kit.lifecycle import project_session
+    with project_session.reading():
+        _incomplete(root)
+
+
+def _incomplete(root):
     area = Path(root) / AREA
     if area.is_symlink():
         raise ValueError("symlink migration journal")
