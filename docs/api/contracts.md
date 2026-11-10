@@ -198,3 +198,23 @@ runtime-валидацию и сохраняют явный `Any`. `load()` во
 
 Persist по-прежнему не пишет пустой вердикт и возвращает `None` при ошибке записи.
 [Change Brief](../change-briefs/1412-strict-review-state.md).
+
+## Защищённое чтение lifecycle-артефакта (#1412)
+
+`shared.lifecycle_store.load_guarded()` возвращает `GuardedLoadResult` из уже strict-модуля
+`shared.contracts`. Это union трёх существующих форм словаря: `GuardedLoadAbsent`
+с `state: absent`, `GuardedLoadCorrupt` с `state: corrupt` и строковой `reason`,
+`GuardedLoadOk` с `state: ok` и `data`. Только проверка `result["state"] == "ok"`
+открывает статически проверяемый доступ к payload; в остальных ветках `data` отсутствует.
+Состояние `corrupt` не означает «файла нет», поэтому свежий запуск нельзя подставлять вместо
+повреждённого сохранённого состояния.
+
+`data` остаётся `dict[Any, Any]`: существующие проверки dict/kind/required_keys не доказывают
+типы всех ключей и значений YAML. Не добавляются runtime-валидатор, нормализация, новая
+таблица состояний или второй источник истины. `required_keys` статически объявлены строковыми
+именами; алгоритм и возвращаемые словари сохранены.
+
+Это ограниченный срез контракта чтения, а не заявление о полном strict-охвате всего
+`lifecycle_store`. Прежний ратчет семи strict-модулей сохранён; новые compiler-пробы проверяют
+точный union фактического экспорта и отвергают обращения к отсутствующим полям и неверные типы.
+[Change Brief](../change-briefs/1412-guarded-load-state.md).

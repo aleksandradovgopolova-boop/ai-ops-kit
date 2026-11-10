@@ -77,13 +77,21 @@ runtimes:
       status: degraded
       provider: codex-app-server
       implementation: ai_ops_kit/providers/codex_native.py
-      note: "Подготовлен native text-only provider; offline regression не заменяет живую приёмку. Нужны native project/hook trust и поддерживаемая модель; права не расширяются автоматически."
+      note: "Подготовлен native text-only provider; offline regression не заменяет живую приёмку. В CLI0.147.0 SessionStart выполняется внутри run_turn, поэтому даже trusted hooks не дают требуемой no-model readiness. Без настоящего pre-turn ack provider остаётся NOT_READY; права не расширяются автоматически."
     default_provider: openai
     execution_modes: [native, orchestrated, sequential]
     preferred_mode: orchestrated
     capabilities:
-      native_subagents: {status: degraded, value: "baseline TOML agents, not full parity"}
-      parallel_execution: {status: degraded, value: limited}
+      native_subagents: {status: degraded, value: "baseline TOML agents, not full parity",
+        note: "current-session finalize выдаёт scoped native-agent jobs и команду продолжения;
+          dispatch выполняет открытый host своими subagent tools. Пакет заданий не доказывает
+          запуск; обязательные review/gates и ограничения headless provider сохраняются.
+          Код: ai_ops_kit/cli/project_session_completion.py."}
+      parallel_execution: {status: degraded, value: "governed concurrent orchestration (не live-verified)",
+        note: "v4.12 (#1434): parallel_live_dispatch передаёт runtime+provider каждому пакету;
+          offline доказана конкурентность package callbacks с изоляцией клонов. Native Codex turns
+          текущего adapter сериализованы общим workspace lock. Гейты readiness/trust/model сохранены;
+          live concurrency и ускорение не подтверждены. Тест: test_parallel_codex_concurrent."}
       tools: {status: documented, value: true}
       mcp: {status: documented, value: true}
       function_calling: {status: documented, value: true}

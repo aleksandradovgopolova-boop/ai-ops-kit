@@ -113,7 +113,8 @@ change-brief'ы, отчёты аудита, ретроспективы. Запи
 
 - **API-справочник:** [api/contracts.md](api/contracts.md) · [api/public-surface.md](api/public-surface.md) · [api/kit-observability.md](api/kit-observability.md)
 - **Журнал версий:** [changelog/roadmap-history.md](changelog/roadmap-history.md) · [changelog/v3.0-v3.19.md](changelog/v3.0-v3.19.md) · [changelog/v2.md](changelog/v2.md) · [changelog/v0-v1.md](changelog/v0-v1.md)
-- **Change-brief'ы:** [change-briefs/README.md](change-briefs/README.md)
+- **Change-brief'ы:** [change-briefs/README.md](change-briefs/README.md), в том числе
+  [продолжение пользовательского хода после native handoff](change-briefs/1434-user-turn-continuation.md).
 - **Аудиты и ретро:** [audit-report.md](audit-report.md) · [audit-2026-08-25/README.md](audit-2026-08-25/README.md) · [parallel-execution-retro.md](parallel-execution-retro.md) · [3.0-design.md](3.0-design.md)
 
 ---

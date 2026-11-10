@@ -290,6 +290,12 @@
 - `templates/runtime/team-session.md`, `templates/runtime/team_hook.py` — общий канон и bootstrap экспериментального проектного подключения Claude/Codex (#1434)
 - `ai_ops_kit/lifecycle/project_session.py` — привязка постановки, checkout и наблюдаемого запуска; локальное подтверждение не заменяет CI
 - `ai_ops_kit/cli/project_session.py`, `installer/team_setup.py` — lifecycle hooks и доставка ограниченных блоков/собственных hook-записей
+- `docs/change-briefs/1434-user-turn-continuation.md` — новый пользовательский ход в подтверждённом native handoff; приватные квитанции и инвалидация устаревших проверок.
+- `docs/change-briefs/1434-interactive-session.md` — интерактивный controller-путь, границы приёмки, защита от повторов и безграничного ожидания.
+- `ai_ops_kit/cli/project_session_completion.py` — bounded finalize/reconcile открытого агента через существующие проверки и scoped независимые вердикты.
+- `docs/change-briefs/1434-codex-native-agent-handoff.md` — автономное продолжение review в открытой сессии без второго Codex CLI.
+- `ai_ops_kit/lifecycle/session_migration.py`, `ai_ops_kit/lifecycle/session_migration_store.py`, `ai_ops_kit/cli/project_session_migrate.py` — experimental capture/preview/CAS apply/rollback pending-state без исполнения задач.
+- `docs/agent-guides/session-state-migration.md` — приватные snapshots, границы переноса, согласованное окно и восстановление после прерывания.
 - `templates/ci/ai-ops-record.yml` — CI-нетто автонакопления срезов эффекта (v2.30)
 - `templates/ci/ai-ops-validate.yml` — child-CI валидации: пин kit = installed_version, без protected-трения (v2.35)
 - `templates/ci/ai-ops-update.yml`
@@ -815,6 +821,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 
 - `.github/workflows/package-quality.yml`
 - `.github/workflows/pr-smoke.yml`
+- `.github/workflows/uv-pilot.yml` — пилот воспроизводимого dev-окружения parent (advisory)
 - `.github/workflows/release.yml`
 - `.github/ci-groups/{fast-1,fast-2,contracts,selftests-a,selftests-m}.sh` — разбиение полного контура на группы
 
@@ -869,6 +876,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/providers/codex_transport.py` — bounded stdio JSON-RPC и завершение собственной process group.
 - `ai_ops_kit/providers/codex_native_hook.py` — изолированный workspace текстовой роли и native отказ инструментам.
 - `docs/change-briefs/1434-native-codex-provider.md` — границы реализации native Codex provider и локальные доказательства.
+- `docs/change-briefs/1434-native-sessionstart-compat.md` — подтверждённая граница SessionStart в Codex 0.147.0 и честный отказ до модели.
 - `ai_ops_kit/engops/adoption.py` — добровольный локальный учёт проектов и наблюдаемой активности;
   `docs/architecture/adoption-opt-in.md` — границы доверия и приватности;
   `docs/agent-guides/adoption-measurement.md` — согласие, экспорт, импорт и сводка.
@@ -880,3 +888,6 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 
 - `docs/change-briefs/2026-11-02-repository-reconciliation.md` — границы актуализации без policy/runtime changes.
 - `qualification/REPOSITORY-STATUS-2026-11-02.md` — датированный реестр issues/PR, выпуска и оставшихся доказательств.
+- `ai_ops_kit/devtools/workitem_trace.py` — read-only проекция существующих journal/usage/run-report одного WorkItem (#1411), без сети и записи.
+- `ai_ops_kit/cli/project_session_resume.py` — ограниченный read-only worker prepared CLI resume; `docs/change-briefs/1434-runtime-recovery-delivery.md` и `1434-resume-read-deadline.md` — границы поставки и deadline.
+- `docs/change-briefs/1434-hook-read-deadlines.md` — ограниченные read-only фазы проектных hooks до durable-записи.

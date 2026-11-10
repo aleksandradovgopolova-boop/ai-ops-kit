@@ -18,11 +18,21 @@
 
 ## Что здесь есть
 
+- [Preview без побочных действий — #1477](preview-has-no-effects.md).
+- [Новый пользовательский ход после native handoff — #1434](1434-user-turn-continuation.md).
+- [Ограниченное чтение проектных hooks — #1434](1434-hook-read-deadlines.md).
+
+- [Интерактивная сессия без вложенной модели — #1434](1434-interactive-session.md).
 - [Безопасная диагностика неизвестного источника плана выпуска](release-snapshot-diagnostics.md).
 - [Блокировка неподтверждённого Claude read-only runtime — #1476](1476-claude-readonly.md).
 - [Проверка кодов возврата команд после обновления — R7](r7-upgrade-command-status.md).
+- [Установленная копия кита несёт его лицензию — #1481](1481-managed-copy-keeps-kit-notice.md).
 - [Полный откат неудачного обновления — #1406/R5](1406-r5-rollback-footprint.md).
 - [Первый внешний пользователь: русский и английский старт](first-users-ru-en.md).
+- [Подключение из checkout за три команды](three-command-setup.md).
+- [История существующих package receipts — #1411](1411-receipt-history.md).
+
+- [Локальная read-only трасса WorkItem — #1411](1411-local-trace.md).
 - [Передача runtime и сессии через фасад — #1434](1434-runtime-session-identity.md).
 - [Экспериментальное командное подключение — #1434](1434-team-kit-autostart.md).
 
@@ -119,3 +129,9 @@
 - [Актуализация карточек, плана и архитектурных границ02.11.2026](2026-11-02-repository-reconciliation.md).
 
 - [Точная граница CI после реконструкции истории](history-exact-ci-cutoff.md).
+
+- [Пилот uv и единый источник версий инструментов — #1414, #1402](1414-uv-pilot.md).
+- [Граница SessionStart в native Codex 0.147.0 — #1434](1434-native-sessionstart-compat.md).
+- [Продолжение через штатных агентов открытой сессии — #1434](1434-codex-native-agent-handoff.md).
+- [Восстановление runtime без повторного исполнения — #1434](1434-runtime-recovery-delivery.md).
+- [Конечное ожидание read-only resume — #1434](1434-resume-read-deadline.md).

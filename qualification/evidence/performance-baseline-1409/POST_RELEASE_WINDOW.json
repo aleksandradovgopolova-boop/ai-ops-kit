@@ -1,0 +1,73 @@
+{
+  "schema_version": 1,
+  "issue": 1409,
+  "observed_at": "2026-10-30T22:57:16.783800+03:00",
+  "release_hold": "lifted by explicit coordinator notification",
+  "actual_main": "7acca17f9602c04fc2ec71b04c82544bc9846123",
+  "previous_pr_head": "6088c8919c5aca81db3276545a1efdc7dc47bddf",
+  "measurement_status": "BLOCKED_NOT_RUN",
+  "benchmark_commands_started": 0,
+  "reason": "Empty named heavy-process probe does not establish a quiet host: Spotlight indexing actively consumes several CPU cores, and swap-ins increase. No clean series started.",
+  "resource_observation": {
+    "cpu_count": 10,
+    "load_average": [
+      9.056640625,
+      6.5263671875,
+      6.50048828125
+    ],
+    "named_busy_processes": [],
+    "interval_cpu_idle_percent": [
+      62.62,
+      70.42
+    ],
+    "interval_swapins_deltas": [
+      4,
+      4
+    ],
+    "process_comm_cpu_snapshot": {
+      "mds_stores": 66.3,
+      "mds": 51.9,
+      "mdworker_shared_highest": 48.7,
+      "mdworker_shared_multiple_active": true,
+      "fseventsd": 31.1
+    },
+    "units": "ps %CPU is per logical CPU; top aggregate idle is host-wide; swap-in deltas are pages of 16384 bytes",
+    "interpretation": "Host background activity; not product latency measurements."
+  },
+  "resource_policy": {
+    "shared_lock_path": "/tmp/ai-ops-kit-heavy.lock",
+    "foreign_processes_stopped": false,
+    "foreign_locks_removed_or_changed": false,
+    "production_slot_acquired": false,
+    "ii_sreda_or_max_modified": false,
+    "paid_calls": false
+  },
+  "source_scope": {
+    "new_implementation_changes": false,
+    "release_files": "only inherited main merge",
+    "issue1446_scope_overlap": false
+  },
+  "next_action": "Wait for indexing/load to settle; check shared gate and interval CPU/swap before a frozen-source suite plus repeat. Real CI RSS series still outstanding.",
+  "shared_gate_probe": {
+    "command": "python -m ai_ops_kit.devtools.host_resource_cli --owner performance-baseline-1409-postrelease-admission -- python -c admission-probe",
+    "exit_code": 2,
+    "result": "BLOCKED host-slot: host-slot занят; действующая чужая блокировка сохранена",
+    "command_executed": false,
+    "benchmark_executed": false
+  },
+  "postrelease_checks": {
+    "perf_host_unit": {
+      "passed": 78,
+      "seconds": 6.79
+    },
+    "critical_contracts": {
+      "passed": 86,
+      "deselected": 283,
+      "seconds": 5.85
+    },
+    "ruff": "PASS",
+    "towncrier": "PASS",
+    "diff": "PASS",
+    "wide_local_profile": "NOT_RUN"
+  }
+}

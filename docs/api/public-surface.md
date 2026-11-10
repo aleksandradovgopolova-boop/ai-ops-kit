@@ -17,6 +17,24 @@ breaking change: любая правка могла оказаться лома�
 **Что считается breaking change и каково окно вывода — в [AGENTS.md](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/AGENTS.md), раздел
 «Публичная граница и breaking change».** Здесь — только перепись поверхностей.
 
+## Подготовка зависимости из checkout (experimental)
+
+`python3 installer/bootstrap.py <project> [--language ru|en] [--wheelhouse PATH]`
+готовит отдельный Python venv в `.ai/runtime/bootstrap/` checkout и вызывает
+существующий стабильный `setup`; вариант `--demo` вместо проекта вызывает
+существующий offline sample. Это source-only вход для macOS/Linux, не новый интент
+`./ai-ops`, не часть wheel-поставки и не замена init/setup/update. Код `0` наследует
+исход вызываемого setup/примера, `1` — его ошибка выполнения, `2` — подготовка не
+завершена. Готовность модели/команды и native adapter этим не подтверждается.
+Существующая публичная поверхность ниже не меняется.
+
+## Перенос проектных сессий (experimental)
+
+`python3 -m ai_ops_kit.cli.project_session migrate capture|preview|apply|rollback` — локальный CLI
+с точными digests и согласованным окном без writers. Snapshot/plan/WAL — experimental-артефакты,
+не ApprovalRecord и не acceptance. См. [границы и восстановление](../agent-guides/session-state-migration.md).
+Коды: 0 — операция выполнена, 2 — отказ. Новый интент `./ai-ops` не добавляется.
+
 ## Как этот документ не расходится с кодом
 
 Блок ниже — не иллюстрация, а **сама декларация**: его читает

@@ -273,7 +273,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  calibrated_enforcement=False, ui_evidence=None,   # v3.1.8 калиброванное UI-enforcement
                  strict_judge_qualified=True,   # v3.7.1: есть ли QUALIFIED security/integration судья
                  security_reviewer_proposer=None,   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
-                 reevaluate_only=False, verification_intent="merge_candidate"):   # v3.8.4: переоценить гейты существующего HEAD БЕЗ переавторинга
+                 reevaluate_only=False, verification_intent="merge_candidate", review_handoff_root=None,
+                 base_revision=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -322,7 +323,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
 
     # 1b. изоляция + base-binding + resume -> _setup_isolation (K6). Прогон в отдельном worktree на
     #     ветке ai-ops/<id>, основное дерево child не трогается; при отказе — ранний честный выход.
-    _iso = _setup_isolation(child_root, wid, base, isolate=isolate, resume=resume,
+    _iso = _setup_isolation(child_root, wid, base, isolate=isolate, resume=resume, base_revision=base_revision,
                             reevaluate_only=reevaluate_only, discard_previous=discard_previous,
                             open_pr=open_pr)
     if _iso.get("error"):
@@ -341,7 +342,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     # 3b/3c. фаза install-deps (K6: _prepare_environment).
     prepare, prepare_ok, baseline_checks, prepare_mutated_tree = _prepare_environment(
         profile, work_root, pol, is_git, install_deps=install_deps, isolate=isolate,
-        baseline_diff=baseline_diff)
+        baseline_diff=baseline_diff, read_only=base_revision is not None)
 
     # 4/4a. фаза spec-gate: prompt-контекст (task+профиль+prelude/resume+провалы базы) + pre-authoring
     #       Spec-First (K6: _assemble_context_and_author).
@@ -372,7 +373,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         review=review, reviewer_proposer=reviewer_proposer, budget=budget,
         strict_judge_qualified=strict_judge_qualified,
         security_reviewer_proposer=security_reviewer_proposer, reevaluate_only=reevaluate_only,
-        verification_intent=verification_intent)
+        verification_intent=verification_intent, review_handoff_root=review_handoff_root)
     # распаковываем только то, что нужно ФАЗАМ ниже (gates/readiness); поля, идущие лишь в отчёт,
     # проецируются прямо из _ev в _pipeline_build_report — не плодим неиспользуемые локали.
     coll = _ev["coll"]
@@ -398,6 +399,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         require_fix=require_fix, tree_clean_before_checks=tree_clean_before_checks,
         tree_clean_after_checks=tree_clean_after_checks, prepare_ok=prepare_ok,
         commit=commit, effective_approval_signals=effective_approval_signals,
+        approval_base=base_sha if base_revision is not None else None,
         security_pack_result=security_pack_result, gate_ev=gate_ev)
     ready = rd["ready"]
     env_qualified = rd["env_qualified"]
