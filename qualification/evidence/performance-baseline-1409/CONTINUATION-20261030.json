@@ -1,0 +1,1466 @@
+{
+  "schema_version": 1,
+  "issue": 1409,
+  "pr": 1425,
+  "observed_at": "2026-10-30T12:17:34.679645+00:00",
+  "status": "PARTIAL_NOT_BASELINE",
+  "checkout_base": "2678f716caa74ddce93c0e084821bffac27fd1ff",
+  "inherited_pr_head": "907aa78c8e05af5e365bfcfd222947d5beef2151",
+  "acquisition": "gh api read-only; jobs?filter=all&per_page=100 --paginate --slurp; no workflows started/rerun/cancelled",
+  "runs": [
+    {
+      "id": 40711443633,
+      "name": "package-quality",
+      "head_sha": "907aa78c8e05af5e365bfcfd222947d5beef2151",
+      "run_attempt": 1,
+      "event": "pull_request",
+      "conclusion": "failure",
+      "created_at": "2026-10-28T14:59:44Z",
+      "run_started_at": "2026-10-28T14:59:44Z",
+      "html_url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/40711443633",
+      "path": ".github/workflows/package-quality.yml",
+      "pull_requests": [
+        {
+          "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit/pulls/1425",
+          "id": 5052681412,
+          "number": 1425,
+          "head": {
+            "ref": "claude/land-1409-perf-baseline",
+            "sha": "907aa78c8e05af5e365bfcfd222947d5beef2151",
+            "repo": {
+              "id": 1294045510,
+              "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit",
+              "name": "ai-ops-kit"
+            }
+          },
+          "base": {
+            "ref": "main",
+            "sha": "16842db267e929c48a9132dbf881303cb95044ca",
+            "repo": {
+              "id": 1294045510,
+              "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit",
+              "name": "ai-ops-kit"
+            }
+          }
+        }
+      ],
+      "jobs": [
+        {
+          "id": 122897508982,
+          "name": "delivered-footprint",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:48Z",
+          "completed_at": "2026-10-28T14:59:59Z",
+          "runner_name": "GitHub Actions 1000045426",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 11.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install pyyaml",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 5,
+              "name": "Advisory: объём+число файлов доставляемого итога слияния (merge-preview ∩ managed_set)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:58Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:58Z",
+              "completed_at": "2026-10-28T14:59:58Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:58Z",
+              "completed_at": "2026-10-28T14:59:58Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:58Z",
+              "completed_at": "2026-10-28T14:59:58Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509399,
+          "name": "lint",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:48Z",
+          "completed_at": "2026-10-28T15:00:12Z",
+          "runner_name": "GitHub Actions 1000045427",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 24.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'ruff==0.16.2'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:55Z"
+            },
+            {
+              "number": 5,
+              "name": "ruff — правила класса «поломка» (F821/F811/B023/F841)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:55Z",
+              "completed_at": "2026-10-28T14:59:55Z"
+            },
+            {
+              "number": 6,
+              "name": "битая директива # noqa ловится как ошибка, а не как предупреждение",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:55Z",
+              "completed_at": "2026-10-28T15:00:01Z"
+            },
+            {
+              "number": 7,
+              "name": "Run pip install 'mypy==2.3.1'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:01Z",
+              "completed_at": "2026-10-28T15:00:04Z"
+            },
+            {
+              "number": 8,
+              "name": "mypy — фундамент (kernel+shared) типобезопасен",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:04Z",
+              "completed_at": "2026-10-28T15:00:06Z"
+            },
+            {
+              "number": 9,
+              "name": "Run pip install 'towncrier==25.8.0' 'commitizen==4.17.1'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:06Z",
+              "completed_at": "2026-10-28T15:00:09Z"
+            },
+            {
+              "number": 10,
+              "name": "запись для CHANGELOG добавлена в этой ветке (towncrier check)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:09Z",
+              "completed_at": "2026-10-28T15:00:09Z"
+            },
+            {
+              "number": 11,
+              "name": "формат новых коммитов (cz check от точки включения)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:09Z",
+              "completed_at": "2026-10-28T15:00:09Z"
+            },
+            {
+              "number": 12,
+              "name": "Run pip install 'pyyaml==6.*'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:09Z",
+              "completed_at": "2026-10-28T15:00:10Z"
+            },
+            {
+              "number": 13,
+              "name": "CommitContract по коммитам PR (охват + осмысленность сообщения; advise)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:10Z",
+              "completed_at": "2026-10-28T15:00:10Z"
+            },
+            {
+              "number": 25,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:10Z",
+              "completed_at": "2026-10-28T15:00:10Z"
+            },
+            {
+              "number": 26,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:10Z",
+              "completed_at": "2026-10-28T15:00:11Z"
+            },
+            {
+              "number": 27,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:11Z",
+              "completed_at": "2026-10-28T15:00:11Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509545,
+          "name": "pipeline-e2e (3.12)",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:48Z",
+          "completed_at": "2026-10-28T15:01:13Z",
+          "runner_name": "GitHub Actions 1000045428",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 85.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:57Z"
+            },
+            {
+              "number": 5,
+              "name": "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:57Z",
+              "completed_at": "2026-10-28T15:01:11Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:01:11Z",
+              "completed_at": "2026-10-28T15:01:11Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:01:11Z",
+              "completed_at": "2026-10-28T15:01:11Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:01:11Z",
+              "completed_at": "2026-10-28T15:01:11Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509582,
+          "name": "quality (fast-1, .github/ci-groups/fast-1.sh)",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "failure",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:05:49Z",
+          "runner_name": "GitHub Actions 1000045429",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 360.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:51Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:51Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T15:00:00Z"
+            },
+            {
+              "number": 5,
+              "name": "Run fast-1 checks",
+              "conclusion": "failure",
+              "started_at": "2026-10-28T15:00:00Z",
+              "completed_at": "2026-10-28T15:05:46Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "skipped",
+              "started_at": "2026-10-28T15:05:46Z",
+              "completed_at": "2026-10-28T15:05:46Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:05:46Z",
+              "completed_at": "2026-10-28T15:05:46Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:05:46Z",
+              "completed_at": "2026-10-28T15:05:46Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509667,
+          "name": "upgrade-path",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:48Z",
+          "completed_at": "2026-10-28T15:00:16Z",
+          "runner_name": "GitHub Actions 1000045431",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 28.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install pyyaml",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 5,
+              "name": "Обновление предыдущий выпуск -> рабочее дерево",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T15:00:14Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:14Z",
+              "completed_at": "2026-10-28T15:00:14Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:14Z",
+              "completed_at": "2026-10-28T15:00:14Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:14Z",
+              "completed_at": "2026-10-28T15:00:14Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509743,
+          "name": "quality (selftests-a, .github/ci-groups/selftests-a.sh)",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:03:18Z",
+          "runner_name": "GitHub Actions 1000045433",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 209.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            },
+            {
+              "number": 5,
+              "name": "Run selftests-a checks",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:59Z",
+              "completed_at": "2026-10-28T15:03:15Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:03:15Z",
+              "completed_at": "2026-10-28T15:03:15Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:03:15Z",
+              "completed_at": "2026-10-28T15:03:15Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:03:15Z",
+              "completed_at": "2026-10-28T15:03:15Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509766,
+          "name": "pipeline-e2e (3.13)",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:00:50Z",
+          "runner_name": "GitHub Actions 1000045430",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 61.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:58Z"
+            },
+            {
+              "number": 5,
+              "name": "Process Contract Tests: 20 pytest-тестов доказывают инварианты процессов (WP2-WP5)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:58Z",
+              "completed_at": "2026-10-28T15:00:48Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:48Z",
+              "completed_at": "2026-10-28T15:00:48Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:48Z",
+              "completed_at": "2026-10-28T15:00:48Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:48Z",
+              "completed_at": "2026-10-28T15:00:48Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509793,
+          "name": "smoke-macos",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "cancelled",
+          "started_at": "2026-10-28T14:59:45Z",
+          "completed_at": "2026-10-28T15:15:01Z",
+          "runner_name": "",
+          "labels": [
+            "macos-latest"
+          ],
+          "elapsed_seconds": null,
+          "execution_observed": false,
+          "steps": []
+        },
+        {
+          "id": 122897509838,
+          "name": "quality (contracts, .github/ci-groups/contracts.sh)",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:01:50Z",
+          "runner_name": "GitHub Actions 1000045432",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 121.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:51Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:51Z",
+              "completed_at": "2026-10-28T14:59:56Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:56Z",
+              "completed_at": "2026-10-28T14:59:56Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:56Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            },
+            {
+              "number": 5,
+              "name": "Run contracts checks",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:59Z",
+              "completed_at": "2026-10-28T15:01:46Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:01:46Z",
+              "completed_at": "2026-10-28T15:01:46Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:01:46Z",
+              "completed_at": "2026-10-28T15:01:47Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:01:47Z",
+              "completed_at": "2026-10-28T15:01:47Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509885,
+          "name": "clean-install",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:00:26Z",
+          "runner_name": "GitHub Actions 1000045434",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 37.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install pyyaml",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:55Z"
+            },
+            {
+              "number": 5,
+              "name": "Установка в чистый репозиторий без кита рядом",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:55Z",
+              "completed_at": "2026-10-28T15:00:23Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:23Z",
+              "completed_at": "2026-10-28T15:00:23Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:23Z",
+              "completed_at": "2026-10-28T15:00:23Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:23Z",
+              "completed_at": "2026-10-28T15:00:23Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509916,
+          "name": "security-scan",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T14:59:59Z",
+          "runner_name": "GitHub Actions 1000045436",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 10.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install pyyaml",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:55Z"
+            },
+            {
+              "number": 5,
+              "name": "Security scan: секреты, зависимости, injection-surface",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:55Z",
+              "completed_at": "2026-10-28T14:59:55Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:55Z",
+              "completed_at": "2026-10-28T14:59:56Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:56Z",
+              "completed_at": "2026-10-28T14:59:56Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:56Z",
+              "completed_at": "2026-10-28T14:59:56Z"
+            }
+          ]
+        },
+        {
+          "id": 122897510028,
+          "name": "quality (selftests-m, .github/ci-groups/selftests-m.sh)",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:06:44Z",
+          "runner_name": "GitHub Actions 1000045435",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 415.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T15:00:00Z"
+            },
+            {
+              "number": 5,
+              "name": "Run selftests-m checks",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:00Z",
+              "completed_at": "2026-10-28T15:06:42Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:06:42Z",
+              "completed_at": "2026-10-28T15:06:42Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:06:42Z",
+              "completed_at": "2026-10-28T15:06:43Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:06:43Z",
+              "completed_at": "2026-10-28T15:06:43Z"
+            }
+          ]
+        },
+        {
+          "id": 122897510344,
+          "name": "quality (fast-2, .github/ci-groups/fast-2.sh)",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:04:09Z",
+          "runner_name": "GitHub Actions 1000045437",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 260.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:51Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:51Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.16.2'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            },
+            {
+              "number": 5,
+              "name": "Run fast-2 checks",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:59Z",
+              "completed_at": "2026-10-28T15:04:06Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:04:06Z",
+              "completed_at": "2026-10-28T15:04:06Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:04:06Z",
+              "completed_at": "2026-10-28T15:04:06Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:04:06Z",
+              "completed_at": "2026-10-28T15:04:06Z"
+            }
+          ]
+        }
+      ],
+      "job_sum_seconds_excluding_unobserved": 1621.0,
+      "run_attempts_observed": 1,
+      "manual_reruns_observed": 0,
+      "successful_baseline_sample": false
+    },
+    {
+      "id": 40711444150,
+      "name": "pr-smoke",
+      "head_sha": "907aa78c8e05af5e365bfcfd222947d5beef2151",
+      "run_attempt": 1,
+      "event": "pull_request",
+      "conclusion": "success",
+      "created_at": "2026-10-28T14:59:45Z",
+      "run_started_at": "2026-10-28T14:59:45Z",
+      "html_url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/40711444150",
+      "path": ".github/workflows/pr-smoke.yml",
+      "pull_requests": [
+        {
+          "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit/pulls/1425",
+          "id": 5052681412,
+          "number": 1425,
+          "head": {
+            "ref": "claude/land-1409-perf-baseline",
+            "sha": "907aa78c8e05af5e365bfcfd222947d5beef2151",
+            "repo": {
+              "id": 1294045510,
+              "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit",
+              "name": "ai-ops-kit"
+            }
+          },
+          "base": {
+            "ref": "main",
+            "sha": "16842db267e929c48a9132dbf881303cb95044ca",
+            "repo": {
+              "id": 1294045510,
+              "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit",
+              "name": "ai-ops-kit"
+            }
+          }
+        }
+      ],
+      "jobs": [
+        {
+          "id": 122897508717,
+          "name": "pr-size",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:49Z",
+          "completed_at": "2026-10-28T15:00:01Z",
+          "runner_name": "GitHub Actions 1000045438",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 12.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:54Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install pyyaml",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:54Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            },
+            {
+              "number": 5,
+              "name": "размер PR: одна работа = один малый PR (advisory)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:59Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:59Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:59Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:59Z",
+              "completed_at": "2026-10-28T14:59:59Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509294,
+          "name": "smoke",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:48Z",
+          "completed_at": "2026-10-28T15:01:01Z",
+          "runner_name": "GitHub Actions 1000045439",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 73.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:53Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install 'pyyaml==6.*' 'pytest==9.*' 'hypothesis==6.*'",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:53Z",
+              "completed_at": "2026-10-28T14:59:56Z"
+            },
+            {
+              "number": 5,
+              "name": "заголовок PR — тема будущего коммита, формат обязателен",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:56Z",
+              "completed_at": "2026-10-28T14:59:58Z"
+            },
+            {
+              "number": 6,
+              "name": "Pytest — critical path + contracts",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:58Z",
+              "completed_at": "2026-10-28T15:00:04Z"
+            },
+            {
+              "number": 7,
+              "name": "Pytest — critical modules (granular)",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:04Z",
+              "completed_at": "2026-10-28T15:00:59Z"
+            },
+            {
+              "number": 13,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:59Z",
+              "completed_at": "2026-10-28T15:00:59Z"
+            },
+            {
+              "number": 14,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:59Z",
+              "completed_at": "2026-10-28T15:00:59Z"
+            },
+            {
+              "number": 15,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:59Z",
+              "completed_at": "2026-10-28T15:00:59Z"
+            }
+          ]
+        },
+        {
+          "id": 122897509439,
+          "name": "parallel-safety",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T15:00:01Z",
+          "completed_at": "2026-10-28T15:00:09Z",
+          "runner_name": "GitHub Actions 1000045440",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 8.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:02Z",
+              "completed_at": "2026-10-28T15:00:03Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:03Z",
+              "completed_at": "2026-10-28T15:00:06Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:06Z",
+              "completed_at": "2026-10-28T15:00:06Z"
+            },
+            {
+              "number": 4,
+              "name": "Run pip install pyyaml",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:06Z",
+              "completed_at": "2026-10-28T15:00:07Z"
+            },
+            {
+              "number": 5,
+              "name": "PR не смешивает код с координационным файлом",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:07Z",
+              "completed_at": "2026-10-28T15:00:07Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:07Z",
+              "completed_at": "2026-10-28T15:00:07Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:07Z",
+              "completed_at": "2026-10-28T15:00:08Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:08Z",
+              "completed_at": "2026-10-28T15:00:08Z"
+            }
+          ]
+        }
+      ],
+      "job_sum_seconds_excluding_unobserved": 93.0,
+      "run_attempts_observed": 1,
+      "manual_reruns_observed": 0,
+      "successful_baseline_sample": false
+    },
+    {
+      "id": 40711443747,
+      "name": "docs",
+      "head_sha": "907aa78c8e05af5e365bfcfd222947d5beef2151",
+      "run_attempt": 1,
+      "event": "pull_request",
+      "conclusion": "success",
+      "created_at": "2026-10-28T14:59:44Z",
+      "run_started_at": "2026-10-28T14:59:44Z",
+      "html_url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/40711443747",
+      "path": ".github/workflows/docs.yml",
+      "pull_requests": [
+        {
+          "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit/pulls/1425",
+          "id": 5052681412,
+          "number": 1425,
+          "head": {
+            "ref": "claude/land-1409-perf-baseline",
+            "sha": "907aa78c8e05af5e365bfcfd222947d5beef2151",
+            "repo": {
+              "id": 1294045510,
+              "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit",
+              "name": "ai-ops-kit"
+            }
+          },
+          "base": {
+            "ref": "main",
+            "sha": "16842db267e929c48a9132dbf881303cb95044ca",
+            "repo": {
+              "id": 1294045510,
+              "url": "https://api.github.com/repos/aleksandradovgopolova-boop/ai-ops-kit",
+              "name": "ai-ops-kit"
+            }
+          }
+        }
+      ],
+      "jobs": [
+        {
+          "id": 122897507260,
+          "name": "build",
+          "run_attempt": 1,
+          "status": "completed",
+          "conclusion": "success",
+          "started_at": "2026-10-28T14:59:48Z",
+          "completed_at": "2026-10-28T15:00:06Z",
+          "runner_name": "GitHub Actions 1000045425",
+          "labels": [
+            "ubuntu-latest"
+          ],
+          "elapsed_seconds": 18.0,
+          "execution_observed": true,
+          "steps": [
+            {
+              "number": 1,
+              "name": "Set up job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:49Z",
+              "completed_at": "2026-10-28T14:59:50Z"
+            },
+            {
+              "number": 2,
+              "name": "Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:50Z",
+              "completed_at": "2026-10-28T14:59:52Z"
+            },
+            {
+              "number": 3,
+              "name": "Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:52Z",
+              "completed_at": "2026-10-28T14:59:52Z"
+            },
+            {
+              "number": 4,
+              "name": "Установить mkdocs",
+              "conclusion": "success",
+              "started_at": "2026-10-28T14:59:52Z",
+              "completed_at": "2026-10-28T15:00:02Z"
+            },
+            {
+              "number": 5,
+              "name": "Собрать документацию",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:02Z",
+              "completed_at": "2026-10-28T15:00:05Z"
+            },
+            {
+              "number": 9,
+              "name": "Post Run actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:05Z",
+              "completed_at": "2026-10-28T15:00:05Z"
+            },
+            {
+              "number": 10,
+              "name": "Post Run actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:05Z",
+              "completed_at": "2026-10-28T15:00:05Z"
+            },
+            {
+              "number": 11,
+              "name": "Complete job",
+              "conclusion": "success",
+              "started_at": "2026-10-28T15:00:05Z",
+              "completed_at": "2026-10-28T15:00:05Z"
+            }
+          ]
+        }
+      ],
+      "job_sum_seconds_excluding_unobserved": 18.0,
+      "run_attempts_observed": 1,
+      "manual_reruns_observed": 0,
+      "successful_baseline_sample": false
+    }
+  ],
+  "unknown": [
+    "cold/warm OS/page caches",
+    "per-job peak RSS",
+    "per-job CPU count/model and memory limits",
+    "per-job competing load",
+    "repeat-series dispersion on same source/environment"
+  ],
+  "runtime": {
+    "status": "BLOCKED",
+    "operation": "host_resource_cli --owner performance-baseline-1409-continuation -- python -c admission-probe",
+    "exit_code": 2,
+    "reason": "host-slot занят; действующая чужая блокировка сохранена",
+    "baseline_commands_started": 0,
+    "host_probe": {
+      "cpu_count": 10,
+      "load_average": [
+        18.43701171875,
+        23.25439453125,
+        26.81298828125
+      ],
+      "cpu_idle_percent_interval_samples": [
+        6.26,
+        10.9
+      ],
+      "swapins_interval_deltas": [
+        4,
+        40
+      ],
+      "named_busy_processes_observed": 2,
+      "clean_window_established": false
+    },
+    "release_priority": "4.12; no lock removed or foreign process stopped"
+  },
+  "verification": {
+    "platform": "native macOS, CPython 3.14.7",
+    "original_failure_reproduced": true,
+    "targeted": {
+      "passed": 78,
+      "seconds": 9.36,
+      "ambient_actions": "true; run=ambient; attempt=99",
+      "sandbox_note": "3 own-process cleanup checks require ps; first sandboxed run failed, approved native rerun passed",
+      "git_config_global": "/dev/null"
+    },
+    "critical_contracts": {
+      "passed": 86,
+      "deselected": 283,
+      "seconds": 9.68
+    },
+    "ruff": "PASS",
+    "full_pr_profile": "NOT_RUN",
+    "product_series": "NOT_RUN"
+  },
+  "ci_defect": {
+    "job_id": 122897509582,
+    "source_url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/actions/runs/40711443633/job/122897509582",
+    "test": "TestCommandSuites.test_commands_really_execute_and_record_every_repeat_and_memory",
+    "actual": "github_actions",
+    "expected_before_fix": "local",
+    "fix": "Explicitly parameterize absent/false/true GITHUB_ACTIONS and verify run id/attempt with real command marker."
+  },
+  "baseline_defect": {
+    "invalid_explicit_baseline_payloads": [
+      "null",
+      "{}",
+      "[]"
+    ],
+    "before": "null produced NO_BASELINE/exit 0; other invalid values executed commands before INVALID",
+    "after": "exit 2 before commands, no output/logs, baseline bytes preserved",
+    "regression": "three red tests reproduced original behavior; same tests pass after four-line receipt validation",
+    "product_timing_evidence": false
+  }
+}

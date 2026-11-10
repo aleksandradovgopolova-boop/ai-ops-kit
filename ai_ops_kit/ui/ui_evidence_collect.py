@@ -48,7 +48,7 @@ def write_meta(root, commit_sha) -> Path:
     return p
 
 
-def collect(work_root, commit_sha, run_npm=True, timeout=600) -> dict:
+def collect(work_root, commit_sha, run_npm=True, timeout=600, install_deps=True) -> dict:
     """Собрать UI-evidence на committed_sha. UI-стек обязателен; иначе skipped (no-op для python child)."""
     root = Path(work_root)
     if not is_ui_stack(root):
@@ -62,6 +62,8 @@ def collect(work_root, commit_sha, run_npm=True, timeout=600) -> dict:
             return {"skipped": True, "reason": "npm недоступен — UI-CI не запущен (evidence not_run)"}
         try:
             if not (root / "node_modules").is_dir():   # worktree свежий: node_modules gitignore'н
+                if not install_deps:
+                    return {"skipped": True, "reason": "зависимости UI не установлены; локальная переоценка не выполняет npm ci"}
                 subprocess.run(["npm", "ci"], cwd=str(root), capture_output=True, timeout=timeout, check=True)
                 ran.append("npm ci")
             subprocess.run(["npm", "run", "ui-evidence"], cwd=str(root),

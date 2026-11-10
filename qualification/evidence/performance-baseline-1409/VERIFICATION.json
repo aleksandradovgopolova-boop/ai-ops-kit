@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "issue": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1409",
+  "branch": "codex/p0-1409-performance-baseline",
+  "worktree": "/Users/sasad/Documents/Codex/2026-10-28/task-3/p0-1409-performance-baseline",
+  "base_sha": "083bcf3cfbb25b2e526672c0c2be588b992d7213",
+  "base_verification": "git ls-remote origin refs/heads/main matched local origin/main before worktree creation",
+  "duplicate_check": {"issue_state": "open", "open_pr_numbers": [1419, 1371, 1361], "same_scope_duplicate_found": false},
+  "checks": [
+    {"command": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest tests/unit/test_bench_performance.py tests/unit/test_host_resources.py -q", "exit_code": 0, "passed": 51, "seconds": 2.59},
+    {"command": "/Users/sasad/ai-ops-kit/.venv/bin/python -m pytest tests/contracts/ -q -m critical_path", "exit_code": 0, "passed": 44, "deselected": 241, "seconds": 4.48},
+    {"command": "GIT_CONFIG_GLOBAL=/dev/null /Users/sasad/ai-ops-kit/.venv/bin/python -m pytest tests/unit/test_bench_performance.py -q", "exit_code": 0, "passed": 34},
+    {"command": "/Users/sasad/ai-ops-kit/.venv/bin/ruff check .", "exit_code": 0},
+    {"command": "git diff --check", "exit_code": 0},
+    {"command": "load_suite for suite.json and suite-pr.json", "exit_code": 0, "case_counts": [5, 1], "commands_executed": false},
+    {"command": "python -m ai_ops_kit.devtools.bench_performance --help", "exit_code": 0}
+  ],
+  "verification_scope": "Native macOS / CPython 3.14.7; tiny fixture commands are harness tests, not product baseline.",
+  "not_run": ["clean-runtime-baseline", "baseline-repeat-comparison", "real-github-actions-measurements-and-all-attempts", "full-pr-profile", "linux-python-3.12-3.13-matrix"],
+  "measurement_status": "NOT_RUN; actual host observations did not support a clean baseline claim, see RESOURCE_WINDOW.json",
+  "reservation": "No own shared production reservation acquired; nothing to release. Test-only temporary leases released and reacquired successfully.",
+  "known_limitations": ["RSS is maximum child RSS, not total simultaneous tree memory", "ci domain on Mac is a local stage replica; no true CI time/memory/retry claim", "operator must freeze sources and keep window clean after initial host admission"],
+  "out_of_scope_actions_performed": false,
+  "commits_pushes_prs_merges_deploys": "none",
+  "shared_planning_registry_ci_files_modified": false
+}

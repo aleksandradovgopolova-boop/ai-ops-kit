@@ -312,7 +312,7 @@ def _intent(name):
 # этого модуля держит резолвинг у вызывающих/тестов и диспетча; спутник НЕ импортирует ai_ops_cli на
 # верхнем уровне (обратные обращения — ленивым импортом), поэтому цикла нет.
 from ai_ops_kit.cli.ai_ops_cli_intents import (  # noqa: E402,F401 — ре-экспорт для вызывающих/тестов
-    build_preview, _print_preview,
+    build_preview, _print_preview, _show_preview,
     _run_backlog, _BACKLOG_SUBS,
     _product_health_report, _product_risks,
     _intent_products, _intent_model, _intent_contract, _intent_propose,
@@ -586,6 +586,14 @@ def main(argv):
         if _spec_task:
             task = _spec_task
 
+    # Preview заканчивается ДО process gate и всех ветвей исполнения, включая specify/resume.
+    # Флаги --execute/--force/--answers/--open-pr не могут превратить его в действие.
+    if preview_mode:
+        pv = build_preview(intent, task, Path(child_root), signals)
+        pv["will_execute_now"] = False
+        _show_preview(pv, child_root, a)
+        return 0
+
     # Process gate общий для всех ветвей dispatch: короткий путь или вопрос владельцу.
     _gate_rc = _process_gate(intent, task, child_root, signals, a, preview_mode)
     if _gate_rc is not None:
@@ -644,7 +652,7 @@ def main(argv):
     # `session-command-reaches-the-child` довела команду до дочки и не довела до исполнения.
     # Расхождение этого списка с тем, что реально умеет `_run_intent`, теперь краснеет тестом
     # `test_direct_intents_match_the_handler` — рукой список больше не забудут.
-    if not preview_mode and intent in DIRECT_INTENTS:
+    if intent in DIRECT_INTENTS:
         rc = _run_intent(intent, task, Path(child_root), signals, a)
         if rc is not None:
             return rc
@@ -667,15 +675,7 @@ def main(argv):
         _blocked_on_intake = bool(_ph.missing_intake_signals(signals))
     # #708: немедленный старт (do/run --execute) -> превью говорит «запускаю сейчас», не «когда готов».
     pv["will_execute_now"] = _will_execute_now
-    if a.json:
-        print(json.dumps(pv, ensure_ascii=False, indent=2))
-    elif not _blocked_on_intake:
-        # Смысл — всегда; внутренний разбор превью (стадии, флаги, бюджет) — на technical/debug,
-        # как у `next` и `model`. Разбор не выброшен: без него не отладить неверный подбор режима.
-        _say(Path(child_root), "from_execution_preview", pv)
-        if _audience(Path(child_root)) != "product":
-            print()
-            _print_preview(pv)
+    _show_preview(pv, child_root, a, _blocked_on_intake)
 
     # только `run --execute` и `do` реально запускают движок; остальное — превью/делегация
     return _main_run_execute(intent, task, child_root, signals, a, pv)
