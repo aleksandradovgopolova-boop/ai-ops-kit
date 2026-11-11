@@ -131,6 +131,7 @@
 
 - [Точная граница CI после реконструкции истории](history-exact-ci-cutoff.md).
 - [Ручные реальные CI RSS/repeat-серии — #1409](1409-ci-rss-repeat.md).
+- [Один обход AST внутри проверки безопасности обновления](update-security-ast-reuse.md).
 - [Проект двухфазного native preflight и независимого запрета tools — #1434](1434-native-preflight-contract.md).
 
 - [Очистка тестов сохраняет исходное дерево — #1480](1480-safe-root-cleanup.md).
