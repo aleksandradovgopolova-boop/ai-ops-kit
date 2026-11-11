@@ -206,10 +206,10 @@ def _литерал(узел, конст: dict):
     return None
 
 
-def _связывания(дерево) -> Counter:
+def _связывания(nodes) -> Counter:
     """Сколько раз каждое имя связывается где угодно в файле (присвоение, параметр, импорт…)."""
     счёт: Counter = Counter()
-    for у in ast.walk(дерево):
+    for у in nodes:
         if isinstance(у, ast.Name) and not isinstance(у.ctx, ast.Load):
             счёт[у.id] += 1
         elif isinstance(у, ast.arg):
@@ -229,10 +229,10 @@ def _связывания(дерево) -> Counter:
     return счёт
 
 
-def _пространство_переписывается(дерево) -> tuple:
+def _пространство_переписывается(nodes) -> tuple:
     """-> (имена модуля переписываются мимо присвоения, обёртки затенены присвоением)."""
     переписывается, затенены = False, False
-    for у in ast.walk(дерево):
+    for у in nodes:
         if (isinstance(у, ast.Call) and isinstance(у.func, ast.Name) and у.func.id in _ПЕРЕПИСЬ_ИМЁН
                 or isinstance(у, ast.Attribute) and у.attr == "__dict__"
                 or isinstance(у, ast.ImportFrom) and any(a.name == "*" for a in у.names)):
@@ -245,10 +245,10 @@ def _пространство_переписывается(дерево) -> tupl
     return переписывается, затенены
 
 
-def _константы(дерево) -> dict:
+def _константы(дерево, nodes) -> dict:
     """Имена-константы файла -> значение. По порядку: константа из констант выше — тоже константа."""
-    счёт = _связывания(дерево)
-    переписывается, затенены = _пространство_переписывается(дерево)
+    счёт = _связывания(nodes)
+    переписывается, затенены = _пространство_переписывается(nodes)
     конст: dict = {_ОБЁРТКИ_ЗАТЕНЕНЫ: ""} if затенены else {}
     if переписывается:
         return конст
@@ -313,9 +313,9 @@ _ПОЗИЦИОННЫЕ = {"create_subprocess_exec": (0, False),
                 "spawnlpe": (1, True)}
 
 
-def _последовательности(дерево):
+def _последовательности(nodes):
     """Все последовательности аргументов команды: списки/кортежи и позиционные вызовы."""
-    for у in ast.walk(дерево):
+    for у in nodes:
         if isinstance(у, (ast.List, ast.Tuple)):
             yield _развернуть(у.elts)
         elif isinstance(у, ast.Call):
@@ -340,8 +340,9 @@ def _py_строки(text: str) -> list:
         дерево = ast.parse(text)
     except (SyntaxError, ValueError):
         return [n for n, s in enumerate(text.splitlines(), 1) if _PY_ЗАПАСНОЙ.search(s)]
-    конст, out = _константы(дерево), set()
-    for элементы in _последовательности(дерево):
+    nodes = list(ast.walk(дерево))  # Один обход; все три проверки читают тот же полный порядок.
+    конст, out = _константы(дерево, nodes), set()
+    for элементы in _последовательности(nodes):
         # Интерпретатор может стоять не первым: `["ssh", host, "bash", "-c", f"…"]`.
         for k, элемент in enumerate(элементы):
             семейство = _py_семейство(элемент, конст)
