@@ -10,7 +10,7 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     # Одна версия с CI (`package-quality.yml`): расхождение делало «локально чисто»
     # и «чисто в CI» утверждениями про разные линтеры — замер 12.08.2026.
-    rev: v0.17.3
+    rev: v0.17.4
     hooks:
       - id: ruff
         args: [--fix, --exit-non-zero-on-fix]
@@ -80,5 +80,6 @@ repos:
         name: CommitContract (охват коммита и осмысленность сообщения)
         entry: scripts/commit-contract.sh
         language: system
-        pass_filenames: false
+        # На commit-msg единственный filename — путь к сообщению коммита; скрипту он обязателен.
+        pass_filenames: true
         stages: [commit-msg]
