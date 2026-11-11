@@ -18,6 +18,8 @@
 
 ## Что здесь есть
 
+- [Выполненный падающий тест обязателен для mutation kill — #1482](1482-mutation-executed-test.md).
+
 - [Preview без побочных действий — #1477](preview-has-no-effects.md).
 - [Новый пользовательский ход после native handoff — #1434](1434-user-turn-continuation.md).
 - [Ограниченное чтение проектных hooks — #1434](1434-hook-read-deadlines.md).
@@ -129,7 +131,9 @@
 
 - [Точная граница CI после реконструкции истории](history-exact-ci-cutoff.md).
 - [Ручные реальные CI RSS/repeat-серии — #1409](1409-ci-rss-repeat.md).
+- [Проект двухфазного native preflight и независимого запрета tools — #1434](1434-native-preflight-contract.md).
 
+- [Очистка тестов сохраняет исходное дерево — #1480](1480-safe-root-cleanup.md).
 - [Пилот uv и единый источник версий инструментов — #1414, #1402](1414-uv-pilot.md).
 - [Граница SessionStart в native Codex 0.147.0 — #1434](1434-native-sessionstart-compat.md).
 - [Продолжение через штатных агентов открытой сессии — #1434](1434-codex-native-agent-handoff.md).
