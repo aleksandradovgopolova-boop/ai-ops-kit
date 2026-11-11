@@ -51,58 +51,74 @@ schema_version: 1
 kind: ai-ops-public-surface
 
 stable:
+  # #1525: в `stable` остаётся только то, на что кто-то реально опирается. У КАЖДОЙ записи ниже
+  # указана причина, и тест сверяет её с репозиторием; запись без проверяемой причины краснеет.
+  # Причины:
+  #   plugin     — есть слеш-команда плагина Claude Code: plugin/commands/<имя>.md;
+  #   instructed — `ai-ops <имя>` названа в инструкциях, которые получает агент или владелец
+  #                (templates/, plugin/, skills/, README.md, docs/QUICKSTART.md, docs/guides/installation.md);
+  #   setup      — её вызывает единая установка (installer/setup_ops.py);
+  #   wrapper    — обёртка дочки ведёт в неё свою команду (templates/runtime/ai-ops-entry.sh).
+  #
+  # Действия владельца — то, что показывает `ai-ops --help` (ai_ops_kit/cli/human_facade.py ->
+  # HUMAN_ACTIONS). Это и есть видимая поверхность: 7 глаголов поверх интентов ниже. Тест требует
+  # равенства в обе стороны — показанное обязано быть обещано, обещанное обязано быть показано.
+  facade_actions:
+    - research
+    - start
+    - check
+    - work
+    - review
+    - release
+    - feedback
   # Интенты движка (`./ai-ops <интент>`) — ai_ops_kit/cli/ai_ops_cli.py -> INTENTS.
   cli_intents:
-    - new
-    - onboard
-    - discuss
-    - specify
-    - plan
-    - run
-    - do
-    - advise
-    - resume
-    - review
-    - status
-    - health
-    - session
+    new: plugin
+    onboard: plugin
+    discuss: plugin
+    specify: plugin
+    plan: plugin
+    run: plugin
+    do: plugin
+    advise: plugin
+    resume: plugin
+    review: plugin
+    status: plugin
+    health: plugin
+    session: instructed
     # Диагностика установки СИЛАМИ ДОЧКИ (добавлен при сведении лент 20.08.2026). Полный `doctor`
     # живёт в установщике, а он в поставку не едет — в дочке без клона кита команда отвечала
     # «исходник рядом не найден». Обёртка дочки ведёт `doctor` в движок, полную проверку — как
     # `kit-doctor`, по образцу `status`/`kit-status`.
-    - doctor
-    - next
-    - model
-    - bootstrap
+    doctor: plugin
+    next: plugin
+    model: plugin
+    bootstrap: setup
   # Префикс сухого прогона: `./ai-ops preview <интент>`.
   cli_intent_prefixes:
     - preview
   # Команды самого кита (`./ai-ops <команда>`) — installer/ai_ops.py -> _dispatch.
   kit_commands:
-    - init
+    init: instructed
     # Единая установка вместо ручной цепочки init→onboard→bootstrap→model. Оркестратор поверх
     # существующих команд; ничего нового в поставку не добавляет. Печатает один экран «сделано /
     # осталось от тебя» и честно называет то, что автоматизировать нельзя (секреты, ответы, коммит).
-    - setup
-    - update
-    - diff
-    - doctor
-    - validate
-    - migrate
-    - verify-capabilities
-    - selftest
-    - delivery-proof
-    - usage
-    - audit
-    - session
-    - subsession
-    - engops
-    - method
-    - status
+    setup: instructed
+    update: instructed
+    diff: instructed
+    doctor: wrapper
+    validate: instructed
+    status: wrapper
+    audit: instructed
     # Зрелость UI-evidence (Storybook). Раньше звалась `onboard` — то же имя носит интент движка
     # «определить стек» (`./ai-ops onboard`), и обёртка ведёт `onboard` именно в него; чтобы одно имя
     # не значило два разных действия, команда установщика переименована в `ui-status`.
-    - ui-status
+    ui-status: instructed
+  # Команды обёртки дочки, которых нет ни в движке, ни в установщике: они переадресуют в установщик
+  # под другим именем, чтобы `status`/`doctor` в дочке отвечали о работе, а не о копии кита.
+  wrapper_commands:
+    kit-status: instructed
+    kit-doctor: instructed
   # Коды возврата интентов движка. Смысл кода — часть контракта: по нему CI дочки решает,
   # останавливать ли конвейер. Изменить смысл существующего кода = breaking change.
   exit_codes:
@@ -132,6 +148,25 @@ stable:
     DeliveryReceipt: "подтверждение доставки: status, sha_verified, checks_verified, merged"
 
 experimental:
+  # #1525: команды кита, которые работают, но на которые никто снаружи не опирается: их нет ни в
+  # плагине, ни в инструкциях агента и владельца, установка их не вызывает. До 11.11.2026 девять из
+  # них числились `stable` — обещание шире того, что видно. Перевод сюда ничего не удаляет и не
+  # меняет поведения: дочка вправе пользоваться, зная, что форма может меняться.
+  # `session` установщика: обёртка дочки ведёт `session` в интент движка (он `stable`), а эта
+  # команда достижима только из клона кита.
+  # `check-update` и `drift` прежде не были объявлены вовсе.
+  kit_commands:
+    - migrate
+    - verify-capabilities
+    - selftest
+    - delivery-proof
+    - usage
+    - subsession
+    - engops
+    - method
+    - session
+    - check-update
+    - drift
   # Интент канала наблюдений дочка->кит: форма улик ещё меняется.
   # roadmap/delivery (лента 4, Фаза 3): подключены командами CLI и работают, но форма ещё
   # устаканивается — delivery читает backlog по контракту ленты 3, который сводится, а вывод
@@ -302,6 +337,9 @@ internal:
     - validation
   paths:
     - installer/
+  # Служебная команда установщика: разрешает ссылку на выпуск для других команд, человеку не адресована.
+  kit_commands:
+    - resolve-ref
   note: >-
     Валидаторы вне рантайм-списка — внутренние: их наличие, имя и код возврата не контракт.
     Рантайм-список — тот, что исполняется в чеклисте и pytest.
@@ -368,6 +406,25 @@ audience:
 ```
 
 ## Пояснения к решениям
+
+### Обещание не шире того, на что опираются (#1525, 11.11.2026)
+
+Видимую поверхность сократили раньше: `ai-ops --help` показывает 7 действий владельца. Обещание
+отстало: декларация держала в `stable` 17 интентов и 18 команд кита и не упоминала сами 7 действий.
+Теперь у каждой `stable`-записи названа причина, и тест `test_stable_promise_has_reasons.py`
+проверяет её по репозиторию: слеш-команда плагина, упоминание в инструкциях агента или владельца,
+вызов из единой установки или переадресация обёртки дочки.
+
+Итог сверки: все 17 интентов опору имеют (15 — через плагин Claude Code, `session` — через
+инструкции, `bootstrap` — через установку) и остаются `stable`. Из команд кита опору имеют 9 и две
+команды обёртки дочки (`kit-status`, `kit-doctor`). Девять команд кита опоры не имеют и переведены в
+`experimental`; ещё три прежде не были объявлены вовсе и получили уровень. Ни одна команда не удалена
+и не изменила поведения, поэтому окно вывода не понадобилось: это сужение обещания, а не поверхности.
+
+Осталось видимым расхождением, но за рамками этой работы: глаголы `--help` (research / start / check
+/ work / review / release / feedback) и «интерфейс владельца 4+1» плагина (status / inbox / next /
+explain / do + run / model / review) — две разные витрины для одного владельца.
+
 
 ### Ось аудитории — человеческий и экспертный API (#632)
 
