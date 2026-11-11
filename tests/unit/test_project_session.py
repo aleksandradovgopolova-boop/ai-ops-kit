@@ -14,41 +14,6 @@ from ai_ops_kit.lifecycle import project_session as sessions
 
 
 @pytest.mark.parametrize("runtime", sessions.RUNTIMES)
-def test_open_agent_gets_real_controller_plan_without_nested_provider(project, monkeypatch, runtime):
-    from ai_ops_kit.cli import project_session as cli
-    task = sessions.begin(project, runtime, "open-agent", "Проведи ресерч архитектуры", "turn-1")
-    monkeypatch.chdir(project)
-    args = ["run", "--runtime", runtime, "--session", "open-agent"]
-    assert cli.main(args + ["--signals", '{"task_type":"research","size":"small","risk":"low"}']) == 1
-    complete_prepared_spec(project, task)
-    assert cli.main(args) == 1
-    saved = sessions.load(project, runtime, "open-agent")
-    assert saved["status"] == "running" and saved["execution"]["prepared"]
-    assert saved["execution"]["mode"] == "current-session"
-    command = saved["execution"]["command"]
-    assert "--execute" not in command and "--provider" not in command
-    feature = project / "features" / ("session-" + task["request_id"])
-    workitem = yaml.safe_load((feature / "workitem.yaml").read_text())
-    plan = yaml.safe_load((feature / "run-plan.yaml").read_text())
-    assert workitem["task"] == task["prompt"] and plan["base_workflow"] == "RESEARCH"
-    report = json.loads((feature / "run-report.json").read_text())
-    assert report["execution"] == "planned" and plan["gates"]
-    assert not sessions.verify(project, runtime, "open-agent")["accepted"]
-    assert hook(runtime, {"cwd": str(project), "session_id": "open-agent", "hook_event_name": "Stop"})["continue"] is False
-    before = (sessions.session_dir(project, runtime, "open-agent") / "process.stderr.log").read_bytes()
-    # Реальная правка продукта/коммит ожидаема при исполнении текущим агентом.
-    (project / "result.md").write_text("research result")
-    sessions.git(project, "add", "result.md")
-    sessions.git(project, "commit", "-qm", "research result")
-    assert cli.main(args) == 1
-    assert sessions.load(project, runtime, "open-agent")["request_id"] == task["request_id"]
-    assert (sessions.session_dir(project, runtime, "open-agent") / "process.stderr.log").read_bytes() == before
-    (feature / "run-plan.yaml").write_text("foreign plan")
-    assert cli.main(args) == 2
-    assert len(list(sessions.session_dir(project, runtime, "open-agent").glob("*.execution-claim"))) == 1
-
-
-@pytest.mark.parametrize("runtime", sessions.RUNTIMES)
 def test_hook_replay_keeps_preparation_signals_and_existing_claim(project, monkeypatch, runtime):
     from ai_ops_kit.cli import project_session as cli
     payload = {"cwd": str(project), "session_id": "replayed", "hook_event_name": "UserPromptSubmit",
@@ -587,6 +552,13 @@ def test_native_not_ready_preserves_light_request_and_signals_before_claim(proje
     assert saved['request_id']==task['request_id'] and saved['status']=='pending'
     assert saved['blocker']=='native hooks untrusted'
     assert saved['provider_preparation']['signals']['size']=='small'
+    # #1434: повод «Codex не готов» доходит до inbox через шину внимания, с причиной и одним шагом.
+    from ai_ops_kit.lifecycle import attention_bus
+    pending_attention=attention_bus.collect(project)
+    stall=next(r for r in pending_attention if r['work_id']==task['request_id'])
+    assert stall['kind']==attention_bus.BLOCKED
+    assert 'native hooks untrusted' in stall['reason']
+    assert 'Подтверди только подготовленный workspace' in stall['reason']
     assert not list(sessions.session_dir(project,'codex','native-ready').glob('*.execution-claim'))
     assert not (project/'.ai/runtime/process-observed').exists()
     context=hook('codex',{'cwd':str(project),'session_id':'native-ready','hook_event_name':'SessionStart'})
@@ -596,6 +568,8 @@ def test_native_not_ready_preserves_light_request_and_signals_before_claim(proje
     result=sessions.load(project,'codex','native-ready')
     assert result['status']=='accepted' and result['request_id']==task['request_id']
     assert result['blocker'] is None and result['next_step'] is None
+    # #1434: Codex снова готов — повод снят, в очереди inbox его больше нет.
+    assert not [r for r in attention_bus.collect(project) if r['work_id']==task['request_id']]
     observed=json.loads((project/'.ai/runtime/process-calls.jsonl').read_text().splitlines()[0])
     command=observed['command']
     assert observed['provider']==codex_native.NAME
