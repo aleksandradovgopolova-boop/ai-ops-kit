@@ -75,7 +75,9 @@ def test_every_declared_kit_command_exists():
     src = (REPO / "installer" / "ai_ops.py").read_text(encoding="utf-8")
     dispatch = src.split("def _dispatch(", 1)[1]
     real = set(re.findall(r'cmd (?:==|in) \(?["\']([a-z][a-z-]*)["\']', dispatch))
-    ghosts = sorted(set(DECL["stable"]["kit_commands"]) - real)
+    declared = (set(DECL["stable"]["kit_commands"]) | set(DECL["experimental"]["kit_commands"])
+                | set(DECL["internal"]["kit_commands"]))
+    ghosts = sorted(declared - real)
     assert not ghosts, f"объявлены команды кита, которых нет в установщике: {ghosts}"
 
 
