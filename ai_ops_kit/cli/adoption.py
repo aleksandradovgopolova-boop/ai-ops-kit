@@ -11,12 +11,12 @@ from ai_ops_kit.engops import adoption
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Добровольный локальный учёт проектов; без сети")
     sub = ap.add_subparsers(dest="action", required=True)
-    for action in ("identity", "consent", "revoke", "status", "preview", "export", "import", "report"):
+    for action in ("identity", "consent", "revoke", "status", "preview", "export", "import", "report", "evidence"):
         p = sub.add_parser(action)
         p.add_argument("root", type=Path)
         if action in ("consent", "revoke"):
             p.add_argument("--owner", action="store_true", help="подтверждаю решение владельца проекта")
-        if action in ("preview", "export", "report"):
+        if action in ("preview", "export", "report", "evidence"):
             p.add_argument("--start", help="первая дата UTC; без пары дат — последние 30 дней")
             p.add_argument("--end", help="последняя дата UTC, включая текущий неполный день")
         if action == "export":
@@ -29,7 +29,7 @@ def main(argv=None):
                 p.add_argument(f"--{flag}", action="append", type=Path, default=[])
     a = ap.parse_args(argv)
     try:
-        if a.action in ("preview", "export", "report"):
+        if a.action in ("preview", "export", "report", "evidence"):
             window = adoption.reporting_window(a.start, a.end)
             a.start, a.end = window["start"], window["end"]
         if a.action == "identity":
@@ -44,11 +44,15 @@ def main(argv=None):
             result = adoption.export(a.root, a.start, a.end, a.output)
         elif a.action == "import":
             result = adoption.import_receipt(a.root, a.source, a.relationship)
+        elif a.action == "evidence":
+            result = adoption.local_evidence(a.root, a.start, a.end)
         else:
             projects = [(p, r) for flag, r in (("owned", "owned"), ("external", "external"), ("project", "unknown"))
                         for p in getattr(a, flag)]
             result = adoption.report(a.root, a.start, a.end, projects)
         print(json.dumps(result, ensure_ascii=False, indent=2))
+        if result.get("inspection") == "not_permitted":
+            return 2
         return 1 if result.get("errors") else 0
     except (OSError, ValueError, TypeError, KeyError, RuntimeError):
         print(json.dumps({"error": "учёт не выполнен: проверьте согласие, ID и целостность данных"}, ensure_ascii=False))
