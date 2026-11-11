@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import contextlib
+from datetime import datetime, timezone
 import math
 import sys
 
@@ -289,6 +290,7 @@ def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
     try:
         _emit("run_completed", {
             "event_type": "run_completed",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "workitem_id": fid,
             "child_root": str(child_root),
             "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr") else "not-ready"),
