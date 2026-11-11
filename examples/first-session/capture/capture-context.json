@@ -1,0 +1,13 @@
+{
+  "date": "2026-11-02",
+  "base_sha": "3a3ee8ec10ada7d3af6a94bebbfc5bc47ee564ac",
+  "command": "python3 examples/first-session/demo.py",
+  "returncode": 0,
+  "python": "3.14.7",
+  "platform": "macOS",
+  "kit_version": "4.12.0",
+  "scope": "offline installation and repository understanding; no task execution",
+  "capture_method": "browser screenshot of local saved stdout viewer; not a native terminal or an AI session",
+  "path_redaction": "Only the ephemeral temporary directory path in stdout.txt is replaced with <temporary-demo-directory>; screenshot excerpt omits its first/last path lines.",
+  "stdout_sha256": "90f7fc48cf8380ee8a4a1ef0a366c9a61ad5476bc4f6cf67af5d4ab61358737b"
+}

@@ -15,6 +15,7 @@ IDE и mypy получают навигацию и проверку; стары�
   DeliveryReceipt   — подтверждение доставки (PR смержён/не смержён)
   ContextBundle     — пакет контекста для WorkItem
   WorkItemState     — состояние WorkItem
+  GuardedLoadResult — различимые состояния защищённого чтения
   RouteResult       — статическая проекция фактического Python-вывода route()
 
 Только аннотации, без runtime-логики. Импортируется как:
@@ -22,7 +23,7 @@ IDE и mypy получают навигацию и проверку; стары�
 """
 from __future__ import annotations
 
-from typing import Any, Literal, Optional, TypedDict
+from typing import Any, Literal, Optional, TypeAlias, TypedDict
 
 
 # ============================================================================
@@ -276,6 +277,28 @@ class WorkItemState(TypedDict, total=False):
     run_id: Optional[str]
     branch: Optional[str]
     pr_url: Optional[str]
+
+
+# ============================================================================
+# Lifecycle I/O — статическая форма уже существующих результатов load_guarded()
+# ============================================================================
+
+class GuardedLoadAbsent(TypedDict):
+    state: Literal["absent"]
+
+
+class GuardedLoadCorrupt(TypedDict):
+    state: Literal["corrupt"]
+    reason: str
+
+
+class GuardedLoadOk(TypedDict):
+    state: Literal["ok"]
+    # Проверены dict/kind/required_keys, а не типы всех YAML-ключей и значений.
+    data: dict[Any, Any]
+
+
+GuardedLoadResult: TypeAlias = GuardedLoadAbsent | GuardedLoadCorrupt | GuardedLoadOk
 
 
 # ============================================================================
