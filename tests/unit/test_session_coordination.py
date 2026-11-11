@@ -92,6 +92,9 @@ def test_hook_is_declared_in_pre_commit_config():
     assert "commit-msg" in (hook.get("stages") or []), (
         "стадия не commit-msg: без текста сообщения исполнится только половина контракта, "
         f"а половина проверки создаёт видимость полной — {hook.get('stages')}")
+    assert hook.get("pass_filenames", True) is True, (
+        "commit-msg должен передать путь к сообщению: pass_filenames:false подавляет "
+        "обязательный аргумент scripts/commit-contract.sh и блокирует каждый коммит")
     assert (KIT / hook["entry"]).is_file(), f"entry указывает в несуществующий файл: {hook['entry']}"
 
 
@@ -99,6 +102,15 @@ def test_hook_is_declared_in_pre_commit_config():
 def test_hook_script_is_executable():
     assert HOOK.is_file(), HOOK
     assert os.access(HOOK, os.X_OK), f"{HOOK} не исполним — хук упадёт при первом коммите"
+
+
+@pytest.mark.unit
+def test_hook_refuses_without_commit_message_path():
+    """Потерянный аргумент commit-msg не превращается в проверку пустого сообщения."""
+    r = subprocess.run(["/bin/bash", str(HOOK)],
+                       capture_output=True, text=True, timeout=120)
+    assert r.returncode == 2, r.stdout + r.stderr
+    assert "не передан файл сообщения коммита" in r.stderr, r.stderr
 
 
 @pytest.mark.unit
