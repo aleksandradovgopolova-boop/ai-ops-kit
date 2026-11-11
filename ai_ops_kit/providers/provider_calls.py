@@ -335,6 +335,22 @@ def _transient(text):
                                 "timeout", "timed out", "connection"))
 
 
+# #1476: профиль запуска «только чтение». Сам по себе НЕ разрешает live-путь: разрешает только
+# квалификация этого профиля на конкретном бинаре (ai_ops_kit/devtools/claude_readonly_qualification).
+#   --restricted          — без инструментов, исполняющих код, и без user/project/local settings;
+#   --safe-mode           — без плагинов, хуков, MCP, CLAUDE.md, skills и прочих настроек;
+#   --strict-mcp-config   — MCP только из --mcp-config, а его нет: ни одного сервера;
+#   --tools               — доступный встроенный набор; --allowedTools — их автоодобрение;
+#   --permission-mode dontAsk + --permission-prompts none — всё, что спросило бы разрешение, отклонено;
+#   --disable-slash-commands — без skills и команд.
+CLAUDE_READONLY_PROFILE = (
+    "--restricted", "--safe-mode", "--strict-mcp-config",
+    "--tools", "Read,Grep,Glob", "--allowedTools", "Read", "Grep", "Glob",
+    "--permission-mode", "dontAsk", "--permission-prompts", "none",
+    "--disable-slash-commands",
+)
+
+
 def _backoff(n):
     import time
     import random
@@ -398,9 +414,7 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
             "Для офлайн-проверки используйте --provider mock; для живой работы явно выберите "
             "настроенный API-провайдер (--provider anthropic|openai|qwen).",
             "claude-cli", model or "")
-    cmd = [binary, "-p", "--output-format", "json",
-           "--tools", "Read,Grep,Glob",
-           "--allowedTools", "Read", "Grep", "Glob"]
+    cmd = [binary, "-p", "--output-format", "json", *CLAUDE_READONLY_PROFILE]
     if model:
         cmd += ["--model", model]
     cmd += ["--", prompt]
