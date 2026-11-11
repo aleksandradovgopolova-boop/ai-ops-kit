@@ -80,6 +80,22 @@ ALLOWED = (
     re.compile(r"^python3?\s+dashboard/build_data\.py\b"),
 )
 
+# Workflow целиком операционный: ручной замер, который ПРОИЗВОДИТ сырые данные (артефакты прогона),
+# а не выносит вердикт о коде. Освобождение действует, только пока запуск возможен ИСКЛЮЧИТЕЛЬНО
+# вручную (workflow_dispatch): с любым автоматическим триггером он стал бы проверкой мимо pytest,
+# и его команды снова считаются нарушением.
+MANUAL_OPERATIONAL_WORKFLOWS = frozenset({"performance-baseline.yml"})
+
+
+def _manual_only(doc) -> bool:
+    """Запускается ли workflow только вручную. YAML читает ключ `on` как булево True."""
+    triggers = doc.get("on", doc.get(True))
+    if isinstance(triggers, str):
+        return triggers == "workflow_dispatch"
+    if isinstance(triggers, (list, dict)):
+        return list(triggers) == ["workflow_dispatch"]
+    return False
+
 
 def offending_commands(root: Path = PKG):
     """Команды в workflow, которые запускают проверку мимо pytest."""
@@ -89,6 +105,8 @@ def offending_commands(root: Path = PKG):
             doc = yaml.safe_load(wf.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as e:
             bad.append((wf.name, f"нечитаемый YAML: {e}"))
+            continue
+        if wf.name in MANUAL_OPERATIONAL_WORKFLOWS and _manual_only(doc):
             continue
         for job in (doc.get("jobs") or {}).values():
             for step in (job.get("steps") or []):
