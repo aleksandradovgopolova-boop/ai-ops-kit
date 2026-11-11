@@ -309,10 +309,10 @@ UNWIRED_MODULES = frozenset({
 })
 
 DEV_ONLY_TOOLS = frozenset({
-    "bench_lite", "bench_performance", "retrieval_bench",  # бенчмарки самого движка/ретрива
+    "bench_lite", "bench_performance",                     # бенчмарки самого движка
     "model_comparison",                                    # сравнение моделей (исследование кита)
     "changelog_gen",                                       # генератор CHANGELOG кита
-    "qual_run", "promotion_qual",                          # харнессы квалификации (данные — qualification/)
+    "qual_run",                                            # харнесс квалификации (данные — qualification/)
     "kit_observability",                                   # наблюдаемость самого кита
     "mutation_probe",                                      # мутационные пробы охран кита
 })

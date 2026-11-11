@@ -46,11 +46,15 @@ from pathlib import Path
 
 import pytest
 
+from ai_ops_kit.devtools.process_entries import process_entries
+
 PKG_ROOT = Path(__file__).resolve().parents[2]
 PKG = "ai_ops_kit"
 
 # --- Легитимные 0-импортерные входы: запускаются процессом, а не импортом. ---
-# Целые слои-исключения: валидаторы и dev-харнессы. Нулевой импорт у них — норма по устройству.
+# Слои, где нулевой импорт — норма по устройству: валидаторы и dev-харнессы зовут процессом. С #1526
+# одного префикса мало: процессный вход обязан НАЙТИСЬ (ai_ops_kit/devtools/process_entries.py) —
+# реестр, CI, другой модуль, команда запуска в документации, живой или ночной прогон.
 ALLOWLIST_PREFIXES: tuple[str, ...] = (
     f"{PKG}.validation.",   # валидаторы: гейты зовут их отдельным процессом (см. quality/gates.yaml)
     f"{PKG}.devtools.",     # харнессы разработки кита (DEV_ONLY): бенчмарки, пробы — запуск вручную
@@ -84,6 +88,12 @@ ALLOWLIST_MODULES: dict[str, str] = {
 # только СОКРАЩАТЬСЯ: провели в контур (появился импортер) или объявили легит-входом — убрать
 # отсюда. Имя здесь — признанный долг «построено, но не проведено», а НЕ разрешение плодить такое.
 KNOWN_DORMANT: dict[str, str] = {
+    f"{PKG}.gates.gate_result_v2":
+        "ОБНАРУЖЕН #1526 (2026-11-11): единственным импортёром был gates/gate_runtime, а того самого "
+        "звал только удалённый драйвер квалификации devtools/promotion_qual — то есть модуль был "
+        "неподключён и раньше, просто через цепочку. Не удалён здесь: GateResult v2 объявлен "
+        "контрактом (docs/api/contracts.md, статья AC-06 архитектурной конституции). Решение "
+        "«провести в gate_evidence или снять вместе со схемой» — отдельная задача",
     # `engine/parallel_live` УБРАН ИЗ СПИСКА 2026-09-06 (#542): он ПРОВЕДЁН В КОНТУР. Тонкий диспетч
     # `engine/parallel_live_dispatch` импортирует `run_live_concurrent` и вызывается из живого
     # run-пути по явному opt-in `ai-ops run --parallel` (cli/ai_ops_cli). Появился не-тестовый
@@ -212,14 +222,15 @@ def _nontest_importers(modules: dict[str, Path]) -> dict[str, set[str]]:
 
 
 def _find_dormant(zero_importer: set[str], allow_prefixes: tuple[str, ...],
-                  allow_modules: set[str]) -> set[str]:
+                  allow_modules: set[str], entries: set[str] = frozenset()) -> set[str]:
     """Чистая классификация: из 0-импортерных вычесть легит-входы -> генуинно дормантные.
 
     Отдельная функция без обращения к диску — чтобы посадить синтетический модуль и проверить
     детектор на данных, а не на реальном дереве.
     """
+    # #1526: префикс даёт право на вход, но сам вход должен НАЙТИСЬ (process_entries).
     return {m for m in zero_importer
-            if not m.startswith(allow_prefixes) and m not in allow_modules}
+            if m not in allow_modules and not (m.startswith(allow_prefixes) and m in entries)}
 
 
 def _dormant_now() -> set[str]:
@@ -227,7 +238,8 @@ def _dormant_now() -> set[str]:
     modules = _pkg_modules()
     importers = _nontest_importers(modules)
     zero = {m for m in modules if not importers[m]}
-    return _find_dormant(zero, ALLOWLIST_PREFIXES, set(ALLOWLIST_MODULES))
+    entries = set(process_entries(PKG_ROOT, modules, SKIP_DIRS))
+    return _find_dormant(zero, ALLOWLIST_PREFIXES, set(ALLOWLIST_MODULES), entries)
 
 
 @pytest.mark.contract
@@ -309,7 +321,7 @@ def test_legitimate_standalone_entry_is_not_flagged():
 
     validator = f"{PKG}.validation.validate_layering"
     assert importers[validator] == set(), "валидатор ожидаемо без импортеров (его зовут процессом)"
-    assert validator not in dormant, "валидатор — легит-вход по префиксу, не дормант"
+    assert validator not in dormant, "валидатор с найденным процессным входом — не дормант"
 
     # nightly_review — легит process-вход (Robin/night-review.md зовут по расписанию), НО с P1 №8/№9
     # он ПРОВЕДЁН В КОНТУР: cli/human_facade импортирует его для `review all` (полный обзор продукта по
@@ -336,10 +348,13 @@ def test_planted_new_dormant_module_reddens():
     assert new_beyond_ceiling == {planted}, \
         "ратчет обязан покраснеть ровно на новом дормантном модуле сверх потолка"
 
-    # А легит-вход с тем же нулём импортеров ратчет не трогает.
+    # #1526: префикс сам по себе входом не является. Новый валидатор, которого никто не зовёт, —
+    # дормант; тот же валидатор с найденным процессным входом ратчет не трогает.
     entry = f"{PKG}.validation.validate_brand_new"
-    dormant2 = _find_dormant({entry}, ALLOWLIST_PREFIXES, set(ALLOWLIST_MODULES))
-    assert entry not in dormant2, "новый валидатор — легит-вход по префиксу, не дормант"
+    unrun = _find_dormant({entry}, ALLOWLIST_PREFIXES, set(ALLOWLIST_MODULES))
+    assert entry in unrun, "валидатор без процессного входа обязан считаться неподключённым"
+    run = _find_dormant({entry}, ALLOWLIST_PREFIXES, set(ALLOWLIST_MODULES), {entry})
+    assert entry not in run, "валидатор с найденным входом — легит-вход, не дормант"
 
 
 @pytest.mark.contract

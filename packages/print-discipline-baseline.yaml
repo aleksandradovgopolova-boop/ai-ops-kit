@@ -32,7 +32,7 @@ ceilings:
                   #   ранее 139->137 (2026-09-10): CLI ai_route.main уехал в devtools, route() — в shared (K5)
   intelligence: 88
   lifecycle: 66
-  gates: 52     # 54->52 (2026-09-10): 2 print уехали с CLI evidence_collector в devtools (K1-развязка)
+  gates: 51     # 52->51 (2026-11-11, #1526): удалён неподключённый gates/gate_runtime; 54->52 (2026-09-10): 2 print уехали с CLI evidence_collector в devtools (K1-развязка)
   engops: 41     # 42->41 (2026-09-10): environment_map (1 print) уехал в checks (K4-развязка)
   checks: 1      # +1 (2026-09-10): environment_map.main печатает; приехал из engops (K4)
   context: 24     # 31->24 (2026-09-10): CLI context_compiler.main (7 print) уехал в devtools (K2-развязка)

@@ -118,3 +118,23 @@ def test_successful_json_names_dormant_source(tmp_path, monkeypatch, capsys):
     assert garden.main(["--json"]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["dormant_modules"][0]["module"] == module
+
+
+@pytest.mark.nightly
+def test_nightly_garden_report_reaches_the_run_summary(tmp_path, monkeypatch):
+    """#1526: садовник запускается каждую ночь (nightly-quality, `-m nightly`), а его отчёт попадает в
+    сводку прогона — раньше #1405 считалась выполненной, но отчёт не вызывал никто.
+
+    Проверки в CI идут только через pytest (validate_agents_checklist), поэтому запуск — этот тест, а
+    не отдельный шаг workflow. Вне CI (`GITHUB_STEP_SUMMARY` нет) отчёт пишется во временный файл.
+    """
+    import os
+    from pathlib import Path
+
+    summary = Path(os.environ.get("GITHUB_STEP_SUMMARY") or tmp_path / "summary.md")
+    before = summary.read_text(encoding="utf-8") if summary.exists() else ""
+    text = garden.render(garden.collect())
+    with summary.open("a", encoding="utf-8") as fh:
+        fh.write("\n```\n" + text + "\n```\n")
+    assert text.startswith("Садовник кита")
+    assert summary.read_text(encoding="utf-8") == before + "\n```\n" + text + "\n```\n"

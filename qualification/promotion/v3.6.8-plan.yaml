@@ -1,5 +1,7 @@
 schema_version: 1
 kind: PromotionQualificationPlan
+# 2026-11-11 (#1526): `gate_runtime.py` убран из `uses` всех прогонов. Модуль удалён как неподключённый:
+# с v3.6.5 он ни разу не был в рабочем пути прогона, так что прогоны этого плана его и не использовали.
 plan_id: PQP-001
 phase: v3.6.8
 title: Live Qualification & Controlled Promotion Context Engine v2
@@ -14,7 +16,7 @@ runs:
     kind: python-child
     exact_sha_bound: true
     produces_pr: true
-    uses: [ai_ops_run.py, context_engine.py, context_shadow.py, gate_runtime.py, pr_open.py]
+    uses: [ai_ops_run.py, context_engine.py, context_shadow.py, pr_open.py]
     steps:
       - "реальная ENGINEERING-задача на Python child; execution — боевой v1 context"
       - "рядом строится полный v2 shadow (context_engine, require_snapshot=True) на точном committed_sha"
@@ -27,7 +29,7 @@ runs:
     kind: ts-react-storybook
     exact_sha_bound: true
     produces_pr: true
-    uses: [ai_ops_run.py, context_engine.py, storybook_adapter.py, storybook_query.py, gate_runtime.py, pr_open.py]
+    uses: [ai_ops_run.py, context_engine.py, storybook_adapter.py, storybook_query.py, pr_open.py]
     steps:
       - "TS/TSX retrieval (full-text/role-view охватывают .ts/.tsx) на реальном React child"
       - "Storybook catalog (read-only) в контексте агентов; реальная UI-задача"
@@ -39,7 +41,7 @@ runs:
     kind: parallel-2
     exact_sha_bound: true
     produces_pr: true
-    uses: [parallel_planner.py, ai_ops_run.py, gate_runtime.py, pr_open.py]
+    uses: [parallel_planner.py, ai_ops_run.py, pr_open.py]
     steps:
       - "package API || package UI в отдельных worktrees; каждый -> package SHA + GateReport(tested_revision==sha)"
       - "integration worktree; aggregate verification; новый integration SHA (aggregate.tested_revision==integration_sha)"

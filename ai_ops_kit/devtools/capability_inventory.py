@@ -163,12 +163,19 @@ def _nontest_importers(modules: dict[str, Path]) -> dict[str, set[str]]:
 
 
 def dormant_modules() -> list[str]:
-    """Генуинно built≠wired модули на текущем дереве: 0 не-тестовых импортёров, не легит-вход."""
+    """Генуинно built≠wired модули на текущем дереве: 0 не-тестовых импортёров, не легит-вход.
+
+    #1526: модуль из `validation/`/`devtools/` легит-вход только при НАЙДЕННОМ процессном входе
+    (`process_entries`); прежде папка целиком считалась входом, и незапускаемое проходило молча.
+    """
+    from ai_ops_kit.devtools.process_entries import process_entries
+
     modules = _pkg_modules()
     importers = _nontest_importers(modules)
     zero = {m for m in modules if not importers[m]}
-    return sorted(m for m in zero
-                  if not m.startswith(ALLOWLIST_PREFIXES) and m not in ALLOWLIST_MODULES)
+    entries = process_entries(PKG, modules, SKIP_DIRS)
+    return sorted(m for m in zero if m not in ALLOWLIST_MODULES
+                  and not (m.startswith(ALLOWLIST_PREFIXES) and m in entries))
 
 
 # ── команды владельца: INTENTS/DIRECT_INTENTS из cli (AST, без импорта) ──────────────────────────
