@@ -2,22 +2,33 @@
 from __future__ import annotations
 
 import pytest
+import json
+import os
+import subprocess
+import sys
+import shlex
 
 from validate_container_assets import (  # noqa: F401
     check_assets,
     check_dockerfile,
     check_wrapper,
+    main,
+    PKG,
+    check_runtime_versions,
+    RUNTIME_CHECK,
 )
 
 
 GOOD_DOCKERFILE = (
-    "FROM node:22-slim\n"
-    "RUN pyyaml openspec\n"
+    "FROM node:22-trixie-slim\n"
     "COPY . /opt/ai-ops-kit\n"
+    f"RUN {json.dumps(RUNTIME_CHECK)}\n"
+    "RUN pyyaml openspec && npm_config_engine_strict=true npm i package\n"
+    "ENV PYTHONPATH=/opt/ai-ops-kit\n"
     "USER runner\n"
     "ENV GIT_ASKPASS=/bin/false GIT_TERMINAL_PROMPT=0 "
     'GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=credential.helper GIT_CONFIG_VALUE_0=""\n'
-    'ENTRYPOINT ["x"]\n'
+    'ENTRYPOINT ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
 )
 
 GOOD_WRAPPER = (
@@ -89,3 +100,292 @@ def test_wrapper_without_credentialless_fails_closed(dropped):
 @pytest.mark.unit
 def test_shipped_container_assets_valid():
     assert check_assets() == []
+
+
+@pytest.fixture
+def container_root(tmp_path):
+    """Минимальный реальный build context; target нельзя импортировать валидатором."""
+    target = tmp_path / "ai_ops_kit/engine/ai_ops_run.py"
+    target.parent.mkdir(parents=True)
+    target.write_text("raise RuntimeError('validator must not execute target')\n")
+    containers = tmp_path / "containers"
+    containers.mkdir()
+    (containers / "Dockerfile").write_text(GOOD_DOCKERFILE)
+    (containers / "run-sandboxed.sh").write_text(GOOD_WRAPPER)
+    (containers / "deliver-run-branches.sh").write_text("for-each-ref fetch ai-ops/*\n")
+    return tmp_path
+
+
+def test_existing_launch_target_is_checked_without_execution_or_writes(container_root):
+    before = {p.relative_to(container_root): p.read_bytes()
+              for p in container_root.rglob("*") if p.is_file()}
+    assert check_assets(container_root) == []
+    after = {p.relative_to(container_root): p.read_bytes()
+             for p in container_root.rglob("*") if p.is_file()}
+    assert after == before
+
+
+def test_removed_launch_target_fails_despite_all_markers(container_root):
+    target = container_root / "ai_ops_kit/engine/ai_ops_run.py"
+    assert check_assets(container_root) == []
+    target.unlink()
+    assert not target.exists()  # реальная порча до реакции гейта
+    errors = check_assets(container_root)
+    assert any("ai_ops_kit/engine/ai_ops_run.py" in e for e in errors)
+
+
+@pytest.mark.parametrize("entrypoint", [
+    '["python3", "/opt/ai-ops-kit/tools/ai_ops_run.py"]',
+    '["python3", "-m", "ai_ops_kit.engine.missing"]',
+    'python3 -m ai_ops_kit.engine.ai_ops_run',
+    '["python3", "-m",',
+    '["python3", "-m", "ai_ops_kit.engine.ai_ops_run", "--help"]',
+    '["python3", "-m", "ai_ops_kit.engine.ai_ops_run"]',  # cwd может подменить controller
+])
+def test_invalid_launch_command_fails_closed(entrypoint):
+    text = GOOD_DOCKERFILE.rsplit("ENTRYPOINT", 1)[0] + f"ENTRYPOINT {entrypoint}\n"
+    assert any("ENTRYPOINT" in e for e in check_dockerfile(text))
+
+
+def test_last_entrypoint_is_validated_not_a_comment_or_old_instruction():
+    text = GOOD_DOCKERFILE + '# ENTRYPOINT ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
+    assert check_dockerfile(text) == []
+    text += 'ENTRYPOINT ["missing"]\n'
+    assert any("ENTRYPOINT" in e for e in check_dockerfile(text))
+
+
+@pytest.mark.parametrize("replacement", ["", "# ENV PYTHONPATH=/opt/ai-ops-kit", "ENV PYTHONPATH=/work"])
+def test_missing_import_root_fails_closed(replacement):
+    text = GOOD_DOCKERFILE.replace("ENV PYTHONPATH=/opt/ai-ops-kit", replacement)
+    assert any("PYTHONPATH" in e for e in check_dockerfile(text))
+
+
+def test_last_pythonpath_assignment_is_validated():
+    text = GOOD_DOCKERFILE + 'ENV PYTHONPATH="/work"\n'
+    assert any("PYTHONPATH" in e for e in check_dockerfile(text))
+
+
+def test_multiline_instructions_are_supported():
+    text = GOOD_DOCKERFILE.replace("ENV PYTHONPATH=/opt/ai-ops-kit",
+                                  'ENV OTHER=value \\\n    PYTHONPATH="/opt/ai-ops-kit"')
+    assert check_dockerfile(text) == []
+
+
+def test_comment_does_not_copy_launch_source():
+    text = GOOD_DOCKERFILE.replace("COPY . /opt/ai-ops-kit", "# COPY . /opt/ai-ops-kit")
+    assert any("COPY" in e for e in check_dockerfile(text))
+
+
+def test_new_build_stage_cannot_reuse_previous_launch_contract():
+    text = GOOD_DOCKERFILE + 'FROM node:22-slim\nENTRYPOINT ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]\n'
+    assert any("FROM" in e for e in check_dockerfile(text))
+
+
+def test_commented_entrypoint_is_not_a_launch_command():
+    text = GOOD_DOCKERFILE.replace("ENTRYPOINT", "# ENTRYPOINT")
+    assert any("ENTRYPOINT" in e for e in check_dockerfile(text))
+
+
+def test_static_success_does_not_claim_image_start(capsys):
+    assert main([]) == 0
+    assert "сборка/запуск образа и реальная изоляция НЕ проверены" in capsys.readouterr().out
+
+
+def test_standalone_validator_returns_failure_for_deleted_target(container_root):
+    (container_root / "VERSION").write_text("0.0.0\n")
+    validator = container_root / "validate_container_assets.py"
+    validator.write_bytes((PKG / "ai_ops_kit/validation/validate_container_assets.py").read_bytes())
+    target = container_root / "ai_ops_kit/engine/ai_ops_run.py"
+    target.unlink()
+    assert not target.exists()
+    env = {"PATH": os.defpath, "HOME": str(container_root), "PYTHONDONTWRITEBYTECODE": "1"}
+    result = subprocess.run([sys.executable, str(validator)], cwd=container_root, env=env,
+                            text=True, capture_output=True, timeout=30)
+    assert result.returncode == 1, result.stderr
+    assert "ai_ops_kit/engine/ai_ops_run.py" in result.stdout
+    assert "CONTAINER-ASSETS-OK" not in result.stdout
+
+
+def test_launch_target_outside_build_context_fails_closed(container_root, tmp_path):
+    target = container_root / "ai_ops_kit/engine/ai_ops_run.py"
+    outside = tmp_path.parent / (tmp_path.name + "-outside.py")
+    outside.write_text("raise RuntimeError('outside build context')\n")
+    target.unlink()
+    target.symlink_to(outside)
+    assert target.resolve() == outside
+    assert any("ai_ops_kit/engine/ai_ops_run.py" in e for e in check_assets(container_root))
+
+
+def test_shipped_launch_command_reaches_cli_from_work_directory(tmp_path):
+    """Host smoke с тем же import root/argv, без модели; не runnable-image proof."""
+    text = (PKG / "containers/Dockerfile").read_text()
+    entry = next(line.removeprefix("ENTRYPOINT ") for line in text.splitlines()
+                 if line.startswith("ENTRYPOINT "))
+    command = json.loads(entry)
+    assert command == ["python3", "-P", "-m", "ai_ops_kit.engine.ai_ops_run"]
+    env = {"PATH": os.defpath, "HOME": str(tmp_path), "PYTHONPATH": str(PKG),
+           "PYTHONDONTWRITEBYTECODE": "1"}
+    result = subprocess.run([sys.executable, *command[1:], "--help"], cwd=tmp_path,
+                            env=env, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert "run" in result.stdout and "resume" in result.stdout
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_child_package_cannot_shadow_shipped_controller(tmp_path):
+    package = tmp_path / "ai_ops_kit/engine"
+    package.mkdir(parents=True)
+    (package.parent / "__init__.py").write_text("")
+    (package / "__init__.py").write_text("")
+    target = package / "ai_ops_run.py"
+    target.write_text("print('CHILD_CONTROLLED_ENTRYPOINT')\n")
+    assert target.is_file()  # подмена действительно присутствует в child cwd
+    text = (PKG / "containers/Dockerfile").read_text()
+    command = json.loads(next(line.removeprefix("ENTRYPOINT ") for line in text.splitlines()
+                              if line.startswith("ENTRYPOINT ")))
+    env = {"PATH": os.defpath, "HOME": str(tmp_path), "PYTHONPATH": str(PKG),
+           "PYTHONDONTWRITEBYTECODE": "1"}
+    result = subprocess.run([sys.executable, *command[1:], "--help"], cwd=tmp_path,
+                            env=env, text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert "CHILD_CONTROLLED_ENTRYPOINT" not in result.stdout
+    assert "resume" in result.stdout
+
+
+@pytest.mark.parametrize("rule", [
+    "ai_ops_kit/engine/ai_ops_run.py", "/ai_ops_kit/", "**/*.py", "ai_ops_kit/**",
+    "ai_ops_kit/**/engine/**/ai_ops_run.py", "ai_ops_k[i]t", "./ai_ops_kit", "**/engine",
+    "other/../ai_ops_kit",
+])
+def test_dockerignore_cannot_exclude_launch_target(container_root, rule):
+    ignore = container_root / ".dockerignore"
+    ignore.write_text(rule + "\n")
+    assert ignore.read_text() == rule + "\n"
+    assert any(".dockerignore" in e for e in check_assets(container_root))
+
+
+def test_negation_does_not_bypass_conservative_launch_context_contract(container_root):
+    (container_root / ".dockerignore").write_text("**/*.py\n!ai_ops_kit/engine/ai_ops_run.py\n")
+    assert any(".dockerignore" in e for e in check_assets(container_root))
+
+
+def test_shipped_dockerignore_keeps_launch_source(container_root):
+    (container_root / ".dockerignore").write_bytes((PKG / ".dockerignore").read_bytes())
+    assert check_assets(container_root) == []
+
+
+def test_dockerfile_specific_ignore_overrides_root_file(container_root):
+    (container_root / ".dockerignore").write_text("**/node_modules\n")
+    specific = container_root / "containers/Dockerfile.dockerignore"
+    specific.write_text("ai_ops_kit\n")
+    assert any(".dockerignore" in e for e in check_assets(container_root))
+    (container_root / ".dockerignore").write_text("ai_ops_kit\n")
+    specific.write_text("**/node_modules\n")
+    assert check_assets(container_root) == []
+
+
+@pytest.fixture
+def runtime_root(tmp_path):
+    (tmp_path / "VERSION").write_text("0.0.0\n")
+    (tmp_path / "pyproject.toml").write_text('[project]\nrequires-python = ">=3.12"\n')
+    return tmp_path
+
+
+@pytest.mark.parametrize("version", [(3, 12, 0), (3, 13, 5), (3, 14, 0)])
+def test_runtime_accepts_declared_python_floor_and_node22(runtime_root, version):
+    assert check_runtime_versions(version, "v22.23.4", runtime_root) == []
+
+
+@pytest.mark.parametrize("version", [(3, 9, 9), (3, 11, 2), (3, 11, 99)])
+def test_runtime_rejects_python_below_declared_floor(runtime_root, version):
+    assert any("Python" in e for e in check_runtime_versions(version, "v22.23.4", runtime_root))
+
+
+def test_runtime_floor_tracks_real_manifest_change_without_writes(runtime_root):
+    manifest = runtime_root / "pyproject.toml"
+    assert check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root) == []
+    manifest.write_text('[project]\nrequires-python = ">=3.13"\n')
+    before = manifest.read_bytes()
+    assert b">=3.13" in before
+    assert any("Python" in e for e in check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root))
+    assert manifest.read_bytes() == before
+
+
+@pytest.mark.parametrize("spec", ["", '[project]\nrequires-python = "nonsense"\n', '[project]\n', 'not TOML'])
+def test_missing_or_invalid_floor_cannot_default_to_old_python(runtime_root, spec):
+    (runtime_root / "pyproject.toml").write_text(spec)
+    assert any("pyproject" in e for e in check_runtime_versions((3, 14, 0), "v22.23.4", runtime_root))
+
+
+def test_deleted_manifest_cannot_default_to_old_python(runtime_root):
+    manifest = runtime_root / "pyproject.toml"
+    assert check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root) == []
+    manifest.unlink()
+    assert not manifest.exists()
+    assert any("pyproject" in e for e in check_runtime_versions((3, 12, 0), "v22.23.4", runtime_root))
+
+
+@pytest.mark.parametrize("node", ["v18.20.0", "v20.19.0", "v24.0.0", "broken", ""])
+def test_reference_runtime_rejects_other_or_unknown_node_line(runtime_root, node):
+    assert any("Node" in e for e in check_runtime_versions((3, 13, 5), node, runtime_root))
+
+
+def test_floating_old_base_fails_static_runtime_contract():
+    text = GOOD_DOCKERFILE.replace("node:22-trixie-slim", "node:22-slim")
+    assert any("BASE_IMAGE" in e for e in check_dockerfile(text))
+
+
+@pytest.mark.parametrize("replacement", ["", f"# RUN {json.dumps(RUNTIME_CHECK)}",
+                                         f"RUN {' '.join(RUNTIME_CHECK)} || true"])
+def test_missing_or_shell_bypassed_runtime_guard_fails_closed(replacement):
+    text = GOOD_DOCKERFILE.replace(f"RUN {json.dumps(RUNTIME_CHECK)}", replacement)
+    assert any("runtime-floor" in e for e in check_dockerfile(text))
+
+
+def test_runtime_guard_before_copy_does_not_validate_sources():
+    guard = f"RUN {json.dumps(RUNTIME_CHECK)}\n"
+    text = GOOD_DOCKERFILE.replace(guard, "").replace("COPY . /opt/ai-ops-kit", guard + "COPY . /opt/ai-ops-kit")
+    assert any("runtime-floor" in e for e in check_dockerfile(text))
+
+
+def test_npm_engine_mismatch_cannot_be_ignored():
+    text = GOOD_DOCKERFILE.replace("npm_config_engine_strict=true ", "")
+    assert any("engines" in e for e in check_dockerfile(text))
+
+
+@pytest.mark.parametrize("node_version,requires,returncode", [
+    ("v22.23.4", ">=3.12", 0), ("v18.20.0", ">=3.12", 1), ("v22.23.4", ">=99.0", 1),
+])
+def test_standalone_runtime_guard_uses_actual_probe_and_manifest(runtime_root, node_version, requires, returncode):
+    validator = runtime_root / "validate_container_assets.py"
+    validator.write_bytes((PKG / "ai_ops_kit/validation/validate_container_assets.py").read_bytes())
+    manifest = runtime_root / "pyproject.toml"
+    manifest.write_text(f'[project]\nrequires-python = "{requires}"\n')
+    before = manifest.read_bytes()
+    bin_dir = runtime_root / "bin"
+    bin_dir.mkdir()
+    seen = runtime_root / "node-probed"
+    node = bin_dir / "node"
+    node.write_text(f"#!/bin/sh\nprintf '%s\\n' {shlex.quote(node_version)}\nprintf probe > {shlex.quote(str(seen))}\n")
+    node.chmod(0o700)
+    assert node.is_file() and not seen.exists()
+    result = subprocess.run([sys.executable, str(validator), "--runtime-floor"], cwd=runtime_root,
+                            env={"PATH": str(bin_dir), "PYTHONDONTWRITEBYTECODE": "1"},
+                            text=True, capture_output=True, timeout=10)
+    assert seen.read_text() == "probe"  # версия реально запрошена до утверждения о гейте
+    assert manifest.read_bytes() == before
+    assert result.returncode == returncode, result.stderr
+    assert ("CONTAINER-RUNTIME-VERSIONS-OK" in result.stdout) == (returncode == 0)
+    if returncode == 0:
+        assert "только версии" in result.stdout
+
+
+def test_standalone_runtime_guard_missing_node_is_not_success(runtime_root):
+    validator = runtime_root / "validate_container_assets.py"
+    validator.write_bytes((PKG / "ai_ops_kit/validation/validate_container_assets.py").read_bytes())
+    result = subprocess.run([sys.executable, str(validator), "--runtime-floor"], cwd=runtime_root,
+                            env={"PATH": str(runtime_root), "PYTHONDONTWRITEBYTECODE": "1"},
+                            text=True, capture_output=True, timeout=10)
+    assert result.returncode == 1, result.stderr
+    assert "Node version probe" in result.stdout
+    assert "CONTAINER-RUNTIME-VERSIONS-OK" not in result.stdout
