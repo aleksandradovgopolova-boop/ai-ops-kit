@@ -1,0 +1,108 @@
+# Только ручной запуск в подтверждённом существующем бесплатном runner-окне.
+# Подготовка файла не является разрешением dispatch/расходов или принятием baseline.
+name: performance-baseline
+on:
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Проверенный полный SHA исходников с command-suite harness'
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: performance-baseline
+  cancel-in-progress: false
+jobs:
+  bounded-pair:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SOURCE_SHA: ${{ inputs.source_sha }}
+      OUT: ${{ runner.temp }}/performance-baseline
+      PYTHONDONTWRITEBYTECODE: '1'
+      PYTHONHASHSEED: '0'
+      PYTHON: python3
+    steps:
+      - name: Проверить точный SHA до checkout
+        run: |
+          python3 - <<'PY'
+          import os, re
+          if not re.fullmatch(r'[0-9a-f]{40}', os.environ['SOURCE_SHA']):
+              raise SystemExit('source_sha must be a reviewed full SHA')
+          PY
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Существующий toolchain CI
+        run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.17.4'
+      - name: Одна штатная lease на base и repeat
+        run: |
+          cat > "$RUNNER_TEMP/measure-pair.sh" <<'SH'
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, subprocess
+          from pathlib import Path
+          from ai_ops_kit.devtools import bench_performance as bp, host_resource_cli as gate
+          out = Path(os.environ['OUT'])
+          out.mkdir(exist_ok=False)
+          def git(*args):
+              return subprocess.check_output(['git', *args], text=True).strip()
+          def memory():
+              values = dict(line.split() for line in Path('/proc/vmstat').read_text().splitlines())
+              return {'boot_id': Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
+                      'pswpin': int(values['pswpin']), 'pswpout': int(values['pswpout'])}
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+          if os.environ.get('GITHUB_ACTIONS') != 'true' or gate.inherited_slot() is None:
+              raise SystemExit('real Actions context and real shared slot required')
+          if git('rev-parse', 'HEAD') != os.environ['SOURCE_SHA'] or git('status', '--porcelain'):
+              raise SystemExit('source mismatch or dirty checkout')
+          if not callable(getattr(bp, 'run_suite', None)):
+              raise SystemExit('selected source SHA lacks command-suite harness; use a reviewed capable SHA')
+          if not Path('qualification/evidence/performance-baseline-1409/suite.json').is_file():
+              raise SystemExit('selected source SHA lacks the reviewed bounded suite')
+          before = memory()
+          codes, base_hash, after_hash = [], None, None
+          snapshot = {'before': before, 'workflow_sha': os.environ.get('GITHUB_WORKFLOW_SHA'),
+                      'workflow_ref': os.environ.get('GITHUB_WORKFLOW_REF'),
+                      'run_id': os.environ.get('GITHUB_RUN_ID'), 'attempt': os.environ.get('GITHUB_RUN_ATTEMPT'),
+                      'runner_os': os.environ.get('RUNNER_OS'), 'runner_arch': os.environ.get('RUNNER_ARCH'),
+                      'cache_semantics': 'fresh process; OS cache uncontrolled; warmup recorded',
+                      'memory_semantics': 'maximum child RSS, not simultaneous tree RSS',
+                      'qualification': 'NOT_VALIDATED'}
+          try:
+              common = ['--suite', 'qualification/evidence/performance-baseline-1409/suite.json',
+                        '--iterations', '3', '--warmup', '1']
+              codes.append(bp.main(common + ['--output', str(out / 'base.json')]))
+              if codes[-1] == 0:
+                  base_hash = digest(out / 'base.json')
+                  codes.append(bp.main(common + ['--baseline', str(out / 'base.json'),
+                        '--regression-threshold', '1.2', '--output', str(out / 'repeat.json')]))
+                  after_hash = digest(out / 'base.json')
+          finally:
+              after = memory()
+              source_ok = git('rev-parse', 'HEAD') == os.environ['SOURCE_SHA'] and not git('status', '--porcelain')
+              stable = before['boot_id'] == after['boot_id'] and all(before[k] == after[k] for k in ('pswpin', 'pswpout'))
+              valid = source_ok and stable and codes == [0, 0] and base_hash is not None and base_hash == after_hash
+              snapshot.update(after=after, source_unchanged=source_ok, swap_stable=stable,
+                              base_sha256_before_repeat=base_hash, base_sha256_after_repeat=after_hash,
+                              exit_codes=codes, qualification='CANDIDATE' if valid else 'REJECTED')
+              (out / 'window.json').write_text(json.dumps(snapshot, indent=2) + '\n')
+          raise SystemExit(0 if valid else 2)
+          PY
+          SH
+          python3 -m ai_ops_kit.devtools.host_resource_cli --owner "ci-perf-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" -- bash "$RUNNER_TEMP/measure-pair.sh"
+      - name: Сохранить raw даже при отказе
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: performance-${{ inputs.source_sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/performance-baseline
+          if-no-files-found: warn
+          retention-days: 7

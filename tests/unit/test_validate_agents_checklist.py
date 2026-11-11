@@ -113,3 +113,43 @@ def test_exit_code_and_json_reflect_the_verdict():
     )
     assert r.returncode == 0, r.stdout + r.stderr
     assert json.loads(r.stdout)["offending"] == []
+
+
+# ------------------------------------------------ ручной операционный workflow ---
+
+
+def _named_workflow(tmp_path, name, triggers):
+    wf = tmp_path / ".github" / "workflows"
+    wf.mkdir(parents=True)
+    (wf / name).write_text(
+        f"name: x\non: {triggers}\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n"
+        "      - run: python3 -m ai_ops_kit.devtools.host_resource_cli --owner x -- bash m.sh\n",
+        encoding="utf-8")
+    return tmp_path
+
+
+@pytest.mark.unit
+def test_manual_measurement_workflow_is_exempt_while_manual_only(tmp_path):
+    """Ручной замер производит данные, а не вердикт: пока запуск только ручной, он не нарушение."""
+    root = _named_workflow(tmp_path, "performance-baseline.yml", "{workflow_dispatch: {}}")
+    assert vac.offending_commands(root) == []
+
+
+@pytest.mark.unit
+@pytest.mark.parametrize("triggers", [
+    "{workflow_dispatch: {}, pull_request: {}}",
+    "{workflow_dispatch: {}, schedule: [{cron: '0 4 * * 0'}]}",
+    "{push: {branches: [main]}}",
+])
+def test_exemption_ends_with_any_automatic_trigger(tmp_path, triggers):
+    """Fail-closed: с автоматическим запуском тот же workflow — проверка мимо pytest."""
+    root = _named_workflow(tmp_path, "performance-baseline.yml", triggers)
+    bad = vac.offending_commands(root)
+    assert [w for w, _ in bad] == ["performance-baseline.yml"], bad
+
+
+@pytest.mark.unit
+def test_exemption_is_by_name_not_by_being_manual(tmp_path):
+    """Ручной запуск сам по себе не освобождает: список поимённый."""
+    root = _named_workflow(tmp_path, "other-manual.yml", "{workflow_dispatch: {}}")
+    assert [w for w, _ in vac.offending_commands(root)] == ["other-manual.yml"]
