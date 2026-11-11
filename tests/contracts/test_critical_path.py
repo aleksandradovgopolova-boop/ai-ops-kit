@@ -175,8 +175,8 @@ class TestOrchestratorContracts:
         assert len(long_msg) > 200
         assert long_msg.strip() in str(ei.value)   # текст сохранён целиком (не обрезан до 200)
 
-    def test_claude_cli_read_only_tools(self):
-        """Claude CLI must be restricted to read-only tools."""
+    def test_claude_cli_offline_argv_requests_builtin_set(self):
+        """#1476: сборка argv офлайн; effective read-only runtime этим не доказан."""
         from ai_ops_kit.providers import orchestrator
 
         seen_cmd = []
@@ -194,19 +194,15 @@ class TestOrchestratorContracts:
         provider("test")
 
         cmd = seen_cmd[0]
-        # Contract: --allowedTools present
+        assert cmd[cmd.index("--tools") + 1] == "Read,Grep,Glob"
+        # Autoapproval — отдельное свойство, а не доказательство недоступности mutation.
         assert "--allowedTools" in cmd
-        # Contract: only Read/Grep/Glob allowed
         idx = cmd.index("--allowedTools") + 1
         tools = []
         while idx < len(cmd) and not cmd[idx].startswith("--"):
             tools.append(cmd[idx])
             idx += 1
         assert set(tools) <= {"Read", "Grep", "Glob"}
-        # Contract: no mutation tools
-        assert "Write" not in cmd
-        assert "Edit" not in cmd
-        assert "Bash" not in cmd
 
 
 class TestToolBrokerContracts:

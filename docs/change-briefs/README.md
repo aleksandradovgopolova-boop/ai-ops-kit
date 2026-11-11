@@ -26,6 +26,7 @@
 
 - [Интерактивная сессия без вложенной модели — #1434](1434-interactive-session.md).
 - [Безопасная диагностика неизвестного источника плана выпуска](release-snapshot-diagnostics.md).
+- [Блокировка неподтверждённого Claude read-only runtime — #1476](1476-claude-readonly.md).
 - [Проверка кодов возврата команд после обновления — R7](r7-upgrade-command-status.md).
 - [Установленная копия кита несёт его лицензию — #1481](1481-managed-copy-keeps-kit-notice.md).
 - [Полный откат неудачного обновления — #1406/R5](1406-r5-rollback-footprint.md).

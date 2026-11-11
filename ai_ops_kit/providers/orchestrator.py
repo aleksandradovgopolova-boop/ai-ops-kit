@@ -168,8 +168,66 @@ def _save_stage_origin(stage, owner, result, out):
     return origin
 
 
-def _finish_run_state(state, gates, skill_failure, budget_exceeded):
-    if skill_failure:
+def _is_readonly_refusal(rec) -> bool:
+    return (rec.get("reason") == "readonly_runtime_unqualified"
+            and rec.get("provider") == "claude-cli")
+
+
+def _writer_stage(provider, prompt, sid, state, run_dir, bud):
+    """Вызвать writer-провайдера стадии. -> (result, None) либо (None, отказ #1476).
+
+    Узкая граница #1476: перехватывается только отказ неквалифицированного read-only Claude CLI;
+    отказ или политика API и mock идут дальше исключением.
+    """
+    try:
+        result = provider(prompt)
+    except ProviderRefusal as refusal:
+        rec = refusal.as_dict()
+        if not _is_readonly_refusal({"reason": refusal.reason, "provider": refusal.provider}):
+            raise
+        writer_refusal = {"stage": sid, **rec}
+        state.update(status="blocked", current_phase=None,
+                     provider_refusal=writer_refusal, budget=bud.to_dict())
+        # Сначала честное состояние на диске; completed/next_action и опубликованный
+        # префикс сохранены. Отказ не становится stage output или handoff.
+        save_state(run_dir, state)
+        (run_dir / f"stage-{sid}.refusal.json").write_text(
+            json.dumps(rec, ensure_ascii=False, indent=2), encoding="utf-8")
+        return None, writer_refusal
+    previous = state.get("provider_refusal") or {}
+    if previous.get("stage") == sid and _is_readonly_refusal(previous):
+        # Успешное явное resume: сохраняем историю, но collect_evidence больше
+        # не должен читать прежний отказ как текущий результат этой стадии.
+        refusal_path = run_dir / f"stage-{sid}.refusal.json"
+        if refusal_path.exists():
+            refusal_path.replace(run_dir / f"stage-{sid}.refusal.previous.json")
+        state.pop("provider_refusal", None)
+    return result, None
+
+
+def _final_line(workflow_id, state, gates, run_dir, skill_failure, writer_refusal) -> str:
+    """Итоговая строка прогона человеку: отказ writer, незакрытые гейты либо успех."""
+    if writer_refusal:
+        return (f"BLOCKED: workflow {workflow_id}, стадия {writer_refusal['stage']}: "
+                f"{writer_refusal['reason']}. {writer_refusal['detail']} "
+                f"Состояние для продолжения: {run_dir / 'TaskState.yaml'}")
+    if state["status"] == "blocked":
+        return (f"BLOCKED: workflow {workflow_id} прошёл {len(state['completed_checks'])} стадий, "
+                f"но блокирующие гейты не выполнены: {', '.join(gates['unmet_gates'])}. "
+                f"Отчёт гейтов: {run_dir / 'GateReport.json'}"
+                f"{'; skill недоступен: ' + skill_failure['reason'] if skill_failure else ''}")
+    return (f"OK: workflow {workflow_id} завершён sequential-режимом; "
+            f"{len(state['completed_checks'])} стадий, все блокирующие гейты выполнены; "
+            f"состояние: {run_dir / 'TaskState.yaml'}")
+
+
+def _finish_run_state(state, gates, skill_failure, budget_exceeded, writer_refusal=None):
+    if writer_refusal:
+        # Gate evidence не заменяет невыполненную writer-стадию (#1476).
+        state['status'] = 'blocked'
+        state['provider_refusal'] = writer_refusal
+        state['unmet_gates'] = gates.get('unmet_gates', [])
+    elif skill_failure:
         state['status'] = 'blocked'
         state['skill_failure'] = skill_failure
         state['unmet_gates'] = gates.get('unmet_gates', [])
@@ -242,6 +300,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
     budget_exceeded = None
     skill_failure = None
+    writer_refusal = None
 
     stages = w["stages"]
     done_ids = {s for s in state.get("completed_checks", [])}
@@ -298,7 +357,9 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                 if verbose:
                     print(f"  stage {sid} [{owner}/judge] -> ОТКАЗ: {rec['reason_text']}")
         else:
-            result = provider(prompt)
+            result, writer_refusal = _writer_stage(provider, prompt, sid, state, run_dir, bud)
+            if writer_refusal:
+                break
 
         # опубликовать результат стадии (это и есть handoff-артефакт)
         out = run_dir / f"stage-{sid}.md"
@@ -346,7 +407,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     state["current_phase"] = None
     state["gate_report"] = "GateReport.json"
     state["budget"] = bud.to_dict()
-    _finish_run_state(state, gates, skill_failure, budget_exceeded)
+    _finish_run_state(state, gates, skill_failure, budget_exceeded, writer_refusal)
     save_state(run_dir, state)
     # append-only аудит-лог действия ИИ (security-posture: audit-log)
     # Ф0: НЕ писать сырой task_text (может содержать ПДн/секреты) — только id и хэш.
@@ -358,15 +419,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
         "model_calls": bud.model_calls,
         "budget_exceeded": bool(budget_exceeded)})
     if verbose:
-        if state["status"] == "blocked":
-            print(f"BLOCKED: workflow {workflow_id} прошёл {len(state['completed_checks'])} стадий, "
-                  f"но блокирующие гейты не выполнены: {', '.join(gates['unmet_gates'])}. "
-                  f"Отчёт гейтов: {run_dir / 'GateReport.json'}"
-                  f"{'; skill недоступен: ' + skill_failure['reason'] if skill_failure else ''}")
-        else:
-            print(f"OK: workflow {workflow_id} завершён sequential-режимом; "
-                  f"{len(state['completed_checks'])} стадий, все блокирующие гейты выполнены; "
-                  f"состояние: {run_dir / 'TaskState.yaml'}")
+        print(_final_line(workflow_id, state, gates, run_dir, skill_failure, writer_refusal))
     return state, run_dir
 
 

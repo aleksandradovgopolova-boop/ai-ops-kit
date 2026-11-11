@@ -162,6 +162,146 @@ class TestRunWorkflowQuick:
         assert "blocked" in report
 
 
+@pytest.mark.unit
+class TestClaudeWriterRefusalLifecycle:
+    @pytest.fixture(autouse=True)
+    def no_live_transport(self, monkeypatch):
+        import subprocess
+        from ai_ops_kit.providers import orchestrator_providers as op
+        from ai_ops_kit.providers import provider_calls
+
+        monkeypatch.setattr(op, "claude_binary", lambda: "/fixture/claude-no-launch")
+        self.launches, self.retries = [], []
+        original_run = subprocess.run
+
+        def forbid_claude(cmd, **kwargs):
+            if cmd[0] == "/fixture/claude-no-launch":
+                self.launches.append(cmd)
+                raise AssertionError("Claude subprocess не должен запускаться")
+            return original_run(cmd, **kwargs)
+
+        monkeypatch.setattr(subprocess, "run", forbid_claude)
+        monkeypatch.setattr(provider_calls, "_backoff", lambda n: self.retries.append(n))
+        self.usage_before = list(orchestrator_usage._CALL_STATS)
+
+    @pytest.mark.parametrize("alias", ["claude-cli", "claude-code-local"])
+    @pytest.mark.parametrize("evidence", [None, QUICK_EVIDENCE])
+    def test_actual_guard_persists_blocked_even_when_gates_pass(self, child_root, alias, evidence, capsys):
+        actual_provider = orchestrator.make_provider(alias)
+        callbacks = []
+
+        def provider(prompt):
+            callbacks.append(prompt)
+            return actual_provider(prompt)
+
+        state, run_dir = orchestrator.run_workflow(
+            "QUICK", "guarded writer", child_root, provider=provider,
+            provider_name=alias, gate_evidence=evidence, verbose=True)
+        assert state["status"] == "blocked"
+        assert state["next_action"] == "intake"
+        assert state["current_phase"] is None
+        assert state["completed_checks"] == []
+        assert state["artifacts"] == []
+        rec = json.loads((run_dir / "stage-intake.refusal.json").read_text())
+        assert rec["reason"] == "readonly_runtime_unqualified"
+        assert "до запуска" in rec["detail"]
+        assert state["provider_refusal"] == {"stage": "intake", **rec}
+        assert orchestrator.load_state(run_dir) == state
+        assert not list(run_dir.glob("stage-*.md"))
+        assert not (run_dir / "TaskHandoff.json").exists()
+        if evidence:
+            assert json.loads((run_dir / "GateReport.json").read_text())["blocked"] is False
+        audit = json.loads((child_root / ".ai/runtime/interaction-log.jsonl").read_text())
+        assert audit["status"] == "blocked" and audit["stages"] == 0
+        assert "readonly_runtime_unqualified" in capsys.readouterr().out
+        assert len(callbacks) == 1
+        assert self.launches == [] and self.retries == []
+        assert orchestrator_usage._CALL_STATS == self.usage_before
+
+    def test_resume_preserves_completed_prefix_and_archives_resolved_refusal(self, child_root):
+        actual_provider = orchestrator.make_provider("claude-cli")
+        callbacks = []
+
+        def initial_provider(prompt):
+            callbacks.append(prompt)
+            if len(callbacks) == 1:
+                return "OFFLINE INTAKE CONTEXT"
+            return actual_provider(prompt)
+
+        state, run_dir = orchestrator.run_workflow(
+            "QUICK", "resume guarded writer", child_root, provider=initial_provider,
+            provider_name="claude-cli", gate_evidence=QUICK_EVIDENCE, verbose=False)
+        assert state["status"] == "blocked"
+        assert state["completed_checks"] == ["intake"]
+        assert state["next_action"] == "local-change"
+        prefix = {name: (run_dir / name).read_bytes() for name in
+                  ("stage-intake.md", "stage-intake.provenance.json")}
+        assert prefix["stage-intake.md"] == b"OFFLINE INTAKE CONTEXT"
+        refusal = (run_dir / "stage-local-change.refusal.json").read_bytes()
+        assert len(callbacks) == 2
+        assert self.launches == [] and self.retries == []
+        assert orchestrator_usage._CALL_STATS == self.usage_before
+
+        resumed_prompts = []
+
+        def safe_provider(prompt):
+            resumed_prompts.append(prompt)
+            return orchestrator.mock_provider(prompt)
+
+        resumed, same_dir = orchestrator.run_workflow(
+            "QUICK", "resume guarded writer", child_root, provider=safe_provider,
+            provider_name="mock", gate_evidence=QUICK_EVIDENCE, collect=True, verbose=False)
+        assert same_dir == run_dir
+        assert resumed["status"] == "done"
+        assert len(resumed["completed_checks"]) == 4
+        assert resumed["next_action"] is None
+        assert "provider_refusal" not in resumed
+        assert len(resumed_prompts) == 3
+        assert "OFFLINE INTAKE CONTEXT" in resumed_prompts[0]
+        assert all((run_dir / name).read_bytes() == content for name, content in prefix.items())
+        assert not (run_dir / "stage-local-change.refusal.json").exists()
+        assert (run_dir / "stage-local-change.refusal.previous.json").read_bytes() == refusal
+        assert orchestrator.load_state(run_dir) == resumed
+        assert self.launches == [] and self.retries == []
+        assert orchestrator_usage._CALL_STATS == self.usage_before
+
+    def test_unrelated_provider_refusal_keeps_existing_behavior(self, child_root):
+        from ai_ops_kit.providers.response_contract import ProviderRefusal
+
+        def api_refusal(prompt):
+            raise ProviderRefusal("refused_by_model", "fixture refusal", "anthropic", "fixture")
+
+        with pytest.raises(ProviderRefusal, match="fixture refusal"):
+            orchestrator.run_workflow("QUICK", "API refusal", child_root,
+                                      provider=api_refusal, verbose=False)
+
+    def test_controller_returns_blocked_report_with_saved_resume_state(self, child_root, capsys):
+        from ai_ops_kit.engine import ai_ops_run
+
+        report = ai_ops_run.run(
+            "controller guarded writer", {"task_type": "QUICK", "risk": "low", "size": "small"},
+            child_root, feature="guarded-controller", engine="controller",
+            runtime="generic-orchestrator", provider_name="claude-cli", execute=True)
+        assert report["status"] == "blocked"
+        assert report["run_state_materialized"] is True
+        saved = yaml.safe_load(Path(report["run_state"]).read_text())
+        assert saved["status"] == "blocked"
+        assert saved["next_action"] == "intake"
+        assert saved["provider_refusal"]["reason"] == "readonly_runtime_unqualified"
+        assert saved["completed_checks"] == []
+        assert report["provider_refusal"] == saved["provider_refusal"]
+        assert report["next_action"] == saved["next_action"]
+        assert json.loads((child_root / "features/guarded-controller/run-report.json").read_text()) == report
+        capsys.readouterr()
+        ai_ops_run.print_human(report)
+        printed = capsys.readouterr().out
+        assert saved["provider_refusal"]["detail"] in printed
+        assert "intake" in printed
+        assert "mock" in printed
+        assert self.launches == [] and self.retries == []
+        assert orchestrator_usage._CALL_STATS == self.usage_before
+
+
 @pytest.mark.critical_path
 @pytest.mark.unit
 class TestBudgetEnforcement:
@@ -354,7 +494,7 @@ class _FakeResult:
 @pytest.mark.critical_path
 @pytest.mark.unit
 class TestClaudeCliProvider:
-    """claude-cli как first-class provider: текст-предложение, usage, read-only tools, retry."""
+    """Офлайн-runner: текст-предложение, usage, argv и retry; live runtime не квалифицируется."""
 
     def test_returns_provider_text(self):
         """Runner отдаёт JSON-конверт claude -> провайдер возвращает РОВНО строку предложения."""
@@ -382,14 +522,15 @@ class TestClaudeCliProvider:
         assert last["cost_usd_est"] is not None
         assert last["latency"] is not None and last["latency"] >= 0
 
-    def test_read_only_allowed_tools(self):
-        """cmd содержит -p и ограничивает инструменты Read/Grep/Glob (нет Write/Edit/Bash)."""
+    def test_offline_argv_requests_builtin_tools_and_autoapproval(self):
+        """Проверка сборки cmd; effective runtime permissions этим не доказаны."""
         seen = {}
         def runner(cmd):
             seen["cmd"] = cmd
             return _FakeResult(stdout=json.dumps({"result": "ok", "usage": {}}))
         orchestrator.make_claude_cli_provider(runner=runner)("тест")
         cmd = seen["cmd"]
+        assert cmd[cmd.index("--tools") + 1] == "Read,Grep,Glob"
         allowed = []
         if "--allowedTools" in cmd:
             i = cmd.index("--allowedTools") + 1
@@ -397,7 +538,6 @@ class TestClaudeCliProvider:
                 allowed.append(cmd[i]); i += 1
         assert "-p" in cmd
         assert allowed and set(allowed) <= {"Read", "Grep", "Glob"} and "Read" in allowed
-        assert not any(t in cmd for t in ("Write", "Edit", "Bash"))
 
     def test_registered_first_class(self):
         """claude-cli резолвится через make_provider как callable."""
