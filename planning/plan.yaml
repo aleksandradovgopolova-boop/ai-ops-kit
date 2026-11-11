@@ -1135,41 +1135,8 @@ current_milestone:
 # развести две правды об одной находке (принцип `dp-001`: дубли уже построенного отклоняем).
 
 work:
-  - id: next-kit-release-4-13-0
-    title: Следующий состав после 4.12.0 проверен перед выпуском
-    type: delivery
-    goal: evidence-backed-release-planning
-    status: in_progress
-    owner_role: delivery
-    value: high
-    issue: 1492
-    branch: release/v4.13.0
-    note: "Взята в работу 10.11.2026 решением владельца: подготовить выпуск. Слияние релизного PR, тег и публикация — отдельное решение владельца."
-    write_scope:
-      - VERSION
-      - CHANGELOG.md
-      - manifest/
-      - registry/release-claims.yaml
-      - registry/release-notes.yaml
-      - newsfragments/
-      - qualification/
-      - docs/
-    evidence: qualification/REPOSITORY-STATUS-2026-11-02.md
-    rationale: >-
-      На исходном main073d1bfb Pages snapshot12:01:11UTC по13 фрагментам выводит minor4.13.0;
-      это целевая версия, не release_ready и не дата выпуска. Открытый draft не
-      становится обязательным для4.13 по факту существования. Нужны достоверный
-      source snapshot, точные CI-привязки применимых входов, установленный артефакт,
-      независимое review, все17 PR checks и stock release gates точного release SHA.
-      В snapshot12:01 source подтверждён, plan_ready=true, но release_ready=false:
-      implementation_ci_incomplete, final_release_evidence_required и release_bump_pending.
-      Старые bindings нельзя заменить предположением или ослабить политикой.
-      Последующий snapshot12:33:34UTC снова source=null/plan_ready=false на
-      final_source_consistency; причина неизвестна, target4.13 — последний
-      подтверждённый, не текущий готовый план. Diagnostics draft1473 отдельным
-      владельцем не означает исправления main. Этот план не разрешает release,
-      trust или rollout.
-
+  # next-kit-release-4-13-0 ЗАКРЫТА 2026-11-11: выпуск 4.13.0 опубликован (PR #1517) и живёт в
+  # history/plan-history.yaml.
   - id: kit-plans-own-releases
     title: Кит автоматически пересчитывает план выпуска по выполненной работе
     type: engineering

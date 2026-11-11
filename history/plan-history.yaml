@@ -19,6 +19,40 @@ kind: delivery-plan-history
 
 
 work:
+  - id: next-kit-release-4-13-0
+    title: Следующий состав после 4.12.0 проверен перед выпуском
+    type: delivery
+    goal: evidence-backed-release-planning
+    status: done
+    owner_role: delivery
+    issue: 1492
+    pr: 1517
+    commit: 55d545a4bb0c801dde4c1ee8fce547e8b41279bb
+    closed_at: '2026-11-11'
+    value: high
+    result: >-
+      Опубликован выпуск v4.13.0 на коммите 55d545a4: тег и GitHub Release созданы конвейером
+      выпуска, версия согласована во всех поверхностях, слой для владельца прошёл строгую проверку.
+    write_scope:
+      - VERSION
+      - CHANGELOG.md
+      - manifest/
+      - registry/release-claims.yaml
+      - registry/release-notes.yaml
+      - newsfragments/
+      - qualification/
+      - docs/
+    evidence: qualification/REPOSITORY-STATUS-2026-11-10.md
+    rationale: >-
+      Выпуск 4.13.0 опубликован 11.11.2026 решением владельца: релизный PR #1517 прошёл
+      18 обязательных проверок на точном head, конвейер выпуска на релизном коммите
+      завершён успешно (13 этапов, два штатно пропущены), тег создан автоматически.
+      Первый выпуск под PolyForm Noncommercial; текст лицензии едет в установленную
+      копию (#1511). Не подтверждено: ревью человеком, установка в настоящий проект и
+      доставка в дочки. Привязки проверок к слитым изменениям на пульте плана выпуска
+      этим выпуском не восстановлены — это остаток работы kit-plans-own-releases.
+      В состав не вошли открытые #1491, #1461, #1352.
+
   - id: next-kit-release-4-12-0
     title: Проверенные исправления и накопленные возможности доставлены выпуском 4.12.0
     type: delivery
