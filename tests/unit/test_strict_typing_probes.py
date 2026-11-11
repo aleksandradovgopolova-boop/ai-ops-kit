@@ -19,10 +19,11 @@ from pathlib import Path
 from typing import Any, assert_type
 from ai_ops_kit.engine.run_context import RunContext
 from ai_ops_kit.kernel.ports import ExecutorPort, ExecutionSpec, ExecutionResult
-from ai_ops_kit.shared.contracts import GateResultV2, RouteResult
+from ai_ops_kit.shared.contracts import GateResultV2, RouteResult, GuardedLoadResult
 from ai_ops_kit.shared.events import subscribe
 from ai_ops_kit.shared.budget import Budget, resolve_budget
 from ai_ops_kit.shared.ai_route import route
+from ai_ops_kit.shared.lifecycle_store import load_guarded
 from ai_ops_kit.engine.ai_route import route as legacy_route
 from ai_ops_kit.shared.review_verdict import (
     build_record, load as load_review, checked_sources, who_checked_lines, node_title, persist,
@@ -75,6 +76,15 @@ review_record["checked_by"]["deterministic"] = ["test"]
 review_record["outcome_verdict"] = "not_met"
 loaded_review = load_review(Path("/tmp/child"), "bounded-review")
 assert_type(loaded_review, dict[Any, Any] | None)
+guarded = load_guarded(Path("/tmp/artifact.yaml"), required_keys=("kind",), kind="TaskState")
+assert_type(guarded, GuardedLoadResult)
+if guarded["state"] == "ok":
+    guarded_payload: dict[Any, Any] = guarded["data"]
+elif guarded["state"] == "corrupt":
+    guarded_reason: str = guarded["reason"]
+else:
+    guarded_absent: str = guarded["state"]
+# guarded state boundary
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -109,6 +119,14 @@ def test_real_contract_consumer_passes_strict(tmp_path):
 
 
 @pytest.mark.parametrize(("before", "after", "error"), [
+    ('# guarded state boundary', 'unguarded_payload = guarded["data"]', '[typeddict-item]'),
+    ('guarded_absent: str = guarded["state"]', 'absent_payload = guarded["data"]', '[typeddict-item]'),
+    ('guarded_reason: str = guarded["reason"]', 'corrupt_payload = guarded["data"]', '[typeddict-item]'),
+    ('guarded_payload: dict[Any, Any] = guarded["data"]', 'ok_reason = guarded["reason"]', '[typeddict-item]'),
+    ('guarded_reason: str', 'guarded_reason: int', '[assignment]'),
+    ('guarded_payload: dict[Any, Any]', 'guarded_payload: str', '[assignment]'),
+    ('required_keys=("kind",)', 'required_keys=(7,)', '[arg-type]'),
+    ('# guarded state boundary', 'guarded["state"] = "fresh"', '[arg-type]'),
     ('review_verified: bool', 'review_verified: str', '[assignment]'),
     ('review_revision: str | None', 'review_revision: str', '[assignment]'),
     ('review_record["verified"] = False', 'review_record["verified"] = "yes"', '[typeddict-item]'),

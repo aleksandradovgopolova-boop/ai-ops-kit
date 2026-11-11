@@ -17,8 +17,8 @@ providers:
     capabilities:
       structured_output: {status: unsupported, value: false}
       tool_calling: {status: unsupported, value: false}
-      text_generation: {status: degraded, value: true, note: "Локальный протокол проверяется без модели; живой workflow не квалифицирован. Только POSIX."}
-    known_limitations: [native-project-and-hook-trust-required, no-api-key-fallback, no-live-team-acceptance]
+      text_generation: {status: degraded, value: true, note: "Живой workflow не квалифицирован. CLI0.147.0 откладывает SessionStart до run_turn и не проходит обязательную no-model readiness; доверие hooks этого не исправляет. Только POSIX."}
+    known_limitations: [native-project-and-hook-trust-required, no-api-key-fallback, no-live-team-acceptance, codex-0.147.0-session-start-deferred-until-turn]
   anthropic:
     display_name: Anthropic
     kind: hosted-api
