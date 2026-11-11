@@ -34,3 +34,11 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           python3 -m pytest tests/ -q -n auto --dist loadfile -m nightly
+      # #1526: садовник (#1405) собирает кандидатов на уборку — неподключённые модули, устаревшие
+      # ключи базы дублей, нечестные метки гейтов. Отчёт, не гейт: код всегда 0, итог — в сводке
+      # прогона. Раньше его не запускал никто, и «кит находит лишнее» оставалось обещанием.
+      - name: "Садовник кита: кандидаты на уборку (отчёт)"
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          python3 -m ai_ops_kit.devtools.garden | tee -a "$GITHUB_STEP_SUMMARY"

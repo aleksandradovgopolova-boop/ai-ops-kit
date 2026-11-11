@@ -35,7 +35,6 @@ FIXTURE_CHECKS = [
     ("ai_ops_kit/devtools/model_comparison.py", ["examples/model-comparison-demo"]),
     ("ai_ops_kit/engine/parallel_planner.py", ["examples/work-graph-demo"]),
     ("ai_ops_kit/intelligence/product_health.py", ["examples/product-health-demo/input.yaml"]),
-    ("ai_ops_kit/devtools/promotion_qual.py", ["--verify-negatives"]),
     ("ai_ops_kit/engine/run_plan.py", ["validate"]),
     ("ai_ops_kit/security/security_enforcement.py", ["--key-preflight", "examples/key-lifecycle-demo/KLP-001.yaml"]),
 ]

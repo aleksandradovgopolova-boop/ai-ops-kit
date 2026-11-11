@@ -620,7 +620,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `execution_pipeline` (+`pipeline_*`), `tool_broker`, `tool_loop`, `worktree`, `run_context`,
   `run_plan`, `run_handoff`, `acceptance_verify`, `atomic_planner`, `workpackage_executor`,
   `sequence_{plan,aggregate}`, `parallel_{planner,executor,live}`
-- `ai_ops_kit/gates/` — гейты и допуск: `gate_executor`, `gate_policy`, `gate_runtime`,
+- `ai_ops_kit/gates/` — гейты и допуск: `gate_executor`, `gate_policy`,
   `gate_result_v2`, `preflight`, `economic_preflight`, `concurrency_preflight`, `evidence_collector`,
   `regression_evidence`, `verification_tiers`, `spec_levels`, `invariants`, `approvals`
 - `ai_ops_kit/providers/` — модели и деньги: `orchestrator` (+`_http`/`_providers`/`_usage`),
@@ -651,8 +651,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `ai_ops_cli_{commands,intents,lifecycle,product,report}`), `entry`, `human_help`
 - `ai_ops_kit/devtools/` — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
   (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,
-  `kit_observability`, `model_comparison`, `mutation_probe`, `promotion_qual`, `qual_run`,
-  `retrieval_bench`; `decision_eval`, `decision_capture`, `decision_llm_capture` и `decision_model_experiment` — offline-сравнение bounded decisions
+  `kit_observability`, `model_comparison`, `mutation_probe`, `qual_run`; `decision_eval`, `decision_capture`, `decision_llm_capture` и `decision_model_experiment` — offline-сравнение bounded decisions
   и экспериментальный живой Jev capture (#1247 / #1253), без production-проводки
 - `ai_ops_kit/checks/` — проверки-контракты артефактов и результатов: `feature_blueprint`,
   `requirements_artifact`, `plan_artifact`, `spec_artifact`, `acceptance_result`, `reviewer_result`,

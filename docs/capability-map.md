@@ -49,7 +49,7 @@ README ссылаются на неё, а не дублируют список �
 | — из них enforced (blocking) | 23 |
 | — из них advisory (partial) | 13 |
 | Роли в реестре | 42 |
-| **built≠wired модулей** | **1** |
+| **built≠wired модулей** | **2** |
 | planned / unsupported | 4 |
 
 ## built≠wired — построено, но не проведено в контур
@@ -63,6 +63,7 @@ README ссылаются на неё, а не дублируют список �
 
 | Модуль | Состояние | Причина |
 |---|---|---|
+| `ai_ops_kit/gates/gate_result_v2.py` | built≠wired | 0 не-тестовых импортёров; ждёт проводки — `tests/contracts/test_dormant_inventory.py` |
 | `ai_ops_kit/security/security_review_cascade.py` | built≠wired | намеренный карантин (PARK #589): каскад НЕ прошёл held-out N=80 (пропуск уязвимости), строгую безопасность держит человек — объявленная граница портфеля `human_strict_security_5` (registry/release-claims.yaml). Проводить в контур ТОЛЬКО после нового held-out на более сильной модели с 0 unsafe_pass. Сохранён как воспроизводимый отрицательный эксперимент. |
 
 ## Команды владельца
