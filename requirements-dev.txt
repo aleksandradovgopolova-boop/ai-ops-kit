@@ -6,7 +6,7 @@
 # Testing
 # Версии — ЗЕРКАЛО pyproject.toml [project.optional-dependencies] + tool.ai_ops.dev_tool_versions (#1402).
 # Пол pytest = 9: CI и uv.lock держат pytest 9, пол ниже этого — дрейф (как версии Python).
-pytest>=9.0
+pytest>=9.2.0
 pytest-cov>=7.1.0
 pytest-xdist>=3.8.0     # параллельный прогон (-n auto): полный набор 11мин -> ~5мин, набор параллель-безопасен
 hypothesis>=6.170.14
