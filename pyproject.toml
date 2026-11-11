@@ -27,8 +27,8 @@ ai-ops = "ai_ops_kit.cli.entry:main"
 # (tests/contracts/test_tool_versions_aligned.py). pytest-пол
 # был `>=8.0`, а CI и lock держат pytest 9 — пол ниже того, что реально требует CI, это тот
 # же класс дрейфа, что версии Python; выровнен к 9.
-test = ["pytest>=9.0", "pytest-cov>=7.1.0", "hypothesis>=6.170.14"]
-dev = ["pytest>=9.0", "pytest-cov>=7.1.0", "hypothesis>=6.170.14", "ruff>=0.17.3", "mypy>=2.4.1", "pre-commit>=3.5"]
+test = ["pytest>=9.0", "pytest-cov>=7.1.0", "hypothesis>=6.170.15"]
+dev = ["pytest>=9.0", "pytest-cov>=7.1.0", "hypothesis>=6.170.15", "ruff>=0.17.3", "mypy>=2.4.1", "pre-commit>=3.5"]
 
 # Уже используемый parent dev-инструмент; не расширяет устанавливаемые extras пакета.
 # Контракт версий сверяет этот пол с requirements-dev.txt и CI, как остальные инструменты.
