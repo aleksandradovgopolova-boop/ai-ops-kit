@@ -66,77 +66,157 @@ os.environ["GIT_CONFIG_COUNT"] = str(_gc + 2)
 # в корне новый артефакт (или изменившего доставкой `.gitignore`/`ai-ops`/`CLAUDE.md`), он ТОЧЕЧНО
 # чистит дерево (никогда не трогая отслеживаемые `.ai/project/context/*.md`) и заваливает ИМЕННО
 # этот тест — с именем виновника и подсказкой «передавай явный tmp-корень во все доставляющие вызовы».
-import glob as _rg_glob          # noqa: E402
-import hashlib as _rg_hashlib    # noqa: E402
+import stat as _rg_stat         # noqa: E402
 
 _RG_REPO = Path.cwd()
-# Активен только когда тесты идут ИЗ корня самого кита (а не из установленной копии/дочки): иначе
-# «артефакты кита в корне» — норма, и сторожу нечего охранять.
 _RG_ACTIVE = (_RG_REPO / "installer" / "ai_ops.py").is_file() and (_RG_REPO / "VERSION").is_file()
-# Доставка ДОПИСЫВАЕТ/ПЕРЕЗАПИСЫВАЕТ эти отслеживаемые файлы — ловим по смене содержимого.
 _RG_TRACKED = (".gitignore", "ai-ops", "CLAUDE.md")
 
 
-def _rg_hash(path):
+def _rg_state(path):
+    """Фактические bytes/type/mode, а не Git HEAD/index; ссылки не разыменовываем."""
     try:
-        return _rg_hashlib.sha256(path.read_bytes()).hexdigest()
-    except OSError:
+        info = path.lstat()
+    except FileNotFoundError:
         return None
+    mode = _rg_stat.S_IMODE(info.st_mode)
+    if _rg_stat.S_ISREG(info.st_mode):
+        return ("file", path.read_bytes(), mode)
+    if _rg_stat.S_ISDIR(info.st_mode):
+        return ("directory", None, mode)
+    if _rg_stat.S_ISLNK(info.st_mode):
+        return ("symlink", os.readlink(path), mode)
+    return ("special", None, mode)
+
+
+def _rg_safe_parents(path):
+    """Не читать/писать через подменённый родитель; отсутствие разрешает восстановить каталог."""
+    for parent in reversed(path.relative_to(_RG_REPO).parents):
+        if parent == Path("."):
+            continue
+        try:
+            mode = (_RG_REPO / parent).lstat().st_mode
+        except FileNotFoundError:
+            break
+        if not _rg_stat.S_ISDIR(mode):
+            raise ValueError(f"небезопасный родитель: {parent}")
+
+
+def _rg_tree(path, seen):
+    state = _rg_state(path)
+    if state is None:
+        return
+    seen[path.relative_to(_RG_REPO).as_posix()] = state
+    if state[0] == "directory":
+        for child in sorted(path.iterdir()):
+            _rg_tree(child, seen)
 
 
 def _rg_artifacts():
-    """Множество артефактов доставки, ПРИСУТСТВУЮЩИХ в корне сейчас."""
-    seen = set()
-    if (_RG_REPO / ".ai" / "managed").exists():
-        seen.add(".ai/managed")
-    if (_RG_REPO / ".ai-ops").exists():
-        seen.add(".ai-ops")
-    if _rg_glob.glob(str(_RG_REPO / ".github" / "workflows" / "ai-ops-*.yml")):
-        seen.add(".github/workflows/ai-ops-*.yml")
+    """Точные пути и состояния, включая новые файлы внутри ПРЕЖНИХ managed-каталогов."""
+    seen = {}
+    for name in (".ai/managed", ".ai-ops"):
+        path = _RG_REPO / name
+        _rg_safe_parents(path)
+        _rg_tree(path, seen)
+    workflows = _RG_REPO / ".github" / "workflows"
+    _rg_safe_parents(workflows / "_entry")
+    for path in sorted(workflows.glob("ai-ops-*.yml")):
+        _rg_tree(path, seen)
     return seen
 
 
-# Базовая линия: что уже есть/каково содержимое ДО тестов. Флагаем только НОВОЕ поверх базы —
-# грязное дерево до прогона сторож не наказывает (это забота гейта чистоты, не наша).
-_RG_BASE_ARTIFACTS = _rg_artifacts() if _RG_ACTIVE else set()
-_RG_BASE_TRACKED = {n: _rg_hash(_RG_REPO / n) for n in _RG_TRACKED} if _RG_ACTIVE else {}
+# Снимок ДО тестов: хранит и прежние локальные правки, и отсутствие файлов. Git index не трогаем.
+# Конкурентные writers в одном worktree не поддерживаются: тесты доставки обязаны брать tmp root.
+_RG_BASE_ARTIFACTS = _rg_artifacts() if _RG_ACTIVE else {}
+_RG_BASE_TRACKED = {n: _rg_state(_RG_REPO / n) for n in _RG_TRACKED} if _RG_ACTIVE else {}
 
 
-def _rg_cleanup(new_artifacts, changed_files):
-    """Точечная уборка: только НОВЫЕ артефакты + откат доставкой изменённых отслеживаемых файлов.
-    НИКОГДА `rm -rf .ai` — там живут отслеживаемые `.ai/project/context/*.md`."""
-    import shutil as _sh
-    if ".ai/managed" in new_artifacts:
-        _sh.rmtree(_RG_REPO / ".ai" / "managed", ignore_errors=True)
-    if ".ai-ops" in new_artifacts:
-        _sh.rmtree(_RG_REPO / ".ai-ops", ignore_errors=True)
-    if ".github/workflows/ai-ops-*.yml" in new_artifacts:
-        for wf in _rg_glob.glob(str(_RG_REPO / ".github" / "workflows" / "ai-ops-*.yml")):
-            try:
-                os.remove(wf)
-            except OSError:
-                pass
-    if changed_files:
-        subprocess.run(["git", "checkout", "--", *changed_files],
-                       cwd=str(_RG_REPO), capture_output=True)
+def _rg_restore_file(path, state):
+    # Atomic replace не записывает через hardlink существующего файла в другое дерево.
+    fd, temporary = tempfile.mkstemp(prefix=".root-guard-", dir=path.parent)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(state[1])
+            os.fchmod(stream.fileno(), state[2])
+        os.replace(temporary, path)
+    finally:
+        if os.path.lexists(temporary):
+            os.unlink(temporary)
 
 
-def pytest_runtest_teardown(item, nextitem):
-    """Проверка в конце КАЖДОГО теста: корень worktree обязан остаться чистым от артефактов доставки."""
+def _rg_cleanup(current, baseline):
+    """Сначала проверяем ВСЮ очистку; затем удаляем лишь новые пути и восстанавливаем снимок.
+
+    Symlink/special/type substitution отказывает без auto-restore. Никаких git checkout/reset,
+    wildcard-delete, rmtree или молчаливого ignore_errors. Ошибка остаётся ошибкой теста.
+    """
+    changed = [n for n in current.keys() | baseline.keys() if current.get(n) != baseline.get(n)]
+    for name in changed:
+        _rg_safe_parents(_RG_REPO / name)
+        old, now = baseline.get(name), current.get(name)
+        if old is not None and old[0] not in ("file", "directory"):
+            raise ValueError(f"неподдерживаемое восстановление: {name}")
+        if now is not None and (now[0] == "special" or (old and now[0] != old[0])):
+            raise ValueError(f"небезопасное восстановление типа: {name}")
+    for name in sorted(changed, key=lambda n: (n.count("/"), n), reverse=True):
+        if baseline.get(name) is None and current.get(name) is not None:
+            path = _RG_REPO / name
+            if current[name][0] == "directory":
+                path.rmdir()  # не удаляет неизвестное содержимое даже при гонке
+            else:
+                path.unlink()
+    for name in sorted(changed, key=lambda n: (n.count("/"), n)):
+        state = baseline.get(name)
+        if state is None:
+            continue
+        path = _RG_REPO / name
+        if state[0] == "directory":
+            path.mkdir(exist_ok=True)
+        else:
+            _rg_restore_file(path, state)
+    for name in sorted(changed, key=lambda n: (n.count("/"), n), reverse=True):
+        state = baseline.get(name)
+        if state is not None and state[0] == "directory":
+            (_RG_REPO / name).chmod(state[2])
+
+
+def _rg_check(item):
+    """Загрязнивший корень тест всегда падает, даже после успешного восстановления."""
     if not _RG_ACTIVE:
         return
-    new_artifacts = _rg_artifacts() - _RG_BASE_ARTIFACTS
-    changed_files = [n for n in _RG_TRACKED if _rg_hash(_RG_REPO / n) != _RG_BASE_TRACKED.get(n)]
-    if not new_artifacts and not changed_files:
-        return
-    _rg_cleanup(new_artifacts, changed_files)          # чиним дерево ДО отказа, чтобы флак не каскадил
-    dirtied = sorted(new_artifacts) + [f"{n} (изменён доставкой)" for n in changed_files]
+    try:
+        current = _rg_artifacts() | {n: _rg_state(_RG_REPO / n) for n in _RG_TRACKED}
+        baseline = _RG_BASE_ARTIFACTS | _RG_BASE_TRACKED
+        dirtied = sorted(n for n in current.keys() | baseline.keys()
+                         if current.get(n) != baseline.get(n))
+        if not dirtied:
+            return
+        _rg_cleanup(current, baseline)
+        restored = _rg_artifacts() | {n: _rg_state(_RG_REPO / n) for n in _RG_TRACKED}
+        if restored != baseline:
+            raise ValueError("проверка восстановления bytes/mode не прошла")
+    except (OSError, ValueError) as exc:
+        if getattr(item, "session", None) is not None:
+            item.session.shouldstop = "root-pollution guard: безопасное восстановление не завершено"
+        pytest.fail(f"сторож корня: восстановление не выполнено полностью: {exc}. "
+                    "Не продолжайте тесты в этом дереве; используйте изолированный tmp-корень.",
+                    pytrace=False)
     pytest.fail(
         f"тест наследил в КОРНЕ рабочего репозитория: {', '.join(dirtied)}. "
         "Доставляющий вызов (deliver_assets/cmd_init/cmd_setup/sync_ci_workflows) отработал с корнем "
         "по умолчанию (REPO_ROOT = Path.cwd()) вместо tmp — передавай явный tmp-корень во ВСЕ такие "
-        "вызовы. Иначе from-copy проверка (test_validator_runtime_contract) краснеет порядок-зависимо.",
+        "вызовы. Исходные bytes/mode восстановлены без изменения Git index.",
         pytrace=False)
+
+
+@pytest.hookimpl(wrapper=True, tryfirst=True)
+def pytest_runtest_teardown(item, nextitem):
+    # finally обязателен: обычный trylast hook не вызывается, если fixture finalizer упал.
+    try:
+        yield
+    finally:
+        _rg_check(item)
 
 
 # ============================================================================
