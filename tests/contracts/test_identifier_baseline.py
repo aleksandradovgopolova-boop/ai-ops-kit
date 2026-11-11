@@ -44,7 +44,7 @@ FROZEN_FILES_CEILING = 18
 # впиши сюда новое, меньшее; дошло до нуля — файл уходит из заморозки целиком.
 FROZEN_COUNTS = {
     "ai_ops_kit/security/scan_exec_call.py": 101,
-    "ai_ops_kit/security/scan_inline_code.py": 188,
+    "ai_ops_kit/security/scan_inline_code.py": 185,
     "ai_ops_kit/security/scan_prose.py": 39,
     "ai_ops_kit/security/scan_secret_noise.py": 21,
     "ai_ops_kit/security/scan_vendor.py": 11,
