@@ -82,6 +82,7 @@ AI сопровождает продукт на всём жизненном ци
 - [agent-guides/context-resource.md](agent-guides/context-resource.md) — стоимость, ограничения и измерения compiled контекста.
 - [agent-guides/pre-commit-checklist.md](agent-guides/pre-commit-checklist.md) — обязательные проверки перед коммитом.
 - [container-isolation.md](container-isolation.md) — изоляция рантайма движка.
+- [claude-readonly-contract.md](claude-readonly-contract.md) — граница read-only для Claude CLI: что остановлено до запуска и что не доказано.
 - [downstream-secret-scanning.md](downstream-secret-scanning.md) — secret-scanning в дочках без блокировки обновлений.
 - [dogfooding-metrics.md](dogfooding-metrics.md) — как метрики обкатки закрываются сами.
 - Полные инструкции для агентов, работающих над самим китом, — в
