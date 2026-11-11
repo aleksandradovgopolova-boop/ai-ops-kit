@@ -67,21 +67,28 @@ class TestReviewGroundingReadsTheFile:
         # файла на диске нет -> _read_source вернёт None -> цитата не подтверждена (fail-closed)
         assert _cited_lines_confirmed(str(tmp_path), "src/nope.py", "1") is False
 
-    def test_cites_delivered_grounds_only_when_lines_real(self, tmp_path):
+    @pytest.mark.parametrize("form", ["object", "array"])
+    def test_cites_delivered_grounds_only_when_lines_real(self, tmp_path, form):
         self._write(tmp_path, "src/a.py", "l1\nl2\nl3\n")
         delivered = {"src/a.py"}
         real = {"checks": [{"id": "c", "status": "pass",
                             "evidence": [{"file": "src/a.py", "lines": "1-3"}]}]}
         fake = {"checks": [{"id": "c", "status": "pass",
                             "evidence": [{"file": "src/a.py", "lines": "800-900"}]}]}
+        if form == "object":
+            real["checks"][0]["evidence"] = real["checks"][0]["evidence"][0]
+            fake["checks"][0]["evidence"] = fake["checks"][0]["evidence"][0]
         assert _review_cites_delivered_file(real, delivered, str(tmp_path)) is True
         # имя доставленного файла совпадает, но строки выдуманы -> НЕ заземлено
         assert _review_cites_delivered_file(fake, delivered, str(tmp_path)) is False
 
-    def test_cites_off_change_file_not_grounded(self, tmp_path):
+    @pytest.mark.parametrize("form", ["object", "array"])
+    def test_cites_off_change_file_not_grounded(self, tmp_path, form):
         self._write(tmp_path, "src/other.py", "l1\nl2\n")
         res = {"checks": [{"id": "c", "status": "pass",
                            "evidence": [{"file": "src/other.py", "lines": "1"}]}]}
+        if form == "object":
+            res["checks"][0]["evidence"] = res["checks"][0]["evidence"][0]
         # файл реальный и строки реальны, но он НЕ в доставленной правке -> не заземляет
         assert _review_cites_delivered_file(res, {"src/delivered.py"}, str(tmp_path)) is False
 

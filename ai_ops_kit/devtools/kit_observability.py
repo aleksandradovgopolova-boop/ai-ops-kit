@@ -317,17 +317,27 @@ def main():
     parser = argparse.ArgumentParser(description="AI Ops Kit observability report")
     parser.add_argument("child_root", nargs="?", help="Path to child repository root")
     parser.add_argument("--json", action="store_true", help="Output as JSON")
+    parser.add_argument("--workitem", help="Read-only local trace for one WorkItem")
     parser.add_argument("--selftest", action="store_true", help="Run selftest")
     args = parser.parse_args()
 
     if not args.child_root:
         parser.error("child_root required (or --selftest)")
 
-    report = compute(args.child_root)
+    formatter = format_text
+    if args.workitem is not None:
+        from ai_ops_kit.devtools import workitem_trace
+        try:
+            report = workitem_trace.compute(args.child_root, args.workitem)
+        except ValueError:
+            parser.error("workitem id must be a single safe path component")
+        formatter = workitem_trace.format_text
+    else:
+        report = compute(args.child_root)
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
     else:
-        print(format_text(report))
+        print(formatter(report))
     return 0
 
 

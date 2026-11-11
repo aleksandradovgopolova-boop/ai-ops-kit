@@ -107,6 +107,19 @@ def build_preview(intent, task, child_root, signals):
     }
 
 
+def _show_preview(pv, child_root, a, blocked_on_intake=False):
+    """Одинаковый вывод для dry preview и обычного пути запуска; без dispatch."""
+    from ai_ops_kit.cli.ai_ops_cli import _say, _audience, _print_preview
+    if a.json:
+        print(json.dumps(pv, ensure_ascii=False, indent=2))
+    elif not blocked_on_intake:
+        # Смысл — всегда; внутренние стадии, флаги и бюджет — на technical/debug.
+        _say(Path(child_root), "from_execution_preview", pv)
+        if _audience(Path(child_root)) != "product":
+            print()
+            _print_preview(pv)
+
+
 def _print_preview(pv):
     from ai_ops_kit.cli.ai_ops_cli import INTENTS   # реестр намерений живёт в ai_ops_cli
     u = pv["understood"]

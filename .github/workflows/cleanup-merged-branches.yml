@@ -1,0 +1,44 @@
+# Еженедельный авто-снос влитых веток: ветки `codex/*`, у которых PR уже влит (MERGED) и нет ни
+# одного открытого PR, удаляются. Подстраховка к включённому "delete branch on merge" — убирает
+# ветки, не ушедшие автоматически (слиты до включения настройки, вручную, не через PR и т.п.).
+# ЦЕЛ-предохранители: трогаются только `codex/*`; ветка с открытым PR и ветка без PR не удаляются;
+# default/protected ветки префикс не затрагивает. Удаление идёт через gh API (git-клон не нужен).
+name: cleanup-merged-branches
+on:
+  schedule:
+    - cron: "0 4 * * 0"    # по воскресеньям, после ночных сверок
+  workflow_dispatch: {}
+permissions:
+  contents: write          # удаляет ref-ветки через gh api
+  pull-requests: read      # читает состояние PR по каждой ветке
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    if: github.repository == 'aleksandradovgopolova-boop/ai-ops-kit'   # не на форках
+    steps:
+      - name: Снести влитые codex-ветки
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          deleted=0 kept=0
+          echo "| Ветка | Действие | Причина |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          while read -r b; do
+            states="$(gh pr list --head "$b" --state all --json state --jq '.[].state' 2>/dev/null || true)"
+            if [ -z "$states" ]; then
+              kept=$((kept+1)); echo "| $b | оставлена | нет PR (возможна работа в процессе) |" >> "$GITHUB_STEP_SUMMARY"; continue
+            fi
+            if echo "$states" | grep -q OPEN; then
+              kept=$((kept+1)); echo "| $b | оставлена | есть открытый PR |" >> "$GITHUB_STEP_SUMMARY"; continue
+            fi
+            if echo "$states" | grep -q MERGED; then
+              gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/$b" \
+                && { deleted=$((deleted+1)); echo "| $b | удалена | PR влит |" >> "$GITHUB_STEP_SUMMARY"; } \
+                || echo "| $b | ошибка удаления | — |" >> "$GITHUB_STEP_SUMMARY"
+            else
+              kept=$((kept+1)); echo "| $b | оставлена | PR только закрыт без слияния |" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done < <(gh api --paginate "repos/${GITHUB_REPOSITORY}/branches?per_page=100" --jq '.[].name' | grep '^codex/' || true)
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Готово. Удалено: ${deleted}, оставлено: ${kept}." >> "$GITHUB_STEP_SUMMARY"
