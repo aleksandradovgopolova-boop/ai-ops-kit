@@ -88,6 +88,8 @@ def test_a_killed_mutant_is_reported_as_killed(tmp_path):
 
     assert [p["outcome"] for p in rep["probes"]] == ["killed"], rep["probes"]
     assert rep["survived"] == [] and rep["not_verified"] == []
+    assert rep["probes"][0]["execution"]["failed_tests"] == [
+        "tests.test_guarded::test_none_is_refused"]
 
 
 # ─── fail-closed ───────────────────────────────────────────────────────────────────────────────
@@ -275,7 +277,8 @@ def test_invalid_parallelism_refuses_before_execution(tmp_path, workers):
 
 def test_mutant_timeout_is_unknown_not_killed(tmp_path, monkeypatch):
     root = _probes(_mini_repo(tmp_path))
-    calls = iter([(0, "baseline green"), (124, "timeout")])
+    green = {"executed": 1, "failed_tests": [], "errors": 0, "unsupported": 0}
+    calls = iter([(0, "baseline green", green), (124, "timeout", None)])
     monkeypatch.setattr(mp, "_pytest", lambda *args: next(calls))
     result = mp.run(root)
     assert result["not_verified"] == ["guard-refuses-none"]
@@ -307,3 +310,138 @@ def test_generated_output_does_not_contaminate_mutation_copy(tmp_path, directory
     assert result["probes"][0]["outcome"] == "killed"
     assert generated.read_text() == "stale = 1\n"
     assert (root / "guarded.py").read_text() == GUARDED
+
+
+@pytest.mark.parametrize("replacement", ["    if (:", "    if False:\n        break"])
+@pytest.mark.parametrize("test_body", [TEST_SRC, '''def test_late_import():
+    from guarded import keep
+    assert keep(None) == "отказ"
+'''])
+def test_malformed_python_is_not_a_kill_even_with_late_import(tmp_path, test_body, replacement):
+    root = _probes(_mini_repo(tmp_path, test_body=test_body), replace_with=replacement)
+    before = {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+    assert {p.relative_to(root): p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
+
+
+def test_collection_import_error_is_not_a_kill(tmp_path):
+    root = _probes(_mini_repo(tmp_path), find='    return "ок"',
+                   replace_with='    return "ок"\nraise ImportError("broken import")')
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+
+
+@pytest.mark.parametrize("phase", ["setup", "teardown"])
+def test_fixture_error_is_not_an_executed_failing_test(tmp_path, phase):
+    body = ('import pytest\nfrom guarded import keep\n'
+            '@pytest.fixture\ndef guard():\n'
+            + ('    yield\n' if phase == "teardown" else '')
+            + '    assert keep(None) == "отказ"\n'
+            'def test_body(guard):\n    assert True\n')
+    root = _probes(_mini_repo(tmp_path, test_body=body))
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+    assert result["probes"][0]["execution"]["errors"] == 1
+
+
+def test_collection_error_with_an_actual_failure_is_not_a_kill(tmp_path):
+    root = _probes(_mini_repo(tmp_path), tests=["tests"])
+    (root / "pytest.ini").write_text("[pytest]\naddopts = --continue-on-collection-errors\n")
+    (root / "tests/test_collection.py").write_text(
+        'from guarded import keep\nassert keep(None) == "отказ"\n')
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+    assert result["probes"][0]["execution"]["failed_tests"]
+    assert result["probes"][0]["execution"]["errors"] == 1
+
+
+@pytest.mark.parametrize("failure", [
+    'raise RuntimeError("internal")',
+    'raise pytest.UsageError("usage")',
+    'raise KeyboardInterrupt()',
+    'items.clear()',
+])
+def test_pytest_infrastructure_failure_is_not_a_kill(tmp_path, failure):
+    root = _probes(_mini_repo(tmp_path))
+    (root / "conftest.py").write_text(
+        'import pytest\nfrom guarded import keep\n'
+        'def pytest_collection_modifyitems(items):\n'
+        '    if keep(None) != "отказ":\n'
+        f'        {failure}\n')
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+
+
+@pytest.mark.parametrize("addopts", ["--collect-only", ""])
+def test_no_executed_baseline_cannot_verify_mutation(tmp_path, addopts):
+    body = TEST_SRC if addopts else 'import pytest\ndef test_skip():\n    pytest.skip("skip")\n'
+    root = _probes(_mini_repo(tmp_path, test_body=body))
+    (root / "pytest.ini").write_text(f"[pytest]\naddopts = {addopts}\n")
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+
+
+def test_skipped_mutant_is_not_a_survivor(tmp_path):
+    root = _probes(_mini_repo(tmp_path, test_body='''import pytest
+from guarded import keep
+def test_guard():
+    if keep(None) != "отказ":
+        pytest.skip("mutation skipped verification")
+    assert keep(None) == "отказ"
+'''))
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+    assert result["survived"] == []
+
+
+@pytest.mark.parametrize("report", [None, "<not-xml", "<unrelated/>"])
+def test_missing_or_malformed_execution_report_cannot_prove_kill(tmp_path, monkeypatch, report):
+    from types import SimpleNamespace
+    root = _probes(_mini_repo(tmp_path))
+    original = mp.subprocess.run
+    def run(cmd, **kwargs):
+        if 'if False:' not in (Path(kwargs["cwd"]) / "guarded.py").read_text():
+            return original(cmd, **kwargs)
+        report_path = Path(cmd[cmd.index("--junitxml") + 1])
+        assert not report_path.exists(), "stale baseline report reused"
+        assert not report_path.is_relative_to(root), "report writes to original tree"
+        if report is not None:
+            report_path.write_text(report)
+        return SimpleNamespace(returncode=1, stdout="1 failed", stderr="")
+    monkeypatch.setattr(mp.subprocess, "run", run)
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+
+
+def test_import_error_inside_executed_test_call_is_a_kill(tmp_path):
+    root = _probes(_mini_repo(tmp_path, test_body='''def test_import():
+    from guarded import keep
+    assert keep(None) == "отказ"
+'''), find='    return "ок"',
+        replace_with='    return "ок"\nraise ImportError("broken import")')
+    result = mp.run(root)
+    assert result["probes"][0]["outcome"] == "killed", result
+    assert result["probes"][0]["execution"]["failed_tests"] == ["tests.test_guarded::test_import"]
+
+
+@pytest.mark.parametrize("phase", ["setUp", "tearDown", "test_body"])
+def test_unittest_lifecycle_cannot_be_mistaken_for_test_body(tmp_path, phase):
+    body = ('import unittest\nfrom guarded import keep\nclass TestGuard(unittest.TestCase):\n'
+            f'    def {phase}(self):\n        assert keep(None) == "отказ"\n')
+    if phase != "test_body":
+        body += '    def test_body(self):\n        assert True\n'
+    root = _probes(_mini_repo(tmp_path, test_body=body))
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result
+    assert "unittest" in result["probes"][0]["reason"]
+
+
+def test_missing_item_kind_evidence_is_not_silently_accepted(tmp_path):
+    root = _probes(_mini_repo(tmp_path))
+    (root / "conftest.py").write_text(
+        "import pytest\n@pytest.hookimpl(trylast=True)\n"
+        "def pytest_collection_modifyitems(items):\n"
+        "    for item in items:\n        item.user_properties.clear()\n")
+    result = mp.run(root)
+    assert result["not_verified"] == ["guard-refuses-none"], result

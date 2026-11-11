@@ -18,6 +18,8 @@
 
 ## Что здесь есть
 
+- [Выполненный падающий тест обязателен для mutation kill — #1482](1482-mutation-executed-test.md).
+
 - [Preview без побочных действий — #1477](preview-has-no-effects.md).
 - [Новый пользовательский ход после native handoff — #1434](1434-user-turn-continuation.md).
 - [Ограниченное чтение проектных hooks — #1434](1434-hook-read-deadlines.md).
