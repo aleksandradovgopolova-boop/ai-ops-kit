@@ -21,8 +21,6 @@ import pytest
 
 PKG_ROOT = Path(__file__).resolve().parents[2]
 
-from ai_ops_kit.engine import execution_pipeline # noqa: E402
-
 WID = "acc-seam"
 SPEC = """schema_version: 1
 kind: FeatureSpec
@@ -40,6 +38,12 @@ sections:
 
 def _git(root, *a):
     return subprocess.run(["git", *a], cwd=root, capture_output=True, text=True)
+
+
+def _run_pipeline(**kwargs):
+    # Import-breaking seam-проба должна ронять ВЫПОЛНЕННЫЙ тест, а не collection.
+    from ai_ops_kit.engine import execution_pipeline
+    return execution_pipeline.run_pipeline(**kwargs)
 
 
 @pytest.fixture()
@@ -95,7 +99,7 @@ def test_pipeline_runs_the_acceptance_check_and_reports_the_unmet_criterion(repo
     """ШОВ: сверка вызвана из прогона, вердикт лёг в отчёт, невыполненный критерий назван."""
     _writer.done = False
 
-    report = execution_pipeline.run_pipeline(
+    report = _run_pipeline(
         task="убрать из README упоминание public/media",
         signals={"task_type": "QUICK"}, child_root=repo, proposer=_writer,
         feature=WID, commit=True, review=True, reviewer_proposer=_judge,
@@ -121,7 +125,7 @@ def test_the_judge_sees_the_whole_branch_not_the_last_commit(repo):
     PROMPTS.clear()
     _writer.done = False
 
-    execution_pipeline.run_pipeline(
+    _run_pipeline(
         task="убрать из README упоминание public/media",
         signals={"task_type": "QUICK"}, child_root=repo, proposer=_writer,
         feature=WID, commit=True, review=True, reviewer_proposer=_judge,
@@ -151,7 +155,7 @@ def test_a_plain_string_section_is_verified_too(tmp_path):
         _git(root, *a)
     _writer.done = False
 
-    report = execution_pipeline.run_pipeline(
+    report = _run_pipeline(
         task="убрать из README упоминание public/media",
         signals={"task_type": "QUICK"}, child_root=root, proposer=_writer,
         feature=WID, commit=True, review=True, reviewer_proposer=_judge,
@@ -179,7 +183,7 @@ def test_a_section_without_a_single_checkable_item_says_so(tmp_path):
         _git(root, *a)
     _writer.done = False
 
-    report = execution_pipeline.run_pipeline(
+    report = _run_pipeline(
         task="правка", signals={"task_type": "QUICK"}, child_root=root, proposer=_writer,
         feature=WID, commit=True, review=True, reviewer_proposer=_judge,
         install_deps=False, baseline_diff=False)
@@ -195,7 +199,7 @@ def test_without_a_judge_the_report_says_not_verified(repo):
     """Порядок и честность: нет судьи -> «не сверялись» с причиной, а не тишина и не «выполнено»."""
     _writer.done = False
 
-    report = execution_pipeline.run_pipeline(
+    report = _run_pipeline(
         task="убрать из README упоминание public/media",
         signals={"task_type": "QUICK"}, child_root=repo, proposer=_writer,
         feature=WID, commit=True, review=False, reviewer_proposer=None,
@@ -219,7 +223,7 @@ def test_criteria_are_verified_even_when_gate_review_is_off(repo):
     """
     _writer.done = False
 
-    report = execution_pipeline.run_pipeline(
+    report = _run_pipeline(
         task="убрать из README упоминание public/media",
         signals={"task_type": "QUICK"}, child_root=repo, proposer=_writer,
         feature=WID, commit=True, review=False, reviewer_proposer=_judge,
