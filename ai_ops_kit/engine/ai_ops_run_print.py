@@ -301,13 +301,14 @@ def print_human(r):
         if r.get("error"):
             print(f"  {r['error']}")
         return
-    print(f"ai-ops run → WorkItem {r['workitem_id']} [{r['status']}]")
     refusal = r.get("provider_refusal") or {}
+    blocked = ""
     if (isinstance(refusal, dict)
             and refusal.get("reason") == "readonly_runtime_unqualified"
             and refusal.get("provider") == "claude-cli"):
-        print(f"  {refusal['detail']}")
-        print(f"  продолжение со стадии {r.get('next_action')}; состояние: {r.get('run_state')}")
+        blocked = (f"\n  {refusal['detail']}"
+                   f"\n  продолжение со стадии {r.get('next_action')}; состояние: {r.get('run_state')}")
+    print(f"ai-ops run → WorkItem {r['workitem_id']} [{r['status']}]{blocked}")
     print(f"  base_workflow: {r['base_workflow']} · execution: {r['execution']} ({r['runtime']})")
     if r["required_tracks"]:
         print(f"  треки (required): {', '.join(r['required_tracks'])}")
