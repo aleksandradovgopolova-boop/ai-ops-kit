@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import socket
 import subprocess
@@ -98,7 +99,8 @@ def test_incomplete_window_export_does_not_write_or_change_consent(repo, tmp_pat
 
 def observe(root):
     rep = {"kind": "execution-pipeline", "provider": "test-live", "cost": {"calls": 1}}
-    a.observe_completed({"child_root": str(root), "report": rep})
+    a.observe_completed({"child_root": str(root), "report": rep,
+                         "timestamp": a._today() + "T00:00:00+00:00"})
     return rep
 
 
@@ -130,12 +132,19 @@ def test_uncommitted_id_is_not_accepted(repo):
         a.consent(repo, owner=True)
 
 
-def test_event_records_real_local_side_effect_once_per_day(repo):
+def test_event_records_real_local_side_effect_once_per_day(repo, monkeypatch):
     a.consent(repo, owner=True)
+    writes = []
+    original = a._write
+    def counted_write(path, doc):
+        writes.append(path)
+        return original(path, doc)
+    monkeypatch.setattr(a, "_write", counted_write)
     observe(repo)
     observe(repo)
     state = json.loads((a._store(repo) / "consent.json").read_text())
     assert state["days"] == [a._today()]
+    assert len(writes) == 1
     snap = a.snapshot(repo, *window())
     assert snap["installation"] == snap["activity"] == "observed"
 
@@ -143,7 +152,8 @@ def test_event_records_real_local_side_effect_once_per_day(repo):
 def test_subscribed_event_is_wired(repo):
     a.consent(repo, owner=True)
     rep = {"kind": "execution-pipeline", "provider": "test-live", "cost": {"calls": 1}}
-    emit("run_completed", {"child_root": str(repo), "report": rep})
+    emit("run_completed", {"child_root": str(repo), "report": rep,
+                           "timestamp": a._today() + "T00:00:00+00:00"})
     assert rep["adoption_observation"] == "recorded_locally"
     assert a.snapshot(repo, *window())["activity"] == "observed"
 
@@ -153,7 +163,8 @@ def test_subscribed_event_is_wired(repo):
     {"kind": "execution-pipeline", "provider": "live", "cost": {"calls": True}}])
 def test_preview_mock_missing_and_zero_calls_are_not_activity(repo, rep):
     a.consent(repo, owner=True)
-    a.observe_completed({"child_root": str(repo), "report": rep})
+    a.observe_completed({"child_root": str(repo), "report": rep,
+                         "timestamp": a._today() + "T00:00:00+00:00"})
     assert a.snapshot(repo, *window())["activity"] == "unknown"
 
 
@@ -162,6 +173,77 @@ def test_no_evidence_and_old_window_stay_unknown(repo):
     assert a.snapshot(repo, *window())["activity"] == "unknown"
     observe(repo)
     assert a.snapshot(repo, "2000-01-01", "2000-01-02")["activity"] == "unknown"
+
+
+def test_copied_old_event_does_not_refresh_local_activity(repo, monkeypatch):
+    monkeypatch.setattr(a, "_today", lambda: "2026-01-01")
+    a.consent(repo, owner=True)
+    rep = {"kind": "execution-pipeline", "provider": "test-live", "cost": {"calls": 1}}
+    event = {"child_root": str(repo), "report": rep, "timestamp": "2026-01-01T00:00:00+00:00"}
+    a.observe_completed(event)
+    state_path = a._store(repo) / "consent.json"
+    before = state_path.read_bytes()
+    monkeypatch.setattr(a, "_today", lambda: "2026-01-02")
+    a.observe_completed(dict(event, report=dict(rep)))
+    assert state_path.read_bytes() == before
+    assert a.snapshot(repo, "2026-01-02", "2026-01-02")["activity"] == "unknown"
+
+
+@pytest.mark.parametrize("stamp", [None, False, "", "not-a-date", "2026-01-02",
+    "2026-01-02T00:00:00", "2026-01-01T23:59:59Z", "2026-01-03T00:00:00Z",
+    "2026-01-02T13:00:00Z", "2026-01-02T01:00:00+03:00",
+    "0001-01-01T00:00:00+01:00", "9999-12-31T23:59:59-01:00"])
+def test_legacy_invalid_old_future_or_previous_utc_day_event_does_not_write(repo, monkeypatch, stamp):
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return datetime(2026, 1, 2, 12, tzinfo=timezone.utc).astimezone(tz)
+    monkeypatch.setattr(a, "datetime", Clock)
+    a.consent(repo, owner=True)
+    before = (a._store(repo) / "consent.json").read_bytes()
+    rep = {"kind": "execution-pipeline", "provider": "test-live", "cost": {"calls": 1}}
+    event = {"child_root": str(repo), "report": rep}
+    if stamp is not None:
+        event["timestamp"] = stamp
+    a.observe_completed(event)
+    assert rep["adoption_observation"] == "unavailable"
+    assert (a._store(repo) / "consent.json").read_bytes() == before
+    assert a.snapshot(repo, "2026-01-02", "2026-01-02")["activity"] == "unknown"
+
+
+def test_event_offset_uses_utc_day_not_local_calendar_day(repo, monkeypatch):
+    monkeypatch.setattr(a, "_today", lambda: "2026-01-02")
+    a.consent(repo, owner=True)
+    rep = {"kind": "execution-pipeline", "provider": "test-live", "cost": {"calls": 1}}
+    a.observe_completed({"child_root": str(repo), "report": rep,
+                         "timestamp": "2026-01-01T22:00:00-02:00"})
+    assert a._state(repo)["days"] == ["2026-01-02"]
+
+
+def test_real_kernel_finalizer_emits_source_time_to_adoption_subscriber(repo, monkeypatch, tmp_path):
+    from ai_ops_kit.engine import ai_ops_run_lifecycle as facade
+    from ai_ops_kit.engine import ai_ops_run_lifecycle_stages as stages
+    from ai_ops_kit.shared import events
+    a.consent(repo, owner=True)
+    monkeypatch.setattr(stages.active_work, "finish_cmd", lambda *a, **k: 0)
+    monkeypatch.setattr(stages._ls, "journal_append", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(stages._ls, "merge_bookkeeping_losses", lambda *a, **k: 0)
+    monkeypatch.setattr(facade, "_run_start_audience", lambda *a, **k: "technical")
+    received = []
+    events.subscribe("run_completed", received.append)
+    rep = {"kind": "execution-pipeline", "provider": "test-live", "cost": {"calls": 1},
+           "ready_for_pr": True}
+    before = datetime.now(timezone.utc)
+    try:
+        assert stages._finalize_run(rep, "fixture", repo, str(tmp_path / "journal"), "fixture#a1",
+                                    tmp_path / "active.yaml") is rep
+    finally:
+        events.unsubscribe("run_completed", received.append)
+    stamp = datetime.fromisoformat(received[0]["timestamp"])
+    assert before <= stamp <= datetime.now(timezone.utc)
+    assert stamp.utcoffset().total_seconds() == 0
+    assert rep["adoption_observation"] == "recorded_locally"
+    assert a._state(repo)["days"] == [stamp.date().isoformat()]
 
 
 def test_revoke_purges_days_and_stops_recording(repo):
