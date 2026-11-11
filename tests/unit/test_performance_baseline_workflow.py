@@ -136,3 +136,20 @@ def test_input_guard_refuses_non_full_sha(monkeypatch, sha):
     monkeypatch.setenv('SOURCE_SHA', sha)
     with pytest.raises(SystemExit):
         exec(compile(code, str(WORKFLOW), 'exec'), {})  # noqa: S102 — собственный checked-in guard
+
+
+def test_real_gate_reports_no_lease_without_inherited_lock(tmp_path):
+    """Workflow отказывает при потере lease; настоящая функция без унаследованного fd отвечает «нет».
+
+    Остальные сценарии подменяют `inherited_slot`. Здесь зовётся настоящая: одной переменной окружения
+    недостаточно, и fd чужого файла не засчитывается за блокировку.
+    """
+    lock = tmp_path / 'slot.lock'
+    lock.write_text('')
+    assert gate.inherited_slot(lock, environment={}) is None
+    other = tmp_path / 'other'
+    other.write_text('')
+    with other.open() as handle:
+        assert gate.inherited_slot(lock, environment={'AI_OPS_HOST_SLOT_FD': str(handle.fileno())}) is None
+    with lock.open() as handle:
+        assert gate.inherited_slot(lock, environment={'AI_OPS_HOST_SLOT_FD': str(handle.fileno())}) == handle.fileno()
