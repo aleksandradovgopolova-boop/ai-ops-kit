@@ -1,0 +1,13 @@
+{
+  "base": "f5adcab5714b84f92f9e97d70f25246b753362a2",
+  "source_sha256": [
+    "39b7081c3938e59dfcc2c524d0a884870a8cab68a84f4406c62f80ea2b0cbf4b",
+    "77f51649117a6e7f5e9fa16353ba1a47668ebf4be4564db7359a688d8325d995"
+  ],
+  "files": 1164,
+  "files_with_findings": 23,
+  "largest_ast_nodes": [
+    7237,
+    "tests/unit/test_parallel_live_dispatch.py"
+  ]
+}
