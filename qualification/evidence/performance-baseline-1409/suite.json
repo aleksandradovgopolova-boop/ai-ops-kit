@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "name": "runtime-cli-startup-help",
+      "domain": "runtime",
+      "command": [
+        "{python}",
+        "-m",
+        "ai_ops_kit.cli.entry",
+        "--help"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "name": "runtime-orchestrator-mock-startup",
+      "domain": "runtime",
+      "command": [
+        "{python}",
+        "-c",
+        "from ai_ops_kit.providers import orchestrator; orchestrator.make_provider('mock')"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "name": "runtime-preflight-assess",
+      "domain": "runtime",
+      "command": [
+        "{python}",
+        "-c",
+        "import tempfile; from ai_ops_kit.gates import preflight; root=tempfile.TemporaryDirectory(); preflight.assess({'task_type': 'ENGINEERING'}, root.name, 'bench-1409'); root.cleanup()"
+      ],
+      "timeout_seconds": 60
+    },
+    {
+      "name": "ci-replica-lint",
+      "domain": "ci",
+      "command": [
+        "{python}",
+        "-m",
+        "ruff",
+        "check",
+        "."
+      ],
+      "timeout_seconds": 120
+    },
+    {
+      "name": "ci-replica-critical-contracts",
+      "domain": "ci",
+      "command": [
+        "{python}",
+        "-m",
+        "pytest",
+        "tests/contracts/",
+        "-q",
+        "-m",
+        "critical_path",
+        "--tb=short"
+      ],
+      "timeout_seconds": 300
+    }
+  ]
+}

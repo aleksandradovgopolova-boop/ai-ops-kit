@@ -7,7 +7,11 @@ from __future__ import annotations
 
 import hashlib
 import contextlib
+import contextvars
+import errno
+import functools
 import json
+import math
 import os
 import signal
 import subprocess
@@ -17,7 +21,8 @@ from pathlib import Path
 
 import yaml
 
-from ai_ops_kit.shared import lifecycle_store
+from ai_ops_kit.shared import gitio, lifecycle_store
+from ai_ops_kit.lifecycle import session_migration_store
 
 MARKER = "ai-ops-kit:project-session"
 BEGIN = "<!-- AI-OPS-PROJECT-SESSION:BEGIN -->"
@@ -25,12 +30,67 @@ END = "<!-- AI-OPS-PROJECT-SESSION:END -->"
 POLICY = "templates/runtime/team-session.md"
 RUNTIMES = {"claude-code": ".claude/settings.json", "codex": ".codex/hooks.json"}
 EVENTS = ("SessionStart", "UserPromptSubmit", "Stop")
+HOOK_READ_SECONDS = 10  # внешний hook: 15 с; остаток — cleanup и ответ
+_read_deadline = contextvars.ContextVar("hook_read_deadline", default=None)
+_reading = contextvars.ContextVar("hook_reading", default=False)
+
+
+class HookReadInterrupted(BaseException):
+    """Не превращать deadline/cancel в пойманную ошибку binding и запись blocked."""
+
+
+@contextlib.contextmanager
+def hook_read_budget():
+    token = _read_deadline.set(time.monotonic() + HOOK_READ_SECONDS)
+    try:
+        yield
+    finally:
+        _read_deadline.reset(token)
+
+
+@contextlib.contextmanager
+def reading():
+    """Прерываемая read-only фаза; никогда не оборачивать durable mutation."""
+    deadline = _read_deadline.get()
+    if deadline is None or _reading.get():
+        yield
+        return
+    remaining = deadline - time.monotonic()
+    if remaining <= 0:
+        raise HookReadInterrupted("истёк общий бюджет чтения hook")
+    if signal.getitimer(signal.ITIMER_REAL) != (0.0, 0.0):
+        raise HookReadInterrupted("таймер чтения hook уже занят")
+    def interrupt(signum, frame):
+        raise HookReadInterrupted("чтение hook отменено" if signum == signal.SIGTERM
+                                  else "истёк общий бюджет чтения hook")
+    alarm = signal.signal(signal.SIGALRM, interrupt)
+    termination = signal.signal(signal.SIGTERM, interrupt)
+    token = _reading.set(True)
+    try:
+        signal.setitimer(signal.ITIMER_REAL, remaining)
+        yield
+        if time.monotonic() >= deadline:
+            raise HookReadInterrupted("истёк общий бюджет чтения hook")
+    finally:
+        signal.setitimer(signal.ITIMER_REAL, 0)
+        _reading.reset(token)
+        signal.signal(signal.SIGALRM, alarm)
+        signal.signal(signal.SIGTERM, termination)
+
+
+def read_phase(function):
+    @functools.wraps(function)
+    def call(*args, **kwargs):
+        with reading():
+            return function(*args, **kwargs)
+    return call
 
 
 def digest(data):
     return hashlib.sha256(data if isinstance(data, bytes) else data.encode()).hexdigest()
 
 
+@read_phase
 def within(root, relative):
     path = Path(root) / relative
     if not path.resolve().is_relative_to(Path(root).resolve()):
@@ -38,14 +98,15 @@ def within(root, relative):
     return path
 
 
+@read_phase
 def git(root, *args):
-    proc = subprocess.run(["git", "-C", str(root), *args], capture_output=True,
-                          text=True, timeout=10, check=False)
+    proc = gitio.raw_group(["-C", str(root), *args], timeout=10)
     if proc.returncode:
         raise ValueError(f"git {' '.join(args)} недоступен: {proc.stderr.strip()[:200]}")
     return proc.stdout.removesuffix("\n")
 
 
+@read_phase
 def project_root(cwd):
     return Path(git(Path(cwd), "rev-parse", "--show-toplevel")).resolve()
 
@@ -68,16 +129,22 @@ def instruction_block():
             f"{END}\n")
 
 
-def configuration_problems(root):
+def _read_path(root, relative, before_read=None):
+    if before_read:
+        before_read(Path(root) / relative)
+    return within(root, relative)
+
+
+def configuration_problems(root, *, before_read=None):
     root = Path(root)
     problems = []
     for name in ("AGENTS.md", "CLAUDE.md"):
-        path = within(root, name)
+        path = _read_path(root, name, before_read)
         if not path.is_file() or instruction_block() not in path.read_text(encoding="utf-8"):
             problems.append(f"{name}: общий проектный вход отсутствует или изменён")
     for runtime, relative in RUNTIMES.items():
         try:
-            doc = json.loads(within(root, relative).read_text(encoding="utf-8"))
+            doc = json.loads(_read_path(root, relative, before_read).read_text(encoding="utf-8"))
             if doc.get("disableAllHooks") is True:
                 problems.append(f"{relative}: хуки отключены")
             for event in EVENTS:
@@ -88,12 +155,13 @@ def configuration_problems(root):
     return problems
 
 
+@read_phase
 def required(root):
     cfg = yaml.safe_load(within(root, ".ai-ops.yaml").read_text(encoding="utf-8"))
     return isinstance(cfg, dict) and (cfg.get("standard") or {}).get("team_session") == "required"
 
 
-def source_digest(root, feature=None):
+def source_digest(root, feature=None, *, before_read=None):
     ignored = (".ai/runtime/", ".ai/generated/", ".ai/usage/", ".ai/managed/", ".ai/worktrees/")
     if feature:
         ignored += (f"features/{feature}/",)
@@ -102,7 +170,7 @@ def source_digest(root, feature=None):
     for relative in sorted(set(files)):
         if not relative or relative.startswith(ignored):
             continue
-        path = within(root, relative)
+        path = _read_path(root, relative, before_read)
         values[relative] = (digest(path.read_bytes()), path.stat().st_mode & 0o111) if path.is_file() else None
     return digest(json.dumps(values, sort_keys=True))
 
@@ -115,21 +183,26 @@ def require_checked_tree(root, feature):
         raise ValueError("содержимое результата не соответствует проверенной revision: рабочая копия изменена")
 
 
-def binding(root, feature=None):
+@read_phase
+def binding(root, feature=None, *, before_read=None):
     root = project_root(root)
     managed = within(root, ".ai/managed")
-    cfg = yaml.safe_load(within(root, ".ai-ops.yaml").read_text(encoding="utf-8"))
-    version = within(managed, "VERSION").read_text(encoding="utf-8").strip()
+    cfg = yaml.safe_load(_read_path(root, ".ai-ops.yaml", before_read).read_text(encoding="utf-8"))
+    version = _read_path(managed, "VERSION", before_read).read_text(encoding="utf-8").strip()
     if not isinstance(cfg, dict) or (cfg.get("parent") or {}).get("installed_version") != version:
         raise ValueError("версия managed не совпадает с .ai-ops.yaml; нужен штатный update")
     if not os.access(within(root, "ai-ops"), os.X_OK):
         raise ValueError("точка входа ./ai-ops отсутствует или не исполняется")
-    problems = configuration_problems(root)
+    problems = configuration_problems(root, before_read=before_read)
     if problems:
         raise ValueError("; ".join(problems))
     # Хэш всего managed включает политику и её реализацию; не только номер версии.
     checksums = {}
+    if before_read:
+        before_read(managed)
     for p in sorted(managed.rglob("*")):
+        if before_read:
+            before_read(p)
         if p.is_file() and "__pycache__" not in p.parts and p.suffix != ".pyc":
             relative = p.relative_to(managed).as_posix()
             checksums[relative] = digest(within(managed, relative).read_bytes())
@@ -138,8 +211,8 @@ def binding(root, feature=None):
     return {"root": str(root), "head": git(root, "rev-parse", "HEAD"),
             "branch": git(root, "rev-parse", "--abbrev-ref", "HEAD"),
             "version": version, "managed_sha256": digest(json.dumps(checksums, sort_keys=True)),
-            "config_sha256": digest((root / ".ai-ops.yaml").read_bytes()),
-            "source_sha256": source_digest(root, feature)}
+            "config_sha256": digest(_read_path(root, ".ai-ops.yaml", before_read).read_bytes()),
+            "source_sha256": source_digest(root, feature, before_read=before_read)}
 
 
 def session_dir(root, runtime, session):
@@ -174,6 +247,7 @@ def session_lock(path):
             fcntl.flock(handle, fcntl.LOCK_UN)
 
 
+@session_migration_store.guarded
 def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=None):
     root = project_root(root)
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 131072:
@@ -184,6 +258,21 @@ def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=N
 
 
 def _begin(root, runtime, session, prompt, turn, directory, continuation_validator):
+    with reading():
+        task, fresh, receipt = _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator)
+    if receipt:
+        path, payload = receipt
+        result = lifecycle_store.durable_create_batch(directory, {str(path.relative_to(directory)): payload})
+        if not result.get("ok"):
+            raise ValueError("не удалось сохранить immutable пользовательский ввод: " + str(result.get("error")))
+    if fresh or receipt:
+        write(directory / (task["request_id"] + ".json"), task)
+    if fresh:
+        write(directory / "active.json", {"request_id": task["request_id"]})
+    return task
+
+
+def _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator):
     if turn is not None and (not isinstance(turn, str) or not turn.strip() or len(turn) > 1024):
         raise ValueError("неверный turn_id")
     # Идентичность события, не текст: одинаковые новые запросы остаются разными.
@@ -197,19 +286,19 @@ def _begin(root, runtime, session, prompt, turn, directory, continuation_validat
         if task.get("status") == "accepted" or task.get("input_latest") != request or continuation_validator is None:
             raise ValueError("поздний повтор пользовательского ввода не является новым запросом")
         continuation_validator(root, runtime, session, task)
-        return task
+        return task, False, None
     previous = directory / f"{request}.json"
     if previous.exists():
         task = load(root, runtime, session)
         if (task["request_id"] != request or task.get("turn_id") != turn or task.get("prompt") != prompt
                 or task.get("input_latest")):
             raise ValueError("повтор события не совпадает с активной постановкой; сохранённые задачи не изменены")
-        return task
+        return task, False, None
     if (directory / "active.json").exists():
         active = load(root, runtime, session)
         claim = directory / (active["request_id"] + ".execution-claim")
         if active.get("status") != "accepted" and (claim.exists() or claim.is_symlink() or active.get("status") != "pending"
-                or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation"))):
+                or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation", "state_migration"))):
             if continuation_validator is None:
                 raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
             continuation_validator(root, runtime, session, active)
@@ -217,27 +306,19 @@ def _begin(root, runtime, session, prompt, turn, directory, continuation_validat
             relative = str(path.relative_to(root))
             if git(root, "ls-files", "--", relative) or not git(root, "check-ignore", "--", relative):
                 raise ValueError("пользовательский ввод требует ignored runtime path вне публичного Git")
-            result = lifecycle_store.durable_create_batch(directory, {
-                str(path.relative_to(directory)): json.dumps(input_receipt(active, prompt, turn, request),
-                                                            ensure_ascii=False, indent=2)})
-            if not result.get("ok"):
-                raise ValueError("не удалось сохранить immutable пользовательский ввод: " + str(result.get("error")))
-            active.setdefault("input_receipts", {})[str(path.relative_to(root))] = digest(path.read_bytes())
+            payload = json.dumps(input_receipt(active, prompt, turn, request), ensure_ascii=False, indent=2)
+            active.setdefault("input_receipts", {})[relative] = digest(payload)
             active.setdefault("input_events", []).append(relative)
             active["input_latest"] = request
-            write(directory / (active["request_id"] + ".json"), active)
-            return active
+            return active, False, (path, payload)
     task = {"schema_version": 1, "request_id": request, "session_id": session,
             "runtime": runtime, "turn_id": turn, "prompt": prompt, "status": "pending"}
-    # Постановка сохраняется ДО диагностики, в том числе при повреждённой установке.
-    write(directory / f"{request}.json", task)
-    write(directory / "active.json", {"request_id": request})
+    # Диагностика повреждения по-прежнему сохраняется; timeout не оставляет полупостановку.
     try:
         task["binding"] = binding(root, "session-" + request)
     except (OSError, ValueError, yaml.YAMLError) as exc:
         task.update(status="blocked", blocker=str(exc), next_step="Восстановить установку штатным update и повторить задачу.")
-    write(directory / f"{request}.json", task)
-    return task
+    return task, True, None
 
 
 def input_receipt(task, prompt, turn, event):
@@ -260,12 +341,44 @@ def termination_guard():
         signal.signal(signal.SIGTERM, previous)
 
 
-def run_process(command, root, directory, *, timeout=300, progress=None):
+def _process_timeout(timeout):
+    if isinstance(timeout, bool) or not isinstance(timeout, (int, float)):
+        raise ValueError("timeout процесса должен быть конечным положительным числом")
+    try:
+        seconds = float(timeout)
+    except OverflowError as exc:
+        raise ValueError("timeout процесса слишком велик") from exc
+    if not math.isfinite(seconds) or seconds <= 0:
+        raise ValueError("timeout процесса должен быть конечным положительным числом")
+    return seconds
+
+
+def run_process(command, root, directory, *, timeout=300, progress=None, env=None):
     """Ограниченный процесс с видимым прогрессом и диагностикой на диске."""
+    timeout = _process_timeout(timeout)
     stdout, stderr = directory / "process.stdout.log", directory / "process.stderr.log"
     started = time.monotonic()
     with stdout.open("wb") as out, stderr.open("wb") as err, termination_guard():
-        with subprocess.Popen(command, cwd=root, stdout=out, stderr=err, start_new_session=True) as process:
+        for attempt in range(2):
+            remaining = timeout - (time.monotonic() - started)
+            if remaining <= 0:
+                raise subprocess.TimeoutExpired(command, timeout)
+            try:
+                process = subprocess.Popen(command, cwd=root, stdout=out, stderr=err,
+                                           start_new_session=True, env=env)
+                break
+            except OSError as exc:
+                # Только отказ создания/exec ДО возврата Popen; ни wait, ни exit,
+                # ни неизвестный исход уже запущенного процесса сюда не попадают.
+                if attempt or exc.errno not in (errno.EAGAIN, errno.ETXTBSY):
+                    raise
+                message = f"AI Ops: запуск не состоялся (errno={exc.errno}); одна повторная попытка"
+                err.write((message + "\n").encode())
+                err.flush()
+                if progress:
+                    progress(message)
+                time.sleep(min(0.1, max(0, timeout - (time.monotonic() - started))))
+        with process:
             try:
                 while True:
                     if progress:
@@ -295,7 +408,9 @@ def run_process(command, root, directory, *, timeout=300, progress=None):
     return subprocess.CompletedProcess(command, code, *tails)
 
 
+@read_phase
 def load(root, runtime, session):
+    session_migration_store.incomplete(root)
     directory = session_dir(root, runtime, session)
     active = json.loads((directory / "active.json").read_text(encoding="utf-8"))
     request = active["request_id"]
@@ -307,11 +422,14 @@ def load(root, runtime, session):
     return task
 
 
-def artifact_inputs(root, fid):
+@read_phase
+def artifact_inputs(root, fid, *, before_read=None):
     """Полный состав артефактов, включая ignored и отсутствие будущих файлов."""
     files = {}
     for relative in (f"features/{fid}", f".ai/runplan/{fid}", f"openspec/changes/{fid}"):
-        for path in within(root, relative).rglob("*"):
+        for path in _read_path(root, relative, before_read).rglob("*"):
+            if before_read:
+                before_read(path)
             if path.is_symlink():
                 raise ValueError("симлинк в артефактах текущей задачи не подтверждён")
             if path.is_file():
@@ -319,12 +437,14 @@ def artifact_inputs(root, fid):
                 files[key] = digest(within(root, key).read_bytes())
     request = fid.removeprefix("session-")
     inputs = {}
-    for directory in within(root, ".ai/runtime/sessions").glob(f"project-*/{request}.inputs"):
+    for directory in _read_path(root, ".ai/runtime/sessions", before_read).glob(f"project-*/{request}.inputs"):
         if directory.is_symlink() or directory.parent.is_symlink():
             raise ValueError("симлинк в пользовательском вводе не подтверждён")
         if git(root, "ls-files", "--", str(directory.relative_to(root))):
             raise ValueError("пользовательский ввод попал в публичный Git")
         for path in directory.rglob("*"):
+            if before_read:
+                before_read(path)
             if path.is_symlink() or not path.is_file():
                 raise ValueError("неверный файл пользовательского ввода")
             relative = str(path.relative_to(root))
@@ -344,13 +464,15 @@ def artifact_inputs(root, fid):
     return files
 
 
+@session_migration_store.guarded
 def verify(root, runtime, session):
     with session_lock(session_dir(root, runtime, session) / "requests"):
         return _verify(root, runtime, session)
 
 
-def _verify(root, runtime, session):
-    task = load(root, runtime, session)
+@read_phase
+def _verify(root, runtime, session, *, task=None):
+    task = load(root, runtime, session) if task is None else task
     current = binding(root, "session-" + task["request_id"])
     receipt = task.get("execution") or {}
     expected = receipt.get("completion_binding") or task.get("binding")
@@ -401,6 +523,7 @@ def pending(root, runtime, session):
     return task
 
 
+@session_migration_store.guarded
 def save_preparation(root, runtime, session, request, preparation, reason=None):
     with session_lock(session_dir(root, runtime, session) / "requests"):
         task = pending(root, runtime, session)
@@ -416,6 +539,7 @@ def save_preparation(root, runtime, session, request, preparation, reason=None):
         return task
 
 
+@session_migration_store.guarded
 def save_intake(root, runtime, session, request, signals, missing, *, autonomous=False):
     """Факт реально запрошенных CLI данных, не догадка по пользовательскому тексту."""
     directory = session_dir(root, runtime, session)
@@ -429,6 +553,7 @@ def save_intake(root, runtime, session, request, signals, missing, *, autonomous
     return task
 
 
+@session_migration_store.guarded
 def claim_execution(root, runtime, session, task, execution, next_step=None):
     """Активный запрос и claim фиксируются под тем же lock, что новый submit."""
     directory = session_dir(root, runtime, session)
@@ -436,6 +561,8 @@ def claim_execution(root, runtime, session, task, execution, next_step=None):
         current = pending(root, runtime, session)
         if current["request_id"] != task["request_id"]:
             raise ValueError("активная постановка сменилась перед claim")
+        if current.get("binding") != task.get("binding"):
+            raise ValueError("binding изменена после чтения постановки; перечитай сохранённое состояние")
         claim = directory / (task["request_id"] + ".execution-claim")
         descriptor = os.open(claim, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
         os.close(descriptor)
@@ -448,8 +575,10 @@ def claim_execution(root, runtime, session, task, execution, next_step=None):
     return task
 
 
+@session_migration_store.guarded
 def execute(root, runtime, session, signals, *, provider=None, request=None, timeout=300, progress=None):
     """Запустить существующий фасад с теми же guards и единственной execution-claim."""
+    timeout = _process_timeout(timeout)
     root = project_root(root)
     task = pending(root, runtime, session)
     if request is not None and task["request_id"] != request:
@@ -462,13 +591,21 @@ def execute(root, runtime, session, signals, *, provider=None, request=None, tim
         if current["request_id"] != task["request_id"]:
             raise ValueError("активная постановка сменилась во время native readiness; исполнение не начато")
         task = current
+        akey = f"codex-not-ready:{task['request_id']}"
+        from ai_ops_kit.lifecycle import attention_bus as _ab  # #1434: Codex-застревание → inbox
         if not readiness["ready"]:
             readiness["signals"] = dict(signals)
             task.update(provider_preparation=readiness, blocker=readiness["reason"],
                         next_step=readiness["next_step"])
             write(session_dir(root, runtime, session) / f"{task['request_id']}.json", task)
+            with contextlib.suppress(Exception):   # fail-safe
+                _ab.record(root, key=akey, source="запуск Codex",
+                           reason=f"Codex не готов: {readiness['reason']}. Шаг: {readiness['next_step']}",
+                           kind=_ab.BLOCKED, work_id=task["request_id"])
             return task
         task.update(provider_preparation=dict(readiness, signals=dict(signals)), blocker=None, next_step=None)
+        with contextlib.suppress(Exception):       # снова готов — снять повод
+            _ab.resolve(root, akey)
     fid = "session-" + task["request_id"]
     report_path = within(root, f"features/{fid}/run-report.json")
     command = [str(root / "ai-ops"), "run", task["prompt"], str(root), "--execute",

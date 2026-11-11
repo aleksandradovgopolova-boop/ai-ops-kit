@@ -127,7 +127,10 @@ def _review_cites_delivered_file(res, delivered, work_root) -> bool:
     for c in res.get("checks") or []:
         if not isinstance(c, dict):
             continue
-        for ev in c.get("evidence") or []:
+        evidence = c.get("evidence") or []
+        if isinstance(evidence, dict):
+            evidence = [evidence]  # опубликованная одиночная форма reviewer-result
+        for ev in evidence:
             f = ev.get("file") if isinstance(ev, dict) else None
             if not f or f.strip().lstrip("./") not in delivered:
                 continue
