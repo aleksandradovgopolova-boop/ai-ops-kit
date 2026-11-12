@@ -6,24 +6,30 @@
 стережёт, чтобы ассеты не растеряли ключевые гарантии jail'а: если кто-то уберёт `--cap-drop`,
 `--read-only`, лимиты или non-root — тест упадёт (декларация проверяется, как везде в ките).
 
-ЧЕСТНО: валидатор проверяет маркеры изоляции и статический контракт запуска (COPY, import root,
-последний ENTRYPOINT, наличие файла модуля в build context), а не поднимает контейнер.
-Сборку/запуск образа выполняет Docker-хост пользователя (в CI-песочнице кита pull базового образа
-может быть закрыт egress-прокси).
+ЧЕСТНО: режим по умолчанию проверяет маркеры изоляции и статический контракт запуска (COPY, import
+root, последний ENTRYPOINT, наличие файла модуля в build context), а не поднимает контейнер.
+Сборку и запуск образа делает отдельный режим `--image-smoke` (CI container-smoke через pytest): образ
+собирается из `git archive HEAD`, штатный ENTRYPOINT отвечает на `--help` без сети и модели, а
+launch target в образе сверяется по sha256 с коммитом. Нет Docker — честный BLOCKED (код 2), не
+успех. Реальные свойства изоляции (ФС/сеть/UID) этот smoke НЕ доказывает — это #1407.
 
 Использование:
   validate_container_assets.py            # проверить поставляемые containers/*
   validate_container_assets.py --runtime-floor  # фактические версии внутри build; stdlib-only
-Возврат 0 — ок, 1 — ошибки.
+  validate_container_assets.py --image-smoke    # собрать и запустить образ на коммите HEAD
+Возврат 0 — ок, 1 — ошибки, 2 — проверка не исполнена (BLOCKED).
 """
 from __future__ import annotations
 
 import sys
+import hashlib
 import json
 import shlex
+import shutil
 import re
 import posixpath
 import subprocess
+import tempfile
 from pathlib import Path
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
@@ -31,6 +37,14 @@ PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is
 REFERENCE_BASE = "node:22-trixie-slim"
 REFERENCE_NODE_MAJOR = 22
 RUNTIME_CHECK = ["python3", "/opt/ai-ops-kit/ai_ops_kit/validation/validate_container_assets.py", "--runtime-floor"]
+LAUNCH_TARGET = "ai_ops_kit/engine/ai_ops_run.py"
+REVISION_LABEL = "org.opencontainers.image.revision"
+# Smoke-запуск: без сети, read-only root, без capabilities — модель и host mounts недоступны.
+SMOKE_RUN_FLAGS = ["--rm", "--network", "none", "--read-only", "--tmpfs", "/tmp",
+                   "--cap-drop", "ALL", "--security-opt", "no-new-privileges"]
+# Находит модуль ENTRYPOINT тем же import root, НЕ исполняя его, и печатает путь + sha256.
+TARGET_PROBE = ("import hashlib, importlib.util as u; s = u.find_spec('ai_ops_kit.engine.ai_ops_run'); "
+                "print(s.origin); print(hashlib.sha256(open(s.origin, 'rb').read()).hexdigest())")
 # Обязательные маркеры (что гарантирует каждый ассет).
 DOCKERFILE_REQUIRED = {
     "FROM ": "базовый образ",
@@ -273,9 +287,105 @@ def check_assets(root=PKG):
     return errors
 
 
+def _docker(args, timeout, stdin=None):
+    return subprocess.run(["docker", *args], stdin=stdin, capture_output=True, text=True,
+                          timeout=timeout, check=False)
+
+
+def _docker_blocker():
+    """Причина, по которой smoke НЕ исполним (нет docker/демона); None — можно исполнять."""
+    if shutil.which("docker") is None:
+        return "docker не найден в PATH"
+    try:
+        probe = _docker(["info", "--format", "{{.ServerVersion}}"], timeout=30)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return f"docker info не выполнен: {exc}"
+    if probe.returncode != 0:
+        return f"Docker-демон недоступен: {(probe.stderr or probe.stdout).strip()[-300:]}"
+    return None
+
+
+def _commit_source(root):
+    """(ревизия HEAD, sha256 launch target в ЭТОМ коммите) или текст ошибки."""
+    git = ["git", "-C", str(root)]
+    try:
+        rev = subprocess.run([*git, "rev-parse", "--verify", "HEAD^{commit}"], capture_output=True,
+                             text=True, timeout=30, check=True).stdout.strip()
+        blob = subprocess.run([*git, "show", f"{rev}:{LAUNCH_TARGET}"], capture_output=True,
+                              timeout=30, check=True).stdout
+    except (OSError, subprocess.SubprocessError) as exc:
+        return None, f"нет launch target {LAUNCH_TARGET} в коммите HEAD или нет git-ревизии: {exc}"
+    return (rev, hashlib.sha256(blob).hexdigest()), None
+
+
+def _build_from_commit(root, rev, tag):
+    """Сборка из `git archive` ревизии: незакоммиченные правки в образ не попадают."""
+    with tempfile.TemporaryDirectory() as tmp:
+        context = Path(tmp) / "context.tar"
+        subprocess.run(["git", "-C", str(root), "archive", "--format=tar", "-o", str(context), rev],
+                       capture_output=True, timeout=120, check=True)
+        with context.open("rb") as stdin:
+            built = _docker(["build", "-q", "-f", "containers/Dockerfile", "-t", tag,
+                             "--label", f"{REVISION_LABEL}={rev}", "-"], timeout=1800, stdin=stdin)
+    if built.returncode != 0:
+        return [f"сборка образа упала (rc={built.returncode}): {built.stderr.strip()[-800:]}"]
+    return []
+
+
+def _check_built_image(tag, rev, target_sha):
+    errors = []
+    label = _docker(["image", "inspect", "--format", f'{{{{index .Config.Labels "{REVISION_LABEL}"}}}}',
+                     tag], timeout=60).stdout.strip()
+    if label != rev:
+        errors.append(f"образ помечен ревизией {label!r}, ожидалась {rev}")
+    helped = _docker(["run", *SMOKE_RUN_FLAGS, tag, "--help"], timeout=120)
+    if helped.returncode != 0 or "usage:" not in helped.stdout:
+        errors.append(f"штатный ENTRYPOINT --help не ответил (rc={helped.returncode}): "
+                      f"{(helped.stderr or helped.stdout).strip()[-800:]}")
+    probe = _docker(["run", *SMOKE_RUN_FLAGS, "--entrypoint", "python3", tag, "-P", "-c", TARGET_PROBE],
+                    timeout=120)
+    lines = probe.stdout.split()
+    expected = [f"/opt/ai-ops-kit/{LAUNCH_TARGET}", target_sha]
+    if probe.returncode != 0 or lines != expected:
+        errors.append(f"launch target в образе не совпадает с коммитом: ожидалось {expected}, "
+                      f"получено {lines or probe.stderr.strip()[-300:]}")
+    return errors
+
+
+def image_smoke(root=PKG):
+    """No-model smoke образа на точном коммите. Возврат (код, строки): 0 ок, 1 провал, 2 BLOCKED."""
+    blocker = _docker_blocker()
+    if blocker:
+        return 2, [f"CONTAINER-IMAGE-SMOKE: BLOCKED — {blocker}. Образ не собирался; это не успех."]
+    source, error = _commit_source(root)
+    if error:
+        return 1, ["CONTAINER-IMAGE-SMOKE: ошибки:", f"  - {error}"]
+    rev, target_sha = source
+    tag = f"ai-ops-engine:smoke-{rev[:12]}"
+    try:
+        errors = _build_from_commit(root, rev, tag) or _check_built_image(tag, rev, target_sha)
+    except (OSError, subprocess.SubprocessError) as exc:
+        errors = [f"smoke не завершён: {exc}"]
+    finally:
+        try:
+            removed = _docker(["image", "rm", "-f", tag], timeout=120).returncode == 0
+        except (OSError, subprocess.SubprocessError):
+            removed = False
+    leftover = [] if removed else [f"ВНИМАНИЕ: образ {tag} не удалён — docker image rm {tag}"]
+    if errors:
+        return 1, ["CONTAINER-IMAGE-SMOKE: ошибки:", *(f"  - {e}" for e in errors), *leftover]
+    return 0, [f"CONTAINER-IMAGE-SMOKE-OK: образ собран из коммита {rev}; штатный ENTRYPOINT ответил "
+               "на --help без сети и модели; launch target в образе совпадает с коммитом. "
+               "Изоляция ФС/сети/UID НЕ проверена (#1407).", *leftover]
+
+
 def main(argv):
     if argv == ["--runtime-floor"]:
         return _runtime_main()
+    if argv == ["--image-smoke"]:
+        code, lines = image_smoke()
+        print("\n".join(lines))
+        return code
     errs = check_assets()
     if errs:
         print("CONTAINER-ASSETS: ошибки:")

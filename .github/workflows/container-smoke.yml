@@ -1,0 +1,36 @@
+# No-model smoke эталонного образа (#1478): собрать containers/Dockerfile из ТОЧНОГО коммита и
+# запустить штатный ENTRYPOINT без сети и модели. Статический validate_container_assets.py читает
+# только текст Dockerfile и сборку не доказывает — это делает этот прогон.
+# Изоляцию (ФС/сеть/UID) он НЕ квалифицирует — это #1407. В обязательные проверки ветки не входит:
+# сделать его обязательным — решение владельца.
+name: container-smoke
+on:
+  pull_request:
+    paths: ['containers/**', 'ai_ops_kit/**', 'pyproject.toml', '.dockerignore', '.github/workflows/container-smoke.yml']
+  push:
+    branches: [main]
+    paths: ['containers/**', 'ai_ops_kit/**', 'pyproject.toml', '.dockerignore', '.github/workflows/container-smoke.yml']
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: container-smoke-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  image-smoke:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version-file: .python-version}
+      - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'hypothesis==6.*'
+      # Проверка идёт через pytest (инвариант кита). Признак «smoke запущен» ставит ТОТ, КТО ЗОВЁТ:
+      # с ним отсутствие Docker (BLOCKED) — провал, а не skip; на ubuntu-раннере Docker обязан быть.
+      - name: Собрать образ из коммита и запустить CLI без сети и модели
+        env:
+          AI_OPS_IMAGE_SMOKE: "1"
+        run: python3 -m pytest tests/integration/test_reference_image_smoke.py -v -s --tb=short

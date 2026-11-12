@@ -91,7 +91,7 @@ host-слой вне контейнера, а модели токен с пра�
 | Конфигурация | Python | Node | Статус доказательства |
 |---|---|---|---|
 | Старый `node:22-slim` / bookworm, entrypoint head `74ccc063` | Фактически 3.11.2, ниже пола | 22.x | Только build/CLI `--help` PASS; supported-runtime FAIL |
-| Новый `node:22-trixie-slim` / Debian 13 | Ожидается 3.13 из Debian; фактическая версия обязана удовлетворять `pyproject.toml` | Сохраняется 22.x | Код и fixtures подготовлены; image pull/build/start **NOT_RUN**, требуется отдельное разрешение |
+| Новый `node:22-trixie-slim` / Debian 13 | Фактически 3.13.5 (локальная сборка linux/arm64, PR #1490) | 22.23.4 | Build/CLI `--help` PASS локально; на каждом изменении — CI `container-smoke` (linux/amd64) |
 | Существующий CI `pipeline-e2e` | 3.12 и 3.13 | Не квалифицирует образ | Матрица CI не меняется; её успешность на новом head требуется отдельно |
 
 Новый Dockerfile сначала ставит Python из штатного Debian-репозитория, копирует кит и выполняет
@@ -106,11 +106,15 @@ PyYAML/OpenSpec; `npm_config_engine_strict=true` запрещает проигн
 основан на Debian trixie; [пакет Python в Debian trixie](https://packages.debian.org/trixie/python3)
 имеет версию 3.13. [OpenSpec 1.6.0](https://raw.githubusercontent.com/Fission-AI/OpenSpec/v1.6.0/package.json)
 объявляет Node >=20.19; выбранная ветка 22 удовлетворяет этому ограничению. Это данные upstream,
-а не локальная квалификация нового образа; фактические версии нужно записать после разрешённой сборки.
+а не квалификация образа; фактические версии записаны в матрице выше.
 
 Статический `CONTAINER-ASSETS-OK` подтверждает наличие launch/runtime-check контракта и маркеров
 jail-флагов. `CONTAINER-RUNTIME-VERSIONS-OK` подтверждает только версии в исполнившей проверку
 среде. Проверки версий и справки не доказывают изоляцию агента: policy enforcement, не security isolation.
-Ни один из них не заменяет no-model image build/start на точном новом head. Реальные
+Ни один из них не заменяет no-model image build/start на точном новом head — это делает
+`validate_container_assets.py --image-smoke` (CI-workflow `container-smoke`): образ собирается из
+`git archive` коммита, штатный ENTRYPOINT отвечает на `--help` без сети и модели, а файл точки
+входа в образе сверяется с коммитом по sha256. Без Docker результат — BLOCKED (код 2), а не успех.
+Этот smoke тоже не доказывает изоляцию. Реальные
 model/MCP injection, redaction/exfil и sandbox negatives (network/FS/mount/UID/timeouts/Docker
 отказ) остаются открытыми в [#1407](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/issues/1407).
