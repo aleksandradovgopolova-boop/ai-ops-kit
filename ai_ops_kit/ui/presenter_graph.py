@@ -133,6 +133,8 @@ def _scorecard_line(m: dict) -> str:
 
     Инвариант карты «честность превыше полноты»: неизмеренное печатается «не измерено — причина», а не
     нулём и не выдуманным числом. Един для пяти метрик и для показателя «ценность для дочки»."""
+    if m.get("measured") and m.get("unit") == "count":
+        return f"• {m.get('title')}: {m.get('value')} ({m.get('detail')})"
     if m.get("measured"):
         pct = round((m.get("value") or 0) * 100)
         return f"• {m.get('title')}: {pct}% ({m.get('numerator')}/{m.get('denominator')})"
@@ -157,6 +159,10 @@ def from_scorecard(scorecard: dict) -> dict:
     if isinstance(cv, dict) and cv.get("title"):
         summary += ("\nСтрелка «работа кита → исход дочки» (доказана ли ценность для дочек):\n"
                     + _scorecard_line(cv))
+    # Успевает ли проверка за генерацией (#1514): строка карты из частей, не блокирующая проверка.
+    pace = scorecard.get("verification_pace")
+    if isinstance(pace, dict) and pace.get("parts"):
+        summary += f"\n{pace.get('title')}:\n" + "\n".join(_scorecard_line(p) for p in pace["parts"])
     if scorecard.get("unmeasured_count"):
         status = "degraded"
         headline = f"Карта продукта: измерено честно {measured} из {total} метрик"
