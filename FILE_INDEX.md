@@ -719,6 +719,8 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/providers/model_router.py` — provider-neutral resolver роль->cheapest-qualified + **complexity-aware `writer_tier`** (класс задачи -> сильный/дешёвый writer, v3.9.0)
 - `ai_ops_kit/engops/commit_policy.py` — CommitContract: смешение зон кит/продукт, артефакты прогонов, запрещённые файлы, секрет в сообщении, protected_paths без approval (v3.19.0)
 - `ai_ops_kit/engops/branch_policy.py` — BranchContract: защищённые ветки (доставка только PR), имя ветки прогона, **отставание базы** и рассинхрон базы с upstream; unavailable != 0 (v3.19.0)
+- `ai_ops_kit/checks/code_duplication.py` — ядро поиска структурных дублей функций (CODE-003): одно для ратчета кита, онбординга и проверки проекта; база заморозки, охват языков (#827, #1512)
+- `ai_ops_kit/validation/validate_code_duplication.py` — дубли функций В ПРОЕКТЕ: новая группа сверх `.ai/project/code-duplication-baseline.yaml`, без Python — «не проверяется»; шаг child-CI advisory (#1512)
 - `ai_ops_kit/checks/environment_map.py` — read-only карта окружений: объявлено vs обнаружено (CI environment, .env.<name>); detected_not_declared/declared_not_detected; секреты ТОЛЬКО именами (v3.20.0)
 - `ai_ops_kit/gates/deploy_readiness.py` — честная зрелость поставки absent/configured/runnable/verified; без объявленного отката verified недостижим; платформенная поставка = путь вне репозитория (v3.20.0)
 - `ai_ops_kit/gates/economic_preflight.py` — граница расхода ДО tool loop: оценка по истории usage_ledger против лимитов RunPlan; решение по худшему прогону; нет истории = unavailable, не ноль (v3.21.0)

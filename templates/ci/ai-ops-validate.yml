@@ -102,6 +102,14 @@ jobs:
             --base "${{ github.event.pull_request.base.sha }}" \
             --defaults "$RUNNER_TEMP"/ai-ops-kit/registry/coordination-files.yaml \
             --strict
+      # Дубли функций (CODE-003, #1512): новая группа структурно-одинаковых функций сверх базы
+      # `.ai/project/code-duplication-baseline.yaml`. ADVISORY: `continue-on-error` — находка видна
+      # (жёлтый шаг с адресами), но PR не роняет и в день обновления проект не краснеет. Базы ещё нет —
+      # шаг перечисляет найденное и называет команду заморозки; кода на Python нет — «не проверяется».
+      # Сделать блокирующим — убрать `continue-on-error`, когда поток ложных на вашем коде нулевой.
+      - name: Дубли функций (CODE-003, advisory)
+        continue-on-error: true
+        run: python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/validation/validate_code_duplication.py --child-root .
       # ─── ЧАСТЬ 2: СООТВЕТСТВИЕ ПРОДУКТА СТАНДАРТУ (governance-отчёт, SR-17..23) ────────────────
       # Та же джоба, вторая часть отчёта: соответствие самого ПРОДУКТА дочки инженерному стандарту
       # (обязательные секции артефактов, override с причиной/сроком), а не только здоровье установки.

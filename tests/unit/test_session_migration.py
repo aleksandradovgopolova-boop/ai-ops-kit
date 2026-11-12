@@ -283,3 +283,40 @@ def test_suggestion_marker_is_preserved_as_untrusted_user_content(project, tmp_p
     saved = sessions.load(project, "codex", "owner")
     assert saved["prompt"] == task["prompt"] and saved["status"] == "pending"
     assert sessions.verify(project, "codex", "owner")["accepted"] is False
+
+
+def _kit_writes_ci(root, text):
+    """Как `sync_ci_workflows`: кит пишет workflow и запоминает отпечаток своего текста."""
+    workflow = root / ".github/workflows/ai-ops-validate.yml"
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(text, encoding="utf-8")
+    prints = root / migration.CI_PRINTS
+    prints.parent.mkdir(parents=True, exist_ok=True)
+    prints.write_text(json.dumps({"ai-ops-validate.yml": hashlib.sha256(text.encode()).hexdigest()}))
+    return workflow
+
+
+def test_kit_refreshing_its_own_ci_workflow_is_not_owner_drift(project, tmp_path):
+    """#1512: обновление шаблона CI кита не должно блокировать миграцию ожидающих запросов."""
+    _kit_writes_ci(project, "name: old\n")
+    task = initialize(project)
+    snapshot = tmp_path / "snapshot.json"
+    captured = migration.capture(project, snapshot)
+    upgrade(project)
+    _kit_writes_ci(project, "name: new\n")                 # stale-ours -> refreshed
+    preview = migration.preview(project, snapshot, captured["sha256"], tmp_path / "plan.json")
+    assert preview["eligible"] == 1
+    assert sessions.load(project, "codex", "owner")["request_id"] == task["request_id"]
+
+
+def test_owner_edit_of_ci_workflow_is_still_refused(project, tmp_path):
+    workflow = _kit_writes_ci(project, "name: old\n")
+    initialize(project)
+    snapshot = tmp_path / "snapshot.json"
+    captured = migration.capture(project, snapshot)
+    upgrade(project)
+    workflow.write_text("name: owner edit\n")             # отпечаток кита не совпадает
+    before = store.inventory(project, migration.PROTECTED)
+    with pytest.raises(ValueError, match="independent product"):
+        migration.preview(project, snapshot, captured["sha256"], tmp_path / "plan.json")
+    assert store.inventory(project, migration.PROTECTED) == before

@@ -15,6 +15,7 @@ from pathlib import Path
 
 import pytest
 
+from ai_ops_kit.checks import code_duplication as core
 from ai_ops_kit.devtools import code_duplication as cd
 
 
@@ -73,5 +74,5 @@ def test_detector_catches_a_synthetic_duplicate(tmp_path):
 def test_signature_is_version_stable_shape():
     """Подпись — кортеж имён типов узлов (строки): не зависит от версии Python (в отличие от ast.dump)."""
     fn = ast.parse("def f(a):\n    b = a + 1\n    return b\n").body[0]
-    sig = cd._signature(fn)
+    sig = core.signature(fn)
     assert isinstance(sig, tuple) and all(isinstance(s, str) for s in sig), "подпись не версионно-стабильна"

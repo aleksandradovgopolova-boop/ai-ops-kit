@@ -110,6 +110,7 @@ STANDALONE = [
 NEEDS_ARTIFACT = [
     "validate_acceptance_result",
     "validate_architecture_decision",
+    "validate_code_duplication",  # #1512: без принятой базы дублей — перечень групп и код 1, не «ок»
     "validate_context_architecture",
     "validate_context_bundle",
     "validate_context_completeness",

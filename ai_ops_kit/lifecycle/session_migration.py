@@ -16,6 +16,7 @@ from ai_ops_kit.lifecycle import session_migration_store as store
 PROTECTED = (".ai/runtime", "features", ".ai/runplan", "openspec/changes", ".git/ai-ops/claims")
 INSTALLER_RUNTIME = (".ai/runtime/backups", ".ai/runtime/last-update-report.json",
                      ".ai/runtime/ci-templates.json", ".ai/runtime/skill-prints.json")
+CI_PRINTS = ".ai/runtime/ci-templates.json"
 INSTALL = (".ai/managed", ".ai-ops.yaml", "ai-ops", "AGENTS.md", "CLAUDE.md", ".codex", ".claude")
 FIELDS = {"schema_version", "request_id", "session_id", "runtime", "turn_id", "prompt", "status",
           "binding", "intake", "blocker", "next_step", "input_receipts", "input_events", "input_latest"}
@@ -55,8 +56,24 @@ def _manifest(root):
         raise ValueError("managed manifest/checksums mismatch")
 
 
+def _kit_ci_prints(root):
+    """Отпечатки CI-файлов, которые записал сам кит: {имя шаблона: sha256 текста}.
+
+    Обновление кита освежает НЕТРОНУТЫЙ владельцем workflow (`stale-ours`) и записывает новый
+    отпечаток. Без этого знания миграция принимала такое освежение за «независимую правку продукта»
+    и отказывала при первом же изменении шаблона CI (#1512). Битый файл — пусто: тогда всё
+    сравнивается побайтно, как раньше (строже, а не мягче).
+    """
+    try:
+        prints = json.loads((root / CI_PRINTS).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return {k: v for k, v in prints.items() if isinstance(v, str)} if isinstance(prints, dict) else {}
+
+
 def _product(root):
     files = sessions.git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
+    kit_ci = _kit_ci_prints(root)
     result = {}
     for name in sorted(set(files)):
         if not name or name == ".ai-ops.yaml" or name.startswith((".ai/runtime/", ".ai/managed/", ".ai/generated/", ".ai/usage/", ".ai/worktrees/")):
@@ -70,7 +87,10 @@ def _product(root):
                 boundary = b"<!-- AI-OPS-COMMUNICATION-POLICY:END -->\n"
                 following = b"<!-- AI-OPS-PROJECT-SESSION:BEGIN -->"
                 content = content.replace(boundary + b"\n\n" + following, boundary + following, 1)
-            result[name] = [store.sha(content), entry["mode"]]
+            digest = store.sha(content)
+            if name.startswith(".github/") and kit_ci.get(Path(name).name) == digest:
+                digest = "kit-ci-template"     # содержимое ровно то, что записал кит, — не правка владельца
+            result[name] = [digest, entry["mode"]]
         except FileNotFoundError:
             result[name] = None
     return result
