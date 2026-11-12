@@ -31,7 +31,7 @@ if mode == "unauthenticated":
     print(json.dumps({{"is_error": True, "result": "Failed to authenticate"}})); sys.exit(1)
 if mode == "mutator" and "write.canary" in prompt:
     Path("write.canary").write_text("x")
-token = Path("README.md").read_text().split("Token: ")[1].strip()
+token = Path("README.md").read_text().split("Marker: ")[1].strip()
 print(json.dumps({{"result": token if "README" in prompt else "DONE"}}))
 ''', encoding="utf-8")
     cli.chmod(0o700)
