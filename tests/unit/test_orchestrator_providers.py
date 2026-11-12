@@ -125,6 +125,11 @@ class TestClaudeCliProvider:
         cmd = self.seen.get("cmd") or []
         assert cmd[cmd.index("--tools") + 1] == "Read,Grep,Glob"
         assert "-p" in cmd
+        # #1476: весь профиль стоит подряд и до разделителя промпта, ни один флаг не потерян.
+        from ai_ops_kit.providers.provider_calls import CLAUDE_READONLY_PROFILE
+        start = cmd.index(CLAUDE_READONLY_PROFILE[0])
+        assert cmd[start:start + len(CLAUDE_READONLY_PROFILE)] == list(CLAUDE_READONLY_PROFILE)
+        assert start + len(CLAUDE_READONLY_PROFILE) <= cmd.index("--")
 
 
 @pytest.mark.unit
