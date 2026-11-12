@@ -28,11 +28,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.engops import adoption_evidence as installed_evidence
 from ai_ops_kit.planning import product_contract
 
 
@@ -71,6 +73,75 @@ def load(registry_path) -> dict:
     return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
 
 
+
+def _observed_workflows(root):
+    workflows, unreadable, invalid = set(), 0, 0
+    paths = sorted(root.glob("features/*/run-report.json"))
+    for path in paths[:1000]:
+        try:
+            rep = installed_evidence._evidence_json(root, path.relative_to(root).as_posix())
+            cost = rep.get("cost")
+            calls = cost.get("calls") if isinstance(cost, dict) else None
+            workflow, provider = rep.get("base_workflow"), rep.get("provider")
+            if (type(rep.get("schema_version")) is not int or rep["schema_version"] != 1
+                    or rep.get("kind") != "execution-pipeline" or type(calls) is not int or calls < 0
+                    or not isinstance(workflow, str) or not re.fullmatch(r"[A-Za-z][A-Za-z0-9_-]{0,79}", workflow)
+                    or not isinstance(provider, str) or not re.fullmatch(r"[a-z][a-z0-9_-]{0,79}", provider)):
+                invalid += 1
+            elif provider != "mock" and calls > 0:
+                workflows.add(workflow)
+        except (OSError, ValueError, RuntimeError):
+            unreadable += 1
+    return {"state": "observed" if workflows else "unknown", "workflows": sorted(workflows),
+            "source": "features/*/run-report.json: non-mock pipeline with model calls",
+            "coverage": "partial", "reports_read": min(len(paths), 1000) - unreadable,
+            "unreadable_reports": unreadable, "invalid_reports": invalid, "truncated": len(paths) > 1000}
+
+
+def kit_state(root):
+    """Снимок оператора: декларации отдельно от наблюдений и целостности managed."""
+    root = Path(root)
+    declared = managed = None
+    policy = {}
+    try:
+        cfg = yaml.safe_load(installed_evidence._evidence_bytes(root, ".ai-ops.yaml", 1024 * 1024))
+        parent = cfg.get("parent") if isinstance(cfg, dict) else None
+        if isinstance(parent, dict):
+            declared = parent.get("installed_version")
+            for key in ("update_policy", "update_channel", "allowed_version_range"):
+                val = parent.get(key)
+                if isinstance(val, str) and len(val) <= 120:
+                    policy[key] = val
+    except (OSError, ValueError, yaml.YAMLError, RuntimeError):
+        declared = None
+    try:
+        managed = installed_evidence._evidence_bytes(root, ".ai/managed/VERSION", 256).decode().strip()
+    except (OSError, ValueError):
+        managed = None
+    declared = declared if installed_evidence._evidence_version(declared) else None
+    managed = managed if installed_evidence._evidence_version(managed) else None
+    state = "consistent" if declared and declared == managed else "conflict" if declared and managed else "unknown"
+    integrity = installed_evidence._installation_evidence(root)
+    drift = "clean" if integrity["state"] == "locally_consistent" else integrity.get("managed_drift", "unknown")
+    overlay = root / ".ai/custom"
+    overlay_state = "unknown" if overlay.is_symlink() or (root / ".ai").is_symlink() else "none_observed"
+    if overlay_state != "unknown" and overlay.is_dir():
+        if any(p.is_file() and p.name not in {".gitkeep", "README.md"} for p in overlay.rglob("*")):
+            overlay_state = "observed"
+    return {"version_state": state, "installed_version": managed if state == "consistent" else None,
+            "declared_version": declared, "managed_version": managed, "update_policy": policy,
+            "capabilities_used": _observed_workflows(root),
+            "drift": {"managed": drift, "owner_overrides": overlay_state, "override_root": ".ai/custom"}}
+
+
+def render_kit_state(state):
+    version = state["installed_version"] or ("версии расходятся" if state["version_state"] == "conflict" else "неизвестна")
+    drift = {"clean": "без дрейфа", "detected": "есть дрейф", "unknown": "дрейф неизвестен"}[state["drift"]["managed"]]
+    override = {"observed": "есть", "none_observed": "не найдены", "unknown": "неизвестны"}[state["drift"]["owner_overrides"]]
+    used = ", ".join(state["capabilities_used"]["workflows"]) or "нет данных"
+    return f"Kit {version}; {drift}; локальные настройки: {override}; наблюдаемая работа: {used}"
+
+
 def fleet(registry_path, *, health_map: dict | None = None) -> dict:
     """Сводный вид: вердикт по каждому продукту реестра + rollup. Ошибка продукта -> его строка
     со status='error', а не падение всего флота."""
@@ -87,6 +158,7 @@ def fleet(registry_path, *, health_map: dict | None = None) -> dict:
                             "reason": f"каталог не найден: {root}"})
                 products.append(row); continue
             try:
+                row["kit"] = kit_state(root)
                 hv = (health_map or {}).get(pid)
                 v = product_contract.validate(root, health=hv)
                 row.update({"status": "ok", "verdict": v["verdict"],

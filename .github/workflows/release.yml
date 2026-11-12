@@ -64,12 +64,33 @@ jobs:
     if: ${{ needs.check.outputs.needed == 'true' }}
     uses: ./.github/workflows/package-quality.yml
 
+  field-rehearsal:
+    needs: check
+    if: ${{ needs.check.outputs.needed == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version-file: .python-version}
+      - name: Репетиция обновления и отката на двух публичных продуктах
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          pip install 'pyyaml==6.*' 'pytest==9.*'
+          python3 -m pytest tests/unit/test_fleet_release_gate.py -q -m release_gate
+
   release:
     # ИНВАРИАНТ: тег/Release создаются, только если выпуск нужен И полный набор ЗЕЛЁНЫЙ на этом SHA.
     # Явная проверка `full-gate.result == 'success'` намеренна: при падении полного набора эта джоба
     # не выполнится и тег не выйдет; при скипе full-gate (needed=false) условие тоже ложно.
-    needs: [check, full-gate]
-    if: ${{ needs.check.outputs.needed == 'true' && needs.full-gate.result == 'success' }}
+    needs: [check, full-gate, field-rehearsal]
+    if: ${{ needs.check.outputs.needed == 'true' && needs.full-gate.result == 'success' && needs.field-rehearsal.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -544,6 +544,8 @@ def _intent_products(task, child_root, signals, a):
             print(f"  {mark} {r['id']} ({r['name']}): {r['verdict']} "
                   f"[артефакты={r['worst_artifact_state']}, "
                   f"контуры={'ok' if r['contours_ok'] else 'неполны'}, health={r['health_band']}]")
+        if "kit" in r:
+            print(f"    {product_registry.render_kit_state(r['kit'])}")
     return 0
 
 

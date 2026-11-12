@@ -147,3 +147,5 @@
 - [Конечное ожидание read-only resume — #1434](1434-resume-read-deadline.md).
 
 - [#1451 — подтверждённое использование Kit](1451-verified-project-adoption.md)
+
+- [#1406 — флот и репетиция обновления](1406-fleet-rehearsal.md)

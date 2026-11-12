@@ -245,7 +245,7 @@ def test_failed_update_restores_plan_history_written_by_migration(seed, tmp_path
     assert _tree(root) == before
 
 
-@pytest.mark.parametrize("linked", ["gitignore", "prompts", "nested-command", "ancestor"])
+@pytest.mark.parametrize("linked", ["gitignore", "prompts", "nested-command", "ancestor", "shipped-skill", "shipped-skill-case", "external-skill"])
 def test_symlink_footprint_is_blocked_before_delivery(seed, tmp_path, linked):
     root = _child(seed, tmp_path, existing=False)
     home, owner = tmp_path / "codex", tmp_path / "owner"
@@ -258,6 +258,18 @@ def test_symlink_footprint_is_blocked_before_delivery(seed, tmp_path, linked):
         (home / "prompts").symlink_to(owner, target_is_directory=True)
     elif linked == "nested-command":
         (root / ".claude/commands/owner.md").symlink_to(owner / "data")
+    elif linked.endswith("-skill") or linked == "shipped-skill-case":
+        skills = root / ".claude/skills"
+        if linked.startswith("shipped-skill"):
+            link = skills / "product-session-review"
+            shutil.rmtree(link)
+            if linked == "shipped-skill-case":
+                link = link.with_name(link.name.upper())
+            local = root / "owner-skill"
+            local.mkdir()
+            link.symlink_to("../../owner-skill", target_is_directory=True)
+        else:
+            (skills / "external").symlink_to("../../../owner", target_is_directory=True)
     else:
         # Даже отсутствовавший inventory-файл может иметь ссылку среди родительских каталогов.
         shutil.rmtree(root / ".github")
@@ -301,3 +313,27 @@ def test_blocked_snapshot_does_not_write_report_through_symlink(seed, tmp_path, 
     assert _tree(root) == before
     assert _tree(owner) == owner_before
     assert _local_config(root) == config_before
+
+
+@pytest.mark.parametrize("mode", ["update", "rollback"])
+def test_owner_skill_alias_is_preserved(seed, tmp_path, mode):
+    root = _child(seed, tmp_path, existing=False)
+    owner = root / "skill" / "owner"
+    owner.mkdir(parents=True)
+    skill = owner / "SKILL.md"
+    skill.write_bytes(b"owner skill\r\n")
+    link = root / ".claude/skills/owner"
+    link.symlink_to("../../skill/owner", target_is_directory=True)
+    before = _tree(root)
+    if mode == "rollback":
+        proc, report, observed, _ = _execute(root, tmp_path, "smoke", clean_git=True)
+        assert observed.is_file(), proc.stdout + proc.stderr
+        assert proc.returncode == 1 and report["status"] == "rolled_back", report
+        assert _tree(root) == before
+    else:
+        env = {key: value for key, value in os.environ.items() if key != "CODEX_HOME"}
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        proc = _run_cli(root, "update", "--in-place", env=env)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert link.readlink() == Path("../../skill/owner")
+    assert skill.read_bytes() == b"owner skill\r\n"

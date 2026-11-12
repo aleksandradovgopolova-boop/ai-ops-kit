@@ -180,3 +180,49 @@ def test_product_path_and_inspect_injects_health_and_risks(installer, tmp_path):
     assert res["contract"]["health"]["band"] == "red"
     assert res["contract"]["risks"]["count_by_severity"]["high"] == 2
     assert res["verdict"]["verdict"] == "not_ready"  # красное здоровье роняет вердикт
+
+
+def test_fleet_shows_version_observed_workflows_and_owner_overrides(tmp_path):
+    import hashlib
+    import json
+
+    root = tmp_path / "product"
+    managed = root / ".ai/managed"
+    managed.mkdir(parents=True)
+    (root / ".ai-ops.yaml").write_text("parent: {installed_version: 4.13.1, update_policy: pr}\n")
+    version = managed / "VERSION"
+    version.write_text("4.13.1\n")
+    (managed / ".checksums.json").write_text(json.dumps({"schema_version": 1, "algorithm": "sha256",
+        "managed_root": "managed", "files": {"VERSION": hashlib.sha256(version.read_bytes()).hexdigest()}}))
+    (managed / ".provenance.json").write_text(json.dumps({"schema_version": 1, "package": "ai-first-system",
+        "installed_version": "4.13.1", "managed_root": ".ai/managed", "checksums_file": ".checksums.json"}))
+    custom = root / ".ai/custom"
+    custom.mkdir()
+    (custom / "owner.md").write_text("owner rules")
+    for name, workflow, provider, calls in (("real", "ENGINEERING", "openai", 2),
+                                           ("preview", "PRODUCT", "openai", 0),
+                                           ("mock", "QUICK", "mock", 1)):
+        path = root / "features" / name / "run-report.json"
+        path.parent.mkdir(parents=True)
+        path.write_text(json.dumps({"schema_version": 1, "kind": "execution-pipeline", "provider": provider,
+                                    "base_workflow": workflow, "cost": {"calls": calls}}))
+    broken = root / "features/broken/run-report.json"
+    broken.parent.mkdir()
+    broken.write_text(json.dumps({"schema_version": 9, "kind": "execution-pipeline", "provider": False,
+                                  "base_workflow": "made_up", "cost": {"calls": 1}}))
+    registry = _registry_file(tmp_path, [{"id": "product", "path": str(root)}])
+    before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    row = product_registry.fleet(registry)["products"][0]["kit"]
+    assert row["installed_version"] == "4.13.1"
+    assert row["drift"] == {"managed": "clean", "owner_overrides": "observed", "override_root": ".ai/custom"}
+    assert row["capabilities_used"]["workflows"] == ["ENGINEERING"]
+    assert row["capabilities_used"]["invalid_reports"] == 1
+    assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
+    version.write_text("4.13.0\n")
+    assert before[version] != version.read_bytes()
+    row = product_registry.fleet(registry)["products"][0]["kit"]
+    assert row["version_state"] == "conflict" and row["installed_version"] is None
+    assert row["drift"]["managed"] == "unknown"  # provenance расходится, нельзя заявить полноту проверки
+    version.write_text("4.13.1\n")
+    (managed / "extra.txt").write_text("unexpected managed file")
+    assert product_registry.kit_state(root)["drift"]["managed"] == "detected"

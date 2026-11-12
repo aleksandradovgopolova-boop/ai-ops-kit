@@ -125,8 +125,10 @@ def _installation_evidence(root, approved=None, historical=None):
         return {"state": "locally_consistent", "version": version, "checked_files": count,
                 "source_authentication": "unknown", "source_at": None,
                 "reason": "checksums_do_not_authenticate_source"}
-    except (OSError, ValueError, TypeError, KeyError, RuntimeError):
-        return {"state": "unknown", "reason": "installation_evidence_missing_invalid_or_drifted"}
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError) as exc:
+        return {"state": "unknown", "reason": "installation_evidence_missing_invalid_or_drifted",
+                "managed_drift": "detected" if str(exc) in
+                {"incomplete_or_drifted_inventory", "managed_content_drift"} else "unknown"}
 
 
 def _update_evidence(root, installation):
