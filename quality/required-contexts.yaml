@@ -50,5 +50,9 @@ contexts:
   # как и `docs / build`; на push в main предмета сравнения нет. Включение required в
   # branch protection — за владельцем.
   - package-quality / security-scan
+  # delivered-footprint (#1527) — СКАЧОК поставки: итог слияния вырос против main больше обычного
+  # шага (steps.volume_bytes) без записи `what: step` в quality/delivery-budget.yaml. Только на PR,
+  # как security-scan. Включён в branch protection владельцем 12.11.2026.
+  - package-quality / delivered-footprint
   # docs.yml
   - docs / build
