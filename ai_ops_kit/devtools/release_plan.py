@@ -161,6 +161,27 @@ def _archived_binding(pr, run, workflow, names, prior):
             and ("jobs_digest" not in saved or saved["jobs_digest"] == digest(run.get("jobs", []))))
 
 
+_STAMP = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+
+
+def _post_merge_binding(pr, run):
+    """Связь run→PR после слияния, когда GitHub уже очистил `pull_requests` у run.
+
+    Без архива: run того же репозитория (не форка), той же ветки и того же head-коммита,
+    запущен до слияния; head-коммит принадлежит ровно этому PR; слияние легло на ту же базу,
+    что видел PR. Любое расхождение — не связь, а не «почти связь».
+    """
+    head_repo, created, merged_at = pr.get("head_repo"), run.get("created_at"), pr.get("merged_at")
+    return (pr.get("merged") is True and pr.get("state") == "closed"
+            and pr.get("same_repo_head") is True and pr.get("merge_parent") == pr.get("base_sha")
+            and pr.get("head_prs") == [pr["number"]]
+            and isinstance(head_repo, str) and isinstance(run.get("head_repository"), str)
+            and run["head_repository"].casefold() == head_repo.casefold()
+            and isinstance(pr.get("head_ref"), str) and run.get("head_branch") == pr["head_ref"]
+            and all(isinstance(t, str) and _STAMP.fullmatch(t) for t in (created, merged_at))
+            and created <= merged_at)
+
+
 def _ci_observed(pr, records, policy, prior=None):
     """Наблюдение exact PR CI, не independent review и не stock premerge admission."""
     evidence = {}
@@ -176,6 +197,8 @@ def _ci_observed(pr, records, policy, prior=None):
                     p.get("head", {}).get("sha") == pr["head_sha"] and
                     p.get("base", {}).get("sha") == pr["base_sha"]
                     for p in run.get("pull_requests", []))
+        if not bound and run.get("pull_requests") == []:
+            bound = _post_merge_binding(pr, run)
         if not bound and run.get("pull_requests") == [] and prior is not None:
             bound = _archived_binding(pr, run, workflow, names, prior)
         if (run.get("head_sha") != pr["head_sha"] or run.get("event") != "pull_request"

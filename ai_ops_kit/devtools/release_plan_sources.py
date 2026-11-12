@@ -73,11 +73,19 @@ def _pull(client, number, ci, signatures, policy):
     links = client.closing_issue_numbers(number)
     if not links.ok:
         raise SnapshotError(links.reason if links.reason == "github_read_permission_denied" else "closing_issues_unavailable", pr=number)
+    head_repo = (pr["head"].get("repo") or {}).get("full_name")
     item = {"number": number, "merged": pr["merged"], "state": pr["state"],
             "base_ref": pr["base"]["ref"], "base_sha": pr["base"]["sha"],
             "head_sha": pr["head"]["sha"], "merge_sha": pr["merge_commit_sha"],
+            "head_ref": pr["head"].get("ref"), "head_repo": head_repo,
+            "same_repo_head": _same_repo(pr["head"], client.repo), "merged_at": pr.get("merged_at"),
             "changed_files": pr["changed_files"], "closing_issues": links.items}
     ci[str(number)] = _ci(client, item, policy, signatures)
+    if item["merged"] is True and any(run.get("pull_requests") == [] for run in ci[str(number)]):
+        # После слияния GitHub снимает связь run→PR; однозначность head-коммита проверяет модель.
+        associated = collection(client, f"repos/{client.repo}/commits/{item['head_sha']}/pulls")
+        item["head_prs"] = sorted(p["number"] for p in associated
+                                  if (p.get("head") or {}).get("sha") == item["head_sha"])
     return item
 
 
@@ -135,8 +143,10 @@ def _ci(client, pr, policy, signatures):
         if not runs:
             continue
         row = max(runs, key=lambda r: (r["id"], r["run_attempt"]))
-        keys = ("id", "run_attempt", "path", "head_sha", "event", "status", "conclusion", "pull_requests")
+        keys = ("id", "run_attempt", "path", "head_sha", "head_branch", "event", "status", "conclusion",
+                "created_at", "pull_requests")
         run = {k: row.get(k) for k in keys}
+        run["head_repository"] = (row.get("head_repository") or {}).get("full_name")
         attempt = run["run_attempt"]
         if type(run["id"]) is not int or type(attempt) is not int or attempt < 1:
             raise SnapshotError("workflow_identity_invalid", pr=pr["number"], workflow=workflow)
@@ -212,7 +222,10 @@ def _open_ci(client, branch, policy, signatures):
         if repository_bound and job_ids_valid and ok:
             archive.append({"pr": number, "head": identity["head_sha"], "base": identity["base_sha"],
                             "ci_evidence": evidence})
-        queries.append({"identity": identity, "jobs_digest": release_plan.digest(runs)})
+            # Финальный барьер сверяет только то, что легло в архив. PR, чьи проверки ещё идут,
+            # в снимок не входят, и их движение не обнуляет план (#1446: пока команда работает,
+            # у какого-то PR проверки идут почти всегда).
+            queries.append({"identity": identity, "jobs_digest": release_plan.digest(runs)})
     return archive, queries
 
 
