@@ -70,7 +70,6 @@
 |--------|-----------------|
 | `ai_ops_kit/gates/gate_executor.py` | Единый исполнитель quality gates (классификация, оценка, отчёт) |
 | `ai_ops_kit/gates/gate_policy.py` | Risk-calibrated UI enforcement (advisory/blocking по калибровке) |
-| `ai_ops_kit/gates/gate_result_v2.py` | GateResult v2 schema + миграционный адаптер v2↔v1 |
 | `ai_ops_kit/gates/evidence_collector.py` | Сбор evidence (build/lint/test через tool_broker) |
 | `ai_ops_kit/gates/approvals.py` | Human approval flow |
 | `ai_ops_kit/gates/concurrency_preflight.py` | Проверка коллизий параллельной работы |
