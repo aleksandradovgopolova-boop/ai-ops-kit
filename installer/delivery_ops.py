@@ -601,20 +601,16 @@ BUDGET_RAISE_REQUIRED = ("at", "what", "measured_before", "measured_after", "fil
                          "why_it_works_in_the_child")
 
 
-# События CI, на которых меряется ИТОГ уже слитого main. Всё остальное (PR, локальный прогон) меряет
-# ветку, которой ещё предстоит слиться рядом с соседней, — там граница строже на один обычный шаг.
+# События CI, где меряется уже слитый main; на PR и локально граница строже на обычный шаг.
 MERGED_EVENTS = frozenset({"push", "schedule", "workflow_dispatch", "workflow_run", "workflow_call", "release"})
 
 
 def volume_hard_limit(doc, event=None):
     """Жёсткая граница объёма реальной установки (#1527). -> int байт.
 
-    На PR и локально — потолок МИНУС обычный шаг `steps.volume_bytes`: место под одно соседнее
-    слияние. Два PR, каждый под этой границей и каждый с шагом не больше обычного, вместе не выходят
-    за потолок, поэтому main не краснеет от слияния подряд. На main (события MERGED_EVENTS) — сам
-    потолок: там проверяется уже слитое. Запас 10% (`warnings.volume_reserve_fraction`) остаётся
-    предупреждением о таянии, а не жёсткой границей: она заставляла поднимать потолок почти в каждом PR.
-    """
+    На PR и локально — потолок минус обычный шаг `steps.volume_bytes` (место под одно соседнее
+    слияние: два таких PR вместе не выходят за потолок); на main — сам потолок. Запас 10% —
+    предупреждение, а не граница: жёсткий запас заставлял поднимать потолок почти в каждом PR."""
     ceiling = doc["ceilings"]["volume_bytes"]
     step = (doc.get("steps") or {}).get("volume_bytes") or 0
     event = os.environ.get("GITHUB_EVENT_NAME", "") if event is None else event
