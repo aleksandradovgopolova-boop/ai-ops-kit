@@ -91,7 +91,7 @@ def build_fixture(root: Path) -> Path:
     }, indent=2), encoding="utf-8")
     for args in (["init", "-q"], ["add", "-A"],
                  ["-c", "user.email=q@example.invalid", "-c", "user.name=q", "commit", "-qm", "fixture"]):
-        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True)
+        subprocess.run(["git", *args], cwd=root, check=True, capture_output=True, timeout=60)
     return root
 
 
