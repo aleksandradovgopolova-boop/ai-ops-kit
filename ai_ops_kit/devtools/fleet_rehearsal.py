@@ -76,7 +76,13 @@ def _checkout(root, case, mirrors=None):
         mirror = mirrors / case["repository"].split("/")[-1]
         _require(mirror.is_dir(), "local_mirror_missing")
         source, protocol = str(mirror.resolve()), "file"
-    _git(root, "fetch", "--no-tags", "--depth=1", "--update-shallow", source, case["commit"], protocol=protocol)
+    fetch = ("fetch", "--no-tags", "--depth=1", "--update-shallow", source, case["commit"])
+    try:
+        _git(root, *fetch, protocol=protocol)
+    except (RehearsalError, subprocess.TimeoutExpired):
+        if protocol != "https":
+            raise
+        _git(root, *fetch, protocol=protocol)  # повторяем тот же публичный снимок при сбое сети
     _git(root, "checkout", "--detach", "FETCH_HEAD")
     _require(_git(root, "rev-parse", "HEAD").strip() == case["commit"], "reference_commit_mismatch")
 

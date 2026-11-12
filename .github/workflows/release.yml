@@ -68,7 +68,7 @@ jobs:
     needs: check
     if: ${{ needs.check.outputs.needed == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 22
+    timeout-minutes: 32
     permissions:
       contents: read
     steps:

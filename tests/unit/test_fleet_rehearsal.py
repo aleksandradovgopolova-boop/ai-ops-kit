@@ -132,3 +132,20 @@ def test_real_worker_separates_migration_output_from_receipt(installed):
         receipt = rehearsal._worker(KIT, root, {"installed_version": old}, "apply", case_dir / "unused")
         assert receipt["smoke_checks"] >= 1 and receipt["to"] == (KIT / "VERSION").read_text().strip()
         assert (case_dir / "result-apply.json").is_file()
+
+
+def test_checkout_retries_only_the_same_https_pin(tmp_path, monkeypatch):
+    pin = "a" * 40
+    requests = []
+
+    def git(_root, *args, protocol=""):
+        if args[0] == "fetch":
+            requests.append((args, protocol))
+            if len(requests) == 1:
+                raise rehearsal.RehearsalError("git_fetch_failed")
+        return pin if args[0] == "rev-parse" else ""
+
+    monkeypatch.setattr(rehearsal, "_git", git)
+    rehearsal._checkout(tmp_path / "child", {"repository": "owner/public", "commit": pin})
+    expected = ("fetch", "--no-tags", "--depth=1", "--update-shallow", "https://github.com/owner/public.git", pin)
+    assert requests == [(expected, "https"), (expected, "https")]
