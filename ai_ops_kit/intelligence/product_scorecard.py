@@ -48,7 +48,13 @@
 from __future__ import annotations
 
 import math
-from pathlib import Path
+import re
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path, PurePosixPath
+
+import yaml
+
+from ai_ops_kit.shared.gitio import git
 
 
 def _text(v) -> str:
@@ -453,6 +459,146 @@ def child_value_share(kit_root) -> dict:
                "низкая, а не приукрашенная")
 
 
+# ── #1514: успевает ли проверка за генерацией кода ─────────────────────────────────────────
+# Успевает ли проверка за генерацией кода — строка карты продукта (#1514).
+# 
+# ЗАЧЕМ. Потолки размера ловят рост, но только поднимаются; построенное и не подключённое копится.
+# Быстрая поставка выглядит успехом, пока разрыв «пишется больше, чем проверяется» не становится
+# долгом. Показателя этого разрыва не было ни у кита, ни у проектов.
+# 
+# ЧТО СЧИТАЕТСЯ — только из того, что уже лежит в репозитории, без сети и новых сборщиков:
+#   * прирост кода за окно (Git: добавлено/удалено строк в файлах кода, без тестов);
+#   * доля прироста тестов к приросту кода (Git) — грубая мера, успевают ли тесты за кодом;
+#   * подъёмы потолков за окно (ленты `raises` реестров потолков, если они есть в репозитории);
+#   * построенное, но не подключённое (перепись из карты возможностей: её делает только сам кит);
+#   * доля изменений с независимым ИИ-ревью — след такого ревью в репозитории не сохраняется,
+#     поэтому честно «не измерено». Ревью человеком мерой не является (решение 11.11.2026).
+# 
+# ИНВАРИАНТ. Нет данных -> «не измерено» с причиной, никогда не ноль. Это строка карты, а не проверка,
+# которая что-то блокирует. Слой `intelligence`, только чтение.
+
+WINDOW_DAYS = 90
+CODE_SUFFIXES = frozenset({".py", ".js", ".jsx", ".ts", ".tsx", ".go", ".rb", ".java", ".kt", ".swift",
+                           ".rs", ".php", ".cs", ".c", ".cc", ".cpp", ".h", ".hpp", ".scala", ".vue"})
+# Не код проекта: копия кита в проекте (судится отдельно) и сторонние/собранные папки.
+NOT_PROJECT_CODE = (".ai/managed/", "node_modules/", "vendor/", "dist/", "build/", ".venv/")
+CEILING_LEDGERS = ("quality/delivery-budget.yaml", "packages/*-baseline.yaml")
+
+
+def is_test_path(path: str) -> bool:
+    p = PurePosixPath(path)
+    name = p.name
+    return (any(part in ("test", "tests", "__tests__", "spec") for part in p.parts[:-1])
+            or name.startswith("test_") or name.endswith(("_test.py", "_test.go"))
+            or ".test." in name or ".spec." in name)
+
+
+def code_churn(root, since: date) -> dict | None:
+    """{code_added, code_removed, test_added, commits} за окно; None — Git недоступен."""
+    rc, out, _ = git(root, "log", f"--since={since.isoformat()}", "--no-merges", "--numstat",
+                     "--format=@%H", timeout=60)
+    if rc != 0:
+        return None
+    totals = {"code_added": 0, "code_removed": 0, "test_added": 0, "commits": 0}
+    for line in out.splitlines():
+        if line.startswith("@"):
+            totals["commits"] += 1
+            continue
+        parts = line.split("\t")
+        if len(parts) != 3 or not parts[0].isdigit() or not parts[1].isdigit():
+            continue                                  # двоичный файл или пустая строка
+        path = parts[2].split(" => ")[-1].rstrip("}")
+        if (PurePosixPath(path).suffix not in CODE_SUFFIXES
+                or any(path.startswith(d) or f"/{d}" in path for d in NOT_PROJECT_CODE)):
+            continue
+        if is_test_path(path):
+            totals["test_added"] += int(parts[0])
+        else:
+            totals["code_added"] += int(parts[0])
+            totals["code_removed"] += int(parts[1])
+    return totals
+
+
+def ceiling_raises(root, since: date) -> int | None:
+    """Число записей о подъёме потолка с датой в окне; None — реестров потолков в репозитории нет."""
+    root = Path(root)
+    ledgers = [p for pattern in CEILING_LEDGERS for p in sorted(root.glob(pattern))]
+    if not ledgers:
+        return None
+    count = 0
+    for ledger in ledgers:
+        try:
+            data = yaml.safe_load(ledger.read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError):
+            return None                               # битый реестр — не ноль, а неизвестность
+        entries = (data.get("raises") or []) if isinstance(data, dict) else []
+        for entry in entries:
+            stamp = (entry.get("at") or entry.get("date")) if isinstance(entry, dict) else None
+            try:
+                when = date.fromisoformat(str(stamp)[:10])
+            except ValueError:
+                continue
+            count += when >= since
+    return count
+
+
+def unwired_modules(root) -> list[str] | None:
+    """Построенное, но не подключённое — из сгенерированной карты возможностей кита.
+
+    Перепись делает только сам кит (`docs/capability-map.md`, её свежесть держит тест); в проекте
+    карты нет -> None, то есть «не измерено», а не ноль."""
+    path = Path(root) / "docs" / "capability-map.md"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    return re.findall(r"^\| `([^`]+)` \| built≠wired \|", text, flags=re.M)
+
+
+def _count(mid, title, value, detail):
+    return {"id": mid, "title": title, "measured": True, "unit": "count", "value": value, "detail": detail}
+
+
+def verification_pace(root, *, now: datetime | None = None, days: int = WINDOW_DAYS) -> dict:
+    """Строка «успевает ли проверка за генерацией» из частей; каждая честно измерена или нет."""
+    since = (now or datetime.now(timezone.utc)).date() - timedelta(days=days)
+    churn = code_churn(root, since)
+    parts = []
+    if churn is None:
+        no_git = "история Git недоступна"
+        parts += [_metric("code_growth", "Прирост кода", measured=False, reason=no_git),
+                  _metric("tests_keep_pace", "Прирост тестов к приросту кода", measured=False, reason=no_git)]
+    else:
+        net = churn["code_added"] - churn["code_removed"]
+        parts.append(_count("code_growth", "Прирост кода, строк", net,
+                            f"добавлено {churn['code_added']}, удалено {churn['code_removed']}, "
+                            f"коммитов {churn['commits']}"))
+        if churn["code_added"]:
+            parts.append(_metric("tests_keep_pace", "Прирост тестов к приросту кода", measured=True,
+                                 value=churn["test_added"] / churn["code_added"],
+                                 numerator=churn["test_added"], denominator=churn["code_added"],
+                                 caveat="строки, а не покрытие: грубая мера, успевают ли тесты за кодом"))
+        else:
+            parts.append(_metric("tests_keep_pace", "Прирост тестов к приросту кода", measured=False,
+                                 reason="за период код не прибавлялся — долю считать не от чего"))
+    parts.append(_metric("independent_review_share", "Доля изменений с независимым ИИ-ревью",
+                         measured=False,
+                         reason="след независимого ревью слитых изменений в репозитории не сохраняется"))
+    raises = ceiling_raises(root, since)
+    parts.append(_metric("ceiling_raises", "Подъёмы потолков", measured=False,
+                         reason="в репозитории нет реестров потолков с лентой подъёмов")
+                 if raises is None else
+                 _count("ceiling_raises", "Подъёмы потолков", raises, "записи о подъёме за период"))
+    unwired = unwired_modules(root)
+    parts.append(_metric("unwired", "Построено, но не подключено", measured=False,
+                         reason="перепись неподключённого кода умеет только сам кит")
+                 if unwired is None else
+                 _count("unwired", "Построено, но не подключено", len(unwired), "модулей без входа"))
+    return {"id": "verification_pace", "title": f"Успевает ли проверка за генерацией (за {days} дней)",
+            "window_days": days, "since": since.isoformat(),
+            "measured": any(p["measured"] for p in parts), "parts": parts}
+
+
 def build_scorecard(child_root, *, claim_results=None) -> dict:
     """Собрать единую карту продукта кита из 5 метрик. Read-only: ничего не пишет.
 
@@ -466,7 +612,10 @@ def build_scorecard(child_root, *, claim_results=None) -> dict:
     улучшения дочки (стрелка «работа кита -> исход дочки»). Он про другую единицу (работы кита, а не
     фичи репозитория), поэтому стоит рядом, а не шестым в `metrics`; строкой, не гейтом (#1141/#1116).
 
-    -> `{schema_version, kind, metrics: [...5...], measured_count, unmeasured_count, child_value}`.
+    Ещё одна строка рядом — `verification_pace` (#1514): успевает ли проверка за генерацией кода.
+
+    -> `{schema_version, kind, metrics: [...5...], measured_count, unmeasured_count, child_value,
+    verification_pace}`.
     """
     from ai_ops_kit.intelligence import knowledge_graph as kg
     graph = kg.build_graph(child_root)
@@ -482,4 +631,5 @@ def build_scorecard(child_root, *, claim_results=None) -> dict:
             "metrics": metrics,
             "measured_count": measured,
             "unmeasured_count": len(metrics) - measured,
-            "child_value": child_value_share(child_root)}
+            "child_value": child_value_share(child_root),
+            "verification_pace": verification_pace(child_root)}
