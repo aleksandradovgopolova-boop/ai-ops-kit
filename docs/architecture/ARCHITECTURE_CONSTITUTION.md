@@ -78,21 +78,22 @@
 
 **Как проверяется.**
 - `test_gate_has_applicability` — каждый гейт в `quality/gates.yaml` имеет непустое поле `applicability` (список workflow-типов).
-- `ai_ops_kit/gates/gate_result_v2.py` — `check()` валидирует: `status=not_applicable` требует `applicability=not_applicable`.
+- `ai_ops_kit/gates/gate_executor.py` — неприменимый гейт получает честный non-blocking результат `scope=["not_applicable"]` (`_not_applicable_result`), а не тихий `pass` и не блок; такой результат не засчитывается как прохождение.
 - `test_process_applicability.py` — gate coverage matrix проверяет, что PRODUCT/CRITICAL имеют полный контур.
 
 ---
 
-## AC-06: ABSTAIN не является FAIL
+## AC-06: ABSTAIN не является FAIL — СНЯТА 12.11.2026 (#1530)
 
-**Формулировка.** `abstain` — это субъективное сомнение ревьюера, которое калибровка НЕ считает блоком (для advisory) или передаёт человеку (для blocking). Это не `fail`, не `warn`, а отдельный статус с отдельной семантикой.
+Статья описывала отдельный статус ревьюера `abstain` и его передачу человеку. Исполнения у неё не
+было: модуль `gates/gate_result_v2.py`, на который она ссылалась, с v3.1.8 ни разу не был в рабочем
+пути проверок (его звал только квалификационный стенд), а ревьюеры в рабочем пути возвращают
+`pass | warn | fail`. Передача сомнения человеку противоречит решению владельца: кит работает
+автономно, без человека в контуре качества. Модуль и схема `gate-result-v2` удалены.
 
-**Почему важно.** Если `abstain` деградирует в `fail`, ревьюеры перестают воздерживаться — и система теряет канал «я не уверен, но не буду блокировать». Если деградирует в `warn` — blocking-abstain (человек должен решить) тихо проходит. Два вида abstain (advisory-abstain и blocking-abstain) имеют разную семантику, и смешивать их нельзя.
-
-**Как проверяется.**
-- `ai_ops_kit/gates/gate_result_v2.py` — `check()` валидирует: advisory-abstain → `resolution=resolved, delivery_allowed=true`; blocking-abstain → `resolution=pending_human, delivery_allowed=false, human_handoff=true`.
-- `to_v1()` — blocking-abstain деградирует в `fail` (fail-closed), advisory-abstain — в `warn`. Не наоборот.
-- `STATUS_V2 = {"pass", "warn", "fail", "not_applicable", "abstain"}` — 5 статусов, не 3.
+Если отдельный статус сомнения понадобится, статья возвращается вместе с исполнением в рабочем пути
+и автономным разрешением сомнения, а не с отдельным валидатором. Тест держит обе стороны: статья
+помечена снятой, и ни один модуль `gates/` не выдаёт `abstain` как статус гейта.
 
 ---
 
@@ -142,7 +143,7 @@
 - **Policy** — правила автономии (`ai_ops_kit/governance/policy_engine.py`: suggest/prepare/execute/require_approval)
 - **Workflow** — последовательность шагов (`registry/workflows.yaml`: PRODUCT, CRITICAL, QUICK, ...)
 - **Gate** — контрольная точка качества (`quality/gates.yaml`: 35 gates)
-- **Evidence** — доказательство прохождения (gate-evidence, gate-result-v2)
+- **Evidence** — доказательство прохождения (gate-evidence)
 
 **Почему важно.** Когда gate становится policy, или workflow — gate, система теряет способность рассуждать о каждом типе отдельно. Policy говорит «кто решает»; gate — «что проверяется»; workflow — «в каком порядке»; evidence — «чем доказано»; capability — «что доступно». Смешение = невозможность независимо менять одно без другого.
 

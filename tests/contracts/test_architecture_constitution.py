@@ -351,21 +351,17 @@ class TestGateHasApplicability:
             "\nBlocking gate без evidence-требования = fail-closed нарушение."
         )
 
-    def test_gate_result_v2_abstain_not_fail(self):
-        """AC-06: gate_result_v2 различает abstain и fail."""
-        grv2 = AI_OPS_KIT / "gates" / "gate_result_v2.py"
-        if not grv2.exists():
-            pytest.skip("gates/gate_result_v2.py не найден")
+    def test_ac06_is_retired_and_no_gate_emits_abstain(self):
+        """AC-06 снята (#1530): статья помечена снятой, и рабочий путь гейтов не выдаёт `abstain`.
 
-        src = grv2.read_text(encoding="utf-8")
-        # STATUS_V2 должен содержать и abstain, и fail как разные значения
-        assert '"abstain"' in src or "'abstain'" in src, (
-            "AC-06: gate_result_v2.py не содержит статус 'abstain'. "
-            "ABSTAIN и FAIL — разные сущности."
-        )
-        assert '"fail"' in src or "'fail'" in src, (
-            "AC-06: gate_result_v2.py не содержит статус 'fail'."
-        )
+        Вернуть статус сомнения можно только вместе со статьёй — иначе это снова норма без исполнения.
+        """
+        text = (PKG_ROOT / "docs" / "architecture" / "ARCHITECTURE_CONSTITUTION.md").read_text(encoding="utf-8")
+        assert "## AC-06: ABSTAIN не является FAIL — СНЯТА" in text, "AC-06 не помечена снятой"
+        assert not (AI_OPS_KIT / "gates" / "gate_result_v2.py").exists()
+        emitting = [py.name for py in sorted((AI_OPS_KIT / "gates").glob("*.py"))
+                    if re.search(r"[\"']status[\"']\s*:\s*[\"']abstain[\"']", py.read_text(encoding="utf-8"))]
+        assert not emitting, f"AC-06 снята, а гейты выдают abstain: {emitting} — верните статью с исполнением"
 
 
 # ============================================================================

@@ -69,8 +69,8 @@ a11y-нарушения по-прежнему блокируют (см. матр
   (`ai_ops_run.run(calibrated_enforcement=True)`). Хук в `execution_pipeline._run_reviews`:
   субъективный reviewer `warn` по UI-гейту НЕ блокирует, когда гейт advisory (internal low-risk) ИЛИ
   механика подтверждена детерминированным evidence (`evidence=pass`); `evidence=fail` (реальная
-  регрессия/дефект) блокирует ВСЕГДА, даже при reviewer `pass` (усиление). `GateResult v2`
-  (`ai_ops_kit/gates/gate_result_v2.py`, +`not_applicable`/`abstain`) + адаптер v2→v1 для старых потребителей.
+  регрессия/дефект) блокирует ВСЕГДА, даже при reviewer `pass` (усиление). Неприменимость гейта
+  выражается результатом `scope=["not_applicable"]` в рабочем пути проверок.
   **NO-OP без богатых сигналов:** легаси `ui_changed`→`user_facing`+нет evidence→fail-closed == как
   раньше. Доказано на Bench Lite v0.3 (реальный A/B): block-rate 0.667→0.333 (−50%),
   `residual_false_fail_rate=0.0` (≤0.10), `false_green=0`, safety-регрессии (evidence=fail)

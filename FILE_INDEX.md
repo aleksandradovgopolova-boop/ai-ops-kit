@@ -621,7 +621,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
   `run_plan`, `run_handoff`, `acceptance_verify`, `atomic_planner`, `workpackage_executor`,
   `sequence_{plan,aggregate}`, `parallel_{planner,executor,live}`
 - `ai_ops_kit/gates/` — гейты и допуск: `gate_executor`, `gate_policy`,
-  `gate_result_v2`, `preflight`, `economic_preflight`, `concurrency_preflight`, `evidence_collector`,
+  `preflight`, `economic_preflight`, `concurrency_preflight`, `evidence_collector`,
   `regression_evidence`, `verification_tiers`, `spec_levels`, `invariants`, `approvals`
 - `ai_ops_kit/providers/` — модели и деньги: `orchestrator` (+`_http`/`_providers`/`_usage`),
   `model_router`, `provider_endpoints`, `usage_ledger`, `cost_account`, `cost_method`

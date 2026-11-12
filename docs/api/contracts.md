@@ -79,8 +79,8 @@ report: RunReport = {
 | `UsageRecord` | usage_ledger | Запись учёта модельного вызова |
 | `PreflightResult` | preflight | Результат preflight-проверок |
 | `PreflightCheck` | preflight | Одна проверка preflight |
-| `GateResultV2` | gate_result_v2 | Результат quality gate v2 |
-| `GateCheck` | gate_result_v2 | Одна проверка внутри gate |
+| `GateResultV2` | gate_executor (форма результата) | Результат quality gate; схема и валидатор v2 сняты (#1530) |
+| `GateCheck` | gate_executor | Одна проверка внутри gate |
 | `RunReport` | execution_pipeline | Отчёт execution pipeline |
 | `DeliveryIntent` | ai_ops_run | Намерение доставки (PR) |
 | `DeliveryReceipt` | ai_ops_run | Подтверждение доставки |
@@ -133,7 +133,7 @@ budget/reservations-тесты — поведение отказов, поток
 ### Решение по Pydantic v2
 
 Решение этого среза: **не внедрять Pydantic**. Сравнение сделано с существующими
-`schemas/workitem.schema.json` и `schemas/gate-result-v2.schema.json`; внешняя
+`schemas/workitem.schema.json` и тогдашней схемой GateResult v2 (снята в #1530); внешняя
 JSON Schema остаётся источником формата, а TypedDict описывает используемые Python
 представления, иногда частичные. `total=False` не доказывает наличие обязательных
 полей внешнего документа и не заменяет runtime-валидацию схемы.
