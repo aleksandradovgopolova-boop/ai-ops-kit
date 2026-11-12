@@ -17,6 +17,7 @@ import io
 import tokenize
 from functools import lru_cache
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -600,6 +601,22 @@ BUDGET_RAISE_REQUIRED = ("at", "what", "measured_before", "measured_after", "fil
                          "why_it_works_in_the_child")
 
 
+# События CI, где меряется уже слитый main; на PR и локально граница строже на обычный шаг.
+MERGED_EVENTS = frozenset({"push", "schedule", "workflow_dispatch", "workflow_run", "workflow_call", "release"})
+
+
+def volume_hard_limit(doc, event=None):
+    """Жёсткая граница объёма реальной установки (#1527). -> int байт.
+
+    На PR и локально — потолок минус обычный шаг `steps.volume_bytes` (место под одно соседнее
+    слияние: два таких PR вместе не выходят за потолок); на main — сам потолок. Запас 10% —
+    предупреждение, а не граница: жёсткий запас заставлял поднимать потолок почти в каждом PR."""
+    ceiling = doc["ceilings"]["volume_bytes"]
+    step = (doc.get("steps") or {}).get("volume_bytes") or 0
+    event = os.environ.get("GITHUB_EVENT_NAME", "") if event is None else event
+    return ceiling if event in MERGED_EVENTS else ceiling - step
+
+
 def delivery_budget_errors(doc, shipped=None, exists=None):
     """Что не так с объявленным бюджетом поставки. -> список проблем (пустой = всё названо).
 
@@ -619,6 +636,11 @@ def delivery_budget_errors(doc, shipped=None, exists=None):
     for key in ("volume_bytes", "substantive_files"):
         if not isinstance(ceilings.get(key), int):
             problems.append(f"ceilings.{key} не объявлен числом — потолка нет")
+    step = (doc.get("steps") or {}).get("volume_bytes")
+    if not isinstance(step, int) or step <= 0:
+        problems.append("steps.volume_bytes не объявлен положительным числом — обычный шаг не назван")
+    elif isinstance(ceilings.get("volume_bytes"), int) and step * 10 > ceilings["volume_bytes"]:
+        problems.append(f"обычный шаг {step} Б больше десятой доли потолка — это уже не шаг, а дыра")
     vol = [r for r in raises if isinstance(r, dict) and r.get("what") == "volume"]
     if not vol:
         problems.append("в ленте нет ни одного подъёма объёма — потолок появился без записи")

@@ -260,7 +260,8 @@ jobs:
   # (это делает merge_preview). Файловая ось закрывает дрейф 490->498 ФАЙЛОВ, который объёмная ось не
   # ловит. НЕ блокирующая: запускается без --strict (всегда exit 0); новый job в обязательные статусы
   # защиты ветки не входит без действия владельца — промоут отдельным решением. Только на PR:
-  # --base origin/main требует базы для превью слияния.
+  # --base origin/main требует базы для превью слияния. #1527: --strict-step краснит СКАЧОК — рост
+  # итога слияния против main больше обычного шага (steps.volume_bytes) без записи `what: step`.
   delivered-footprint:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
@@ -271,7 +272,7 @@ jobs:
         with: {python-version-file: .python-version}
       - run: pip install pyyaml
       - name: "Advisory: объём+число файлов доставляемого итога слияния (merge-preview ∩ managed_set)"
-        run: python3 installer/delivered_merge_footprint.py --base origin/main --head HEAD
+        run: python3 installer/delivered_merge_footprint.py --base origin/main --head HEAD --strict-step
 
 
   # 2026-09-03 (замер CI): джоба `coverage` УБРАНА С ПУТИ PR. Замер показал: она занимала ~10.8 мин

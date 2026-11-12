@@ -76,14 +76,16 @@ def test_real_copy_has_compact_checksum_executes_and_no_update_diff(tmp_path, in
     assert installer.build_diff()[0]['action'] == 'replace'
 
 
-def test_real_install_has_ten_percent_reserve_and_same_python_ast(tmp_path, installer):
+def test_real_install_fits_hard_limit_and_same_python_ast(tmp_path, installer):
     child = _make_child_repo(tmp_path / 'child')
     result = _run_cli(child, 'init', '.')
     assert result.returncode == 0, result.stdout + result.stderr
     managed = child / '.ai' / 'managed'
     actual = sum(p.stat().st_size for p in managed.rglob('*') if p.is_file())
     budget = installer.delivery_budget()
-    assert actual <= budget['ceilings']['volume_bytes'] * (1 - budget['warnings']['volume_reserve_fraction'])
+    # #1527: жёсткая граница — потолок минус обычный шаг на PR (место под соседнее слияние), на main —
+    # сам потолок; запас 10% стал предупреждением в test_installer, а не провалом.
+    assert actual <= installer.volume_hard_limit(budget), (actual, installer.volume_hard_limit(budget))
     smaller = 0
     for source, rel in installer.managed_set():
         if rel.startswith('ai_ops_kit/') and rel.endswith('.py'):
