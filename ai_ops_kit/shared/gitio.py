@@ -33,7 +33,8 @@ def raw_group(args: list[str], *, cwd: str | Path | None = None,
     return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
 
 
-def run(args: list[str], *, cwd: str | Path | None = None, timeout: int = GIT_TIMEOUT_DEFAULT) -> tuple[int, str, str]:
+def run(args: list[str], *, cwd: str | Path | None = None, timeout: int = GIT_TIMEOUT_DEFAULT,
+        env: dict[str, str] | None = None) -> tuple[int, str, str]:
     """git <args...> (без подстановки `-C`) -> (returncode, stdout.strip(), stderr.strip()).
 
     Для форм, не сводимых к `git -C <root>`: `git clone <src> <dst>` и команды, задающие рабочий
@@ -41,15 +42,16 @@ def run(args: list[str], *, cwd: str | Path | None = None, timeout: int = GIT_TI
     (124, '', reason), а не блокировка."""
     try:
         r = subprocess.run(["git", *args], cwd=(str(cwd) if cwd is not None else None),
-                           capture_output=True, text=True, timeout=timeout)
+                           capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return 124, "", f"git timeout {timeout}s: {' '.join(str(a) for a in args)[:120]}"
     return r.returncode, r.stdout.strip(), r.stderr.strip()
 
 
-def git(root: str | Path, *args: str, timeout: int = GIT_TIMEOUT_DEFAULT) -> tuple[int, str, str]:
+def git(root: str | Path, *args: str, timeout: int = GIT_TIMEOUT_DEFAULT,
+        env: dict[str, str] | None = None) -> tuple[int, str, str]:
     """git -C <root> <args...> -> (returncode, stdout.strip(), stderr.strip()). Таймаут -> (124, '', reason)."""
-    return run(["-C", str(root), *args], timeout=timeout)
+    return run(["-C", str(root), *args], timeout=timeout, env=env)
 
 
 def committed_changed_files(root: str | Path, sha: str) -> list[str]:

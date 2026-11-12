@@ -548,17 +548,18 @@ def _parse_task_and_root(intent, rest):
 
 
 def main(argv):
-    # #675 Human API: пустой вызов и `help` показывают человеческую дверь (короткий набор команд
-    # владельца), а не argparse-стену из 36 интентов и 30 флагов. `help --all` — весь список.
+    # #675: короткий список команд владельца; `help --all` показывает полный.
     _door = human_help.handle(argv, INTENTS, HUMAN_ACTIONS)
     if _door is not None:
         return _door
-    # Фасад владельца (7 действий человеческим языком поверх 34 intents). ДО argparse: research/start/
-    # check/release и `review all` — не intent-имена, argparse их не знает; work/review/feedback имена
-    # разделяют с intents и разрешаются внутри (см. _dispatch_human_action).
+    # Фасад разбирает команды владельца до парсера технических интентов.
     _facade = _dispatch_human_action(argv, main)
     if _facade is not None:
         return _facade
+    # Обёртки подставляют корень сразу после reach; отчёт разбирает свои флаги.
+    if len(argv) >= 4 and argv[0] == "reach" and argv[2:4] == ["adoption", "report"]:
+        from ai_ops_kit.cli import adoption as adoption_cli
+        return adoption_cli.main(["report", argv[1], *argv[4:]])
     ap = _build_cli_arg_parser()
     a = ap.parse_intermixed_args(argv)
 
@@ -567,7 +568,6 @@ def main(argv):
     preview_mode = intent == "preview"
     if preview_mode:
         intent = rest.pop(0) if rest else "run"
-    # Парсер оставляет неиспользованные позиционные в rest для resume.
     task, child_root = _parse_task_and_root(intent, rest)
     # Проверка feature предшествует чтению спеки и записи процессного следа.
     if a.feature is not None:

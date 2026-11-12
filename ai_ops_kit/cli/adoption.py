@@ -25,6 +25,8 @@ def main(argv=None):
             p.add_argument("source", type=Path)
             p.add_argument("--relationship", choices=adoption.RELATIONSHIPS, default="unknown")
         if action == "report":
+            p.add_argument("--verification", type=Path, help="локальная квитанция независимой проверки")
+            p.add_argument("--verification-sha256", help="SHA256 из доверенного канала проверки")
             for flag in ("owned", "external", "project"):
                 p.add_argument(f"--{flag}", action="append", type=Path, default=[])
     a = ap.parse_args(argv)
@@ -49,7 +51,10 @@ def main(argv=None):
         else:
             projects = [(p, r) for flag, r in (("owned", "owned"), ("external", "external"), ("project", "unknown"))
                         for p in getattr(a, flag)]
-            result = adoption.report(a.root, a.start, a.end, projects)
+            if (a.verification is None) != (a.verification_sha256 is None):
+                raise ValueError("нужны квитанция и её доверенный SHA256")
+            verification = adoption.load_verification(a.verification, a.verification_sha256) if a.verification else None
+            result = adoption.report(a.root, a.start, a.end, projects, verification=verification)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         if result.get("inspection") == "not_permitted":
             return 2
