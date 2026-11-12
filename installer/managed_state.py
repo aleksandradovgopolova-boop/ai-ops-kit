@@ -423,14 +423,35 @@ def _merge_driver_config(root, values=None):
     return out
 
 
-def _footprint_symlink(paths):
+def _owner_skill_alias(path, skills_root, shipped_ids, root):
+    # sync_skills пишет только в .claude/skills/<shipped id>. Другие прямые псевдонимы
+    # остаются нетронутыми; снимок/откат копирует саму ссылку, сохраняя цель владельца.
+    if path.parent != skills_root or path.name.rstrip(" .").casefold() in shipped_ids or Path(os.readlink(path)).is_absolute():
+        return False
+    try:
+        target = path.resolve(strict=True)
+    except (OSError, RuntimeError):
+        return False
+    return root in target.parents and target.is_dir()
+
+
+def _footprint_symlink(paths, *, preserve_owner_skill_aliases=False):
     """Не следовать по ссылкам ни в областях записи, ни среди их родителей в репозитории."""
     root = _ao().REPO_ROOT
+    skills_root = root / ".claude/skills"
+    shipped_ids = set()
+    if preserve_owner_skill_aliases:
+        skills = _core().manifest().get("skills") or {}
+        shipped_ids = {skill["id"].casefold() for skill in skills.get("shipped") or []
+                       if isinstance(skill.get("id"), str)}
     for p in paths:
         candidates = [p] + [parent for parent in p.parents if root in parent.parents]
         link = next((candidate for candidate in candidates if candidate.is_symlink()), None)
         if link is None and p.is_dir():
-            link = next((candidate for candidate in p.rglob("*") if candidate.is_symlink()), None)
+            link = next((candidate for candidate in p.rglob("*")
+                         if candidate.is_symlink()
+                         and not (preserve_owner_skill_aliases and p == skills_root
+                                  and _owner_skill_alias(candidate, skills_root, shipped_ids, root))), None)
         if link is not None:
             return link
     return None
@@ -443,8 +464,10 @@ def snapshot_footprint(dest: Path):
     не подставляя абсолютные пути в dest. Фактический manifest передаётся откату в памяти.
     """
     paths = _footprint_paths()
-    # Delivery пишет сквозь ссылки, а copytree сохраняет лишь сами ссылки. Отказываем ДО записи.
-    link = _footprint_symlink(paths + [_ao().AI_DIR / "runtime/last-update-report.json"])
+    # Delivery может писать сквозь ссылки. Исключение — прямые локальные псевдонимы
+    # навыков владельца, пути которых sync_skills не открывает.
+    link = _footprint_symlink(paths + [_ao().AI_DIR / "runtime/last-update-report.json"],
+                              preserve_owner_skill_aliases=True)
     if link is not None:
         raise OSError(f"В install footprint есть символическая ссылка: {link}; запись не начата.")
     if dest.exists():

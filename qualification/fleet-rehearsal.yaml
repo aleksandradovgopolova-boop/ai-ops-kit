@@ -1,0 +1,8 @@
+schema_version: 1
+cases:
+  - repository: aleksandradovgopolova-boop/dashboard-kit
+    commit: 106c4d846e10c5494efe5b66339bbf9c27046328
+    installed_version: 4.11.4
+  - repository: aleksandradovgopolova-boop/personal-cosmic-book
+    commit: ba2adf4f20718dbd99ce9505ee8b4f3e606fcad0
+    installed_version: 4.10.1

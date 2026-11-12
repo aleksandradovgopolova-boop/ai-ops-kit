@@ -900,3 +900,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/devtools/workitem_trace.py` — read-only проекция существующих journal/usage/run-report одного WorkItem (#1411), без сети и записи.
 - `ai_ops_kit/cli/project_session_resume.py` — ограниченный read-only worker prepared CLI resume; `docs/change-briefs/1434-runtime-recovery-delivery.md` и `1434-resume-read-deadline.md` — границы поставки и deadline.
 - `docs/change-briefs/1434-hook-read-deadlines.md` — ограниченные read-only фазы проектных hooks до durable-записи.
+
+- `ai_ops_kit/devtools/fleet_rehearsal.py` — предрелизная репетиция установки и отката на закреплённых дочках.
+- `tests/unit/test_fleet_release_gate.py` — обязательный предрелизный запуск репетиции.
+- `qualification/fleet-rehearsal.yaml` — открытые эталонные репозитории и их неизменяемые Git-снимки.

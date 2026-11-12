@@ -1030,15 +1030,16 @@ probes:
   covers:
   - .github/workflows/release.yml
   file: .github/workflows/release.yml
-  find: "    if: ${{ needs.check.outputs.needed == 'true' && needs.full-gate.result == 'success' }}"
+  find: "    if: ${{ needs.check.outputs.needed == 'true' && needs.full-gate.result == 'success' && needs.field-rehearsal.result == 'success' }}"
   replace_with: "    if: ${{ true }}"
   tests:
   - tests/unit/test_release_gates.py
+  - tests/unit/test_fleet_rehearsal.py
   why: 'ШОВ, которого потребовал сам кит: `validate_mutation_probes` сказал «у механизма есть охранные
     пробы, но НЕТ пробы шва» — и был прав. 2026-10-26 (#1376): ворота выпуска переехали с per-step
     `if` на уровень джобы `release` — тег/Release выходит, только пока джоба условна на нужде выпуска И
-    зелёном полном наборе на релизном SHA (`needs.full-gate.result == ''success''`). Мутация снимает
-    это условие (`if: true`): релиз пошёл бы и без зелёного полного набора, и на обычном merge —
+    зелёном полном наборе и репетиции на релизном SHA. Мутация снимает
+    это условие (`if: true`): релиз пошёл бы и без обеих проверок, и на обычном merge —
     ровно так дефект и живёт: гейт объявлен, а конвейер до него не доходит.'
 - id: freeze-state-is-fail-closed
   kind: guard
