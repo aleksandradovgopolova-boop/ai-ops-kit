@@ -385,6 +385,11 @@ RUNTIME_VALIDATORS = frozenset({
     # (stdlib+pyyaml). budget_contract/context_architecture НЕ вносим: у дочки нет BudgetContract/CAD
     # (её `budget.yaml` — токенный бюджет, другой kind), они остаются parent-only (parent-CI).
     "validate_access_filter", "validate_key_lifecycle",
+    # #1512: CODE-003 «без дублирования» едет в проект с конституцией, а проверял её только CI кита.
+    # Валидатор зовётся в дочке ПРОЦЕССОМ — шагом child-CI (из клона) и командой владельца для
+    # заморозки базы (`.ai/managed/.../validate_code_duplication.py --write-baseline`). Ядро —
+    # поставляемый checks/code_duplication.py.
+    "validate_code_duplication",
 })
 
 

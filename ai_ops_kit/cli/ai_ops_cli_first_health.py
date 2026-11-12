@@ -33,6 +33,13 @@ def _code_item(child_root) -> dict:
         return {"area": "Устройство кода", "status": NOT_CHECKED,
                 "text": f"проверить не удалось ({type(exc).__name__})"}
     if not findings:
+        from ai_ops_kit.checks import code_duplication as _dup
+        checked, not_checked, _ = _dup.source_languages(child_root)
+        if not checked:
+            # Эвристики читают только Python: тишина по непрочитанному коду — не «нет расхождений».
+            langs = ", ".join(sorted(not_checked)) or "исходников не найдено"
+            return {"area": "Устройство кода", "status": NOT_CHECKED,
+                    "text": f"не проверяется: правила устройства кода кит читает только в Python ({langs})"}
         return {"area": "Устройство кода", "status": OK,
                 "text": "расхождений с правилами устройства кода нет"}
     n = sum(f.get("count", 1) for f in findings)

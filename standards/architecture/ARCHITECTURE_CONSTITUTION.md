@@ -231,14 +231,16 @@
 - **Уровень:** MUST_NOT
 - **Категория:** anti_pattern
 - **Severity:** medium
-- **Гейт:** test_code_duplication
-- **Исполнение:** parent
+- **Гейт:** validate_code_duplication
+- **Исполнение:** both
 - **Анти-паттерн:** одна и та же логика скопирована в несколько мест; правку приходится вносить
   N раз, и одно из мест забывают.
 - **Подсказка агенту:** предпочитай выделение общей функции копипасте.
-- _Гейт-ратчет (#827): существующие структурные дубли функций заморожены в
-  `packages/code-duplication-baseline.yaml`, новый краснит `tests/contracts/test_code_duplication.py`
-  (детектор `ai_ops_kit/devtools/code_duplication.py`). Пока parent-CI; в дочку не едет._
+- _Гейт-ратчет (#827, #1512): существующие структурные дубли функций заморожены базой, новая группа
+  — находка. У кита база — `packages/code-duplication-baseline.yaml`, краснеет
+  `tests/contracts/test_code_duplication.py`. В проекте база — `.ai/project/code-duplication-baseline.yaml`,
+  проверка — поставляемый `validate_code_duplication.py`, шаг child-CI advisory. Ядро одно:
+  `ai_ops_kit/checks/code_duplication.py`. Читает только Python; проект без Python — «не проверяется»._
 
 ### CODE-004 · Имена раскрывают намерение
 - **Уровень:** SHOULD

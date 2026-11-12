@@ -176,8 +176,8 @@ rules:
     level: MUST_NOT
     category: anti_pattern
     severity: medium
-    gate: "test_code_duplication"
-    enforced_in: parent
+    gate: "validate_code_duplication"
+    enforced_in: both
     validation:
       automated: true
       manual: false

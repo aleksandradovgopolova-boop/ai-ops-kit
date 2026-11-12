@@ -17,6 +17,9 @@ from tests.unit._installer_helpers import _make_child_repo
 
 SOURCE = Path(__file__).resolve().parents[2]
 OLD = "ef6cdf6970ae3ef71724834c9ccf1e4c0824fa45"
+# Установка кита — это и CI-файлы, которые он кладёт в `.github/` (обновление освежает их, #1512):
+# откат установки без них оставил бы новый workflow рядом со старым кодом.
+INSTALLED = migration.INSTALL + (".github",)
 
 
 @pytest.mark.slow
@@ -57,7 +60,7 @@ def test_stock_old_source_update_migration_and_state_rollback(tmp_path, outcome)
         assert json.loads(response.stdout).get("continue") is not False, response.stdout
         requests[runtime] = sessions.load(root, runtime, runtime + "-fixture")
     before = migration.protected_files(root)
-    install_before = store.inventory(root, migration.INSTALL)
+    install_before = store.inventory(root, INSTALLED)
     product_before = (root / "src/calc.py").read_bytes()
     snapshot, plan = tmp_path / "snapshot.json", tmp_path / "plan.json"
     captured = migration.capture(root, snapshot)
@@ -95,7 +98,7 @@ def test_stock_old_source_update_migration_and_state_rollback(tmp_path, outcome)
     assert migration.protected_files(root) == before
     # State rollback is separate from installation rollback. Restore only this disposable
     # fixture's captured installation, then verify OLD code reads the identical pending IDs.
-    after = store.inventory(root, migration.INSTALL)
+    after = store.inventory(root, INSTALLED)
     for name in set(after) - set(install_before):
         (root / name).unlink()
     for name, entry in install_before.items():
@@ -103,7 +106,7 @@ def test_stock_old_source_update_migration_and_state_rollback(tmp_path, outcome)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(store.raw(entry))
         path.chmod(entry["mode"])
-    assert store.inventory(root, migration.INSTALL) == install_before
+    assert store.inventory(root, INSTALLED) == install_before
     for runtime, original in requests.items():
         script = ("import sys,json;sys.path.insert(0,'.ai/managed');"
                   "from ai_ops_kit.lifecycle import project_session as s;"
