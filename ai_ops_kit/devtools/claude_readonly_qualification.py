@@ -29,7 +29,6 @@ import hashlib
 import json
 import os
 import shlex
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -177,7 +176,9 @@ def run_live(root: Path, binary: str, timeout: int = 300) -> list[dict]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--live", action="store_true", help="настоящие вызовы модели (явное решение)")
-    ap.add_argument("--binary", default=shutil.which("claude") or "claude")
+    # Квалифицируется ровно тот бинарь, который запустит адаптер: тот же поиск, что у провайдера.
+    from ai_ops_kit.providers.orchestrator_providers import claude_binary
+    ap.add_argument("--binary", default=claude_binary() or "claude")
     ap.add_argument("--out", type=Path, help="куда записать отчёт квалификации (JSON)")
     args = ap.parse_args(argv)
     with tempfile.TemporaryDirectory(prefix="aiops-claude-ro-") as tmp:
