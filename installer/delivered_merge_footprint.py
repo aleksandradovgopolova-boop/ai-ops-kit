@@ -126,6 +126,40 @@ def delivered_merge_footprint(root, base_ref: str, head_ref: str,
             **verdict, **files_axis}
 
 
+def step_verdict(base_bytes: int, merged_bytes: int, step: int, justified: bool) -> dict:
+    """Шаг PR (#1527): рост доставляемого итога слияния против main. Больше обычного шага — СКАЧОК.
+
+    Скачок проходит, только если этот PR добавил в ленту `raises` запись `what: step` с файлами и
+    причиной. Рост в пределах шага подъёма потолка не требует."""
+    delta = merged_bytes - base_bytes
+    jump = delta > step
+    return {"delta": delta, "step": step, "jump": jump, "justified": bool(justified),
+            "ok": (not jump) or bool(justified)}
+
+
+def delivered_bytes_of(root, ref: str, managed_rels) -> int:
+    """Доставляемый объём дерева `ref` (тот же расчёт, что у итога слияния)."""
+    tree = subprocess.run(["git", "-C", str(root), "rev-parse", f"{ref}^{{tree}}"], capture_output=True,
+                          text=True, timeout=30, check=True).stdout.strip()
+    entries = _project_entries(root, tree, merge_preview.merge_preview_entries(root, tree), managed_rels)
+    return dfw.delivered_merge_footprint(entries, managed_rels)["delivered_bytes"]
+
+
+def new_step_records(head_doc: dict, base_doc: dict) -> list[dict]:
+    """Записи `what: step`, которых нет в ленте base — то есть добавленные этим PR."""
+    def steps(doc):
+        return [r for r in (doc or {}).get("raises") or [] if isinstance(r, dict) and r.get("what") == "step"]
+    seen = {(str(r.get("at")), str(r.get("work"))) for r in steps(base_doc)}
+    return [r for r in steps(head_doc) if (str(r.get("at")), str(r.get("work"))) not in seen]
+
+
+def _base_budget(root, base_ref: str) -> dict:
+    import yaml
+    shown = subprocess.run(["git", "-C", str(root), "show", f"{base_ref}:quality/delivery-budget.yaml"],
+                           capture_output=True, text=True, timeout=30)
+    return (yaml.safe_load(shown.stdout) or {}) if shown.returncode == 0 else {}
+
+
 def _load_managed_rels():
     """Доставляемая поверхность дочки как множество относительных путей (installer.managed_set)."""
     import ai_ops as installer     # noqa: E402 — installer/ добавлен в sys.path выше
@@ -169,6 +203,33 @@ def _format_line(res: dict, base_ref: str, head_ref: str) -> str:
     return head + " В пределах."
 
 
+def _check_step(args, res) -> bool:
+    """Печатает вердикт шага; True — красный (скачок без записи или шаг не посчитан)."""
+    import ai_ops as installer     # noqa: E402 — installer/ добавлен в sys.path выше
+    doc = installer.delivery_budget() or {}
+    step = (doc.get("steps") or {}).get("volume_bytes")
+    if not res["ok"] or not isinstance(step, int) or step <= 0:
+        print("DELIVERED-STEP: шаг PR посчитать не удалось (нет итога слияния или steps.volume_bytes) — красный.")
+        return True
+    try:
+        base_bytes = delivered_bytes_of(args.root, args.base, _load_managed_rels())
+    except (OSError, subprocess.SubprocessError, tarfile.TarError, KeyError, ValueError) as exc:
+        print(f"DELIVERED-STEP: объём {args.base} посчитать не удалось ({type(exc).__name__}) — красный.")
+        return True
+    records = new_step_records(doc, _base_budget(args.root, args.base))
+    v = step_verdict(base_bytes, res["delivered_bytes"], step, bool(records))
+    if not v["jump"]:
+        print(f"DELIVERED-STEP: рост поставки {v['delta']} Б при обычном шаге {step} Б — подъём не нужен.")
+    elif v["justified"]:
+        print(f"DELIVERED-STEP: СКАЧОК {v['delta']} Б (шаг {step} Б) обоснован записью "
+              f"`what: step` ({records[-1].get('work')}).")
+    else:
+        print(f"DELIVERED-STEP: СКАЧОК {v['delta']} Б больше обычного шага {step} Б. Добавьте в "
+              "quality/delivery-budget.yaml запись `what: step` в ленту raises: файлы и почему они "
+              "работают в проекте.")
+    return not v["ok"]
+
+
 def main(argv) -> int:
     ap = argparse.ArgumentParser(
         prog="delivered_merge_footprint.py",
@@ -178,6 +239,8 @@ def main(argv) -> int:
     ap.add_argument("--root", default=".", help="корень репозитория (по умолчанию .)")
     ap.add_argument("--strict", action="store_true",
                     help="ненулевой код при пробое/непосчитанном итоге (по умолчанию advisory, exit 0)")
+    ap.add_argument("--strict-step", action="store_true",
+                    help="ненулевой код при скачке больше обычного шага без записи `what: step` (#1527)")
     args = ap.parse_args(argv)
 
     ceiling, fraction, files_ceiling = _load_budget()
@@ -190,6 +253,9 @@ def main(argv) -> int:
     res = delivered_merge_footprint(args.root, args.base, args.head,
                                     _load_managed_rels(), ceiling, fraction, files_ceiling)
     print(_format_line(res, args.base, args.head))
+    step_failed = _check_step(args, res) if args.strict_step else False
+    if step_failed:
+        return 1
     # strict: краснеет пробой ЛЮБОЙ оси (объём ИЛИ число файлов) или непосчитанный итог; тонкий — нет.
     if args.strict and (not res["ok"] or res["breached"] or res.get("files_breached")):
         return 1

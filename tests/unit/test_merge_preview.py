@@ -480,7 +480,10 @@ def test_ci_wires_the_delivered_footprint_advisory_job():
     assert calls, "package-quality.yml не зовёт installer/delivered_merge_footprint.py"
     joined = "\n".join(calls)
     assert "--base origin/main" in joined and "--head HEAD" in joined, joined
-    assert "--strict" not in joined, "гейт обязан оставаться advisory (без --strict) до промоута"
+    flags = joined.split()
+    assert "--strict" not in flags, "ось потолка обязана оставаться advisory (без --strict) до промоута"
+    # #1527: ось ШАГА краснит скачок без записи `what: step` — она заменила жёсткий запас 10%.
+    assert "--strict-step" in flags, "скачок поставки больше обычного шага не краснеет в CI"
 
 
 def test_delivered_python_size_uses_merged_blob_projection(tmp_path):

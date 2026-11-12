@@ -352,8 +352,9 @@ def test_delivery_footprint_is_smaller_than_legacy(installed, ai_ops):
     # только с содержательной причиной, а её больше нет. Число потолка теперь читается из реестра
     # (`quality/delivery-budget.yaml`, работа `delivery-budget-is-declared`), а не вписано сюда:
     # запись «почему не подняли» осталась историей, действующее число — в одном месте.
-    assert total < _ceil["volume_bytes"], ai_ops.footprint_breach_message(
-        "объём managed", total, _ceil["volume_bytes"])
+    # #1527: на PR граница — потолок минус обычный шаг (место под соседнее слияние), на main — потолок.
+    _limit = ai_ops.volume_hard_limit(_budget)
+    assert total <= _limit, ai_ops.footprint_breach_message("объём managed", total, _limit)
     # ПРЕДУПРЕЖДЕНИЕ О ТАЮЩЕМ ЗАПАСЕ (работа `delivery-footprint-warns-before-breach`, 2026-08-27).
     # Порог — ИЗ РЕЕСТРА, не хардкод. Пока поставка под потолком, но запас меньше доли volume_bytes —
     # ЗЕЛЁНОЕ предупреждение с авто-разбором В ЭТОМ прогоне, а не падением на следующей работе.
