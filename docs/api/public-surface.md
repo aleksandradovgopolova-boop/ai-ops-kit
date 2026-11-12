@@ -179,7 +179,7 @@ experimental:
     # Всё opt-in, рукой владельца, без сети (сбор дочек — `python3 -m ai_ops_kit.engops.child_registry
     # collect`). Регистрация несёт только имя проекта + версию кита + дату + анонимный id (без путей/
     # почты/кода). Форма записи и сводки ещё уточняется — дочка вправе пользоваться, зная это.
-    # reach adoption: только локальное состояние нового добровольного учёта.
+    # reach adoption: локальное состояние; reach adoption report — сводка без сети.
     # Полный экспериментальный CLI: python3 -m ai_ops_kit.cli.adoption
     # identity|consent|revoke|status|preview|export|import|report|evidence. Записи псевдонимны, сети нет.
     # preview/export/report/evidence: без обеих дат — последние 30 календарных дней UTC;
@@ -393,7 +393,7 @@ audience:
     - graph
     - replan
     - readout
-    # reach adoption: только локальное состояние нового добровольного учёта.
+    # reach adoption: локальное состояние; reach adoption report — сводка без сети.
     # Полный экспериментальный CLI: python3 -m ai_ops_kit.cli.adoption
     # identity|consent|revoke|status|preview|export|import|report|evidence. Записи псевдонимны, сети нет.
     # preview/export/report/evidence: без обеих дат — последние 30 календарных дней UTC;

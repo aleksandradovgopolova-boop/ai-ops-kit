@@ -884,6 +884,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `docs/change-briefs/1434-native-preflight-contract.md` — неактивный проект двухфазного preflight с независимым native запретом tools.
 - `docs/change-briefs/fixtures/1434-native-preflight-scenarios.yaml` — синтетические сценарии проекта preflight, не evidence живой квалификации.
 - `docs/change-briefs/1434-native-sessionstart-compat.md` — подтверждённая граница SessionStart в Codex 0.147.0 и честный отказ до модели.
+- `ai_ops_kit/engops/adoption_evidence.py` — ограниченная проверка байтов managed-инвентаря.
 - `ai_ops_kit/engops/adoption.py` — добровольный локальный учёт проектов и наблюдаемой активности;
   `docs/architecture/adoption-opt-in.md` — границы доверия и приватности;
   `docs/agent-guides/adoption-measurement.md` — согласие, экспорт, импорт и сводка.
