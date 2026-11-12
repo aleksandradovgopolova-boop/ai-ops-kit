@@ -118,6 +118,8 @@ class ProducerClient(Client):
             return [{"id": 10, "number": 10}]
         if self.phase == "merged" and tail == f"/commits/{self.head}/pulls":
             return [{"id": 11, "number": 11}]
+        if tail == f"/commits/{self.feature}/pulls":
+            return [{"id": 11, "number": 11, "head": {"sha": self.feature}}]
         if tail == "/pulls/10":
             return {"number": 10, "merged": True, "state": "closed", "merge_commit_sha": self.original,
                     "head": {"sha": "3" * 40}, "base": {"ref": "main", "sha": self.base}, "changed_files": 1}
@@ -675,3 +677,66 @@ def test_missing_canonical_link_permission_invalidates_snapshot(source_case):
     root, client = source_case
     client.closing_issue_numbers = lambda _: FetchResult(False, reason="HTTP 403")
     assert not src.capture(root, client)["complete"]
+
+
+def test_in_flight_open_pr_ci_does_not_void_the_plan(producer_case, monkeypatch):
+    """#1446: пока у открытого PR идут проверки, его движение не обнуляет план выпуска."""
+    root, client, _ = producer_case
+    original, reads = client.read_page, {"jobs": 0}
+    def flowing(path, params=None):
+        value = deepcopy(original(path, params))
+        if "/actions/runs/10" in path and path.endswith("/jobs"):
+            reads["jobs"] += 1
+            done = reads["jobs"] > len(client.policy)            # второе чтение — проверки дошли
+            for job in value["jobs"]:
+                job["status"], job["conclusion"] = ("completed", "success") if done else ("in_progress", None)
+        return value
+    monkeypatch.setattr(client, "read_page", flowing)
+    snap = src.capture(root, client)
+    assert snap["complete"], snap.get("diagnostic")
+    assert snap["ci_archive"] == [] and snap["validation"]["open_ci_queries"] == []
+
+
+def _merged_with_native_fields(producer_case, monkeypatch, failure=None):
+    root, client, git = producer_case
+    git("merge", "--no-ff", "--no-edit", "fixture-feature")
+    client.head, client.phase = git("rev-parse", "HEAD"), "merged"
+    original = client.read_page
+    def platform(path, params=None):
+        value = deepcopy(original(path, params))
+        if path.endswith("/pulls/11"):
+            value["head"]["ref"] = "fixture-feature"
+            value["merged_at"] = "2026-11-02T00:00:00Z"
+            if failure == "fork":
+                value["head"]["repo"]["full_name"] = "foreign/kit"
+        if path.endswith(f"/commits/{client.feature}/pulls") and failure == "ambiguous":
+            value.append({"id": 12, "number": 12, "head": {"sha": client.feature}})
+        if isinstance(value, dict) and params and params.get("head_sha") == client.feature:
+            for run in value.get("workflow_runs", []):
+                run.update(head_branch="other-branch" if failure == "branch" else "fixture-feature",
+                           head_repository={"full_name": "foreign/kit" if failure == "run_fork" else "owner/kit"},
+                           created_at="2026-11-03T00:00:00Z" if failure == "after_merge" else "2026-11-01T00:00:00Z")
+        return value
+    monkeypatch.setattr(client, "read_page", platform)
+    snap = src.capture(root, client)
+    assert snap["complete"], snap.get("diagnostic")
+    if failure == "parent":
+        merged = next(c for c in snap["commits"] if c["sha"] == client.head)
+        merged["parents"][0] = client.base
+        snap["commits"] = [merged]
+    return root, snap
+
+
+def test_merged_pr_ci_is_bound_without_any_archive(producer_case, monkeypatch):
+    """#1446: сливаем сразу по зелёному — архив не успевает; связь восстанавливается из самого GitHub."""
+    root, snap = _merged_with_native_fields(producer_case, monkeypatch)
+    assert snap["ci"]["11"][0]["pull_requests"] == [] and snap["pulls"][0]["head_prs"] == [11]
+    report = rp.build(root, snap)
+    assert report["implementation_evidence_complete"]
+    assert not report["release_ready"] and report["publication_authorized"] is None
+
+
+@pytest.mark.parametrize("failure", ["fork", "run_fork", "branch", "after_merge", "ambiguous", "parent"])
+def test_post_merge_binding_never_accepts_a_lookalike_run(producer_case, monkeypatch, failure):
+    root, snap = _merged_with_native_fields(producer_case, monkeypatch, failure)
+    assert not rp.build(root, snap)["implementation_evidence_complete"]
