@@ -1,0 +1,52 @@
+{
+  "kind": "jsts-import-compare",
+  "root": "typeorm/typeorm@5a572a40bae2f85a1d5f7b87a0aa88bbbaec5ab3",
+  "files": 3626,
+  "tree_parsed_files": 3624,
+  "fallbacks": {
+    "syntax-error": 2
+  },
+  "pairs": {
+    "regex": 12428,
+    "tree": 13697,
+    "both": 12353,
+    "only_regex": 75,
+    "only_tree": 1344
+  },
+  "seconds": {
+    "regex": 0.088,
+    "tree": 1.016
+  },
+  "samples": {
+    "only_regex": [
+      ".prettierrc.js:3 -> prettier",
+      "docs/src/pages/index.tsx:101 -> typeorm",
+      "packages/codemod/src/transforms/ast-helpers.ts:243 -> ...",
+      "packages/codemod/src/transforms/ast-helpers.ts:746 -> expo-sqlite",
+      "packages/codemod/src/transforms/ast-helpers.ts:844 -> module",
+      "packages/codemod/src/transforms/ast-helpers.ts:846 -> module/sub/path",
+      "packages/codemod/src/transforms/ast-helpers.ts:287 -> moduleName[/subpath]",
+      "packages/codemod/src/transforms/ast-helpers.ts:1295 -> typeorm",
+      "packages/codemod/src/transforms/ast-helpers.ts:797 -> typeorm/driver/sap/SapConnectionOptions",
+      "packages/codemod/src/transforms/ast-helpers.ts:467 -> typeorm/metadata/ColumnMetadata"
+    ],
+    "only_tree": [
+      "docs/src/pages/index.tsx:9 -> lucide-react",
+      "packages/codemod/src/cli/run-dependencies.ts:4 -> ../dependencies",
+      "packages/codemod/src/transforms/ast-helpers.ts:1 -> jscodeshift",
+      "packages/codemod/src/transforms/v1/column-readonly.ts:8 -> ../ast-helpers",
+      "packages/codemod/src/transforms/v1/column-readonly.ts:2 -> jscodeshift",
+      "packages/codemod/src/transforms/v1/column-unsigned-numeric.ts:3 -> ../ast-helpers",
+      "packages/codemod/src/transforms/v1/column-width-zerofill.ts:3 -> ../ast-helpers",
+      "packages/codemod/src/transforms/v1/connection-options-reader.ts:11 -> ../ast-helpers",
+      "packages/codemod/src/transforms/v1/connection-options-reader.ts:2 -> jscodeshift",
+      "packages/codemod/src/transforms/v1/connection-to-datasource.ts:9 -> ../ast-helpers"
+    ],
+    "fallback_files": {
+      "syntax-error": [
+        "packages/typeorm/src/data-source/index.ts",
+        "packages/typeorm/src/index.ts"
+      ]
+    }
+  }
+}
