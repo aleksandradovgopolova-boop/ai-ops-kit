@@ -1,0 +1,53 @@
+{
+  "kind": "jsts-import-compare",
+  "root": "excalidraw/excalidraw@701b901a0f1ba3d0b390d9cdf63d112e25abac4b",
+  "files": 718,
+  "tree_parsed_files": 713,
+  "fallbacks": {
+    "syntax-error": 5
+  },
+  "pairs": {
+    "regex": 3976,
+    "tree": 4645,
+    "both": 3968,
+    "only_regex": 8,
+    "only_tree": 677
+  },
+  "seconds": {
+    "regex": 0.076,
+    "tree": 0.768
+  },
+  "samples": {
+    "only_regex": [
+      "dev-docs/docusaurus.config.js:51 -> @docusaurus/preset-classic",
+      "dev-docs/docusaurus.config.js:9 -> @docusaurus/types",
+      "dev-docs/sidebars.js:14 -> @docusaurus/plugin-content-docs",
+      "examples/with-nextjs/next.config.js:1 -> next",
+      "excalidraw-app/data/firebaseSDK.ts:2 -> ./firebaseSDK",
+      "excalidraw-app/data/firebaseSDK.ts:4 -> firebase/*",
+      "scripts/woff2/woff2-esbuild-plugins.js:18 -> esbuild",
+      "scripts/woff2/woff2-vite-plugins.js:8 -> vite"
+    ],
+    "only_tree": [
+      "examples/with-script-in-browser/components/ExampleApp.tsx:13 -> @excalidraw/excalidraw/element/types",
+      "examples/with-script-in-browser/components/ExampleApp.tsx:17 -> @excalidraw/excalidraw/types",
+      "examples/with-script-in-browser/components/ExampleApp.tsx:2 -> react",
+      "excalidraw-app/App.tsx:83 -> ./app-jotai",
+      "excalidraw-app/App.tsx:90 -> ./app_constants",
+      "excalidraw-app/App.tsx:138 -> ./components/DebugCanvas",
+      "excalidraw-app/App.tsx:105 -> ./components/ExportToExcalidrawPlus",
+      "excalidraw-app/App.tsx:111 -> ./data",
+      "excalidraw-app/App.tsx:126 -> ./data/LocalData",
+      "excalidraw-app/App.tsx:120 -> ./data/localStorage"
+    ],
+    "fallback_files": {
+      "syntax-error": [
+        "packages/element/tests/dragElements.test.ts",
+        "packages/excalidraw/tests/clipboard.test.tsx",
+        "packages/excalidraw/tests/onDuplicate.test.tsx",
+        "packages/excalidraw/tests/wheel.test.tsx",
+        "setupTests.ts"
+      ]
+    }
+  }
+}

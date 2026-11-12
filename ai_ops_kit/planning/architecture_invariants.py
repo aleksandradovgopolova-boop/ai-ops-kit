@@ -28,11 +28,14 @@
 (`security_scan.new_dependencies`); здесь добавлена СВЯЗЬ: новая зависимость, не упомянутая ни в
 одном ADR, — находка с адресом (манифест + имя). С ADR — тишина.
 
-ГРАНИЦА (§5.2). Разбор импортов JS/TS — регулярными выражениями (stdlib+pyyaml, без tree-sitter):
-он не видит динамический импорт, ре-экспорт через barrel и алиасы сборщика, и потому даёт ПРОПУСКИ,
-не ложные тревоги. Инвариант поверх такого графа рождается `advisory` и повышается до блокирующего
-ТОЛЬКО замером на живом репозитории (issue #606: «измерено число ложных»). Этот модуль собирает и
-ПОКАЗЫВАЕТ находки; блокировать он не вправе.
+ГРАНИЦА (§5.2). По умолчанию импорты JS/TS читаются регулярным выражением по одной строке
+(stdlib+pyyaml): оно не видит многострочный и динамический импорт и принимает импорт из комментария
+или строки за ребро — то есть даёт и ПРОПУСКИ, и ЛОЖНЫЕ тревоги. `parser: tree-sitter` в объявлении
+включает разбор синтаксическим деревом (`context.js_imports`, #1408): опциональный пакет, без него
+и на непокрытых файлах — прежний способ с причиной в отчёте. Алиасы сборщика не выводит ни один из
+двух способов — их объявляют. Инвариант поверх графа рождается `advisory` и повышается до
+блокирующего ТОЛЬКО замером на живом репозитории (issue #606: «измерено число ложных»). Этот модуль
+собирает и ПОКАЗЫВАЕТ находки; блокировать он не вправе.
 
 Форму объявления задаёт schemas/architecture-invariants.schema.json.
 """
@@ -43,6 +46,7 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.context import js_imports
 from ai_ops_kit.planning import contours
 from ai_ops_kit.security import security_scan
 
@@ -174,14 +178,49 @@ def _resolve_import(from_rel: str, spec: str, aliases: dict) -> str | None:
     return rel or None
 
 
-def build_import_graph(child_root, zones: dict, aliases: dict | None = None) -> list:
-    """Рёбра графа импортов между ЗОНАМИ. -> список dict с адресом (SR-11).
+def _regex_imports(text: str) -> list:
+    """Прежний разбор: регулярное выражение по каждой строке (default, §5.2)."""
+    return [js_imports.JsImport(spec, lineno) for lineno, line in enumerate(text.splitlines(), start=1)
+            for spec in _IMPORT_RE.findall(line)]
 
-    Каждое ребро: {from_file, line, import, from_zone, to_zone}. Рёбра, у которых зона источника
-    или цели неизвестна, отбрасываются: инвариант говорит о зонах, а не о безымянных файлах.
+
+def _file_imports(path: Path, text: str, reader, parse: dict) -> list:
+    """Импорты файла выбранным способом; невозможность разбора деревом — fallback с причиной."""
+    if reader is not None:
+        try:
+            found = reader.read(path.suffix, text)
+            parse["files"]["tree-sitter"] += 1
+            return found
+        except js_imports.AstUnavailable as exc:
+            parse["fallbacks"][exc.reason] = parse["fallbacks"].get(exc.reason, 0) + 1
+    parse["files"]["regex"] += 1
+    return _regex_imports(text)
+
+
+def _zone_edges(from_rel: str, from_zone: str, imports: list, zones: dict, aliases: dict) -> list:
+    edges = []
+    for imp in imports:
+        target = _resolve_import(from_rel, imp.specifier, aliases)
+        to_zone = zone_of(target, zones) if target else None
+        if to_zone is not None and to_zone != from_zone:
+            edges.append({"from_file": from_rel, "line": imp.line, "import": imp.specifier,
+                          "from_zone": from_zone, "to_zone": to_zone})
+    return edges
+
+
+def analyze_import_graph(child_root, zones: dict, aliases: dict | None = None,
+                         parser: str = "regex") -> tuple:
+    """Рёбра графа импортов между ЗОНАМИ и сводка способа разбора. -> (edges, parse).
+
+    Каждое ребро: {from_file, line, import, from_zone, to_zone} (SR-11). Рёбра, у которых зона
+    источника или цели неизвестна, отбрасываются: инвариант говорит о зонах, а не о файлах.
+    parse: {requested, files: {tree-sitter, regex}, fallbacks: {причина: число файлов}} — сколько
+    файлов разобрано деревом и почему остальные прочитаны прежним способом.
     """
     root = Path(child_root)
     aliases = aliases or {}
+    reader = js_imports.AstImportReader() if parser == "tree-sitter" else None
+    parse = {"requested": parser, "files": {"tree-sitter": 0, "regex": 0}, "fallbacks": {}}
     edges = []
     for p in sorted(_iter_source_files(root)):
         from_rel = str(p.relative_to(root)).replace("\\", "/")
@@ -192,17 +231,48 @@ def build_import_graph(child_root, zones: dict, aliases: dict | None = None) -> 
             text = p.read_text(encoding="utf-8", errors="replace")
         except OSError:
             continue
-        for lineno, line in enumerate(text.splitlines(), start=1):
-            for spec in _IMPORT_RE.findall(line):
-                target = _resolve_import(from_rel, spec, aliases)
-                if not target:
-                    continue
-                to_zone = zone_of(target, zones)
-                if to_zone is None or to_zone == from_zone:
-                    continue
-                edges.append({"from_file": from_rel, "line": lineno, "import": spec,
-                              "from_zone": from_zone, "to_zone": to_zone})
-    return edges
+        imports = _file_imports(p, text, reader, parse)
+        edges.extend(_zone_edges(from_rel, from_zone, imports, zones, aliases))
+    return edges, parse
+
+
+def build_import_graph(child_root, zones: dict, aliases: dict | None = None,
+                       parser: str = "regex") -> list:
+    """Только рёбра (см. analyze_import_graph)."""
+    return analyze_import_graph(child_root, zones, aliases, parser)[0]
+
+
+_FALLBACK_WORDS = {
+    js_imports.NOT_INSTALLED: "tree-sitter не установлен",
+    js_imports.SYNTAX_ERROR: "синтаксическая ошибка в файле",
+    js_imports.UNSUPPORTED: "формат без грамматики (.vue/.svelte)",
+    js_imports.ESCAPED_SPECIFIER: "escape-последовательность в пути импорта",
+}
+
+
+def parse_summary(parse: dict | None) -> str | None:
+    """Строка для человека: каким способом прочитаны импорты. None — показывать нечего (default)."""
+    if not parse or (parse.get("requested") == "regex" and not parse.get("problem")):
+        return None
+    files = parse["files"]
+    text = (f"импорты прочитаны деревом в {files['tree-sitter']} файлах, "
+            f"регулярным выражением — в {files['regex']}")
+    reasons = [f"{_FALLBACK_WORDS.get(k, k)}: {n}" for k, n in sorted(parse["fallbacks"].items())]
+    if reasons:
+        text += f" ({'; '.join(reasons)})"
+    if parse["fallbacks"].get(js_imports.NOT_INSTALLED):
+        text += f". Чтобы читать деревом: {js_imports.INSTALL_HINT}"
+    if parse.get("problem"):
+        text += f". {parse['problem']} — разбор шёл регулярным выражением"
+    return text
+
+
+def _parser(decl: dict) -> tuple:
+    """Способ разбора из объявления. -> (parser, problem); неизвестное значение — regex + причина."""
+    value = decl.get("parser", "regex") if isinstance(decl, dict) else "regex"
+    if value in js_imports.PARSERS:
+        return value, None
+    return "regex", f"неизвестный parser {value!r} (допустимо: {', '.join(js_imports.PARSERS)})"
 
 
 # ── Проверка рёбер против правил — та же логика, что у validate_layering.check() (SR-9). ───────
@@ -326,13 +396,17 @@ def report(child_root, deps=None) -> dict:
     rules = [r for r in (decl.get("rules") or []) if isinstance(r, dict)]
 
     rows: list = []
+    parse = None
     if not zones or not rules:
         reason = ("зоны архитектуры не объявлены — нечем разрешать пути в зоны"
                   if not zones else "правила между зонами не объявлены — нечего проверять")
         rows.append({"requirement": "architecture::zones", "status": NOT_CHECKED,
                      "closed_by": "validator", "strength": STRENGTH, "reason": reason})
     else:
-        edges = build_import_graph(root, zones, _aliases(decl))
+        parser, parser_problem = _parser(decl)
+        edges, parse = analyze_import_graph(root, zones, _aliases(decl), parser)
+        if parser_problem:
+            parse["problem"] = parser_problem
         rows.extend(check(decl, edges))
         if not rows:
             rows.append({"requirement": "architecture::zones", "status": PASS,
@@ -356,5 +430,5 @@ def report(child_root, deps=None) -> dict:
     return {
         "kind": KIND, "schema_version": SCHEMA_VERSION, "strength": STRENGTH,
         "declared": bool(zones and rules), "source": decl.get("_source"),
-        "counts": counts, "rows": rows,
+        "counts": counts, "rows": rows, "parse": parse,
     }

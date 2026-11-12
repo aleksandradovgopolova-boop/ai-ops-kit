@@ -261,6 +261,9 @@ def render(rep: dict) -> str:
         ac = arch["counts"]
         lines.append(f"  Архитектурные инварианты (advisory, SR-9..13): "
                      f"pass {ac['pass']} · violated {ac['violated']} · not_checked {ac['not_checked']}")
+        parsed = architecture_invariants.parse_summary(arch.get("parse"))
+        if parsed:
+            lines.append(f"    разбор: {parsed}")
         for r in arch["rows"]:
             if r["status"] == PASS:
                 continue
