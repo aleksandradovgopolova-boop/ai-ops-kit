@@ -1,0 +1,29 @@
+{
+  "before": {
+    "boot_id": "6eef3a51-cf43-4c80-91dd-cd847c9424eb",
+    "pswpin": 0,
+    "pswpout": 0
+  },
+  "workflow_sha": "25eca8ab151c664ca8f4cd770f1612cccd7122b8",
+  "workflow_ref": "aleksandradovgopolova-boop/ai-ops-kit/.github/workflows/performance-baseline.yml@refs/heads/main",
+  "run_id": "43409263821",
+  "attempt": "1",
+  "runner_os": "Linux",
+  "runner_arch": "X64",
+  "cache_semantics": "fresh process; OS cache uncontrolled; warmup recorded",
+  "memory_semantics": "maximum child RSS, not simultaneous tree RSS",
+  "qualification": "CANDIDATE",
+  "after": {
+    "boot_id": "6eef3a51-cf43-4c80-91dd-cd847c9424eb",
+    "pswpin": 0,
+    "pswpout": 0
+  },
+  "source_unchanged": true,
+  "swap_stable": true,
+  "base_sha256_before_repeat": "4b48887561d84cf27f4e2aafae357694288693615c2a50689dcba71b456b57fe",
+  "base_sha256_after_repeat": "4b48887561d84cf27f4e2aafae357694288693615c2a50689dcba71b456b57fe",
+  "exit_codes": [
+    0,
+    0
+  ]
+}

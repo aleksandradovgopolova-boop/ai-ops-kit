@@ -1,0 +1,483 @@
+{
+  "schema_version": 1,
+  "metadata": {
+    "sha": "25eca8ab151c664ca8f4cd770f1612cccd7122b8",
+    "dirty": false,
+    "dirty_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "environment": {
+      "platform": "Linux-7.0.0-1019-azure-x86_64-with-glibc2.43",
+      "machine": "x86_64",
+      "host": "runnervmwuk1x",
+      "python": "3.12.16",
+      "implementation": "CPython",
+      "executable": "/opt/hostedtoolcache/Python/3.12.16/x64/bin/python3",
+      "cpu_count": 4,
+      "packages": [
+        [
+          "PyYAML",
+          "6.0.3"
+        ],
+        [
+          "Pygments",
+          "2.21.0"
+        ],
+        [
+          "execnet",
+          "2.1.2"
+        ],
+        [
+          "hypothesis",
+          "6.170.15"
+        ],
+        [
+          "iniconfig",
+          "2.3.1"
+        ],
+        [
+          "packaging",
+          "26.3"
+        ],
+        [
+          "pip",
+          "26.2.2"
+        ],
+        [
+          "pluggy",
+          "1.7.0"
+        ],
+        [
+          "pytest",
+          "9.2.0"
+        ],
+        [
+          "pytest-xdist",
+          "3.8.0"
+        ],
+        [
+          "ruff",
+          "0.17.4"
+        ],
+        [
+          "sortedcontainers",
+          "2.4.0"
+        ]
+      ],
+      "variables": {
+        "PATH": "/opt/hostedtoolcache/Python/3.12.16/x64/bin:/opt/hostedtoolcache/Python/3.12.16/x64:/snap/bin:/home/runner/.local/bin:/opt/pipx_bin:/home/runner/.cargo/bin:/home/runner/.config/composer/vendor/bin:/usr/local/.ghcup/bin:/home/runner/.dotnet/tools:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin",
+        "PYTHONHASHSEED": "0",
+        "PYTEST_ADDOPTS": null,
+        "PYTHONPATH": null,
+        "PYTHON": "python3",
+        "AI_OPS_PYTHON": null,
+        "LC_ALL": null,
+        "LANG": "C.UTF-8",
+        "TZ": null,
+        "OMP_NUM_THREADS": null,
+        "CI": "true"
+      }
+    },
+    "suite_sha256": "a45cc2b60b123e52a1a63cba473d005aaea0be0713e45e01b1c4dc54b7786c43",
+    "iterations": 3,
+    "warmup": 1,
+    "started_at": "2026-11-13T10:28:22.532666+00:00",
+    "load_average": [
+      1.26904296875,
+      0.353515625,
+      0.11962890625
+    ],
+    "execution_context": "github_actions",
+    "ci_run_id": "43409263821",
+    "ci_run_attempt": "1",
+    "memory_semantics": "RUSAGE_CHILDREN ru_maxrss; max child RSS, not sum of concurrent process RSS"
+  },
+  "suite": {
+    "schema_version": 1,
+    "cases": [
+      {
+        "name": "runtime-cli-startup-help",
+        "domain": "runtime",
+        "command": [
+          "{python}",
+          "-m",
+          "ai_ops_kit.cli.entry",
+          "--help"
+        ],
+        "timeout_seconds": 60
+      },
+      {
+        "name": "runtime-orchestrator-mock-startup",
+        "domain": "runtime",
+        "command": [
+          "{python}",
+          "-c",
+          "from ai_ops_kit.providers import orchestrator; orchestrator.make_provider('mock')"
+        ],
+        "timeout_seconds": 60
+      },
+      {
+        "name": "runtime-preflight-assess",
+        "domain": "runtime",
+        "command": [
+          "{python}",
+          "-c",
+          "import tempfile; from ai_ops_kit.gates import preflight; root=tempfile.TemporaryDirectory(); preflight.assess({'task_type': 'ENGINEERING'}, root.name, 'bench-1409'); root.cleanup()"
+        ],
+        "timeout_seconds": 60
+      },
+      {
+        "name": "ci-replica-lint",
+        "domain": "ci",
+        "command": [
+          "{python}",
+          "-m",
+          "ruff",
+          "check",
+          "."
+        ],
+        "timeout_seconds": 120
+      },
+      {
+        "name": "ci-replica-critical-contracts",
+        "domain": "ci",
+        "command": [
+          "{python}",
+          "-m",
+          "pytest",
+          "tests/contracts/",
+          "-q",
+          "-m",
+          "critical_path",
+          "--tb=short"
+        ],
+        "timeout_seconds": 300
+      }
+    ]
+  },
+  "results": {
+    "runtime-cli-startup-help": {
+      "domain": "runtime",
+      "command": [
+        "{python}",
+        "-m",
+        "ai_ops_kit.cli.entry",
+        "--help"
+      ],
+      "cwd": "/home/runner/work/ai-ops-kit/ai-ops-kit",
+      "timeout_seconds": 60,
+      "samples": [
+        {
+          "elapsed_ms": 176.5265989999989,
+          "peak_rss_bytes": 24498176,
+          "cpu_seconds": 0.17194500000000001,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-0.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-0.stderr.log",
+          "attempt": 1,
+          "warmup": true
+        },
+        {
+          "elapsed_ms": 179.50787699999893,
+          "peak_rss_bytes": 24530944,
+          "cpu_seconds": 0.17507099999999998,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-1.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-1.stderr.log",
+          "attempt": 2,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 174.08752500000446,
+          "peak_rss_bytes": 24526848,
+          "cpu_seconds": 0.16966799999999999,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-2.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-2.stderr.log",
+          "attempt": 3,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 173.6959529999993,
+          "peak_rss_bytes": 24588288,
+          "cpu_seconds": 0.169282,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-3.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-0-attempt-3.stderr.log",
+          "attempt": 4,
+          "warmup": false
+        }
+      ],
+      "iterations": 3,
+      "command_attempts": 4,
+      "repeat_count": 3,
+      "status": "measured",
+      "median_ms": 174.08752500000446,
+      "median_peak_rss_bytes": 24530944,
+      "median_cpu_seconds": 0.16966799999999999
+    },
+    "runtime-orchestrator-mock-startup": {
+      "domain": "runtime",
+      "command": [
+        "{python}",
+        "-c",
+        "from ai_ops_kit.providers import orchestrator; orchestrator.make_provider('mock')"
+      ],
+      "cwd": "/home/runner/work/ai-ops-kit/ai-ops-kit",
+      "timeout_seconds": 60,
+      "samples": [
+        {
+          "elapsed_ms": 110.42284900000254,
+          "peak_rss_bytes": 22089728,
+          "cpu_seconds": 0.105923,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-0.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-0.stderr.log",
+          "attempt": 1,
+          "warmup": true
+        },
+        {
+          "elapsed_ms": 105.88035699999665,
+          "peak_rss_bytes": 21999616,
+          "cpu_seconds": 0.10139799999999999,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-1.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-1.stderr.log",
+          "attempt": 2,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 106.2167950000017,
+          "peak_rss_bytes": 21966848,
+          "cpu_seconds": 0.10177399999999999,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-2.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-2.stderr.log",
+          "attempt": 3,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 107.9126119999998,
+          "peak_rss_bytes": 22028288,
+          "cpu_seconds": 0.10346499999999999,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-3.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-1-attempt-3.stderr.log",
+          "attempt": 4,
+          "warmup": false
+        }
+      ],
+      "iterations": 3,
+      "command_attempts": 4,
+      "repeat_count": 3,
+      "status": "measured",
+      "median_ms": 106.2167950000017,
+      "median_peak_rss_bytes": 21999616,
+      "median_cpu_seconds": 0.10177399999999999
+    },
+    "runtime-preflight-assess": {
+      "domain": "runtime",
+      "command": [
+        "{python}",
+        "-c",
+        "import tempfile; from ai_ops_kit.gates import preflight; root=tempfile.TemporaryDirectory(); preflight.assess({'task_type': 'ENGINEERING'}, root.name, 'bench-1409'); root.cleanup()"
+      ],
+      "cwd": "/home/runner/work/ai-ops-kit/ai-ops-kit",
+      "timeout_seconds": 60,
+      "samples": [
+        {
+          "elapsed_ms": 134.78556399999775,
+          "peak_rss_bytes": 24788992,
+          "cpu_seconds": 0.130273,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-0.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-0.stderr.log",
+          "attempt": 1,
+          "warmup": true
+        },
+        {
+          "elapsed_ms": 132.88913200000252,
+          "peak_rss_bytes": 24653824,
+          "cpu_seconds": 0.12842599999999998,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-1.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-1.stderr.log",
+          "attempt": 2,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 132.35644699999938,
+          "peak_rss_bytes": 24707072,
+          "cpu_seconds": 0.127908,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-2.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-2.stderr.log",
+          "attempt": 3,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 133.27898000000005,
+          "peak_rss_bytes": 24735744,
+          "cpu_seconds": 0.12880799999999998,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-3.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-2-attempt-3.stderr.log",
+          "attempt": 4,
+          "warmup": false
+        }
+      ],
+      "iterations": 3,
+      "command_attempts": 4,
+      "repeat_count": 3,
+      "status": "measured",
+      "median_ms": 132.88913200000252,
+      "median_peak_rss_bytes": 24707072,
+      "median_cpu_seconds": 0.12842599999999998
+    },
+    "ci-replica-lint": {
+      "domain": "ci",
+      "command": [
+        "{python}",
+        "-m",
+        "ruff",
+        "check",
+        "."
+      ],
+      "cwd": "/home/runner/work/ai-ops-kit/ai-ops-kit",
+      "timeout_seconds": 120,
+      "samples": [
+        {
+          "elapsed_ms": 184.69916600000147,
+          "peak_rss_bytes": 33513472,
+          "cpu_seconds": 0.6091840000000001,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-0.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-0.stderr.log",
+          "attempt": 1,
+          "warmup": true
+        },
+        {
+          "elapsed_ms": 44.08257800000115,
+          "peak_rss_bytes": 22446080,
+          "cpu_seconds": 0.055742,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-1.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-1.stderr.log",
+          "attempt": 2,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 44.17604899999361,
+          "peak_rss_bytes": 23412736,
+          "cpu_seconds": 0.055312,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-2.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-2.stderr.log",
+          "attempt": 3,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 43.49477099999888,
+          "peak_rss_bytes": 23302144,
+          "cpu_seconds": 0.054657,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-3.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-3-attempt-3.stderr.log",
+          "attempt": 4,
+          "warmup": false
+        }
+      ],
+      "iterations": 3,
+      "command_attempts": 4,
+      "repeat_count": 3,
+      "status": "measured",
+      "median_ms": 44.08257800000115,
+      "median_peak_rss_bytes": 23302144,
+      "median_cpu_seconds": 0.055312
+    },
+    "ci-replica-critical-contracts": {
+      "domain": "ci",
+      "command": [
+        "{python}",
+        "-m",
+        "pytest",
+        "tests/contracts/",
+        "-q",
+        "-m",
+        "critical_path",
+        "--tb=short"
+      ],
+      "cwd": "/home/runner/work/ai-ops-kit/ai-ops-kit",
+      "timeout_seconds": 300,
+      "samples": [
+        {
+          "elapsed_ms": 8236.084511000001,
+          "peak_rss_bytes": 60473344,
+          "cpu_seconds": 3.5880229999999997,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-0.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-0.stderr.log",
+          "attempt": 1,
+          "warmup": true
+        },
+        {
+          "elapsed_ms": 8111.118429999998,
+          "peak_rss_bytes": 60014592,
+          "cpu_seconds": 3.6584,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-1.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-1.stderr.log",
+          "attempt": 2,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 7853.973215000004,
+          "peak_rss_bytes": 60465152,
+          "cpu_seconds": 3.586956,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-2.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-2.stderr.log",
+          "attempt": 3,
+          "warmup": false
+        },
+        {
+          "elapsed_ms": 7327.9997329999915,
+          "peak_rss_bytes": 60903424,
+          "cpu_seconds": 3.6594889999999998,
+          "returncode": 0,
+          "error": null,
+          "stdout": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-3.stdout.log",
+          "stderr": "/home/runner/work/_temp/performance-baseline/base.logs/case-4-attempt-3.stderr.log",
+          "attempt": 4,
+          "warmup": false
+        }
+      ],
+      "iterations": 3,
+      "command_attempts": 4,
+      "repeat_count": 3,
+      "status": "measured",
+      "median_ms": 7853.973215000004,
+      "median_peak_rss_bytes": 60465152,
+      "median_cpu_seconds": 3.6584
+    }
+  },
+  "comparison": null,
+  "status": "NO_BASELINE"
+}
