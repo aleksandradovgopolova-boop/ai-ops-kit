@@ -19,7 +19,8 @@ jobs:
     timeout-minutes: 15
     env:
       SOURCE_SHA: ${{ inputs.source_sha }}
-      OUT: ${{ runner.temp }}/performance-baseline
+      # OUT задаётся в шаге, а не здесь: контекст `runner` на уровне job недоступен — GitHub
+      # отвергал весь файл, ручной запуск был невозможен, а каждый push давал красный «прогон» за 0 с.
       PYTHONDONTWRITEBYTECODE: '1'
       PYTHONHASHSEED: '0'
       PYTHON: python3
@@ -42,6 +43,8 @@ jobs:
       - name: Существующий toolchain CI
         run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-xdist==3.*' 'hypothesis==6.*' 'ruff==0.17.4'
       - name: Одна штатная lease на base и repeat
+        env:
+          OUT: ${{ runner.temp }}/performance-baseline
         run: |
           cat > "$RUNNER_TEMP/measure-pair.sh" <<'SH'
           set -euo pipefail

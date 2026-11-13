@@ -42,6 +42,8 @@ LIVE_RUN_FILES = (
     "tests/unit/test_validator_runtime_contract.py",
     "tests/unit/test_validator_contract.py",
     "tests/contracts/test_safety_validators_green_on_live_kit.py",
+    # workflow_contexts по всем .github/workflows и templates/ci кита — в каждом PR (#1409).
+    "tests/unit/test_workflow_context_availability.py",
 )
 
 

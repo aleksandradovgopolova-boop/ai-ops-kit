@@ -749,6 +749,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/engine/tool_broker.py` — Tool Broker + Policy Engine: модель предлагает, политика решает (v2.36)
 - `ai_ops_kit/engine/tool_loop.py` — tool-calling петля: proposer → Policy → Broker → Evidence → контекст (механика, v2.42); + независимый ревьюер `make_reviewer_proposer`/`run_review` под read-only (writer ≠ judge, v2.83)
 - `ai_ops_kit/devtools/jsts_import_compare.py` — замер: импорты JS/TS регулярным выражением против синтаксического дерева (dev-only, #1408; итоги — `docs/evidence/1408-jsts-ast/`)
+- `ai_ops_kit/devtools/workflow_contexts.py` — workflow GitHub: контекст на уровне workflow/job, где он недоступен, — GitHub отвергает файл целиком (dev-only, #1409)
 - `ai_ops_kit/devtools/mutation_probe.py` — прогон мутационных проб: снятие охраны обязано ронять названный тест (dev-only, 2026-08-14)
 - `docs/change-briefs/1482-mutation-executed-test.md` — mutation kill требует выполненного падающего test call; ошибки запуска не засчитываются.
 - `ai_ops_kit/planning/staleness.py` — проверки протухания: мёртвые ссылки описания и отставание плана от истории (14.08.2026)
