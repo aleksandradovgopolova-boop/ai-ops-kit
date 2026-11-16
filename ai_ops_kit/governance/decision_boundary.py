@@ -160,6 +160,123 @@ def describe(verdict: dict) -> list:
     return lines
 
 
+# ── ЛЕСТНИЦА АВТОНОМИИ (#1413) ───────────────────────────────────────────────────────────────────
+# Уровень = минимум потолков (класс действия, тип задачи, права runtime, история прогонов этого типа).
+# Владелец поднимает потолок типа задачи и снимает авто-понижение только в `.ai-ops/POLICY.yaml`;
+# если эта же работа меняет политику, её настройки не действуют. Агент не повышает себе уровень.
+LADDER = ("assist", "execute", "deliver", "supervised", "policy_governed")
+POLICY_REL = ".ai-ops/POLICY.yaml"
+
+
+def _registry(model=None) -> dict:
+    if model is not None:
+        return model
+    try:
+        return yaml.safe_load((PKG / MODEL_REL).read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}
+
+
+def _owner_ladder(root, changed_paths) -> tuple:
+    """Настройки владельца из POLICY.yaml -> (dict, причина|None). Политика в этой работе -> пусто."""
+    if root is None:
+        return {}, None
+    if POLICY_REL in {str(p).removeprefix("./") for p in changed_paths or ()}:
+        return {}, "политика меняется в этой же работе — её повышения не действуют"
+    try:
+        data = yaml.safe_load((Path(root) / POLICY_REL).read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError):
+        return {}, None
+    own = data.get("autonomy_ladder") if isinstance(data, dict) else None
+    return (own if isinstance(own, dict) else {}), None
+
+
+def _journal(path: Path) -> list:
+    try:
+        rows = [json.loads(ln) for ln in path.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    except (OSError, ValueError):
+        return []
+    return [r for r in rows if isinstance(r, dict)]
+
+
+def work_task_type(root, work_id) -> str | None:
+    """Тип задачи работы — из её последнего run_start (движок пишет его сам)."""
+    starts = [e for e in _journal(Path(root) / "features" / str(work_id) / "lifecycle-journal.jsonl")
+              if e.get("kind") == "run_start" and e.get("task_type")]
+    return str(starts[-1]["task_type"]) if starts else None
+
+
+def run_history(root, task_type: str) -> list:
+    """Завершённые прогоны этого типа задач из журналов движка -> [{work, ok, at}] по времени."""
+    import datetime as _dt
+    out = []
+    for jp in sorted(Path(root).glob("features/*/lifecycle-journal.jsonl")):
+        events = _journal(jp)
+        kinds = {e.get("attempt_id"): e.get("task_type") for e in events if e.get("kind") == "run_start"}
+        mtime = _dt.datetime.fromtimestamp(jp.stat().st_mtime, _dt.timezone.utc).isoformat()
+        for e in events:
+            if e.get("kind") == "run_end" and kinds.get(e.get("attempt_id")) == task_type:
+                out.append({"work": jp.parent.name, "ok": bool(e.get("ready_for_pr")),
+                            "at": str(e.get("at") or mtime)})
+    return sorted(out, key=lambda r: r["at"])
+
+
+def ladder(signals: dict, *, root=None, task_type=None, runtime_rights=None, requested_level=None,
+           changed_paths=(), history=None, model=None) -> dict:
+    """Уровень автономии по правилу -> {level, allows, ceilings, limited_by, demoted, reason}."""
+    spec = _registry(model).get("autonomy_ladder") or {}
+    levels = {lv.get("id"): lv for lv in spec.get("levels") or [] if isinstance(lv, dict)}
+    if set(levels) != set(LADDER):
+        return {"level": LADDER[0], "allows": [], "ceilings": [], "limited_by": ["registry"],
+                "demoted": False, "requested_level": requested_level,
+                "reason": ["лестница в реестре недоступна — fail-closed: только согласование"]}
+    own, own_note = _owner_ladder(root, changed_paths)
+    ceilings = []
+    cls = evaluate(signals or {}, model=model)["decision_class"]
+    ceilings.append(("класс действия", (spec.get("by_decision_class") or {}).get(cls, LADDER[0]), cls))
+    if task_type:
+        owner_tt = (own.get("task_types") or {}).get(task_type)
+        if owner_tt in LADDER:
+            ceilings.append(("тип задачи", owner_tt, f"{task_type}: потолок владельца"))
+        elif (spec.get("by_task_type") or {}).get(task_type):
+            ceilings.append(("тип задачи", spec["by_task_type"][task_type], f"{task_type}: дорогая ошибка"))
+    if runtime_rights:
+        lvl = (spec.get("by_runtime_rights") or {}).get(str(runtime_rights), LADDER[0])
+        ceilings.append(("права runtime", lvl, str(runtime_rights)))
+    demoted = False
+    dem = spec.get("demotion") or {}
+    if task_type and (history is not None or root is not None):
+        runs = history if history is not None else run_history(root, task_type)
+        since = (own.get("restore") or {}).get(task_type)
+        runs = [r for r in runs if since is None or str(r.get("at")) > str(since)]
+        recent = runs[-int(dem.get("window", 5)):]
+        failed = sum(1 for r in recent if not r.get("ok"))
+        if failed >= int(dem.get("failures", 2)):
+            demoted = True
+            ceilings.append(("история", dem.get("to", LADDER[0]),
+                             f"{failed} из {len(recent)} последних прогонов «{task_type}» не дошли до PR"))
+    level = min((c[1] for c in ceilings), key=LADDER.index, default=LADDER[-1])
+    reason = [f"{src}: не выше {lvl} ({why})" for src, lvl, why in ceilings]
+    if own_note:
+        reason.append(own_note)
+    if requested_level in LADDER and LADDER.index(requested_level) > LADDER.index(level):
+        reason.append(f"запрошен {requested_level} — отклонено: повысить уровень может только владелец")
+    elif requested_level in LADDER and requested_level != level:
+        level = requested_level
+        reason.append(f"запрошен более строгий {requested_level} — принят")
+    return {"level": level, "allows": list(levels[level].get("allows") or []),
+            "means": levels[level].get("means"), "ceilings": [
+                {"source": s, "level": lv, "why": w} for s, lv, w in ceilings],
+            "limited_by": [s for s, lv, _ in ceilings if lv == level], "demoted": demoted,
+            "requested_level": requested_level, "reason": reason}
+
+
+def describe_ladder(v: dict) -> list:
+    lines = [f"  уровень автономии: {v['level']} — {v.get('means') or ''}".rstrip(" —")]
+    lines += [f"    · {r}" for r in v["reason"]]
+    return lines
+
+
 def main(argv) -> int:
     import argparse
     ap = argparse.ArgumentParser(prog="decision_boundary.py")

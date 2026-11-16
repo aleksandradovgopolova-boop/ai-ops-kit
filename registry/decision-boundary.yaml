@@ -184,3 +184,40 @@ implemented_by:
       Маппинг класс→уровень берётся ИЗ этого реестра (classes[].maps_to_autonomy_level) — не дубль;
       исполнение уровня — policy_engine. Инварианты never_downgraded_silently и fail_closed соблюдены.
       Проведён в контур командой `governance` (ai_ops_cli_intents._intent_governance). Issue #631.
+
+  - mechanism: "Лестница автономии: пять уровней по правилу, авто-понижение, защита от самоповышения"
+    where: ai_ops_kit/governance/decision_boundary.py
+    provides: [autonomy_ladder]
+    status: implemented
+    note: >-
+      ladder() берёт минимум из потолков: класс действия, тип задачи, права runtime, история
+      прогонов этого типа задач (журналы features/*/lifecycle-journal.jsonl). Проведена в шлюз
+      доставки (governance/enforcement.gate_delivery) и в команду `governance`. Issue #1413.
+
+# ── ЛЕСТНИЦА АВТОНОМИИ (#1413) ─────────────────────────────────────────────────────────────────────
+# Уровень — не тумблер и не ручная настройка агента, а ВЫЧИСЛЕНИЕ: минимум из потолков. Каждый
+# потолок называет свою причину. Поднять потолок может только владелец — в `.ai-ops/POLICY.yaml`
+# (защищённый путь; агент работает в своей копии и чужую политику не меняет). Запрос агентом более
+# высокого уровня, чем расчётный, отклоняется с причиной.
+autonomy_ladder:
+  levels:                                   # по возрастанию автономии
+    - {id: assist,          allows: [],                     means: "кит предлагает и готовит; доставка — только после согласования"}
+    - {id: execute,         allows: [],                     means: "кит делает изменение в своей ветке; PR — после согласования"}
+    - {id: deliver,         allows: [create_pr],            means: "кит доводит до PR с проверками; слияние — после согласования"}
+    - {id: supervised,      allows: [create_pr, merge],     means: "кит сливает сам по зелёным проверкам; владелец видит каждую работу"}
+    - {id: policy_governed, allows: [create_pr, merge],     means: "кит работает в границах политики; владелец видит сводку"}
+  by_decision_class: {AUTONOMOUS: policy_governed, COLLABORATIVE: deliver, ASSISTED: assist}
+  by_task_type:                             # типы задач с дорогой ошибкой; остальные — без потолка
+    migration: deliver
+    db-migration: deliver
+    data-migration: deliver
+    model-migration: deliver
+    hotfix: deliver
+    security-fix: deliver
+    incident-fix: deliver
+    critical-change: deliver
+  by_runtime_rights: {read_only: assist, no_push: execute, no_merge: deliver, full: policy_governed}
+  # Авто-понижение: среди последних `window` завершённых прогонов этого типа задач `failures` и более
+  # не дошли до готового PR -> такие задачи идут на обязательное согласование (`to`). Владелец снимает
+  # понижение записью `autonomy_ladder.restore: {<тип>: <дата ISO>}` в POLICY.yaml — счёт идёт заново.
+  demotion: {window: 5, failures: 2, to: assist}
