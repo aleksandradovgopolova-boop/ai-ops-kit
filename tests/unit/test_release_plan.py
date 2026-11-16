@@ -291,6 +291,20 @@ def test_ready_can_be_observed_after_actual_gates_before_publication(release_cas
     assert result["published"]["version"] == "4.11.4"
 
 
+def test_release_pauses_to_publish_ready_before_tag():
+    """#1446: пульт пересобирается после всех гейтов и до тега, и это не становится гейтом."""
+    job = yaml.safe_load((ROOT / ".github/workflows/release.yml").read_text())["jobs"]["release"]
+    steps = job["steps"]
+    window = next(i for i, s in enumerate(steps) if s.get("id") == "ready_window")
+    gates = [i for i, s in enumerate(steps) if "pytest" in s.get("run", "")]
+    tag = next(i for i, s in enumerate(steps) if "gh release create" in s.get("run", ""))
+    step = steps[window]
+    assert max(gates) < window < tag
+    assert "pytest" not in step["run"] and step["continue-on-error"] is True
+    assert "gh workflow run status-dashboard.yml" in step["run"] and step["timeout-minutes"] <= 20
+    assert job["permissions"] == {"contents": "write", "actions": "write"}
+
+
 @pytest.mark.parametrize("event", ["push", "workflow_dispatch"])
 def test_release_applicability_is_read_from_policy_without_writing_inputs(release_case, event):
     root, snap = release_case
