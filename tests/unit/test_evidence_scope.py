@@ -372,7 +372,8 @@ assert sys.argv[sys.argv.index("--target")+1]==os.environ["HEAD_SHA"]
 with Path(os.environ["EVENTS"]).open("a") as stream: stream.write("tag\\n")
 ''')
     fake_gh.chmod(0o755)
-    commands = "\n".join(step.get("run", "") for step in steps[first:last+1])
+    # Окно «готов» на пульте (#1446) ничего не решает и ходит в сеть — вне этой проверки гейтов.
+    commands = "\n".join(step.get("run", "") for step in steps[first:last+1] if step.get("id") != "ready_window")
     commands = commands.replace("/tmp/notes.md", str(tmp_path / "notes.md"))
     env = {**os.environ, "PATH": str(bindir) + os.pathsep + os.environ["PATH"],
            "EVENTS": str(events), "MUTATION_EXIT": str(mutation_exit), "VERSION": "0.0.1",

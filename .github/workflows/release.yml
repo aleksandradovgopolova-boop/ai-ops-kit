@@ -92,6 +92,9 @@ jobs:
     needs: [check, full-gate, field-rehearsal]
     if: ${{ needs.check.outputs.needed == 'true' && needs.full-gate.result == 'success' && needs.field-rehearsal.result == 'success' }}
     runs-on: ubuntu-latest
+    permissions:
+      contents: write   # тег и Release
+      actions: write    # пересобрать пульт перед тегом (#1446)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -133,6 +136,35 @@ jobs:
       # тег не создаётся. Через pytest (PYTEST-ONLY) с маркером `release_gate`, как гейт очереди выше.
       - name: Описание выпуска для владельца проходит проверку (гейт слоя A)
         run: python3 -m pytest tests/unit/test_release_owner_layer.py -q -m release_gate
+
+      # ОКНО «ВЫПУСК ГОТОВ» НА ПУЛЬТЕ (#1446). Проверки и публикация идут одним прогоном, поэтому
+      # пульт успевал увидеть только «идут проверки» или «уже выпущено». Здесь, когда все гейты
+      # зелёные, а тега ещё нет, выпуск сам пересобирает пульт и ждёт успешной публикации (не
+      # дольше 15 минут). Шаг ничего не решает: сбой или таймаут — предупреждение, выпуск идёт дальше.
+      - name: Показать «выпуск готов» на пульте до создания тега
+        id: ready_window
+        continue-on-error: true
+        timeout-minutes: 16
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          if ! gh workflow run status-dashboard.yml --repo "$GITHUB_REPOSITORY" --ref "${DEFAULT_BRANCH:-main}"; then
+            echo "::warning::пульт не удалось пересобрать — «выпуск готов» может быть не виден; выпуск продолжается"
+            exit 0
+          fi
+          for _ in $(seq 1 60); do
+            sleep 15
+            DONE=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow status-dashboard.yml --limit 20 \
+              --json createdAt,status,conclusion \
+              --jq "[.[] | select(.createdAt >= \"$STARTED\" and .status == \"completed\" and .conclusion == \"success\")] | length" || echo 0)
+            if [ "${DONE:-0}" -gt 0 ]; then
+              echo "Пульт опубликован с состоянием «выпуск готов»"
+              exit 0
+            fi
+          done
+          echo "::warning::пульт не опубликовался за 15 минут — выпуск продолжается без окна «готов»"
 
       - name: Создать тег и Release из CHANGELOG
         env:
