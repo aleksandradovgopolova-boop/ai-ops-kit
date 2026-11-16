@@ -236,17 +236,19 @@ def _intent_governance(task, child_root, signals, a):
     # Граница решений (#631): три оси действия РАЗОМ -> имя класса + причина. Классифицируем текущее
     # действие по сигналам вызова; без сигналов это профиль по умолчанию (fail-closed COLLABORATIVE).
     boundary = decision_boundary.evaluate(signals)
+    autonomy = decision_boundary.ladder(signals, root=root, task_type=signals.get("task_type"),
+                                        runtime_rights=signals.get("runtime_rights"))   # #1413
     if js:
         print(json.dumps({"policy": policy, "ai_decisions_count": len(decisions),
                           "overrides_count": len(ovr), "recent_decisions": decisions[-5:],
-                          "overrides": ovr, "decision_boundary": boundary},
+                          "overrides": ovr, "decision_boundary": boundary, "autonomy": autonomy},
                          ensure_ascii=False, indent=2, default=str))
         return 0
     print(f"GOVERNANCE ПРОДУКТА ({root})")
     print(f"  политика автономии: default={policy['default']} (источник: {policy['source']})")
     for act, lvl in (policy.get("actions") or {}).items():
         print(f"    {act}: {lvl}")
-    for _ln in decision_boundary.describe(boundary):   # граница решений (#631): 3 оси -> класс
+    for _ln in decision_boundary.describe(boundary) + decision_boundary.describe_ladder(autonomy):
         print(_ln)
     print(f"  решений AI в журнале: {len(decisions)}; переопределений человека: {len(ovr)}")
     for e in decisions[-5:]:

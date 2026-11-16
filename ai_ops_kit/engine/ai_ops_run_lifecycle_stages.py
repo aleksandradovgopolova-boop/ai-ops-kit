@@ -305,6 +305,7 @@ def _finalize_run(rep, fid, child_root, jname, attempt_id, aw_path):
                                 "status": rep.get("overall_status") or ("ready" if rep.get("ready_for_pr")
                                                                         else "not-ready"),
                                 "ready_for_pr": bool(rep.get("ready_for_pr")),
+                                "at": datetime.now(timezone.utc).isoformat(),
                                 "commit": (rep.get("commit") or {}).get("sha")})
     # F-012: `done` только когда работа действительно доведена. NOT_READY -> blocked, иначе
     # `ai-ops status` показывает пустоту при незакрытых гейтах и ненаписанном коде.

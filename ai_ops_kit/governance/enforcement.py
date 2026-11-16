@@ -33,7 +33,7 @@ from pathlib import Path
 
 import yaml
 
-from ai_ops_kit.governance import decision_log, human_override, policy_engine
+from ai_ops_kit.governance import decision_boundary, decision_log, human_override, policy_engine
 
 OBSERVE = "observe"
 BLOCK = "block"
@@ -81,13 +81,19 @@ def gate_delivery(root, *, target: str, action: str = DEFAULT_ACTION, date: str 
     policy = policy_engine.load_policy(root)
     approved = is_approved(root, action=action, target=target)
     decision = policy_engine.authorize(action, policy, approved=approved)
+    # Лестница автономии (#1413): тип задачи работы и история таких прогонов могут понизить уровень
+    # ниже политики — тогда доставка ждёт согласования так же, как require_approval.
+    autonomy = decision_boundary.ladder({}, root=root, task_type=decision_boundary.work_task_type(root, target))
+    if decision["allowed"] and action not in autonomy["allows"] and not approved:
+        decision = {**decision, "allowed": False, "requires_approval": True,
+                    "reason": f"лестница автономии: уровень {autonomy['level']} — {action} после согласования"}
     mode = enforcement_mode(root)
     blocked = bool(mode == BLOCK and not decision["allowed"])
     outcome = "allow" if decision["allowed"] else ("blocked" if blocked else "would_block")
     logged = _record(root, action=action, target=target, outcome=outcome,
                      reason=f"{decision['reason']} [режим {mode}]", date=date)
     return {**decision, "approved": approved, "mode": mode, "outcome": outcome,
-            "blocked": blocked, "logged": logged}
+            "blocked": blocked, "logged": logged, "autonomy": autonomy}
 
 
 def _record(root, *, action, target, outcome, reason, date) -> bool:
