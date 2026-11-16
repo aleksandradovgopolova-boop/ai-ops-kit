@@ -1,0 +1,111 @@
+# ai-ops-release.yml — автовыпуск продукта (#1548). Ставится `ai-ops init`/`update` в .github/workflows/.
+#
+# ВЫКЛЮЧЕН, пока владелец не включил его в .ai-ops.yaml:
+#   release:
+#     enabled: true
+# Дальше на каждый push в main: есть ли новая версия (VERSION / package.json / pyproject.toml /
+# Cargo.toml или release.version_file) без тега -> проверки проекта на ЭТОМ коммите (команды
+# build/test из профиля стека кита или release.checks) -> описание из раздела CHANGELOG.md ->
+# «выпуск готов» -> тег vX.Y.Z и GitHub Release. Не прошло хоть что-то — тега нет.
+# Проверить нечем (стек не распознан, нет команды тестов) — «не проверено», и выпуск НЕ выходит,
+# пока не задан release.checks или release.allow_unchecked: true.
+# Ход выпуска виден на странице прогона (Summary): «идут проверки» -> «выпуск готов» -> «выпущено».
+# Код выпуска берётся из кита на пине installed_version — в репозиторий он не копируется.
+name: ai-ops-release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: write          # тег и Release
+concurrency:
+  # Выпуски идут по одному и не отменяются: каждый прогон относится к своему коммиту main.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  release:
+    runs-on: ${{ vars.CI_RUNNER_LINUX || 'ubuntu-latest' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: ${{ !vars.CI_RUNNER_LINUX }}
+        with: {python-version: "3.12"}
+      - run: pip install pyyaml
+        if: ${{ !vars.CI_RUNNER_LINUX }}
+      - name: Проверить python и pyyaml (свой раннер)
+        if: ${{ vars.CI_RUNNER_LINUX }}
+        run: |
+          python3 -c 'import sys, yaml; print("python", sys.version.split()[0], "· pyyaml", yaml.__version__)' \
+            || { echo "на раннере '${{ vars.CI_RUNNER_LINUX }}' нет python3 с pyyaml — поставьте их на машину раннера"; exit 1; }
+      - name: Клонировать kit на пин = installed_version (.ai-ops.yaml)
+        run: |
+          SRC=$(python3 -c "import yaml;s=yaml.safe_load(open('.ai-ops.yaml'))['parent']['source'];print(s[4:] if s.startswith('git+') else s)")
+          VER=$(python3 -c "import yaml;print(yaml.safe_load(open('.ai-ops.yaml'))['parent']['installed_version'])")
+          git clone --depth 1 --branch "v$VER" "$SRC" "$RUNNER_TEMP/ai-ops-kit" \
+            || { echo "не удалось клонировать kit v$VER из $SRC — нет тега, нет доступа или каталог занят"; exit 1; }
+      - name: Нужен ли выпуск
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION_TAG=$(python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/devtools/child_release.py plan --root . \
+            | python3 -c "import json,sys;print(json.load(sys.stdin).get('tag') or '')")
+          EXISTS=0
+          if [ -n "$VERSION_TAG" ] && { gh release view "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+               || git ls-remote --exit-code --tags origin "refs/tags/$VERSION_TAG" >/dev/null 2>&1; }; then EXISTS=1; fi
+          python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/devtools/child_release.py plan --root . --tag-exists "$EXISTS" > "$RUNNER_TEMP/plan.json"
+          cat "$RUNNER_TEMP/plan.json"
+          python3 - "$RUNNER_TEMP/plan.json" >> "$GITHUB_OUTPUT" <<'PY'
+          import json, sys
+          p = json.load(open(sys.argv[1]))
+          print(f"needed={'true' if p['needed'] else 'false'}")
+          print(f"version={p.get('version', '')}")
+          print(f"tag={p.get('tag', '')}")
+          print(f"stage={p['stage']}")
+          print(f"reason={p['reason']}")
+          PY
+      - name: Итог без выпуска
+        if: ${{ steps.plan.outputs.needed != 'true' }}
+        env:
+          STAGE: ${{ steps.plan.outputs.stage }}
+          REASON: ${{ steps.plan.outputs.reason }}
+        run: |
+          python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/devtools/child_release.py summary --stage "$STAGE" --detail "$REASON"
+          [ "$STAGE" != "refused" ] || exit 1
+      - name: Профиль проекта (детектор кита)
+        if: ${{ steps.plan.outputs.needed == 'true' }}
+        run: |
+          PYTHONPATH="$RUNNER_TEMP"/ai-ops-kit \
+            python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/shared/project_detector.py detect . --json \
+            > "$RUNNER_TEMP/repository-profile.json"
+      - name: Проверки проекта на этом коммите
+        if: ${{ steps.plan.outputs.needed == 'true' }}
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+        run: |
+          python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/devtools/child_release.py checks --root . \
+            --profile "$RUNNER_TEMP/repository-profile.json" --version "$VERSION"
+      - name: Описание выпуска из CHANGELOG.md
+        if: ${{ steps.plan.outputs.needed == 'true' }}
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/devtools/child_release.py notes --root . --version "$VERSION" \
+            --changelog-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/$TAG/CHANGELOG.md" --out "$RUNNER_TEMP/notes.md"
+          python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/devtools/child_release.py summary --stage ready --version "$VERSION" \
+            --detail "Проверки прошли, описание собрано. Тег $TAG создаётся следующим шагом."
+      - name: Создать тег и Release
+        if: ${{ steps.plan.outputs.needed == 'true' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          PRERELEASE=""
+          case "$VERSION" in *-*) PRERELEASE="--prerelease" ;; esac
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "$TAG" $PRERELEASE --notes-file "$RUNNER_TEMP/notes.md"
+          python3 "$RUNNER_TEMP"/ai-ops-kit/ai_ops_kit/devtools/child_release.py summary --stage published --version "$VERSION" \
+            --detail "Release $TAG опубликован."
