@@ -113,7 +113,12 @@ def _unchanged_install(before, after):
     for config, version in zip(configs, versions):
         if config["parent"].pop("installed_version") != version:
             raise ValueError("installer version mismatch")
-    if configs[0] != configs[1] or before["product"] != after["product"]:
+    # Новый CI-шаблон, который это обновление само положило (отпечаток кита), — не правка владельца
+    # (#1548: ai-ops-release.yml). Всё остальное новое или изменённое по-прежнему отказ.
+    added = {name for name in after["product"].keys() - before["product"].keys()
+             if (after["product"][name] or [None])[0] == "kit-ci-template"}
+    product_after = {k: v for k, v in after["product"].items() if k not in added}
+    if configs[0] != configs[1] or before["product"] != product_after:
         raise ValueError("independent product/config change; migration refused")
 
 
