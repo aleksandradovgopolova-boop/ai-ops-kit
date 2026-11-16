@@ -320,3 +320,37 @@ def test_owner_edit_of_ci_workflow_is_still_refused(project, tmp_path):
     with pytest.raises(ValueError, match="independent product"):
         migration.preview(project, snapshot, captured["sha256"], tmp_path / "plan.json")
     assert store.inventory(project, migration.PROTECTED) == before
+
+
+def _kit_adds_ci(project, name, text):
+    workflow = project / ".github/workflows" / name
+    workflow.parent.mkdir(parents=True, exist_ok=True)
+    workflow.write_text(text)
+    prints_path = project / ".ai/runtime/ci-templates.json"
+    prints = json.loads(prints_path.read_text()) if prints_path.is_file() else {}
+    prints[name] = hashlib.sha256(text.encode()).hexdigest()
+    prints_path.write_text(json.dumps(prints))
+    return workflow
+
+
+def test_kit_adding_a_new_ci_workflow_is_not_owner_drift(project, tmp_path):
+    """#1548: обновление ставит НОВЫЙ шаблон CI (ai-ops-release.yml) — миграция не отказывает."""
+    task = initialize(project)
+    snapshot = tmp_path / "snapshot.json"
+    captured = migration.capture(project, snapshot)
+    upgrade(project)
+    _kit_adds_ci(project, "ai-ops-release.yml", "name: release\n")
+    preview = migration.preview(project, snapshot, captured["sha256"], tmp_path / "plan.json")
+    assert preview["eligible"] == 1
+    assert sessions.load(project, "codex", "owner")["request_id"] == task["request_id"]
+
+
+def test_owner_adding_a_workflow_is_still_refused(project, tmp_path):
+    initialize(project)
+    snapshot = tmp_path / "snapshot.json"
+    captured = migration.capture(project, snapshot)
+    upgrade(project)
+    (project / ".github/workflows").mkdir(parents=True, exist_ok=True)
+    (project / ".github/workflows/owner.yml").write_text("name: owner\n")   # отпечатка кита нет
+    with pytest.raises(ValueError, match="independent product"):
+        migration.preview(project, snapshot, captured["sha256"], tmp_path / "plan.json")
