@@ -257,9 +257,11 @@ def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=N
         return _begin(root, runtime, session, prompt, turn, directory, continuation_validator)
 
 
-def _begin(root, runtime, session, prompt, turn, directory, continuation_validator):
+def _begin(root, runtime, session, prompt, turn, directory, continuation_validator, *, input_origin=None):
     with reading():
         task, fresh, receipt = _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator)
+    if fresh and input_origin is not None:
+        task["input_origin"] = input_origin
     if receipt:
         path, payload = receipt
         result = lifecycle_store.durable_create_batch(directory, {str(path.relative_to(directory)): payload})
