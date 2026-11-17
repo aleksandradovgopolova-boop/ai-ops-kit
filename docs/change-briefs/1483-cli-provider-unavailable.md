@@ -5,7 +5,8 @@
 
 **Затрагиваемые пути.** docs/api/public-surface.md → контракт кодов;
 tests/contracts/test_public_surface.py → main, _main_guarded и console entry;
-newsfragments → пояснение владельцу. Runtime-код не меняется.
+newsfragments → пояснение владельцу; docs/change-briefs/README.md → достижимый
+из общего индекса бриф. Runtime-код не меняется.
 
 **Инварианты.** Смысл 0/1/2 и фактический rc3 сохранены; причина в stderr,
 неожиданный дефект не маскируется. Ни модель, ни реальный проект не запускаются.
