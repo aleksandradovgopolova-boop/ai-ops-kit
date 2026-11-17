@@ -121,7 +121,7 @@ def test_blocked_read_is_killed_within_common_deadline_without_state_change(proj
         with sessions.session_migration_store.barrier(project), sessions.session_lock(directory / "preparation"):
             resume.validate(project, prepared, timeout=1.5)
     assert time.monotonic() - started < 5
-    assert marker.is_file()  # worker действительно дошёл до блокирующего syscall
+    assert marker.is_file(), str(error.value)  # worker действительно дошёл до блокирующего syscall
     assert not alive(int(marker.read_text()))
     assert relative in str(error.value)
     assert state(project) == before

@@ -57,6 +57,33 @@ def resume_current(root, runtime, session, task):
     return task
 
 
+@sessions.session_migration_store.guarded
+def initial_intake(root, runtime, session, prompt):
+    """Явный ввод текущего агента: не эмуляция UserPromptSubmit или runtime turn_id."""
+    if runtime != "codex":
+        raise ValueError("initial intake поддержан только для текущего Codex-агента")
+    if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 131072:
+        raise ValueError("постановка пуста или превышает бюджет 128 KiB")
+    directory = sessions.session_dir(root, runtime, session)
+    origin = {"kind": "current-agent-intake", "identity_scope": "declared", "hook_event_name": None}
+    with sessions.session_lock(directory / "requests"):
+        with sessions.reading():
+            if (directory / "active.json").exists():
+                task = sessions.load(root, runtime, session)
+                if (task.get("input_origin") != origin or task.get("prompt") != prompt
+                        or task.get("status") == "accepted"):
+                    raise ValueError("initial intake не заменяет сохранённую задачу; продолжи её штатным run")
+                claim = directory / (task["request_id"] + ".execution-claim")
+                if (task.get("status") == "pending" and not task.get("execution")
+                        and not claim.exists() and not claim.is_symlink()
+                        and not any(key in task for key in ("intake", "preparation", "provider_preparation", "state_migration"))):
+                    sessions.pending(root, runtime, session)
+                else:
+                    continuation(root, runtime, session, task)
+                return task
+        return sessions._begin(root, runtime, session, prompt, None, directory, None, input_origin=origin)
+
+
 def continuation(root, runtime, session, task):
     """Разрешить только проверенную передачу текущему агенту, без запуска процесса."""
     execution = task.get("execution") or {}
@@ -223,6 +250,7 @@ def hook(runtime, payload):
     if event == "SessionStart":
         current = sessions.binding(root)
         context = f"AI Ops: проект {current['root']}, ветка {current['branch']}, версия {current['version']}. "
+        context += f"runtime={runtime}; session_id={session}. "
         try:
             task = sessions.load(root, runtime, session)
         except FileNotFoundError:
@@ -237,6 +265,11 @@ def hook(runtime, payload):
             if task.get("provider_preparation"):
                 context += ("Готовность native provider ещё не подтверждена; signals сохранены. "
                             + (task.get("blocker") or "") + " " + (task.get("next_step") or ""))
+        elif runtime == "codex":
+            context += ("Задача ещё не сохранена. Если host передал поручение как delegation без "
+                        "UserPromptSubmit, сам сохрани дословный запрос через project_session intake "
+                        "с этим session_id и JSON stdin {prompt: исходный текст}, затем исполни run. "
+                        "Это declared current-agent intake, не hook evidence или approval. ")
         context += f"Общий канон: .ai/managed/{sessions.POLICY}."
         return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
     raise ValueError(f"неподдерживаемое событие: {event}")
@@ -255,7 +288,7 @@ def main(argv=None):
         from ai_ops_kit.cli import project_session_migrate
         return project_session_migrate.main(argv[1:])
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", nargs="?", default="hook", choices=("hook", "run", "verify", "finalize", "reconcile"))
+    parser.add_argument("action", nargs="?", default="hook", choices=("hook", "intake", "run", "verify", "finalize", "reconcile"))
     parser.add_argument("--runtime", required=True, choices=tuple(sessions.RUNTIMES))
     parser.add_argument("--session")
     parser.add_argument("--signals")
@@ -274,7 +307,23 @@ def main(argv=None):
         else:
             from pathlib import Path
             root = sessions.project_root(Path.cwd())
-            if args.action == "verify":
+            if args.action == "intake":
+                if args.signals is not None or args.autonomous or args.review_digests is not None:
+                    raise ValueError("intake сохраняет только исходный текст; исполнение и review — отдельные действия")
+                with sessions.hook_read_budget():
+                    with sessions.reading():
+                        raw = sys.stdin.buffer.read(262145)
+                        if len(raw) > 262144:
+                            raise ValueError("payload intake превышает 256 KiB")
+                        payload = json.loads(raw)
+                    if not isinstance(payload, dict) or set(payload) != {"prompt"}:
+                        raise ValueError("intake требует ровно JSON object с полем prompt")
+                    result = initial_intake(root, args.runtime, args.session, payload["prompt"])
+                    with sessions.reading():
+                        result = agent_response(root, result)
+                print(json.dumps(result, ensure_ascii=False))
+                return 1  # capture/handoff никогда не является accepted
+            elif args.action == "verify":
                 result = sessions.verify(root, args.runtime, args.session)
             else:
                 # Подготовка не должна переписать spec, пока другой вызов уже исполняет её.
