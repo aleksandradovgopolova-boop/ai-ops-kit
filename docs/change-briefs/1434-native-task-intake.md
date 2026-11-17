@@ -47,3 +47,12 @@ review точного кандидата. Эти проверки offline, не 
 Это не общий зелёный профиль: причина не установлена. В assert добавлена только
 диагностика последнего пути чтения, без изменения deadline/реакции/критериев.
 Финальная delta требует повторной затронутой проверки и независимого review.
+
+Финальный расширенный локальный срез e270ecc6: 321 targeted/core/session/installer
+PASS (215.54 с), без моделей. Это не full-current-python или compatibility-matrix.
+Независимый entire-delta review нашёл P1: сборка agent_response после replay могла
+читать verification report уже вне deadline. Исправление включает ответ в тот же
+read-only budget и возвращает его один раз. Новые реальные OS-read пробы проверяют
+verification.finished report и cancellation с неизменными state/claim и освобождением
+locks. После исправления 28 новых + 63 core-smoke PASS; дополнительно проверяется
+настоящая stock install в disposable child с запуском доставленного CLI, без trust.

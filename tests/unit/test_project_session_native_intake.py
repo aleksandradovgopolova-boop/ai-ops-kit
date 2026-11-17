@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 
 import pytest
+import yaml
 
 from ai_ops_kit.cli import project_session as cli
 from ai_ops_kit.lifecycle import project_session as sessions
@@ -128,6 +129,26 @@ def test_other_runtime_does_not_gain_unqualified_intake(project):
     assert not list((project / ".ai/runtime/sessions").glob("project-*/*.json"))
 
 
+def test_stock_installed_intake_uses_delivered_code_without_model(installed_copy):
+    from installer import team_setup
+    config_path = installed_copy / ".ai-ops.yaml"
+    config = yaml.safe_load(config_path.read_text())
+    config.setdefault("standard", {})["team_session"] = "required"
+    config_path.write_text(yaml.safe_dump(config))
+    team_setup.ensure_team_session(installed_copy)  # synthetic project only, no native trust
+    process = subprocess.run([sys.executable, "-P", "-m", "ai_ops_kit.cli.project_session",
+                              "intake", "--runtime", "codex", "--session", "installed"],
+        cwd=installed_copy, input='{"prompt":"Исследуй отмену задачи"}', capture_output=True,
+        text=True, timeout=15, env=dict(os.environ, PYTHONPATH=str(installed_copy / ".ai/managed")))
+    assert process.returncode == 1, process.stderr
+    task = json.loads(process.stdout)
+    assert task["status"] == "pending" and task["input_origin"]["identity_scope"] == "declared"
+    assert task["binding"]["root"] == str(installed_copy.resolve())
+    directory = sessions.session_dir(installed_copy, "codex", "installed")
+    assert json.loads((directory / (task["request_id"] + ".json")).read_text())["prompt"] == "Исследуй отмену задачи"
+    assert not list(directory.glob("*.execution-claim")) and not (installed_copy / "features").exists()
+
+
 @pytest.mark.parametrize("cancel", [False, True])
 def test_real_blocking_stdin_finishes_without_task_or_owned_worker(project, cancel):
     code = (f"import sys; sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r}); "
@@ -159,9 +180,20 @@ def test_real_blocking_stdin_finishes_without_task_or_owned_worker(project, canc
 
 
 @pytest.mark.parametrize("cancel", [False, True])
-def test_replay_blocked_state_read_is_bounded_and_preserves_task(project, tmp_path, cancel):
+@pytest.mark.parametrize("read_kind", ["active", "verification"])
+def test_replay_blocked_state_read_is_bounded_and_preserves_task(project, tmp_path, monkeypatch, cancel, read_kind):
     task = cli.initial_intake(project, "codex", "native", "original")
     directory = sessions.session_dir(project, "codex", "native")
+    target, method = directory / "active.json", "read_text"
+    if read_kind == "verification":
+        monkeypatch.chdir(project)
+        assert cli.main(["run", "--runtime", "codex", "--session", "native", "--signals",
+                         '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+        task = sessions.load(project, "codex", "native")
+        target, method = directory / "verification.json", "read_bytes"
+        sessions.write(target, {})  # synthetic finished report; block before parsing it
+        task["verification"] = {"phase": "finished", "report": str(target.relative_to(project))}
+        sessions.write(directory / (task["request_id"] + ".json"), task)
     before = state(project)
     fifo, marker = tmp_path / "fifo", tmp_path / "entered"
     os.mkfifo(fifo)
@@ -170,14 +202,14 @@ import os, sys
 sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r})
 from pathlib import Path
 from ai_ops_kit.cli import project_session as cli
-actual = Path.read_text
+actual = Path.{method}
 def read(path, *args, **kwargs):
-    if path == Path({str(directory / 'active.json')!r}):
+    if path == Path({str(target)!r}):
         Path({str(marker)!r}).write_text('entered')
         fd = os.open({str(fifo)!r}, os.O_RDWR)
         os.read(fd, 1)
     return actual(path, *args, **kwargs)
-Path.read_text = read
+Path.{method} = read
 cli.sessions.HOOK_READ_SECONDS = 0.7
 raise SystemExit(cli.main(['intake','--runtime','codex','--session','native']))
 """

@@ -319,6 +319,10 @@ def main(argv=None):
                     if not isinstance(payload, dict) or set(payload) != {"prompt"}:
                         raise ValueError("intake требует ровно JSON object с полем prompt")
                     result = initial_intake(root, args.runtime, args.session, payload["prompt"])
+                    with sessions.reading():
+                        result = agent_response(root, result)
+                print(json.dumps(result, ensure_ascii=False))
+                return 1  # capture/handoff никогда не является accepted
             elif args.action == "verify":
                 result = sessions.verify(root, args.runtime, args.session)
             else:
