@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import ast
 import json
+import os
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -185,7 +188,7 @@ def test_exit_codes_of_the_engine_are_only_the_declared_ones():
     declared = {int(c) for c in DECL["stable"]["exit_codes"]}
     used = set()
     for fn in tree.body:
-        if isinstance(fn, ast.FunctionDef) and fn.name == "main":
+        if isinstance(fn, ast.FunctionDef) and fn.name in {"main", "_main_guarded"}:
             for node in ast.walk(fn):
                 if isinstance(node, ast.Return) and isinstance(node.value, ast.Constant) \
                         and isinstance(node.value.value, int):
@@ -195,6 +198,85 @@ def test_exit_codes_of_the_engine_are_only_the_declared_ones():
     assert not undeclared, (
         f"движок возвращает необъявленные коды: {undeclared}. Смысл кода — контракт; "
         f"впишите его в {DOC.name} вместе с тем, что он означает для человека")
+
+
+# Подмена только тела main: настоящий console entry, guard и sys.exit работают в процессе.
+# Никакой provider не вызывается; marker доказывает достижение границы и отсутствие повтора.
+_CLI_BOUNDARY_PROBE = """
+import json
+import pathlib
+import runpy
+import sys
+from ai_ops_kit.cli import ai_ops_cli
+from ai_ops_kit.providers.orchestrator_providers import (
+    ProviderEnvUnavailableError, ProviderLimitError,
+)
+
+kind, marker = sys.argv[1:]
+def outcome(argv):
+    with pathlib.Path(marker).open("a", encoding="utf-8") as stream:
+        stream.write(json.dumps(argv) + "\\n")
+    if kind == "limit":
+        raise ProviderLimitError("synthetic-provider", "synthetic quota")
+    if kind == "environment":
+        raise ProviderEnvUnavailableError("synthetic-provider", "synthetic environment")
+    if kind == "unexpected":
+        raise RuntimeError("synthetic defect")
+    return int(kind)
+
+ai_ops_cli.main = outcome
+sys.argv = ["ai-ops", "run", "synthetic task"]
+runpy.run_module("ai_ops_kit.cli.entry", run_name="__main__")
+"""
+
+
+def _cli_boundary(tmp_path, kind):
+    root = tmp_path / "project"
+    root.mkdir()
+    original = b"product must stay unchanged\n"
+    (root / "product.txt").write_bytes(original)
+    marker = tmp_path / "boundary.jsonl"
+    proc = subprocess.run(
+        [sys.executable, "-c", _CLI_BOUNDARY_PROBE, kind, str(marker)],
+        cwd=root, capture_output=True, text=True, timeout=20,
+        env={**os.environ, "PYTHONPATH": str(REPO), "PYTHONDONTWRITEBYTECODE": "1"},
+    )
+    # Проверяем реальное достижение main раньше оценки кода возврата.
+    assert marker.is_file(), proc.stderr
+    assert [json.loads(line) for line in marker.read_text().splitlines()] == [
+        ["run", "synthetic task", str(root)]
+    ]
+    assert sorted(p.name for p in root.iterdir()) == ["product.txt"]
+    assert (root / "product.txt").read_bytes() == original
+    return proc
+
+
+@pytest.mark.parametrize(("kind", "message"), [
+    ("limit", "Лимит модели"),
+    ("environment", "Исполнитель"),
+])
+def test_provider_unavailable_is_declared_at_console_process_boundary(tmp_path, kind, message):
+    proc = _cli_boundary(tmp_path, kind)
+    assert proc.returncode == 3
+    assert proc.returncode in DECL["stable"]["exit_codes"]
+    assert message in proc.stderr and "synthetic-provider" in proc.stderr
+    assert "Traceback" not in proc.stderr
+    assert not proc.stdout
+
+
+@pytest.mark.parametrize("code", [0, 1, 2])
+def test_console_guard_preserves_existing_exit_codes(tmp_path, code):
+    proc = _cli_boundary(tmp_path, str(code))
+    assert proc.returncode == code
+    assert proc.returncode in DECL["stable"]["exit_codes"]
+    assert not proc.stdout and not proc.stderr
+
+
+def test_console_guard_does_not_hide_unexpected_defect_as_provider_unavailable(tmp_path):
+    proc = _cli_boundary(tmp_path, "unexpected")
+    assert proc.returncode != 0 and proc.returncode != 3
+    assert "RuntimeError: synthetic defect" in proc.stderr
+    assert "Traceback" in proc.stderr
 
 
 # -------------------------------------------------------- side-effect proof ---
