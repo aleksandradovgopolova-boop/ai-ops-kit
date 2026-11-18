@@ -171,6 +171,37 @@ def test_graph_sees_every_import_style(tmp_path):
         assert any(style in w for w in who), f"форма '{style}' не дала ребра: {sorted(who)}"
 
 
+def _nested_surface(tmp_path, files):
+    surface = tmp_path / "ai_ops_kit"
+    (surface / "beta").mkdir(parents=True)
+    (surface / "beta" / "target.py").write_text("X = 1\n", encoding="utf-8")
+    for rel, text in files.items():
+        path = surface / "alpha" / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+    return surface
+
+
+@pytest.mark.parametrize("rel,text", [
+    ("sub/bad.py", "from ai_ops_kit.beta import target\n"),           # вложенный модуль (#1484)
+    ("__init__.py", "from ai_ops_kit.beta import target\n"),          # initializer пакета
+    ("sub/__init__.py", "import ai_ops_kit.beta.target\n"),           # initializer подпакета
+    ("rel.py", "from ..beta import target\n"),                        # относительный, из пакета
+    ("sub/rel.py", "from ...beta.target import X\n"),                 # относительный, из подпакета
+    ("sub/rel2.py", "from ... import beta\n"),                        # относительный без module
+])
+def test_graph_sees_nested_initializer_and_relative_imports(tmp_path, rel, text):
+    """#1484: тот же импорт наверху был виден, во вложенном модуле и в __init__ — нет."""
+    who = vl.build_graph(_nested_surface(tmp_path, {rel: text})).get(("alpha", "beta"), set())
+    assert who, f"{rel}: ребро alpha -> beta не увидено"
+
+
+def test_relative_import_inside_own_package_is_not_an_edge(tmp_path):
+    surface = _nested_surface(tmp_path, {"sub/a.py": "from . import b\nfrom .. import other\n",
+                                         "sub/b.py": "", "other.py": ""})
+    assert vl.build_graph(surface) == {}
+
+
 def test_ratchet_is_green_on_the_real_repository(spec):
     """positive: замер в реестре совпадает с кодом, потолок не превышен."""
     errors = vl.ratchet_errors(spec, vl.build_graph())
