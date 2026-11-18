@@ -650,7 +650,7 @@ Bounded context «Research» (extractable module): контракты ResearchRe
 - `ai_ops_kit/cli/` — точка входа UX: `ai_ops_cli` (+слой команд
   `ai_ops_cli_{commands,intents,lifecycle,product,report}`), `entry`, `human_help`
 - `ai_ops_kit/devtools/` — инструменты разработки САМОГО кита, в child-репозиторий НЕ едут
-  (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance`, `changelog_gen`,
+  (состав — зеркало `installer.DEV_ONLY_TOOLS`): `bench_lite`, `bench_performance` (+`perf_gate` — гейт скорости и памяти #1409), `changelog_gen`,
   `kit_observability`, `model_comparison`, `mutation_probe`, `qual_run`; `decision_eval`, `decision_capture`, `decision_llm_capture` и `decision_model_experiment` — offline-сравнение bounded decisions
   и экспериментальный живой Jev capture (#1247 / #1253), без production-проводки
 - `ai_ops_kit/checks/` — проверки-контракты артефактов и результатов: `feature_blueprint`,
@@ -823,8 +823,9 @@ CLI ai-ops: init/status/diff/update/validate/doctor/migrate для child-реп�
 CI пакета (package-quality — 4 параллельные группы), быстрый слой на PR (pr-smoke) и релизный
 workflow (release.yml: VERSION в main -> тег + Release; идемпотентен — существующий релиз не пересоздаёт).
 
-- `.github/workflows/performance-baseline.yml` — ручная bounded RSS/repeat-серия на проверенном source SHA; запуск требует бесплатного runner-окна.
-- `tests/unit/test_performance_baseline_workflow.py` — positive/fail-closed/side-effect проверки CI measurement wrapper.
+- `.github/workflows/performance-baseline.yml` — гейт скорости и памяти (#1409): вручную и ночью по main; время — парой база/кандидат на одной машине, память — против принятой базы.
+- `tests/unit/test_performance_baseline_workflow.py` — триггеры, pinned actions и выбор базы гейта скорости и памяти.
+- `tests/unit/test_perf_gate.py` — парное время, память против принятой базы, отказы до команд и повторный разбор CI-квитанций 13.11.2026.
 - `.github/workflows/package-quality.yml`
 - `.github/workflows/pr-smoke.yml`
 - `.github/workflows/uv-pilot.yml` — пилот воспроизводимого dev-окружения parent (advisory)
