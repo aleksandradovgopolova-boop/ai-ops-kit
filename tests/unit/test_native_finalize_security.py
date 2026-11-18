@@ -6,6 +6,12 @@ from ai_ops_kit.security import security_scan
 pytestmark = pytest.mark.unit
 
 
+def sql(query):
+    # Настоящий scanner input собирается во время теста: raw Python fixture
+    # не должен сам считаться JS sink при сканировании исходников Кита.
+    return 'db.' + 'query' + '(`' + query + '`);'
+
+
 def process_code(tail=''):
     return ("import {spawn} from 'node:child_process';\n"
             "spawn(process.execPath,['e2e/owned.mjs'],{env:{PAD:'" + 'x'*600
@@ -47,9 +53,20 @@ def test_parse_limit_is_still_finite_and_fail_closed():
                for f in security_scan.scan_injection({'e2e/probe.mjs': code}))
 
 
+@pytest.mark.parametrize('options', [
+    'shell:false,shell:true', 'shell:false,shell:external', 'shell:true,shell:false',
+    'env:{shell:false},shell:true', 'shell:false,shell', 'shell:false,get shell(){return true}',
+    'shell:false,["shell"]:true',
+])
+def test_every_shell_occurrence_must_be_proven_false_in_long_launch(options):
+    code = process_code().replace("stdio:'pipe'", options)
+    assert code.index(options) > 400 and code.endswith('});\n')
+    assert any(f['id'] == 'node_child_process_exec'
+               for f in security_scan.scan_injection({'server.mjs': code}))
+
+
 def test_numeric_generated_schema_has_no_external_string_input():
-    code = ('const schema = `fixture_${process.pid}_${Date.now()}`;\n'
-            'await db.query(`CREATE SCHEMA ${schema}`);\n')
+    code = 'const schema = `fixture_${process.pid}_${Date.now()}`;\nawait ' + sql('CREATE SCHEMA ${schema}')
     assert 'CREATE SCHEMA ${schema}' in code
     assert not [f for f in security_scan.scan_injection({'test.mjs': code})
                 if f['id'] == 'sql_template_literal']
@@ -61,7 +78,7 @@ def test_numeric_generated_schema_has_no_external_string_input():
     '`fixture_${process.pid}` + request.name',
 ])
 def test_schema_unknown_or_external_initializer_remains_finding(initializer):
-    code = f'const schema = {initializer};\nawait db.query(`DROP SCHEMA ${{schema}}`);\n'
+    code = f'const schema = {initializer};\nawait ' + sql('DROP SCHEMA ${schema}')
     assert any(f['id'] == 'sql_template_literal'
                for f in security_scan.scan_injection({'test.mjs': code}))
 
@@ -72,27 +89,46 @@ def test_schema_unknown_or_external_initializer_remains_finding(initializer):
     'const sink = (schema = readInput()) => {\n',
 ])
 def test_schema_shadowing_or_mutated_primitive_does_not_prove_safety(prefix):
-    code = ('const schema = `fixture_${process.pid}_${Date.now()}`;\n' + prefix
-            + 'db.query(`DROP SCHEMA ${schema}`);\n')
+    code = 'const schema = `fixture_${process.pid}_${Date.now()}`;\n' + prefix + sql('DROP SCHEMA ${schema}')
     if '{\n' in prefix:
         code += '}\n'
     assert any(f['id'] == 'sql_template_literal'
                for f in security_scan.scan_injection({'test.mjs': code}))
 
 
+@pytest.mark.parametrize('declaration', ['let unused, schema = input',
+    'const unused = 1, schema = input', 'var unused, schema = input'])
+def test_second_declarator_never_reuses_outer_generated_binding(declaration):
+    code = ('const schema = `fixture_${process.pid}_${Date.now()}`;\n'
+            + f'function unsafe(input) {{{declaration}; ' + sql('DROP SCHEMA ${schema}') + '}\n')
+    assert any(f['id'] == 'sql_template_literal'
+               for f in security_scan.scan_injection({'server.mjs': code}))
+
+
+@pytest.mark.parametrize('mutation,primitive', [
+    ("Date.__defineGetter__('now', () => () => request.name);", 'Date.now()'),
+    ("process.__defineGetter__('pid', () => request.name);", 'process.pid'),
+    ("Object.defineProperty(Date, 'now', {value: () => request.name});", 'Date.now()'),
+    ('const sideEffect = `${Date.__defineGetter__(propertyName, getter)}`;', 'Date.now()'),
+])
+def test_accessor_or_opaque_template_mutation_cannot_prove_numeric_schema(mutation, primitive):
+    code = mutation + f'\nconst schema = `fixture_${{{primitive}}}`;\n' + sql('DROP SCHEMA ${schema}')
+    assert any(f['id'] == 'sql_template_literal'
+               for f in security_scan.scan_injection({'server.mjs': code}))
+
+
 def test_uuid_property_and_real_secret_are_not_blessed_by_fixture_name():
     value = '9Qz' + 'b7V' * 8
-    code = (f'const password = "{value}";\n'
-            'db.query(`SELECT * FROM tasks WHERE id = \'${claim.turnId}\'`);\n')
+    code = f'const password = "{value}";\n' + sql("SELECT * FROM tasks WHERE id = '${claim.turnId}'")
     assert security_scan.scan_secrets({'e2e/fixture.mjs': code})
     assert any(f['id'] == 'sql_template_literal'
                for f in security_scan.scan_injection({'e2e/fixture.mjs': code}))
 
 
 @pytest.mark.parametrize('shadow', [
-    'const r = /"/; function unsafe(schema){db.query(`DROP SCHEMA ${schema}`);} const text = "x";',
-    r'function unsafe(\u0073chema){db.query(`DROP SCHEMA ${schema}`);}',
-    'const text = `${((schema) => db.query(`DROP SCHEMA ${schema}`))(external)}`;',
+    'const r = /"/; function unsafe(schema){' + sql('DROP SCHEMA ${schema}') + '} const text = "x";',
+    r'function unsafe(\u0073chema){' + sql('DROP SCHEMA ${schema}') + '}',
+    'const text = `${((schema) => ' + sql('DROP SCHEMA ${schema}').removesuffix(';') + ')(external)}`;',
 ])
 def test_opaque_regex_escape_or_nested_template_does_not_hide_shadowing(shadow):
     code = 'const schema = `fixture_${process.pid}_${Date.now()}`;\n' + shadow

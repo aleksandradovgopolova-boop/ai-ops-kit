@@ -98,21 +98,31 @@ def _generated_identifiers(lexical, skeleton):
     if re.search(r'[/\\]', skeleton):
         return {}
     substitutions = _INTERPOLATION_BODY.findall(lexical)
+    names = {match.group(1) for match in matches}
     if (len(substitutions) != lexical.count('${')
             or any(re.search(r"['\"`\\]", expr) for expr in substitutions)):
         return {}
     parameters = _parameter_names(skeleton)
     if parameters is None or re.search(r'\b(?:eval|with|Function|globalThis)\b', skeleton):
         return {}
-    if re.search(r'\b(?:Date|process)\b(?!\s*\.)', skeleton):
-        return {}  # alias/import/parameter/escape builtins не входят в доказанный класс
+    if (re.search(r'\bDate\b(?!\s*\.\s*now\s*\()', skeleton)
+            or re.search(r'\bprocess\b(?!\s*\.\s*(?:pid|env|execPath)\b)', skeleton)):
+        return {}  # mutators/accessors/alias/import/escape не входят в доказанный класс
     if re.search(r'\b(?:Date|process)(?:\s*\.[\w$]+|\s*\[[^\]]*\])*\s*(?:[+*/%&|^?-]*=(?!=)|\+\+|--)', skeleton):
         return {}
     if re.search(r'\bdelete\s+(?:Date|process)\b|[,(]\s*(?:Date|process)\s*[,)]', skeleton):
         return {}
+    # Гасим только тривиальные reads. Остальной код подстановок сохраняется:
+    # parameter/declaration/mutator внутри template не должен исчезнуть из proof.
+    binding_skeleton = _INTERPOLATION_BODY.sub(lambda m: ' ' * len(m.group())
+        if m.group(1).strip() in names or _NUMERIC_PRIMITIVE.fullmatch(m.group(1).strip()) else m.group(), skeleton)
     out = {}
     for match in matches:
         name, body = match.groups()
+        # Единственный unquoted token — само объявление. Вторые declarators,
+        # параметры, destructuring и любые другие uses требуют общего JS resolver.
+        if len(re.findall(r'(?<![\w$])' + re.escape(name) + r'(?![\w$])', binding_skeleton)) != 1:
+            continue
         prefix = skeleton[match.start():match.start() + match.group().index('`')]
         if not re.match(r'const\s+' + re.escape(name) + r'\b', prefix):
             continue  # похожий текст внутри строки не объявляет binding
