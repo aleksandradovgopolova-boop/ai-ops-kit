@@ -26,6 +26,23 @@ def test_closed_controlled_launch_over_old_window_is_not_an_injection():
     assert not [f for f in findings if f['id'].startswith('node_child_process')]
 
 
+def test_long_node_launch_supports_only_literal_script_choices():
+    code = process_code().replace("'e2e/owned.mjs'",
+        "process.argv.includes('--suite-one')?'e2e/one.mjs':process.argv.includes('--suite-two')?'e2e/two.mjs':'e2e/three.mjs'")
+    assert len(code) > 400 and code.count('process.argv.includes') == 2
+    assert not [f for f in security_scan.scan_injection({'e2e/probe.mjs': code})
+                if f['id'].startswith('node_child_process')]
+
+
+@pytest.mark.parametrize('prefix', ['const process = request;\n',
+    'process.execPath = request.binary;\n', "process.__defineGetter__('execPath',getter);\n",
+    'function unsafe(process){\n'])
+def test_long_node_proof_rejects_visible_process_substitution(prefix):
+    code = prefix + process_code() + ('}\n' if prefix.startswith('function') else '')
+    assert any(f['id'].startswith('node_child_process')
+               for f in security_scan.scan_injection({'server.mjs': code}))
+
+
 @pytest.mark.parametrize('tail', [',shell:true', ',shell:options.shell', ',...options'])
 def test_long_launch_still_detects_unsafe_options_after_old_window(tail):
     code = process_code(tail)
@@ -61,6 +78,36 @@ def test_parse_limit_is_still_finite_and_fail_closed():
 def test_every_shell_occurrence_must_be_proven_false_in_long_launch(options):
     code = process_code().replace("stdio:'pipe'", options)
     assert code.index(options) > 400 and code.endswith('});\n')
+    assert any(f['id'] == 'node_child_process_exec'
+               for f in security_scan.scan_injection({'server.mjs': code}))
+
+
+@pytest.mark.parametrize('options', [
+    '[optionName]:true', "['sh'+'ell']:true", '__proto__:{shell:true}',
+    '...externalOptions', 'stdio:externalStdio', 'stdio:\'pipe\',env:externalEnv',
+    'env:{NODE_OPTIONS:externalInput}', 'stdio:\'pipe\',env:{...externalEnv}',
+])
+def test_long_call_unknown_options_never_receive_new_safe_classification(options):
+    code = 'const optionName = "shell";\n' + process_code().replace("stdio:'pipe'", options)
+    assert len(code) > 400
+    assert any(f['id'] == 'node_child_process_exec'
+               for f in security_scan.scan_injection({'server.mjs': code}))
+
+
+@pytest.mark.parametrize('expression', [
+    "process.argv.includes('--one')?'e2e/one.mjs':'e2e/two.mjs'",
+    "process.argv.includes('--one')?'e2e/one.mjs':process.argv.includes('--two')?'e2e/two.mjs':'e2e/three.mjs'",
+])
+def test_long_node_entrypoint_can_select_only_literal_scripts(expression):
+    code = process_code().replace("'e2e/owned.mjs'", expression)
+    assert not [f for f in security_scan.scan_injection({'server.mjs': code})
+                if f['id'].startswith('node_child_process')]
+
+
+@pytest.mark.parametrize('expression', ['externalScript', "'e2e/owned.mjs',externalInput",
+    "process.argv.includes('--one')?'e2e/one.mjs':externalScript", "'--eval'", "'../foreign.mjs'"])
+def test_long_node_entrypoint_unknown_or_code_argument_stays_blocking(expression):
+    code = process_code().replace("'e2e/owned.mjs'", expression)
     assert any(f['id'] == 'node_child_process_exec'
                for f in security_scan.scan_injection({'server.mjs': code}))
 
