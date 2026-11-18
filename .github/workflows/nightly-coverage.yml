@@ -29,7 +29,10 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with: {python-version-file: .python-version}
       - run: pip install 'pyyaml==6.*' 'pytest==9.*' 'pytest-cov==7.*' 'pytest-xdist==3.*' 'hypothesis==6.*'
+      - name: "Отпечаток исходников до замера (#1387: привязка покрытия для CRAP)"
+        run: python3 -m ai_ops_kit.devtools.coverage_binding snapshot --out "$RUNNER_TEMP/coverage-inputs.json"
       - name: "Покрытие обычного набора без nightly/release_gate (пол 70%)"
+        id: cov
         env:
           PYTHONDONTWRITEBYTECODE: "1"
           # sysmon переводит coverage.py на sys.monitoring (CPython 3.12+) вместо трассировки каждой
@@ -37,7 +40,36 @@ jobs:
           # станет тихо считать медленно.
           COVERAGE_CORE: sysmon
         run: |
+          set +e
           python3 -m pytest tests/ -q -n auto --dist loadfile -m "not nightly and not release_gate" \
             --cov=ai_ops_kit --cov=installer \
             --cov-report=term-missing:skip-covered \
+            --cov-report=json:"$RUNNER_TEMP/coverage.json" \
             --cov-fail-under=70
+          rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit $rc
+      # Привязка пишется и при красном прогоне — с outcome failed, которую crap_score не примет.
+      # Входы изменились за время замера -> привязки нет (код 2), покрытие чужого кода не выдаётся.
+      - name: "Привязка покрытия к исходникам (#1387)"
+        if: always() && steps.cov.outputs.rc != ''
+        env:
+          TESTS_EXIT: ${{ steps.cov.outputs.rc }}
+        run: >-
+          python3 -m ai_ops_kit.devtools.coverage_binding bind
+          --inputs "$RUNNER_TEMP/coverage-inputs.json" --report "$RUNNER_TEMP/coverage.json"
+          --tests-exit "$TESTS_EXIT" --out "$RUNNER_TEMP/coverage-binding.json"
+          --scope "nightly-coverage: tests/ -m 'not nightly and not release_gate', CI ubuntu-latest"
+          -- python3 -m pytest tests/ -q -n auto --dist loadfile -m "not nightly and not release_gate"
+          --cov=ai_ops_kit --cov=installer --cov-fail-under=70
+      - name: "Сохранить покрытие и привязку для CRAP-заморозки"
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: coverage-${{ github.sha }}-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/coverage.json
+            ${{ runner.temp }}/coverage-binding.json
+            ${{ runner.temp }}/coverage-inputs.json
+          if-no-files-found: warn
+          retention-days: 14

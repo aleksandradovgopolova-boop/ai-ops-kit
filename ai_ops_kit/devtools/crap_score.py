@@ -227,8 +227,18 @@ def _function_coverage(row, evidence, line_count):
     return "measured", len(hit & lines) / len(statements)
 
 
-def analyze(root: Path, evidence: CoverageEvidence | None, frozen: dict) -> dict:
-    """Read-only отчёт; raw scores сравниваются до округления."""
+UNMEASURABLE_REASON = ("в покрытии нет исполняемых строк тела: тело на строке объявления, "
+                       "исключено из coverage или состоит из docstring")
+
+
+def analyze(root: Path, evidence: CoverageEvidence | None, frozen: dict,
+            declared: dict | None = None) -> dict:
+    """Read-only отчёт; raw scores сравниваются до округления.
+
+    `declared` — объявленные неоцениваемые функции из baseline (решение владельца 18.11.2026):
+    только они при статусе `unknown` не считаются неизвестными. missing/stale не объявляются.
+    """
+    declared = declared or {}
     rows = functions(root)
     counts = {}
     for row in rows:
@@ -250,13 +260,15 @@ def analyze(root: Path, evidence: CoverageEvidence | None, frozen: dict) -> dict
     if evidence is not None and not evidence.stale and evidence.binding["inputs_sha256"] != measurement_inputs(root):
         for row in rows:
             row.update(coverage_status="stale", coverage=None, crap=None, finding=None)
-    unknown = sum(r["crap"] is None for r in rows)
+    for row in rows:
+        row["declared_unmeasurable"] = row["coverage_status"] == "unknown" and row["key"] in declared
+    unknown = sum(r["crap"] is None and not r["declared_unmeasurable"] for r in rows)
     findings = sum(r["finding"] is not None for r in rows)
     return {"schema_version": 1, "mode": "advisory", "algorithm": ALGORITHM,
             "coverage_mode": "line-approximation", "threshold": THRESHOLD,
             "status": "incomplete" if unknown else ("findings" if findings else "measured"),
             "unknown_functions": unknown, "new_or_regressed": findings,
-            "stale_baseline_keys": sorted(set(frozen) - {r["key"] for r in rows}),
+            "stale_baseline_keys": sorted((set(frozen) | set(declared)) - {r["key"] for r in rows}),
             "measurement": evidence.binding if evidence else None, "functions": rows}
 
 
@@ -265,6 +277,11 @@ def baseline_document(rows, evidence):
             "threshold": THRESHOLD, "coverage_mode": "line-approximation",
             "measurement": evidence.binding if evidence else None,
             "functions": {r["key"]: r["crap"] for r in rows if r["crap"] is not None and r["crap"] >= THRESHOLD}}
+
+
+def _check_key(key):
+    if not isinstance(key, str) or "::" not in key or "@" not in key:
+        raise ValueError("невалидный ключ baseline")
 
 
 def load_baseline(path: Path) -> dict:
@@ -279,10 +296,16 @@ def load_baseline(path: Path) -> dict:
     if not isinstance(entries, dict):
         raise ValueError("baseline functions должен быть mapping")
     for key, value in entries.items():
-        if not isinstance(key, str) or "::" not in key or "@" not in key:
-            raise ValueError("невалидный ключ baseline")
+        _check_key(key)
         if type(value) not in (float, int) or not math.isfinite(value) or value < THRESHOLD:
             raise ValueError("baseline принимает только конечный измеренный CRAP >= 10")
+    declared = doc.get("unmeasurable", {})
+    if not isinstance(declared, dict):
+        raise ValueError("baseline unmeasurable должен быть mapping ключ -> причина")
+    for key, reason in declared.items():
+        _check_key(key)
+        if not isinstance(reason, str) or not reason.strip():
+            raise ValueError("у неоцениваемой функции нужна причина")
     if entries and not isinstance(doc.get("measurement"), dict):
         raise ValueError("непустой baseline требует measurement provenance")
     history = doc.get("raises", [])
@@ -309,16 +332,22 @@ def _atomic_write(path, text):
 
 
 def _write_baseline(path, result, evidence, previous, reason):
-    if result["unknown_functions"] or evidence is None:
+    rows = result["functions"]
+    if evidence is None or any(r["crap"] is None and r["coverage_status"] != "unknown" for r in rows):
         raise ValueError("baseline не записан: нужно измеренное покрытие ВСЕХ функций")
-    doc = baseline_document(result["functions"], evidence)
+    doc = baseline_document(rows, evidence)
     old = previous.get("functions", {}) if previous else {}
+    old_declared = previous.get("unmeasurable", {}) if previous else {}
+    declared = {r["key"]: old_declared.get(r["key"], UNMEASURABLE_REASON) for r in rows if r["crap"] is None}
     raised = {k: v for k, v in doc["functions"].items() if previous is not None and (k not in old or v > old[k] + 1e-9)}
+    raised.update({k: "unmeasurable" for k in declared if previous is not None and k not in old_declared})
     if raised and not (reason and reason.strip()):
         raise ValueError("baseline не записан: новый/выросший долг требует --allow-raise REASON")
     history = list(previous.get("raises", [])) if previous else []
     if raised:
         history.append({"reason": reason.strip(), "functions": raised})
+    if declared:
+        doc["unmeasurable"] = declared
     if history:
         doc["raises"] = history
     # Все проверки до записи; при ошибке сериализации старый файл сохраняется.
@@ -330,7 +359,7 @@ def _render(result):
     print(f"advisory CRAP: {result['status']}; функций {len(result['functions'])}; "
           f"новый/выросший долг {result['new_or_regressed']}; неизвестно {result['unknown_functions']}")
     for row in result["functions"]:
-        if row["finding"] or row["crap"] is None:
+        if row["finding"] or (row["crap"] is None and not row["declared_unmeasurable"]):
             score = "unknown" if row["crap"] is None else f"{row['crap']:.3f}"
             print(f"  {row['path']}:{row['line']} {row['name']}: CC={row['complexity']} "
                   f"CRAP={score} coverage={row['coverage_status']} {row['finding'] or ''}")
@@ -355,7 +384,8 @@ def main(argv=None):
         path = args.baseline or root / "packages/crap-score-baseline.yaml"
         previous = load_baseline(path) if path.exists() or not args.write_baseline else None
         evidence = load_coverage(root, args.coverage, args.coverage_binding) if args.coverage else None
-        result = analyze(root, evidence, previous["functions"] if previous else {})
+        result = analyze(root, evidence, previous["functions"] if previous else {},
+                         previous.get("unmeasurable", {}) if previous else {})
         if args.write_baseline:
             _write_baseline(path, result, evidence, previous, args.allow_raise)
         if args.json:
