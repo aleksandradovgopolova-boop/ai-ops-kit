@@ -279,6 +279,13 @@ def _node_process_binding(skeleton):
         return False
     if re.search(r'\bprocess(?:\s*\.[\w$]+|\s*\[[^\]]*\])+\s*(?:[+*/%&|^?-]*=(?!=)|\+\+|--)', skeleton):
         return False
+    for usage in re.finditer(r'\bprocess\s*\.\s*env\b', skeleton):
+        tail = skeleton[usage.end():].lstrip()
+        if re.match(r'\.\s*[A-Z_][A-Z0-9_]*\b', tail):
+            continue  # Node env scalar read не передаёт сам изменяемый объект
+        if skeleton[:usage.start()].rstrip().endswith('...'):
+            continue  # непосредственная shallow копия, не alias окружения
+        return False  # mutator/alias/неподдержанное использование — unknown
     return not re.search(r'\bdelete\s+process\b', skeleton)
 
 

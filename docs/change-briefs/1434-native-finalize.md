@@ -130,3 +130,11 @@ options, неизвестные argv/ветви и reserved environment оста
 реальный поддержанный длинный fixture и литеральный conditional fixture проходят.
 После реализации — targeted scanner/core, затем независимое entire-delta review
 нового head и полный exact-head CI. Два прерванных широких профиля не PASS.
+
+Повторный review сохранил блокировку для escape `process.env` в mutator/alias.
+Уточнение environmental proof ДО кода: допускаются только scalar dot-reads
+`process.env.KEY` и непосредственная object-spread копия стандартного окружения;
+передача самого env в функцию, alias, destructuring/неподдержанная форма и видимая
+мутация остаются blocking. Это не проверка deployed environment или полного
+поведения импортированных модулей; самостоятельные атаки/суждение остаются
+обязательными для red-team. Встроенный ambient env не объявляется очищенным.

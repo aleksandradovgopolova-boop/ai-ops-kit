@@ -43,6 +43,21 @@ def test_long_node_proof_rejects_visible_process_substitution(prefix):
                for f in security_scan.scan_injection({'server.mjs': code}))
 
 
+@pytest.mark.parametrize('prefix', [
+    'Object.assign(process.env,{NODE_OPTIONS:request.options});\n',
+    "Reflect.set(process.env,'NODE_OPTIONS',request.options);\n",
+    "Object.defineProperty(process.env,'NODE_OPTIONS',{value:request.options});\n",
+    'const environment=process.env; environment.NODE_OPTIONS=request.options;\n',
+    'let environment; environment=process.env; mutate(environment);\n',
+    'const {env:environment}=process; mutate(environment);\n',
+])
+def test_long_node_proof_rejects_environment_escape(prefix):
+    code = prefix + process_code()
+    assert len(code) > 400 and '...process.env' in code
+    assert any(f['id'].startswith('node_child_process')
+               for f in security_scan.scan_injection({'server.mjs': code}))
+
+
 @pytest.mark.parametrize('tail', [',shell:true', ',shell:options.shell', ',...options'])
 def test_long_launch_still_detects_unsafe_options_after_old_window(tail):
     code = process_code(tail)
