@@ -485,6 +485,11 @@ def _validate_receipt(receipt):
     return None
 
 
+def validate_receipt(receipt):
+    """Публичная проверка квитанции для гейта `perf_gate` (#1409): None — годна, строка — провал этапа."""
+    return _validate_receipt(receipt)
+
+
 def _validate_samples(result, metadata):
     total, warmup = metadata["iterations"] + metadata["warmup"], metadata["warmup"]
     samples = result.get("samples")

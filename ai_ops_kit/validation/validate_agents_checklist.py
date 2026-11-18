@@ -78,6 +78,12 @@ ALLOWED = (
     # открытых задач, у неё нет вердикта pass/fail, обернуть в pytest нельзя. Зовётся по
     # расписанию/на push/вручную из workflow `status-dashboard` перед публикацией на GitHub Pages.
     re.compile(r"^python3?\s+dashboard/build_data\.py\b"),
+    # Гейт скорости и памяти (#1409, схема принята владельцем 18.11.2026): вердикт выносит ЗАМЕР
+    # настоящих прогонов базы и кандидата на одной машине, а не проверка кода — в pytest его не
+    # обернуть (тест не должен зависеть от скорости runner). Логика сравнения покрыта
+    # tests/unit/test_perf_gate.py. Разрешены ровно обёртка lease и сам `perf_gate pair`.
+    re.compile(r"^python3?\s+-m\s+ai_ops_kit\.devtools\.host_resource_cli\s+--owner\s+\"ci-perf-"),
+    re.compile(r"^python3?\s+-m\s+ai_ops_kit\.devtools\.perf_gate\s+pair\b"),
 )
 
 # Workflow целиком операционный: ручной замер, который ПРОИЗВОДИТ сырые данные (артефакты прогона),
