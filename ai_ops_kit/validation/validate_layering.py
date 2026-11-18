@@ -75,7 +75,7 @@ def _dynamic_import_literal(node):
     return None
 
 
-def _imported_names(src, filename=None):
+def _imported_names(src, filename=None, package=None):
     """Имена верхнего уровня из import/from И динамических __import__/import_module — через AST.
 
     Динамическая загрузка со строковым литералом — такое же ребро зависимости, как статический
@@ -92,13 +92,45 @@ def _imported_names(src, filename=None):
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             names += [a.name for a in node.names]
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            names.append(node.module)
+        elif isinstance(node, ast.ImportFrom) and not node.level:
+            if node.module:
+                names.append(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            names += _resolve_relative(node, package)
         else:
             dynamic = _dynamic_import_literal(node)
             if dynamic:
                 names.append(dynamic)
     return names
+
+
+def _resolve_relative(node, package):
+    """Абсолютные имена для `from .x import y` (#1484): без пакета файла разрешить нечем.
+
+    `from .. import beta` без module даёт имя на каждый импортируемый объект — так подпакет,
+    названный в import, остаётся видимым ребром.
+    """
+    if not package:
+        return []
+    parts = package.split(".")
+    if node.level > len(parts):
+        return []
+    base = parts[:len(parts) - node.level + 1]
+    if node.module:
+        return [".".join(base + node.module.split("."))]
+    return [".".join(base + [a.name]) for a in node.names]
+
+
+def _package_files(directory):
+    """Все модули пакета, включая вложенные и `__init__.py` (#1484): (файл, подпись, пакет)."""
+    for f in sorted(directory.rglob("*.py")):
+        if "__pycache__" in f.parts:
+            continue
+        rel = f.relative_to(directory.parent).with_suffix("")
+        dotted = ["ai_ops_kit", *rel.parts]
+        package = dotted if f.name == "__init__.py" else dotted[:-1]
+        label = f.stem if f.parent == directory else ".".join(rel.parts[1:])
+        yield f, label, ".".join(package)
 
 
 def build_graph(surface=SURFACE):
@@ -108,10 +140,8 @@ def build_graph(surface=SURFACE):
     for d in sorted(surface.iterdir()):
         if not d.is_dir() or d.name == "__pycache__":
             continue
-        for f in sorted(d.glob("*.py")):
-            if f.name == "__init__.py":
-                continue
-            for name in _imported_names(f.read_text(encoding="utf-8"), filename=str(f)):
+        for f, label, package in _package_files(d):
+            for name in _imported_names(f.read_text(encoding="utf-8"), filename=str(f), package=package):
                 parts = name.split(".")
                 # Обе пакетные формы: `from ai_ops_kit.<пакет> import <модуль>` даёт module из ДВУХ
                 # частей, `from ai_ops_kit.<пакет>.<модуль> import <имя>` — из трёх. Требование
@@ -123,7 +153,7 @@ def build_graph(surface=SURFACE):
                 else:
                     continue
                 if target != d.name:
-                    edges[(d.name, target)].add(f"{f.stem} -> {parts[-1]}")
+                    edges[(d.name, target)].add(f"{label} -> {parts[-1]}")
     return dict(edges)
 
 
