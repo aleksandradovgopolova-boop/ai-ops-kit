@@ -321,3 +321,62 @@ def test_excluded_eof_cannot_hide_executed_line_outside_source(tmp_path):
     bound = cs.load_coverage(tmp_path, report, binding)
     with pytest.raises(ValueError, match="вне исходника"):
         cs.analyze(tmp_path, bound, {})
+
+
+# ── #1387, решение владельца 18.11.2026: неоцениваемые функции — явным списком с причиной ──
+
+INLINE = "def inline(a, b): return a and b\n"
+MEASURED = "def f():\n    return 1\n"
+
+
+def two_functions(tmp_path):
+    p = source(tmp_path, MEASURED + INLINE)
+    return p, evidence(tmp_path, p, [1, 2, 3], [])
+
+
+def test_body_without_statements_is_frozen_as_declared_unmeasurable(tmp_path):
+    p, (report, binding) = two_functions(tmp_path)
+    base = baseline(tmp_path)
+    assert run(tmp_path, base, report, binding, "--write-baseline", "--allow-raise", "первая заморозка") == 0
+    doc = yaml.safe_load(base.read_text())
+    (key, reason), = doc["unmeasurable"].items()
+    assert "::inline@" in key and reason.strip()
+    assert run(tmp_path, base, report, binding) == 0  # объявленная — не «неизвестно»
+
+
+def test_new_unmeasurable_function_outside_the_list_is_still_unknown(tmp_path, capsys):
+    p, (report, binding) = two_functions(tmp_path)
+    base = baseline(tmp_path)
+    run(tmp_path, base, report, binding, "--write-baseline", "--allow-raise", "первая заморозка")
+    p.write_text(MEASURED + INLINE + "def other(a, b): return a or b\n", encoding="utf-8")
+    report, binding = evidence(tmp_path, p, [1, 2, 3, 4], [])
+    capsys.readouterr()
+    assert run(tmp_path, base, report, binding) == 1
+    assert json.loads(capsys.readouterr().out)["unknown_functions"] == 1
+
+
+def test_adding_to_the_unmeasurable_list_needs_an_explicit_reason(tmp_path):
+    p, (report, binding) = two_functions(tmp_path)
+    base = baseline(tmp_path)
+    before = base.read_bytes()
+    assert run(tmp_path, base, report, binding, "--write-baseline") == 2
+    assert base.read_bytes() == before
+
+
+def test_missing_or_stale_coverage_is_never_declared_unmeasurable(tmp_path):
+    p, _ = two_functions(tmp_path)
+    source(tmp_path, MEASURED, "uncovered.py")
+    report, binding = evidence(tmp_path, p, [1, 2, 3], [])
+    base = baseline(tmp_path)
+    assert run(tmp_path, base, report, binding, "--write-baseline", "--allow-raise", "x") == 2
+    assert "unmeasurable" not in yaml.safe_load(base.read_text())
+
+
+@pytest.mark.parametrize("value", [{"bad-key": "причина"}, {"ai_ops_kit/a.py::f@1": ""}, ["x"]])
+def test_malformed_unmeasurable_section_is_refused(tmp_path, value):
+    source(tmp_path, MEASURED)
+    base = baseline(tmp_path)
+    doc = yaml.safe_load(base.read_text())
+    doc["unmeasurable"] = value
+    base.write_text(yaml.safe_dump(doc), encoding="utf-8")
+    assert run(tmp_path, base) == 2

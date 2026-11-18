@@ -84,6 +84,10 @@ ALLOWED = (
     # tests/unit/test_perf_gate.py. Разрешены ровно обёртка lease и сам `perf_gate pair`.
     re.compile(r"^python3?\s+-m\s+ai_ops_kit\.devtools\.host_resource_cli\s+--owner\s+\"ci-perf-"),
     re.compile(r"^python3?\s+-m\s+ai_ops_kit\.devtools\.perf_gate\s+pair\b"),
+    # Привязка покрытия к исходникам (#1387): не проверка, а запись provenance замера покрытия для
+    # CRAP — снимок хешей до тестов и сверка после. Вердикта о коде нет; логика —
+    # tests/unit/test_coverage_binding.py.
+    re.compile(r"^python3?\s+-m\s+ai_ops_kit\.devtools\.coverage_binding\s+(snapshot|bind)\b"),
 )
 
 # Workflow целиком операционный: ручной замер, который ПРОИЗВОДИТ сырые данные (артефакты прогона),

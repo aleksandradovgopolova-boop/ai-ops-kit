@@ -34,7 +34,8 @@ def test_ordinary_coverage_keeps_both_roots_floor_and_explicit_scope():
     """Явный -m переопределяет pytest.ini: release_gate нужно исключить повторно."""
     step = _ordinary_coverage_step()
     args = shlex.split(step["run"].replace("\\\n", " "))
-    assert args[args.index("-m", 3) + 1] == "not nightly and not release_gate"
+    # Флаг маркеров — после `pytest`, а не `python3 -m pytest` (перед командой стоит `set +e`, #1387).
+    assert args[args.index("-m", args.index("pytest")) + 1] == "not nightly and not release_gate"
     assert [arg for arg in args if arg.startswith("--cov=")] == [
         "--cov=ai_ops_kit", "--cov=installer"]
     assert "--cov-fail-under=70" in args
@@ -109,12 +110,15 @@ def test_release(): record("release")
     env.update(step["env"])
     env.update(PATH=str(bindir) + os.pathsep + env["PATH"], PYTEST_ADDOPTS="",
                PYTEST_XDIST_AUTO_NUM_WORKERS="1", COVERAGE_FIXTURE_MODE=mode,
-               COVERAGE_SCOPE_LOG=str(log))
+               COVERAGE_SCOPE_LOG=str(log), RUNNER_TEMP=str(tmp_path),
+               GITHUB_OUTPUT=str(tmp_path / "github-output"))
     result = subprocess.run(["bash", "-euo", "pipefail", "-c", step["run"]],
                             cwd=tmp_path, env=env, capture_output=True, text=True, timeout=60)
     output = result.stdout + result.stderr
     assert log.is_file(), output
     assert sorted(log.read_text().splitlines()) == ["contract", "fast", "slow"], output
+    # #1387: код возврата тестов доходит до шага привязки — она пишет passed только при 0.
+    assert (tmp_path / "github-output").read_text() == f"rc={result.returncode}\n", output
     if mode == "passes":
         assert result.returncode == 0, output
     else:
