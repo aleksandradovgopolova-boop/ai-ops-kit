@@ -906,7 +906,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/devtools/fleet_rehearsal.py` — предрелизная репетиция установки и отката на закреплённых дочках.
 - `tests/unit/test_fleet_release_gate.py` — обязательный предрелизный запуск репетиции.
 - `qualification/fleet-rehearsal.yaml` — открытые эталонные репозитории и их неизменяемые Git-снимки.
-- `docs/change-briefs/1434-native-finalize.md` — границы native specification evidence, parser proofs и человеческого red-team handoff.
+- `docs/change-briefs/1434-native-finalize.md` — границы native specification evidence и человеческого red-team fallback; незакрытые security/producer blockers.
 - `tests/unit/test_native_finalize_specification.py` — действительные native артефакты, сохранённый strict CLI и fail-closed profile.
-- `tests/unit/test_native_finalize_security.py` — конечный разбор generated schema/exec и опасные мутации.
+- `tests/unit/test_native_finalize_security.py` — независимость shell occurrences и сохранение блокировки неподтверждённых SQL/long launches.
 - `tests/unit/test_native_red_team_handoff.py` — специализированный human request/ingestion, binding и отрицательные transport fixtures.

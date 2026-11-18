@@ -92,7 +92,7 @@ _SHELL_КЛЮЧ = re.compile(r'\bshell\b')
 
 # Сколько символов после открывающей скобки считать вызовом. Настоящий вызов укладывается с
 # запасом; ограничение нужно, чтобы незакрытая скобка не утащила разбор через весь файл.
-_ОКНО = 4096
+_ОКНО = 400
 
 
 def without_regexp_exec(line: str, regexp_names: frozenset) -> str:
@@ -175,121 +175,7 @@ def _россыпь_в_опциях(скелет: str) -> bool:
     return False
 
 
-def _argument_parts(raw, skeleton):
-    """Конечное разбиение по top-level запятым только достоверного string skeleton."""
-    stack, parts, start = [], [], 0
-    pairs = {')': '(', ']': '[', '}': '{'}
-    for pos, char in enumerate(skeleton):
-        if char in '([{':
-            stack.append(char)
-        elif char in ')]}':
-            if not stack or stack.pop() != pairs[char]:
-                return None
-        elif char == ',' and not stack:
-            parts.append((raw[start:pos].strip(), skeleton[start:pos].strip()))
-            start = pos + 1
-    if stack:
-        return None
-    if raw[start:].strip():
-        parts.append((raw[start:].strip(), skeleton[start:].strip()))
-    return parts
-
-
-_SCRIPT_LITERAL = r'''(?P<quote>['"])(?P<script>[A-Za-z0-9_./-]+)(?P=quote)'''
-_SCRIPT_CHOICE = re.compile(r'''process\s*\.\s*argv\s*\.\s*includes\s*\(\s*(['"])(--[A-Za-z0-9_-]+)\1\s*\)\s*\?\s*'''
-                            + _SCRIPT_LITERAL + r'\s*:\s*(?P<rest>.+)', re.S)
-
-
-def _literal_node_script(expression, depth=0):
-    """Один локальный JS entrypoint либо <=8 literal branches; не общий JS evaluator."""
-    if depth > 8:
-        return False
-    expression = expression.strip()
-    literal = re.fullmatch(_SCRIPT_LITERAL, expression)
-    choice = None if literal else _SCRIPT_CHOICE.fullmatch(expression)
-    match = literal or choice
-    if match is None:
-        return False
-    name = match['script']
-    if (not name.endswith(('.js', '.mjs', '.cjs')) or name.startswith(('/', '-'))
-            or '..' in name.split('/')):
-        return False
-    return literal is not None or _literal_node_script(choice['rest'], depth + 1)
-
-
-def _literal_env(raw, skeleton):
-    if not raw.startswith('{') or not raw.endswith('}'):
-        return False
-    parts = _argument_parts(raw[1:-1], skeleton[1:-1])
-    if parts is None:
-        return False
-    names = set()
-    for text, _ in parts:
-        if re.fullmatch(r'\.\.\.\s*process\s*\.\s*env', text):
-            continue
-        prop = re.fullmatch(r'([A-Z_][A-Z0-9_]*)\s*:\s*(.+)', text, re.S)
-        if prop is None:
-            return False
-        name, value = prop.groups()
-        if (name in names or name == 'PATH' or name.startswith(('NODE_', 'LD_', 'DYLD_'))):
-            return False
-        names.add(name)
-        # Только scalar literals/local values, никаких вызовов, accessors или nested options.
-        if not re.fullmatch(r'''(?:[A-Za-z_$][\w$]*|[0-9]+|"[^"\\]*"|'[^'\\]*')''', value.strip()):
-            return False
-    return True
-
-
-def _long_node_launch(raw, skeleton):
-    """Новое окно не расширяет старое доверие: длинный вызов требует закрытого proof."""
-    parts = _argument_parts(raw, skeleton)
-    if parts is None or len(parts) != 3 or parts[0][0] != 'process.execPath':
-        return False
-    argv, options = parts[1], parts[2]
-    if not argv[0].startswith('[') or not argv[0].endswith(']'):
-        return False
-    arguments = _argument_parts(argv[0][1:-1], argv[1][1:-1])
-    if arguments is None or len(arguments) != 1 or not _literal_node_script(arguments[0][0]):
-        return False
-    if not options[0].startswith('{') or not options[0].endswith('}'):
-        return False
-    properties = _argument_parts(options[0][1:-1], options[1][1:-1])
-    if not properties:
-        return False
-    seen = set()
-    for text, code in properties:
-        prop = re.fullmatch(r'(stdio|env)\s*:\s*(.+)', text, re.S)
-        if prop is None or prop[1] in seen:
-            return False
-        seen.add(prop[1])
-        value = prop[2].strip()
-        if prop[1] == 'stdio':
-            if not re.fullmatch(r'''(['"])(?:pipe|inherit|ignore)\1''', value):
-                return False
-        elif not _literal_env(value, code[code.index(':') + 1:].strip()):
-            return False
-    return True
-
-
-def _node_process_binding(skeleton):
-    """Длинный proof не принимает видимую подмену/escape стандартного Node process."""
-    if re.search(r'\\u(?:[0-9a-fA-F]|\{)|\b(?:globalThis|global|eval|Function|with)\b', skeleton):
-        return False
-    if re.search(r'\bprocess\b(?!\s*\.\s*(?:execPath|argv|env|pid)\b)', skeleton):
-        return False
-    if re.search(r'\bprocess(?:\s*\.[\w$]+|\s*\[[^\]]*\])+\s*(?:[+*/%&|^?-]*=(?!=)|\+\+|--)', skeleton):
-        return False
-    for usage in re.finditer(r'\bprocess\s*\.\s*env\b', skeleton):
-        tail = skeleton[usage.end():].lstrip()
-        if re.match(r'\.\s*[A-Z_][A-Z0-9_]*\b', tail):
-            continue  # Node env scalar read не передаёт сам изменяемый объект
-        if skeleton[:usage.start()].rstrip().endswith('...'):
-            continue  # непосредственная shallow копия, не alias окружения
-        return False  # mutator/alias/неподдержанное использование — unknown
-    return not re.search(r'\bdelete\s+process\b', skeleton)
-
-
-def launch_is_a_surface(функция: str, окно: str, окно_скелет: str = None, *, process_binding=False) -> bool:
+def launch_is_a_surface(функция: str, окно: str, окно_скелет: str = None) -> bool:
     """Этот запуск команды — поверхность внедрения?
 
     `окно` — текст аргументов как он написан (флаги живут ВНУТРИ строковых литералов, поэтому их
@@ -304,16 +190,11 @@ def launch_is_a_surface(функция: str, окно: str, окно_скеле�
     # внутри строкового аргумента), а не пропуска. Разбор строк живёт в `scan_prose` — одна копия
     # эвристики на весь сканер, и сюда она приходит готовым скелетом.
     скелет = окно if окно_скелет is None else окно_скелет
-    if len(окно) >= 399 and (not process_binding or функция != 'spawn' or not _long_node_launch(окно, скелет)):
-        return True  # старый предел не давал safe verdict; неизвестность сохраняем
     if _россыпь_в_опциях(скелет):
         return True                              # `{ ...opts }` — внутри может оказаться `shell`
-    # КЛЮЧ ИЩЕТСЯ ПО СЫРОМУ ОКНУ, а не по скелету: скелет гасит содержимое кавычек, и
-    # `{ "shell": true }` переставал опознаваться — префикс `['"]?` в выражении был мёртвым
-    # (нашло независимое ревью). Цена: слово `shell:` внутри строкового аргумента даст лишний флаг.
-    # Это безопасная сторона, и она дешевле пропущенной оболочки.
-    # Каждое употребление должно быть явно ложным: другой false в объекте
-    # не оправдывает повторный true, shorthand, accessor или computed key.
+    # Каждое shell occurrence проверяется по сырому окну: скелет гасит quoted keys.
+    # Один false не оправдывает другие true/unknown/computed/shorthand occurrences.
+    # Цена — лишний флаг на слове shell внутри аргумента; это безопасная сторона.
     if any(not _SHELL_ЛОЖЬ.match(окно, key.start()) for key in _SHELL_КЛЮЧ.finditer(окно)):
         return True                              # `shell` в любой форме, кроме доказанно ложной
     вид, значение = _первый_аргумент(окно)
@@ -421,7 +302,7 @@ def _разобрать(код: str, скелет: str, имена_регуля�
             старт = смещения[номер - 1] + m.end() - 1
             конец, закрылся = _границы_вызова(скелет, старт)
             if not закрылся or launch_is_a_surface(
-                    m.group(1), код[старт + 1:конец], скелет[старт + 1:конец], process_binding=_node_process_binding(скелет)):
+                    m.group(1), код[старт + 1:конец], скелет[старт + 1:конец]):
                 поверхности.add(номер)
                 break                            # на строке довольно одного адреса
     return вызовы, поверхности, разобранные

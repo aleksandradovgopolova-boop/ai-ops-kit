@@ -350,12 +350,7 @@ def scan_injection(files):
                 # там мы не разобрали ничего, и молчание означало бы «не проверено» вместо «чисто».
                 res = [f for f in res
                        if not (f["path"] == path and f["id"] == "node_child_process")]
-        sql_lexical, sql_skeleton, sql_parsed = None, None, False
-        if '`' in text and '${' in text and Path(path).suffix.lower() in {'.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'}:
-            sql_lexical, comments_ok = _blank_comments(text, path)
-            sql_skeleton, strings_ok = _blank_strings(sql_lexical)
-            sql_parsed = comments_ok and strings_ok
-        for lineno in _sql_template_literal_lines(text, lexical=sql_lexical, skeleton=sql_skeleton, parsed=sql_parsed):
+        for lineno in _sql_template_literal_lines(text):
             res.append({"path": path, "id": "sql_template_literal", "line": lineno})
         # #1161: интерпретатору в .py/.sh передан код, собранный подстановкой. Литеральный код флагом
         # не считается: исполнится ровно написанное (решение и цена — в `scan_inline_code`).

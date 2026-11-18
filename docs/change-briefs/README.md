@@ -18,7 +18,7 @@
 
 ## Что здесь есть
 
-- [Native finalize: спецификация, конечный parser и специализированный red team — #1434](1434-native-finalize.md).
+- [Native finalize: Spec-First и человеческий red-team fallback — #1434](1434-native-finalize.md).
 
 - [Выполненный падающий тест обязателен для mutation kill — #1482](1482-mutation-executed-test.md).
 

@@ -1,140 +1,64 @@
-# #1434: завершение native-сессии по действительному evidence
+# #1434: настоящая спецификация и независимый red-team handoff
 
 ## Результат
 
-Проект с явно отключённым OpenSpec проверяет свою настоящую Spec-First
-спецификацию штатным детерминированным путём. Безопасные конструкции отличаются
-от доказанных secrets/injection по данным, а не по имени тестового каталога.
-Обязательный специализированный `ai_red_team` получает честный внешний путь
-приёмки; обычный reviewer не выдаётся за red team. Это продолжение #1434.
-
-Вход — приватные воспроизведения владельца дочернего проекта от 18.11.2026.
-Их пути, пользовательские данные и значения находок в Git не публикуются.
-Предыдущий срез cc4f501b уже доставлен отдельным PR; его evidence не является
-проверкой этой новой delta.
+При явно отключённом OpenSpec обязательный specification gate проверяет реальные
+Spec-First и requirements артефакты отдельным реестровым профилем. Default/true
+сохраняет strict CLI. Native finalize получает внешний человеческий red-team
+fallback; нормативная альтернатива другой независимой модели сохраняется.
+Это частичная поставка #1434, не закрытие всех consumer blockers.
 
 ## Затрагиваемые пути
 
-- Явный `openspec.enabled=false` → authoring/reevaluation → выбор настоящего
-  валидатора specification → gate result, включая текущую native finalize-сессию.
-- Отсутствующий/включённый OpenSpec → прежний strict CLI; ошибка конфигурации
-  и неизвестный режим не дают более мягкого поведения.
-- Полный scan затронутых файлов → secret/SQL/exec classification → доменная
-  применимость → derived approval signals → strict security gate/report.
-- RunPlan с `ai_red_team` → специализированный внешний handoff → приём
-  привязанного результата либо конкретное ожидание независимой квалификации.
-- Установка через stock managed projection, config/source/artifact binding,
-  восстановление сохранённой сессии и неприменимость старых verdicts после обновления.
+- Фактическая конфигурация worktree → профиль specification → authoring/reevaluation
+  существующих артефактов → обязательный gate и readiness.
+- План с ai_red_team → отдельный human request → independently obtained digest →
+  verdict/attack artifact ingestion → finalize/reconcile на точном binding.
+- Старый короткий exec scan → каждый shell occurrence проверяется отдельно.
+- Stock managed projection/update; старые verdicts не подходят к новым inputs.
 
 ## Инварианты
 
-Не отключать обязательные gates, не создавать ApprovalRecord, не менять права,
-trust, runtime/model policy или пользовательский продукт. Не объявлять
-`openspec_valid`, если OpenSpec CLI не исполнялся: альтернативное evidence должно
-быть явно названо и объявлено реестром. Требования и сценарии должны существовать
-в настоящих артефактах и пройти проверку; одного `status: complete` недостаточно.
-Режим по умолчанию сохраняет прежний CLI-контракт.
+Не объявлять openspec_valid без выполненного CLI. Неполные/чужие/испорченные
+артефакты не закрывают обязательный gate. NO_SELF_REVIEW сохраняется; generic
+same-model reviewer не заменяет red team. Hash/роль в JSON не удостоверяют
+личность и не доказывают выполнение атак: оператор получает digest из
+независимого человеческого канала, квалифицированный судья проверяет настоящее
+execution evidence. Fixtures не выдаются за реальных участников или live acceptance.
+Не менять approvals/trust/credentials/model policy и продуктовый код.
 
-Наследование строки из base, имя каталога, слово `test` и заключение автора
-не доказывают безопасность. Неразрешимый dataflow остаётся находкой. Нельзя
-скрывать findings перестановкой кода или blanket allowlist. Любое уточнение
-approval trigger должно исполнять уже объявленное условие домена; реальная
-граница секретов/прав требует прежнего scoped человеческого одобрения.
+## Failure modes
 
-`NO_SELF_REVIEW` сохраняется. Специализированное внешнее заключение не заменяется
-code review, отсутствием ошибок или fixture-вердиктом. Без действительного
-proof/qualified reviewer/human path результат остаётся не принятым.
-
-## Основные failure modes
-
-1. Отключённый инструмент ложно считается исполненным либо плохая спецификация
-   проходит по одному owner-флагу.
-2. Реальный secret/SQL/command input замаскирован видом synthetic fixture.
-3. Узкое parser window скрывает опасную опцию/аргумент; неразобранное считается safe.
-4. Применимость домена ошибочно подменяет фактическое условие human approval;
-   настоящая эскалация инструментов остаётся без одобрения.
-5. Автор/обычный reviewer/устаревший результат закрывает red-team gate либо
-   изменение source/config/artifact scope переиспользует старое evidence.
+1. Ошибочный config/profile или stale cache даёт ложную готовность specification.
+2. Статус complete без содержания/реальных требований считается валидной спецификацией.
+3. Автор/обычный reviewer/чужая ревизия закрывает специализированный red-team gate.
+4. Изменённый execution artifact принимается по старому digest.
+5. Одна shell:false скрывает другую true/unknown/computed/shorthand опцию.
 
 ## Доказательство
 
-До реализации фиксируются синтетические positive/fail-closed/side-effect cases:
+Реальные synthetic artifact/request files, Git revisions и scanner inputs до assert;
+positive/fail-closed/side-effect regressions. Default вызывает реальный тестовый CLI;
+false не запускает CLI/модель и не меняет входы. Unknown/partial/foreign binding,
+изменённые логи и self-review блокируются. Короткий core smoke, линтеры/валидаторы,
+независимое entire-delta review и exact-head CI. Широкий PR-профиль нужен по риску
+gate dispatch; два прерванных прежних профиля не PASS. Проверочное окружение
+изолируется от editable старой рабочей копии без изменения глобальных настроек.
 
-- OpenSpec-off: реальный валидный Spec-First/requirements/plan даёт явно native
-  evidence; испорченные/пустые/чужие данные блокируются; spy сначала доказывает,
-  что CLI не запускался и файлы не менялись. Default/true вызывает настоящий
-  тестовый CLI; его ошибка блокирует.
-- Security: конечные разборы известных безопасных выражений плюс их мутации с
-  внешними данными, shell/code flags, неоднозначным binding, настоящим secret и
-  соседним synthetic fixture. Строка/sink действительно присутствует и scanner
-  исполняется до проверки результата. Неподдержанный UUID/dataflow не прощается.
-- Домены/approval: отсутствие tool expansion само по себе не отменяет security
-  review; реальная эскалация и findings-derived secret boundary остаются blocking.
-- Red team: настоящий request/file и его binding; нет verdict → blocked, writer,
-  обычный code review, чужой digest/revision и stale input → отказ. Документированный
-  человеческий путь не выдаётся за выполненный adversarial прогон.
+## Точная граница и остаток
 
-Целевые tests → core smoke → применимые lint/validators → независимое entire-delta
-review и обязательный CI точного head/base. Широкий PR-профиль применим к изменению
-gate/evidence диспетчеризации, исполняется через общий resource gate. Старые
-5837 тестов и браузерные прогоны дочернего проекта не повторяются и не заявляются
-проверкой нового Кита. При невозможности доказать безопасную классификацию
-фиксируется точный оставшийся blocker, а не ослабляется правило.
+Новые exemptions числовых SQL-схем и long launches отозваны после независимых P1
+review: достаточный source/dataflow proof не получен. Они остаются findings;
+окно exec не расширяется. Никакого blanket allowlist/human false-positive override.
+Доменная применимость/approval triggers этим срезом не исправляются и не ослабляются.
+
+Human transport — только fallback. Native other-model producer с доверенной host
+provenance фактических моделей writer/reviewer ещё не реализован; model id в
+авторском JSON недостаточен. Сохраняются отдельные незакрытые security/producer
+blockers. Приватные incident/probe/review artifacts не публикуются.
 
 ## Не входит
 
 Live/model/paid calls, новые credentials, product edits, production/release,
-смена required/trust policy, редактирование чужих checkout, автоматическая
-публикация приватных отчётов. Полная автономность и закрытие #1434 этим локальным
-срезом заранее не объявляются.
-
-## Граница реализованного среза
-
-Новый parser доказывает только конечные локальные конструкции: закрытый запуск
-команды и числовые имена SQL-схем с проверкой binding/затенения. Opaque JavaScript,
-межфайловые UUID и lifetime фиксированных credentials он не доказывает. Такие
-находки сохраняются; human false-positive override не добавлен. Применимость
-доменов и approval triggers этим срезом не изменяются. Их неизвестное состояние
-не трактуется как отсутствие риска. Реальная тестовая гигиена дочернего проекта
-принадлежит его владельцу и не является результатом этого parser fix.
-
-Red-team human handoff даёт поддержанный транспорт независимого суждения, но не
-удостоверяет личность по JSON и не доказывает смысл испытания одним hash. Оператор
-получает digest по независимому человеческому каналу; настоящий специалист
-проверяет реальные execution artifacts. Синтетические тесты проверяют транспорт
-и отказы, а не заменяют такую приёмку.
-
-Нормативная альтернатива «другая модель/человек» сохраняется. Этот срез проводит
-только внешний человеческий fallback. Native other-model producer с доверенной
-host provenance фактических моделей writer/reviewer пока не реализован;
-заявленный model id в авторском JSON недостаточен. Это отдельный незакрытый
-контрактный остаток, а не требование всегда привлекать человека.
-
-## Перепланирование ограниченного exec-разбора
-
-Два независимых review заблокировали широкий safe-вывод из увеличенного окна:
-неоднозначные/computed options нельзя считать безопасными по отсутствию слова
-`shell`. Поэтому для новых вызовов длиннее прежних 400 символов вводится
-отдельное достаточное условие, а не расширяется прежнее эвристическое доверие.
-
-Поддержанный класс: только `spawn(process.execPath, [script], options)`. Script —
-буквальный локальный JS entrypoint либо конечная цепочка выбора таких литералов
-через `process.argv.includes` с буквальными флагами. Options — явный объект без
-computed/повторных/унаследованных ключей; только literal `stdio` и плоский `env`,
-без startup-code environment variables. Незнакомые аргументы/options/aliases,
-аргумент с внешним вводом и формы вне этого класса сохраняют finding. Предел
-разбора остаётся конечным. Прежний короткий путь не получает новых exemptions.
-
-Проверка до кода: computed variable/concatenated keys, prototype/shorthand/opaque
-options, неизвестные argv/ветви и reserved environment остаются blocking;
-реальный поддержанный длинный fixture и литеральный conditional fixture проходят.
-После реализации — targeted scanner/core, затем независимое entire-delta review
-нового head и полный exact-head CI. Два прерванных широких профиля не PASS.
-
-Повторный review сохранил блокировку для escape `process.env` в mutator/alias.
-Уточнение environmental proof ДО кода: допускаются только scalar dot-reads
-`process.env.KEY` и непосредственная object-spread копия стандартного окружения;
-передача самого env в функцию, alias, destructuring/неподдержанная форма и видимая
-мутация остаются blocking. Это не проверка deployed environment или полного
-поведения импортированных модулей; самостоятельные атаки/суждение остаются
-обязательными для red-team. Встроенный ambient env не объявляется очищенным.
+смена required/trust policy, запись в чужие checkout, повтор дорогого child finalize.
+Полная автономность/живые атаки/командная приёмка этим срезом не подтверждаются.
