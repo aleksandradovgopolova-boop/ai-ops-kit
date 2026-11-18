@@ -16,6 +16,9 @@ fallback; нормативная альтернатива другой неза�
   verdict/attack artifact ingestion → finalize/reconcile на точном binding.
 - Старый короткий exec scan → каждый shell occurrence проверяется отдельно.
 - Stock managed projection/update; старые verdicts не подходят к новым inputs.
+- Человеческий red-team envelope объявляется отдельным experimental schema profile
+  поверх reviewer-result. Generic provider wire schema не получает human metadata
+  и новых обязательных полей. Native human job ссылается на точный profile/hash.
 
 ## Инварианты
 

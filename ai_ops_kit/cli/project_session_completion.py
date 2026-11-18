@@ -410,7 +410,8 @@ def review_jobs(root, task, expected, paths):
         if gid == 'ai_red_team':
             if request.get('reviewer_kind') != 'human' or request.get('review_role') != 'ai-red-teamer':
                 raise ValueError('red-team request потерял специализированный человеческий контракт')
-            job.update(status='awaiting_human', dispatch='qualified-external-human', prompt=request['instructions'])
+            job.update(status='awaiting_human', dispatch='qualified-external-human', prompt=request['instructions'],
+                result_contract_fragment='#/definitions/human_red_team')
             human_jobs.append(job)
         else:
             jobs.append(job)

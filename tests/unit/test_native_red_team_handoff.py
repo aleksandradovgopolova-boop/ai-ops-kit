@@ -2,6 +2,7 @@
 import hashlib
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 import yaml
@@ -110,6 +111,10 @@ def test_human_request_is_exposed_separately_from_native_agent_jobs(packet, monk
     action = completion.review_jobs(root, task, expected, pending)
     assert action['jobs'] == [] and len(action['human_jobs']) == 1
     assert action['human_jobs'][0]['gate'] == 'ai_red_team'
+    assert action['human_jobs'][0]['result_contract_fragment'] == '#/definitions/human_red_team'
+    contract = json.loads(Path(action['human_jobs'][0]['result_contract']).read_text())
+    assert 'human_red_team' in contract['definitions']
+    assert 'reviewer_kind' not in contract['properties']
     assert action['status'] == 'awaiting_human'
     assert action['human_jobs'][0]['request_sha256'] == hashlib.sha256(pending[0].read_bytes()).hexdigest()
     payload = verdict_path.read_bytes()

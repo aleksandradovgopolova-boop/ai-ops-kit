@@ -313,6 +313,7 @@ experimental:
   contracts:
     - Experience Contract
     - watch-контракты
+    - Human red-team fallback profile (schemas/reviewer-result.schema.json#/definitions/human_red_team)
 
 internal:
   # Импортировать снаружи нельзя. Внутри пакета имена пакетные, снаружи — никаких обещаний.

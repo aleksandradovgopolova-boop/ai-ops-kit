@@ -142,8 +142,11 @@ Native finalize создаёт
 `awaiting_human`. Это конкретное ожидаемое действие, а не уже выполненная атака
 и не поручение обычному subagent. Независимый квалифицированный человек читает
 весь base..HEAD, проверяет настоящие adversarial execution artifacts и пишет
-reviewer-result по пути request. Дополнительные поля: `reviewer_kind: human`,
-`review_role: ai-red-teamer`, `review_root`, `managed_sha256`, `config_sha256`,
+reviewer-result по пути request. Профиль envelope —
+`schemas/reviewer-result.schema.json#/definitions/human_red_team`; job объявляет
+его через `result_contract_fragment`. Generic wire schema провайдеров не меняется.
+Дополнительные поля: `reviewer_kind: human`, `review_role: ai-red-teamer`,
+`review_root`, `managed_sha256`, `config_sha256`,
 все scope-поля request и `attack_evidence` (kind/path/sha256/tested_revision).
 Обязательные checks берутся из quality/gates.yaml. Pass без артефактов,
 обычный code review, автор, чужая ревизия/root/config/managed и изменённый log
