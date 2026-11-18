@@ -117,3 +117,51 @@ child-валидатор, вызываемый CI, проверяет те же 
 Создавать новые аккаунты, получать новые credentials, расширять права или включать
 обход доверия для этого плана не требуется. До этих подтверждений живые вызовы
 не запускаются, fixture-профили остаются только автоматическими проверками.
+
+## Native finalize: specification и специализированный red team
+
+`openspec.enabled: false` выбирает профиль `native-spec-first` из фактического
+config рабочего дерева. Движок сверяет принадлежность и уровень `features/<wid>/spec.yaml`,
+содержание обязательных разделов и настоящий `.ai/runplan/<wid>/requirements.yaml`.
+Пустые, чужие, неподдержанные и ожидающие решения артефакты остаются blocking.
+Результат называет `native_spec_valid` и `requirements_covered`; `openspec_valid`
+не выдумывается. По умолчанию и при `true` остаётся настоящий strict OpenSpec CLI.
+Произвольный сигнал задачи не переключает этот профиль.
+
+`ai_red_team` не входит в generic same-model reviews. Политика допускает
+независимую другую модель **или человека**. Описанный ниже transport — человеческая
+альтернатива, а не новое требование human-only. Встроенный native producer другой
+модели пока не подтверждает host provenance/фактические модели writer и reviewer;
+такой машинный результат этим transport не принимается. Простые поля JSON или
+заявленный model id этого ограничения не снимают. Для автоматического закрытия
+нужен отдельный поддержанный producer с доверенным host receipt этих identities,
+exact scope и настоящими attack artifacts. Этот остаток остаётся блокирующим.
+
+Native finalize создаёт
+отдельный scoped request и возвращает `host_actions.human_jobs`, включая
+`awaiting_human`. Это конкретное ожидаемое действие, а не уже выполненная атака
+и не поручение обычному subagent. Независимый квалифицированный человек читает
+весь base..HEAD, проверяет настоящие adversarial execution artifacts и пишет
+reviewer-result по пути request. Профиль envelope —
+`schemas/reviewer-result.schema.json#/definitions/human_red_team`; job объявляет
+его через `result_contract_fragment`. Generic wire schema провайдеров не меняется.
+Дополнительные поля: `reviewer_kind: human`, `review_role: ai-red-teamer`,
+`review_root`, `managed_sha256`, `config_sha256`,
+все scope-поля request и `attack_evidence` (kind/path/sha256/tested_revision).
+Обязательные checks берутся из quality/gates.yaml. Pass без артефактов,
+обычный code review, автор, чужая ревизия/root/config/managed и изменённый log
+не принимаются. Артефакты ограничены: не более 32, 4 MiB каждый и 16 MiB суммарно.
+
+Оператор получает SHA256 точного verdict из независимого человеческого канала
+и передаёт `--review-digests '{"ai_red_team":"<trusted-sha256>"}'` вместе с
+другими действительными digest. Code/JSON не удостоверяют личность по имени:
+происхождение канала проверяет оператор, как у premerge. Автор не создаёт
+человеческое заключение и не переименовывает fixture в реального участника.
+Новые live/model вызовы не следуют из наличия request и требуют своего бюджета.
+Все attack artifacts входят в completion hashes и повторно сверяются до accepted.
+
+Этот путь не является per-finding security override. Неразобранные credentials,
+SQL/command dataflow и неизвестное изменение прав инструментов сохраняют
+strict blockers; человеческое `false-positive` и ApprovalRecord не заменяют
+механическое доказательство безопасности. По имени тестового каталога и
+наследованию строки из base находка не прощается.

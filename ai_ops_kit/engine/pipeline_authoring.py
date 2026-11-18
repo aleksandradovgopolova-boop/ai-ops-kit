@@ -88,6 +88,13 @@ def _author_with_retry(author_proposer, base_prompt, check_fn, bud, attempts=3):
 
 def _run_spec_authoring(author_proposer, work_root, gate_ev, wid, task, bud, openspec_validate):
     """v2.89: произвести OpenSpec change для гейта specification."""
+    from ai_ops_kit.engine.pipeline_helpers import _specification_mode, _native_specification_evidence
+    if _specification_mode(work_root) == 'native-spec-first':
+        native = _native_specification_evidence(work_root, wid)
+        gate_ev = dict(gate_ev, specification=native)
+        return gate_ev, {'gate': 'specification', 'artifact': f'features/{wid}/spec.yaml',
+                         'validator': 'native-spec-first', 'valid': native['status'] == 'pass',
+                         'closed': native['status'] == 'pass', 'errors': native['blockers'] or None}
     # Проверка формы и рендер СОДЕРЖИМОГО живут ВНИЗ, в пакете `checks` (слой primitives): движок
     # зовёт их вниз, без восходящего ребра engine -> validation (лента №5). Запись файлов — ниже.
     from ai_ops_kit.checks import spec_artifact as vsa

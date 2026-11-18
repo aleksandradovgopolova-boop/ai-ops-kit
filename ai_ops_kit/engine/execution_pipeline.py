@@ -38,7 +38,7 @@ from ai_ops_kit.engine import run_plan              # noqa: E402  (build_plan в
 # ---------------------------------------------------------------------------
 from ai_ops_kit.engine.pipeline_helpers import (  # noqa: E402,F401
     _profile_summary, _intake_evidence, NO_SELF_REVIEW, _reviewable_gates,
-    _gate_checklist, _parse_yaml_block, _openspec_validate, _authoring_specs,
+    _gate_checklist, _parse_yaml_block, _openspec_validate, _authoring_specs, _specification_mode,
     acceptance_blocks_ready,
 )
 from ai_ops_kit.engine.pipeline_git import (  # noqa: E402,F401
@@ -263,6 +263,16 @@ def _pipeline_build_report(*, plan, child_root, profile, sandbox, pol, loop, app
     return report
 
 
+def _pipeline_project_profile(work_root, signals):
+    """Прочитать профиль реального worktree до install/model phases."""
+    try:
+        # Предложенный исполнителем сигнал не заменяет фактический config.
+        signals['specification_validation'] = _specification_mode(work_root)
+    except ValueError as exc:
+        return None, {'kind': 'execution-pipeline', 'status': 'error', 'ready_for_pr': False, 'error': str(exc)}
+    return project_detector.detect(work_root), None
+
+
 def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  max_steps=40, feature=None, commit=False, allow_missing_tests=True,
                  isolate=False, open_pr=False, install_deps=True, baseline_diff=False,
@@ -274,7 +284,7 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
                  strict_judge_qualified=True,   # v3.7.1: есть ли QUALIFIED security/integration судья
                  security_reviewer_proposer=None,   # v3.7.3 (#5): ОТДЕЛЬНЫЙ security-судья (не общий reviewer)
                  reevaluate_only=False, verification_intent="merge_candidate", review_handoff_root=None,
-                 base_revision=None):
+                 base_revision=None, human_review_context=None):
     """Один прогон движка: [worktree-изоляция] -> детект -> правки через tool-loop ->
     [commit на ветке] -> evidence (на зафиксированном SHA) -> гейты RunPlan.
 
@@ -331,9 +341,9 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
     work_root, worktree_rel = _iso["work_root"], _iso["worktree_rel"]
     resume_info, base_binding = _iso["resume_info"], _iso["base_binding"]
     base_ref, base_sha, delivery_pf = _iso["base_ref"], _iso["base_sha"], _iso["delivery_pf"]
-
-    # 1. детект стека (в рабочем дереве)
-    profile = project_detector.detect(work_root)
+    profile, profile_error = _pipeline_project_profile(work_root, signals)
+    if profile_error:
+        return profile_error
 
     # 3. политика по умолчанию: execution, границы — по work_root (containment внутри помощника).
     pol = _pipeline_resolve_policy(policy, sandbox, work_root, write_scope)
@@ -373,7 +383,8 @@ def run_pipeline(task, signals, child_root, proposer, policy=None, budget=None,
         review=review, reviewer_proposer=reviewer_proposer, budget=budget,
         strict_judge_qualified=strict_judge_qualified,
         security_reviewer_proposer=security_reviewer_proposer, reevaluate_only=reevaluate_only,
-        verification_intent=verification_intent, review_handoff_root=review_handoff_root)
+        verification_intent=verification_intent, review_handoff_root=review_handoff_root,
+        human_review_context=human_review_context)
     # распаковываем только то, что нужно ФАЗАМ ниже (gates/readiness); поля, идущие лишь в отчёт,
     # проецируются прямо из _ev в _pipeline_build_report — не плодим неиспользуемые локали.
     coll = _ev["coll"]

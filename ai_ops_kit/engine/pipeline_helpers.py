@@ -349,8 +349,92 @@ def _parse_yaml_block(text):
     return None
 
 
+def _specification_mode(work_root):
+    """Режим берётся только из фактического config; ложноподобные значения не opt-out."""
+    import yaml
+    root = Path(work_root).resolve()
+    path = root / '.ai-ops.yaml'
+    if not path.exists():
+        return 'openspec'
+    if not path.resolve().is_relative_to(root) or path.stat().st_size > 1024 * 1024:
+        raise ValueError('небезопасный config спецификации')
+    try:
+        config = yaml.safe_load(path.read_text(encoding='utf-8'))
+    except (OSError, yaml.YAMLError) as exc:
+        raise ValueError('config спецификации не прочитан') from exc
+    if not isinstance(config, dict):
+        raise ValueError('config спецификации должен быть object')
+    setting = config.get('openspec', {})
+    if not isinstance(setting, dict):
+        raise ValueError('openspec должен быть object')
+    # Не сужаем прежде допустимый config: неизвестные значения сохраняют строгий
+    # прежний CLI-путь. Только настоящий boolean False выбирает native validator.
+    value = setting.get('enabled', True)
+    return 'native-spec-first' if type(value) is bool and value is False else 'openspec'
+
+
+def _native_specification_evidence(work_root, wid, signals=None):
+    """Проверить реальные Spec-First и требования; никогда не утверждать openspec_valid."""
+    import hashlib
+    import yaml
+    from ai_ops_kit.gates import spec_levels
+    from ai_ops_kit.checks import requirements_artifact
+    root = Path(work_root).resolve()
+    relative = (f'features/{wid}/spec.yaml', f'.ai/runplan/{wid}/requirements.yaml')
+    errors, hashes, docs = [], {}, []
+    try:
+        for name in relative:
+            path = root / name
+            if not path.resolve().is_relative_to(root) or path.stat().st_size > 1024 * 1024:
+                raise ValueError('небезопасный артефакт спецификации')
+            raw = path.read_bytes()
+            hashes[name] = hashlib.sha256(raw).hexdigest()
+            docs.append(yaml.safe_load(raw))
+        spec, requirements = docs
+        if (not isinstance(spec, dict) or type(spec.get('schema_version')) is not int or spec['schema_version'] != 1
+                or spec.get('kind') != 'spec' or spec.get('workitem_id') != wid
+                or not isinstance(spec.get('sections'), dict)):
+            raise ValueError('Spec-First не принадлежит текущей работе или имеет неверную форму')
+        declared = spec.get('signals', {})
+        if not isinstance(declared, dict):
+            raise ValueError('signals спецификации должен быть object')
+        level = spec.get('level')
+        if type(level) is not int or level not in range(4):
+            raise ValueError('неверный уровень спецификации')
+        # Сохранённый уровень и фактические сигналы не позволяют понизить глубину.
+        level = max(1, level, spec_levels.classify(dict(declared, **(signals or {})))['level'])
+        for sid in spec_levels.required_sections(level):
+            entry = spec['sections'].get(sid)
+            if not isinstance(entry, dict):
+                errors.append(f'{sid}: отсутствует раздел')
+                continue
+            status = entry.get('status')
+            if status == 'not_applicable':
+                if not isinstance(entry.get('note'), str) or not entry['note'].strip():
+                    errors.append(f'{sid}: нет обоснования неприменимости')
+            elif status != 'complete':
+                errors.append(f'{sid}: раздел не завершён')
+            else:
+                content = entry.get('content')
+                if (not isinstance(content, str) or not content.strip()
+                        or re.fullmatch(r'(?i)\s*(?:todo|tbd|pending|заполнить|не заполнено)[.\s]*', content)):
+                    errors.append(f'{sid}: нет конкретного содержания')
+        errors.extend(requirements_artifact.check(requirements))
+        if isinstance(requirements, dict) and requirements.get('workitem_id', wid) != wid:
+            errors.append('requirements artifact относится к другой работе')
+    except (OSError, ValueError, TypeError, AttributeError, yaml.YAMLError) as exc:
+        errors.append(str(exc))
+    return {'status': 'fail' if errors else 'pass',
+            'provided': [] if errors else ['native_spec_valid', 'requirements_covered'],
+            'blockers': errors, 'artifact_hashes': hashes,
+            'evidence': [f'native-spec-first: {name}' for name in relative],
+            'warnings': ['OpenSpec явно отключён проектом; CLI не исполнялся. Проверены реальные native артефакты.']}
+
+
 def _openspec_validate(work_root, change_id):
     """v2.89: прогнать НАСТОЯЩИЙ openspec CLI на произведённом change. -> (available, ok, output)."""
+    if _specification_mode(work_root) != 'openspec':
+        return False, False, 'OpenSpec явно отключён проектом; требуется native-spec-first evidence'
     try:
         r = subprocess.run(["openspec", "validate", change_id, "--strict"],
                            cwd=str(work_root), capture_output=True, text=True, timeout=120,

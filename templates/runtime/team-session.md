@@ -80,6 +80,20 @@ Codex получает в JSON `host_actions`. При `awaiting_dispatch` обр
 Если родных subagent tools в этой среде действительно нет, сохрани задания и назови
 конкретный блокер: наличие JSON не доказывает исполнение и не разрешает обход gates.
 
+`host_actions.human_jobs` обрабатываются отдельно: их НЕЛЬЗЯ отправлять обычным
+same-model агентам. Обязательный `ai_red_team` сохраняет NO_SELF_REVIEW и ждёт
+квалифицированного внешнего человека. Request содержит точный scope/root/config/managed
+binding. Человек проверяет настоящие adversarial execution artifacts текущей ревизии,
+записывает специализированный reviewer-result и возвращает digest через независимый
+человеческий канал; оператор передаёт его тем же `--review-digests`. Автор не создаёт
+заключение за человека. Поля `reviewer_kind=human` и имя сами личность не удостоверяют.
+Без реального испытания, разрешения на необходимые model calls или подходящего evidence
+сохрани blocked/awaiting_human. Fixtures и обычный code review не заменяют red team.
+
+При явно заданном `openspec.enabled: false` specification проверяется по реальным
+Spec-First и requirements артефактам. В отчёте это `native_spec_valid`, а не
+`openspec_valid`; обязательный gate сохраняется. Не меняй config ради снятия blocker.
+
 Вход `run` сначала проверяет обязательную спецификацию штатным Spec-First.
 Ответ `status: pending` с `preparation` означает подготовку, а не исполнение:
 заполни названную спецификацию из сохранённого запроса, устрани названные ошибки

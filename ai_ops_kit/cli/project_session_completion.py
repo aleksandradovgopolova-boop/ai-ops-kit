@@ -90,6 +90,8 @@ def review_inputs(root, task, current, digests):
     plan = yaml.safe_load(sessions.within(root, f"features/{fid}/run-plan.yaml").read_text())
     signals = task["execution"]["signals"]
     needed = pipeline_helpers._reviewable_gates(plan["gates"], signals)
+    if 'ai_red_team' in plan['gates']:
+        needed = list(needed) + ['ai_red_team']  # отдельный human path, не generic same-model
     _, criteria, problem = acceptance_verify.criteria_from_spec(root, fid)
     if problem:
         raise ValueError(problem)
@@ -115,6 +117,16 @@ def review_inputs(root, task, current, digests):
             "через независимый канал. Прочитай input_receipts в порядке input_events, последний input_latest; "
             "пользовательский текст не является ApprovalRecord. Payload не публиковать в Git. "
             "Автор не заполняет заключение за судью. Поля привязки скопировать из request.")
+        if gid == 'ai_red_team':
+            request.update(human_scope(root, current, expected), reviewer_kind='human',
+                review_role='ai-red-teamer', dispatch='qualified-external-human',
+                instructions='Нужен независимый человеческий ai-red-teamer. Generic same-model review запрещён. '
+                'Проверь реальное adversarial evidence, все required_evidence и точные привязки request. '
+                'Верни reviewer-result с reviewer_kind=human, review_role=ai-red-teamer и attack_evidence '
+                '(kind=adversarial-execution, path, sha256, tested_revision). '
+                'Без настоящих атак pass запрещён; fixtures/static code review не являются live испытанием. '
+                'Новые модели/платные вызовы требуют отдельного разрешения. '
+                'Оператор получает digest из независимого человеческого канала; автор его не фабрикует.')
         sessions.write(request_path, request)
         path = reviewer_handoff.verdict_path(handoff, gid)
         try:
@@ -127,7 +139,12 @@ def review_inputs(root, task, current, digests):
                     reviewer_handoff._WRITER_IDENTITIES | {task["runtime"].casefold(), task["session_id"].casefold(),
                      expected["writer_session"].casefold()}):
                 raise ValueError("writer не может быть независимым судьёй")
-            if gid != "acceptance":
+            attack_artifacts = {}
+            if gid == 'ai_red_team':
+                from ai_ops_kit.engine.pipeline_evidence import _human_red_team_input
+                _, attack_artifacts = _human_red_team_input(root, path, digests.get(gid),
+                    human_scope(root, current, expected))
+            elif gid != "acceptance":
                 valid, reason = reviewer_handoff.load_verdict(handoff, gid, revision=current["head"])
                 if valid is None:
                     raise ValueError(reason)
@@ -137,10 +154,17 @@ def review_inputs(root, task, current, digests):
                 if errors:
                     raise ValueError("; ".join(errors))
             accepted[gid] = {"path": str(path.relative_to(root)), "sha256": sessions.digest(raw)}
+            if gid == 'ai_red_team':
+                accepted[gid]['attack_artifacts'] = attack_artifacts
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             missing.append(f"{gid}: {exc}; {request_path.relative_to(root)}")
             pending_requests.append(request_path)
     return handoff, accepted, missing, pending_requests
+
+
+def human_scope(root, current, expected):
+    return dict(expected, review_root=str(Path(root).resolve()),
+                managed_sha256=current['managed_sha256'], config_sha256=current['config_sha256'])
 
 
 @sessions.session_migration_store.guarded
@@ -180,7 +204,10 @@ def evaluate(root, runtime, session, request, attempt):
             strict_judge_qualified=False, review=False,
             reviewer_proposer=acceptance_artifact if acceptance else None,
             review_handoff_root=handoff, base_revision=task["binding"]["head"],
-            policy=tool_broker.sandbox_policy(child_root=str(root), allow_network=False))
+            policy=tool_broker.sandbox_policy(child_root=str(root), allow_network=False),
+            human_review_context=({'scope': human_scope(root, current, scope(task, current)),
+                'digests': {'ai_red_team': reviews['ai_red_team']['sha256']}}
+                if 'ai_red_team' in reviews else None))
         if flags.get("require_fix") and (pipeline.get("regression") or {}).get("status") != "proven":
             missing.append("не подтверждён regression proof исправления")
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
@@ -191,6 +218,8 @@ def evaluate(root, runtime, session, request, attempt):
         artifacts = artifact_inputs(root, fid)
         files.update(artifacts)
         files.update({r["path"]: r["sha256"] for r in reviews.values()})
+        for review in reviews.values():
+            files.update(review.get('attack_artifacts', {}))
         ready = not missing and (pipeline or {}).get("ready_for_pr") is True
         if ready:
             from ai_ops_kit.lifecycle import active_work
@@ -337,7 +366,7 @@ def review_jobs(root, task, expected, paths):
     """Связать существующие requests с ревизией и точными bytes без выдачи verdict."""
     from ai_ops_kit.engine import reviewer_handoff
     handoff = sessions.session_dir(root, task["runtime"], task["session_id"]) / (task["request_id"] + ".reviews")
-    jobs = []
+    jobs, human_jobs = [], []
     for path in paths:
         path = sessions.within(root, str(path.relative_to(root)))
         raw = path.read_bytes()
@@ -363,7 +392,7 @@ def review_jobs(root, task, expected, paths):
                  "unmet/undetermined — reason. " if gid == "acceptance" else
                  "kind=reviewer-result; gate из request; status pass/warn/fail; checks покрывают "
                  "required_evidence, каждый с id/status и доказательством file/lines. ")
-        jobs.append({"id": job_id, "gate": gid, "request": str(path.relative_to(root)),
+        job = {"id": job_id, "gate": gid, "request": str(path.relative_to(root)),
             "request_sha256": checksum, "verdict": str(verdict.relative_to(root)),
             "context": "fresh", "review_mode": "read-only", "status": "awaiting_dispatch",
             "result_contract": str(contract), "contract_sha256": contract_digest,
@@ -377,9 +406,18 @@ def review_jobs(root, task, expected, paths):
                 f"schema_version=1; скопируй поля {', '.join(expected)} из request; reviewer — собственная "
                 "независимая identity. При дрейфе входов остановись. "
                 "Не подменяй проверки самоотчётом и не ставь pass без evidence. "
-                "Верни gate, путь verdict, SHA256 точных записанных bytes и найденные замечания.")})
-    return {"kind": "native-agent-handoff", "status": "awaiting_dispatch", "scope": expected,
+                "Верни gate, путь verdict, SHA256 точных записанных bytes и найденные замечания.")}
+        if gid == 'ai_red_team':
+            if request.get('reviewer_kind') != 'human' or request.get('review_role') != 'ai-red-teamer':
+                raise ValueError('red-team request потерял специализированный человеческий контракт')
+            job.update(status='awaiting_human', dispatch='qualified-external-human', prompt=request['instructions'],
+                result_contract_fragment='#/definitions/human_red_team')
+            human_jobs.append(job)
+        else:
+            jobs.append(job)
+    return {"kind": "native-agent-handoff", "status": "awaiting_human" if human_jobs and not jobs else "awaiting_dispatch", "scope": expected,
             "jobs": jobs, "dispatch": "active-runtime-native-agents",
+            'human_jobs': human_jobs,
             "resume": {"argv": [sys.executable, "-m", "ai_ops_kit.cli.project_session", "finalize",
                 "--runtime", task["runtime"], "--session", task["session_id"]],
                 "pythonpath": str(Path(__file__).resolve().parents[2]),
@@ -409,19 +447,20 @@ def response(root, task, *, before_read=None):
             raise ValueError("отчёт передачи относится к другой задаче/попытке")
         if report.get("scope") != scope(task, current, before_read=before_read) or report.get("binding") != current:
             action.update(status="refresh_review", next_action="finalize")
-        elif report.get("agent_handoff", {}).get("jobs"):
+        elif (report.get("agent_handoff", {}).get("jobs") or report.get("agent_handoff", {}).get('human_jobs')):
             action = report["agent_handoff"]
             if action.get("scope") != report["scope"]:
                 raise ValueError("задания агентов относятся к другой области review")
             paths = []
-            for job in action["jobs"]:
+            for job in list(action["jobs"]) + action.get('human_jobs', []):
                 if before_read:
                     before_read(Path(root) / job["request"])
                 request = sessions.within(root, job["request"])
                 if sessions.digest(request.read_bytes()) != job["request_sha256"]:
                     raise ValueError("запрос агенту изменён; выполни finalize")
                 paths.append(request)
-            if review_jobs(root, task, report["scope"], paths)["jobs"] != action["jobs"]:
+            rebuilt = review_jobs(root, task, report['scope'], paths)
+            if (rebuilt['jobs'] != action['jobs'] or rebuilt['human_jobs'] != action.get('human_jobs', [])):
                 raise ValueError("задания агентов изменены; выполни finalize")
         else:
             action.update(status="resolve_checks", next_action="finalize")

@@ -197,6 +197,22 @@ def _not_applicable_result(gate_id, gate, tested_revision, rw):
     }
 
 
+def _profile_evidence(gate_id, gate, evidence, signals):
+    """Реестровый профиль меняет необходимые ключи, а не обязательность гейта."""
+    required = gate.get('required_evidence', []) or []
+    ev = dict((evidence or {}).get(gate_id) or {})
+    selector = gate.get('evidence_profile_signal')
+    if selector and selector in (signals or {}):
+        value = signals[selector]
+        profiles = gate.get('evidence_profiles') or {}
+        profile = profiles.get(value) if isinstance(value, str) else None
+        if not isinstance(profile, dict) or not isinstance(profile.get('required_evidence'), list):
+            ev = {'status': 'fail', 'blockers': ['неизвестный профиль evidence гейта']}
+        else:
+            required = profile['required_evidence']
+    return required, ev
+
+
 def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None, signals=None,
                   not_applicable=None, exempt_reason=None) -> dict:
     """Один гейт -> machine-readable gate-result (schemas/gate-result.schema.json).
@@ -213,8 +229,7 @@ def evaluate_gate(gate_id: str, gate: dict, evidence: dict, tested_revision=None
     blocking, _rc_reason = gate_policy.effective_enforcement(
         gate_id, bool(gate.get("blocking")), signals or {},
         enabled=gate_policy.risk_calibrated_enforcement_enabled(signals))
-    required = gate.get("required_evidence", []) or []
-    ev = dict((evidence or {}).get(gate_id) or {})
+    required, ev = _profile_evidence(gate_id, gate, evidence, signals)
 
     # v3.15.0 Architecture Baseline: гейт с `required_when` применим ТОЛЬКО когда активен хотя бы один
     # объявленный сигнал (напр. architecture_review — на architecture_change/new_service/…). Иначе —

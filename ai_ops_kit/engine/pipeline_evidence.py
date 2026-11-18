@@ -15,7 +15,7 @@ from ai_ops_kit.gates import gate_executor
 from ai_ops_kit.gates import gate_policy
 
 from ai_ops_kit.engine.pipeline_helpers import (
-    _openspec_validate, _authoring_specs,
+    _openspec_validate, _authoring_specs, _specification_mode, _native_specification_evidence,
     _reviewable_gates, _gate_checklist,
 )
 from ai_ops_kit.engine.pipeline_git import _change_context
@@ -31,7 +31,7 @@ from ai_ops_kit.engine.pipeline_authoring import (  # noqa: F401 — публи�
 )
 
 
-def _reevaluate_artifact_evidence(work_root, wid, gate_ids):
+def _reevaluate_artifact_evidence(work_root, wid, gate_ids, signals=None):
     """v3.8.3 reevaluate: пере-вывести evidence артефакт-гейтов из СУЩЕСТВУЮЩИХ на диске артефактов
     (БЕЗ модели) — SHA не менялся, форма уже подтверждена оригинальным прогоном."""
     import yaml as _yaml
@@ -56,6 +56,9 @@ def _reevaluate_artifact_evidence(work_root, wid, gate_ids):
         except Exception:  # noqa: BLE001,S110 — сбой разбора артефакта не закрывает гейт (fail-closed)
             pass
     if "specification" in gate_ids:
+        if _specification_mode(work_root) == 'native-spec-first':
+            ev['specification'] = _native_specification_evidence(work_root, wid, signals)
+            return ev
         try:
             _avail, _ok, _ = _openspec_validate(work_root, wid)
             if _avail and _ok:
@@ -242,8 +245,60 @@ def _gate_ev_from_verdict(gid, g, rv, *, revision, delivered, work_root, valid_i
              "checks": res.get("checks", []), "evidence": [ev_ref]}, entry)
 
 
+def _human_red_team_input(work_root, path, checksum, expected):
+    """Сверить exact bytes человеческого заключения/логов, не удостоверять имя по JSON.
+
+    Оператор обязан получить checksum по независимому человеческому каналу.
+    Same-model callback сюда не подключён. Привязка не заменяет суждение судьи.
+    """
+    import hashlib
+    import json
+    from ai_ops_kit.checks import reviewer_result
+    from ai_ops_kit.engine import reviewer_handoff
+    root, path = Path(work_root).resolve(), Path(path)
+    keys = {'workitem_id', 'request_id', 'writer_session', 'base_revision', 'reviewed_revision',
+            'source_sha256', 'inputs_sha256', 'artifacts_sha256', 'review_root', 'managed_sha256', 'config_sha256'}
+    if (not isinstance(expected, dict) or not keys.issubset(expected)
+            or expected['review_root'] != str(root)
+            or not isinstance(checksum, str) or not re.fullmatch(r'[0-9a-f]{64}', checksum)):
+        raise ValueError('нет доверенного digest/полной привязки человеческого red-team review')
+    if not path.resolve().is_relative_to(root) or not path.is_file():
+        raise ValueError('недопустимый путь red-team verdict')
+    with path.open('rb') as handle:
+        raw = handle.read(262145)
+    if len(raw) > 262144 or hashlib.sha256(raw).hexdigest() != checksum:
+        raise ValueError('red-team verdict не соответствует доверенным bytes')
+    result = json.loads(raw)
+    required = gate_executor.load_gates()['ai_red_team']['required_evidence']
+    errors = reviewer_result.check_human_red_team(result, required)
+    if errors or any(result.get(k) != v for k, v in expected.items()):
+        raise ValueError('; '.join(errors) if errors else 'red-team verdict относится к другому scope')
+    who = result.get('reviewer')
+    invalid = reviewer_handoff._WRITER_IDENTITIES | {expected['writer_session'].casefold(),
+        expected['writer_session'].partition(':')[0].casefold()}
+    if not isinstance(who, str) or not who.strip() or who.strip().casefold() in invalid:
+        raise ValueError('writer/same-runtime не удостоверяет человеческое red-team суждение')
+    artifacts, total = {}, 0
+    for record in result.get('attack_evidence') or []:
+        relative = record['path']
+        artifact = root / relative
+        if Path(relative).is_absolute() or not artifact.resolve().is_relative_to(root) or not artifact.is_file():
+            raise ValueError('attack evidence должно быть файлом внутри текущего проекта')
+        if relative in artifacts:
+            raise ValueError('повтор attack evidence')
+        with artifact.open('rb') as handle:
+            body = handle.read(4 * 1024 * 1024 + 1)
+        total += len(body)
+        if (len(body) > 4 * 1024 * 1024 or total > 16 * 1024 * 1024
+                or hashlib.sha256(body).hexdigest() != record['sha256']):
+            raise ValueError('attack evidence изменено/превышает предел')
+        artifacts[relative] = record['sha256']
+    return result, artifacts
+
+
 def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *, child_root=None,
-                              calibrated_enforcement=False, ui_evidence=None, review_base=None):
+                              calibrated_enforcement=False, ui_evidence=None, review_base=None,
+                              human_review_context=None):
     """Потребить ЗАПИСАННЫЕ оркестратором вердикты для ai-review гейтов БЕЗ вызова провайдера.
 
     #570 follow-up (живой прогон 07.09): artifact-first жил ТОЛЬКО внутри `_run_reviews`, а тот
@@ -280,6 +335,27 @@ def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *
             ev["provenance"] = "JUDGMENT"
         gate_ev[gid] = ev
         reviews.append(entry)
+    if 'ai_red_team' in gate_ids and human_review_context:
+        gid = 'ai_red_team'
+        try:
+            context = human_review_context
+            expected = context['scope']
+            if expected['reviewed_revision'] != revision or expected['base_revision'] != review_base:
+                raise ValueError('human red-team context относится к другому диапазону')
+            rr, artifacts = _human_red_team_input(work_root,
+                reviewer_handoff.verdict_path(handoff_root, gid), context['digests'].get(gid), expected)
+            ev, entry = _gate_ev_from_verdict(gid, gates[gid],
+                {'result': rr, 'stopped': 'human-handoff-artifact', 'reads': [], 'denied': [],
+                 'source': 'human-red-team-artifact'}, revision=revision, delivered=delivered,
+                work_root=work_root, valid_ids=set(gates), signals=signals,
+                calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence)
+            ev['artifact_hashes'] = artifacts
+            gate_ev[gid] = ev
+            reviews.append(entry)
+        except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
+            gate_ev[gid] = {'status': 'fail', 'blockers': ['human red-team: ' + str(exc)]}
+            reviews.append({'gate': gid, 'valid': False, 'source': 'human-red-team-artifact',
+                            'status': 'fail', 'errors': [str(exc)]})
     return gate_ev, reviews
 
 
