@@ -162,9 +162,11 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
         _choice = (data.get("choices", [{}])[0] or {})
         msg = _choice.get("message", {}) or {}
         content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
+        # #1411 R10: каждая попытка — оплаченный вызов, и пустой HTTP 200 тоже. Запись только при
+        # непустом content занижала учёт ровно на перегрузке, где ретраев больше всего.
+        _u = data.get("usage") or {}   # v3.1 trace v0.2: OpenAI-совместимый usage
+        _record_call(model, _u.get("prompt_tokens"), _u.get("completion_tokens"), time.monotonic() - _t0)
         if content:
-            _u = data.get("usage") or {}   # v3.1 trace v0.2: OpenAI-совместимый usage
-            _record_call(model, _u.get("prompt_tokens"), _u.get("completion_tokens"), time.monotonic() - _t0)
             # Обрезанный ответ не отдаём за ответ ТОЛЬКО там, где он становится вердиктом: у
             # writer-ролей на обрезке стоит своя механика ретрая с нуджем, и ломать её нельзя.
             if contract is not None and _choice.get("finish_reason") == "length":
