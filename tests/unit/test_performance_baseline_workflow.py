@@ -66,6 +66,14 @@ def test_gate_step_runs_the_pair_under_one_lease_and_keeps_red_red():
     assert (ROOT / EVIDENCE / 'accepted-memory-baseline.json').is_file()
 
 
+def test_series_shape_matches_the_accepted_memory_baseline():
+    """Иначе память всегда «сравнить нельзя» — так и вышло в первом живом прогоне 44286991254."""
+    import json
+    accepted = json.loads((ROOT / EVIDENCE / 'accepted-memory-baseline.json').read_text())['metadata']
+    run = step('База и кандидат на одной машине под одной lease')['run']
+    assert f"--iterations {accepted['iterations']} --warmup {accepted['warmup']}" in run
+
+
 def test_receipts_are_kept_even_when_the_gate_fails():
     upload = next(s for s in steps() if 'upload-artifact' in s.get('uses', ''))
     assert upload['if'] == 'always()'

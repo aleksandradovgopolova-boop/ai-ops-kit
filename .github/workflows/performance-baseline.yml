@@ -87,7 +87,7 @@ jobs:
               --memory-baseline "$EVIDENCE/accepted-memory-baseline.json" \
               --base-root "$GITHUB_WORKSPACE/base" --base-sha "$BASE_SHA" \
               --candidate-root . --candidate-sha "$CANDIDATE_SHA" \
-              --threshold 1.2 --out "$RUNNER_TEMP/performance-gate"
+              --iterations 3 --warmup 1 --threshold 1.2 --out "$RUNNER_TEMP/performance-gate"
       - name: Сохранить квитанции даже при отказе
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
