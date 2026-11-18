@@ -26,7 +26,9 @@ from ai_ops_kit.gates import evidence_collector       # noqa: E402
 from ai_ops_kit.ui import storybook_adapter           # noqa: E402  (v3.1.9 exact-SHA UI evidence)
 from ai_ops_kit.engine import living_status as _living_status  # noqa: E402
 
-from ai_ops_kit.engine.pipeline_helpers import _intake_evidence  # noqa: E402
+from ai_ops_kit.engine.pipeline_helpers import (  # noqa: E402
+    _intake_evidence, _specification_mode, _native_specification_evidence,
+)
 from ai_ops_kit.engine.pipeline_git import (  # noqa: E402
     _git, _has_changes, _tree_clean, _tree_clean_after_checks, _untracked,
     _committed_changed_files, _commit_on_branch, _resolve_base,
@@ -367,11 +369,20 @@ def _verification_changed_files(root, base_sha, revision):
     return sorted({path for path in output.split("\0") if path})
 
 
+def _seed_native_specification(work_root, wid, plan, signals, gate_ev):
+    """Свежая native-проверка предшествует кешу; не перечитывать её старым CLI-путём."""
+    if ('specification' in plan['gates']
+            and _specification_mode(work_root) == 'native-spec-first'):
+        gate_ev['specification'] = _native_specification_evidence(work_root, wid, signals)
+        return [gid for gid in plan['gates'] if gid != 'specification']
+    return plan['gates']
+
+
 def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, loop, *,
                        commit, is_git, committed_sha, base_sha, authored_ev, allow_missing_tests,
                        calibrated_enforcement, ui_evidence, review, reviewer_proposer, budget,
                        strict_judge_qualified, security_reviewer_proposer, reevaluate_only, verification_intent="merge_candidate",
-                       review_handoff_root=None):
+                       review_handoff_root=None, human_review_context=None):
     """Сбор evidence на зафиксированном SHA и наполнение gate_ev: реальный прогон проверок профиля
     через Broker, intake/regression/authored/reevaluate-seed, освобождения по неприменимым проверкам,
     UI-evidence на точном SHA, seam-scan advisory, независимые ревью и доменный security-вердикт.
@@ -422,6 +433,7 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
     for _gid, _ev in (authored_ev or {}).items():
         gate_ev.setdefault(_gid, _ev)
 
+    artifact_gates = _seed_native_specification(work_root, wid, plan, signals, gate_ev)
     # v3.8.3 reevaluate-only: SHA НЕ менялся -> артефакт-гейты (requirements/specification/plan_readiness)
     # пере-выводим ДЕТЕРМИНИРОВАННО из существующих на диске артефактов (без модели, без чтения
     # клоббер-подверженного run-report). code_review переподтверждается ревью на том же SHA (--review).
@@ -446,7 +458,7 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
         # отличие от учёта usage и lifecycle-журнала, где терялась АУДИТ-запись.
         except Exception:  # noqa: BLE001,S110 — потеря кеша не меняет вердикт, пересчитаем
             pass
-        for _gid, _ev in _reevaluate_artifact_evidence(work_root, wid, plan["gates"]).items():
+        for _gid, _ev in _reevaluate_artifact_evidence(work_root, wid, artifact_gates).items():
             gate_ev.setdefault(_gid, _ev)
 
     # 6c. «умное ослабление» (v2.61): инструмента нет в подтверждённом стеке -> флаг освобождается
@@ -529,7 +541,7 @@ def _assemble_evidence(profile, work_root, pol, child_root, wid, plan, signals, 
         gate_ev, reviews = _consume_handoff_verdicts(
             work_root, plan["gates"], gate_ev, signals, committed_sha, child_root=review_handoff_root or child_root,
             review_base=base_sha if review_handoff_root else None,
-            calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence)
+            calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence, human_review_context=human_review_context)
         # Контракт `reviews`: None = ревью не проводилось. Пустой потреблённый список (вердикта-
         # артефакта не было) == ревью не было -> None, иначе `report.reviews is None`-инвариант без
         # ревьюера валится, а гейты при этом и так остаются как есть (потребления не случилось).

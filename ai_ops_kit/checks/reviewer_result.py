@@ -10,6 +10,8 @@ fail ⇒ общий status не pass. Только stdlib — никакого �
 """
 from __future__ import annotations
 
+import re
+
 ST = {"pass", "warn", "fail"}
 
 
@@ -53,4 +55,44 @@ def check(data: dict, gate_ids=None, allow_empty_checks=False):
         errors.append(f"status={data.get('status')} требует непустой blockers (блокирующий вердикт без причины)")
     if any_fail and data.get("status") == "pass":
         errors.append("есть check со status=fail, но общий status=pass — несогласованно")
+    return errors
+
+
+def check_human_red_team(data, required_evidence):
+    """Форма специализированного человеческого суждения; не удостоверение личности.
+
+    Доверенный digest приходит из внешнего человеческого канала. Здесь нельзя
+    заменить настоящее выполнение атак обычным code review или утверждением автора.
+    Hash/цитата подтверждают binding; смысл суждения остаётся ответственностью судьи.
+    """
+    if not isinstance(data, dict):
+        return ['red-team verdict должен быть object']
+    try:
+        errors = check(data, gate_ids={'ai_red_team'})
+    except (TypeError, AttributeError):
+        return ['неверные типы полей red-team verdict']
+    if type(data.get('schema_version')) is not int or data['schema_version'] != 1:
+        errors.append('неподдерживаемая версия red-team verdict')
+    if data.get('gate') != 'ai_red_team':
+        errors.append('ожидается специализированный ai_red_team verdict')
+    if data.get('reviewer_kind') != 'human' or data.get('review_role') != 'ai-red-teamer':
+        errors.append('нужен внешний человеческий ai-red-teamer; same-model review не подходит')
+    if not isinstance(data.get('review_root'), str) or not data['review_root'].strip():
+        errors.append('нет привязки review_root')
+    if data.get('status') == 'pass':
+        checks = data.get('checks') if isinstance(data.get('checks'), list) else []
+        passing = {c.get('id') for c in checks if isinstance(c, dict) and isinstance(c.get('id'), str) and c.get('status') == 'pass'}
+        if set(required_evidence) - passing:
+            errors.append('не подтверждены все обязательные red-team checks')
+        records = data.get('attack_evidence')
+        if not isinstance(records, list) or not records or len(records) > 32:
+            errors.append('pass требует ограниченный непустой список attack_evidence')
+        else:
+            for record in records:
+                if (not isinstance(record, dict) or record.get('kind') != 'adversarial-execution'
+                        or not isinstance(record.get('path'), str) or not record['path'].strip()
+                        or not isinstance(record.get('sha256'), str)
+                        or not re.fullmatch(r'[0-9a-f]{64}', record['sha256'])
+                        or record.get('tested_revision') != data.get('reviewed_revision')):
+                    errors.append('attack_evidence требует конкретный артефакт/hash текущей ревизии')
     return errors

@@ -60,10 +60,89 @@ _INTERPOLATION_BODY = re.compile(r"\$\{([^{}]*)\}")
 _TEMPLATE_LITERAL_WINDOW = 2000
 
 
-def sql_template_literal_lines(text: str) -> list:
+_GENERATED_BINDING = re.compile(
+    r'\bconst\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]*)?=\s*`([^`\\]*)`\s*;')
+_NUMERIC_PRIMITIVE = re.compile(r'(?:process\s*\.\s*pid|Date\s*\.\s*now\s*\(\s*\))')
+_PARAMETER_TAIL = re.compile(r'\s*(?::[^;{}\n=]+)?\s*(?:=>|\{)')
+
+
+def _parameter_names(skeleton):
+    """Консервативные потенциальные параметры; неизвестные скобки не дают proof."""
+    stack, names = [], set()
+    for i, char in enumerate(skeleton):
+        if char == '(':
+            stack.append(i)
+        elif char == ')':
+            if not stack:
+                return None
+            start = stack.pop()
+            if _PARAMETER_TAIL.match(skeleton, i + 1):
+                names.update(re.findall(r'[A-Za-z_$][\w$]*', skeleton[start + 1:i]))
+    if stack:
+        return None
+    names.update(re.findall(r'\b([A-Za-z_$][\w$]*)\s*=>', skeleton))
+    return names
+
+
+def _generated_identifiers(lexical, skeleton):
+    """Достаточное узкое условие: top-level const из литерала и числовых Node primitives.
+
+    Никаких имён каталогов/UUID-полей/пользовательских значений. Неполный initializer,
+    затенение и видимая мутация builtins оставляют finding. Это не общий JS resolver.
+    """
+    matches = list(_GENERATED_BINDING.finditer(lexical))
+    if not matches or len(matches) > 32:
+        return {}
+    # Regex/escaped identifiers и сложные template expressions этот resolver не
+    # разбирает. Признать неизвестность безопаснее, чем скрыть shadowing строкой.
+    if re.search(r'[/\\]', skeleton):
+        return {}
+    substitutions = _INTERPOLATION_BODY.findall(lexical)
+    if (len(substitutions) != lexical.count('${')
+            or any(re.search(r"['\"`\\]", expr) for expr in substitutions)):
+        return {}
+    parameters = _parameter_names(skeleton)
+    if parameters is None or re.search(r'\b(?:eval|with|Function|globalThis)\b', skeleton):
+        return {}
+    if re.search(r'\b(?:Date|process)\b(?!\s*\.)', skeleton):
+        return {}  # alias/import/parameter/escape builtins не входят в доказанный класс
+    if re.search(r'\b(?:Date|process)(?:\s*\.[\w$]+|\s*\[[^\]]*\])*\s*(?:[+*/%&|^?-]*=(?!=)|\+\+|--)', skeleton):
+        return {}
+    if re.search(r'\bdelete\s+(?:Date|process)\b|[,(]\s*(?:Date|process)\s*[,)]', skeleton):
+        return {}
+    out = {}
+    for match in matches:
+        name, body = match.groups()
+        prefix = skeleton[match.start():match.start() + match.group().index('`')]
+        if not re.match(r'const\s+' + re.escape(name) + r'\b', prefix):
+            continue  # похожий текст внутри строки не объявляет binding
+        if skeleton[:match.start()].count('{') != skeleton[:match.start()].count('}'):
+            continue  # поддержан только module-level const
+        if name in parameters:
+            continue
+        declarations = re.findall(r'\b(?:const|let|var|function|class)\s+' + re.escape(name) + r'\b', skeleton)
+        if len(declarations) != 1:
+            continue
+        if re.search(r'\b(?:const|let|var)\s*[\[{][^;=\n]*\b' + re.escape(name) + r'\b', skeleton):
+            continue
+        if any(re.search(r'\b' + re.escape(name) + r'\b', imp)
+               for imp in re.findall(r'\bimport\b[^;\n]*', skeleton)):
+            continue
+        expressions = _INTERPOLATION_BODY.findall(body)
+        if (not expressions or len(expressions) != body.count('${')
+                or not all(_NUMERIC_PRIMITIVE.fullmatch(e.strip()) for e in expressions)):
+            continue
+        if not re.fullmatch(r'[A-Za-z_][A-Za-z0-9_]*', _INTERPOLATION_BODY.sub('0', body)):
+            continue
+        out[name] = match.end()
+    return out
+
+
+def sql_template_literal_lines(text: str, *, lexical=None, skeleton=None, parsed=False) -> list:
     """Номера строк, где в запрос через `${…}` подставляется НЕ объявленная рядом константа."""
     out = []
     consts = frozenset(_CONST_STRING_BINDING.findall(text))
+    generated = _generated_identifiers(lexical, skeleton) if parsed and lexical is not None and skeleton is not None else {}
     for m in _SQL_TEMPLATE_CALL.finditer(text):
         window = text[m.end():m.end() + _TEMPLATE_LITERAL_WINDOW]
         end = window.find("`")
@@ -74,7 +153,8 @@ def sql_template_literal_lines(text: str) -> list:
             continue                                   # подстановок нет — запрос статичен
         spots = _INTERPOLATION_BODY.findall(body)
         # Разобраны ВСЕ подстановки и каждая — константа этого файла: подставлять нечему.
-        if len(spots) == body.count("${") and all(e.strip() in consts for e in spots):
+        if len(spots) == body.count("${") and all(
+                e.strip() in consts or (e.strip() in generated and generated[e.strip()] < m.start()) for e in spots):
             continue
         out.append(text.count("\n", 0, m.start()) + 1)
     return out

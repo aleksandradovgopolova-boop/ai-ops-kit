@@ -271,6 +271,12 @@ gates:
     retirement_condition: "Контракт спецификации упразднён решением об архитектуре либо его полноту проверяет эквивалентная замена."
     review_mode: read-only
     validator: openspec-validate-strict
+    # Альтернатива выбирается движком ТОЛЬКО по фактическому openspec.enabled=false.
+    # Это реальные native артефакты, а не утверждение, что OpenSpec был исполнен.
+    evidence_profile_signal: specification_validation
+    evidence_profiles:
+      openspec: {required_evidence: [openspec_valid, requirements_covered]}
+      native-spec-first: {required_evidence: [native_spec_valid, requirements_covered]}
     human_approval: false
     applicability: [ENGINEERING, PRODUCT]
     stale_detection: {bind_to: artifact_hashes}

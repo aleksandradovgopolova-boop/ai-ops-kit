@@ -10,6 +10,25 @@
     "gate": {"type": "string", "description": "id гейта из quality/gates.yaml"},
     "reviewer": {"type": "string", "description": "agent id ревьюера"},
     "reviewed_revision": {"type": "string", "description": "git sha проверенной ревизии"},
+    "reviewer_kind": {"enum": ["human", "agent"], "description": "Специализированный ai_red_team требует human из доверенного внешнего канала; поле не удостоверяет личность."},
+    "review_role": {"type": "string"},
+    "review_root": {"type": "string", "minLength": 1},
+    "managed_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "config_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "attack_evidence": {
+      "type": "array", "maxItems": 32,
+      "description": "Человеческий pass требует настоящие execution artifacts текущей ревизии; fixtures не подтверждают live испытание.",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["kind", "path", "sha256", "tested_revision"],
+        "properties": {
+          "kind": {"const": "adversarial-execution"},
+          "path": {"type": "string", "minLength": 1},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "tested_revision": {"type": "string", "minLength": 1}
+        }
+      }
+    },
     "status": {"enum": ["pass", "warn", "fail"]},
     "checks": {
       "type": "array",

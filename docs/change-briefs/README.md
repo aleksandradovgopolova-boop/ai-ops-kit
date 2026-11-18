@@ -18,6 +18,8 @@
 
 ## Что здесь есть
 
+- [Native finalize: спецификация, конечный parser и специализированный red team — #1434](1434-native-finalize.md).
+
 - [Выполненный падающий тест обязателен для mutation kill — #1482](1482-mutation-executed-test.md).
 
 - [Preview без побочных действий — #1477](preview-has-no-effects.md).
