@@ -247,14 +247,16 @@ def sync_skills(child_root: Path, previous_version=None, *, selected=None):
     if new_prints != prints:                        # повторный прогон файл не трогает
         p = child_root / SKILL_PRINTS_REL
         p.parent.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=p.parent, delete=False) as out:
-            temp = Path(out.name)
-        try:
-            temp.write_text(json.dumps(new_prints, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                            encoding="utf-8")
-            os.replace(temp, p)
-        finally:
-            temp.unlink(missing_ok=True)
+        text = json.dumps(new_prints, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+        if selected is None:
+            p.write_text(text, encoding="utf-8")
+        else:
+            with tempfile.TemporaryDirectory(prefix=".skill-prints-", dir=p.parent) as work:
+                temp = Path(work) / "new.json"
+                temp.write_text(text, encoding="utf-8")
+                if p.exists():
+                    shutil.copymode(p, temp)
+                os.replace(temp, p)
     return synced
 
 

@@ -41,9 +41,12 @@ def test_installer_profile_add_and_stock_update(tmp_path):
     conf_before = yaml.safe_load(config.read_bytes())
     assert conf_before['presets']['enabled'] == ['software-product', 'data-and-integrations']
     config.write_bytes(config.read_bytes() + b'# owner comment\n')
+    prints = root / '.ai/runtime/skill-prints.json'
+    prints.chmod(0o640)
     for kind, name in [('capability', 'repo-onboarding'), ('bundle', 'enterprise')]:
         result = command(root, kind, 'add', name)
         assert result.returncode == 0, result.stderr + result.stdout
+        assert prints.stat().st_mode & 0o777 == 0o640
         before_retry = config.read_bytes()
         result = command(root, kind, 'add', name)
         assert result.returncode == 0 and config.read_bytes() == before_retry
