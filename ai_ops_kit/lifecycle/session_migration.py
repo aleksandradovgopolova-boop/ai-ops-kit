@@ -102,7 +102,29 @@ def _context(root):
             "config": yaml.safe_load((root / ".ai-ops.yaml").read_text())}
 
 
-def _unchanged_install(before, after):
+def _stock_launcher_refresh(root, snapshot, after):
+    """Both launchers must be intact stock files, including the executable mode."""
+    template = "templates/runtime/ai-ops-entry.sh"
+    managed = ".ai/managed/" + template
+    old_template = snapshot["install"].get(managed)
+    if old_template is None:
+        return False
+    old = snapshot["context"]["product"].get("ai-ops")
+    if old != [store.sha(store.raw(old_template)), 0o755]:
+        return False
+    reference = Path(__file__).resolve().parents[2] / template
+    if reference.resolve().is_relative_to(root):
+        return False   # the installation being checked cannot vouch for its own changed launcher
+    try:
+        expected = store.raw(store.read(reference))
+        installed = store.raw(store.read(root / managed))
+    except FileNotFoundError:
+        return False
+    return installed == expected and after.get("ai-ops") == [store.sha(expected), 0o755]
+
+
+def _unchanged_install(root, snapshot, after):
+    before = snapshot["context"]
     for key in ("root", "branch", "head"):
         if before["binding"][key] != after["binding"][key]:
             raise ValueError("root/branch/HEAD changed; migration refused")
@@ -118,6 +140,9 @@ def _unchanged_install(before, after):
     added = {name for name in after["product"].keys() - before["product"].keys()
              if (after["product"][name] or [None])[0] == "kit-ci-template"}
     product_after = {k: v for k, v in after["product"].items() if k not in added}
+    if before["product"].get("ai-ops") != product_after.get("ai-ops"):
+        if _stock_launcher_refresh(root, snapshot, product_after):
+            product_after["ai-ops"] = before["product"]["ai-ops"]
     if configs[0] != configs[1] or before["product"] != product_after:
         raise ValueError("independent product/config change; migration refused")
 
@@ -170,7 +195,7 @@ def _plan(root, snapshot, snapshot_sha):
     if snapshot.get("kind") != "session-state-snapshot" or snapshot.get("schema_version") != 1:
         raise ValueError("unsupported migration snapshot")
     context = _context(root)
-    _unchanged_install(snapshot["context"], context)
+    _unchanged_install(root, snapshot, context)
     files = protected_files(root)
     if files != snapshot["files"]:
         raise ValueError("session/artifact/claim state changed since capture")

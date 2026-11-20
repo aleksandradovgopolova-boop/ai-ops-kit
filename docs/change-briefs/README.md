@@ -158,3 +158,4 @@
 - [#1434 — начальная задача штатного Codex host](1434-native-task-intake.md)
 - [#1434 — stock update подготовленной задачи в linked worktree](1434-prepared-update.md)
 - [#1446 — проверка сообщения о готовности выпуска на пульте](1446-verify-published-ready.md)
+- [#1417 — установка под стек и добавление готовых навыков](1417-stack-presets.md)

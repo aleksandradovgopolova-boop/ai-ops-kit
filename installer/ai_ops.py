@@ -7,7 +7,9 @@
   check-update         — ГЕЙТ для CI: код 2 — копия отстала, 1 — проверить не удалось, 0 — актуальна
                          ([--quiet] молчит при успехе, [--json] — машиночитаемо)
   update [--force]     — обновить managed-слой из пакета (алгоритм ниже); --force игнорирует drift
-  init <path>          — установить систему в новый child (создать .ai/, конфиг-заготовку)
+  init <path> [--preset <имя>]          — установить систему в новый child (создать .ai/, конфиг-заготовку)
+  capability add <имя> — подключить один поставляемый навык в проекте
+  bundle add <имя>     — подключить именованный набор навыков
   setup <path>         — единая установка: init → onboard → bootstrap → model одной командой;
                          печатает ОДИН экран «сделано автоматически» и «осталось от тебя»
                          (секреты/провайдеры, ответы на вопросы, коммит — за человеком).
@@ -314,6 +316,17 @@ def _dispatch(argv):
         # флаг, а не поведение по умолчанию: чужие правки молча не теряются.
         return _update_ops().cmd_update(force="--force" in argv, refresh_ci="--refresh-ci" in argv,
                           in_place="--in-place" in argv)
+    if cmd == "capability" or cmd == "bundle" or (cmd == "init" and len(argv) > 3):
+        core = _core()
+        import yaml
+        from stack_profiles import add_cli, init_cli
+        try:
+            if cmd == "init":
+                return init_cli(argv[2:], PKG, core.manifest(), _setup_ops().cmd_init)
+            return add_cli(argv[2:], cmd, PKG, core)
+        except (OSError, ValueError, KeyError, yaml.YAMLError) as exc:
+            print(f"ОШИБКА профиля установки: {exc}")
+            return 2
     if cmd == "init":
         if len(argv) < 3:
             print("использование: ai-ops init <путь-к-репозиторию>"); return 2

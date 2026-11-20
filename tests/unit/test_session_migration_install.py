@@ -66,6 +66,15 @@ def test_stock_old_source_update_migration_and_state_rollback(tmp_path, outcome)
     captured = migration.capture(root, snapshot)
     run([sys.executable, str(SOURCE / "installer/ai_ops.py"), "update", "--in-place"])
     assert migration.protected_files(root) == before
+    if outcome == "rollback":
+        local_plan = tmp_path / "self-attested-plan.json"
+        rejected = subprocess.run(
+            [sys.executable, "-m", "ai_ops_kit.cli.project_session", "migrate", "preview",
+             "--project", str(root), "--snapshot", str(snapshot), "--snapshot-sha256", captured["sha256"],
+             "--plan", str(local_plan), "--quiescent-window"],
+            cwd=root / ".ai/managed", env=env, text=True, capture_output=True, timeout=180)
+        assert rejected.returncode == 2 and "independent product/config change" in rejected.stderr
+        assert not local_plan.exists() and migration.protected_files(root) == before
     preview = migration.preview(root, snapshot, captured["sha256"], plan)
     assert preview["eligible"] == 2, store.document(plan)["preserved"]
     applied = migration.apply(root, snapshot, captured["sha256"], plan, preview["sha256"])

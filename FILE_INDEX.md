@@ -915,3 +915,5 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `docs/change-briefs/1434-prepared-update.md` — границы поставки нового Kit в ту же подготовленную задачу.
 - `ai_ops_kit/devtools/release_ready_window.py` — подтверждение опубликованного состояния пульта перед тегом.
 - `tests/unit/test_release_ready_window.py` — привязка сообщения о готовности к публикации, версии и SHA.
+- `installer/stack_profiles.py` — выбор профиля и подключение навыка или набора.
+- `tests/unit/test_stack_presets.py` — установка профиля и поставка навыков через CLI.

@@ -127,10 +127,14 @@ def test_diff_is_recomputed_after_the_migration_chain():
     Дефект не в одной строке, а в ПОСЛЕДОВАТЕЛЬНОСТИ, и именно её надо держать.
     """
     tree = ast.parse(UPDATE_OPS.read_text(encoding="utf-8"))
-    fn = next(n for n in ast.walk(tree)
-              if isinstance(n, ast.FunctionDef) and n.name == "cmd_update")
-    # build_diff остался в ai_ops.py (гейт check-update), cmd_update зовёт его через `_ao().build_diff()`
-    # — это Attribute-вызов, а не bare-name; ловим обе формы.
+    functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    # Вход выполняет обновление внутри project lock. Проверяем связь с реальным телом.
+    locked = next(n for n in ast.walk(functions["cmd_update"]) if isinstance(n, ast.With)
+                  and any(getattr(item.context_expr.func, "id", "") == "install_lock"
+                          for item in n.items if isinstance(item.context_expr, ast.Call)))
+    call = next(n.value for n in locked.body if isinstance(n, ast.Return))
+    assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    fn = functions[call.func.id]
     diffs = [n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
              and (getattr(n.func, "id", "") == "build_diff"
                   or getattr(n.func, "attr", "") == "build_diff")]
@@ -141,7 +145,7 @@ def test_diff_is_recomputed_after_the_migration_chain():
                              "по устаревшим путям), либо решение о раннем выходе принимается после "
                              "лишней работы")
     assert chain, "не нашлось запуска цепочки миграций"
-    assert max(diffs) > min(chain), ("диф не пересчитывается после миграций — перенесённый файл "
+    assert min(diffs) < min(chain) <= max(chain) < max(diffs), ("диф не пересчитывается после миграций — перенесённый файл "
                                     "снова уцелеет")
 
 

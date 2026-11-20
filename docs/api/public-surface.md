@@ -17,6 +17,17 @@ breaking change: любая правка могла оказаться лома�
 **Что считается breaking change и каково окно вывода — в [AGENTS.md](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/main/AGENTS.md), раздел
 «Публичная граница и breaking change».** Здесь — только перепись поверхностей.
 
+## Профили установки из checkout (experimental)
+
+При новой установке `./ai-ops init <каталог> --preset dashboard` записывает
+подборку агентов и экспортируемых навыков в конфигурацию проекта. Доступны
+react-product, python-backend, ai-product, dashboard и mobile. Из корня
+установленной дочки вызовите `./ai-ops capability add <skill>` или
+`./ai-ops bundle add <набор>`. Обёртка находит исходный checkout установщика
+через `AI_OPS_HOME` или в обычном месте клона кита. Локальная запись состава требует flock. Состав наборов
+объявлен в manifest/ai-ops-manifest.yaml (skills.installation_profiles). Обновления читают сохранённый
+runtime_surface.skills.enabled. Профиль описывает поставку навыков для Claude.
+
 ## Подготовка зависимости из checkout (experimental)
 
 `python3 installer/bootstrap.py <project> [--language ru|en] [--wheelhouse PATH]`
@@ -165,6 +176,8 @@ experimental:
   # команда достижима только из клона кита.
   # `check-update` и `drift` прежде не были объявлены вовсе.
   kit_commands:
+    - capability
+    - bundle
     - migrate
     - verify-capabilities
     - selftest

@@ -177,6 +177,21 @@ def test_second_run_changes_nothing(child):
     assert not [a for a in acts if a["action"] != "left-alone"], acts
 
 
+def _locked_command_body(tree, name):
+    """Выбираем фактический обработчик через вызов внутри install_lock."""
+    import ast
+    functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    if name == "cmd_init":
+        assert any(getattr(node, "id", "") == "_with_init_lock" for node in functions[name].decorator_list)
+        return functions[name]
+    locked = next(n for n in ast.walk(functions[name]) if isinstance(n, ast.With)
+                  and any(isinstance(item.context_expr, ast.Call)
+                          and getattr(item.context_expr.func, "id", "") == "install_lock" for item in n.items))
+    call = next(n.value for n in locked.body if isinstance(n, ast.Return))
+    assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
+    return functions[call.func.id]
+
+
 def test_delivery_happens_even_when_the_version_matches(child):
     """ВТОРОЙ СЛОЙ ДЕФЕКТА: доставка стояла после раннего выхода «обновление не требуется».
 
@@ -187,8 +202,7 @@ def test_delivery_happens_even_when_the_version_matches(child):
     # cmd_update вынесена в сателлит installer/update_ops.py; deliver_assets там — `_ao().deliver_assets()`.
     src = (KIT / "installer" / "update_ops.py").read_text(encoding="utf-8")
     tree = ast.parse(src)
-    fn = next(n for n in ast.walk(tree)
-              if isinstance(n, ast.FunctionDef) and n.name == "cmd_update")
+    fn = _locked_command_body(tree, "cmd_update")
     deliver = next((n.lineno for n in ast.walk(fn) if isinstance(n, ast.Call)
                     and (getattr(n.func, "id", "") == "deliver_assets"
                          or getattr(n.func, "attr", "") == "deliver_assets")), None)
@@ -224,7 +238,7 @@ def test_install_and_update_deliver_the_same_things():
     calls = {}
     for name in ("cmd_update", "cmd_init"):
         cmd_tree = ast.parse(src_by_cmd[name])
-        fn = next(n for n in ast.walk(cmd_tree) if isinstance(n, ast.FunctionDef) and n.name == name)
+        fn = _locked_command_body(cmd_tree, name)
         calls[name] = ({getattr(c.func, "id", "") for c in ast.walk(fn) if isinstance(c, ast.Call)}
                        | {getattr(c.func, "attr", "") for c in ast.walk(fn) if isinstance(c, ast.Call)})
     for name in ("cmd_update", "cmd_init"):

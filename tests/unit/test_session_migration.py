@@ -1,6 +1,7 @@
 """Migration changes real files; no model or original user request is executed."""
 import hashlib
 import json
+from pathlib import Path
 
 import pytest
 import yaml
@@ -102,6 +103,30 @@ def test_new_turn_keeps_migrated_identity_and_prevents_destructive_rollback(proj
         migration.rollback(project, applied["id"], preview["sha256"])
     assert actual.read_bytes() == before
     assert sessions.load(project, runtime, "owner")["request_id"] == task["request_id"]
+
+
+@pytest.mark.parametrize("drift", ["old-custom", "new-custom", "new-template", "old-mode", "new-mode", "missing-old-template"])
+def test_launcher_refresh_refuses_owner_changes_without_touching_request(project, tmp_path, drift):
+    rel = "templates/runtime/ai-ops-entry.sh"
+    template = project / ".ai/managed" / rel
+    template.parent.mkdir(exist_ok=True, parents=True)
+    launcher = project / "ai-ops"
+    launcher.write_bytes(b"owner" if drift == "old-custom" else b"old installed launcher")
+    launcher.chmod(0o700 if drift == "old-mode" else 0o755)
+    if drift != "missing-old-template":
+        template.write_bytes(b"old installed launcher")
+    initialize(project)
+    snapshot, plan = tmp_path / "snapshot.json", tmp_path / "plan.json"
+    captured = migration.capture(project, snapshot)
+    stock = (Path(__file__).resolve().parents[2] / rel).read_bytes()
+    template.write_bytes(b"unverified" if drift == "new-template" else stock)
+    launcher.write_bytes(b"owner" if drift == "new-custom" else template.read_bytes())
+    launcher.chmod(0o700 if drift == "new-mode" else 0o755)
+    upgrade(project)
+    protected = migration.protected_files(project)
+    with pytest.raises(ValueError, match="independent product/config change"):
+        migration.preview(project, snapshot, captured["sha256"], plan)
+    assert migration.protected_files(project) == protected and not plan.exists()
 
 
 @pytest.mark.parametrize("drift", ["config", "product", "manifest", "branch", "root", "owner-instructions"])
