@@ -18,6 +18,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -191,7 +192,22 @@ def _guard_skill_copy(child_root: Path, sid: str, dst_dir: Path, src_sig: dict, 
               f"— туда кит не пишет.")
 
 
-def sync_skills(child_root: Path, previous_version=None):
+def _deliver_selected_skill(src, dst, signature):
+    if dst.exists():
+        if _dir_signature(dst) != signature:
+            raise ValueError(f"существующий навык {dst.name} отличается от поставки")
+        return
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    # Materialize outside the runtime discovery directory until the copy is complete.
+    with tempfile.TemporaryDirectory(prefix=".skill-delivery-", dir=dst.parent.parent) as tmp:
+        staged = Path(tmp) / dst.name
+        shutil.copytree(src, staged)
+        if _dir_signature(staged) != signature or dst.exists():
+            raise ValueError(f"содержимое навыка {dst.name} изменилось при поставке")
+        staged.rename(dst)
+
+
+def sync_skills(child_root: Path, previous_version=None, *, selected=None):
     """Скопировать поставляемые китом скиллы в <child>/.claude/skills/<id>/.
     Скиллы грузятся раннером из .claude/skills/ (registry/runtimes.yaml).
     shipped-скиллы — managed assets: перезаписываются из пакета. Локальную правку НЕ теряем
@@ -204,7 +220,7 @@ def sync_skills(child_root: Path, previous_version=None):
     prints = _skill_prints(child_root)
     new_prints = dict(prints)
     release_ref = None                              # тег ищем лениво — только если он понадобится
-    skills_filter = _core()._surface_filter("skills")   # v3.14.0: репозиторий выбирает, что экспортировать
+    skills_filter = selected if selected is not None else _core()._surface_filter("skills")   # v3.14.0: репозиторий выбирает, что экспортировать
     for sk in (_core().manifest().get("skills", {}) or {}).get("shipped", []) or []:
         sid = sk.get("id")
         src_path = _ao().PKG / sk.get("path", "")
@@ -215,21 +231,30 @@ def sync_skills(child_root: Path, previous_version=None):
             continue                                # не в выбранной поверхности — не экспортируем
         dst_dir = child_root / ".claude" / "skills" / sid
         src_sig = _dir_signature(src_dir)
-        if dst_dir.exists():
-            if sid not in prints and release_ref is None and previous_version:
-                release_ref = _release_ref(previous_version) or ""
-            _guard_skill_copy(child_root, sid, dst_dir, src_sig, prints.get(sid),
-                              rel_dir=src_dir.relative_to(_ao().PKG).as_posix(),
-                              release_ref=release_ref or None)
-            shutil.rmtree(dst_dir)
-        shutil.copytree(src_dir, dst_dir)
+        if selected is not None:
+            _deliver_selected_skill(src_dir, dst_dir, src_sig)
+        else:
+            if dst_dir.exists():
+                if sid not in prints and release_ref is None and previous_version:
+                    release_ref = _release_ref(previous_version) or ""
+                _guard_skill_copy(child_root, sid, dst_dir, src_sig, prints.get(sid),
+                                  rel_dir=src_dir.relative_to(_ao().PKG).as_posix(),
+                                  release_ref=release_ref or None)
+                shutil.rmtree(dst_dir)
+            shutil.copytree(src_dir, dst_dir)
         new_prints[sid] = _signature_print(src_sig)
         synced.append(sid)
     if new_prints != prints:                        # повторный прогон файл не трогает
         p = child_root / SKILL_PRINTS_REL
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(new_prints, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
-                     encoding="utf-8")
+        with tempfile.NamedTemporaryFile(dir=p.parent, delete=False) as out:
+            temp = Path(out.name)
+        try:
+            temp.write_text(json.dumps(new_prints, ensure_ascii=False, indent=2, sort_keys=True) + "\n",
+                            encoding="utf-8")
+            os.replace(temp, p)
+        finally:
+            temp.unlink(missing_ok=True)
     return synced
 
 

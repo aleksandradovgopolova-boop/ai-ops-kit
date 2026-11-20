@@ -81,6 +81,28 @@ skills:
       path: skills/plain-language-communication/SKILL.md
       opt_in: false
       policy: registry/communication-policy.yaml
+  installation_profiles:
+    presets:
+      react-product:
+        agents: [software-product]
+        skills: [frontend-design, e2e-browser-testing, repo-onboarding]
+      python-backend:
+        agents: [software-product, data-and-integrations]
+        skills: [repo-onboarding, system-constraint-analysis, user-documentation]
+      ai-product:
+        agents: [software-product, ai-product]
+        skills: [repo-onboarding, system-constraint-analysis, decision-support]
+      dashboard:
+        agents: [software-product, data-and-integrations]
+        skills: [frontend-design, e2e-browser-testing, user-documentation]
+      mobile:
+        agents: [software-product, product-discovery]
+        skills: [frontend-design, product-session-review, repo-onboarding]
+    bundles:
+      product-team: [product-session-review, frontend-design, e2e-browser-testing, user-documentation]
+      enterprise: [system-constraint-analysis, decision-support, user-documentation]
+      startup: [repo-onboarding, product-session-review, product-demo-video]
+      govtech: [system-constraint-analysis, contradiction-resolution, user-documentation]
   authoring_convention: rules/meta/skill-authoring.yaml   # v2.11: конвенция авторинга (из skill-creator)
 
 quality_gates:

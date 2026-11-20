@@ -913,3 +913,5 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `ai_ops_kit/lifecycle/session_prepared_update.py` — отдельная disposition подготовленной current-session: stock install, исходная base, journal и CAS rollback.
 - `tests/unit/test_prepared_session_update.py` — synthetic linked Git/stock install/resume/rollback, неизвестный исход и отмена без выполнения задачи.
 - `docs/change-briefs/1434-prepared-update.md` — границы поставки нового Kit в ту же подготовленную задачу.
+- `installer/stack_profiles.py` — выбор профиля и подключение навыка или набора.
+- `tests/unit/test_stack_presets.py` — установка профиля и поставка навыков через CLI.

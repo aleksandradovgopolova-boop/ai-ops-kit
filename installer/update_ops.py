@@ -356,6 +356,16 @@ def _update_smoke(backup, footprint, report, inst, smoke_checks):
 
 
 def cmd_update(force=False, smoke_checks=None, refresh_ci=False, in_place=False):
+    from stack_profiles import install_lock
+    try:
+        with install_lock(_ao().REPO_ROOT):
+            return _update_locked(force, smoke_checks, refresh_ci, in_place)
+    except BlockingIOError:
+        print("ОШИБКА: другая операция меняет установку в этом проекте")
+        return 2
+
+
+def _update_locked(force, smoke_checks, refresh_ci, in_place):
     inst, target = _core().installed_version(), _core().pkg_version()
     # F-022: политика дочки ЧИТАЕТСЯ и исполняется. `pr` -> обновление уходит в ветку, а не в
     # рабочее дерево; `manual` -> владелец сам решает, когда обновляться, применение на месте
