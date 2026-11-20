@@ -480,6 +480,8 @@ def _verify(root, runtime, session, *, task=None):
     expected = receipt.get("completion_binding") or task.get("binding")
     same = expected == current
     if receipt.get("mode") == "current-session" and task.get("status") != "accepted":
+        from ai_ops_kit.lifecycle import session_prepared_update
+        expected = session_prepared_update.runtime_binding(root, task)
         same = all(current.get(k) == expected.get(k) for k in
                    ("root", "branch", "version", "managed_sha256", "config_sha256"))
     if not same:

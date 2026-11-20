@@ -9,6 +9,7 @@ import sys
 import tempfile
 
 from ai_ops_kit.lifecycle import project_session as sessions
+from ai_ops_kit.lifecycle import session_prepared_update
 
 TIMEOUT = 30
 SNAPSHOT_LIMIT = 4 * 1024 * 1024
@@ -73,7 +74,8 @@ def validate(root, task, *, timeout=None):
 def check(root, task, *, before_read=None):
     """Прежний inline validator: callbacks hooks не должны порождать 30s worker."""
     current = sessions.binding(root, "session-" + task["request_id"], before_read=before_read)
-    if any(current.get(key) != task["binding"].get(key) for key in
+    expected = session_prepared_update.runtime_binding(root, task)
+    if any(current.get(key) != expected.get(key) for key in
            ("root", "branch", "version", "managed_sha256", "config_sha256")):
         raise ValueError("контекст проектной сессии изменился; проверь сохранённую работу")
     for relative, checksum in task["execution"]["files"].items():

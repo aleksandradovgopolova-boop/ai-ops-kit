@@ -35,6 +35,14 @@ breaking change: любая правка могла оказаться лома�
 не ApprovalRecord и не acceptance. См. [границы и восстановление](../agent-guides/session-state-migration.md).
 Коды: 0 — операция выполнена, 2 — отказ. Новый интент `./ai-ops` не добавляется.
 
+Отдельные `migrate prepared-capture|prepared-apply|prepared-rollback` сохраняют
+подготовленную current-session, включая linked worktree. `prepared-apply` вызывает
+штатный installer закреплённого чистого source внутри exclusive barrier. Исходная
+binding/base не меняется; новый runtime context связывается с durable journal.
+Native review scope включает `managed_sha256` и `config_sha256`: прежние verdicts
+не подтверждают новые правила. Это experimental-путь с отдельными
+[предусловиями и восстановлением](../agent-guides/session-state-migration.md#подготовленная-current-session).
+
 ## Как этот документ не расходится с кодом
 
 Блок ниже — не иллюстрация, а **сама декларация**: его читает

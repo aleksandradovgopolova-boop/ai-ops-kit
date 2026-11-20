@@ -156,3 +156,4 @@
 - [#1483 — публичный код недоступного исполнителя](1483-cli-provider-unavailable.md)
 
 - [#1434 — начальная задача штатного Codex host](1434-native-task-intake.md)
+- [#1434 — stock update подготовленной задачи в linked worktree](1434-prepared-update.md)
