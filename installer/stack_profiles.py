@@ -5,6 +5,7 @@ import argparse
 from contextlib import contextmanager
 import json
 import os
+import sys
 from pathlib import Path
 import tempfile
 
@@ -121,7 +122,16 @@ def add_cli(argv, kind, kit, core):
     catalog, skills = _catalog(core.manifest())
     members = _members(catalog, kind, argv[1], skills)
     _check_sources(kit, skills, members)
-    with install_lock(root, required=True) as fd:
+    # Take the shared migration barrier before the installer lock. An exclusive
+    # prepared update holds this barrier across child installer exit and postflight.
+    if str(kit) not in sys.path:
+        sys.path.insert(0, str(kit))
+    from ai_ops_kit.lifecycle import session_migration_store
+    try:
+        import fcntl  # noqa: F401
+    except ImportError:
+        raise ValueError('для согласованного добавления требуется файловая блокировка flock') from None
+    with session_migration_store.barrier(root), install_lock(root) as fd:
         before = config.read_bytes()
         cfg = yaml.safe_load(before)
         if not isinstance(cfg, dict) or not isinstance(cfg.get('parent'), dict):
@@ -165,13 +175,11 @@ def add_cli(argv, kind, kit, core):
 
 
 @contextmanager
-def install_lock(root, *, required=False):
+def install_lock(root):
     """The directory inode survives a config rename; no stale lock file on crash."""
     try:
         import fcntl
     except ImportError:
-        if required:
-            raise ValueError('для согласованного добавления требуется файловая блокировка flock') from None
         yield None
         return
     fd = os.open(root, os.O_RDONLY | os.O_DIRECTORY)

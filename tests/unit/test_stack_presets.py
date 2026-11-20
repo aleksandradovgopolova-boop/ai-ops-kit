@@ -136,7 +136,7 @@ def test_aliased_commands_cannot_be_changed_by_adding_skill():
 def test_update_and_add_share_an_exclusive_lock(tmp_path):
     from installer.stack_profiles import install_lock
     root = _make_child_repo(tmp_path / 'child')
-    with install_lock(root, required=True):
+    with install_lock(root):
         result = command(root, 'update', '--in-place')
     assert result.returncode == 2 and 'другая операция' in result.stdout
     assert not (root / '.ai').exists()
@@ -171,3 +171,21 @@ def test_add_rejects_missing_source_before_expanding_configuration(tmp_path, mon
     with pytest.raises(ValueError, match='исходный файл'):
         stack_profiles.add_cli(['add', 'set'], 'bundle', kit, SimpleNamespace(manifest=lambda: manifest))
     assert cfg.read_bytes() == before and not (root / '.claude').exists()
+
+@pytest.mark.parametrize('state', ['exclusive', 'unfinished'])
+def test_add_preserves_prepared_migration_window(tmp_path, state):
+    from ai_ops_kit.lifecycle import session_migration_store as store
+    from contextlib import nullcontext
+    root = _make_child_repo(tmp_path / 'child').resolve()
+    result = command(tmp_path, 'init', str(root), '--preset', 'dashboard')
+    assert result.returncode == 0, result.stdout + result.stderr
+    config = root / '.ai-ops.yaml'
+    before = config.read_bytes()
+    initial_skills = installed(root)
+    window = store.barrier(root, exclusive=True) if state == 'exclusive' else nullcontext()
+    if state == 'unfinished':
+        store.create(root / store.AREA / ('a' * 64) / 'journal.json', {'phase': 'installing'})
+    with window:
+        result = command(root, 'capability', 'add', 'repo-onboarding')
+    assert result.returncode == 2 and 'migration' in result.stdout
+    assert config.read_bytes() == before and installed(root) == initial_skills
