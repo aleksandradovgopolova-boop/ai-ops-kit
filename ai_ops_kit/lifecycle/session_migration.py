@@ -112,8 +112,11 @@ def _stock_launcher_refresh(root, snapshot, after):
     old = snapshot["context"]["product"].get("ai-ops")
     if old != [store.sha(store.raw(old_template)), 0o755]:
         return False
+    reference = Path(__file__).resolve().parents[2] / template
+    if reference.resolve().is_relative_to(root):
+        return False   # the installation being checked cannot vouch for its own changed launcher
     try:
-        expected = store.raw(store.read(Path(__file__).resolve().parents[2] / template))
+        expected = store.raw(store.read(reference))
         installed = store.raw(store.read(root / managed))
     except FileNotFoundError:
         return False
