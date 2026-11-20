@@ -85,7 +85,8 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
     if committed_sha and is_git and "security" not in gate_ev:
         from ai_ops_kit.security import security_pack
         try:
-            security_pack_result = security_pack.run_pack(work_root, base=base_revision or f"{committed_sha}~1", signals=signals)
+            security_pack_result = security_pack.run_pack(work_root, base=base_revision or f"{committed_sha}~1",
+                                                        signals=signals, revision=committed_sha)
         except Exception as _e:  # noqa: BLE001
             _security_scan_error = str(_e)
             security_pack_result = None
@@ -237,7 +238,10 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
         # после preflight-блока. Раньше и то и другое читалось из work_root -> человеческое одобрение в
         # lifecycle-каталоге отсутствовало в worktree -> ложный uncovered.
         try:
-            _sec_changed = _security_diff_paths(work_root, committed_sha, base_revision)
+            scope = security_pack_result.get("scan_scope") or {}
+            _sec_changed = _security_diff_paths(work_root, scope.get("head_sha") or committed_sha,
+                                                scope.get("base_sha", base_revision),
+                                                initial=scope.get("mode") == "initial-commit")
         except Exception:  # noqa: BLE001
             gate_ev = dict(gate_ev, security={"status": "fail", "blockers": ["не удалось проверить пути security diff"]})
             return gate_ev, security_pack_result, effective_approval_signals
@@ -251,10 +255,11 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
     return gate_ev, security_pack_result, effective_approval_signals
 
 
-def _security_diff_paths(root, revision, base):
+def _security_diff_paths(root, revision, base, *, initial=False):
     """None означает ошибку Git, а не отсутствие изменений."""
     from ai_ops_kit.security import security_scan
-    paths = security_scan._git_changed_files(root, base or revision + "^") if revision else []
+    parent = None if initial else base or revision + "^"
+    paths = security_scan._git_changed_files(root, parent, revision) if revision else []
     if paths is None:
         raise ValueError("security diff unavailable")
     return paths

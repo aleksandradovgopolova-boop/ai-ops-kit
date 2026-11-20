@@ -917,3 +917,5 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `tests/unit/test_release_ready_window.py` — привязка сообщения о готовности к публикации, версии и SHA.
 - `installer/stack_profiles.py` — выбор профиля и подключение навыка или набора.
 - `tests/unit/test_stack_presets.py` — установка профиля и поставка навыков через CLI.
+
+- `tests/unit/test_security_commit_inputs.py` — доменная проверка по объектам точного Git-коммита, ошибки источника и сохранность рабочего дерева.

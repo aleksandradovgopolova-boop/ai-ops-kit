@@ -188,7 +188,7 @@ def _aggregate_verify(child_root, wid, sandbox, final_sha, base_checks, sequence
             _base_sha = _fp or None
         agg_sec = None
         try:
-            agg_sec = _sp2.run_pack(vroot, base=(_base_sha or None), signals=(signals or {}))
+            agg_sec = _sp2.run_pack(vroot, base=(_base_sha or None), signals=(signals or {}), revision=final_sha)
         except Exception:  # noqa: BLE001
             agg_sec = {"overall": "error"}
         # needs_review != провал — awaiting: закрываем независимым security-reviewer на aggregate-диффе
