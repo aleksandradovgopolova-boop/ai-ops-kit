@@ -910,3 +910,6 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `tests/unit/test_native_finalize_specification.py` — действительные native артефакты, сохранённый strict CLI и fail-closed profile.
 - `tests/unit/test_native_finalize_security.py` — независимость shell occurrences и сохранение блокировки неподтверждённых SQL/long launches.
 - `tests/unit/test_native_red_team_handoff.py` — специализированный human request/ingestion, binding и отрицательные transport fixtures.
+- `ai_ops_kit/lifecycle/session_prepared_update.py` — отдельная disposition подготовленной current-session: stock install, исходная base, journal и CAS rollback.
+- `tests/unit/test_prepared_session_update.py` — synthetic linked Git/stock install/resume/rollback, неизвестный исход и отмена без выполнения задачи.
+- `docs/change-briefs/1434-prepared-update.md` — границы поставки нового Kit в ту же подготовленную задачу.

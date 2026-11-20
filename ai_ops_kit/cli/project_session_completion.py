@@ -54,8 +54,10 @@ def record_prepared(root, task):
 
 @sessions.session_migration_store.guarded
 def recover_handoff(root, runtime, session, task):
+    from ai_ops_kit.lifecycle import session_prepared_update
     current = sessions.binding(root, "session-" + task["request_id"])
-    if any(current.get(k) != task["binding"].get(k) for k in
+    expected = session_prepared_update.runtime_binding(root, task)
+    if any(current.get(k) != expected.get(k) for k in
            ("root", "branch", "version", "managed_sha256", "config_sha256")):
         raise ValueError("контекст незавершённой передачи изменился")
     claim = sessions.session_dir(root, runtime, session) / (task["request_id"] + ".execution-claim")
@@ -76,6 +78,7 @@ def scope(task, current, *, before_read=None):
             "writer_session": task["runtime"] + ":" + task["session_id"],
             "base_revision": task["binding"]["head"], "reviewed_revision": current["head"],
             "source_sha256": current["source_sha256"],
+            "managed_sha256": current["managed_sha256"], "config_sha256": current["config_sha256"],
             "inputs_sha256": sessions.digest(json.dumps({"receipts": task.get("input_receipts", {}),
                 "events": task.get("input_events", []), "latest": task.get("input_latest")}, sort_keys=True)),
             "artifacts_sha256": sessions.digest(json.dumps(artifacts, sort_keys=True))}

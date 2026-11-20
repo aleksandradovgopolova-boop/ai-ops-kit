@@ -94,3 +94,66 @@ Reload hooks/importers и live trust требуют отдельной пров�
 После committed migration новый turn сохраняется как immutable input того же pending. После нового
 ввода rollback отказывает. Старые review/results не становятся действительными для нового кода;
 штатные gates и независимые проверки остаются обязательными.
+
+## Подготовленная current-session
+
+Это отдельная disposition, не ослабление описанного выше pending-only пути. Она
+поддерживает POSIX standalone и linked worktree, только активную
+`running|blocked/current-session/prepared` задачу с пустым существующим execution-claim.
+Неизвестная/работающая verification, accepted/result receipt или изменившиеся
+подготовленные артефакты вызывают отказ. Окно владельца без writers/importers
+по-прежнему необходимо; locks сами его не доказывают.
+
+До кода установки сохраняются private snapshot, исходные task/claim/artifacts,
+install footprint, собственные Git index/HEAD и shared config/refs/claims. Snapshot
+не является полным backup всех ignored файлов или других рабочих деревьев. Source
+должен быть отдельным чистым Git checkout точного проверенного commit с поддержкой
+prepared continuation. Переход только внутри одного stable major. Общие Git
+merge-driver keys обязаны уже совпадать со stock значениями. Новые определения
+hooks/settings выявляются на временной копии и блокируют эту операцию до отдельного
+согласования; изменение trust не производится.
+
+```sh
+python3 -m ai_ops_kit.cli.project_session migrate prepared-capture \
+  --project /private/project --runtime codex --session SESSION \
+  --snapshot /private/evidence/prepared.json --quiescent-window
+
+python3 -m ai_ops_kit.cli.project_session migrate prepared-apply \
+  --project /private/project --snapshot /private/evidence/prepared.json \
+  --snapshot-sha256 SNAPSHOT_SHA --source /private/reviewed-kit \
+  --source-revision SOURCE_SHA --quiescent-window
+```
+
+Запускать из проверенной новой копии Kit с PyYAML. Временный Python venv содержит
+только копию уже установленного PyYAML, без pip/network и родительских editable/.pth.
+Footprint берётся из stock installer, managed hashes — из его `managed_content`,
+не из непроецированных исходников. Stock update и его smoke validators выполняются
+один раз; `--timeout-seconds` ограничивает каждый внешний probe/install процесс
+(180 секунд по умолчанию); отмена завершает принадлежащую ему process group.
+Глобальные prompts не доставляются. Команда не запускает постановку или модель.
+
+После postflight исходная `task.binding` и base сохраняются целиком. Новое
+`prepared_update` ссылается на committed plan с проверенным runtime context.
+Прежняя verification переносится в history без исправления её дат/полей; файлы
+вердиктов остаются историческими. Новые native requests связываются с actual
+managed/config. Resume тем же runtime/UUID не создаёт новый claim, не переподготавливает
+и не принимает задачу. Изменение gates существующего RunPlan новым source требует
+отдельного решения: этот путь сохраняет исходный подготовленный контракт.
+
+```sh
+python3 -m ai_ops_kit.cli.project_session migrate prepared-rollback \
+  --project /private/project --transaction TRANSACTION_ID \
+  --plan-sha256 PLAN_SHA --quiescent-window
+```
+
+Для известного плана rollback восстанавливает только точные before/after bytes и
+modes задачи и stock install footprint, включая прежние version-keyed backups.
+Конкурентные inputs, claims, Git или установочные правки блокируют откат до первой
+замены. После частичного отката разрешено явное продолжение с тем же планом; чужие
+байты не стираются. Пустые служебные каталоги могут сохраниться.
+
+Если installer/OS прерван до записи проверенного `plan.json`, исход установки
+неизвестен: durable `installing` блокирует обычные session-команды. Автоматического
+повтора/rollback по догадке нет. Сохраните intent/snapshot/logs и разберите точные
+изменения в согласованном окне; не удаляйте journal/claim и не меняйте binding вручную.
+Этот известный предел не объявляется общей автономной recovery или live acceptance.
