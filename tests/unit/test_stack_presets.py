@@ -14,9 +14,10 @@ KIT = Path(__file__).resolve().parents[2]
 
 
 def command(cwd, *args):
-    env = dict(os.environ, AI_OPS_PYTHON=sys.executable, PYTHONDONTWRITEBYTECODE='1')
+    env = dict(os.environ, AI_OPS_PYTHON=sys.executable, AI_OPS_HOME=str(KIT), PYTHONDONTWRITEBYTECODE='1')
     env.pop('CODEX_HOME', None)
-    return subprocess.run([KIT / 'ai-ops', *args], cwd=cwd, env=env,
+    entry = cwd / 'ai-ops' if (cwd / 'ai-ops').is_file() else KIT / 'ai-ops'
+    return subprocess.run([entry, *args], cwd=cwd, env=env,
                           capture_output=True, text=True, timeout=150)
 
 

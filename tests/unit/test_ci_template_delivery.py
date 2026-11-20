@@ -181,6 +181,9 @@ def _locked_command_body(tree, name):
     """Выбираем фактический обработчик через вызов внутри install_lock."""
     import ast
     functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
+    if name == "cmd_init":
+        assert any(getattr(node, "id", "") == "_with_init_lock" for node in functions[name].decorator_list)
+        return functions[name]
     locked = next(n for n in ast.walk(functions[name]) if isinstance(n, ast.With)
                   and any(isinstance(item.context_expr, ast.Call)
                           and getattr(item.context_expr.func, "id", "") == "install_lock" for item in n.items))

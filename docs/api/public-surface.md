@@ -22,8 +22,9 @@ breaking change: любая правка могла оказаться лома�
 При новой установке `./ai-ops init <каталог> --preset dashboard` записывает
 подборку агентов и экспортируемых навыков в конфигурацию проекта. Доступны
 react-product, python-backend, ai-product, dashboard и mobile. Из корня
-установленной дочки вызовите установщик той же версии с `capability add <skill>`
-или `bundle add <набор>`. Локальная запись состава требует flock. Состав наборов
+установленной дочки вызовите `./ai-ops capability add <skill>` или
+`./ai-ops bundle add <набор>`. Обёртка находит исходный checkout установщика
+через `AI_OPS_HOME` или в обычном месте клона кита. Локальная запись состава требует flock. Состав наборов
 объявлен в manifest/ai-ops-manifest.yaml (skills.installation_profiles). Обновления читают сохранённый
 runtime_surface.skills.enabled. Профиль описывает поставку навыков для Claude.
 

@@ -14,6 +14,7 @@ model). Вынесено из `installer/ai_ops.py`.
 """
 from __future__ import annotations
 
+from functools import wraps
 import json
 import re
 import shutil
@@ -63,22 +64,26 @@ def _core():
     return _ao()._core()
 
 
+def _with_init_lock(command):
+    @wraps(command)
+    def run(target_dir, *, profile=None):
+        from stack_profiles import install_lock, verify_new_install
+        root = Path(target_dir).resolve()
+        if not root.is_dir():
+            return command(target_dir, profile=profile)
+        try:
+            with install_lock(root):
+                if profile is not None:
+                    verify_new_install(root, _ao().PKG, _core().manifest(), profile[1])
+                return command(target_dir, profile=profile)
+        except BlockingIOError:
+            print("ОШИБКА: другая операция меняет установку в этом проекте")
+            return 2
+    return run
+
+
+@_with_init_lock
 def cmd_init(target_dir, *, profile=None):
-    from stack_profiles import install_lock, verify_new_install
-    root = Path(target_dir).resolve()
-    if not root.is_dir():
-        return _init_project(target_dir, profile)
-    try:
-        with install_lock(root):
-            if profile is not None:
-                verify_new_install(root, _ao().PKG, _core().manifest(), profile[1])
-            return _init_project(target_dir, profile)
-    except BlockingIOError:
-        print("ОШИБКА: другая операция меняет установку в этом проекте")
-        return 2
-
-
-def _init_project(target_dir, profile):
     """Установка в новый child (для второго пилота)."""
     root = Path(target_dir).resolve()
     # Кит ставится ТОЛЬКО в git-репозиторий: движок изолирует прогон в worktree, фиксирует
