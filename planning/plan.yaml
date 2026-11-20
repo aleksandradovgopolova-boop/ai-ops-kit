@@ -1145,7 +1145,7 @@ work:
     owner_role: engineer
     value: high
     issue: 1446
-    pr: 1465
+    pr: 1546
     write_scope:
       - ai_ops_kit/devtools/
       - ai_ops_kit/planning/
@@ -1157,20 +1157,18 @@ work:
       - newsfragments/
     evidence: docs/change-briefs/1439-release-replanning.md
     rationale: >-
-      PR1449 и1465 слиты: read model и producer будущего CI-архива используют
-      существующие события/Pages, без новых permissions. Срез1465 не восстановил
-      восемь прежних bindings. Pages02.11 в12:01:11UTC подтверждает source073d1bfb,
-      target4.13.0 и plan_ready=true, но release_ready=false: CI evidence всех11
-      post-tag implementation записей неполно. Финальный snapshot12:33:34UTC снова
-      source=null/plan_ready=false на final_source_consistency; причина неизвестна,
-      старый target не подставляется. Diagnostics draft1473 не исправление main.
-      Полная приёмка включает
-      interruption, проверенную историю, уведомления и per-child delivery/recovery;
-      частичный merge не означает done. Найденные workflow logs/Git parents —
-      кандидаты evidence, не принятый recovery-контракт. Диагностика ведётся
-      отдельной работой; этот audit не меняет runtime, recovery/trust policy,
-      настройки или полномочия публикации/paid actions.
-    note: "Полная приёмка в архиве #1439, текущий трекер #1446, эпик #1447. PR1466 объединяется с PR1456. Сверка 10.11.2026: PR1449/1465/1473 слиты, открытой ветки под остатком приёмки нет; частичный результат не означает done."
+      Штатный выпуск 4.15.0 (43880442341, dbbe2bdb) прошёл. До тега на том же SHA
+      опубликован пульт запуском 43884004491. Успех той сборки сам по себе не
+      устанавливает значение release_ready в её опубликованных данных.
+      На 500e123c опубликованный план следующего выпуска 4.16.0 подтвердил
+      состав и CI реализации: plan_ready=true, implementation_evidence_complete=true.
+      Два запуска 44731772055 и 44733204737 дали одинаковый digest
+      386c394559ee0dac43449a6ce5201faba3e4267dd2424c22a444adc914bfac4c.
+      Для 44733204737 проверены происхождение Pages и история. Итоговые проверки
+      выпуска 4.16.0 ожидают release bump; доставка дочкам и получение уведомления
+      владельцем остаются unknown. Для полной приёмки нужны проверяемые результаты
+      восстановления после прерывания и доставки по каждой дочке.
+    note: "Критерии в #1439, трекер #1446, эпик #1447. Опубликованный план не разрешает выпуск или установку."
 
   # Независимая техническая очередь. Полевые исходы ниже остаются открытыми.
   # (Работа verification-cycle-performance-baseline закрыта 2026-10-26 и уехала в

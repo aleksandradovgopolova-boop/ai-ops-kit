@@ -148,23 +148,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          VERSION: ${{ needs.check.outputs.version }}
         run: |
           STARTED=$(date -u +%Y-%m-%dT%H:%M:%SZ)
           if ! gh workflow run status-dashboard.yml --repo "$GITHUB_REPOSITORY" --ref "${DEFAULT_BRANCH:-main}"; then
             echo "::warning::пульт не удалось пересобрать — «выпуск готов» может быть не виден; выпуск продолжается"
             exit 0
           fi
-          for _ in $(seq 1 60); do
+          DEADLINE=$((SECONDS + 900))
+          while (( SECONDS + 15 < DEADLINE )); do
             sleep 15
-            DONE=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow status-dashboard.yml --limit 20 \
-              --json createdAt,status,conclusion \
-              --jq "[.[] | select(.createdAt >= \"$STARTED\" and .status == \"completed\" and .conclusion == \"success\")] | length" || echo 0)
-            if [ "${DONE:-0}" -gt 0 ]; then
+            REMAINING=$((DEADLINE - SECONDS))
+            (( REMAINING > 0 )) || break
+            if timeout "$REMAINING" python3 -m ai_ops_kit.devtools.release_ready_window \
+                --repo "$GITHUB_REPOSITORY" --head "$GITHUB_SHA" --version "$VERSION" --started "$STARTED"; then
               echo "Пульт опубликован с состоянием «выпуск готов»"
               exit 0
             fi
           done
-          echo "::warning::пульт не опубликовался за 15 минут — выпуск продолжается без окна «готов»"
+          echo "::warning::За 15 минут не удалось подтвердить на пульте готовность версии $VERSION для $GITHUB_SHA. Выпуск продолжается."
 
       - name: Создать тег и Release из CHANGELOG
         env:
