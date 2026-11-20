@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -438,16 +439,21 @@ def _looks_binary(data: bytes) -> bool:
     return b"\x00" in data[:8192]
 
 
-def _git_changed_files(root, base):
+def _git_changed_files(root, base, revision="HEAD"):
     # RAW с явным timeout= (скрипт-режим — без импорта пакета): зависший git не вешает security-скан.
+    flags = ["--no-renames", "--name-only", "-z", "--end-of-options"]
+    if base is None:
+        args = ["diff-tree", "--root", "--no-commit-id", "-r", *flags, revision, "--"]
+    else:
+        args = ["diff", *flags, f"{base}..{revision}", "--"]
     try:
-        r = subprocess.run(["git", "-C", str(root), "diff", "--name-only", f"{base}..HEAD"],
-                           capture_output=True, text=True, timeout=90)
+        r = subprocess.run(["git", "--no-replace-objects", "-C", str(root), *args],
+                           capture_output=True, timeout=90)
     except subprocess.TimeoutExpired:
         return None
     if r.returncode != 0:
         return None
-    return [ln for ln in r.stdout.splitlines() if ln.strip()]
+    return [os.fsdecode(name) for name in r.stdout.split(b"\0") if name]
 
 
 def _read_files(root, rels):
@@ -472,7 +478,7 @@ def _git_show(root, ref, rel):
     # стягивает stdout через .strip() и срезал бы ведущие/хвостовые пробелы содержимого. timeout=
     # обязателен явно — иначе зависший git повесил бы скан (тот же инвариант, что держит gitio).
     try:
-        r = subprocess.run(["git", "-C", str(root), "show", f"{ref}:{rel}"],
+        r = subprocess.run(["git", "--no-replace-objects", "-C", str(root), "show", f"{ref}:{rel}"],
                            capture_output=True, text=True, timeout=90)
     except subprocess.TimeoutExpired:
         return ""
@@ -511,9 +517,11 @@ def delivered_surface(root, rels, base=None):
     return _vendor_arrivals(root, base, vendor, files) if (base and vendor) else vendor
 
 
-def _vendor_version(root, base, files):
+def _vendor_version(root, base, files, *, revision=None):
     """Версия установленного кита до и после. None — прочитать не удалось, и это не «не менялась»."""
     текущая = files.get(_VENDOR_VERSION_FILE)
+    if текущая is None and revision is not None:
+        текущая = _git_show(root, revision, _VENDOR_VERSION_FILE)
     if текущая is None:
         try:
             текущая = (Path(root) / _VENDOR_VERSION_FILE).read_text(encoding="utf-8")
