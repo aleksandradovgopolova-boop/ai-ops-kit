@@ -393,7 +393,7 @@ ceilings:
   #   См. `raises`.
   # 2026-09-29: 681 -> 682 под единый формат issue `planning/issue_format.py` (issues-one-format).
   #   См. `raises`.
-  substantive_files: 703
+  substantive_files: 704
   # 2026-10-26: 685 -> 686 под verify-scope-delivered-command (#1321): один доставляемый модуль
   #   ai_ops_kit/cli/verify_scope_cli.py. Реальная установка 684 -> 685. См. запись в `raises`.
   # 2026-11-10: 700 -> 701 под условия кита в установленной копии (#1481): один файл LICENSE.
@@ -4304,3 +4304,17 @@ raises:
       Release. Выключен, пока владелец не задал release.enabled в .ai-ops.yaml. Код выпуска
       (devtools/child_release.py) в проект не копируется — шаги зовут его из клона кита на пине,
       как линт проекта; поэтому поставка растёт ровно на один файл.
+
+  - at: "2026-11-20"
+    what: substantive_files
+    from_count: 703
+    to_count: 704
+    measured_before: 702
+    measured_after: 703
+    work: "team-kit-autostart (#1434): обновление подготовленной сессии"
+    files: [ai_ops_kit/lifecycle/session_prepared_update.py]
+    why_it_works_in_the_child: >-
+      При продолжении из установленного кита модуль проверяет исходную привязку
+      задачи и подтверждённый журнал обновления. Без него обновлённый child не
+      может продолжить ту же задачу. Обе стороны измерены штатным init в чистых
+      репозиториях: 702 файла / 6457826 байт до и 703 файла / 6484799 байт после.
