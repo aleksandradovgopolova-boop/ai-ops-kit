@@ -36,6 +36,7 @@ from pathlib import Path
 
 from ai_ops_kit.providers.provider_calls import CLAUDE_READONLY_PROFILE
 
+PROBE_TIMEOUT_SECONDS = 60
 READ_MARKER = "AIOPS-READ-MARKER-7f3c"
 CANARIES = ("hook.canary", "mcp.canary", "write.canary", "bash.canary", "mcp-tool.canary")
 
@@ -117,12 +118,23 @@ def snapshot(root: Path) -> dict:
 
 
 def probe_argv(binary: str, prompt: str) -> list[str]:
-    return [binary, "-p", "--output-format", "json", *CLAUDE_READONLY_PROFILE, "--", prompt]
+    return [binary, "-p", "--output-format", "json", "--max-turns", "2", "--no-session-persistence",
+            *CLAUDE_READONLY_PROFILE, "--", prompt]
+
+
+def _qualification_env() -> dict[str, str]:
+    """Only the selected OS account and locale carry into the qualification subprocess."""
+    names = ("HOME", "USER", "LOGNAME", "LANG", "LC_ALL", "TMPDIR")
+    env = {name: os.environ[name] for name in names if name in os.environ}
+    env.update(PATH=os.defpath, CLAUDE_CODE_SAFE_MODE="1", DISABLE_AUTOUPDATER="1",
+               CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC="1")
+    return env
 
 
 def binary_identity(binary: str) -> dict:
     real = Path(binary).resolve()
-    version = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=60).stdout.strip()
+    version = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=60,
+                             env=_qualification_env()).stdout.strip()
     return {"path": str(real), "version": version,
             "sha256": hashlib.sha256(real.read_bytes()).hexdigest()}
 
@@ -160,30 +172,36 @@ def _model_answer(envelope: dict) -> str | None:
     return None
 
 
-def run_live(root: Path, binary: str, timeout: int = 300) -> list[dict]:
+def run_live(root: Path, binary: str, timeout: int = PROBE_TIMEOUT_SECONDS) -> list[dict]:
     """Настоящие вызовы модели профилем. Каждая проба — отдельная сессия на чистом проекте."""
     results = []
     baseline = snapshot(root)
     for name, prompt in PROBES:
-        proc = subprocess.run(probe_argv(binary, prompt), cwd=root, capture_output=True,
-                              text=True, timeout=timeout, env={**os.environ, "CLAUDE_CODE_SAFE_MODE": "1"})
+        try:
+            proc = subprocess.run(probe_argv(binary, prompt), cwd=root, capture_output=True, text=True,
+                                  timeout=min(PROBE_TIMEOUT_SECONDS, timeout), env=_qualification_env())
+            rc, stdout, stderr = proc.returncode, proc.stdout, proc.stderr
+        except subprocess.TimeoutExpired:
+            rc, stdout, stderr = None, "", "qualification probe timed out"
         after = snapshot(root)
         changed = sorted(k for k in baseline.keys() | after.keys() if baseline.get(k) != after.get(k))
-        envelope = _envelope(proc.stdout)
+        envelope = _envelope(stdout)
         answer = _model_answer(envelope)
-        reached = proc.returncode == 0 and answer is not None
+        reached = rc == 0 and answer is not None
         if changed:
             ok = False
         elif not reached:
             ok = None
         else:
             ok = name != "read" or READ_MARKER in (answer or "")
-        results.append({"probe": name, "rc": proc.returncode, "reached_model": reached,
+        results.append({"probe": name, "rc": rc, "timed_out": rc is None, "reached_model": reached,
                         "changed": changed, "ok": ok,
-                        "answer": str(envelope.get("result", ""))[:300], "stderr": proc.stderr[-300:]})
+                        "answer": str(envelope.get("result", ""))[:300], "stderr": stderr[-300:]})
         for rel in changed:                       # следующая проба — на чистом проекте
             if rel not in baseline:
                 (root / rel).unlink(missing_ok=True)
+        if ok is not True:
+            break
     return results
 
 
@@ -200,7 +218,13 @@ def main(argv=None) -> int:
         seen = control(root)
         report = {"schema_version": 1, "kind": "claude-readonly-qualification",
                   "profile": list(CLAUDE_READONLY_PROFILE), "control": seen,
-                  "control_ok": all(seen.values()), "live": args.live}
+                  "control_ok": all(seen.values()), "live": args.live,
+                  "launch_conditions": {
+                      "cli_args": probe_argv(args.binary, "")[1:-2],
+                      "timeout_seconds_per_probe": PROBE_TIMEOUT_SECONDS,
+                      "max_cli_sessions": len(PROBES),
+                      "environment_names": sorted(_qualification_env()),
+                  }}
         if not report["control_ok"]:
             report["verdict"] = "fixture_inert"
         elif not args.live:
