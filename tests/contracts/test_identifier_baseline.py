@@ -49,7 +49,7 @@ FROZEN_COUNTS = {
     "ai_ops_kit/security/scan_secret_noise.py": 21,
     "ai_ops_kit/security/scan_vendor.py": 11,
     "ai_ops_kit/security/security_pack.py": 1,
-    "ai_ops_kit/security/security_scan.py": 17,
+    "ai_ops_kit/security/security_scan.py": 13,
     "ai_ops_kit/ui/presenter_graph.py": 1,
     "tests/unit/test_delivered_kit_scan.py": 1,
     "tests/unit/test_security_scan.py": 6,

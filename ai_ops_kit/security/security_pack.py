@@ -253,6 +253,18 @@ def _domain_findings(domain, secrets, injections, new_deps_detailed):
     return findings
 
 
+def _scan_inputs(child_root, base, revision, files_content):
+    if files_content is not None:
+        prior = {p: security_scan._git_show(child_root, base, p) for p in files_content
+                 if child_root and base and Path(p).name in security_scan.DEP_MANIFESTS}
+        return files_content, prior, {"mode": "given", "base": None}
+    if child_root is None:
+        return {}, {}, {"mode": "empty", "base": None}
+    scope = _scan_scope(child_root, base, revision)
+    files, prior = _commit_files(child_root, scope)
+    return files, prior, scope
+
+
 def run_pack(child_root=None, base=None, signals=None, files_content=None, *, revision=None):
     """Доменный security-вердикт. files_content: {path: text} для offline-теста; иначе — из git diff.
 
@@ -261,23 +273,13 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None, *, re
     signals = dict(signals or {})
     domains, allowed = load_domains()
 
-    # источник изменённых файлов: переданная карта (тест) или git diff коммита
-    before = {}
-    scan_scope = {"mode": "given", "base": None}
-    if files_content is None:
-        files_content = {}
-        scan_scope = {"mode": "empty", "base": None}
-        if child_root is not None:
-            scan_scope = _scan_scope(child_root, base, revision)
-            files_content, before = _commit_files(child_root, scan_scope)
+    files_content, before, scan_scope = _scan_inputs(child_root, base, revision, files_content)
 
     # детерминированные находки (один раз)
     secrets = security_scan.scan_secrets(files_content)
     injections, vendor_injections = security_scan._vendor_split(   # см. комментарий над _domain_findings
         security_scan.scan_injection(files_content))
     mani = {p: c for p, c in files_content.items() if Path(p).name in security_scan.DEP_MANIFESTS}
-    if scan_scope["mode"] == "given" and child_root and base:
-        before = {p: security_scan._git_show(child_root, base, p) for p in mani}
     # `new_deps` (недетальный вариант) снят ревизией 2026-08-11: результат не использовался с
     # перехода на `new_deps_detailed` в v3.0-rc5 — считался лишний проход по манифестам.
     new_deps_detailed = security_scan.new_dependencies_detailed(before, mani)   # v3.0-rc5 (P1.2): fingerprint

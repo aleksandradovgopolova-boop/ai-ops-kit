@@ -229,19 +229,9 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
                                             "blocking": security_pack_result["blocking"],
                                             "needs_review": security_pack_result["needs_review"]}}
 
-        # v3.0-rc20 (finding аудита P0): БРАНЧ-НЕЗАВИСИМАЯ проверка — high-risk домены, применимые ПО
-        # РЕАЛЬНО ИЗМЕНЁННЫМ ПУТЯМ (Dockerfile/CI/auth), требуют человеческого ApprovalRecord, даже если
-        # security-reviewer/детерминированные проверки дали pass. Неожиданное изменение прод-конфига без
-        # одобрения -> security=fail. Форсируется поверх любой ветки выше.
-        # v3.0.2 (finding аудита P1): изменённые файлы берём из EXECUTION-root (worktree), а
-        # ApprovalRecord'ы/plan-binding — из LIFECYCLE-root (child_root/features), где их создаёт человек
-        # после preflight-блока. Раньше и то и другое читалось из work_root -> человеческое одобрение в
-        # lifecycle-каталоге отсутствовало в worktree -> ложный uncovered.
+        # Пути изменений берутся из execution-root, а одобрения человека — из lifecycle-root.
         try:
-            scope = security_pack_result.get("scan_scope") or {}
-            _sec_changed = _security_diff_paths(work_root, scope.get("head_sha") or committed_sha,
-                                                scope.get("base_sha", base_revision),
-                                                initial=scope.get("mode") == "initial-commit")
+            _sec_changed = _security_diff_paths(work_root, security_pack_result, committed_sha, base_revision)
         except Exception:  # noqa: BLE001
             gate_ev = dict(gate_ev, security={"status": "fail", "blockers": ["не удалось проверить пути security diff"]})
             return gate_ev, security_pack_result, effective_approval_signals
@@ -255,10 +245,13 @@ def _evaluate_security(work_root, child_root, wid, committed_sha, is_git, gate_e
     return gate_ev, security_pack_result, effective_approval_signals
 
 
-def _security_diff_paths(root, revision, base, *, initial=False):
+def _security_diff_paths(root, pack, committed_sha, base_revision):
     """None означает ошибку Git, а не отсутствие изменений."""
     from ai_ops_kit.security import security_scan
-    parent = None if initial else base or revision + "^"
+    scope = pack.get("scan_scope") or {}
+    revision = scope.get("head_sha") or committed_sha
+    base = scope.get("base_sha", base_revision)
+    parent = None if scope.get("mode") == "initial-commit" or not revision else base or revision + "^"
     paths = security_scan._git_changed_files(root, parent, revision) if revision else []
     if paths is None:
         raise ValueError("security diff unavailable")

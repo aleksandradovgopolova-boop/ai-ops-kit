@@ -519,16 +519,16 @@ def delivered_surface(root, rels, base=None):
 
 def _vendor_version(root, base, files, *, revision=None):
     """Версия установленного кита до и после. None — прочитать не удалось, и это не «не менялась»."""
-    текущая = files.get(_VENDOR_VERSION_FILE)
-    if текущая is None and revision is not None:
-        текущая = _git_show(root, revision, _VENDOR_VERSION_FILE)
-    if текущая is None:
+    current = files.get(_VENDOR_VERSION_FILE)
+    if current is None and revision is not None:
+        current = _git_show(root, revision, _VENDOR_VERSION_FILE)
+    if current is None:
         try:
-            текущая = (Path(root) / _VENDOR_VERSION_FILE).read_text(encoding="utf-8")
+            current = (Path(root) / _VENDOR_VERSION_FILE).read_text(encoding="utf-8")
         except OSError:
-            текущая = ""
-    прежняя = _git_show(root, base, _VENDOR_VERSION_FILE) if base else ""
-    return (прежняя.strip() or None), (текущая.strip() or None)
+            current = ""
+    previous = _git_show(root, base, _VENDOR_VERSION_FILE) if base else ""
+    return (previous.strip() or None), (current.strip() or None)
 
 
 def scan_repo(root, base=None):
