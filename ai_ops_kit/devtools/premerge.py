@@ -105,6 +105,10 @@ def admit(repo, number, head, review, policy, call):
             require(job['status'] == 'completed' and job['conclusion'] == 'success',
                     f'required check not successful: {workflow}/{name}')
         evidence[workflow] = dict(run_id=run['id'], attempt=run['run_attempt'], checks=names)
+    # GitHub's PR snapshot can lag behind the actual target during parallel merges.
+    target = call(['api', f'repos/{repo}/git/ref/heads/main'])
+    require(target['ref'] == 'refs/heads/main' and target['object']['type'] == 'commit'
+            and target['object']['sha'] == pr['base']['sha'], 'target branch differs from reviewed base')
     return dict(repository=repo, pr=number, head=head, base=pr['base']['sha'], checks=evidence)
 
 
