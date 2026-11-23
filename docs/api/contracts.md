@@ -179,6 +179,19 @@ Anthropic/OpenAI-совместимых вендоров и `claude -p`, `for_co
 была видна внутри лямбды; `_human_error` разбирает `text or ""`, и для `None` итог тот же —
 «не JSON, отдаём текст как есть».
 
+### Шестой срез: роутер моделей
+
+`providers.model_router` (роль -> самая дешёвая квалифицированная модель, writer≠judge,
+лестница эскалации) переведён под strict. Записи реестров и результаты резолва — `JsonDict`:
+их форму проверяют валидаторы реестров. Типизированы `resolve`, `plan_run`, `writer_tier`,
+`check_independence`, `escalation_decision`.
+
+Одно изменение видно снаружи: `resolve`/`plan_run`, вызванные с `roles_cfg`, но без
+`quals`/`models`, падают `TypeError` с объяснением, что передать (прежде — тем же
+`TypeError`, но «NoneType is not iterable»). Все вызовы в пакете и тестах передают либо
+все три значения, либо ни одного. `orchestrator` вместе с сигнатурами `skill_context` и
+`gate_executor` — следующий срез.
+
 ### Решение по Pydantic v2
 
 Решение этого среза: **не внедрять Pydantic**. Сравнение сделано с существующими

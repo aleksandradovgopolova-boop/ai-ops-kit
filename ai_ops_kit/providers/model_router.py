@@ -21,13 +21,19 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 
+# Записи реестров (model-roles / model-qualification / models) и результаты резолва — открытые
+# YAML/JSON-объекты: их форму проверяют валидаторы реестров, здесь читаются только нужные поля.
+JsonDict = dict[str, Any]
+
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
-_COST_RANK = {"low": 0, "medium": 1, "high": 2, None: 1}
+_COST_RANK: dict[str | None, int] = {"low": 0, "medium": 1, "high": 2, None: 1}
 # ADR-004 (уточнено измеренной квалификацией 2026-07-28): роль ПИСАТЕЛЯ/эконом-ревью допускает
 # conditional-модель (дешёвый пишет, гейты страхуют); строгий СУДЬЯ — только qualified (safety-first,
 # судья не может быть «условным»). false_green>0 -> не допускается НИКОГДА и ни к какой роли.
@@ -35,17 +41,17 @@ WRITER_ROLES = {"implementation", "code_review"}
 STRICT_JUDGE_ROLES = {"security_review", "integration_judge"}
 
 
-def _eligible(q, role):
+def _eligible(q: JsonDict, role: str) -> bool:
     fg = (q.get("metrics") or {}).get("false_green", 1)
     if fg is None or fg > 0:
         return False
-    st = q.get("status")
+    st: object = q.get("status")
     if role in STRICT_JUDGE_ROLES:
         return st == "qualified"
     return st in ("qualified", "conditional")
 
 
-def _load():
+def _load() -> tuple[JsonDict, list[JsonDict], dict[str, JsonDict]]:
     r = yaml.safe_load((PKG / "registry" / "model-roles.yaml").read_text(encoding="utf-8"))
     q = yaml.safe_load((PKG / "registry" / "model-qualification.yaml").read_text(encoding="utf-8"))
     m = yaml.safe_load((PKG / "registry" / "models.yaml").read_text(encoding="utf-8"))
@@ -53,15 +59,22 @@ def _load():
     return r, q.get("qualifications", []), models
 
 
-def resolve(role, roles_cfg=None, quals=None, models=None, exclude_models=None):
+def resolve(role: str, roles_cfg: JsonDict | None = None, quals: list[JsonDict] | None = None,
+            models: dict[str, JsonDict] | None = None,
+            exclude_models: Iterable[str] | None = None) -> JsonDict:
     if roles_cfg is None:
         roles_cfg, quals, models = _load()
+    if quals is None or models is None:
+        raise TypeError("resolve: quals и models передаются вместе с roles_cfg (или все три — None)")
     req = (roles_cfg.get("roles") or {}).get(role, {})
     allowed_classes = {req.get("preferred_class"), req.get("fallback_class")} - {None}
     exclude_models = set(exclude_models or ())
 
-    def m_classes(mid):
-        return set((models.get(mid) or {}).get("classes", []) or [])
+    def _entry(mid: Any) -> JsonDict:        # model_id из реестра; None/неизвестный -> пустая запись
+        return models.get(mid) or {}
+
+    def m_classes(mid: Any) -> set[str]:
+        return set(_entry(mid).get("classes", []) or [])
 
     # кандидаты: ДОПУЩЕННЫЕ для роли (writer: qualified∨conditional; судья: только qualified; fg=0 всегда)
     # И входящие в требуемый класс роли; v3.8.3: exclude_models -> writer≠judge (исключаем модель судьи)
@@ -72,11 +85,11 @@ def resolve(role, roles_cfg=None, quals=None, models=None, exclude_models=None):
     # v3.7.10 экономика В ДЕНЬГАХ: если у ВСЕХ кандидатов роли есть total_cost_per_verified_change
     # (деньги), сортируем по деньгам; иначе честный tokens-fallback + warning (ранжирование может не
     # совпасть с деньгами). Токен-прокси врёт при разнице тарифов — деньги основной критерий.
-    def _money(q):
+    def _money(q: JsonDict) -> float | None:
         v = (q.get("economics") or {}).get("total_cost_per_verified_change")
         return v if isinstance(v, (int, float)) else None
 
-    def _tokens(q):
+    def _tokens(q: JsonDict) -> float | None:
         t = (q.get("economics") or {}).get("tokens_per_verified_change")
         if isinstance(t, (int, float)):
             return t
@@ -85,10 +98,10 @@ def resolve(role, roles_cfg=None, quals=None, models=None, exclude_models=None):
 
     money_mode = bool(cands) and all(_money(q) is not None for q in cands)
 
-    def cost_key(q):
+    def cost_key(q: JsonDict) -> tuple[float, int]:
         primary = _money(q) if money_mode else _tokens(q)
         return (primary if isinstance(primary, (int, float)) else 1e18,
-                _COST_RANK.get((models.get(q.get("model_id")) or {}).get("cost_class"), 1))
+                _COST_RANK.get(_entry(q.get("model_id")).get("cost_class"), 1))
 
     cands.sort(key=cost_key)
     if not cands:
@@ -104,7 +117,7 @@ def resolve(role, roles_cfg=None, quals=None, models=None, exclude_models=None):
     top = cands[0]
     fb = cands[1] if len(cands) > 1 else None
     cost_basis = "money" if money_mode else "tokens-fallback"
-    res = {"kind": "ModelResolutionResult", "resolved": True, "role": role,
+    res: JsonDict = {"kind": "ModelResolutionResult", "resolved": True, "role": role,
            "model_id": top["model_id"], "provider": top.get("provider"), "revision": top.get("revision"),
            "status": top.get("status"), "cost_basis": cost_basis,
            "qualification_evidence": f"{top['model_id']}@{top.get('revision')}/{role}#{top.get('corpus_version')}",
@@ -120,7 +133,7 @@ def resolve(role, roles_cfg=None, quals=None, models=None, exclude_models=None):
     # (impl_verification/code_review) fix-loop эскалирует writer'а на кандидата с ВЫШЕ observed success rate.
     # ЧЕСТНО (owner-review): это НАБЛЮДАЕМАЯ успешность на конкретном (малом) корпусе, НЕ универсальная «сила»
     # модели. Ладдер = кандидаты с higher_observed_success_rate, чем у top (сильнейший-по-наблюдению первым).
-    def _succ(q):
+    def _succ(q: JsonDict) -> float:
         v = (q.get("metrics") or {}).get("success_rate")
         return v if isinstance(v, (int, float)) else 0.0
     _top_succ = _succ(top)
@@ -142,7 +155,7 @@ ALL_ROLES = ("implementation", "code_review", "security_review", "integration_ju
 _HEAVY_CLASSES = {"ENGINEERING", "PRODUCT", "AI_FEATURE", "CRITICAL", "RESEARCH"}
 
 
-def writer_tier(signals=None):
+def writer_tier(signals: Mapping[str, Any] | None = None) -> dict[str, str]:
     """v3.9.0: тир writer'а ПО КЛАССУ ЗАДАЧИ (не только по среднему success_rate модели). QUICK -> cheap-api
     (дешёвый qualified writer, money-mode). ENGINEERING/PRODUCT/AI_FEATURE/CRITICAL/RESEARCH или risk
     high/critical -> strong-executor (Claude Code adapter, provider=claude-cli) СРАЗУ: на доказанно сложном
@@ -158,7 +171,9 @@ def writer_tier(signals=None):
             "reason": f"task_type={tt or 'QUICK'} -> дешёвый qualified writer (money-mode)"}
 
 
-def plan_run(roles_cfg=None, quals=None, models=None, signals=None, available_providers=None):
+def plan_run(roles_cfg: JsonDict | None = None, quals: list[JsonDict] | None = None,
+             models: dict[str, JsonDict] | None = None, signals: Mapping[str, Any] | None = None,
+             available_providers: Iterable[str] | None = None) -> JsonDict:
     """v3.7.12: резолв ВСЕХ рантайм-ролей одним вызовом -> bundle для RunReport.model_resolution.
     Делает решение роутера ВИДИМЫМ в отчёте прогона (writer/reviewer/security/integration независимо).
     writer≠judge по МОДЕЛИ: если code_review резолвится в модель != implementation — это разные identity.
@@ -166,12 +181,14 @@ def plan_run(roles_cfg=None, quals=None, models=None, signals=None, available_pr
     available_providers — optional allowset вызывающего; не online health/новый допуск роли."""
     if roles_cfg is None:
         roles_cfg, quals, models = _load()
+    if quals is None or models is None:
+        raise TypeError("plan_run: quals и models передаются вместе с roles_cfg (или все три — None)")
     # None — чистый offline план; пустой allowset запрещает все providers.
     # Фильтруем ДО всех resolve, включая writer≠judge/fallback/escalation.
     if available_providers is not None:
-        available_providers = set(available_providers)
-        quals = [q for q in quals if q.get("provider") in available_providers]
-    plan = {role: resolve(role, roles_cfg, quals, models) for role in ALL_ROLES}
+        allowed = set(available_providers)
+        quals = [q for q in quals if q.get("provider") in allowed]
+    plan: JsonDict = {role: resolve(role, roles_cfg, quals, models) for role in ALL_ROLES}
     plan["preferred_writer_tier"] = writer_tier(signals)
     # v3.8.3 CONFLICT-AWARE writer≠judge: role_constraints (model-roles.yaml) вида
     # {security_review: {must_differ_from: implementation}} — если судья и writer сошлись в одной модели,
@@ -180,7 +197,7 @@ def plan_run(roles_cfg=None, quals=None, models=None, signals=None, available_pr
     _constraints = (roles_cfg.get("role_constraints") or {})
     plan["role_constraints_applied"] = []
     for _judge_role, _c in _constraints.items():
-        _writer_role = (_c or {}).get("must_differ_from")
+        _writer_role: Any = (_c or {}).get("must_differ_from")
         jr, wr = plan.get(_judge_role), plan.get(_writer_role)
         if (_writer_role and jr and wr and jr.get("resolved") and wr.get("resolved")
                 and jr.get("model_id") == wr.get("model_id")):
@@ -204,7 +221,7 @@ def plan_run(roles_cfg=None, quals=None, models=None, signals=None, available_pr
     return plan
 
 
-def check_independence(plan, escalations=None):
+def check_independence(plan: Mapping[str, Any], escalations: Mapping[str, str] | None = None) -> JsonDict:
     """Fail-closed страж инварианта writer≠judge, устойчивый к эскалации/fallback.
 
     plan_run переселяет писателя с модели судьи ПРИ ПЛАНИРОВАНИИ. Но во время прогона судья
@@ -221,11 +238,11 @@ def check_independence(plan, escalations=None):
     """
     escalations = dict(escalations or {})
 
-    def _model(role):
+    def _model(role: str) -> Any:
         return escalations.get(role) or (plan.get(role) or {}).get("model_id")
 
     writer = _model("implementation")
-    violations = []
+    violations: list[dict[str, Any]] = []
     for jr in (r for r in ALL_ROLES if r != "implementation"):
         jm = _model(jr)
         if writer and jm and writer == jm:
@@ -241,7 +258,8 @@ def check_independence(plan, escalations=None):
                      "writer≠judge сохранён" + (" после эскалации" if after_esc else " при планировании"))}
 
 
-def escalation_decision(role, attempt, signal, roles_cfg=None):
+def escalation_decision(role: str, attempt: int, signal: str,
+                        roles_cfg: JsonDict | None = None) -> JsonDict:
     """signal ∈ {ok, reviewer_abstain, schema_invalid, reviewer_uncertain}. -> действие.
     Targeted retry до max; затем эскалация ТОЛЬКО review/judge-вызова (не всей задачи)."""
     if roles_cfg is None:
@@ -255,7 +273,7 @@ def escalation_decision(role, attempt, signal, roles_cfg=None):
             "note": "эскалируется только review/judge-вызов на fallback-класс, НЕ пере-прогон всей задачи"}
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     args = [a for a in argv if not a.startswith("--")]
     if not args:
         print(__doc__)
