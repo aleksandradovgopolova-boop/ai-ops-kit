@@ -236,3 +236,69 @@ raise SystemExit(cli.main(['intake','--runtime','codex','--session','native']))
         if process.poll() is None:
             process.kill()
         process.communicate(timeout=3)
+
+
+@pytest.mark.parametrize("entry", ["intake", "UserPromptSubmit", "SessionStart"])
+def test_missing_active_pointer_preserves_saved_task(project, entry):
+    task = cli.initial_intake(project, "codex", "native", "original")
+    directory = sessions.session_dir(project, "codex", "native")
+    pointer = directory / "active.json"
+    pointer.unlink()
+    before = state(project)
+    assert (directory / (task["request_id"] + ".json")).is_file()
+    with pytest.raises(ValueError, match="active.json"):
+        if entry == "intake":
+            cli.initial_intake(project, "codex", "native", "new")
+        else:
+            cli.hook("codex", {"hook_event_name": entry, "cwd": str(project),
+                               "session_id": "native", "prompt": "new", "turn_id": "next"})
+    assert state(project) == before
+
+
+@pytest.mark.parametrize("suffix", [".execution-claim", ".inputs", ".reviews", ".verification-attempt.json"])
+def test_orphaned_execution_evidence_prevents_fresh_intake(project, suffix):
+    directory = sessions.session_dir(project, "codex", "native")
+    directory.mkdir(parents=True)
+    (directory / "requests.lock").touch()
+    marker = directory / ("a" * 32 + suffix)
+    if suffix in (".reviews", ".inputs"):
+        marker.mkdir()
+    else:
+        marker.touch()
+    with sessions.session_migration_store.barrier(project):
+        before = state(project)
+    with pytest.raises(ValueError, match="active.json"):
+        cli.initial_intake(project, "codex", "native", "new")
+    assert state(project) == before
+
+
+def test_empty_session_lock_and_unrelated_file_allow_first_intake(project):
+    directory = sessions.session_dir(project, "codex", "native")
+    directory.mkdir(parents=True)
+    (directory / "requests.lock").touch()
+    (directory / ".DS_Store").write_bytes(b"metadata")
+    task = cli.initial_intake(project, "codex", "native", "first")
+    assert sessions.load(project, "codex", "native") == task
+    assert task["status"] == "pending"
+
+
+def test_session_start_refuses_pointer_whose_task_record_is_missing(project):
+    task = cli.initial_intake(project, "codex", "native", "original")
+    directory = sessions.session_dir(project, "codex", "native")
+    (directory / (task["request_id"] + ".json")).unlink()
+    before = state(project)
+    with pytest.raises(FileNotFoundError):
+        cli.hook("codex", {"hook_event_name": "SessionStart", "cwd": str(project),
+                           "session_id": "native"})
+    assert state(project) == before
+
+
+def test_initial_intake_preserves_dangling_pointer(project):
+    directory = sessions.session_dir(project, "codex", "native")
+    directory.mkdir(parents=True)
+    pointer = directory / "active.json"
+    pointer.symlink_to("absent")
+    with pytest.raises(ValueError, match="active.json"):
+        cli.initial_intake(project, "codex", "native", "new")
+    assert pointer.is_symlink() and not (directory / "absent").exists()
+    assert list(directory.glob("*.json")) == [pointer]
