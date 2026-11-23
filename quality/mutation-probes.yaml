@@ -553,8 +553,8 @@ probes:
 - id: security-scan-initial-commit-scope-is-precise
   kind: guard
   file: ai_ops_kit/security/security_pack.py
-  find: '    if not m:'
-  replace_with: '    if m:'
+  find: '    if initial and (revision is None or initial == head):'
+  replace_with: '    if False:'
   tests:
   - tests/unit/test_absent_base_is_resolved_or_refused.py
   why: 'Единственный законный случай неразрешимой базы — `<sha>~1` у КОРНЕВОГО коммита: родителя нет
@@ -566,9 +566,8 @@ probes:
   covers:
   - ai_ops_kit/security/security_pack.py
   file: ai_ops_kit/security/security_pack.py
-  find: '            changed, scan_scope = _scan_scope(child_root, base)'
-  replace_with: '            changed, scan_scope = (security_scan._git_changed_files(child_root, base)
-    or []), {"mode": "diff", "base": str(base)}'
+  find: '    files_content, before, scan_scope = _scan_inputs(child_root, base, revision, files_content)'
+  replace_with: '    files_content, before, scan_scope = {}, {}, {"mode": "empty", "base": None}'
   tests:
   - tests/unit/test_absent_base_is_resolved_or_refused.py
   why: 'ШОВ: решение об охвате что-то значит только если его зовёт САМ run_pack. Подмена на прежнюю

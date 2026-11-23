@@ -20,6 +20,8 @@ required_evidence целиком покрыто пройденными дете�
 from __future__ import annotations
 
 import argparse
+import os
+import subprocess
 import json
 import re
 import sys
@@ -28,7 +30,6 @@ from pathlib import Path
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
-from ai_ops_kit.shared.gitio import git  # noqa: E402
 from ai_ops_kit.security import security_scan  # noqa: E402
 import yaml           # noqa: E402
 
@@ -131,57 +132,73 @@ def _applies(domain, signals, files_content):
     return reasons
 
 
-def _root_commit_files(root, base):
-    """ЕДИНСТВЕННЫЙ законный случай неразрешимой базы: `<sha>~1`, где `<sha>` — КОРНЕВОЙ коммит.
-    Родителя нет ПО ПОСТРОЕНИЮ, и охват тогда — файлы самого коммита, а не весь репозиторий.
-    -> список путей; None, если случай другой (тогда вызывающий обязан отказаться)."""
-    m = re.fullmatch(r"(.+)~1", str(base))
-    if not m:
+def _git_bytes(root, *args, data=None, optional=False):
+    try:
+        result = subprocess.run(["git", "--no-replace-objects", "-C", str(root), *args],
+                                input=data, capture_output=True, timeout=90)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise RuntimeError(f"security: не удалось выполнить git {args[0]}") from exc
+    if result.returncode == 0:
+        return result.stdout
+    if optional:
         return None
-    sha = m.group(1)
-    # родителя нет -> это корень; у любого другого коммита `<sha>^` разрешается.
-    # Единый вход к git с таймаутом (см. shared/gitio): зависший git не вешает сбор security-пакета.
-    if git(root, "rev-parse", "--verify", "--quiet", f"{sha}^")[0] == 0:
-        return None
-    rc, out, _ = git(root, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r", sha)
-    if rc != 0:
-        return None
-    return [ln for ln in out.splitlines() if ln.strip()]
+    raise RuntimeError(f"security: git {args[0]} не прочитал объект проверки")
 
 
-def _scan_scope(child_root, base):
-    """Файлы для скана и НАЗВАННЫЙ охват. -> (files, scope) или RuntimeError с причиной.
+def _commit(root, ref):
+    raw = _git_bytes(root, "rev-parse", "--verify", "--end-of-options", f"{ref}^{{commit}}", optional=True)
+    return raw.strip().decode("ascii") if raw else None
 
-    ПОЛЕ 17-18.08.2026 (заявка #139, ИИ-Среда): при `base=None` здесь брался ВЕСЬ репозиторий
-    (`git ls-files`), и прогон блокировался находкой в ДАВНЕМ файле, которого правка не касалась.
-    Замер с контролем на пробном репозитории: правка одного безобидного файла -> без базы
-    `overall=blocked` (домен input_validation, находка в чужом legacy), с базой -> `clear`.
-    Заявка читалась как «блокирует без находок» именно поэтому: находки были настоящие, но
-    принадлежали чужому коду — врал не вердикт, а ОХВАТ.
 
-    ПОЭТОМУ ОТСУТСТВИЕ БАЗЫ — РЕШЕНИЕ, А НЕ ПУСТОЕ ЗНАЧЕНИЕ, и оба молчаливых варианта запрещены:
-    весь репозиторий превращает любой прогон в аудит чужого legacy, а пустой диф дал бы ложное
-    `clear` (скан без единого файла — не «чисто», а «не проверено»). Отказ называет причину."""
+def _scan_scope(root, base, revision):
     if base is None:
-        raise RuntimeError(
-            "security-скан без базы сравнения: fail-closed. Весь репозиторий сканировать нельзя "
-            "(находка в файле, которого правка не касалась, блокирует чужой работой — заявка #139), "
-            "пустой диф нельзя выдавать за 'clear'. Передай base=<sha|ветка> тем, кто вызывает "
-            "run_pack, или задай --base у security_pack.py")
-    changed = security_scan._git_changed_files(child_root, base)
-    if changed is not None:
-        return changed, {"mode": "diff", "base": str(base)}
-    root_files = _root_commit_files(child_root, base)
-    if root_files is not None:
-        # первый коммит репозитория: сравнивать не с чем, и охват «файлы этого коммита» — точный,
-        # а не «весь репозиторий по случайности совпал».
-        return root_files, {"mode": "initial-commit", "base": str(base)}
-    # v3.0.11 (finding аудита P1): git-энумерация упала -> FAIL-CLOSED (raise), НЕ changed=[].
-    # Прежде rc!=0 -> [] -> нет находок -> overall='clear': реальная правка при git-сбое
-    # признавалась чистой. Исключение ловит вызывающий (_security_scan_error -> security=fail).
-    raise RuntimeError(
-        f"база сравнения '{base}' не разрешается в {child_root}: диф не получен, и это не первый "
-        f"коммит — файлы для security-скана определить нечем — fail-closed")
+        raise RuntimeError("security-скан без базы сравнения: fail-closed")
+    head = _commit(root, "HEAD" if revision is None else revision)
+    if not head:
+        raise RuntimeError("security: проверяемый коммит не разрешается")
+    # Resolve relative HEAD expressions against the selected commit, even if the checkout advanced.
+    comparison = re.sub(r"^HEAD(?=$|[~^])", head, str(base))
+    parent = _commit(root, comparison)
+    if parent:
+        return {"mode": "diff", "base": str(base), "base_sha": parent, "head_sha": head}
+    initial = _commit(root, comparison[:-2]) if comparison.endswith("~1") else None
+    if initial and (revision is None or initial == head):
+        header = _git_bytes(root, "cat-file", "commit", initial).split(b"\n\n", 1)[0]
+        if not any(line.startswith(b"parent ") for line in header.splitlines()):
+            return {"mode": "initial-commit", "base": str(base), "base_sha": None, "head_sha": initial}
+    raise RuntimeError(f"база сравнения '{base}' не разрешается; security-скан не выполнен (fail-closed)")
+
+
+def _blob_text(root, oid):
+    # Один blob за раз: бинарные файлы не должны накапливаться в памяти целиком.
+    raw = _git_bytes(root, "cat-file", "blob", oid)
+    return None if security_scan._looks_binary(raw) else raw.decode("utf-8", errors="ignore")
+
+
+def _commit_files(root, scope):
+    revisions = [scope["base_sha"]] if scope["base_sha"] else ["--root"]
+    raw = _git_bytes(root, "diff-tree", "--raw", "-r", "-z", "--no-abbrev", "--no-renames",
+                     "--ignore-submodules=none", "--no-commit-id", *revisions, scope["head_sha"], "--")
+    fields = raw.split(b"\0")
+    if fields.pop() or len(fields) % 2:
+        raise RuntimeError("security: неполный список изменённых файлов")
+    current, prior_manifests = {}, {}
+    for header, name in zip(fields[::2], fields[1::2]):
+        old_mode, new_mode, old, new, status = header.removeprefix(b":").split()
+        path = os.fsdecode(name)
+        if status == b"D" or security_scan._is_artifact(path):
+            continue
+        if new_mode not in (b"100644", b"100755"):
+            raise RuntimeError(f"security: тип изменённого Git-объекта не поддержан: {path!r}")
+        current[path] = new
+        if Path(path).name in security_scan.DEP_MANIFESTS and old_mode != b"000000":
+            if old_mode not in (b"100644", b"100755"):
+                raise RuntimeError(f"security: не проверен исходный манифест: {path!r}")
+            prior_manifests[path] = old
+    texts = {oid: _blob_text(root, oid) for oid in set(current.values()) | set(prior_manifests.values())}
+    files = {p: texts[oid] for p, oid in current.items() if texts[oid] is not None}
+    before = {p: texts[oid] or "" for p, oid in prior_manifests.items()}
+    return files, before
 
 
 # ─── ПОСТАВЛЕННАЯ КОПИЯ КИТА НЕ СУДИТСЯ ГЕЙТОМ ПРОДУКТА (#1147) ──────────────────────────────────
@@ -196,7 +213,7 @@ def _scan_scope(child_root, base):
 # в «не показываем», и кит молча привозил бы в чужой репозиторий injection-поверхность, за которую
 # отвечает сам. Секретов это НЕ касается: пароль, приехавший в поставке, лежит в репозитории дочки
 # и утёк из него — там гейт обязан падать по-прежнему.
-def _vendor_section(child_root, base, vendor, files_content):
+def _vendor_section(child_root, base, vendor, files_content, revision=None):
     """Раздел поставки для доменного вердикта: разметка прибытий, версии кита и подпись адресата.
 
     ДО ЭТОГО РАЗМЕТКИ ЗДЕСЬ НЕ БЫЛО ВОВСЕ (нашло независимое ревью): поле `arrived` числилось в
@@ -207,7 +224,7 @@ def _vendor_section(child_root, base, vendor, files_content):
     compared = bool(child_root and base)
     if compared and vendor:
         vendor = security_scan._vendor_arrivals(child_root, base, vendor, files_content)
-    before, after = (security_scan._vendor_version(child_root, base, files_content)
+    before, after = (security_scan._vendor_version(child_root, base, files_content, revision=revision)
                      if child_root else (None, None))
     приехало = sum(1 for f in vendor if f.get("arrived"))
     return {"vendor_flags": vendor, "vendor_compared": compared,
@@ -236,7 +253,19 @@ def _domain_findings(domain, secrets, injections, new_deps_detailed):
     return findings
 
 
-def run_pack(child_root=None, base=None, signals=None, files_content=None):
+def _scan_inputs(child_root, base, revision, files_content):
+    if files_content is not None:
+        prior = {p: security_scan._git_show(child_root, base, p) for p in files_content
+                 if child_root and base and Path(p).name in security_scan.DEP_MANIFESTS}
+        return files_content, prior, {"mode": "given", "base": None}
+    if child_root is None:
+        return {}, {}, {"mode": "empty", "base": None}
+    scope = _scan_scope(child_root, base, revision)
+    files, prior = _commit_files(child_root, scope)
+    return files, prior, scope
+
+
+def run_pack(child_root=None, base=None, signals=None, files_content=None, *, revision=None):
     """Доменный security-вердикт. files_content: {path: text} для offline-теста; иначе — из git diff.
 
     `scan_scope` в результате называет, ЧТО сравнивалось (diff/initial-commit/переданная карта):
@@ -244,21 +273,13 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
     signals = dict(signals or {})
     domains, allowed = load_domains()
 
-    # источник изменённых файлов: переданная карта (тест) или git diff коммита
-    scan_scope = {"mode": "given", "base": None}
-    if files_content is None:
-        files_content = {}
-        scan_scope = {"mode": "empty", "base": None}
-        if child_root is not None:
-            changed, scan_scope = _scan_scope(child_root, base)
-            files_content = security_scan._read_files(child_root, changed)
+    files_content, before, scan_scope = _scan_inputs(child_root, base, revision, files_content)
 
     # детерминированные находки (один раз)
     secrets = security_scan.scan_secrets(files_content)
     injections, vendor_injections = security_scan._vendor_split(   # см. комментарий над _domain_findings
         security_scan.scan_injection(files_content))
     mani = {p: c for p, c in files_content.items() if Path(p).name in security_scan.DEP_MANIFESTS}
-    before = {p: (security_scan._git_show(child_root, base, p) if (child_root and base) else "") for p in mani}
     # `new_deps` (недетальный вариант) снят ревизией 2026-08-11: результат не использовался с
     # перехода на `new_deps_detailed` в v3.0-rc5 — считался лишний проход по манифестам.
     new_deps_detailed = security_scan.new_dependencies_detailed(before, mani)   # v3.0-rc5 (P1.2): fingerprint
@@ -312,7 +333,8 @@ def run_pack(child_root=None, base=None, signals=None, files_content=None):
         # ОХВАТ РЯДОМ С ВЕРДИКТОМ: что сравнивалось. Вердикт без охвата непроверяем — заявка #139
         # читалась как «блокирует без находок» именно потому, что охват был не назван нигде.
         "scan_scope": scan_scope,
-        **_vendor_section(child_root, base, vendor_injections, files_content),
+        **_vendor_section(child_root, scan_scope.get("base_sha", base), vendor_injections, files_content,
+                          revision=scan_scope.get("head_sha")),
         "allowed_evidence_sources": allowed,
     }
 

@@ -173,7 +173,9 @@ def test_security_pack_pair_with_base_is_clear_and_names_its_scope(tmp_path):
     root = _repo(tmp_path, branch_commit=False)
     res = security_pack.run_pack(root, base="HEAD~1", signals={})
     assert res["overall"] == "clear", res["blocking"]
-    assert res["scan_scope"] == {"mode": "diff", "base": "HEAD~1"}
+    assert res["scan_scope"] == {"mode": "diff", "base": "HEAD~1",
+                                 "base_sha": _git(root, "rev-parse", "HEAD~1").stdout.strip(),
+                                 "head_sha": _git(root, "rev-parse", "HEAD").stdout.strip()}
     # контроль: тот же файл, поданный как изменённый, находку даёт — значит охват, а не слепота
     same_file = security_pack.run_pack(files_content={"src/legacy.tsx": INJECTION}, signals={})
     assert same_file["overall"] == "blocked"
