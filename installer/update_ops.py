@@ -460,6 +460,10 @@ def _update_locked(force, smoke_checks, refresh_ci, in_place):
         # ниже переносят файлы, и список удаляемых, посчитанный до них, указывает на старые пути.
         changes = _core().build_diff()
         if not changes and inst == target:
+            if in_place:
+                installed_commands = _core().reconcile_codex_home()
+                if installed_commands:
+                    report["commands_installed"] = installed_commands
             if not _update_smoke(backup, footprint, report, inst, smoke_checks):
                 return 1
             msg = "Обновление не требуется." + _ci_line

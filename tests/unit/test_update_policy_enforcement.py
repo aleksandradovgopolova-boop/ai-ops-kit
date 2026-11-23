@@ -315,3 +315,27 @@ def test_deferred_update_keeps_owner_driver_and_personal_prompts(child, tmp_path
     assert [(p.name, p.read_bytes()) for p in prompts.iterdir()] == [(personal.name, b"owner prompt\r\n")]
     assert report["plan_merge_driver"] == "deferred"
     assert report["commands_installed"]["codex_generated"] > 0 and report["commands_installed"]["codex_prompts"] == 0
+
+
+@pytest.mark.slow
+def test_explicit_update_finishes_host_commands_after_branch_merge(prepared_update_copy, tmp_path, monkeypatch):
+    child, _, _ = prepared_update_copy
+    branch, = _branches(child)
+    assert _git(child, "merge", "--ff-only", branch).returncode == 0
+    host = tmp_path / "profile"
+    prompts = host / "prompts"
+    prompts.mkdir(parents=True)
+    monkeypatch.setenv("CODEX_HOME", str(host))
+    owner = prompts / "personal.md"
+    owner.write_bytes(b"owner data")
+    generated = child / ".ai/generated/codex/prompts"
+    expected = (generated / "ai-run.md").read_bytes()
+    (generated / "unlisted.md").write_bytes(b"outside declared command surface")
+    result = _run(child, "update", "--in-place")
+    assert result.returncode == 0, result.stdout[-1000:]
+    assert (prompts / "ai-run.md").read_bytes() == expected
+    assert not (prompts / "unlisted.md").exists() and owner.read_bytes() == b"owner data"
+    assert _report(child)["commands_installed"]["codex_prompts"] > 0
+    before_retry = (prompts / "ai-run.md").stat().st_mtime_ns
+    assert _run(child, "update", "--in-place").returncode == 0
+    assert (prompts / "ai-run.md").stat().st_mtime_ns == before_retry

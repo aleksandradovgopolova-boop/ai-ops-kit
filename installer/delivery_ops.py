@@ -21,6 +21,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import sys
 from pathlib import Path
 
@@ -106,19 +107,52 @@ def _surface_filter(kind):
     return None                                      # 'all' или отсутствие -> всё
 
 
+def _generate_commands(root, runtimes):
+    if str(_ao().PKG) not in sys.path:
+        sys.path.insert(0, str(_ao().PKG))
+    from ai_ops_kit.shared import generate_runtime
+    return generate_runtime.generate(root, verbose=False, runtimes=runtimes,
+                                     command_filter=_surface_filter("commands"))
+
+
+def _install_codex_prompts(root, generated):
+    source = root / ".ai/generated/codex/prompts"
+    commands = [p for p in generated if p.parent == source]
+    home = os.environ.get("CODEX_HOME")
+    if not home or not commands:
+        return {"codex_generated": len(commands), "codex_prompts": 0}
+    dest = Path(home) / "prompts"
+    dest.mkdir(parents=True, exist_ok=True)
+    for command in commands:
+        path = dest / command.name
+        if (path.is_file() and path.stat().st_size == command.stat().st_size
+                and path.read_bytes() == command.read_bytes()):
+            continue
+        shutil.copy2(command, path)
+    return {"codex_generated": len(commands), "codex_prompts": len(commands)}
+
+
+def reconcile_codex_home():
+    """Явное применение после merge: только команды Кита, даже при прежней версии."""
+    if not os.environ.get("CODEX_HOME"):
+        return {}
+    runtimes = _configured_runtimes()
+    if runtimes and "codex" not in runtimes:
+        return {}
+    # Генератор использует исходники кита и фильтр проекта. Посторонние файлы из
+    # рабочего дерева не должны становиться командами в личном профиле.
+    with tempfile.TemporaryDirectory(prefix="ai-ops-codex-prompts-") as tmp:
+        root = Path(tmp)
+        return _install_codex_prompts(root, _generate_commands(root, ["codex"]))
+
+
 def materialize_runtime(child_root: Path):
     """Сгенерировать runtime-команды и УСТАНОВИТЬ их туда, где их находит раннер.
     generate_runtime пишет source of truth в .ai/generated/<runtime>/…; здесь мы
     ставим команды claude-code в .claude/commands/ (command_loading из runtimes.yaml),
     иначе после установки среда не видит сгенерированные точки входа. Возвращает число
     установленных команд. v3.14.0: адаптеры только для настроенных рантаймов + фильтр поверхности."""
-    import os
-    if str(_ao().PKG) not in sys.path:
-        sys.path.insert(0, str(_ao().PKG))
-    from ai_ops_kit.shared import generate_runtime
-    generate_runtime.generate(child_root, verbose=False,
-                              runtimes=_configured_runtimes(),
-                              command_filter=_surface_filter("commands"))
+    generated = _generate_commands(child_root, _configured_runtimes())
     # claude-code -> .claude/commands/ (command_loading из runtimes.yaml)
     src = child_root / ".ai" / "generated" / "claude-code" / "commands"
     dst = child_root / ".claude" / "commands"
@@ -128,17 +162,7 @@ def materialize_runtime(child_root: Path):
         for f in sorted(src.glob("*.md")):
             shutil.copy2(f, dst / f.name)
             claude += 1
-    # codex -> $CODEX_HOME/prompts/ (env-var путь ВНЕ репо), только если CODEX_HOME задан
-    xsrc = child_root / ".ai" / "generated" / "codex" / "prompts"
-    codex_generated = len(list(xsrc.glob("*.md"))) if xsrc.is_dir() else 0
-    codex = 0
-    codex_home = os.environ.get("CODEX_HOME")
-    if codex_home and xsrc.is_dir():
-        xdst = Path(codex_home) / "prompts"
-        xdst.mkdir(parents=True, exist_ok=True)
-        for f in sorted(xsrc.glob("*.md")):
-            shutil.copy2(f, xdst / f.name)
-            codex += 1
+    codex = _install_codex_prompts(child_root, generated)
     # qwen-code -> .qwen/commands/ (in-repo путь, command_loading из runtimes.yaml), ТОЛЬКО если
     # рантайм ЯВНО включён в .ai-ops.yaml. Как codex гейтится на CODEX_HOME, так qwen — на явное
     # включение: иначе каждая дочка получала бы каталог .qwen/, которым не пользуется.
@@ -152,7 +176,7 @@ def materialize_runtime(child_root: Path):
         for f in sorted(qsrc.glob("*.md")):
             shutil.copy2(f, qdst / f.name)
             qwen += 1
-    return {"claude_commands": claude, "codex_prompts": codex, "codex_generated": codex_generated,
+    return {"claude_commands": claude, **codex,
             "qwen_commands": qwen, "qwen_generated": qwen_generated}
 
 
