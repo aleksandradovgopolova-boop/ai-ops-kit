@@ -9,7 +9,7 @@
     "command": { "type": "string", "enum": ["init", "status", "diff", "update", "validate", "doctor", "migrate", "verify-capabilities"] },
     "from_version": { "type": ["string", "null"] },
     "to_version": { "type": ["string", "null"] },
-    "status": { "type": "string", "enum": ["ok", "blocked", "conflict", "failed", "dry-run"] },
+    "status": { "type": "string", "enum": ["ok", "blocked", "conflict", "failed", "dry-run", "skipped", "rolled_back", "rollback_failed"] },
     "compatibility": { "type": "string", "enum": ["compatible", "requires-migration", "incompatible", "incompatible-forced"] },
     "managed_changes": {
       "type": "array",
@@ -49,6 +49,8 @@
     "gitignore": {"type": "string"},
     "gitattributes": {"type": "string"},
     "plan_merge_driver": {"type": "string"},
+    "error_type": {"type": "string"},
+    "rollback_error_type": {"type": "string"},
     "report_read_error": {"type": "string"},
     "allowed_range_widened": {"type": "string"},
     "entry_point": {"type": "object"},

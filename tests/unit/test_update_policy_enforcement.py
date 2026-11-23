@@ -339,3 +339,24 @@ def test_explicit_update_finishes_host_commands_after_branch_merge(prepared_upda
     before_retry = (prompts / "ai-run.md").stat().st_mtime_ns
     assert _run(child, "update", "--in-place").returncode == 0
     assert (prompts / "ai-run.md").stat().st_mtime_ns == before_retry
+
+
+@pytest.mark.slow
+def test_host_prompt_directory_collision_rolls_back(prepared_update_copy, tmp_path, monkeypatch):
+    child, _, _ = prepared_update_copy
+    branch, = _branches(child)
+    assert _git(child, "merge", "--ff-only", branch).returncode == 0
+    home = tmp_path / "owner-profile"
+    directory = home / "prompts/ai-run.md"
+    directory.mkdir(parents=True)
+    owner_file = directory / "original"
+    owner_file.write_bytes(b"owner content")
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    result = _run(child, "update", "--in-place")
+    assert result.returncode == 1
+    from ai_ops_kit.validation.validate_research_artifacts import check_schema
+    report = _report(child)
+    assert report["status"] == "rolled_back"
+    assert check_schema(report, json.loads((KIT / "schemas/update-result.schema.json").read_bytes())) == []
+    assert sorted((p.relative_to(home).as_posix() for p in home.rglob("*") if p.is_file())) == ["prompts/ai-run.md/original"]
+    assert owner_file.read_bytes() == b"owner content"
