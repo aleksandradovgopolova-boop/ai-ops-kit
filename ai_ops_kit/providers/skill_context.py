@@ -1,7 +1,12 @@
 """Разрешение явно объявленных skills перед вызовом исполнителя (#1251)."""
+from __future__ import annotations
+
 import hashlib
 import json
+import os
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -10,7 +15,8 @@ class SkillUnavailable(ValueError):
     """Объявленный контекст не разрешён: стадию нельзя исполнять без него."""
 
 
-def resolve_skills(stage, package_root, resolver=None):
+def resolve_skills(stage: Mapping[str, Any], package_root: str | os.PathLike[str],
+                   resolver: Callable[[str], str | None] | None = None) -> dict[str, str]:
     """Только uses_skills стадии; внешний skill требует явного runtime resolver."""
     ids = stage.get('uses_skills', [])
     if not isinstance(ids, list) or any(not isinstance(s, str) or not s for s in ids):
@@ -43,10 +49,10 @@ def resolve_skills(stage, package_root, resolver=None):
         raise SkillUnavailable(f'не удалось разрешить skills: {exc}') from exc
 
 
-def runtime_skill_resolver(child_root):
+def runtime_skill_resolver(child_root: str | os.PathLike[str]) -> Callable[[str], str | None]:
     """Skill-файлы, установленные для native runtime этой дочки; без фиктивных builtin bodies."""
     root = Path(child_root).resolve()
-    def resolve(sid):
+    def resolve(sid: str) -> str | None:
         if not isinstance(sid, str) or '/' in sid or '\\' in sid or '..' in sid:
             raise SkillUnavailable('недопустимый skill id')
         for directory in ('.claude/skills', '.agents/skills', '.codex/skills'):

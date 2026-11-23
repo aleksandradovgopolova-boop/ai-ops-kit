@@ -39,7 +39,9 @@ import json
 import shutil
 import sys
 import tempfile
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 
@@ -65,22 +67,32 @@ from ai_ops_kit.providers.orchestrator_providers import (
 )
 from ai_ops_kit.providers.response_contract import REVIEWER_RESULT, ProviderRefusal
 
+if TYPE_CHECKING:
+    from ai_ops_kit.providers.provider_calls import Provider
+    from ai_ops_kit.shared.budget import Budget
+
+# TaskState, записи реестров, гейт-отчёт и отказы — открытые YAML/JSON-объекты; их форму
+# проверяют схемы и валидаторы, здесь читаются только нужные поля.
+JsonDict = dict[str, Any]
+SkillResolver = Callable[[str], "str | None"]
+
 
 # ---------------- state ----------------
 
-def load_state(run_dir: Path):
+def load_state(run_dir: Path) -> JsonDict | None:
     p = run_dir / "TaskState.yaml"
     if p.exists():
-        return yaml.safe_load(p.read_text(encoding="utf-8"))
+        state: JsonDict | None = yaml.safe_load(p.read_text(encoding="utf-8"))
+        return state
     return None
 
 
-def save_state(run_dir: Path, state: dict):
+def save_state(run_dir: Path, state: JsonDict) -> None:
     (run_dir / "TaskState.yaml").write_text(
         yaml.safe_dump(state, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
 
-def append_interaction_log(child_root: Path, record: dict):
+def append_interaction_log(child_root: Path, record: Mapping[str, Any]) -> Path:
     """Append-only аудит действий ИИ (security-posture: audit-log). Пишет одну JSONL-запись
     в <child>/.ai/runtime/interaction-log.jsonl: кто/что/когда/итог. Секреты/сырые данные
     не пишем (только имена и статусы). Только дозапись — не перезапись."""
@@ -95,14 +107,15 @@ def append_interaction_log(child_root: Path, record: dict):
 
 # ---------------- core ----------------
 
-def agent_body(agent_id: str, agents_index: dict):
-    rel = (agents_index.get(agent_id) or {}).get("file")
+def agent_body(agent_id: str, agents_index: Mapping[str, JsonDict]) -> str:
+    rel: str | None = (agents_index.get(agent_id) or {}).get("file")
     if rel and (PKG / rel).exists():
         return (PKG / rel).read_text(encoding="utf-8")
     return f"# {agent_id}\n(тело роли не найдено в пакете — используется контракт из registry)"
 
 
-def build_role_prompt(stage, agent_id, agents_index, task_text, published, skill_bodies=None):
+def build_role_prompt(stage: JsonDict, agent_id: str, agents_index: Mapping[str, JsonDict], task_text: str,
+                      published: Mapping[str, str], skill_bodies: Mapping[str, str] | None = None) -> str:
     """Изолированный промпт роли: тело агента + задача + ТОЛЬКО опубликованные артефакты."""
     from ai_ops_kit.providers.skill_context import resolve_skills
     bodies = resolve_skills(stage, PKG) if skill_bodies is None else skill_bodies
@@ -120,7 +133,7 @@ def build_role_prompt(stage, agent_id, agents_index, task_text, published, skill
             f"{skill_text}\n{guard}\n## Задача\n{task_text}\n\n## Опубликованные артефакты\n{pub}\n")
 
 
-def _write_reviewer_json(run_dir, sid, text):
+def _write_reviewer_json(run_dir: Path, sid: str, text: str) -> bool:
     """Из ответа judge-роли достать JSON reviewer-result и, если валиден по схеме, записать
     stage-<sid>.reviewer.json (структурный источник истины). Иначе — ничего (фолбэк на markdown)."""
     # Разбор — ОДИН на весь кит (v3.37): `gates.gate_executor.extract_reviewer_json`. Прежде эта
@@ -149,7 +162,9 @@ def _write_reviewer_json(run_dir, sid, text):
     return True
 
 
-def _prepare_stage_prompt(stage, owner, agents_index, task, published, child_root, resolver, state, run_dir):
+def _prepare_stage_prompt(stage: JsonDict, owner: str, agents_index: Mapping[str, JsonDict], task: str,
+                          published: Mapping[str, str], child_root: Path, resolver: SkillResolver | None,
+                          state: JsonDict, run_dir: Path) -> str:
     from ai_ops_kit.providers.skill_context import resolve_skills, runtime_skill_resolver
     bodies = resolve_skills(stage, PKG, resolver=resolver or runtime_skill_resolver(child_root))
     prompt = build_role_prompt(stage, owner, agents_index, task, published, skill_bodies=bodies)
@@ -160,7 +175,7 @@ def _prepare_stage_prompt(stage, owner, agents_index, task, published, child_roo
     return prompt
 
 
-def _save_stage_origin(stage, owner, result, out):
+def _save_stage_origin(stage: JsonDict, owner: str, result: str, out: Path) -> dict[str, str]:
     origin = {'kind': 'JUDGMENT' if stage.get('review_mode') == 'read-only' else 'REASONING',
               'actor': owner, 'source': out.name, 'sha256': hashlib.sha256(result.encode()).hexdigest()}
     out.with_suffix('.provenance.json').write_text(
@@ -168,12 +183,13 @@ def _save_stage_origin(stage, owner, result, out):
     return origin
 
 
-def _is_readonly_refusal(rec) -> bool:
-    return (rec.get("reason") == "readonly_runtime_unqualified"
-            and rec.get("provider") == "claude-cli")
+def _is_readonly_refusal(rec: Mapping[str, Any]) -> bool:
+    return bool(rec.get("reason") == "readonly_runtime_unqualified"
+                and rec.get("provider") == "claude-cli")
 
 
-def _writer_stage(provider, prompt, sid, state, run_dir, bud):
+def _writer_stage(provider: Provider, prompt: str, sid: str, state: JsonDict, run_dir: Path,
+                  bud: Budget) -> tuple[str | None, JsonDict | None]:
     """Вызвать writer-провайдера стадии. -> (result, None) либо (None, отказ #1476).
 
     Узкая граница #1476: перехватывается только отказ неквалифицированного read-only Claude CLI;
@@ -205,7 +221,8 @@ def _writer_stage(provider, prompt, sid, state, run_dir, bud):
     return result, None
 
 
-def _final_line(workflow_id, state, gates, run_dir, skill_failure, writer_refusal) -> str:
+def _final_line(workflow_id: str, state: JsonDict, gates: JsonDict, run_dir: Path,
+                skill_failure: Mapping[str, str] | None, writer_refusal: JsonDict | None) -> str:
     """Итоговая строка прогона человеку: отказ writer, незакрытые гейты либо успех."""
     if writer_refusal:
         return (f"BLOCKED: workflow {workflow_id}, стадия {writer_refusal['stage']}: "
@@ -221,7 +238,8 @@ def _final_line(workflow_id, state, gates, run_dir, skill_failure, writer_refusa
             f"состояние: {run_dir / 'TaskState.yaml'}")
 
 
-def _finish_run_state(state, gates, skill_failure, budget_exceeded, writer_refusal=None):
+def _finish_run_state(state: JsonDict, gates: JsonDict, skill_failure: Mapping[str, str] | None,
+                      budget_exceeded: str | None, writer_refusal: JsonDict | None = None) -> None:
     if writer_refusal:
         # Gate evidence не заменяет невыполненную writer-стадию (#1476).
         state['status'] = 'blocked'
@@ -244,7 +262,8 @@ def _finish_run_state(state, gates, skill_failure, budget_exceeded, writer_refus
         state.pop("unmet_gates", None)
 
 
-def _run_identity(child_root, workitem_id, task_text, workflow_id, gate_ids):
+def _run_identity(child_root: Path, workitem_id: str | None, task_text: str, workflow_id: str,
+                  gate_ids: list[str] | None) -> tuple[str, str, Path, list[str] | None]:
     """Разрешить идентичность и сохранённые требования до побочных эффектов."""
     task_hash = hashlib.sha256(task_text.encode("utf-8")).hexdigest()[:12]
     wid = workitem_id or f"wi-{task_hash}"
@@ -260,9 +279,12 @@ def _run_identity(child_root, workitem_id, task_text, workflow_id, gate_ids):
 
 
 def run_workflow(workflow_id: str, task_text: str, child_root: Path,
-                 provider=mock_provider, verbose=True, gate_evidence=None,
-                 collect=False, fresh=False, provider_name="mock", workitem_id=None,
-                 budget=None, gate_ids=None, signals=None, skill_resolver=None):
+                 provider: Provider = mock_provider, verbose: bool = True,
+                 gate_evidence: Mapping[str, Any] | None = None, collect: bool = False,
+                 fresh: bool = False, provider_name: str = "mock", workitem_id: str | None = None,
+                 budget: Budget | JsonDict | None = None, gate_ids: list[str] | None = None,
+                 signals: Mapping[str, Any] | None = None,
+                 skill_resolver: SkillResolver | None = None) -> tuple[JsonDict, Path]:
     wf_all = yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8"))["workflows"]
     ag = yaml.safe_load((PKG / "registry" / "agents.yaml").read_text(encoding="utf-8"))
     agents_index = {a["id"]: a for a in ag.get("agents", [])}
@@ -298,13 +320,13 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     # execution budget (v2.38): жёсткий потолок вызовов модели; enforcement ДО вызова
     from ai_ops_kit.shared import budget as _budget_mod
     bud = budget if isinstance(budget, _budget_mod.Budget) else _budget_mod.Budget.from_dict(budget)
-    budget_exceeded = None
-    skill_failure = None
-    writer_refusal = None
+    budget_exceeded: str | None = None
+    skill_failure: dict[str, str] | None = None
+    writer_refusal: JsonDict | None = None
 
     stages = w["stages"]
     done_ids = {s for s in state.get("completed_checks", [])}
-    published = {}  # name -> content (опубликованные артефакты)
+    published: dict[str, str] = {}  # name -> content (опубликованные артефакты)
     # восстановить опубликованное с диска (resume)
     for f in sorted(run_dir.glob("stage-*.md")):
         published[f.stem] = f.read_text(encoding="utf-8")
@@ -357,9 +379,11 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
                 if verbose:
                     print(f"  stage {sid} [{owner}/judge] -> ОТКАЗ: {rec['reason_text']}")
         else:
-            result, writer_refusal = _writer_stage(provider, prompt, sid, state, run_dir, bud)
+            written, writer_refusal = _writer_stage(provider, prompt, sid, state, run_dir, bud)
             if writer_refusal:
                 break
+            # Без отказа `_writer_stage` отдаёт ответ провайдера (Provider -> str) как есть.
+            result = cast(str, written)
 
         # опубликовать результат стадии (это и есть handoff-артефакт)
         out = run_dir / f"stage-{sid}.md"
@@ -423,7 +447,7 @@ def run_workflow(workflow_id: str, task_text: str, child_root: Path,
     return state, run_dir
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     if len(argv) >= 3 and argv[1] == "run":
         rest = list(argv[2:])
         collect = "--collect-evidence" in rest
@@ -432,19 +456,20 @@ def main(argv):
         for fl in ("--collect-evidence", "--fresh", "--resume"):
             while fl in rest:
                 rest.remove(fl)
-        gate_evidence = None
+        gate_evidence: JsonDict | None = None
         if "--evidence" in rest:            # JSON по schemas/gate-evidence.schema.json (валидируется)
             i = rest.index("--evidence")
             from ai_ops_kit.gates import gate_executor
             gate_evidence = gate_executor.load_evidence(rest[i + 1])
             del rest[i:i + 2]
         # провайдер: mock (по умолчанию, офлайн) | anthropic | openai (живая модель по ключу env)
-        prov_name, model = "mock", None
+        prov_name = "mock"
+        model: str | None = None
         if "--provider" in rest:
             i = rest.index("--provider"); prov_name = rest[i + 1]; del rest[i:i + 2]
         if "--model" in rest:
             i = rest.index("--model"); model = rest[i + 1]; del rest[i:i + 2]
-        workitem_id = None
+        workitem_id: str | None = None
         if "--workitem-id" in rest:
             i = rest.index("--workitem-id"); workitem_id = rest[i + 1]; del rest[i:i + 2]
         provider = make_provider(prov_name, model)
