@@ -272,6 +272,14 @@ extra_checks = true
 # сборка ложилась в существующий CHANGELOG и её находил извлекатель записок в release.yml (`## [ver]`).
 # Вставка идёт под маркер `<!-- towncrier release notes start -->` (в CHANGELOG.md, сразу под
 # `## [Unreleased]`) — так новый раздел встаёт под Unreleased и над прошлой версией.
+[tool.coverage.run]
+# #1558 (замер 18.11.2026): 349 функций кита показывали 0% покрытия, 115 из них в валидаторах, —
+# тесты исполняют их отдельным процессом (`python3 -m ...`, `subprocess.run`), а замер видел только
+# процесс pytest. `patch = subprocess` (coverage.py >= 7.10) подхватывает дочерние процессы Python
+# и сливает их данные; источник (`--cov=...`) и пол покрытия задаются в nightly-coverage, не здесь.
+# Дочерний процесс с очищенным окружением (env={}) по-прежнему не учитывается — честно непокрыт.
+patch = ["subprocess"]
+
 [tool.towncrier]
 directory = "newsfragments"
 filename = "CHANGELOG.md"
