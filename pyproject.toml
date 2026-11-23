@@ -229,7 +229,8 @@ files = ["ai_ops_kit/shared", "ai_ops_kit/kernel", "ai_ops_kit/engine/run_contex
          "ai_ops_kit/providers/orchestrator_http.py", "ai_ops_kit/providers/provider_errors.py",
          "ai_ops_kit/providers/response_contract.py", "ai_ops_kit/providers/orchestrator_usage.py",
          "ai_ops_kit/providers/orchestrator_providers.py", "ai_ops_kit/providers/provider_calls.py",
-         "ai_ops_kit/providers/provider_writer_lock.py", "ai_ops_kit/providers/model_router.py"]
+         "ai_ops_kit/providers/provider_writer_lock.py", "ai_ops_kit/providers/model_router.py",
+         "ai_ops_kit/providers/orchestrator.py"]
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
@@ -260,6 +261,8 @@ module = [
     "ai_ops_kit.providers.provider_writer_lock",
     # Роутер моделей: роль -> квалифицированная модель, writer≠judge (#1412, шестой срез).
     "ai_ops_kit.providers.model_router",
+    # Оркестратор workflow: стадии, writer, reviewer, gates (#1412, седьмой срез).
+    "ai_ops_kit.providers.orchestrator",
 ]
 # Полный набор --strict mypy 2.3.1, развёрнутый по модулям: strict=true в override
 # этой версии протекает в global options. warn_redundant_casts — только global (выше).

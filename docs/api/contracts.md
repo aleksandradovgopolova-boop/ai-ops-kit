@@ -192,6 +192,20 @@ Anthropic/OpenAI-совместимых вендоров и `claude -p`, `for_co
 все три значения, либо ни одного. `orchestrator` вместе с сигнатурами `skill_context` и
 `gate_executor` — следующий срез.
 
+### Седьмой срез: оркестратор workflow
+
+`providers.orchestrator` (стадии workflow, writer и judge, handoff, гейты, TaskState) переведён
+под strict. TaskState, записи реестров и гейт-отчёт — `JsonDict`; провайдер — `Provider`,
+бюджет — `Budget` или его словарь, как и прежде. Для этого сигнатуры получили помощники
+из нестрогих модулей: `skill_context.resolve_skills` / `runtime_skill_resolver` и
+`gates.gate_evidence.load_evidence` / `extract_reviewer_json`. Сами эти модули под strict
+не переводились.
+
+Поведение не менялось. Ответ writer-стадии без отказа приводится к `str` через `cast`:
+`_writer_stage` отдаёт ответ провайдера как есть, а тип провайдера — `str`.
+Остались codex-адаптеры (`codex_native`, `codex_transport`, `codex_native_hook`) и учёт
+стоимости (`cost_account`, `cost_method`).
+
 ### Решение по Pydantic v2
 
 Решение этого среза: **не внедрять Pydantic**. Сравнение сделано с существующими

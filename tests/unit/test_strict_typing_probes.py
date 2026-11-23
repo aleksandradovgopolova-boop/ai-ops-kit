@@ -34,6 +34,8 @@ from ai_ops_kit.providers.orchestrator_providers import (
     ClaudeLookup, autoresolve_enabled, claude_lookup, print_provider_resolution, resolve_provider,
 )
 from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
+from pathlib import Path as _Path
+from ai_ops_kit.providers.orchestrator import build_role_prompt, load_state, run_workflow
 from ai_ops_kit.providers.model_router import check_independence, escalation_decision, plan_run, writer_tier
 from ai_ops_kit.providers.provider_calls import Provider, for_contract, make_claude_cli_provider, make_provider
 from ai_ops_kit.providers.provider_writer_lock import _writer_serialization_lock as writer_lock, writer_lock_busy
@@ -143,6 +145,13 @@ route_plan: dict[str, Any] = plan_run({"roles": {}}, [], {}, signals={"task_type
 tier: dict[str, str] = writer_tier({"risk": "high"})
 independence: dict[str, Any] = check_independence(route_plan, escalations={"code_review": "kimi-k2"})
 next_step: dict[str, Any] = escalation_decision("code_review", 0, "reviewer_abstain", {"escalation_policy": {}})
+# Оркестратор workflow (#1412, седьмой срез)
+saved: dict[str, Any] | None = load_state(_Path("run"))
+role_prompt: str = build_role_prompt({"id": "s1"}, "planner", {}, "task", {"stage-a": "text"},
+                                     skill_bodies={})
+run_state, run_dir = run_workflow("quick", "task", _Path("."), provider=mock_fn, verbose=False,
+                                  budget={"max_model_calls": 3}, gate_ids=["g1"])
+run_dir_name: str = run_dir.name
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -163,7 +172,7 @@ PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.prov
                       "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage",
                       "ai_ops_kit.shared.lifecycle_store", "ai_ops_kit.providers.orchestrator_providers",
                       "ai_ops_kit.providers.provider_calls", "ai_ops_kit.providers.provider_writer_lock",
-                      "ai_ops_kit.providers.model_router")
+                      "ai_ops_kit.providers.model_router", "ai_ops_kit.providers.orchestrator")
 
 
 def _mypy(tmp_path, source):
@@ -251,6 +260,11 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('tier: dict[str, str]', 'tier: dict[str, int]', '[assignment]'),
     ('escalations={"code_review": "kimi-k2"}', 'escalations={"code_review": 2}', '[dict-item]'),
     ('escalation_decision("code_review", 0,', 'escalation_decision("code_review", "0",', '[arg-type]'),
+    ('saved: dict[str, Any] | None', 'saved: dict[str, Any]', '[assignment]'),
+    ('{"stage-a": "text"}', '{"stage-a": 1}', '[dict-item]'),
+    ('provider=mock_fn, verbose=False', 'provider="mock", verbose=False', '[arg-type]'),
+    ('gate_ids=["g1"])', 'gate_ids="g1")', '[arg-type]'),
+    ('run_dir_name: str', 'run_dir_name: int', '[assignment]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),
