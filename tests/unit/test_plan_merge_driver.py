@@ -206,7 +206,7 @@ def test_end_to_end_real_git_merge(tmp_path):
     # регистрируем драйвер, указывая на скрипт кита прямо (без доставки)
     script = str(PKG_ROOT / "ai_ops_kit" / "planning" / "plan_merge_driver.py")
     _git(root, "config", "merge.ai-ops-plan.name", "ai ops plan")
-    _git(root, "config", "merge.ai-ops-plan.driver", f"python3 {script} %O %A %B")
+    _git(root, "config", "merge.ai-ops-plan.driver", drv.driver_command(script))
 
     _git(root, "checkout", "-qb", "ours")
     plan.write_text(BASE + "  - id: work-ours\n    title: t\n", encoding="utf-8")
@@ -237,7 +237,7 @@ def test_end_to_end_conflict_on_same_id(tmp_path):
     _git(root, "commit", "-qm", "base")
     base_branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
     script = str(PKG_ROOT / "ai_ops_kit" / "planning" / "plan_merge_driver.py")
-    _git(root, "config", "merge.ai-ops-plan.driver", f"python3 {script} %O %A %B")
+    _git(root, "config", "merge.ai-ops-plan.driver", drv.driver_command(script))
 
     _git(root, "checkout", "-qb", "ours")
     plan.write_text(BASE.replace("value: high", "value: OURS"), encoding="utf-8")
@@ -251,6 +251,49 @@ def test_end_to_end_conflict_on_same_id(tmp_path):
                          capture_output=True, text=True)
     assert res.returncode != 0, "конфликтный merge должен вернуть ненулевой код"
     assert "<<<<<<<" in plan.read_text(encoding="utf-8"), "человек должен получить обычные маркеры"
+
+
+def test_driver_command_quotes_only_unsafe_paths():
+    """Путь скрипта экранируется для shell, которым git зовёт драйвер (#1569).
+
+    Безопасный путь остаётся байт-в-байт прежним: уже записанные в git config дочек значения
+    сверяются точным сравнением (session_prepared_update), и миграция им не нужна."""
+    delivered = ".ai/managed/ai_ops_kit/planning/plan_merge_driver.py"
+    assert drv.driver_command(delivered) == f"python3 {delivered} %O %A %B"
+    assert drv.driver_command("kit copy/it's.py") == "python3 'kit copy/it'\"'\"'s.py' %O %A %B"
+
+
+def test_end_to_end_merge_with_space_in_paths(tmp_path):
+    """Репозиторий и скрипт драйвера в папках с пробелом: install_for_repo + реальный git merge
+    сводят непересекающиеся правки без конфликта (#1569: раньше shell рвал путь на два аргумента)."""
+    home = tmp_path / "AI OPS"
+    home.mkdir()
+    root = _make_repo(home)
+    plan = root / "planning" / "plan.yaml"
+    plan.parent.mkdir()
+    plan.write_text(BASE, encoding="utf-8")
+    _git(root, "add", "-A")
+    _git(root, "commit", "-qm", "base")
+    base_branch = _git(root, "rev-parse", "--abbrev-ref", "HEAD").stdout.strip()
+    script = root / "kit tools" / "plan_merge_driver.py"
+    script.parent.mkdir()
+    script.write_bytes((PKG_ROOT / "ai_ops_kit" / "planning" / "plan_merge_driver.py").read_bytes())
+    (root / ".git" / "info" / "exclude").write_text("kit tools/\n", encoding="utf-8")
+    assert drv.install_for_repo(str(root), script_rel="kit tools/plan_merge_driver.py") == 0
+
+    _git(root, "checkout", "-qb", "ours")
+    plan.write_text(BASE + "  - id: work-ours\n    title: t\n", encoding="utf-8")
+    _git(root, "commit", "-qam", "ours")
+    _git(root, "checkout", "-q", base_branch)
+    _git(root, "checkout", "-qb", "theirs")
+    plan.write_text(BASE + "  - id: work-theirs\n    title: t\n", encoding="utf-8")
+    _git(root, "commit", "-qam", "theirs")
+
+    res = subprocess.run(["git", "-C", str(root), "merge", "ours", "-m", "m"],
+                         capture_output=True, text=True)
+    assert res.returncode == 0, f"merge не прошёл: {res.stdout}\n{res.stderr}"
+    wids = [w["id"] for w in yaml.safe_load(plan.read_text(encoding="utf-8"))["work"]]
+    assert "work-ours" in wids and "work-theirs" in wids
 
 
 # ── проводка установщика ────────────────────────────────────────────────────────────────────────
@@ -269,6 +312,8 @@ def test_installer_registers_driver(tmp_path):
     assert status == "registered"
     got = _git(root, "config", "--get", "merge.ai-ops-plan.driver").stdout.strip()
     assert "plan_merge_driver.py" in got and "%O %A %B" in got
+    # #1569: значение для доставленного пути не изменилось — у дочек нечего мигрировать.
+    assert got == f"python3 {mod.DELIVERED} %O %A %B" == drv.driver_command(mod.DELIVERED)
 
 
 def test_install_for_repo_uses_local_attributes(tmp_path):

@@ -171,7 +171,7 @@ def _python():
 
 
 PROBE = """
-import importlib.util, json, hashlib, sys, tempfile, shutil
+import importlib.util, json, hashlib, shlex, sys, tempfile, shutil
 from pathlib import Path
 entry = Path(sys.argv[1]) / 'installer/ai_ops.py'
 spec = importlib.util.spec_from_file_location('prepared_stock_installer', entry)
@@ -218,7 +218,7 @@ print(json.dumps({'paths': [str(p.relative_to(Path.cwd())) for p in paths],
  'hook_changes': hook_changes,
  'plan': {k: plan[k] for k in ('workitem_id', 'base_workflow', 'gates', 'task_hash')},
  'merge_driver': {'merge.' + driver.DRIVER_NAME + '.name': 'AI Ops: структурное слияние planning/plan.yaml',
-                  'merge.' + driver.DRIVER_NAME + '.driver': 'python3 ' + driver.DELIVERED + ' %O %A %B'},
+                  'merge.' + driver.DRIVER_NAME + '.driver': 'python3 ' + shlex.quote(driver.DELIVERED) + ' %O %A %B'},
  'managed': {rel: hashlib.sha256(core.managed_content(rel, p.read_bytes())).hexdigest()
              for p, rel in core.managed_set()}}))
 """

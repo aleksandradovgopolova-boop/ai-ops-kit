@@ -31,6 +31,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -249,6 +250,18 @@ def _run_driver(ancestor, current, other):
 
 
 _DRIVER_NAME = "ai-ops-plan"
+
+
+def driver_command(script):
+    """Значение `merge.ai-ops-plan.driver` для скрипта `script`. -> str.
+
+    Git исполняет эту строку через shell, поэтому путь экранируется: в папке с пробелом
+    (`~/Desktop/AI OPS`) неэкранированный путь рвался на два аргумента, драйвер не запускался,
+    и человек молча получал обычный конфликт вместо структурного слияния (#1569). Безопасный путь
+    `shlex.quote` не меняет — уже записанные значения у дочек остаются байт-в-байт прежними.
+    """
+    return f"python3 {shlex.quote(str(script))} %O %A %B"
+
 _PLAN_PATH = "planning/plan.yaml"
 _ATTR_RULE = f"{_PLAN_PATH} merge={_DRIVER_NAME}"
 
@@ -281,7 +294,7 @@ def install_for_repo(root=".", script_rel="ai_ops_kit/planning/plan_merge_driver
             with open(attr_abs, "a", encoding="utf-8") as f:
                 f.write(sep + _ATTR_RULE + "\n")
         _git("config", f"merge.{_DRIVER_NAME}.name", "AI Ops: структурное слияние planning/plan.yaml")
-        _git("config", f"merge.{_DRIVER_NAME}.driver", f"python3 {script_rel} %O %A %B")
+        _git("config", f"merge.{_DRIVER_NAME}.driver", driver_command(script_rel))
     except (subprocess.CalledProcessError, OSError) as exc:
         sys.stderr.write(f"plan_merge_driver --install: git недоступен ({exc})\n")
         return 1

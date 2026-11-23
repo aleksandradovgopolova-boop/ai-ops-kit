@@ -9,6 +9,7 @@
 """
 from __future__ import annotations
 
+import shlex
 import subprocess
 from pathlib import Path
 
@@ -27,7 +28,8 @@ def ensure_plan_merge_driver(root):
     root = Path(root)
     if not (root / ".git").exists():
         return "skipped-no-git"
-    driver_cmd = f"python3 {DELIVERED} %O %A %B"
+    # Git зовёт драйвер через shell — путь экранируется (#1569); для DELIVERED это no-op.
+    driver_cmd = f"python3 {shlex.quote(DELIVERED)} %O %A %B"
     try:
         subprocess.run(["git", "-C", str(root), "config", f"merge.{DRIVER_NAME}.name",
                         "AI Ops: структурное слияние planning/plan.yaml"],
