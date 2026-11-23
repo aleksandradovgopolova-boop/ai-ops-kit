@@ -16,6 +16,18 @@ from pathlib import Path
 GIT_TIMEOUT_DEFAULT = 90   # сек: обычные plumbing-команды завершаются мгновенно; потолок против зависаний
 
 
+_EXIT_GRACE = 0.5   # сек: сколько ждать завершения ребёнка, ответившего на killpg ESRCH/EPERM
+
+
+def _exited(process: subprocess.Popen[str]) -> bool:
+    """Завершился ли ребёнок — с коротким ожиданием: на macOS EPERM приходит посреди выхода."""
+    try:
+        process.wait(timeout=_EXIT_GRACE)
+    except subprocess.TimeoutExpired:
+        return False
+    return True
+
+
 def raw_group(args: list[str], *, cwd: str | Path | None = None,
               timeout: float = GIT_TIMEOUT_DEFAULT) -> subprocess.CompletedProcess[str]:
     """Дословный вывод, конечное ожидание и cleanup собственной POSIX Git-группы."""
@@ -26,9 +38,13 @@ def raw_group(args: list[str], *, cwd: str | Path | None = None,
         finally:
             try:
                 os.killpg(process.pid, signal.SIGKILL)
-            except ProcessLookupError:
-                if process.poll() is None:
-                    raise  # отсутствие группы допустимо только для завершённого ребёнка
+            except (ProcessLookupError, PermissionError):
+                # Группы нет (ESRCH) — или, на macOS, лидер как раз завершается, и тогда ответ
+                # EPERM (#1575, замер: сразу после него poll() ещё None, через миг — код выхода).
+                # Оба допустимы только для ЗАВЕРШИВШЕГОСЯ ребёнка; иначе исходный TimeoutExpired
+                # подменялся бы PermissionError. Живой ребёнок после короткого ожидания — отказ.
+                if not _exited(process):
+                    raise
             process.wait()
     return subprocess.CompletedProcess(process.args, process.returncode, stdout, stderr)
 
