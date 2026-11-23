@@ -21,8 +21,11 @@ CLI:  cost_account.py <budget.(yaml|json)> <run_cost.(json|yaml)> [--iterations 
 from __future__ import annotations
 import json
 import math
+import os
 import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -34,6 +37,9 @@ if str(PKG) not in sys.path:
 
 from ai_ops_kit.shared.usage_ledger import complete_cost, cost_value  # noqa: E402
 
+# Бюджеты, расход прогона и попытки — открытые YAML/JSON-объекты.
+JsonDict = dict[str, Any]
+
 _MAP = {
     "max_model_calls": "calls",
     "max_tokens": "_tokens",
@@ -43,17 +49,17 @@ _MAP = {
 }
 
 
-def _money(value):
+def _money(value: object) -> float | None:
     """Конечная неотрицательная денежная величина; неизвестное не равно нулю."""
     return cost_value(value)
 
 
-def total_call_cost(values):
+def total_call_cost(values: Iterable[object]) -> float | None:
     """Полная цена вызовов известна только при конечной цене каждого вызова."""
     return complete_cost(values)
 
 
-def _measured(run_cost: dict, iterations):
+def _measured(run_cost: Mapping[str, Any], iterations: int | None) -> JsonDict:
     tokens = None
     it = run_cost.get("input_tokens")
     ot = run_cost.get("output_tokens")
@@ -64,15 +70,17 @@ def _measured(run_cost: dict, iterations):
             "_iterations": iterations}
 
 
-def reconcile(budget: dict, run_cost: dict, iterations=None) -> dict:
+def reconcile(budget: Mapping[str, Any], run_cost: Mapping[str, Any] | None,
+              iterations: int | None = None) -> JsonDict:
     limits = budget.get("limits") or {}
     spent = _measured(run_cost or {}, iterations)
-    dims = {}
+    dims: dict[str, JsonDict] = {}
     over_any = exhausted_any = False
     for dim, limit in limits.items():
         if limit is None:
             continue
-        sp = spent.get(_MAP.get(dim))
+        key = _MAP.get(dim)                     # неизвестное измерение -> не измерено
+        sp = spent.get(key) if key is not None else None
         if sp is None:
             dims[dim] = {"limit": limit, "spent": None, "measured": False}
             continue
@@ -88,7 +96,7 @@ def reconcile(budget: dict, run_cost: dict, iterations=None) -> dict:
             "on_exhaustion": budget.get("on_exhaustion"), "verdict": verdict, "dimensions": dims}
 
 
-def cost_per_successful_change(attempt: dict) -> dict:
+def cost_per_successful_change(attempt: Mapping[str, Any]) -> JsonDict:
     """v3.7 (ADR-004): стоимость ОДНОГО успешно доставленного и ПРОВЕРЕННОГО изменения.
     Дешёвая модель бывает дорогой: повторы, битый structured output, длинные fix-loop, эскалации,
     ручное вмешательство. attempt: {calls_cost, retry_cost, reviewer_cost, escalation_cost, latency_s,
@@ -108,7 +116,7 @@ def cost_per_successful_change(attempt: dict) -> dict:
                      else "нет успешного проверенного изменения -> стоимость = потери (не экономия)")}
 
 
-def human_attention_cost(root=None) -> "float | None":
+def human_attention_cost(root: str | os.PathLike[str] | None = None) -> float | None:
     """Ставка внимания человека ($/вмешательство) из дочернего `.ai-ops.yaml`; не задана -> None.
 
     Внимание человека — org-специфичная цена (сколько стоит один раз оторвать человека на ревью/
@@ -132,7 +140,8 @@ def human_attention_cost(root=None) -> "float | None":
     return None
 
 
-def cost_per_successful_outcome(attempt: dict, *, human_attention_cost_usd=None) -> dict:
+def cost_per_successful_outcome(attempt: Mapping[str, Any], *,
+                                human_attention_cost_usd: object = None) -> JsonDict:
     """Нагруженная стоимость успешного ИСХОДА: AI-стоимость + внимание человека (#637).
 
     Расширяет `cost_per_successful_change`: к четырём монетизированным AI-компонентам добавляется
@@ -152,8 +161,7 @@ def cost_per_successful_outcome(attempt: dict, *, human_attention_cost_usd=None)
     ai_total = cost_per_successful_change(attempt)["total_cost"]
     mi = attempt.get("manual_interventions")
     mi = mi if isinstance(mi, int) and not isinstance(mi, bool) and mi >= 0 else None
-    rate = human_attention_cost_usd
-    rate = _money(rate)
+    rate = _money(human_attention_cost_usd)
     try:
         human = _money(mi * rate) if (mi is not None and rate is not None) else None
     except OverflowError:
@@ -183,7 +191,8 @@ def cost_per_successful_outcome(attempt: dict, *, human_attention_cost_usd=None)
             "cost_per_outcome": (loaded if delivered else None), "note": note}
 
 
-def roid_outcome_report(cost, latency, manual_interventions, delivered, root=None) -> dict:
+def roid_outcome_report(cost: object, latency: float | None, manual_interventions: object, delivered: bool,
+                        root: str | os.PathLike[str] | None = None) -> JsonDict:
     """Готовая секция `rep["roid_outcome"]` для отчёта прогона (#637) — вся сборка в providers.
 
     Тонкая обёртка: собирает attempt из данных прогона, берёт ставку внимания из дочернего конфига
@@ -199,7 +208,7 @@ def roid_outcome_report(cost, latency, manual_interventions, delivered, root=Non
             "delivered_verified": o["delivered_verified"], "note": o["note"]}
 
 
-def estimate_vs_actual(estimate: dict, actual) -> dict:
+def estimate_vs_actual(estimate: Mapping[str, Any] | None, actual: object) -> JsonDict:
     """Пост-фактум: «работа стоила $X вместо ожидаемых $Y» — оценка ДО прогона против факта (#637).
 
     estimate — из `economic_preflight` (`checks["economic_budget"]`): {estimate_status, cost_median,
@@ -233,7 +242,7 @@ def estimate_vs_actual(estimate: dict, actual) -> dict:
             "cost_max_usd": cmax, "over_max": over_max, "status": "measured", "note": note}
 
 
-def compare_configs(configs) -> dict:
+def compare_configs(configs: Iterable[Mapping[str, Any]]) -> JsonDict:
     """Сравнить конфигурации (reference vs economical): ранжировать ТОЛЬКО доставившие+проверенные по
     cost_per_change (безопасность важнее экономии — не-доставившие исключаются, не считаются «дешёвыми»).
     configs: [{name, attempt}]. -> {ranking, cheapest_qualified, excluded}."""
@@ -246,12 +255,12 @@ def compare_configs(configs) -> dict:
                                       if r["delivered_verified"] and r["cost_per_change"] is None]}
 
 
-def _load(p: Path):
+def _load(p: Path) -> Any:
     t = p.read_text(encoding="utf-8")
     return yaml.safe_load(t) if p.suffix in (".yaml", ".yml") else json.loads(t)
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     args = [a for a in argv if not a.startswith("-")]
     if len(args) < 2:
         print(__doc__)

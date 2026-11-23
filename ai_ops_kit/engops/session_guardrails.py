@@ -17,8 +17,11 @@ CLI:  session_guardrails.py <child_root> [--workitem WID] [--context N] [--next-
 from __future__ import annotations
 
 import json
+import os
 import sys
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.engops import session_telemetry  # noqa: E402
@@ -70,7 +73,7 @@ OUTCOMES = ("continue", "compact", "clear", "new_session", "defer")
 COMMANDED_OUTCOMES = ("compact", "clear", "new_session")
 
 
-def load_policy(child_root):
+def load_policy(child_root: str | os.PathLike[str]) -> dict[str, Any]:
     """SessionEconomyPolicy из .ai-ops.yaml (session_economy), поверх дефолтов."""
     pol = dict(SESSION_ECONOMY_DEFAULTS)
     cfg_p = Path(child_root) / ".ai-ops.yaml"
@@ -85,7 +88,7 @@ def load_policy(child_root):
     return pol
 
 
-def classify_context(tokens, policy=None):
+def classify_context(tokens: float | None, policy: Mapping[str, Any] | None = None) -> str:
     """Порог гигиены контекста. None -> unknown (честно: без числа не классифицируем)."""
     p = policy or SESSION_ECONOMY_DEFAULTS
     if tokens is None:
@@ -99,7 +102,7 @@ def classify_context(tokens, policy=None):
     return "normal"
 
 
-def classify_session_spend(total_tokens, policy=None):
+def classify_session_spend(total_tokens: float | None, policy: Mapping[str, Any] | None = None) -> str:
     """Потолок РАСХОДА СЕССИИ. None -> unknown (без числа не классифицируем, и это не «норма»).
 
     Пороги контекста отвечают на «сколько сессия читает СЕЙЧАС», этот — на «сколько она прочитала

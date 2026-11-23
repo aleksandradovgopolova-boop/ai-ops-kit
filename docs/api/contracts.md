@@ -206,6 +206,18 @@ Anthropic/OpenAI-совместимых вендоров и `claude -p`, `for_co
 Остались codex-адаптеры (`codex_native`, `codex_transport`, `codex_native_hook`) и учёт
 стоимости (`cost_account`, `cost_method`).
 
+### Восьмой срез: учёт стоимости
+
+`providers.cost_account` (сверка бюджета с фактом, цена успешного изменения и исхода,
+оценка против факта) и `providers.cost_method` (советы по методу работы и их отрисовка)
+переведены под strict. Записи прогона и советы — `JsonDict`; входы, которые модули только
+читают, — `Mapping`. Сигнатуры получили помощники из нестрогих модулей
+`engops.session_guardrails`, `engops.delegation_advisor` и `engops.session_telemetry`;
+сами они под strict не переводились.
+
+Поведение не менялось. Остались codex-адаптеры (`codex_native`, `codex_transport`,
+`codex_native_hook`).
+
 ### Решение по Pydantic v2
 
 Решение этого среза: **не внедрять Pydantic**. Сравнение сделано с существующими

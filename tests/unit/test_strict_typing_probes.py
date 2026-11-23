@@ -35,6 +35,8 @@ from ai_ops_kit.providers.orchestrator_providers import (
 )
 from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
 from pathlib import Path as _Path
+from ai_ops_kit.providers.cost_account import cost_per_successful_outcome, estimate_vs_actual, reconcile
+from ai_ops_kit.providers.cost_method import advise as cost_advise, render as cost_render
 from ai_ops_kit.providers.orchestrator import build_role_prompt, load_state, run_workflow
 from ai_ops_kit.providers.model_router import check_independence, escalation_decision, plan_run, writer_tier
 from ai_ops_kit.providers.provider_calls import Provider, for_contract, make_claude_cli_provider, make_provider
@@ -152,6 +154,12 @@ role_prompt: str = build_role_prompt({"id": "s1"}, "planner", {}, "task", {"stag
 run_state, run_dir = run_workflow("quick", "task", _Path("."), provider=mock_fn, verbose=False,
                                   budget={"max_model_calls": 3}, gate_ids=["g1"])
 run_dir_name: str = run_dir.name
+# Учёт стоимости (#1412, восьмой срез)
+account: dict[str, Any] = reconcile({"limits": {"max_model_calls": 3}}, {"calls": 2}, iterations=1)
+outcome: dict[str, Any] = cost_per_successful_outcome({"calls_cost": 0.4}, human_attention_cost_usd=5)
+delta: dict[str, Any] = estimate_vs_actual({"estimate_status": "measured", "cost_median": 1.0}, 1.2)
+advice: list[dict[str, Any]] = cost_advise({"task_type": "QUICK"}, child_root=".")
+advice_text: str = cost_render(advice)
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -172,7 +180,8 @@ PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.prov
                       "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage",
                       "ai_ops_kit.shared.lifecycle_store", "ai_ops_kit.providers.orchestrator_providers",
                       "ai_ops_kit.providers.provider_calls", "ai_ops_kit.providers.provider_writer_lock",
-                      "ai_ops_kit.providers.model_router", "ai_ops_kit.providers.orchestrator")
+                      "ai_ops_kit.providers.model_router", "ai_ops_kit.providers.orchestrator",
+                      "ai_ops_kit.providers.cost_account", "ai_ops_kit.providers.cost_method")
 
 
 def _mypy(tmp_path, source):
@@ -265,6 +274,12 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('provider=mock_fn, verbose=False', 'provider="mock", verbose=False', '[arg-type]'),
     ('gate_ids=["g1"])', 'gate_ids="g1")', '[arg-type]'),
     ('run_dir_name: str', 'run_dir_name: int', '[assignment]'),
+    ('iterations=1)', 'iterations="1")', '[arg-type]'),
+    ('account: dict[str, Any]', 'account: list[Any]', '[assignment]'),
+    ('{"calls_cost": 0.4}, human', '["calls_cost"], human', '[arg-type]'),
+    ('advice: list[dict[str, Any]]', 'advice: dict[str, Any]', '[assignment]'),
+    ('advice_text: str', 'advice_text: int', '[assignment]'),
+    ('child_root=".")', 'child_root=1)', '[arg-type]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),

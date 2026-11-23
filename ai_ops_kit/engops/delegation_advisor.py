@@ -21,6 +21,8 @@ from __future__ import annotations
 
 import json
 import sys
+from collections.abc import Mapping
+from typing import Any
 
 RETURN_TO_MAIN = ["краткий вывод", "релевантные пути", "evidence", "открытые вопросы", "следующий шаг"]
 DO_NOT_RETURN = ["полный transcript разведки", "все прочитанные файлы", "длинные необработанные логи",
@@ -29,7 +31,8 @@ DO_NOT_RETURN = ["полный transcript разведки", "все прочи�
 DEFAULT_THRESHOLDS = {"exploration_files": 8, "compare_files": 5, "log_lines": 500}
 
 
-def advise(signals, thresholds=None):
+def advise(signals: Mapping[str, Any] | None,
+           thresholds: Mapping[str, Any] | None = None) -> list[dict[str, Any]]:
     """-> список рекомендаций делегирования. Каждая: {trigger, reason, delegate_to, return_to_main, do_not_return}."""
     s = dict(signals or {})
     t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
