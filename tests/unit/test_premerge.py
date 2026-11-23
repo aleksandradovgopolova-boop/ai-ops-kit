@@ -24,6 +24,7 @@ class Forge:
                         status='completed', conclusion='success', pull_requests=[{'number': 7, 'head': {'sha': SHA}, 'base': {'sha': BASE}}])
         self.jobs = {w: [dict(name=n, status='completed', conclusion='success')
                          for n in names] for w, names in POLICY.items()}
+        self.main_ref = {'ref': 'refs/heads/main', 'object': {'type': 'commit', 'sha': BASE}}
         self.second_head = None
         self.reads = 0
 
@@ -32,6 +33,8 @@ class Forge:
         if args[0] == 'pr':
             return ''
         path = args[1]
+        if path == f'repos/{REPO}/git/ref/heads/main':
+            return self.main_ref
         if '/pulls/' in path:
             self.reads += 1
             value = copy.deepcopy(self.pr)
@@ -231,6 +234,7 @@ def test_real_subprocess_cli_uses_fake_gh_and_defaults_to_reads(receipt, tmp_pat
     responses = {}
     policy = json.loads((Path(premerge.__file__).resolve().parents[2] / 'quality/premerge-checks.json').read_text())
     responses[f'repos/{REPO}/pulls/7'] = forge.pr
+    responses[f'repos/{REPO}/git/ref/heads/main'] = forge.main_ref
     for i, (workflow, names) in enumerate(policy.items(), 1):
         responses[f'repos/{REPO}/actions/workflows/{workflow}/runs?head_sha={SHA}&event=pull_request&per_page=100&page=1'] = {
             'total_count': 1, 'workflow_runs': [dict(forge.run, id=i, path='.github/workflows/' + workflow)]}
@@ -254,7 +258,7 @@ def test_real_subprocess_cli_uses_fake_gh_and_defaults_to_reads(receipt, tmp_pat
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(result.stdout)['status'] == 'admitted'
     recorded = [json.loads(line) for line in log.read_text().splitlines()]
-    assert len(recorded) == 7 and all(c[0] == 'api' for c in recorded)
+    assert len(recorded) == 8 and all(c[0] == 'api' for c in recorded)
 
 
 def test_ci_for_previous_base_cannot_admit_new_delta(receipt):
@@ -283,3 +287,27 @@ def test_transport_failure_cannot_fall_back_to_cached_evidence(receipt):
         premerge.execute(REPO, 7, SHA, receipt, hashlib.sha256(receipt.read_bytes()).hexdigest(),
                          POLICY, call, merge=True)
     assert not any(c[0] == 'pr' for c in forge.calls)
+
+
+def test_stale_pr_base_rejected_despite_green_ci_and_matching_review(receipt):
+    forge = Forge()
+    forge.main_ref['object']['sha'] = 'c' * 40
+    with pytest.raises(premerge.AdmissionError, match='target branch'):
+        invoke(forge, receipt)
+    assert forge.calls[-1] == ['api', f'repos/{REPO}/git/ref/heads/main']
+
+
+def test_target_advances_during_final_admission_preserves_main(receipt):
+    forge = Forge()
+    def call(args):
+        value = forge(args)
+        if forge.reads == 2 and '/jobs?' in args[1]:
+            forge.main_ref['object']['sha'] = 'c' * 40
+        return value
+
+    with pytest.raises(premerge.AdmissionError, match='target branch'):
+        premerge.execute(REPO, 7, SHA, receipt, hashlib.sha256(receipt.read_bytes()).hexdigest(),
+                         POLICY, call, merge=True)
+    assert forge.reads == 2
+    assert forge.main_ref['object']['sha'] != BASE
+    assert not any(args[0] == 'pr' for args in forge.calls)
