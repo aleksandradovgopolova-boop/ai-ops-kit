@@ -231,6 +231,30 @@ UNMEASURABLE_REASON = ("в покрытии нет исполняемых стр
                        "исключено из coverage или состоит из docstring")
 
 
+def _stem(key: str) -> str:
+    return key.split("@", 1)[0]
+
+
+def successors(rows, frozen: dict) -> dict:
+    """{текущий ключ: прежний ключ} для правок замороженных функций (#1387, 23.11.2026).
+
+    Структура входит в ключ, поэтому правка функции даёт новый ключ. Прежнее значение
+    наследуется, только если соответствие однозначно: в базе ровно одна запись с тем же
+    «файл::имя», её ключа больше нет в коде, и в коде ровно одна функция с этим именем без
+    точного совпадения. Иначе — новый долг, как раньше: угадывать нельзя.
+    """
+    current = {r["key"] for r in rows}
+    orphans, unmatched = {}, {}
+    for key in frozen:
+        if key not in current:
+            orphans.setdefault(_stem(key), []).append(key)
+    for row in rows:
+        if row["key"] not in frozen:
+            unmatched.setdefault(_stem(row["key"]), []).append(row["key"])
+    return {keys[0]: orphans[stem][0] for stem, keys in unmatched.items()
+            if len(keys) == 1 and len(orphans.get(stem, ())) == 1}
+
+
 def analyze(root: Path, evidence: CoverageEvidence | None, frozen: dict,
             declared: dict | None = None) -> dict:
     """Read-only отчёт; raw scores сравниваются до округления.
@@ -240,6 +264,7 @@ def analyze(root: Path, evidence: CoverageEvidence | None, frozen: dict,
     """
     declared = declared or {}
     rows = functions(root)
+    inherited = successors(rows, frozen)
     counts = {}
     for row in rows:
         path = row["path"]
@@ -248,8 +273,10 @@ def analyze(root: Path, evidence: CoverageEvidence | None, frozen: dict,
         state, cov = _function_coverage(row, evidence, counts[path])
         score = crap(row["complexity"], cov) if cov is not None else None
         finding = None
+        if row["key"] in inherited:
+            row["replaces"] = inherited[row["key"]]
         if score is not None and score >= THRESHOLD:
-            limit = frozen.get(row["key"])
+            limit = frozen.get(row["key"], frozen.get(inherited.get(row["key"])))
             if limit is None:
                 finding = "new_debt"
             elif score > limit + 1e-9:
@@ -268,7 +295,8 @@ def analyze(root: Path, evidence: CoverageEvidence | None, frozen: dict,
             "coverage_mode": "line-approximation", "threshold": THRESHOLD,
             "status": "incomplete" if unknown else ("findings" if findings else "measured"),
             "unknown_functions": unknown, "new_or_regressed": findings,
-            "stale_baseline_keys": sorted((set(frozen) | set(declared)) - {r["key"] for r in rows}),
+            "stale_baseline_keys": sorted((set(frozen) | set(declared)) - {r["key"] for r in rows}
+                                          - set(inherited.values())),
             "measurement": evidence.binding if evidence else None, "functions": rows}
 
 
@@ -339,7 +367,13 @@ def _write_baseline(path, result, evidence, previous, reason):
     old = previous.get("functions", {}) if previous else {}
     old_declared = previous.get("unmeasurable", {}) if previous else {}
     declared = {r["key"]: old_declared.get(r["key"], UNMEASURABLE_REASON) for r in rows if r["crap"] is None}
-    raised = {k: v for k, v in doc["functions"].items() if previous is not None and (k not in old or v > old[k] + 1e-9)}
+    inherited = {r["key"]: r["replaces"] for r in rows if r.get("replaces")}
+
+    def limit(key):
+        return old.get(key, old.get(inherited.get(key)))
+
+    raised = {k: v for k, v in doc["functions"].items()
+              if previous is not None and (limit(k) is None or v > limit(k) + 1e-9)}
     raised.update({k: "unmeasurable" for k in declared if previous is not None and k not in old_declared})
     if raised and not (reason and reason.strip()):
         raise ValueError("baseline не записан: новый/выросший долг требует --allow-raise REASON")

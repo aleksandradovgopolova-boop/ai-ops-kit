@@ -380,3 +380,69 @@ def test_malformed_unmeasurable_section_is_refused(tmp_path, value):
     doc["unmeasurable"] = value
     base.write_text(yaml.safe_dump(doc), encoding="utf-8")
     assert run(tmp_path, base) == 2
+
+
+# ── #1387, 23.11.2026: правка замороженной функции сравнивается с её прежним значением ──
+# Структура входит в ключ, поэтому любая правка давала новый ключ и «новый долг» — даже
+# улучшение (замер: 13 из 26 находок за пять дней после заморозки были такими правками).
+
+DEBT = "def f(x):\n    if x and x and x and x and x and x and x and x and x:\n        return {ret}\n    return 0\n"
+
+
+def frozen_debt(tmp_path):
+    p = source(tmp_path, DEBT.format(ret="1"))
+    report, binding = evidence(tmp_path, p, [1, 2, 3, 4], [])
+    base = tmp_path / "frozen.yaml"
+    assert run(tmp_path, base, report, binding, "--write-baseline") == 0
+    return p, base
+
+
+def edit(tmp_path, p, text, executed=(1, 2, 3, 4), missing=()):
+    p.write_text(text, encoding="utf-8")
+    return evidence(tmp_path, p, list(executed), list(missing))
+
+
+def report_rows(tmp_path, base, report, binding):
+    doc = yaml.safe_load(base.read_text())
+    return cs.analyze(tmp_path, cs.load_coverage(tmp_path, report, binding), doc["functions"])["functions"]
+
+
+def test_edit_that_does_not_worsen_a_frozen_function_is_not_new_debt(tmp_path, capsys):
+    p, base = frozen_debt(tmp_path)
+    old_key = next(iter(yaml.safe_load(base.read_text())["functions"]))
+    report, binding = edit(tmp_path, p, DEBT.format(ret="x"))  # структура другая, CRAP тот же
+    row, = report_rows(tmp_path, base, report, binding)
+    assert row["key"] != old_key and row["replaces"] == old_key
+    assert row["finding"] is None
+    assert run(tmp_path, base, report, binding) == 0
+
+
+def test_edit_that_worsens_a_frozen_function_is_a_regression(tmp_path):
+    p, base = frozen_debt(tmp_path)
+    report, binding = edit(tmp_path, p, DEBT.format(ret="x"), executed=(1, 2, 4), missing=(3,))
+    row, = report_rows(tmp_path, base, report, binding)
+    assert row["finding"] == "regression"
+
+
+def test_ambiguous_successor_stays_new_debt(tmp_path):
+    p, base = frozen_debt(tmp_path)
+    report, binding = edit(tmp_path, p, DEBT.format(ret="x") + DEBT.format(ret="x + 1"),
+                           executed=(1, 2, 3, 4, 5, 6, 7, 8))
+    rows = report_rows(tmp_path, base, report, binding)
+    assert [r["finding"] for r in rows] == ["new_debt", "new_debt"]
+
+
+def test_rewriting_baseline_after_a_harmless_edit_needs_no_reason(tmp_path):
+    p, base = frozen_debt(tmp_path)
+    report, binding = edit(tmp_path, p, DEBT.format(ret="x"))
+    assert run(tmp_path, base, report, binding, "--write-baseline") == 0
+    doc = yaml.safe_load(base.read_text())
+    assert len(doc["functions"]) == 1 and "raises" not in doc
+
+
+def test_rewriting_baseline_after_a_worsening_edit_still_needs_a_reason(tmp_path):
+    p, base = frozen_debt(tmp_path)
+    report, binding = edit(tmp_path, p, DEBT.format(ret="x"), executed=(1, 2, 4), missing=(3,))
+    before = base.read_bytes()
+    assert run(tmp_path, base, report, binding, "--write-baseline") == 2
+    assert base.read_bytes() == before
