@@ -37,6 +37,8 @@
     "preserved_paths": { "type": "array", "items": { "type": "string" } },
     "smoke_tests": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
     "backup_ref": { "type": ["string", "null"] },
+    "candidate_head": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$", "description": "Local deferred update commit" },
+    "candidate_base": { "type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$", "description": "Parent of the local deferred update commit" },
     "pull_request": { "type": ["string", "null"], "description": "PR URL if rollout is PR-based" },
     "human_approval_required": { "type": "boolean" },
     "report": { "type": "string" }

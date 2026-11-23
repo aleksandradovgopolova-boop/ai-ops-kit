@@ -324,6 +324,17 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
                                 f"({len(staged)} файлов); рабочее дерево не тронуто "
                                 f"(кроме .ai/runtime/last-update-report.json — в gitignore). "
                                 f"Откройте PR: git push -u origin {branch} && gh pr create --fill")})
+        # Имена веток переиспользуются. В отчёте сохраняем точный созданный коммит
+        # и его родителя для последующей локальной сверки оператором.
+        try:
+            identity = subprocess.run(["git", "-C", str(wt), "rev-parse", "HEAD", "HEAD^@"],
+                                      capture_output=True, text=True, timeout=10, check=True)
+        except (OSError, subprocess.SubprocessError):
+            pass  # Созданная ветка сохраняется. Флот покажет unknown без точных SHA.
+        else:
+            commits = identity.stdout.splitlines()
+            if len(commits) == 2:
+                _rep["candidate_head"], _rep["candidate_base"] = commits
         _core().write_report(_rep)
     finally:
         subprocess.run(["git", "-C", str(_ao().REPO_ROOT), "worktree", "remove", "--force", str(wt)],

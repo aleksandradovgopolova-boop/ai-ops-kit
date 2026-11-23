@@ -226,3 +226,95 @@ def test_fleet_shows_version_observed_workflows_and_owner_overrides(tmp_path):
     version.write_text("4.13.1\n")
     (managed / "extra.txt").write_text("unexpected managed file")
     assert product_registry.kit_state(root)["drift"]["managed"] == "detected"
+
+
+@pytest.fixture
+def deferred_candidate(tmp_path):
+    import hashlib
+    import json
+    import subprocess
+
+    root = tmp_path / "child"
+    version = root / ".ai/managed/VERSION"
+    version.parent.mkdir(parents=True)
+    version.write_text("1.0.0\n")
+    (root / ".ai-ops.yaml").write_text("parent: {installed_version: 1.0.0, update_policy: pr}\n")
+    (version.parent / ".provenance.json").write_text(json.dumps({
+        "schema_version": 1, "package": "ai-first-system", "installed_version": "1.0.0",
+        "managed_root": ".ai/managed", "checksums_file": ".checksums.json"}))
+    (version.parent / ".checksums.json").write_text(json.dumps({
+        "schema_version": 1, "algorithm": "sha256", "managed_root": "managed",
+        "files": {"VERSION": hashlib.sha256(version.read_bytes()).hexdigest()}}))
+
+    def git(*args):
+        return subprocess.run(["git", "-C", str(root), "-c", "core.hooksPath=/dev/null",
+                               "-c", "user.name=fixture", "-c", "user.email=test@example.invalid",
+                               *args], check=True, capture_output=True, text=True).stdout.strip()
+
+    git("init", "-qb", "main")
+    git("add", ".")
+    git("commit", "-qm", "base")
+    branch = "ai-ops/update-v1.1.0"
+    git("checkout", "-qb", branch)
+    version.write_text("1.1.0\n")
+    git("commit", "-qam", "candidate")
+    head = git("rev-parse", "HEAD")
+    git("checkout", "-q", "main")
+    report = root / ".ai/runtime/last-update-report.json"
+    report.parent.mkdir(parents=True)
+    report.write_text(json.dumps({"schema_version": 1, "command": "update", "status": "ok",
+        "from_version": "1.0.0", "to_version": "1.1.0", "applied_in_place": False, "update_policy": "pr",
+        "deferred_to_branch": branch, "candidate_base": git("rev-parse", "HEAD"), "candidate_head": head}))
+    return root, git, report
+
+
+def test_fleet_verifies_local_candidate_without_writing(deferred_candidate, tmp_path):
+    import json
+
+    root, git, report = deferred_candidate
+    doc = json.loads(report.read_text())
+    registry = _registry_file(tmp_path, [{"id": "child", "path": str(root)}])
+    before = {p: p.read_bytes() for p in root.rglob("*") if p.is_file()}
+    kit = product_registry.fleet(registry)["products"][0]["kit"]
+    assert kit["installed_version"] == "1.0.0"
+    assert kit["update_candidate"] == {"state": "local_branch_verified", "target_version": "1.1.0",
+        "branch": doc["deferred_to_branch"], "base": doc["candidate_base"], "head": doc["candidate_head"]}
+    assert doc["deferred_to_branch"] in product_registry.render_kit_state(kit)
+    assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
+
+
+@pytest.mark.parametrize("change", ["legacy", "advanced_base", "reused_branch", "wrong_version",
+                                    "not_deferred", "invalid_report", "wrong_parent", "nested"])
+def test_unbound_update_is_unknown(deferred_candidate, change):
+    import json
+    import shutil
+
+    root, git, report = deferred_candidate
+    doc = json.loads(report.read_text())
+    branch = doc["deferred_to_branch"]
+    if change == "legacy":
+        del doc["candidate_base"]
+        doc["pull_request"] = branch
+    elif change == "advanced_base":
+        git("commit", "--allow-empty", "-qm", "later")
+    elif change == "reused_branch":
+        git("branch", "-f", branch, "HEAD")
+    elif change == "wrong_version":
+        doc["to_version"] = "9.9.9"
+        doc["deferred_to_branch"] = "ai-ops/update-v9.9.9"
+        git("branch", doc["deferred_to_branch"], branch)
+    elif change == "not_deferred":
+        doc["applied_in_place"] = True
+    elif change == "invalid_report":
+        doc["report_read_error"] = "missing"
+    elif change == "wrong_parent":
+        git("branch", "-f", branch, "HEAD")
+        doc["candidate_head"] = doc["candidate_base"]
+    elif change == "nested":
+        child = root / "nested"
+        shutil.copytree(root / ".ai", child / ".ai")
+        shutil.copyfile(root / ".ai-ops.yaml", child / ".ai-ops.yaml")
+        root = child
+        report = child / ".ai/runtime/last-update-report.json"
+    report.write_text(json.dumps(doc))
+    assert product_registry.kit_state(root)["update_candidate"] == {"state": "unknown"}

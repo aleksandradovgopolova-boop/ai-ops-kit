@@ -192,6 +192,9 @@ def test_report_survives_and_names_the_deferral(prepared_update_copy):
     assert rep["human_approval_required"] is True, "решение человека объявлено ненужным"
     assert rep["pull_request"], "поле pull_request снова пустое — это и была улика F-022"
     assert rep["pull_request"] == rep["deferred_to_branch"] == _branches(child)[0]
+    assert rep["candidate_head"] == _git(child, "rev-parse", rep["deferred_to_branch"]).stdout.strip()
+    assert rep["candidate_base"] == _git(child, "rev-parse", "HEAD").stdout.strip()
+    assert _git(child, "rev-parse", rep["candidate_head"] + "^@").stdout.splitlines() == [rep["candidate_base"]]
     assert rep["update_policy"] == "pr"
     assert "Что этот выпуск привозит по безопасности" in rep["security_surface"]["text"]
 
