@@ -25,7 +25,7 @@ measurement:
   - --cov=installer
   - --cov-fail-under=70
   python: 3.12.16
-  report_sha256: 60e3831ff3c9edb42128825b54a7e8ef8e6e22e0f2990a2df52810fbba21f595
+  report_sha256: cff541ad2bb4eeccbf02990bd08d00153a3860a65519ff8ac42132a57befca18
   inputs_sha256:
     ai_ops_kit/__init__.py: 581ed99fd5961b1421c95d537227e368380dd5a702a272af220d0c6b7ea3ca24
     ai_ops_kit/checks/__init__.py: 23bc287fabf30e9a2e980d83d418083c84ef13298f0daa12cf3594242b4a9334
@@ -49,7 +49,7 @@ measurement:
     ai_ops_kit/checks/plan_artifact.py: aebeff36bf40916483a553a88c4691625970fffe8e9f4b57759ab0e5e905d45a
     ai_ops_kit/checks/quality_attributes.py: 97434771648700f073aa94ae7aa841802bc84ae2c975b815d3801b2ce9d0703d
     ai_ops_kit/checks/requirements_artifact.py: afda6c3e7cd0fc77a282004413537602f7b03764e1d917240a5892450ebfad8f
-    ai_ops_kit/checks/reviewer_result.py: ab8c5f8e1eae4c187159b3725fbf077d3b356f203a6514cab0886ea6a43c8d88
+    ai_ops_kit/checks/reviewer_result.py: 9e73520b4c65d8f2a3f15f5c6b6d5011a86dac5cedd72ecf78760f374dc5d208
     ai_ops_kit/checks/run_handoff.py: 4329b5143bb933583c58cc354aee59c02189b85f984b0f2a99f33a758fd40547
     ai_ops_kit/checks/spec_artifact.py: c5b404322efac8c560d48a9384a2f91275539d43145d2f5e9a8a9bab0a326331
     ai_ops_kit/checks/surface_extraction.py: ffb415d9d476eea379c0492391d6cd347f9b06439e216a6ced4d04f133655d69
@@ -91,9 +91,9 @@ measurement:
     ai_ops_kit/cli/portfolio_cli.py: ef8fe5c0a9c90a7dfb18a229414828ef1367b8c1162eb658e9ba7775e7e33d31
     ai_ops_kit/cli/post_release_loop.py: 0efaea344970122a87c25b39d8b5839014d022766add050795b09832426673a5
     ai_ops_kit/cli/project_session.py: e868a514901e1d20f072d158f249760348157b771c67d75a1772e158c569e252
-    ai_ops_kit/cli/project_session_completion.py: c8f920143e3e0c528ca04d072e60b8756cb57620f2eba3800b1dce86eff53e42
-    ai_ops_kit/cli/project_session_migrate.py: 6300ed9856c6d63008f32f2170689ac2632614ddd4dbcbfacd73d18f06b0cb9b
-    ai_ops_kit/cli/project_session_resume.py: 592e0e13a9281b4f95af71b2808d23dfb7085a3111d6094e01942e3556a78d30
+    ai_ops_kit/cli/project_session_completion.py: 15b00a5b88615f1659e264cd56810305bf28f9b3bd08b138ca8c1a7c6c8f7fda
+    ai_ops_kit/cli/project_session_migrate.py: add00cbeec3d93a4ae63e8a7e930e90982a63bbcef6bdd2b97d4fe4991acbda5
+    ai_ops_kit/cli/project_session_resume.py: 7fcf755f5f1d63bdf32aef4e972b978283ba293eeabdc03594dc7fa34373d40b
     ai_ops_kit/cli/roadmap_sync_cli.py: 5ecc7da22dd5d0952d513d288aeb1df5e46716fb2331182ddc058ab3291d1729
     ai_ops_kit/cli/verify_scope_cli.py: 37af7c41ca9b6860718aca5555ec478e3d66b520d265a634b9dcc5207cb49e02
     ai_ops_kit/context/__init__.py: 671f403f15fa1856e7dae37ead943327e8ab38c4e8e9fb858c81a285e78ebee7
@@ -127,7 +127,7 @@ measurement:
     ai_ops_kit/devtools/commit_hook.py: 179a6a70ac1b288ac1762e6638910a5a2f140f1203f41299599f2996842a9c99
     ai_ops_kit/devtools/context_compile_cli.py: 9ed671f67b9a4cdf8c77112e565b80ed885a45cf95039f4b485904add0b73ad0
     ai_ops_kit/devtools/coverage_binding.py: 489e0b27a96084255640aa85b0220ec9616c21008d026e7a659c84366a34027c
-    ai_ops_kit/devtools/crap_score.py: 422529e9f51660afaa28204e6d115363189a42d18368f8f0ec04bc158868c8b2
+    ai_ops_kit/devtools/crap_score.py: 1a1e217e55b72c5c338ee428420653192f19f8caef9723660f7aa2b844b51b8a
     ai_ops_kit/devtools/decision_capture.py: 42ce789169c497675791a6f0cbe855dbf33807fc38fc0f5ff555719f0848f44e
     ai_ops_kit/devtools/decision_eval.py: c0a5fa61dae2648a4ae76539f37615c6ee6ecf53c7bb886d599bf555a3781f82
     ai_ops_kit/devtools/decision_llm_capture.py: 88f78dd70a87a9839797eab20fa0b578ec2207ca51d5a0b78313fef225f58a54
@@ -159,6 +159,7 @@ measurement:
     ai_ops_kit/devtools/release_plan.py: e8fe6aecf64433c0f4bbccbc0664fa45a12b52b21d3ffb0f206193d6b68cc529
     ai_ops_kit/devtools/release_plan_sources.py: 8a72fd78926dfc4da2f102f01d8e3e5bccad93c04ec2e09e22a805f555c91748
     ai_ops_kit/devtools/release_plan_state.py: 3723916dd274296cbc50c2687964812e5e251ff1a85b2e034dbbba224da26f67
+    ai_ops_kit/devtools/release_ready_window.py: d89fa13230e48677e920d6b856e6e3f27e6bb2efc6b322a40677ae9df2af7d27
     ai_ops_kit/devtools/runtime_context_probe.py: 822beec16e7d7664c27181eadaa1202aff6fcf99d31c8a2fc3b130635cc8dd5e
     ai_ops_kit/devtools/skills_qualification.py: bc75906d175ae55042fcae39647dd682eed6eb059c7723a50289047729e8d3a4
     ai_ops_kit/devtools/workflow_contexts.py: eb7a1e32314e4aa2042ce63eb56c960e97657101a64f67812c138597d0adf7f6
@@ -173,19 +174,19 @@ measurement:
     ai_ops_kit/engine/ai_ops_run_reporting.py: d9f9d5f49730c430e104a579f1698565d72bd893cb7eb88bdf38bd6ebe6b9ffe
     ai_ops_kit/engine/ai_route.py: 0b9c7b2a015c56e96326fca910a48db09ee99146c3d467411df0dbcbfb7edfa3
     ai_ops_kit/engine/atomic_planner.py: 3d1f15b51f9ab906c1d9198e1584f56e1a5ab7b53b8a2c8445b67976ca1bbe46
-    ai_ops_kit/engine/execution_pipeline.py: 079add06ba479226d46b3971fabf4ac5e77dc6e7fbd084f248c872def93ca2ca
+    ai_ops_kit/engine/execution_pipeline.py: c688d2b0493095345077e6cb577bd40abd210ebf55c6008caf385189dfed3438
     ai_ops_kit/engine/living_status.py: 4723d09bfc600b78888ece92d30048392564dba91732a381c6074da162a4df1f
     ai_ops_kit/engine/parallel_executor.py: 4b8a9679f77e7456d5f5593e1fecb827a2e906783c2c721341bad73df17de235
     ai_ops_kit/engine/parallel_live.py: 3c6f7b8d4f9ec4497430ed4c5a4fc373f2bff11fe6b4399c7a030cb857e7d253
     ai_ops_kit/engine/parallel_live_dispatch.py: a9c549a1bc97d0a5a479b0320e61747f6521f8ae4759040b40dc8c0641294e3c
     ai_ops_kit/engine/parallel_planner.py: 24d771eab9d78e8c9c9d7fbb9733641eea9a5cabb83142754e049da21f28d6c2
-    ai_ops_kit/engine/pipeline_authoring.py: de94439ee18c998b45be1e545c583c709f294398daa3972025fdf50f33fafa77
-    ai_ops_kit/engine/pipeline_evidence.py: dab84012aad18b1bcaf30c1b0218072f441c2b77eee5f1e5b9820840b6bd4d20
+    ai_ops_kit/engine/pipeline_authoring.py: af52fb5c4ee1b8f2bd453a25a413971567f87d05bda718c36f09dff78552a617
+    ai_ops_kit/engine/pipeline_evidence.py: 2bc1bfd35af212298d54526537d936de52e7f252f929dab8e109a41b79e00ada
     ai_ops_kit/engine/pipeline_failure.py: 933dda4cd3ebacf5ab64621564b6ae12d22b6e90c5051365f9639490852875e9
     ai_ops_kit/engine/pipeline_git.py: 2fc8b5416e959b22464ee26aace7a036eaf0f92d7d0f404699549ed9da91b623
-    ai_ops_kit/engine/pipeline_helpers.py: 032f5ef3959966874a43e60ce2b2131bc29ba814b4d93a98c1d5ec979a3a2137
+    ai_ops_kit/engine/pipeline_helpers.py: 69d632d8f2d08cc2d0493a04046be94abb04365ad224c705050ed5d43305f490
     ai_ops_kit/engine/pipeline_readiness.py: fae0f27287af3dd0cb9efb47e246bc8e75e6825048244d7124a21de772fff241
-    ai_ops_kit/engine/pipeline_setup.py: 89fe61bb3240c2f78ee9c5bd99970fc8c5cf57679fa61d66e2ae7b0efbcc4d6e
+    ai_ops_kit/engine/pipeline_setup.py: a9296b084173323886a25a381e43f6aa9417f3041631adf6a8615d4fc6fd6d24
     ai_ops_kit/engine/pipeline_stages.py: 1cc5a0cacac208aa4c8c406ce66a0ffabbe53f1400ce4a481008142a4546cf65
     ai_ops_kit/engine/review_branch.py: dd0e8d8c221b385b38bb6ff461971f08e5ba68832957b4acce642e0b12175c10
     ai_ops_kit/engine/reviewer_handoff.py: ef6ba1cb0776eabc5273ff598c65d91ac8b4fb6838df107dd328b974291f9f7b
@@ -228,7 +229,7 @@ measurement:
     ai_ops_kit/gates/economic_preflight.py: 122a5cab5a480d49760e9eb0950e4105818d939b936736466da88615836b9227
     ai_ops_kit/gates/evidence_collector.py: 89cda2fe67eece45c3e85b0dd804176b66c9dc7f4b7d74ebe821b1270eaa5bf5
     ai_ops_kit/gates/gate_evidence.py: 62670f193e11c2ac040631cb78c1d32ff2f3a88f24b44545a55042c8cbcda349
-    ai_ops_kit/gates/gate_executor.py: 39653ae3f4b4919ce3c9bf1a8c520ae8bef2e64181cffa5ff92e2831f8ca790b
+    ai_ops_kit/gates/gate_executor.py: dd1cc0fcef41e91717b32262ae7cd3ab5cb7b8a244bcfcbcfa35be3e411c8081
     ai_ops_kit/gates/gate_policy.py: aad0e2cc23cdd899c0b807af1243ee386dcfdf0fdb01b5e8b7e4dc853823ebe0
     ai_ops_kit/gates/gate_runners.py: ddefc268e0b2f4e02997a469eb1781e0ed41b154e4095936012690895f00db0e
     ai_ops_kit/gates/invariants.py: 9d0c86737801eb2fcc960252063735cc00180a0a8244c6772fb82f0f2a937e11
@@ -287,11 +288,12 @@ measurement:
     ai_ops_kit/lifecycle/child_doctor.py: 28b423a5cca0305a2a9a4058df2da897d93c1446a34990e34832c2e096a24b7d
     ai_ops_kit/lifecycle/lifecycle_intent.py: 96f0e887091fb9d997ca99ac7838789a2f94744b136e9369c5344efc9641ce2c
     ai_ops_kit/lifecycle/merge_memory.py: cc0f4e870628621d3aaf8846febfc1e4417c87c48ceea9632c7df96115f6473e
-    ai_ops_kit/lifecycle/project_session.py: 52e270a80e40e7509430c42b23c21d536600028cba6200b3d254e57633270854
+    ai_ops_kit/lifecycle/project_session.py: d68e5cbff56e2a7fa04aa8d8558a69a23d360e69d453ddbe873fd3ddb10e3228
     ai_ops_kit/lifecycle/role_handoff.py: 8df75361545e7cd68308d1a46e151e90981f46e605a419268fb3b88e66418cc9
     ai_ops_kit/lifecycle/run_report.py: d4e1cb002f7b2dc198508ba292932ee73cfbf38442f5dd67cea3502018354254
-    ai_ops_kit/lifecycle/session_migration.py: 7364b25731256da7631ba843c5f521032f829cbe2f5bdc26e2a74d212682d12d
+    ai_ops_kit/lifecycle/session_migration.py: 946c0d0a40669277407dae4eb54fb4323c71dedaa46c2f49926805e5ff52393c
     ai_ops_kit/lifecycle/session_migration_store.py: 819a02e46a4e5f61e0546a92afac7341fd12be731152dc4395bb115bbb35098c
+    ai_ops_kit/lifecycle/session_prepared_update.py: 4b0485850fcee497b7e1491050d051201700ca14502adb42e348eaaa7a84b983
     ai_ops_kit/lifecycle/work_claims.py: 5e3e758a2e6e72d5e74f4d2d0ded58687f4b40c618734c2232fd22b26f67a836
     ai_ops_kit/lifecycle/work_reconcile.py: 6318c91c8d2a75dd24c0fb23d15b9c672667fc9c87bcdcf245cd8a80de884084
     ai_ops_kit/lifecycle/work_view.py: 85be83c8c688978c73e5c91bf9dcacee8d2d593e13ad2234ae53a8f59e624a99
@@ -358,7 +360,7 @@ measurement:
     ai_ops_kit/security/__init__.py: cc2c9a0724a161dc7dbeba0cccffe7265277237fde7103cee19238ee205ae2d0
     ai_ops_kit/security/data_classification.py: fa329be174572dd0798d6f364437a743b1a2f52c6bce6ed7f1a2e41f19573a2b
     ai_ops_kit/security/scan_deps.py: c75dee7f70e5541fe2be0d54f8a4b7594719df8d62e6394e8974a46804684d9d
-    ai_ops_kit/security/scan_exec_call.py: e050fc0109c8991e3faadfdc2c705bdaaecc18990a32d717e4924fab3bfbf843
+    ai_ops_kit/security/scan_exec_call.py: da9e3cc499f36f472ade32908e4fb6d316a8c2eb3fa3fb3c419e46042babcdb3
     ai_ops_kit/security/scan_inline_code.py: 9d416d88fe5970f1c18721b33d03d383acbe039b2c769957612eb470add24e7e
     ai_ops_kit/security/scan_prose.py: ff5dd3b3a0e5575f25ea9449ac16ced3c88a6cbe27bcfcd5cb412c59c043c1ce
     ai_ops_kit/security/scan_secret_noise.py: 1b143b729318dd0885ad8ddc62db53d6c8576bceb46e3539bc5196a2bccb9021
@@ -414,7 +416,7 @@ measurement:
     ai_ops_kit/validation/validate_access_filter.py: cae6f8faab0d1e27542fa3c47940a3c94292db90afd4ab28c74c4937835bc1cc
     ai_ops_kit/validation/validate_adr_registry.py: 34d07a1e887b3760a3757298c51d4d9c7b08a8aa4f1898734d6e3a4558d1d6af
     ai_ops_kit/validation/validate_agent_evals.py: 0ed05a55953edd694180d3b91600747421d85467e8146370881a503318d45110
-    ai_ops_kit/validation/validate_agents_checklist.py: 17fa5687ebea43d6953b7b4f256940e02806926d48e36463364363e0fab81e5a
+    ai_ops_kit/validation/validate_agents_checklist.py: db828c306d2c18d09a48e26bec0bb5f34eb8e8b6e43fb712631488ece63627b6
     ai_ops_kit/validation/validate_ai_first_config.py: b37f9e065445f57a8cc49807811961deb60205b314dd8a1af0ae0a0178e627e4
     ai_ops_kit/validation/validate_ai_first_providers.py: 1f427edf6e53fb8b4310199f59c11df216320026f11be79f242f54dd92d31690
     ai_ops_kit/validation/validate_ai_first_registry.py: 717df2fa263b87e402dcc3c08a47dc2d349b410ccb29ddcc41978be7d714f3c8
@@ -501,7 +503,7 @@ measurement:
     ai_ops_kit/validation/validate_test_taxonomy.py: 9483a3abe570d2c31da93cb5cccf3c4ac41228dc897736fec3832ffc374f6c10
     ai_ops_kit/validation/validate_work_graph.py: 216e04ba631e6d2ca97a38e6924d1c9c80c34cb7e96ca00dde4dfad7fa1f6d54
     ai_ops_kit/validation/validate_workflow_gates.py: c3e01216c56d450667bc0f574b32d92cb687f484c706e827aa2c11483550814b
-    pyproject.toml: facb9945b0b4ee29b30fd5fcb6f865ad2607e41e687452964daa7fc1d392a7a7
+    pyproject.toml: 30a4ed8f98f45c10ecd48b2551d5330c34bcfdb3a598edacd498d6f345961a1a
     pytest.ini: b9c9fbce99c49dd482391dad6ee2f52f4c1511ad17925ac4c5801f627e7d612e
     setup.py: 532cfda44e1a68a64ff0a93662b45d67702ee92b779c6fd5bca86cbc0afe07be
     tests/ambient.py: 1cf8bb1acb99954019a4130c43bb0cdd9c3b04937187ecf9d159341ee8db10a4
@@ -642,8 +644,8 @@ measurement:
     tests/unit/test_child_update_ci_token.py: 0a1e19f810bd483fd9b694104fecfa8934d1f78264d42d8393f1948184dfd651
     tests/unit/test_child_update_force_with_lease.py: 64a8ba6605af88ac96454cddf20556b59c8d1da9a71f8884418b85cf2e65e0a0
     tests/unit/test_child_value_share.py: c67515d257054a651a1f6c5b373066910996077932f45eaa4f5fc8973f0c9b9b
-    tests/unit/test_ci_template_delivery.py: e54ea8f8325c606ec682705d677a98a64fe77928ea8f1c0fc5222cef7f7143f7
-    tests/unit/test_ci_workflows.py: cbf000677573523e3be0303f2bf4037b9c9d4d783669e3f03ebb1cd68dcdc326
+    tests/unit/test_ci_template_delivery.py: 658ae5d3699cf34d1ca0e47b5b80b1ebf3586d42776ad61378e389ddaeabb18d
+    tests/unit/test_ci_workflows.py: 1ca624f77aeeed500a3c49137f9d8a87fa43975b4678f0633b1cc6d9bc26012d
     tests/unit/test_claim_publication_files.py: 4a47662291cd4c302703888e27702dcfb272196681c1f44be157ac0dff1cc845
     tests/unit/test_claim_reaches_other_copies.py: 0867a4c7831a489fcae497f20176a9a91ce82b8eda39940b8ca2afab5077a3d0
     tests/unit/test_claude_readonly_qualification.py: bd017cca1e95fa70b4aeea8e8f42a8f44bcd784b3c335f32a8a2c87cc7e4e1a7
@@ -682,7 +684,8 @@ measurement:
     tests/unit/test_cost_method.py: e25f2dd86c1bd6265fa1e9d76c9dd94b329b6b1ac905d084f70cd4700e9c001c
     tests/unit/test_cost_per_outcome.py: 54935a38c258c5b45e0430a742201f8dfcb332d1dd14acca4cf811a85481c09f
     tests/unit/test_coverage_binding.py: f6cc64020b919e21a13364dca7448275ee34775a236cda2a2ecfefb625d18148
-    tests/unit/test_crap_score.py: a9989878dcbfc354e68f07d60d0ee0c94e3b9d246521d160427a03896835e96b
+    tests/unit/test_coverage_subprocess.py: d04081ff8cdb30dc52f277e61497bfede6a7e1c8f9dace59bea695a8f98d027e
+    tests/unit/test_crap_score.py: 356320aebbb4ff4e2810bea6cef0fb0afb7085e168986d44a2021439dc84acab
     tests/unit/test_create_only_goal_barrier.py: f540adc9ec25d7647d842fa5c2f3dde0ea8b7382a6437db23fdc618d04a21587
     tests/unit/test_credentialless_push_env.py: b08221fdd3442ebe828e6d4188137b8b41827aedbe61030dbf900231e9ed1e2c
     tests/unit/test_dashboard_evidence.py: c22db1516b2cf7f18bac93da47faf1fcf75969c08cef02e0514076c78e81662c
@@ -852,6 +855,9 @@ measurement:
     tests/unit/test_module_size.py: c394317a18daab0283ddc5fb17a99247f490c325e64d2abc28e78407485a55c6
     tests/unit/test_mutation_probe.py: c4b2f5671a99a69bf13351a5c2bf38377d653f2da12e22b2d2eb05f086968bf0
     tests/unit/test_mvp_blocking_gates_locked.py: b327fdd63b97a7dc11bc6e822a10621ae5f4184125cbc76dd5b64e883a9de8d3
+    tests/unit/test_native_finalize_security.py: 117a0f5c074cdfc2e23b51d35f6c0dee84f39e5937a733742ec0fe5a0fee5e6d
+    tests/unit/test_native_finalize_specification.py: 674a6ff67458345b4c482ccf6eb163e3d0095f3e38a7fe307a6eac95e59e3446
+    tests/unit/test_native_red_team_handoff.py: ae910e7aa13180e99cad4885d380dacb862bbadfac30983bfb9394676b8df306
     tests/unit/test_next_offers_unheld_work.py: a93ed75ebae749f266b693ae02ef262c8961eaa6f8bfdc5079c9c5f5f4dcfebf
     tests/unit/test_next_skips_achieved_goals.py: a883a0a964cde5790521ce43b10464b507a96e474d8dcd7521c12c91a8075b9e
     tests/unit/test_next_surfaces_waiting_on_owner.py: a63d6b19123a61c6f2f078727c39a59574614934751c8239ef65181c5640eec8
@@ -928,6 +934,7 @@ measurement:
     tests/unit/test_precedent_ledger.py: b7b18d52ab9cf0e5939c3d5f6230edf4a01410120f2de2b69d7fbc4880d840fc
     tests/unit/test_preflight.py: 72c4147f26d024c7fea329ef691f2af5285d0e826dc23e9bc14b2c70b2494f83
     tests/unit/test_premerge.py: 62eff30f3e53ce64aee270f811f742ac4ff75055c5438e2d4505d2ea4af66882
+    tests/unit/test_prepared_session_update.py: 559fe11bd32995a029ed1b54c911ab67041907195fb8e20c81fad36510b3bc29
     tests/unit/test_print_discipline.py: 34d1ce69e651e7c021cda08f9aa305eca69988528e5f6f1b41cfd1393ec56838
     tests/unit/test_printed_commands_are_runnable.py: 346b83bbec026bf1dd9419169772b040665b25938e194a563d5e9565c3a26daa
     tests/unit/test_probes_survive_the_editable_belt.py: 8029afb9c761e0793e55ce72b1eb5e00bc6adbf9cbf00ee2c113a96a4d9f4ab8
@@ -984,6 +991,7 @@ measurement:
     tests/unit/test_release_plan.py: 887298e8db456a9c2acdf78ca47989678e4367b0f9ac86650d90769755f6159f
     tests/unit/test_release_plan_sources.py: 2de935852f865ff225ac00df6b52fc8bc560a47cd264bdb885467e5b7ea6adf6
     tests/unit/test_release_plan_state.py: a46db9c6e87b81dcf0e6db9b528699b434c5a6527cc7ba56bcc3a26e85c05468
+    tests/unit/test_release_ready_window.py: f412da3089ad408226a5ce0fe846d9661e13023769812086045749ac342dd42a
     tests/unit/test_replan_loop.py: 43ae547f5a08c8a5ca4fde2f921c3db48b3a3e544b07d5b19cdbceaa99973421
     tests/unit/test_repo_graph.py: 2ad060ada1fd37aa5e2fa14720709925a029f37acfacbd0d2ada0c5046951612
     tests/unit/test_repo_graph_excludes_kit_area.py: b4aa541f2e442fb7399331a5e3b6bb5e87fcfba0b0584c3a977be7259a56c73c
@@ -1050,9 +1058,9 @@ measurement:
     tests/unit/test_session_handoff.py: 058bc739f1cb6efa97e07aea3fc31aef2e7d9dede7eea84b79ef924194eac5b6
     tests/unit/test_session_handoff_seam.py: 40d74769284763e592e1b94dce20078b38b366c4774f4bedeea2cefb1f877329
     tests/unit/test_session_launcher.py: d49bb318d7d5b31fad58ef8b0924d95ddb68bdebae13b144c9508aa255098ef6
-    tests/unit/test_session_migration.py: c7f1868a0842c7d505ef9a070576e3732b9583be12ccc2b5e134b71323a1b20a
+    tests/unit/test_session_migration.py: 20a630bd9c9bde7b4b07be693720b4c0f01e06510d92ecced6f8920397c4b481
     tests/unit/test_session_migration_crash.py: 80a783f868e53a5467559cdcc749e9c243502760621c4076b8a1524d12dc8847
-    tests/unit/test_session_migration_install.py: 6d239bb90e3f6983f1931f9045774bda11d5c03df85e235b409fd7e15c745f86
+    tests/unit/test_session_migration_install.py: c2f777806f27f2ef7694fe75fde179c36a86480b9157f5f27e20e2acf8c0e3ed
     tests/unit/test_session_protocol_decisions.py: 191d92b3aff99f792f9c16aa50bb0c13d33f2b15a58b6dde7b81f7110ec1e3cb
     tests/unit/test_session_recommendation_validator.py: f407c79d57db336ae90d5a84540edc596f90a28581c294dee7b254aee06e4175
     tests/unit/test_session_telemetry.py: e83d9ad79bdb395c6d7a7b97c01f5638da7892e77918cc2be340e85d4a6eaae2
@@ -1072,6 +1080,7 @@ measurement:
     tests/unit/test_specify_points_to_plan.py: 7500ace2ee8862b2bc7168ba1c848ee3198f82b76e4aee4e1a11fa8289bbefdf
     tests/unit/test_specify_tops_up_sections.py: 757ff6eb3077ce4024a1ad13ed3c94d5609b7a825ba739199e8f72f2dda084c8
     tests/unit/test_stable_channel_honest.py: 40cb1c209b2119ca3040dff1e78cf9c77dfd672b231ced84ebbfddd979eb2084
+    tests/unit/test_stack_presets.py: 042aa75e14ecff53473ef1cc58a9b94125a7628076b61c0ab06c521f6ad488ca
     tests/unit/test_staleness_and_provenance.py: 88b0500c4c8cfd6737523c07520623dbbc15d256a071146262c0cda9ad218a7b
     tests/unit/test_standard_version.py: 60f4aaf952012977de2259daa044823d429c718d66479f70be9ed4360a86322f
     tests/unit/test_storybook_adapter.py: da86c56f364a4f693a391f197c5967879512429978d2591e56bc20578b1ce73f
@@ -1116,7 +1125,7 @@ measurement:
     tests/unit/test_update_points_to_propose.py: 2b8cb6d5178fef69ca8f4110d23dbdb0f7c58f5010375abbf8253c774a709c2e
     tests/unit/test_update_policy_enforcement.py: f2d05d534eca6e98b0ce2a668882464cffa347bec8fd33500fc408953c9c08ce
     tests/unit/test_update_pr_security_section.py: 1847c1e466173fe6ecfc6a95cbf19fd68a4ada03b663e8111c9ff6dd9906de8b
-    tests/unit/test_update_removes_migrated_stale_files.py: 262ee4bbfe5802c924d66e119cbd61713ceac7985e09ad7b2f8805f076d99a59
+    tests/unit/test_update_removes_migrated_stale_files.py: eab10c10745a92a60ba0230fbe9c7d137f93d21dbd3b8343e77a9bed2c3b9c87
     tests/unit/test_update_strategy.py: 8f30a6a39995005ffcac915165faeb67c2f77c4941c09f716b5a42ea6a5d2786
     tests/unit/test_upgrade_from_released_versions.py: be7c936f7515f3c5173dc557ba914a93f18972f3dba200136ff67e161c31350f
     tests/unit/test_upgrade_path_gate.py: dd2639ecfc000badc3977044097455c158e7aa0e3bd7a6ebe8d2c884f2e44c46
@@ -1220,13 +1229,13 @@ measurement:
     tests/unit/test_writer_contention.py: aa8482778822d0eeeb587a7db2201b189e20f5f746922aa9fd75e61d40549bd6
     tests/unit/test_writer_not_judge_approval_provenance.py: cd850e01c8ec9ba66a6e48ea9a26ad206846ecb82dc35dc4f6eab42f983e0023
     tests/unit/test_writer_serialization_lock.py: 18e32bab56a840bd2cbbfcc386f74ab7f9b89b8353424a9997eef4f46dae85f2
-  coverage_version: 7.17.3
+  coverage_version: 7.17.4
 functions:
   ai_ops_kit/checks/acceptance_result.py::check@b350ea6be9e071504b32b347a8fcdbd47803a5ddac90f225a3c76a1ee2ced301: 40.70385638636962
   ai_ops_kit/checks/adr_registry.py::check_registry@59afc80d02c747008d08962b8288612888d5c3c760e49dd70e8d4695637340a3: 27.232
   ai_ops_kit/checks/architecture_decision.py::check@e8a03d9579a397ed001d93db8901b2db378d4fade4d289ed5bb1fb42dcd5fb8f: 37.37026239067056
   ai_ops_kit/checks/capability_policy.py::honesty_errors@711472fb7a648838debaffe760c9ce31ea410f00fbfb05d18b00f90d001683f0: 17.312066915412686
-  ai_ops_kit/checks/code_duplication.py::load_baseline@307b96612f55870d9be76d207b44e97b39579de1d4034256536c2e408ed39d9b: 12.894815927873779
+  ai_ops_kit/checks/code_duplication.py::load_baseline@307b96612f55870d9be76d207b44e97b39579de1d4034256536c2e408ed39d9b: 10.64312546957175
   ai_ops_kit/checks/code_duplication.py::render_baseline@3edd528e29b38b67b17ecd23ed23bf407c44acee977c87f63831a3c3c4855758: 42.0
   ? ai_ops_kit/checks/constitution_conformance.py::_features_missing_audience@a441c8d8507df8b4530040dd7dbed39b26785516cd388f3df174ae13b93df160
   : 11.020747599451303
@@ -1268,6 +1277,8 @@ functions:
   ai_ops_kit/checks/quality_attributes.py::fitness@ccb2310c728bc202b632e6d0c76dc4b264344cd6cc28a9c32a794947011c63af: 13.0
   ai_ops_kit/checks/requirements_artifact.py::check@5e0a6a26d70d2fdd525fa06645a6a395d10b51b870cb09c1b7853c316dcfc16a: 18.131687242798353
   ai_ops_kit/checks/reviewer_result.py::check@767e246454ed4569be402315e933d04e7c5ab5f785acfca8ac1adfa9f9b50423: 19.106962962962964
+  ? ai_ops_kit/checks/reviewer_result.py::check_human_red_team@b63c4fcad3ecfd908ac3f4983a41a29a05c67663ba9ad8f64e15cbe87f39ac60
+  : 29.20436959490214
   ai_ops_kit/checks/run_handoff.py::check@7c4031b95c1ca05a5aad0b03c1db3f3fe7c0052ed526187ec216d28ba49c89f2: 22.104051943782363
   ai_ops_kit/checks/spec_artifact.py::check@e6cc9e4c0138481ee7494e1f07636dbc172280f2deb0162ea60808d77aea0ad4: 36.69081791799103
   ai_ops_kit/checks/surface_extraction.py::extract_surfaces@25a0d29aa68f6918268b3b9a77aa1807ad5872b33da4f4c0126b3c44f010937b: 16.014565316340466
@@ -1320,7 +1331,7 @@ functions:
   ai_ops_kit/cli/adoption.py::main@f2b8abbb6eb2e6d0a226642f24411b6bb75424ad4a09485edb129524ab943e70: 23.107673519234684
   ai_ops_kit/cli/ai_ops_cli.py::resolve_flags@e6959942f915c2bbb67a1063fad50dab8105284ef421b57620720388eb9f7de4: 11.044096209912537
   ai_ops_kit/cli/ai_ops_cli.py::_parse_task_and_root@40b6737a5def3fa2478bdc437ae3891e73760e67af8c98618bdff63e47447c10: 13.076923076923077
-  ai_ops_kit/cli/ai_ops_cli.py::main@2dc1ffb3e2f07d4e093ec1fbddfee98f1eb1110c9ea5fab46c871e739597f270: 41.90649722665929
+  ai_ops_kit/cli/ai_ops_cli.py::main@2dc1ffb3e2f07d4e093ec1fbddfee98f1eb1110c9ea5fab46c871e739597f270: 41.33035613216446
   ? ai_ops_kit/cli/ai_ops_cli_commands.py::_intake_command_carrying_task_type@6d13664eb7d21ad23098f647cb5dfcc504a574b62472c4ca211337cdcb6a935f
   : 10.05787037037037
   ai_ops_kit/cli/ai_ops_cli_commands.py::_intent_feedback@942bfa760e0906dd132517cb198a1afa5f8568f9d9743766e24e349442897052: 14.002242476851851
@@ -1363,7 +1374,7 @@ functions:
   ai_ops_kit/cli/ai_ops_cli_lifecycle.py::_automatic_roots@83bde367ec29199b855934f9f816b68f162c3e58cbe1046a5ba62306b7cfacc4: 165.88575804187346
   ai_ops_kit/cli/ai_ops_cli_product.py::build_preview@10d2896a2ee096ac6660a6abd8dbf1f448aef279f455fb09b061b0c9e51e5242: 16.07585185185185
   ai_ops_kit/cli/ai_ops_cli_product.py::_run_backlog@2f3939d36bd32991311b461aa6e91585f522a24a0b38d5ce94f3b89b8e2e1fa9: 329.072021484375
-  ai_ops_kit/cli/ai_ops_cli_product.py::_intent_model@eda154cd12ca3dbb7071326cce59e68512e09690e7a2671140eeebb8639000a6: 33.324595069110096
+  ai_ops_kit/cli/ai_ops_cli_product.py::_intent_model@eda154cd12ca3dbb7071326cce59e68512e09690e7a2671140eeebb8639000a6: 27.95946449641018
   ai_ops_kit/cli/ai_ops_cli_product.py::_intent_contract@7631a6d4a124057397e4836729889fa6bc4d9c7a8e68150b11f443b35daf6826: 182.0
   ai_ops_kit/cli/ai_ops_cli_product.py::_intent_products@5cd68f5e1cd87184a57bb96b7b0c9f0c341d8550bbfe9cedfd65361cef67309e: 650.0
   ai_ops_kit/cli/ai_ops_cli_product.py::_intent_inspect@4c1a8ccfd6d65384a7e5980de8489b8f743e5f1c7036aa30c4e52786a95330c0: 380.0
@@ -1400,26 +1411,23 @@ functions:
   ai_ops_kit/cli/post_release_loop.py::main._opt@0d6b4b5e378fb6c07b60369946632e6f1fe21312887dd09ce1282f048d20749d: 12.0
   ai_ops_kit/cli/project_session.py::current_session@0fe06f0763326224dac667cbf072285a034cae4776265a6106a4c037f7e4c217: 14.802816
   ai_ops_kit/cli/project_session.py::initial_intake@4227933fbdf3b7350cc3cd7c5cd81d4b0b9ad41576d570c871fb36debc8c6aba: 15.0
-  ai_ops_kit/cli/project_session.py::continuation@5a19c2ffefb6f021b2e170ac9c57697667cd426dd1f4b41ef40db0364e21366e: 14.0478515625
-  ai_ops_kit/cli/project_session.py::waiting_continuation@5fe9e329db880c0c0c5d9426c8f974768c50d7f373287bc60e567f2ca17840b0: 180.0233270156
+  ai_ops_kit/cli/project_session.py::continuation@5a19c2ffefb6f021b2e170ac9c57697667cd426dd1f4b41ef40db0364e21366e: 14.0
+  ai_ops_kit/cli/project_session.py::waiting_continuation@5fe9e329db880c0c0c5d9426c8f974768c50d7f373287bc60e567f2ca17840b0: 20.466540311998834
   ai_ops_kit/cli/project_session.py::prepare@feb925af2dfdc958ced2c7a9aa6888877bd8d52cbc6503438c2f30a694bcce7c: 24.08397725615979
   ai_ops_kit/cli/project_session.py::hook@a4fc869d0728e105093abd2b163fad57a8cbb7188c01c3b5e8adb7b5a83edcec: 21.239900041649314
-  ai_ops_kit/cli/project_session.py::main@9a698d5ba3141039ad9dca460ade7c21a4bfc3b12f013fdd1fc1211c676f6d80: 33.246885927366115
+  ai_ops_kit/cli/project_session.py::main@9a698d5ba3141039ad9dca460ade7c21a4bfc3b12f013fdd1fc1211c676f6d80: 33.01580069935143
   ? ai_ops_kit/cli/project_session_completion.py::record_prepared@2d31f52d19ab2e8778ee0d5422ae86f4c70d246c2c0f23cbe1e737151c50b45d
   : 17.16724537037037
-  ? ai_ops_kit/cli/project_session_completion.py::review_inputs@8335726a531d32a444ec533a8e2bb28eed61983e46011537fcd79b1e0aede956
-  : 380.0
-  ai_ops_kit/cli/project_session_completion.py::evaluate@322267b425f7da754bf8a48745f5acad69c2c994fe734c11d2005915e1d68149: 650.0
-  ? ai_ops_kit/cli/project_session_completion.py::evaluate.acceptance_artifact@b5e96543dcb51b8dcb0beae357f05cc33ea0d96f617f722eadc35b3704d2ccc1
-  : 12.0
+  ? ai_ops_kit/cli/project_session_completion.py::review_inputs@5366a0972ad5eb2a7d4eb919f49fd26f5f910612eb57e0bb263f3b77f6449eff
+  : 23.182814685220283
+  ai_ops_kit/cli/project_session_completion.py::evaluate@de1e03572a01df81bd0d7887e5dffe2e2e78b4fa3f2a669caa0a70b3fa504136: 27.877695693632432
   ai_ops_kit/cli/project_session_completion.py::reconcile@5257de1c0df20e33b9fb1db3fe8f948fe7a0bf3976b67c933e37961ca7bd3a6d: 19.941690962099123
   ai_ops_kit/cli/project_session_completion.py::_reconcile@4f0b30e417338fc159f5390f9d534f9976a12f9f5af3950b6e51865fe6ecd016: 27.729
   ai_ops_kit/cli/project_session_completion.py::finalize@d5338c9ab6b3009cd0d07e71f9ed9d60991e003b3cca164d251b5e3e51bbc196: 11.002039818607866
-  ai_ops_kit/cli/project_session_completion.py::review_jobs@9ec557484e5a7d710cd7fb89fcd1866a9e92ed9653136c067a80cdd56c93ebfc: 11.079559464124271
-  ai_ops_kit/cli/project_session_completion.py::response@0010ae128f24008a90a49875af34578e3e6058c8711e457cd6ec35a681c073ef: 23.102565971715993
-  ai_ops_kit/cli/project_session_migrate.py::main@972ff514d06bf79e95872125aa3a9b71bebce45c718790639e92c549ef82dbb5: 72.0
-  ai_ops_kit/cli/project_session_resume.py::validate@b89b57342a90698f7ab417b766dc23cdb3bd4ee91af623868e6e07eac06a6974: 17.469135802469136
-  ai_ops_kit/cli/project_session_resume.py::worker@000197241e5afaacb2205ccab94d04643d393178e4eb363885a457579ae6c4d7: 12.0
+  ai_ops_kit/cli/project_session_completion.py::review_jobs@4d284233a5d8944460f559fcbb1f3f3e09d36f7ee84b98164d2fb487457a685f: 16.28340645372914
+  ai_ops_kit/cli/project_session_completion.py::response@3cf2f66701438a45e734f51838690bac7bac3e32bae61aea280a153e02a9986b: 24.262175694128356
+  ai_ops_kit/cli/project_session_migrate.py::main@764a6cf138e8f77664bf08a455cde574c8add46661c599361706485e66510a38: 14.179495785047282
+  ai_ops_kit/cli/project_session_resume.py::validate@b89b57342a90698f7ab417b766dc23cdb3bd4ee91af623868e6e07eac06a6974: 15.130208333333334
   ai_ops_kit/cli/roadmap_sync_cli.py::GhIssueClient.list@ebb8c32f32819772d8517f297d0638c5bd2238491d61e37f948ba1d8eab18f9c: 42.0
   ai_ops_kit/cli/roadmap_sync_cli.py::GhIssueClient.create@5656db26f5fb34f91c71dff782a2bb8df059a2195f878facb47049c512112106: 12.0
   ai_ops_kit/cli/roadmap_sync_cli.py::run_roadmap_sync@36e8f9dcb4359e6b873bdef89fa4b7156bcb1d6176da4bf2772bc551d2476e6f: 462.0
@@ -1481,7 +1489,6 @@ functions:
   ai_ops_kit/devtools/bench_lite.py::main@48d4012d0cd89106d8368c5de798a34cd4c7c700939e54ce39234dcab1d31ba4: 20.0
   ai_ops_kit/devtools/bench_performance.py::format_text@a4ce8fa1a89f468c87d6f997fd72ae2f8ace0b4e52b2504570d655d31afcf6a7: 24.718180492783205
   ai_ops_kit/devtools/bench_performance.py::_validate_suite@c78bc1a2fd5404c2efb864332122c48084ba8f7fa3e1b53675c8cd265a77029c: 17.105320699708454
-  ai_ops_kit/devtools/bench_performance.py::_command_worker@c0db173bc24c66f8b0b79dcb9e040acd69e68b1457326413540cdb583cc100ee: 56.0
   ai_ops_kit/devtools/bench_performance.py::run_suite@a81d6f48a54712f11f78fad0aef2e7c8f95e7968d53ba8e3fee007aa7d0afcc0: 16.016384
   ? ai_ops_kit/devtools/bench_performance.py::_validate_receipt@573ea088624fe871f5db7638066930a83a20eef73fffa87cea7d3f61754a1ef8
   : 41.3742104237972
@@ -1510,14 +1517,13 @@ functions:
   ai_ops_kit/devtools/codex_stage.py::prepare@14e472aca35bb2375a262b941401298a57453631fcbda6a3685827ce06c6ae96: 14.571428571428573
   ai_ops_kit/devtools/codex_stage.py::inspect_result@608438b1c7e625d5213a13c2513dc85585a1cf69905e482ec92eb7b2138e13af: 31.23456790123457
   ai_ops_kit/devtools/codex_stage.py::run_specification@a83cd50bef6d758b6c00da98e5b70415543c3141d932c4a5616a753c500b4320: 10.291545189504374
-  ai_ops_kit/devtools/codex_stage_hook.py::main@becd9b96dee15dd8f5b04d040667614955e089353d53d8df82ca4963ce1f46bb: 20.0
-  ai_ops_kit/devtools/commit_hook.py::main@2f498a372de35cb1578f672991a7ad916fd54796c3599f4286464d089bf30b15: 10.020354162426216
-  ai_ops_kit/devtools/context_compile_cli.py::main@6128008b075fd2edcc31f761e04822c5b55265039fc1f1f6bdb57a90529300c5: 420.0
+  ai_ops_kit/devtools/commit_hook.py::main@2f498a372de35cb1578f672991a7ad916fd54796c3599f4286464d089bf30b15: 10.0
+  ai_ops_kit/devtools/context_compile_cli.py::main@6128008b075fd2edcc31f761e04822c5b55265039fc1f1f6bdb57a90529300c5: 52.345566896333885
   ai_ops_kit/devtools/crap_score.py::functions@79963490c588cbcf0520f5e6c3ccbcf32920cb841d4e3c624adc3138d3d53889: 11.00614743687446
   ai_ops_kit/devtools/crap_score.py::load_coverage@a6102127bdced2645cb58cab6652f6cb42d1360c10904a1ff3d192d4c05037ea: 37.275145772594755
-  ai_ops_kit/devtools/crap_score.py::analyze@d05ffb8723746b77e771b9c352c7636715a5322e78107bc42f1f8e4e341634b2: 22.0
+  ai_ops_kit/devtools/crap_score.py::analyze@161b5142e19638b12d63b7760a0af2c2dcedde0eec7fe88a773d937b3dbab56c: 23.0
   ai_ops_kit/devtools/crap_score.py::load_baseline@26205ba262bc9088480f171448817604346bb4b4fff04e1af2a32657fd3c11e2: 25.0737184372301
-  ai_ops_kit/devtools/crap_score.py::_write_baseline@4e7ccdd41975ca2612c225bff10c910f99555774d7ad8e9db28db6f91c40883e: 23.0
+  ai_ops_kit/devtools/crap_score.py::_write_baseline@3403b916545b59a006ba9500b1f894846547ee1fda4dbfa748279c6ea2e93d80: 25.0
   ai_ops_kit/devtools/crap_score.py::_render@bc86b39f026fe65014c428488f16e5baf48cc9ab1bd9875ba129cf7f82537423: 56.0
   ai_ops_kit/devtools/crap_score.py::main@931db4396b8700d1d81749d08e29a7d791711564d22a5f9de56475380f3a0fe1: 15.276740160349854
   ai_ops_kit/devtools/decision_capture.py::capture@2c1709a247dbd377f1cff65398b45ea8b48342772f47859ab2668398ad804fdc: 20.321984227803842
@@ -1567,24 +1573,22 @@ functions:
   ai_ops_kit/devtools/gate_machinability.py::split@30cd971e010b9b9f7f5864198eba7c72dfd838a73f4544272097b2f5835a1500: 14.0
   ai_ops_kit/devtools/gate_machinability.py::main@6073d401c6334361ac5d4cffac11cf817a026e5f23f7dceb1fdc13704903cb81: 12.0
   ai_ops_kit/devtools/host_resource_cli.py::heavy_processes@41a1c5581521266e1bf9922845727a52c9ebc90601a412ab1f9d0747d18aff35: 10.0
-  ai_ops_kit/devtools/host_resource_cli.py::main@2cf0c651b60106f365814fc1e07377db17b6891dc179f2e1eb094387ca951d4c: 110.0
-  ai_ops_kit/devtools/impact_check_cli.py::main@d233c94ff0a14a82d562e9689d1702d7f1851227e998ceb5a99ec1116feb4637: 21.217377086294288
+  ai_ops_kit/devtools/host_resource_cli.py::main@2cf0c651b60106f365814fc1e07377db17b6891dc179f2e1eb094387ca951d4c: 12.1952
+  ai_ops_kit/devtools/impact_check_cli.py::main@d233c94ff0a14a82d562e9689d1702d7f1851227e998ceb5a99ec1116feb4637: 19.89013545977084
   ai_ops_kit/devtools/kit_observability.py::compute@f5e4c95bf6b260176e9f12dc95b591221a755e4bf1834043f8d5607439de2194: 27.28980828923265
   ai_ops_kit/devtools/kit_observability.py::format_text@f20c8b51a002fb75065eda68454bfd0f39bb56916411d1d0550bad15dfc87159: 25.006019860724503
   ai_ops_kit/devtools/model_comparison.py::check@6860cace7689197d084dad98c6e4c48b6801fa71a35f98f3508790f3d18ee699: 28.436889556724275
   ai_ops_kit/devtools/model_comparison.py::compare@8e56d88ffb19b16f446fce8a938c261d1d85f165c6eb20e07b117177c0858ba7: 17.0
-  ai_ops_kit/devtools/model_comparison.py::main@52f4a34cf55cd8b6e9d197dc6e1ec8df560d9163426e9215bc01af6f98b41777: 156.0
+  ai_ops_kit/devtools/model_comparison.py::main@52f4a34cf55cd8b6e9d197dc6e1ec8df560d9163426e9215bc01af6f98b41777: 15.663749236718907
   ? ai_ops_kit/devtools/mutation_probe.py::_execution_evidence@b7034656bc0734375e9fd282423c253c85e0517b93544316d870f7a169bdb862
   : 13.097800925925926
   ai_ops_kit/devtools/mutation_probe.py::_run_serial@bbc1a7a3dc7ed3e0e0f280c84efbb9cdfe2ceae84e4eafb4388a870ccee5248d: 27.037037037037038
   ai_ops_kit/devtools/mutation_probe.py::run@1d604e5223226a815bcdd925a501a71fda2b4b164830a5da6bf47f5740a61372: 22.045454545454547
   ai_ops_kit/devtools/mutation_probe.py::main@6ab1841453106e5a4dd96dd022f3545de8eb5793038f5d70192a9cfc2bb97c9b: 90.0
   ai_ops_kit/devtools/perf_gate.py::read_window@0b10cd1672c2c65ea5eab8baa018545a34c10ca6d4eab8679a8224a16715c4b4: 12.0
-  ai_ops_kit/devtools/premerge.py::gh@ba424b42b75098d72bce50859cb3e4731853baccef63eb18da4e38c8bbfa0dd7: 12.0
   ai_ops_kit/devtools/premerge.py::admit@47a7adb8d003ea064b8f81ddff4cddd07cdb36f94553e2203e1034f6d5b1f480: 20.0
   ai_ops_kit/devtools/process_entries.py::_outside_files@938b5cdb9faa7ebb1e6d06d6b8bba8f006ad928eef273e11191879e09706fad9: 10.0
   ai_ops_kit/devtools/process_entries.py::process_entries@3f40b90b7375b7f94c840e66f5fea00725c13806942d51ac685ba2eae506a17f: 17.0
-  ai_ops_kit/devtools/python_drift.py::main@952bef7b0d27e66e5e2fcdd330114932b8783fc80a1306abcbb8deeb74f1026f: 12.0
   ai_ops_kit/devtools/qual_run.py::evaluate_report@9ea2e9d253f70c0e7b6df6f1c73f927a487dfa07072f2b5d74d7f75c9f297f09: 15.308641975308642
   ai_ops_kit/devtools/qual_run.py::read_tasks@58e93a90fd0a528090879ccf174d95fa3eaf77c26da37487453e139cb1da8ea3: 20.0
   ai_ops_kit/devtools/qual_run.py::print_summary@071d7e8e776e385f9292fbe28458fa037a44f7f71e59b90ca5f219a8556e960e: 10.6591796875
@@ -1622,7 +1626,8 @@ functions:
   : 40.91418176267046
   ai_ops_kit/devtools/release_plan_state.py::read_page@890f831f000adb28aa96f2aaad0d0ee811730043c19c003771dce3ec579f9d7f: 20.0
   ai_ops_kit/devtools/release_plan_state.py::previous@a647798421fc7ea9336f6a36e8fea88b64af6502aaf756c1270e3d73725d194f: 28.401408
-  ai_ops_kit/devtools/runtime_context_probe.py::main@b2223590060df88cf71c35f603aa4e5991e5404da2d12509421dfc903e4b8a4c: 20.0
+  ai_ops_kit/devtools/release_ready_window.py::receipt@59cac807fa04f4f8f4892f3f8391077d15c4230aceabb1c1d05e89608e039234: 14.0
+  ai_ops_kit/devtools/release_ready_window.py::main@c8942a47437583f78454941f8560b4cdfff690ee247c17869a90665047a6c905: 20.0
   ? ai_ops_kit/devtools/skills_qualification.py::source_identity@6f733df65f3161c06e927fc3139e23c3b820a5a5b4f23c159be52df134d99812
   : 30.0
   ? ai_ops_kit/devtools/skills_qualification.py::selected_context@5f0259040fa9088913793495f9537f75005377a6d1628b015849fc936abca591
@@ -1633,7 +1638,6 @@ functions:
   ai_ops_kit/devtools/skills_qualification.py::main@617bc46a050d9103a129a19ec498daf0485268f363accf77d1ee554042c402aa: 182.0
   ai_ops_kit/devtools/workflow_contexts.py::used_contexts@29c1eeae38f96b111f0dfa76c90682b295aa376e776c5b2425bb6bf2ad155535: 11.5625
   ai_ops_kit/devtools/workflow_contexts.py::violations@cf41851c4c17910a315294e6a759876fda6f23ec76c1fdbdebf4cc0119cef8bf: 10.462962962962962
-  ai_ops_kit/devtools/workflow_contexts.py::main@914488773a6ce004abdea68325f0fa16e253ceaf8aaea9e6c79496167467858f: 72.0
   ai_ops_kit/devtools/workitem_trace.py::_read_journal@194f8c658929a001a8c5062a50cb3e39e344f2c0f47775d1f7c5fc31bcadc013: 26.264824944501676
   ai_ops_kit/devtools/workitem_trace.py::_journal_events@0e1a7821f2f65db0bf785f518a2cf591de834675e2b49f9ce9c3461bb7fe79f2: 15.735864529090984
   ai_ops_kit/devtools/workitem_trace.py::_metric@76c6182a3373545a9facfeb01740047eebb5d51533389642a598149d0f38a283: 10.137174211248286
@@ -1691,7 +1695,7 @@ functions:
   ai_ops_kit/engine/atomic_planner.py::main@0b3115d0b8e718ecc737cc34245c0bf5ab809170e43def1a8bbed242fefac883: 182.0
   ? ai_ops_kit/engine/execution_pipeline.py::_pipeline_build_report@f864540c5392c80ce46db281167eeabbe41db1c90bf108b18d7f32ffd3f53fe6
   : 11.0
-  ai_ops_kit/engine/execution_pipeline.py::run_pipeline@358f034921cb3764fa890ef4be56e21c065008a4a16ea052953f427ae21f00c2: 11.000507703668893
+  ai_ops_kit/engine/execution_pipeline.py::run_pipeline@b54f1f4fe964f4ba75c78357f9ac5709638b754372c5c7d21edaea679a70235a: 12.00439453125
   ? ai_ops_kit/engine/execution_pipeline.py::_assemble_context_and_author@7b83dd129e2b813a3171913d4ee4dd24bf050c3f7b7264e32decfe5eb0ae3baa
   : 13.0
   ai_ops_kit/engine/execution_pipeline.py::_run_tool_loop@f69401e9858270995d45db7fae3ce0c6e9d1982eaad95de32030ce08e75df963: 11.0
@@ -1734,18 +1738,21 @@ functions:
   ? ai_ops_kit/engine/parallel_planner.py::integration_decision@73ec530e93f265dc8af0ad2424d01f7a9c4f554c93ee39b44ffe99ca8a9ab0a7
   : 10.0
   ai_ops_kit/engine/parallel_planner.py::integration_gate@a44fff4d6dabcf465e13dcdb3af44082cbf329fe4fb0021143c3077af2c2f864: 32.0
-  ai_ops_kit/engine/parallel_planner.py::main@440aef5b5af0931ab524bdc1558aa453a694a394e9ee6254b29aa984a67571aa: 30.0
-  ? ai_ops_kit/engine/pipeline_authoring.py::_run_spec_authoring@ed6bfabc767f527cd55f30b6f491f4733617e2c0daa7982a10fddc23d8d42144
-  : 10.0
+  ? ai_ops_kit/engine/pipeline_authoring.py::_run_spec_authoring@5b77f0d4d1b362f310d605796a3284b5c14f2aa66cda94a0ada9d7ce2b7253fa
+  : 12.0
   ai_ops_kit/engine/pipeline_authoring.py::_run_authoring@235a988a892a8d8a4ce2ac5cec838beff58ac457271ac932feed7333ac084e15: 16.0
   ? ai_ops_kit/engine/pipeline_authoring.py::contour_consistency_evidence@88faabbbfb651f56c1291e850cc4cf2681544c485f3354b5a4efc902e77ede0d
   : 33.18918574136171
-  ? ai_ops_kit/engine/pipeline_evidence.py::_reevaluate_artifact_evidence@465b131fb69cc864fae7bb2f118676e86052510006ffcc328f29748db071cf19
-  : 11.636475712994164
+  ? ai_ops_kit/engine/pipeline_evidence.py::_reevaluate_artifact_evidence@0fd308983206ef02ce38458769eaa3746843674f10c228e3d6e0c3253cd19b12
+  : 12.524351388256713
   ? ai_ops_kit/engine/pipeline_evidence.py::_review_cites_delivered_file@29ac2644f32df237f3322eadab60450f5bd186b860e63a0ad9e643ac8085c061
   : 13.050074074074073
   ? ai_ops_kit/engine/pipeline_evidence.py::_gate_ev_from_verdict@f079ba40a614787b4cb74f74ec47204a0abc2a8f78781e0f9a6d9b9e2926f5eb
   : 49.55879920488675
+  ? ai_ops_kit/engine/pipeline_evidence.py::_human_red_team_input@3bfb28c65dcb24cd088bcb577368172cce52fd43f6ceee7885608b4e148ab0b9
+  : 27.539947514214898
+  ? ai_ops_kit/engine/pipeline_evidence.py::_consume_handoff_verdicts@4ab7bb761891314fb52968d4b3e8861c0b2ff32d0519622f683538986a54b66c
+  : 13.0289780521262
   ai_ops_kit/engine/pipeline_evidence.py::_run_reviews@70d6520a59b001f1c0744405bb35a6145f4502647b6aeb2e9f77b79c79e02917: 18.0098876953125
   ai_ops_kit/engine/pipeline_evidence.py::_review_security@c89d7982525de8d5652110e5c7e43ee5ddc4e1cc735055e03b30da0e299e8f0d: 14.0
   ? ai_ops_kit/engine/pipeline_evidence.py::_human_approval_domains_uncovered@2576c21f19a3bd4a3107c5907ea32c60897ca112a90021c08b2158845096e061
@@ -1763,6 +1770,10 @@ functions:
   ai_ops_kit/engine/pipeline_helpers.py::_profile_summary@cfe9d388edacb0e9bfaaf118cf5972374537e0e8f4f7eed687052e15b7e0435c: 10.0
   ? ai_ops_kit/engine/pipeline_helpers.py::missing_intake_signals@966f1499fb839a6d6c8bbfe3a03be00cf6961189ccd30ac8859fddd71aa7d887
   : 10.291545189504374
+  ? ai_ops_kit/engine/pipeline_helpers.py::_specification_mode@5cea621ba3f6bf914c9b6da92b986d1eca7b399de31f6c79340de57b3a67f5d3
+  : 10.73611111111111
+  ? ai_ops_kit/engine/pipeline_helpers.py::_native_specification_evidence@e1c2bec31880e42da5835439335d4c3e72a131df5094106d665202cd846baf41
+  : 32.16557475994513
   ? ai_ops_kit/engine/pipeline_readiness.py::_build_not_yet_list@45c702f1e16c96b7617b2a23469a1528a42c64fec3113bfe46ffffde005a3eec
   : 20.118518518518517
   ? ai_ops_kit/engine/pipeline_readiness.py::_evaluate_security@bf23071ae8457c2c12790521fd21b5b0830e91b6a1e4707e3df26d46e8f91878
@@ -1774,8 +1785,8 @@ functions:
   : 10.0
   ai_ops_kit/engine/pipeline_setup.py::_prepare_environment@dd8c66df001a7b1be1298bf3f813c69aac7e992db1dbc96c202e257c1596ab29: 21.166180758017493
   ai_ops_kit/engine/pipeline_setup.py::_commit_work@3012a6b7ba896b67be4c9a515e1461fdc04851807c5f3726e53a46ce74d0f7e5: 16.16832415550259
-  ai_ops_kit/engine/pipeline_setup.py::_assemble_evidence@df10ce1ff27bc4db8f8a7f8fcf8c7129c244ca8decedddc2bbc9aeac4ed36fd1: 44.87049061060732
-  ai_ops_kit/engine/pipeline_stages.py::_pipeline_run_gates@cbca80d7878a334eea0dd13943695b60296f7fde4f54f0f0c84ef72361224b48: 19.801101339689325
+  ai_ops_kit/engine/pipeline_setup.py::_assemble_evidence@560f8fa844aa4325940f25e119125c4d939cbf5bf8a65dda0f1437dc2d40ef5d: 43.40058309037901
+  ai_ops_kit/engine/pipeline_stages.py::_pipeline_run_gates@cbca80d7878a334eea0dd13943695b60296f7fde4f54f0f0c84ef72361224b48: 19.23736335990795
   ? ai_ops_kit/engine/pipeline_stages.py::_pipeline_assess_readiness@31abff9f3eef5c8c5eb249a353a810f87493bef3833cbf877942c9a8417d99e5
   : 45.52661741617946
   ai_ops_kit/engine/review_branch.py::_persist_review@ad84a06d3ec5f0f7ac0c59dde0bb77af0884c63a4b27e61f7058c36ca23f5eb7: 10.601051840721261
@@ -1793,7 +1804,7 @@ functions:
   ai_ops_kit/engine/run_plan.py::_escalation_disclosure@6a3ffcbabfbfb1c6d23ee7e4aefba60209725c47b4f3c0b8e913bca749db6329: 10.237037037037037
   ai_ops_kit/engine/run_plan.py::build_plan@a11c353d7232911c3393f0fb4348516feb58646c3ddd00671a7e79686e3e79ba: 10.0
   ai_ops_kit/engine/run_plan.py::validate_plan@9a82afcf39b77763a34b6e16249b190ddbc128628b23f355cc6f3ed7c990d537: 23.216898167173504
-  ai_ops_kit/engine/run_plan.py::main@7318000a63c5a2a8392fc3bdae1b57c76c05714748a2746a07b46578648819cd: 90.0
+  ai_ops_kit/engine/run_plan.py::main@7318000a63c5a2a8392fc3bdae1b57c76c05714748a2746a07b46578648819cd: 17.106641763848398
   ? ai_ops_kit/engine/sequence_aggregate.py::_collect_base_checks_at@e1b2ae7af35cdf7a83f08ac9ada264fed5582390d6f85f1fa2545f03131caac0
   : 13.656192
   ? ai_ops_kit/engine/sequence_aggregate.py::_aggregate_close_security@254cfbb5a7366c5a4625810aa5dfb7bf1a735556202aa44255c23fc9d11067fa
@@ -1836,7 +1847,7 @@ functions:
   ai_ops_kit/engops/adoption.py::snapshot@3e20724b77e5d0825653707f981b8c04954669f0c2c1eedf52fdff9b77781cf9: 10.0244140625
   ai_ops_kit/engops/adoption.py::validate_receipt@28d88e9938c2f77c38239fb7a0deee2f602fec7e4efead3e4ad399d5502b1b4a: 19.5
   ai_ops_kit/engops/adoption.py::report@add7c2b77be306064466365eef3763d0d81db386d6133253090d5e5a2f2382ec: 32.25
-  ai_ops_kit/engops/adoption.py::load_verification@bc678e5684c35d947185b6490252f36e8387a2f3ffdb26dd9f5b2493f949c14f: 542.7221248295629
+  ai_ops_kit/engops/adoption.py::load_verification@bc678e5684c35d947185b6490252f36e8387a2f3ffdb26dd9f5b2493f949c14f: 40.981857138881935
   ai_ops_kit/engops/adoption.py::_verified_observation@49f8dcc35c6c8147b1552b8583fc830543431b2049edcdfc7ca059323bb9393e: 27.22604140972998
   ai_ops_kit/engops/adoption.py::_verified_report@e133aa698501f5788c03ba7ca304e0674a8e070dccc4b44340190e742565c897: 27.241115521593894
   ai_ops_kit/engops/adoption_evidence.py::_evidence_path@2981651094f3cda8475b5c95e39dd2f16e70a48c7936e9498e90dfd6d027204b: 12.083333333333334
@@ -1947,7 +1958,8 @@ functions:
   ai_ops_kit/gates/gate_executor.py::closure_breakdown@9f81223e0e9236b85220bea9e698c09b1c7dd17857d5a47920092c7cb58d5cee: 17.0
   ai_ops_kit/gates/gate_executor.py::evidence_verdict@1ce98d86c1c54c3581cca973a33515e8579153b4e3546c523bbfdfdeabd20ec4: 22.0
   ai_ops_kit/gates/gate_executor.py::_origin_check@c00f5122727ab5f9b6bf0bad0390c673002793a62f280c9cd160835d0d96d839: 11.0
-  ai_ops_kit/gates/gate_executor.py::evaluate_gate@daea22f2cced6f37c397ac2e12baab89a150e07f2d6e2e64b5e9150625d99024: 56.0
+  ai_ops_kit/gates/gate_executor.py::_profile_evidence@33ae004f5c45f5ba19497bfcaafc0db83b86ada8dd764c8951246cf8ef5aba8d: 11.0
+  ai_ops_kit/gates/gate_executor.py::evaluate_gate@f3c704952dc429e069d2f4ca6bac380c7d8f8317d3d35668dafc297745626554: 53.0
   ai_ops_kit/gates/gate_executor.py::evaluate@331c42584a8f12c3af7437bf90dbb195d03428efb68bfc418ddf3c21b1f0095e: 32.303407407407406
   ai_ops_kit/gates/gate_policy.py::shadow_diff@6c890fd5dc2a3bc37497dc7dc04a0b98ed373f1413546e873696bf2e526a9abf: 18.157470703125
   ai_ops_kit/gates/gate_runners.py::deterministic_run@cc6765f9ea9a57909e3fb76cc6208e1d4daab2ea2842695527f45d9f91977116: 12.419825072886297
@@ -2080,7 +2092,6 @@ functions:
   : 53.8422510570054
   ? ai_ops_kit/intelligence/outcome_analytics.py::format_report@c6a21038be2b688691d385d619cd38216e3f7aadce9d503975c0a8306f225f6c
   : 10.267918381344307
-  ai_ops_kit/intelligence/outcome_analytics.py::main@f73fe6ed5315764731cb6ccb62fbce43afe3891e233dceecffc0293f0c5e30ed: 12.0
   ? ai_ops_kit/intelligence/outcome_insight.py::build_outcome_readout@6c275d58f5631a301ef4e6b9cf87269d185b6c7eab1fbfcbd5929d29ceb58e93
   : 16.0
   ai_ops_kit/intelligence/outcome_insight.py::_epistemics@20c0d195b6ef776666772d19f801a76f585d52aa1d3307402f0a0328dd2e2137: 17.008819580078125
@@ -2095,7 +2106,6 @@ functions:
   ai_ops_kit/intelligence/product_advice.py::_gaps@cd51c81b87a4424e41471045b7f962a7aa5f9d5dc4234013b89feb968d6bc260: 12.143347050754459
   ai_ops_kit/intelligence/product_audit.py::main@7936c2b2c1c1d2af377ae4c01cab7d745ff1714c164a828d1e5213ecd2264c73: 56.0
   ai_ops_kit/intelligence/product_health.py::compute@6b8c3d530b29333778eee7c3e77baa18df2bd0d10a6552907f637a8bfa36cb7a: 12.108189331329827
-  ai_ops_kit/intelligence/product_health.py::main@d0968a852e6ea3e1b56baa78450bbb4262acae842ffd5c2cb31352d1443eebd0: 12.0
   ? ai_ops_kit/intelligence/product_scorecard.py::_story_edges@3c23cc830094c858647f80c63c08b16a8f57805954b8e1d0a37bf98b70cae588
   : 12.0
   ? ai_ops_kit/intelligence/product_scorecard.py::_measured_readouts@678423179843edb9477959d4de82a4f5b2f34c320cc3b4a361c577047e3bf2f4
@@ -2124,9 +2134,8 @@ functions:
   : 10.291545189504374
   ai_ops_kit/lifecycle/active_work.py::register@a234356bb530a450079f160fae21f871f11564d47f7007dd906a0adb06a82358: 51.03773886043441
   ai_ops_kit/lifecycle/active_work.py::list_cmd@20180a237ebde73832b490187a98ea4e01ec297eac48a6f17373a67c90ffeec9: 27.86856678351878
-  ai_ops_kit/lifecycle/active_work.py::check_cmd@7adb461e05af174ccb77e411e9ad9334abcd4a476a8d82e2537a8512af3ca58b: 12.408564148927425
   ai_ops_kit/lifecycle/active_work.py::finish_cmd@8ab6ede2e9cad0d1ed1945ed6d9e53400d9a201c1391b88941c4ba5479c95800: 16.037323224959906
-  ai_ops_kit/lifecycle/active_work.py::main@6ab2f9f580cbf4e9442c46af645f614dff5187db4aa02a94e7fc88884c244998: 11.0648
+  ai_ops_kit/lifecycle/active_work.py::main@6ab2f9f580cbf4e9442c46af645f614dff5187db4aa02a94e7fc88884c244998: 10.409600000000001
   ai_ops_kit/lifecycle/attention_bus.py::main@98e3e82d50406628fa1529b3ed3a4f2a5eb3fe7c72d83422e863a5b55a306c16: 42.0
   ai_ops_kit/lifecycle/child_doctor.py::assess@74af3aa7c8c6137cf94f3834b846ded871560fa1d75f4012e54e754d0b9e514d: 19.0
   ai_ops_kit/lifecycle/child_doctor.py::render@afdbed05dac59a7d1ad8a75015f4501763f71195972cd2bccae5f7eec1bdcaca: 16.37915339098771
@@ -2134,23 +2143,29 @@ functions:
   ai_ops_kit/lifecycle/merge_memory.py::record@83b03927280c0530b6a29eaa4aa4082f9afe9fe8d091562dc67ba89ece7c50a2: 11.0
   ai_ops_kit/lifecycle/merge_memory.py::main@6008895fe48683658c66f95d3a064d40eda6228e8093de3ea90a0096cf14b486: 30.0
   ai_ops_kit/lifecycle/project_session.py::binding@2003950263bc25edeadd5bb01940eed4951f7ba0404f92beec43b2f990e3856c: 13.111120243281006
-  ai_ops_kit/lifecycle/project_session.py::_begin_read@2806ea0322e5eb80552d777023f20caedfebedd4f0d6c25c81df8930c89947c3: 41.20237663411732
+  ai_ops_kit/lifecycle/project_session.py::_begin_read@2806ea0322e5eb80552d777023f20caedfebedd4f0d6c25c81df8930c89947c3: 29.012202376634118
   ai_ops_kit/lifecycle/project_session.py::run_process@30a8a60595bcde1eb536e7f704f5165673a981bd97a53bf20727c1912082a988: 13.0
-  ai_ops_kit/lifecycle/project_session.py::artifact_inputs@c1af1c797a7221a7e2ecd7490dfc07e0b696e764918731058d1fa1f31f02ea91: 24.438344023323612
-  ai_ops_kit/lifecycle/project_session.py::_verify@9c6c47c721d6343abaad254e2428125c92daa9949a3680d8c9f7a382033cbd56: 22.247808
+  ai_ops_kit/lifecycle/project_session.py::artifact_inputs@c1af1c797a7221a7e2ecd7490dfc07e0b696e764918731058d1fa1f31f02ea91: 23.411078717201168
+  ai_ops_kit/lifecycle/project_session.py::_verify@66e629545013d0711b2ce56c21d9c93453f2eeecd7f18eadb28a3afcac3f5344: 22.196717979982726
   ai_ops_kit/lifecycle/project_session.py::execute@d1766d2781f68a825d7a455d7cfb59da3e0e854a9e62ecbec47f9979714044bc: 39.14953846153846
   ai_ops_kit/lifecycle/run_report.py::graph_findings@bf6d2f0f5e722789f0d96cc897b378cd1442db98714522de946117e33f24dbe7: 18.137629392039656
   ai_ops_kit/lifecycle/run_report.py::build_report@bee124880f9b2b1e6ab63b167dfff2805f6d645ad97c97df2327b8ddefd2ec98: 40.24503703703704
   ai_ops_kit/lifecycle/run_report.py::find_child_root@c70d6186132d6eb68e021255b6a4f08343d4fa30aa80eef8a3c3247f32071a18: 20.0
   ai_ops_kit/lifecycle/run_report.py::print_report@db10299520dd7c5ecfd4a42315b467e992161172d86da284ce52188740ed6106: 72.0
   ai_ops_kit/lifecycle/run_report.py::main@f6b90b2987f5399ba92149676074bafb05ea200a6db4d80624763e2c8acccd74: 110.0
-  ? ai_ops_kit/lifecycle/session_migration.py::_unchanged_install@5348d3335d4418ad7db723dd916ddd1045c82e5fa110782538c13a66b092a096
-  : 17.84256559766764
+  ? ai_ops_kit/lifecycle/session_migration.py::_unchanged_install@c5420fa3b03d0a5f8897f97d3861efef8ddc993bcf9a2fb9f7b5c047170bc7a3
+  : 19.49519890260631
   ai_ops_kit/lifecycle/session_migration.py::rollback@9311a2712b94074f67cf5eb462995dbd1d968b8deec2686d70cc2b85a0431980: 12.355359011312261
   ai_ops_kit/lifecycle/session_migration.py::continuation@5c4e8e9e92171929bc4d836fda76e0190ca3618d9fde92431fc1246144360a39: 13.875839609200083
   ai_ops_kit/lifecycle/session_migration_store.py::read@43b8ef0777bb54e93e540d31ee731016921b9f00a92403870f4726f254496fb8: 13.034398534500305
   ? ai_ops_kit/lifecycle/session_migration_store.py::inventory@854a39f0f5a8bc7cd88a9a81fe9cd8338d80bbee674f561fc3c22cf195f93048
   : 20.44282258395178
+  ai_ops_kit/lifecycle/session_prepared_update.py::_task@78bb0d5f58e9f483e78c76b178da2f13bf9b8ddeb1e8bee5e2be897421fb4039: 21.555555555555554
+  ai_ops_kit/lifecycle/session_prepared_update.py::_source@25de896583cbe306cd8c2cb13007171cf6bf06002c155a595b1e4f9bb888b968: 10.37037037037037
+  ai_ops_kit/lifecycle/session_prepared_update.py::_probe@36931882eff2637d781be4fdbc864b53b78c40d5757b7341193746a59a2a0160: 15.225
+  ? ai_ops_kit/lifecycle/session_prepared_update.py::_preserved@460253d0cc584868d0dd979e86459b6bed3b3126fbdb8d9d1a86de0370984f8f
+  : 25.112448
+  ai_ops_kit/lifecycle/session_prepared_update.py::rollback@0f95027bb890ad8d213ea9cfcc69d580f913752bc8c0e9a32a24050870cdb742: 11.055075102412381
   ? ai_ops_kit/lifecycle/work_claims.py::load_published_claims@30ae37378dd8d12e5056d33137ffffddb3b348452ec4199cc12790b90e0b8174
   : 10.137174211248286
   ai_ops_kit/lifecycle/work_claims.py::load_copy_claims@dd7d8ee26e5f90fbabe7898f5a1076907bbc526b1f6fe1fd3e662cda5b7ad53f: 11.024628536535722
@@ -2174,8 +2189,7 @@ functions:
   ai_ops_kit/lifecycle/work_view.py::project_work@8961766f643ea680848f1b030dc45fac4e8df7c2936f63f7b9f58f6c469c3ed2: 32.0
   ai_ops_kit/lifecycle/work_view.py::main@dab8b5be1bc3e401450e91bf735ef9fa795c78feefd53495d7fb475449c1b3b1: 42.0
   ai_ops_kit/lifecycle/workitem.py::derive_status@d5f30e0af97d1fe1d031e1bf3544cd9d00aac103113bba651ff2c32558b69f96: 19.029670419988495
-  ai_ops_kit/lifecycle/workitem.py::main@f3bb9d40095eb2961de87f29ab68f7be84115ac14e69285ff73cd1333f4accae: 72.0
-  ai_ops_kit/lifecycle/workitem.py::_opt@bcb3c6da3d6cdb48d22abaaa64cc20957efa65739adaa46842a40d4d33aed8e7: 12.0
+  ai_ops_kit/lifecycle/workitem.py::main@f3bb9d40095eb2961de87f29ab68f7be84115ac14e69285ff73cd1333f4accae: 23.625
   ? ai_ops_kit/planning/architecture_invariants.py::load_declaration@2addd644df8784c3b25418da278c9a4481da33cd459d8d8acbeca46a95ae4c19
   : 14.897727272727275
   ? ai_ops_kit/planning/architecture_invariants.py::_resolve_import@b6f2846bc87cfd9cc9370a997c0acc8efceaf4cac205f76385bda58d624caa79
@@ -2219,7 +2233,7 @@ functions:
   ai_ops_kit/planning/contours.py::_sot_touched@b50fa7af0fb8db5e79b9934cf69b9ed1d305c33aa11194e6466b389a7036d567: 14.114013671875
   ai_ops_kit/planning/contours.py::reconcile@249a92419648a2bc6b1120253e293cbff3ed3e4aa04f0bee690a4bb3950651a3: 21.48821189880684
   ai_ops_kit/planning/contours.py::suggest_affects@e7903c91ba54cd9d2f4be5ea43ab004542fb4c4a74e6ca71b32222c3380162ca: 30.0
-  ai_ops_kit/planning/contours.py::main@12127e36262929d4f202d3c5ecb60259f30b91b7bf1aa78655b761a90153087c: 420.0
+  ai_ops_kit/planning/contours.py::main@12127e36262929d4f202d3c5ecb60259f30b91b7bf1aa78655b761a90153087c: 70.0
   ai_ops_kit/planning/contours_signals.py::unquote_git_path@180e1da8adeecb95816f6de4b6694971095992d3a6b55c470186f2c400dfedd1: 16.709888
   ai_ops_kit/planning/contours_signals.py::_matches@1e3cd6f1a3ae7ff99f3968629b3a687ff32b78e384855c374bcb6808ae641457: 10.799999999999999
   ai_ops_kit/planning/contours_signals.py::_repo_has_signal@c4949455c47e4aafc296c72c1de0c4a91ca43f5a243d6f6589c80b93ff85c0de: 19.311999999999998
@@ -2232,7 +2246,7 @@ functions:
   ai_ops_kit/planning/delivery_plan.py::_scope_conflict@59615d0871530788dc0fd4fc4117415fe4402083ca8630a7e4f00c1bcc687d84: 16.116522530723714
   ai_ops_kit/planning/delivery_plan.py::resolve@7c531733d8c7cf3cad9d240d5fbe157feaa83d4482c3d61ba21f3b763e2668de: 46.548042887585886
   ai_ops_kit/planning/delivery_plan.py::_topo_order@1609f057051b976c10101cc6673285c20cd96d7c380169f57f299dea34cd9722: 14.0
-  ai_ops_kit/planning/delivery_plan.py::main@cab6cabe224e452669fb48e92639a6d9c3e2e17a8328e17b349742bd2651098a: 31.504207176726574
+  ai_ops_kit/planning/delivery_plan.py::main@cab6cabe224e452669fb48e92639a6d9c3e2e17a8328e17b349742bd2651098a: 28.903492774221142
   ai_ops_kit/planning/delivery_planning.py::_forecast@fec3488741e38d5cddf609909712b676f84c9c48c0c58de9ec58bd4dcf30d6d3: 10.0
   ai_ops_kit/planning/delivery_planning.py::_risks@5728f9628f93715d8dfc75907cf8dcd344b870a732ba51d8964d85c46dd59abd: 12.0
   ai_ops_kit/planning/delivery_planning.py::main@8b4d66a10c853aead122173ad0d7a0536de1a2a96d39ab7e6c9595547c651b53: 306.0
@@ -2246,7 +2260,7 @@ functions:
   ai_ops_kit/planning/first_hour.py::_render_ready@02f3eae48ca4ba0391f7bc209a46b6e81a3d63286bf6007187d63c547b8694a1: 20.020322105370116
   ai_ops_kit/planning/foundation_freshness.py::assess@cada94be37e3b6cb510b3dc87f7d7f2b7936ecd11500d7f89bdbae4161aff081: 31.009256137849995
   ai_ops_kit/planning/foundation_freshness.py::_doc_rows@91e1760ed164e862ac6a9a7f833285cf7506a1b885a27dea08455c71b56f6d14: 10.0
-  ai_ops_kit/planning/governance_report.py::_base_rows@57b7eb7f3538b47bb9d7fc3db75de1711473e646418d870cdaf589cb7cd38632: 16.131072
+  ai_ops_kit/planning/governance_report.py::_base_rows@57b7eb7f3538b47bb9d7fc3db75de1711473e646418d870cdaf589cb7cd38632: 16.016384
   ? ai_ops_kit/planning/governance_report.py::_apply_overrides@f69b002e4a7d3fe3dfffe04cd8dd0994c5ab64449db1fdbdb0442ef61e67a133
   : 13.0
   ai_ops_kit/planning/governance_report.py::render@39b888970ab544fe75b3e1c37b90c19c31724ef1dd790ba19dd0d84700d544d5: 31.652427467560866
@@ -2261,18 +2275,17 @@ functions:
   ai_ops_kit/planning/next_work.py::main@723042e07b242304ebf3b94611341e80857799bb2b7a1b3d65724b056145958f: 56.0
   ai_ops_kit/planning/passport_generator.py::_repo_name@61c953653bfe1cae319b698aa9ec670c1349fc29f7ff64e54e95c75a3472679f: 12.99514091350826
   ? ai_ops_kit/planning/passport_generator.py::_readme_summary@f78a7fb2ee7c899ff951232c3cac5fcb80032a018df5cbdd7264ff583452e12d
-  : 12.16795451231958
+  : 12.020994314039948
   ai_ops_kit/planning/passport_generator.py::sections@1a821736b54f0e9f96c3efc0d363ec6a44c690ecd1ed902c470e2c9e351482f0: 30.022898432729495
   ? ai_ops_kit/planning/passport_generator.py::_product_metric_observations@6eaa822da5ef66e50d33bf1faf81c47646d1590fb79a57d963b823e7fb229b44
   : 14.39649908406269
   ai_ops_kit/planning/passport_generator.py::_milestone@f6b281fd71774415bad0cf48f84283310021e60bf68a877a9d44056da08681f2: 23.2407828857533
   ? ai_ops_kit/planning/passport_generator.py::merge_owner_sections@f0d6e2bc87344991d5bbf46ad738f9eed1f2189a51b08947e985a4b16909a6fc
   : 10.02962962962963
-  ai_ops_kit/planning/passport_generator.py::main@8466ccd09fcf44d7d7b4c84ed5cbe8a6af570b3c70341bbf9e01d56ffc87e098: 42.0
+  ai_ops_kit/planning/passport_generator.py::main@8466ccd09fcf44d7d7b4c84ed5cbe8a6af570b3c70341bbf9e01d56ffc87e098: 10.5
   ai_ops_kit/planning/plan_merge_driver.py::_split_items@4b75a3391d6fe133e075deda70652cd92776db43a6878423b86c64e2d6779f45: 12.144
   ai_ops_kit/planning/plan_merge_driver.py::_merge_items@4fb0f1212405b3ee5717514d3dd8e3e2192bc06075e87b1a4038a24e43067044: 28.61393482695258
   ai_ops_kit/planning/plan_merge_driver.py::_validate@5e9d078f2ac8ead0a40d24c59afa4b59390fc4e1002f4f8aaf2758c3b63eef3a: 15.481481481481483
-  ai_ops_kit/planning/plan_merge_driver.py::main@28c2311228a104cc8065862c81ac2259eb0d28a7796f85187c212df88c10aa40: 42.0
   ai_ops_kit/planning/plan_model.py::freeze_state@74d9e11901b50b12809a8ea0c9d3a1a4a7de4b698726e43654b432e7aefe37a3: 11.0
   ai_ops_kit/planning/plan_model.py::_freeze_lift_errors@b1ec6647528c68ff78839d20c119c3077e27b46707e2c955baef53c462db30d0: 26.419663177059626
   ai_ops_kit/planning/plan_validate.py::_cycles@8faad1233f834bd538c16c8b4a89c48210b32a325650815c7ea86b9676c069ed: 15.0
@@ -2300,14 +2313,14 @@ functions:
   ai_ops_kit/planning/product_templates.py::state_of@befcd2b4f1ff49132790a3d26dd2b8be07e9b615d666839531c2e5fe9fc14b9d: 37.386372976082846
   ? ai_ops_kit/planning/product_templates.py::migrate_instance@2a3ac4162676e13d90bdd15252067dfd73cc5c6a3f96d3e89ba31a63b34dbc34
   : 11.013065543677788
-  ai_ops_kit/planning/product_templates.py::main@9cec6f99f7b0c2e0049ac0153f78a8689850fe4436b4b280891537c886cf14f1: 110.0
+  ai_ops_kit/planning/product_templates.py::main@9cec6f99f7b0c2e0049ac0153f78a8689850fe4436b4b280891537c886cf14f1: 28.196296296296293
   ai_ops_kit/planning/repo_audit.py::_measure_storybook@b2fefb557d82b86d43e72156438a7e218731fac4ac80529965057bf64d283a0f: 14.496740333757021
   ai_ops_kit/planning/repo_audit.py::discover@443527067dc126e9d9747a91d9e08eb154fa523a8183c36ea81c980d9f049472: 20.118518518518517
   ai_ops_kit/planning/repo_audit.py::audit@b2e9dd58c65be7a12eb34f5bada543e6df5279a19e6d638d0c393e718210eb04: 21.0
   ai_ops_kit/planning/repo_audit.py::question_package@1c740eacad2b4d33e0855c16e63286e84a207547d4932998508ff03b1293b698: 17.0
   ai_ops_kit/planning/repo_audit.py::render@4d84ed159a8014116a50f2cc96f5668b4b516c5ff8949ce2a37937770dead940: 31.492032
   ai_ops_kit/planning/repo_audit.py::main@11f82257b56ce36fa5d62078771e6eb27dec34dd1e399141cab6ec9a9bfeb0b9: 56.0
-  ai_ops_kit/planning/repo_audit_analysis.py::classify@771be02356425347ed42f0e754ab96ae71ec77daccf0b417371dd9dfb04553c0: 24.640625
+  ai_ops_kit/planning/repo_audit_analysis.py::classify@771be02356425347ed42f0e754ab96ae71ec77daccf0b417371dd9dfb04553c0: 20.671296296296294
   ? ai_ops_kit/planning/repo_audit_analysis.py::owner_confirmed@97e09b5528a632b3746fc4157717cb2e9340e97266491416a2fbc376a3c01abd
   : 10.265625
   ai_ops_kit/planning/repo_audit_analysis.py::reconstruct@0a571db9427c0ada8b8cbd5097bf4053281d35c8a574b7ecfb4b02f852bd583a: 64.5185185185185
@@ -2348,8 +2361,6 @@ functions:
   ai_ops_kit/providers/codex_native.py::answer@cb93d08925a547919e1859e80eb046640e5654f93822a0c03cf81b3d3f7aabc9: 36.366651531005076
   ai_ops_kit/providers/codex_native.py::_call@74bcd3c783a69d400f06bd7038cd0a8b2bed6323c3d1e33ba12a1afa087e3f51: 24.054094665664913
   ai_ops_kit/providers/codex_native_hook.py::prepare@dd1506064c3fa87acff88d1f876c10da2c5b39c325bbe9ed5a26a6f02a7d0c93: 16.236515367392634
-  ai_ops_kit/providers/codex_native_hook.py::handle@723fb3f6cd9c265c8b590e7e8a1635b9c2544c0f0f9f61679fb9d05e02dfdfaf: 10.399999999999999
-  ai_ops_kit/providers/codex_native_hook.py::main@67054f46192e3e7470adfa1f31faff13421d66c58eefb8fec61a80c234ca96bb: 20.0
   ai_ops_kit/providers/codex_transport.py::RPC.receive@1a5f590d7e071f620e4a9e5b4300a0290efd24dbe6958dc38584ab92f1ae7f76: 13.152
   ai_ops_kit/providers/codex_transport.py::RPC.group_alive@25ad4e1778fa87207c7740b22c16a96d044c4f312a56e482b80aecb5e99a8716: 42.0
   ai_ops_kit/providers/codex_transport.py::RPC.close@6f282aa684184e808028190f4f6cb365528973ea98de2e87e5f708a98b4b7880: 12.096
@@ -2389,7 +2400,7 @@ functions:
   ai_ops_kit/security/scan_deps.py::_toml_dep_names_scanned@4c2ba388a462e86a51c0e84b4329367be4e22c1e8c163effa1bf966ea0f311cc: 11.495616
   ai_ops_kit/security/scan_deps.py::_dep_names@4df09e16482ffa103e96a72270ff43472b77f260cb921e1520d84c24cfd7de26: 13.145988554151819
   ai_ops_kit/security/scan_deps.py::_dep_specs@1b5089cc4447eb38b3afb4f61dc64811a37e5994d12130f1a1371d172c355b04: 12.018
-  ? ai_ops_kit/security/scan_exec_call.py::launch_is_a_surface@0c0d7147424705367331cf6cddf21572369baf6c0d1c07a11053874524695a98
+  ? ai_ops_kit/security/scan_exec_call.py::launch_is_a_surface@ee63e32aeefde2187d5674fd4c5deb01c3d96c94c23400bfbc8dfd209365fa50
   : 12.0
   ai_ops_kit/security/scan_exec_call.py::bound_names@548971eb9ab23acc4c39c78f8a4de174344450f290eea4d83862f37a3e9b3bc9: 13.0
   ai_ops_kit/security/scan_inline_code.py::_вид_флага@644a41e9818a058d109ad8059aa465a1d568bac6d0394b04d0621e23613dff4c: 18.0
@@ -2411,11 +2422,11 @@ functions:
   ai_ops_kit/security/seam_scan.py::main@05e325a57034f7a82d992caebfc4400c1f5f4c07b3807f80dbd5956962b03d68: 132.0
   ? ai_ops_kit/security/security_enforcement.py::key_preflight@79a868a8f443e904b9f56d25825b1cb791cf1c8aa79e86aa9a6c32f4277a2482
   : 13.041259765625
-  ai_ops_kit/security/security_enforcement.py::main@6dde297b440478d8b0da055caeab0b99dbc1500765d499476a05e96affd63cab: 90.0
+  ai_ops_kit/security/security_enforcement.py::main@6dde297b440478d8b0da055caeab0b99dbc1500765d499476a05e96affd63cab: 16.381124999999997
   ai_ops_kit/security/security_pack.py::_applies@e16eff4d3545a6741adfa855914bef49bf85ed4b111fcde843751f63c51f9a14: 14.0
   ai_ops_kit/security/security_pack.py::run_pack@d6a5a6f88cf52ddd3aa27da42e22a296f66fdf39a19a32a56c74851a9b9ebbd7: 23.0
   ai_ops_kit/security/security_pack.py::for_report@8c3bb50ab08f9aa8d7e052cdf28d878cbd110c8036689b403f8cc8d132649634: 17.0
-  ai_ops_kit/security/security_pack.py::main@b00413bbbab63469791379a6135bad95139efe30e7aabdbcf3ac671a21a16b62: 72.0
+  ai_ops_kit/security/security_pack.py::main@b00413bbbab63469791379a6135bad95139efe30e7aabdbcf3ac671a21a16b62: 12.777372794868056
   ? ai_ops_kit/security/security_review_cascade.py::_corroborate@4f64118ed11811abbc7f748261c58426a2e858110c839f6f1375cfe271fce711
   : 45.11400462962962
   ? ai_ops_kit/security/security_review_cascade.py::reduce_verdicts@652a5ce5f3449c6020f07c693ed97928c25a0f511672a6c7a6cc6d348216abf1
@@ -2442,7 +2453,7 @@ functions:
   ai_ops_kit/shared/claim_provenance.py::_capture_inputs@2c175b48279fd45c3fe0497a84a764a21373b4bb347bf687de892ca61dab5a35: 16.645502645502646
   ai_ops_kit/shared/claim_provenance.py::_input_drift@e535f3927f513cab96868e5c406b6694e84e305d1799066cc88f590b11ba87de: 14.0
   ai_ops_kit/shared/claim_provenance.py::run@5e62c489692a0bf8cc7ee0f39236ac9a482daad9bdc961fbd1ec4b57ba239b10: 18.012
-  ai_ops_kit/shared/claim_provenance.py::python_context@a24dc0eef1ce18e2e69b51b90b25a924ea3d9e780ed951f619d5628022ad8c44: 26.246355685131196
+  ai_ops_kit/shared/claim_provenance.py::python_context@a24dc0eef1ce18e2e69b51b90b25a924ea3d9e780ed951f619d5628022ad8c44: 27.970845481049565
   ai_ops_kit/shared/gate_dimensions.py::run_verified_lines@f5696207f18af757ce20c1ccfff2016befbe3c6c435d96370fcaf4c30006f948: 11.286814814814814
   ai_ops_kit/shared/gate_dimensions.py::knowledge_levels@4d1ffa1cd6e7ba32a1386165093263d0a4c0c331bec3523d617b1fe079727911: 11.0
   ai_ops_kit/shared/gate_dimensions.py::knowledge_readout@5521190e89c299588b982d520794f382c12c2546da31c6e0340246c17a8ac55c: 21.38095238095238
@@ -2470,7 +2481,6 @@ functions:
   ai_ops_kit/shared/project_detector.py::_python_commands@1ba72dc6f188b1f169b3da8111520cd8f64a05af36f63c8857eb1cd8c38a4900: 60.27699125364431
   ai_ops_kit/shared/project_detector.py::_python_stack@fbfd7907940626b9716e89a87b80c1f17435f7446173f2cbeba24f3374b8aec0: 12.013523666416228
   ai_ops_kit/shared/project_detector.py::detect@c2bcd1a2c54afe30e3f9975e430a887f8ecfeda770eb389a49578f28304e4834: 25.007337058602555
-  ai_ops_kit/shared/project_detector.py::main@acd1686b5311775be11fa21312c5a1b8c31e1381259f9545217ccf27115e9195: 12.0
   ai_ops_kit/shared/signal_words.py::looks_like_plain_words@0265c68e35c35a21ae4e0fb38d1bd283c511ad2673f29010ffd95393b0c5efbb: 12.0
   ai_ops_kit/shared/usage_ledger.py::check@0f7563849be0c92c5a4c2fc172ec29c115b6b916eff56f2c7bb96679ee470696: 22.605826126536186
   ai_ops_kit/shared/usage_ledger.py::append@775e5dfca693307f1a1a3e5a715c7fbef22b42886e2df6b416eda2ea189519ca: 12.042666666666667
@@ -2541,21 +2551,8 @@ functions:
   ai_ops_kit/ui/ui_readiness.py::check@00dbfeb51d290f695e09ca614f4ccef4bc2e22593f4fb01c8048b3372c24f035: 17.57194926374107
   ai_ops_kit/ui/ui_readiness.py::_fmt@05c702e995b72c1babb8a149599ed0db3956d2e00050971b82eaccfb1a69d670: 10.075131480090159
   ai_ops_kit/ui/ui_readiness.py::main@7fd05737a611d59df459c1a9c940ced3cbdef1de4c877f290111b0ad6ce6495e: 30.0
-  ? ai_ops_kit/validation/ai_capability_selftest.py::validate_mini@e9ce02515350deb075ccaa6e5edb3edd4c1de7735c04aa504bb89295ff30cc1c
-  : 12.0
-  ? ai_ops_kit/validation/ai_capability_selftest.py::structured_output_test@200823922c7152e757ad0055dcb4f16bcbcf4a6875f449126644e7dfbb6a2623
-  : 30.0
-  ? ai_ops_kit/validation/ai_capability_selftest.py::structured_output_test.extract_json@75bc85181a902b2e37cf19e493fb81024cbc030e3f16738a89ac3e2fbe282a7e
-  : 30.0
-  ? ai_ops_kit/validation/ai_capability_selftest.py::error_normalization_test@18a90dba069446c092c9af0f9bdc7646c4a13412faecbfa2ecb467e8c1decc61
-  : 56.0
-  ? ai_ops_kit/validation/ai_capability_selftest.py::routing_downgrade_test@3ceaf638834cde47367fdc1c66098fc6b55e394fc95ed46ba185c42b92f995a0
-  : 30.0
-  ? ai_ops_kit/validation/ai_capability_selftest.py::credentialed_tests@9d2352c8bc53ba0dc1020bd7e72e9211c041bd00ac074b33f6ca4d97c788ea0c
-  : 12.0
-  ai_ops_kit/validation/ai_capability_selftest.py::main@db1ce17b67c9e09b667cccc593ca39c9f566b8f289e4b886772969ff6545fcdd: 132.0
-  ai_ops_kit/validation/ai_managed_checksums.py::verify@ead76345bcc0db0d5eb62eb50a7100fbdb7680bbd997910b667fe873ed7225d7: 272.0
-  ai_ops_kit/validation/ai_managed_checksums.py::main@82136f39ee30e41ac12429b2a68844b454cdc5a6fca40462f6db1db770547178: 42.0
+  ai_ops_kit/validation/ai_capability_selftest.py::main@db1ce17b67c9e09b667cccc593ca39c9f566b8f289e4b886772969ff6545fcdd: 11.0
+  ai_ops_kit/validation/ai_managed_checksums.py::verify@ead76345bcc0db0d5eb62eb50a7100fbdb7680bbd997910b667fe873ed7225d7: 19.538944
   ? ai_ops_kit/validation/own_medicine_checks.py::delivery_steps@7295195a56bfbf5ba4e74afa8877fe3bbc5ebd5333dd9ba57e1e0482639a3687
   : 54.073599999999985
   ? ai_ops_kit/validation/own_medicine_checks.py::check_gitignore@e9bbbe292fe47f3922f1ae075761f980446743541a3bbc2021cce588e7809c99
@@ -2566,21 +2563,16 @@ functions:
   : 11.097393689986282
   ai_ops_kit/validation/validate_acceptance_result.py::main@258a899c8eeeb9961f363292fa47a6bd8cadd3579ac5cbafa90eac058b89c9a4: 156.0
   ai_ops_kit/validation/validate_access_filter.py::check@cff3be8d28c076314e70cc5778e645354008037f227d30c5c741241866cb6ec4: 32.660607999999996
-  ai_ops_kit/validation/validate_access_filter.py::main@49ece23e70d347d5c0461cb81919d8eb60eea0f2e5d6340577893b88aaa315e9: 132.0
+  ai_ops_kit/validation/validate_access_filter.py::main@49ece23e70d347d5c0461cb81919d8eb60eea0f2e5d6340577893b88aaa315e9: 13.822157434402332
   ai_ops_kit/validation/validate_adr_registry.py::main@e73993667e0f0c4e12d83ddf81c1e995d20825d5a8f51fbd3a6ebcfa9f7aed40: 72.0
-  ? ai_ops_kit/validation/validate_agent_evals.py::registry_agent_ids@272142e1e3dde2c2476cf9e7afae0b9b2f7e0bc6497b61ecdec5e1ab3d8a367e
-  : 20.0
   ? ai_ops_kit/validation/validate_agent_evals.py::changed_files@109924b399d269d364c13c7f1585a634e89f72021db4406991ea80a3fe4926ce
   : 20.0
   ? ai_ops_kit/validation/validate_agent_evals.py::resolve_base@f7f3f3342bd5ff2ccb4d1b1c1568f952ec3ff1f64c34ed3ffc59e54afd9f126d
   : 20.0
-  ? ai_ops_kit/validation/validate_agent_evals.py::evals_present_on_disk@1cf9a790b4846a9ebd622a864e492066e4314b9dd73a8352a72344c3e6f4c6bf
-  : 20.0
-  ai_ops_kit/validation/validate_agent_evals.py::run_all@78bd6006d743605a2273d004a972de35f9751c5eae45c1cb19263892e4f61732: 72.0
-  ai_ops_kit/validation/validate_agent_evals.py::main@9de997a5262b1dee7871df6811e7d7e0a59d0bb5572fc87351310b21d675adad: 42.0
+  ai_ops_kit/validation/validate_agent_evals.py::main@9de997a5262b1dee7871df6811e7d7e0a59d0bb5572fc87351310b21d675adad: 31.283950617283946
   ? ai_ops_kit/validation/validate_agents_checklist.py::offending_commands@91ac9e6717262d0fbeaae37b277d3ef8e0ca32343cb7da03973e797e95c222e4
   : 15.0
-  ai_ops_kit/validation/validate_agents_checklist.py::main@c741f08ddcc01eacaed3490c84d878c1e4576be1c0044d1d68a5d46f54e020ff: 42.0
+  ai_ops_kit/validation/validate_agents_checklist.py::main@c741f08ddcc01eacaed3490c84d878c1e4576be1c0044d1d68a5d46f54e020ff: 16.66666666666667
   ai_ops_kit/validation/validate_ai_first_config.py::load@4d52a2d181f7c42547a95bdbc27f348e5f5b8e724de6172dff79a2246e5f64cb: 30.0
   ? ai_ops_kit/validation/validate_ai_first_config.py::agent_file_stems@8feb826966edd0cc600a75e083d53d48ad57e3f752678d824d8a1987e64c25de
   : 12.0
@@ -2595,32 +2587,13 @@ functions:
   ai_ops_kit/validation/validate_ai_first_config.py::main@2da94217b3cb3da23dc31f4f8ed02e1384de6969a68d8ab7d1e1f004d4dbb152: 72.0
   ? ai_ops_kit/validation/validate_ai_first_providers.py::check_router@5818a1c55519816468672e678c11410faa484d9f393a24023ca46d2359da33d1
   : 11.641329085116066
-  ? ai_ops_kit/validation/validate_ai_first_registry.py::load_yaml@84f95884e88b4d2b7f46f2691d233fddfc6cd7f069472d396f0390f7c514d17d
-  : 30.0
-  ? ai_ops_kit/validation/validate_ai_first_registry.py::parse_frontmatter@f20470f475eb20d6a6638a5e86b8a519c44203522814a044e21b9be034d30ed3
-  : 20.0
-  ? ai_ops_kit/validation/validate_ai_first_registry.py::agent_files@e7b47253328df3a7de5f2829f649d429945f5336bd1f08b002eaf30366cda348
-  : 12.0
   ? ai_ops_kit/validation/validate_ai_first_registry.py::check_registry@49bdf5793bbff278abbc037922f332c40f9f3105ab5faac7c7fc6004fcd59a33
-  : 930.0
-  ? ai_ops_kit/validation/validate_ai_first_registry.py::check_manifest@075fd4413e5da6d568e462b8f40adaf6dc2f11bf60a3f030f8e54f77f6a0c1e1
-  : 42.0
-  ? ai_ops_kit/validation/validate_ai_first_registry.py::check_capability_index@f37bf574fa7f2c9294354b20dc55f94247a7b39a9850534a44cb9ff02191db00
-  : 30.0
-  ? ai_ops_kit/validation/validate_ai_first_registry.py::check_permission_levels@1279c9c0ef104603b108e53a974f60fffac7341ca8e331324fc745dd25b739d2
-  : 30.0
-  ai_ops_kit/validation/validate_ai_first_registry.py::main@bd0b6b48f7784f896fc5783f4109a34c3406ea813448faa8bdc627a5f4de0810: 30.0
-  ? ai_ops_kit/validation/validate_ai_first_workflows.py::load@57f3a0833af87ac29ad2308da5187d93d9103c77413b227ba4c55edcaaabfbbc
-  : 20.0
-  ? ai_ops_kit/validation/validate_ai_first_workflows.py::known_agent_ids@0c8a393bd3b6df979323ea778c67b1373615d63baeaf85dc843da24a1f23660d
-  : 30.0
+  : 52.66236828078233
   ? ai_ops_kit/validation/validate_ai_first_workflows.py::check_gates@64adc5e6c721acd7ab5301266d7cf68bf2b252adf0c45b066ee667991746501f
-  : 240.0
+  : 22.552616562048946
   ? ai_ops_kit/validation/validate_ai_first_workflows.py::check_workflows@236c8c95ea278027f08717d0d55e58e65c2568029f10bbe291eed9e133ee72f4
-  : 306.0
-  ? ai_ops_kit/validation/validate_ai_first_workflows.py::main@65c74d57d2b54518f12f14b6e87165f5f897c95f0bd7e91bdf5f9193b32ed749
-  : 30.0
-  ai_ops_kit/validation/validate_ai_ops_child.py::main@db03ca6051c5b4c5b3178cccba07c259930fd825d16301105005fd314bfacd44: 2070.0
+  : 34.52273141399418
+  ai_ops_kit/validation/validate_ai_ops_child.py::main@db03ca6051c5b4c5b3178cccba07c259930fd825d16301105005fd314bfacd44: 91.36107300716355
   ? ai_ops_kit/validation/validate_architecture_decision.py::main@dfca8d3de65e030605e28e89adb3c40a2a084a36bd9c3879d50bca484978c38b
   : 72.0
   ? ai_ops_kit/validation/validate_bootstrap_qualification.py::check@493e097f7d87ff73e069abc8660dd5c57fc09acabe82a55f58205b74522490bc
@@ -2630,20 +2603,14 @@ functions:
   ai_ops_kit/validation/validate_budget_contract.py::check@aea4e278a6a76146e42d19ef0e2a4a12a285bcb2e4131e440dc6c351b4d34ab4: 33.36981649414517
   ? ai_ops_kit/validation/validate_budget_contract.py::check_registry@a9443d9782db82df95a0249c7110ca0fb888250548694ac62c3e2ebf6969563d
   : 12.561164258090779
-  ai_ops_kit/validation/validate_budget_contract.py::main@118c3cd2bfc9c1dfe9f8edbe2bbd1a554651d20d2f897f5fc9c88db1b2c43056: 90.0
+  ai_ops_kit/validation/validate_budget_contract.py::main@118c3cd2bfc9c1dfe9f8edbe2bbd1a554651d20d2f897f5fc9c88db1b2c43056: 14.184000000000001
   ai_ops_kit/validation/validate_capability_policy.py::main@b00248fd9baad1185e4b76f05b6133bd9348c0e6b136b1deea56d084e83bf543: 20.0
   ai_ops_kit/validation/validate_claims.py::check_claim@fa3e03e561102f1531dca23cc12fc38c41a261ab61182db6711675ec2f5ed6cc: 26.25
-  ai_ops_kit/validation/validate_claims.py::run@3cbb295fe0183d8eedb7cf6bb51078c8761a31ca0f9f86d7d5c3ccefb6c7fbc2: 90.0
-  ai_ops_kit/validation/validate_claims.py::main@361d792012494597f0a7ca08ead38b10dc5c84ecd8e342829058da6c39535c59: 42.0
-  ? ai_ops_kit/validation/validate_code_duplication.py::_coverage_note@e37bab2b60f07325b6f2a02f504251ecdd2b16bd9791cd3eae510d6b1706b448
-  : 56.0
+  ai_ops_kit/validation/validate_claims.py::main@361d792012494597f0a7ca08ead38b10dc5c84ecd8e342829058da6c39535c59: 12.17283950617284
   ? ai_ops_kit/validation/validate_code_duplication.py::evaluate@f7ae071a35efacd4c17e7cb57fee28676fff7ca8ce20b3363853a01b5087bed0
-  : 72.0
-  ? ai_ops_kit/validation/validate_code_duplication.py::_lines@c340ba13ef954990a52cffd14fadf138feef9d33f69777daef1353fb3825f545
-  : 42.0
+  : 11.641329085116066
   ? ai_ops_kit/validation/validate_code_duplication.py::write_baseline@4dd9cd6655f203dc46eb6c9da1b36782b5743c29d3ed09e0152a4077387ea9ce
   : 20.0
-  ai_ops_kit/validation/validate_code_duplication.py::main@538ed8333480a6259d2263d5a538e0bb61586bea0afd3d6807ba11848e217826: 30.0
   ? ai_ops_kit/validation/validate_container_assets.py::_check_launch_context@7dec392ac0c8c9167d759f83c0a7f69d6f5a79e9ed6cf80b808f0241d21f50d4
   : 19.208912037037038
   ? ai_ops_kit/validation/validate_container_assets.py::_check_launch_target@44c1e76a1985654472440390b1f987831f6bd4182b9fa99be0134474bf6ddd39
@@ -2658,14 +2625,11 @@ functions:
   : 72.0
   ai_ops_kit/validation/validate_context_bundle.py::main@5046fc4d4871f1df498a217a0d7a2c853b59058eae2e5abda061f4d7dbd4d26a: 42.0
   ? ai_ops_kit/validation/validate_context_completeness.py::run@5ce845c94e190632678d0f41635c3cb9d354bda14af0ce62ed7fea8ee013b08c
-  : 156.0
-  ? ai_ops_kit/validation/validate_context_completeness.py::main@375c9e774c51d2f514edb79a2b8125d4eec868cf48005c600b7699eced1765cc
-  : 20.0
+  : 12.666666666666666
   ? ai_ops_kit/validation/validate_context_qualification.py::run_scenarios@b3e4252aa08344dfc05e4b6c3c5f13138e3a3f87173ecac868962c392507582d
   : 1560.0
   ? ai_ops_kit/validation/validate_context_qualification.py::main@a4971c11750887384f178b1fb47153fd9a6896137c10c02038bea79fb0ebbbd1
   : 42.0
-  ai_ops_kit/validation/validate_cross_artifacts.py::main@11271656bea8e8a1338b86f34eca442dd914a30f269d6f7512d474b2653df75f: 56.0
   ai_ops_kit/validation/validate_decisions.py::check@9c9c66d83740a923195096eb56068b556f153414f66bd8f17cf767358e89128b: 51.85148199120539
   ai_ops_kit/validation/validate_decisions.py::run@093837a597ca53855679c0200b3f4b6eacc74278434c8e37421e97d4d76bea80: 132.0
   ai_ops_kit/validation/validate_decisions.py::main@d34ce1a9dfa8301d16f0de2c8851485accf3e94a27c335c070a93cf09226a6ef: 20.0
@@ -2692,9 +2656,8 @@ functions:
   : 10.010797969981644
   ai_ops_kit/validation/validate_engops_policy.py::main@7de30fecdf6f314ae1f91dce1c46d45e51ec6040a7efc22e8cec216852adeeac: 30.0
   ai_ops_kit/validation/validate_event_catalog.py::check@e6f62ab0e192b6af1cdabb27bd6ad5094c6297599062e03dea7412fca4ad2613: 26.544153344988494
-  ai_ops_kit/validation/validate_event_catalog.py::run@21e1264572c95834aba95f13d47f16614360e38a528e6ba7722f265d48405670: 342.0
-  ai_ops_kit/validation/validate_event_catalog.py::main@976c29f48e225aabb3202944e92c46036742d980fbfc783992adeec02184e815: 72.0
-  ai_ops_kit/validation/validate_feature_blueprint.py::main@074dc281464eab51d8627b90a2f887e11bfadfe9c67874450e79b72e3e61f19b: 56.0
+  ai_ops_kit/validation/validate_event_catalog.py::run@21e1264572c95834aba95f13d47f16614360e38a528e6ba7722f265d48405670: 58.5
+  ai_ops_kit/validation/validate_feature_blueprint.py::main@074dc281464eab51d8627b90a2f887e11bfadfe9c67874450e79b72e3e61f19b: 12.20790202653448
   ? ai_ops_kit/validation/validate_feature_coverage.py::run_child@97893b683e545ce649bb22e3fd1dabcb62c9bb7ff2df4a61570d90d56e8f3bd9
   : 10.110705645987945
   ai_ops_kit/validation/validate_feature_learning.py::check@2f9f652c353c1466212de14e55cdb568dcb1fb7aef3dd422bb75c20b11f55062: 71.5536834520547
@@ -2703,7 +2666,6 @@ functions:
   ai_ops_kit/validation/validate_feature_learning.py::main@e73993667e0f0c4e12d83ddf81c1e995d20825d5a8f51fbd3a6ebcfa9f7aed40: 11.077385424492864
   ai_ops_kit/validation/validate_feature_registry.py::run@6b4a7c6e358c84d7437c7984f16033bdc960611df0167be8bf666d7da7464c7c: 72.0
   ai_ops_kit/validation/validate_feature_registry.py::main@5fb1b34387cb7c275248f44f949de3d284b83b8ea98a0bb9e60491e3c3a79b8b: 42.0
-  ai_ops_kit/validation/validate_freshness.py::main@6c25c7fba8efa0e4e1b368ebff4889106c05491a355c2cccda144e52b1a36e90: 56.0
   ai_ops_kit/validation/validate_func_size.py::advise@4e0f2897b432d280db11e690c98a8d447b3819b06322c4866f5811e24346d2a8: 11.024628536535722
   ai_ops_kit/validation/validate_func_size.py::_scope_block@9ecde35a52fe30064a8f66728892e011554e70762b607fb26438134194a2be3b: 12.0
   ? ai_ops_kit/validation/validate_func_size.py::append_raises_text@dbaab527548e7773c9f34fd9b5c36aabff2343202a41a6ed3611ab96153d1dbc
@@ -2712,12 +2674,10 @@ functions:
   ? ai_ops_kit/validation/validate_func_size.py::unrecorded_raises@6d032fccb3eef62009263e1a1145aca2d71a232d3567ad653f7c8ce2e49bf9f7
   : 20.043191879926574
   ai_ops_kit/validation/validate_func_size.py::main@1960efe030dd39c94715dba75a480fc5c5abd21eedc6fa9f49d5d9fc72ec823d: 132.0
-  ai_ops_kit/validation/validate_governance_report.py::main@a4f1bfa40da8219e06ddb4b8e2050e9929daeff73288b08d49050972a7c82898: 56.0
   ai_ops_kit/validation/validate_key_lifecycle.py::check@f199e384f84cbc6442b29127c4120358553eff73fd6b509bf316f5b5b5eff817: 23.6335
   ai_ops_kit/validation/validate_key_lifecycle.py::main@26e92611c2630598d16c7726ee095fe3c0ab5a80a8d1110b78d4b86fc8b6e3ae: 56.0
   ? ai_ops_kit/validation/validate_knowledge_graph.py::validate_graph@4cbc1f0a90bcde30e13e97aec46987a516bdd2b3ac2ec0c5d69cec3811ebc04f
   : 54.00000000000001
-  ai_ops_kit/validation/validate_knowledge_graph.py::main@33ffaa228d2233d49873025c9cec58208c8246ce5498f1226eff3fcb013c26a3: 30.0
   ? ai_ops_kit/validation/validate_layering.py::_dynamic_import_literal@23a04fd8e8f0ccd588d9786106ffd8888191c88bf8762466b07eab1caf843520
   : 11.0
   ? ai_ops_kit/validation/validate_layering.py::_imported_names@0bc87de2fe4fbedeaf7b964c348e08710df646a6536aedaddc6db1e65e742115
@@ -2757,15 +2717,13 @@ functions:
   : 14.464592592592592
   ? ai_ops_kit/validation/validate_nightly_no_direct_main_write.py::_check_pr_open_draft@16a982651bc019c0cc5d611430febb7a6df2cd22511bd15eb5df8ed99f2d0304
   : 19.029670419988495
-  ? ai_ops_kit/validation/validate_openspec_change.py::split_requirement_blocks@6aea80eb7f00b04ea5319d6bd8e919c13bf08af1c12c6eec1e388adac4ee458e
-  : 12.0
   ? ai_ops_kit/validation/validate_openspec_change.py::check_change@02505f0a1665275a7c1759844097613b3027dbbdd23285e7ce0e5cd698dae77a
-  : 132.0
-  ai_ops_kit/validation/validate_openspec_change.py::main@7ca4e0bc31a28ba6de18e32b37eeed0f89775e96913e0e0c2cf16208157080bd: 210.0
+  : 12.633192959723573
+  ai_ops_kit/validation/validate_openspec_change.py::main@7ca4e0bc31a28ba6de18e32b37eeed0f89775e96913e0e0c2cf16208157080bd: 15.735864529090984
   ? ai_ops_kit/validation/validate_own_medicine.py::check_field_lessons@03df18c9bd08a1833e36e95d5276db8d1424b43e16a2d6360de4aabf2068e15e
   : 43.505800936291465
   ai_ops_kit/validation/validate_own_medicine.py::evaluate@ebb2e9379efd5fb85f2efbdc4710d8a733495230b8b4e0e62081a815e150811e: 62.150383579738865
-  ai_ops_kit/validation/validate_own_medicine.py::main@cf0511a8c8d4147aa437ae9701275741b63b69567ac41a9150b6d41be134e06f: 132.0
+  ai_ops_kit/validation/validate_own_medicine.py::main@cf0511a8c8d4147aa437ae9701275741b63b69567ac41a9150b6d41be134e06f: 13.822157434402332
   ? ai_ops_kit/validation/validate_package_boundaries.py::check@74f622c221d3b4724f300450e7eac727ff1f1a7a2f4ff2af2a111de85a927e9e
   : 29.999999999999996
   ? ai_ops_kit/validation/validate_package_boundaries.py::main@7f9433d50c463cfcbfe83420de25b3b06556529b6f89813a475bad324e0af6dd
@@ -2780,7 +2738,7 @@ functions:
   ? ai_ops_kit/validation/validate_post_release_readout.py::check@bfd1827f47efd1a02b1e0e4ee8b1e9c981687a2d2368d1b35f039da45eed61ba
   : 39.48209757700977
   ? ai_ops_kit/validation/validate_post_release_readout.py::main@49ece23e70d347d5c0461cb81919d8eb60eea0f2e5d6340577893b88aaa315e9
-  : 132.0
+  : 13.822157434402332
   ai_ops_kit/validation/validate_pr_size.py::assess@417bf15a61e273f68cd72b040213d766f3b923c63df33ed0e87d255994871298: 15.276740160349854
   ai_ops_kit/validation/validate_pr_size.py::main@687c6953b9a9716dae5f4bd44b0d177cf878cdc64b4041a493f7c450952e6c0c: 12.0
   ai_ops_kit/validation/validate_presets.py::main@76f920a5c2ad2169371c97b1119c14c82ad7a2d5285d9c70ee40ebd742cf4163: 56.794460641399404
@@ -2842,7 +2800,6 @@ functions:
   ai_ops_kit/validation/validate_references.py::check@1f28130739b0f1276bd5e704bebf66c411133560bc009609b9b54ce26048f8cc: 39.444
   ? ai_ops_kit/validation/validate_references.py::_manifest_path_tokens.walk@4c16bd42fd7e361b67fd214b1038bf85325997a5c5c9d1ffe477a82943f91db7
   : 12.0
-  ai_ops_kit/validation/validate_references.py::run@8899da0f6ef1f614841a16703a50ebe361590beef873d6367cd33a7df1bcd9d5: 30.0
   ? ai_ops_kit/validation/validate_regression_corpus.py::check@4e5dd109b6cd978d8540c8f610221991dece8b03321278ac2f6a1759a37431ef
   : 27.148381844087115
   ? ai_ops_kit/validation/validate_regression_corpus.py::check_registry@a9443d9782db82df95a0249c7110ca0fb888250548694ac62c3e2ebf6969563d
@@ -2927,7 +2884,7 @@ functions:
   ? ai_ops_kit/validation/validate_swallowed_exceptions.py::main@9e411c0d4178996da2398a6456bd544610406d877f677744165402c2afd93163
   : 10.354714500375657
   ? ai_ops_kit/validation/validate_test_taxonomy.py::_collect_product_bindings@3b30eeac5d516e4ecf6aa8b929a46f5736de9005ac534b1e83f78a7a8f9bd402
-  : 27.014392039958146
+  : 27.0
   ? ai_ops_kit/validation/validate_test_taxonomy.py::_fixture_loads_product@b768d691d4504939c1b3185bc07d2a96b5fb610909f06596dab0fdcca4ff68f8
   : 16.0625
   ? ai_ops_kit/validation/validate_test_taxonomy.py::_calls_product@ce54e3f72e72b2be9e4bbb78e5ccd8ab524404128ac79b29b45293bee1fcd0c8
@@ -2938,7 +2895,7 @@ functions:
   ai_ops_kit/validation/validate_work_graph.py::check_psd@c6a3a6bb1c3fc11e515a5d945235e641dcd995efb7cdd02c00abb834e5d6c24f: 40.23165294924553
   ai_ops_kit/validation/validate_work_graph.py::check_ip@1aa14f6799a8a667621c190250eec1624b85c4cd9bf8be76df02f258adbe9c6b: 28.23302469135802
   ai_ops_kit/validation/validate_work_graph.py::cross_check@ff8aba688127424522ebd5c7112634e6f1f6d5636769f96dcf305ae1bd02e5db: 27.03846153846154
-  ai_ops_kit/validation/validate_work_graph.py::main@af12010d19cee1c7a271d50b7629ac81ad3002fe5dd6d03ce0516a4ae37b8e2d: 72.0
+  ai_ops_kit/validation/validate_work_graph.py::main@af12010d19cee1c7a271d50b7629ac81ad3002fe5dd6d03ce0516a4ae37b8e2d: 11.077385424492864
   ? ai_ops_kit/validation/validate_workflow_gates.py::track_errors@f21b11a66ed78aba680f009351e239422c34653582f92a133445b1414667c421
   : 14.267000000000001
   ai_ops_kit/validation/validate_workflow_gates.py::check@f57b7f0314c9ebc76d2465d469678aa5ce964c658cf798551ffcbc8da765b70e: 24.0
@@ -4717,3 +4674,39 @@ raises:
     ai_ops_kit/planning/roadmap_issue_sync.py::Client.create@6e3b6f2af7979356653656317bc259a0a88fc7c4ae3a72781d5ed0c8e868a7ee: unmeasurable
     ai_ops_kit/planning/roadmap_issue_sync.py::Client.edit@6e3b6f2af7979356653656317bc259a0a88fc7c4ae3a72781d5ed0c8e868a7ee: unmeasurable
     ai_ops_kit/planning/roadmap_issue_sync.py::Client.close@6e3b6f2af7979356653656317bc259a0a88fc7c4ae3a72781d5ed0c8e868a7ee: unmeasurable
+- reason: 'Пересчёт 23.11.2026 по решению владельца (#1387): замер nightly-coverage
+    run 45150323118 на 6148ff90 с учётом дочерних процессов (#1558). Принят как есть
+    долг #1560–#1562 (13 новых функций и небольшие ухудшения); два «крупных ухудшения»
+    оказались ошибкой замера (#1565).'
+  functions:
+    ? ai_ops_kit/checks/reviewer_result.py::check_human_red_team@b63c4fcad3ecfd908ac3f4983a41a29a05c67663ba9ad8f64e15cbe87f39ac60
+    : 29.20436959490214
+    ai_ops_kit/cli/project_session_completion.py::review_jobs@4d284233a5d8944460f559fcbb1f3f3e09d36f7ee84b98164d2fb487457a685f: 16.28340645372914
+    ai_ops_kit/cli/project_session_completion.py::response@3cf2f66701438a45e734f51838690bac7bac3e32bae61aea280a153e02a9986b: 24.262175694128356
+    ai_ops_kit/devtools/crap_score.py::analyze@161b5142e19638b12d63b7760a0af2c2dcedde0eec7fe88a773d937b3dbab56c: 23.0
+    ai_ops_kit/devtools/crap_score.py::_write_baseline@3403b916545b59a006ba9500b1f894846547ee1fda4dbfa748279c6ea2e93d80: 25.0
+    ai_ops_kit/devtools/release_ready_window.py::receipt@59cac807fa04f4f8f4892f3f8391077d15c4230aceabb1c1d05e89608e039234: 14.0
+    ai_ops_kit/devtools/release_ready_window.py::main@c8942a47437583f78454941f8560b4cdfff690ee247c17869a90665047a6c905: 20.0
+    ai_ops_kit/engine/execution_pipeline.py::run_pipeline@b54f1f4fe964f4ba75c78357f9ac5709638b754372c5c7d21edaea679a70235a: 12.00439453125
+    ? ai_ops_kit/engine/pipeline_authoring.py::_run_spec_authoring@5b77f0d4d1b362f310d605796a3284b5c14f2aa66cda94a0ada9d7ce2b7253fa
+    : 12.0
+    ? ai_ops_kit/engine/pipeline_evidence.py::_reevaluate_artifact_evidence@0fd308983206ef02ce38458769eaa3746843674f10c228e3d6e0c3253cd19b12
+    : 12.524351388256713
+    ? ai_ops_kit/engine/pipeline_evidence.py::_human_red_team_input@3bfb28c65dcb24cd088bcb577368172cce52fd43f6ceee7885608b4e148ab0b9
+    : 27.539947514214898
+    ? ai_ops_kit/engine/pipeline_evidence.py::_consume_handoff_verdicts@4ab7bb761891314fb52968d4b3e8861c0b2ff32d0519622f683538986a54b66c
+    : 13.0289780521262
+    ? ai_ops_kit/engine/pipeline_helpers.py::_specification_mode@5cea621ba3f6bf914c9b6da92b986d1eca7b399de31f6c79340de57b3a67f5d3
+    : 10.73611111111111
+    ? ai_ops_kit/engine/pipeline_helpers.py::_native_specification_evidence@e1c2bec31880e42da5835439335d4c3e72a131df5094106d665202cd846baf41
+    : 32.16557475994513
+    ai_ops_kit/gates/gate_executor.py::_profile_evidence@33ae004f5c45f5ba19497bfcaafc0db83b86ada8dd764c8951246cf8ef5aba8d: 11.0
+    ? ai_ops_kit/lifecycle/session_migration.py::_unchanged_install@c5420fa3b03d0a5f8897f97d3861efef8ddc993bcf9a2fb9f7b5c047170bc7a3
+    : 19.49519890260631
+    ai_ops_kit/lifecycle/session_prepared_update.py::_task@78bb0d5f58e9f483e78c76b178da2f13bf9b8ddeb1e8bee5e2be897421fb4039: 21.555555555555554
+    ai_ops_kit/lifecycle/session_prepared_update.py::_source@25de896583cbe306cd8c2cb13007171cf6bf06002c155a595b1e4f9bb888b968: 10.37037037037037
+    ai_ops_kit/lifecycle/session_prepared_update.py::_probe@36931882eff2637d781be4fdbc864b53b78c40d5757b7341193746a59a2a0160: 15.225
+    ? ai_ops_kit/lifecycle/session_prepared_update.py::_preserved@460253d0cc584868d0dd979e86459b6bed3b3126fbdb8d9d1a86de0370984f8f
+    : 25.112448
+    ai_ops_kit/lifecycle/session_prepared_update.py::rollback@0f95027bb890ad8d213ea9cfcc69d580f913752bc8c0e9a32a24050870cdb742: 11.055075102412381
+    ai_ops_kit/shared/claim_provenance.py::python_context@a24dc0eef1ce18e2e69b51b90b25a924ea3d9e780ed951f619d5628022ad8c44: 27.970845481049565
