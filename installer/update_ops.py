@@ -270,7 +270,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
             cmd.append("--force")
         if refresh_ci:
             cmd.append("--refresh-ci")
-        applied = subprocess.run(cmd, cwd=str(wt))
+        applied = subprocess.run(cmd, cwd=str(wt), env=_core().deferred_update_env(wt))
         if applied.returncode != 0:
             # Ветка бесполезна без применённого обновления: удаляем, чтобы повтор не спотыкался
             # о «ветка уже существует» и чтобы не осталось видимости подготовленного PR.
@@ -324,6 +324,17 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
                                 f"({len(staged)} файлов); рабочее дерево не тронуто "
                                 f"(кроме .ai/runtime/last-update-report.json — в gitignore). "
                                 f"Откройте PR: git push -u origin {branch} && gh pr create --fill")})
+        # Имена веток переиспользуются. В отчёте сохраняем точный созданный коммит
+        # и его родителя для последующей локальной сверки оператором.
+        try:
+            identity = subprocess.run(["git", "-C", str(wt), "rev-parse", "HEAD", "HEAD^@"],
+                                      capture_output=True, text=True, timeout=10, check=True)
+        except (OSError, subprocess.SubprocessError):
+            pass  # Созданная ветка сохраняется. Флот покажет unknown без точных SHA.
+        else:
+            commits = identity.stdout.splitlines()
+            if len(commits) == 2:
+                _rep["candidate_head"], _rep["candidate_base"] = commits
         _core().write_report(_rep)
     finally:
         subprocess.run(["git", "-C", str(_ao().REPO_ROOT), "worktree", "remove", "--force", str(wt)],
@@ -334,6 +345,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
           f"на месте НЕ применено.\n"
           f"  ветка:          {branch} ({len(staged)} файлов)\n"
           f"  рабочее дерево: не тронуто (кроме .ai/runtime/last-update-report.json — в gitignore)\n"
+          f"  локальная регистрация Git-драйвера и личные команды Codex отложены до установки на месте.\n"
           f"  открыть PR:     git push -u origin {branch} && gh pr create --fill\n"
           f"  посмотреть:     git diff {_base}..{branch} --stat\n"
           f"Чтобы применить на месте осознанно: `ai-ops update --in-place`.")
@@ -448,6 +460,10 @@ def _update_locked(force, smoke_checks, refresh_ci, in_place):
         # ниже переносят файлы, и список удаляемых, посчитанный до них, указывает на старые пути.
         changes = _core().build_diff()
         if not changes and inst == target:
+            if in_place:
+                installed_commands = _core().reconcile_codex_home()
+                if installed_commands:
+                    report["commands_installed"] = installed_commands
             if not _update_smoke(backup, footprint, report, inst, smoke_checks):
                 return 1
             msg = "Обновление не требуется." + _ci_line

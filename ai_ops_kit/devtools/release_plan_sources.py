@@ -392,9 +392,9 @@ def refresh(root, client=None):
         if (publisher["checkout_sha"] != os.environ.get("GITHUB_SHA")
                 or client.repo != os.environ.get("GITHUB_REPOSITORY")):
             raise SnapshotError("publisher source mismatch")
-    prior = release_plan_state.previous(client, current_run=current_run)
+    prior, skipped_notice = release_plan_state.previous_publication(client, current_run=current_run)
     report = release_plan.build(root, snapshot, prior=prior)
-    report = release_plan_state.project(report, prior, publisher)
+    report = release_plan_state.project(report, prior, publisher, skipped_notice=skipped_notice)
     return report
 
 
@@ -411,7 +411,7 @@ def emit_summary(root):
             or publisher["checkout_sha"] != os.environ["GITHUB_SHA"]
             or publisher["digest"] != release_plan_state.payload_digest(report)):
         raise SnapshotError("summary publisher mismatch")
-    if report["transition"]["changed"]:
+    if report["transition"]["changed"] or report["transition"].get("recovered_skipped_summary") is True:
         # Dedicated GITHUB_STEP_SUMMARY: повтор перезаписывает тот же результат, не добавляет дубль.
         Path(os.environ["GITHUB_STEP_SUMMARY"]).write_text(render(report["message"]) + "\n", encoding="utf-8")
     return 0

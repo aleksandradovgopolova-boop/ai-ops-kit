@@ -13,10 +13,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 import yaml
@@ -88,6 +90,39 @@ def _delivery_source(*rel):
 
 
 ENTRY_NAME = "ai-ops"
+
+
+def _install_codex_prompts(root, generated):
+    source = root / ".ai/generated/codex/prompts"
+    commands = [p for p in generated if p.parent == source]
+    home = os.environ.get("CODEX_HOME")
+    if not home or not commands:
+        return {"codex_generated": len(commands), "codex_prompts": 0}
+    dest = Path(home) / "prompts"
+    dest.mkdir(parents=True, exist_ok=True)
+    for command in commands:
+        path = dest / command.name
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise OSError(f"Для команды Codex нужен обычный файл: {path.name}")
+        if (path.exists() and path.stat().st_size == command.stat().st_size
+                and path.read_bytes() == command.read_bytes()):
+            continue
+        shutil.copy2(command, path)
+    return {"codex_generated": len(commands), "codex_prompts": len(commands)}
+
+
+def reconcile_codex_home():
+    """Явное применение после merge: только команды Кита, даже при прежней версии."""
+    if not os.environ.get("CODEX_HOME"):
+        return {}
+    runtimes = _core()._configured_runtimes()
+    if runtimes and "codex" not in runtimes:
+        return {}
+    # Генератор использует исходники кита и фильтр проекта. Посторонние файлы из
+    # рабочего дерева не должны становиться командами в личном профиле.
+    with tempfile.TemporaryDirectory(prefix="ai-ops-codex-prompts-") as tmp:
+        root = Path(tmp)
+        return _install_codex_prompts(root, _core()._generate_commands(root, ["codex"]))
 
 
 def _install_entry_point(root: Path, dry=False):

@@ -337,3 +337,35 @@ def test_owner_skill_alias_is_preserved(seed, tmp_path, mode):
         assert proc.returncode == 0, proc.stdout + proc.stderr
     assert link.readlink() == Path("../../skill/owner")
     assert skill.read_bytes() == b"owner skill\r\n"
+
+
+def test_deferred_rollback_preserves_concurrent_owner_settings(seed, tmp_path, monkeypatch):
+    root = _child(seed, tmp_path, existing=True)
+    home = tmp_path / "personal-codex"
+    prompts = home / "prompts"
+    prompts.mkdir(parents=True)
+    personal = prompts / "personal.md"
+    personal.write_bytes(b"before snapshot")
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    spec = importlib.util.spec_from_file_location("deferred_rollback_installer", INSTALLER)
+    installer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = installer
+    spec.loader.exec_module(installer)
+    monkeypatch.chdir(root)
+    for name, value in {"REPO_ROOT": root, "AI_DIR": root / ".ai", "MANAGED": root / ".ai/managed",
+                        "CHILD_CONFIG": root / ".ai-ops.yaml"}.items():
+        monkeypatch.setattr(installer, name, value)
+    core = installer._core()
+    child_env = core.deferred_update_env(root)
+    assert "CODEX_HOME" not in child_env
+    monkeypatch.delenv("CODEX_HOME")
+    monkeypatch.setenv("_AI_OPS_DEFERRED_UPDATE_ROOT", child_env["_AI_OPS_DEFERRED_UPDATE_ROOT"])
+    backup = tmp_path / "snapshot"
+    manifest = core.snapshot_footprint(backup)
+    assert manifest["git_config"] == {} and str(prompts) not in manifest["paths"]
+    assert _git(root, "config", "--local", "merge.ai-ops-plan.name", "owner changed during update").returncode == 0
+    personal.write_bytes(b"owner edited during update")
+    config_before_rollback = (root / ".git/config").read_bytes()
+    core.restore_footprint(backup, manifest)
+    assert (root / ".git/config").read_bytes() == config_before_rollback
+    assert personal.read_bytes() == b"owner edited during update"
