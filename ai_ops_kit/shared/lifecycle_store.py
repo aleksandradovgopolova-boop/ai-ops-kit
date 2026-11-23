@@ -18,13 +18,18 @@ import argparse
 import os
 import sys
 from pathlib import Path
+from typing import Any
 
 import yaml
 
 from ai_ops_kit.shared.contracts import GuardedLoadResult
 
+# Открытый JSON/YAML-документ хранилища: значения проверяют вызывающие валидаторы.
+JsonDict = dict[str, Any]
 
-def _durable(path: str | Path, data: dict, serialize: Callable, parse: Callable, require_keys: tuple, keep_backup: bool) -> dict:
+
+def _durable(path: str | Path, data: JsonDict, serialize: Callable[[JsonDict], str], parse: Callable[[str], Any],
+             require_keys: tuple[str, ...], keep_backup: bool) -> JsonDict:
     """v3.0.15 (LifecycleStore v1.1, finding аудита P1): АТОМАРНАЯ + FAIL-CLOSED запись с валидацией
     ПРОСПЕКТИВНОГО документа ДО os.replace (иначе программная ошибка могла заменить валидный файл
     невалидным, а потом вернуть ok=False — старый источник истины уже потерян). Порядок:
@@ -86,7 +91,7 @@ def _durable(path: str | Path, data: dict, serialize: Callable, parse: Callable,
                 pass
 
 
-def durable_create_batch(root: str | Path, documents: dict[str, str]) -> dict:
+def durable_create_batch(root: str | Path, documents: dict[str, str]) -> JsonDict:
     """Create-only plan barrier. Existing exact bytes reused; conflicting/unknown files never replaced.
 
     Preflight all documents before creating any; graph can be last in insertion order.
@@ -176,7 +181,8 @@ def durable_create_batch(root: str | Path, documents: dict[str, str]) -> dict:
         return {'ok': False, 'created': created, 'error': str(exc)}
 
 
-def durable_write(path: str | Path, data: dict, require_keys: tuple = (), keep_backup: bool = False) -> dict:
+def durable_write(path: str | Path, data: JsonDict, require_keys: tuple[str, ...] = (),
+                  keep_backup: bool = False) -> JsonDict:
     """АТОМАРНАЯ + FAIL-CLOSED запись YAML-артефакта (LifecycleStore v1.1: validate-before-replace,
     unique temp, cleanup, opt-in backup). -> {ok} | {ok: False, error}. Вызывающий ОБЯЗАН остановиться
     при ok=False (нет источника истины)."""
@@ -184,7 +190,8 @@ def durable_write(path: str | Path, data: dict, require_keys: tuple = (), keep_b
                     yaml.safe_load, require_keys, keep_backup)
 
 
-def durable_write_json(path: str | Path, data: dict, require_keys: tuple = (), keep_backup: bool = False) -> dict:
+def durable_write_json(path: str | Path, data: JsonDict, require_keys: tuple[str, ...] = (),
+                       keep_backup: bool = False) -> JsonDict:
     """v3.0.14/v3.0.15 (finding аудита #2/P1): durable JSON-запись (run-report/controller-report) с той же
     гарантией validate-before-replace, что durable_write. -> {ok} | {ok: False, error}."""
     import json as _json
@@ -193,7 +200,7 @@ def durable_write_json(path: str | Path, data: dict, require_keys: tuple = (), k
                     _json.loads, require_keys, keep_backup)
 
 
-def durable_write_jsonl(path: str | Path, records: list[dict]) -> dict:
+def durable_write_jsonl(path: str | Path, records: list[JsonDict]) -> JsonDict:
     """JSONL по тому же atomic/fsync/readback-контракту; неполная запись не разрешает cleanup."""
     import json
     if not isinstance(records, list) or any(not isinstance(row, dict) for row in records):
@@ -239,10 +246,10 @@ def _journal_lock(journal_path: Path, required: bool = False) -> Iterator[None]:
         f.close()
 
 
-def _journal_scan(journal_path: Path) -> tuple:
+def _journal_scan(journal_path: Path) -> tuple[list[JsonDict], bool, Any, str | None]:
     """Чистое сканирование JSONL с проверкой checksum-цепочки. -> (events, ok, broken_at|None, reason|None)."""
     import json as _json
-    events: list = []
+    events: list[JsonDict] = []
     prev = None
     for i, ln in enumerate(l for l in Path(journal_path).read_text(encoding="utf-8").splitlines() if l.strip()):
         try:
@@ -276,11 +283,11 @@ def _journal_scan(journal_path: Path) -> tuple:
 # двенадцатый вызов приедет без проверки. Здесь регистрируется САМ факт утраты, у источника; отчёт
 # потом сливает накопленное (`drain_bookkeeping_losses`). Образец взят в этом же репозитории:
 # `orchestrator_usage.drain_call_stats` — та же форма «накопили у источника, слили в отчёт».
-_BOOKKEEPING_LOSSES: list[dict] = []
+_BOOKKEEPING_LOSSES: list[JsonDict] = []
 _BOOKKEEPING_LIMIT = 50
 
 
-def _note_journal_loss(journal_path: Path, event: dict, error: str) -> dict:
+def _note_journal_loss(journal_path: Path, event: JsonDict, error: str) -> JsonDict:
     """Зарегистрировать утрату записи журнала и вернуть тот же контракт {ok: False, error}.
 
     Идентифицирующие поля события переносятся в запись НАМЕРЕННО: «потеряна запись журнала» без
@@ -314,7 +321,7 @@ def _note_journal_loss(journal_path: Path, event: dict, error: str) -> dict:
     return {"ok": False, "error": error}
 
 
-def drain_bookkeeping_losses() -> list:
+def drain_bookkeeping_losses() -> list[JsonDict]:
     """Забрать и ОБНУЛИТЬ накопленные утраты служебных записей. -> list[dict].
 
     Обнуление — часть контракта: одна утрата обязана попасть в ОДИН отчёт, иначе прогон в том же
@@ -325,7 +332,7 @@ def drain_bookkeeping_losses() -> list:
     return out
 
 
-def note_bookkeeping_error(rep: dict, what: str, exc: BaseException) -> None:
+def note_bookkeeping_error(rep: JsonDict, what: str, exc: BaseException) -> None:
     """Записать в отчёт УТРАТУ служебной записи, не роняя прогон. -> None (правит rep на месте).
 
     Единый писатель для всех, кому нужно сказать «запись потеряна, прогон продолжается»:
@@ -339,7 +346,7 @@ def note_bookkeeping_error(rep: dict, what: str, exc: BaseException) -> None:
                                 if isinstance(exc, BaseException) else str(exc)[:200]})
 
 
-def merge_bookkeeping_losses(rep: dict) -> int:
+def merge_bookkeeping_losses(rep: JsonDict) -> int:
     """Слить накопленные утраты записей журнала в отчёт. -> число слитых.
 
     Зовётся на КАЖДОМ пути возврата отчёта наружу: пропущенный путь возвращает ровно то состояние,
@@ -353,7 +360,7 @@ def merge_bookkeeping_losses(rep: dict) -> int:
     return len(losses)
 
 
-def journal_append(journal_path: Path, event: dict) -> dict:
+def journal_append(journal_path: Path, event: JsonDict) -> JsonDict:
     """v3.0.14/v3.1 (trace v0.2): append-only JSONL event journal с checksum-цепочкой + head-marker.
     Каждое событие: seq, prev_checksum, собственный checksum. v0.2 ЗАКРЫВАЕТ ограничения v0.1:
       * межпроцессный ЛОК вокруг всей read-verify-append (нет гонки seq/prev_checksum);
@@ -392,7 +399,7 @@ def journal_append(journal_path: Path, event: dict) -> dict:
         return _note_journal_loss(journal_path, event, f"{type(e).__name__}: {e}")
 
 
-def journal_read(journal_path: Path) -> dict:
+def journal_read(journal_path: Path) -> JsonDict:
     """Прочитать event journal + ПРОВЕРИТЬ целостность: checksum-цепочка И сверка с head-marker (v0.2 —
     ловит усечение последней целой строки, которое v0.1 пропускал). -> {events, ok, broken_at?, reason?}."""
     import json as _json
@@ -436,7 +443,7 @@ _TRACE_REQUIRED = {
 }
 
 
-def validate_trace(events: list) -> list:
+def validate_trace(events: list[Any] | None) -> list[str]:
     """v3.1 (trace v0.2): проверить, что события трейса несут ОБЯЗАТЕЛЬНЫЕ id своей связи (Run/Attempt/
     Package/Gate/Delivery) — чтобы трейс был реконструируем. Неизвестный kind допустим (требует лишь
     run_id). -> список ошибок (пусто = валиден)."""

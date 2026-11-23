@@ -23,7 +23,9 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
+from typing import Any, TypedDict
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
@@ -31,45 +33,47 @@ from ai_ops_kit.shared import _bootstrap  # noqa: E402,F401
 
 # _CALL_STATS читаем ЖИВЫМ (drain пересоздаёт список); модуль ре-экспортируется — часть кода
 # импортирует `orchestrator_usage` именно отсюда.
-from ai_ops_kit.providers import orchestrator_usage  # noqa: E402,F401
+from ai_ops_kit.providers import orchestrator_usage as orchestrator_usage  # noqa: E402,F401
+# Тот же объект, что `provider_calls._http_post_json`/`._record_call`: берётся у источника, чтобы
+# ре-экспорт не шёл транзитом через чужой импорт (strict: implicit_reexport=false).
+from ai_ops_kit.providers.orchestrator_http import _http_post_json as _http_post_json  # noqa: E402,F401
+from ai_ops_kit.providers.orchestrator_usage import _record_call as _record_call  # noqa: E402,F401
 
 # --- Ре-экспорт публичной поверхности из сателлитов ------------------------------------------
 # Явный перечень (не `import *`): фасад обязан отдавать КАЖДОЕ перенесённое имя как свой атрибут —
 # внешние импортёры используют их как `orchestrator_providers.X`, в т.ч. приватные с `_`, которые
 # импортируются извне (`_anthropic_call`, `_openai_call`, `_claude_cli_call`, `_MAX_TOKENS`, …).
 from ai_ops_kit.providers.provider_errors import (  # noqa: E402,F401
-    ProviderEnvUnavailableError,
-    ProviderLimitError,
-    _env_unavailable_envelope,
-    _reset_hint,
-    _session_limit,
+    ProviderEnvUnavailableError as ProviderEnvUnavailableError,
+    ProviderLimitError as ProviderLimitError,
+    _env_unavailable_envelope as _env_unavailable_envelope,
+    _reset_hint as _reset_hint,
+    _session_limit as _session_limit,
 )
 from ai_ops_kit.providers.provider_writer_lock import (  # noqa: E402,F401
-    _writer_lock_poll_seconds,
-    _writer_serialization_lock,
-    writer_lock_busy,
-    writer_lock_path,
+    _writer_lock_poll_seconds as _writer_lock_poll_seconds,
+    _writer_serialization_lock as _writer_serialization_lock,
+    writer_lock_busy as writer_lock_busy,
+    writer_lock_path as writer_lock_path,
 )
 from ai_ops_kit.providers.provider_calls import (  # noqa: E402,F401
-    DECLARED_NOT_IMPLEMENTED,
-    DEFAULT_MODELS,
-    OPENAI_COMPATIBLE_VENDORS,
-    _MAX_TOKENS,
-    _anthropic_call,
-    _backoff,
-    _claude_cli_call,
-    _http_post_json,
-    _human_error,
-    _openai_call,
-    _record_call,
-    _response_format_for,
-    _tagged,
-    _transient,
-    for_contract,
-    make_claude_cli_provider,
-    make_openai_provider,
-    make_provider,
-    mock_provider,
+    DECLARED_NOT_IMPLEMENTED as DECLARED_NOT_IMPLEMENTED,
+    DEFAULT_MODELS as DEFAULT_MODELS,
+    OPENAI_COMPATIBLE_VENDORS as OPENAI_COMPATIBLE_VENDORS,
+    _MAX_TOKENS as _MAX_TOKENS,
+    _anthropic_call as _anthropic_call,
+    _backoff as _backoff,
+    _claude_cli_call as _claude_cli_call,
+    _human_error as _human_error,
+    _openai_call as _openai_call,
+    _response_format_for as _response_format_for,
+    _tagged as _tagged,
+    _transient as _transient,
+    for_contract as for_contract,
+    make_claude_cli_provider as make_claude_cli_provider,
+    make_openai_provider as make_openai_provider,
+    make_provider as make_provider,
+    mock_provider as mock_provider,
 )
 
 
@@ -115,8 +119,28 @@ NO_LIVE_PROVIDER_WARNING = ("живой провайдер не настроен
 
 CLAUDE_BIN_ENV = "AI_OPS_CLAUDE_BIN"
 
+Env = Mapping[str, str]
+Which = Callable[[str], "str | None"]
+# Решение о провайдере: provider/source/reason/warning/autoresolve/checked (+ key_env у child-config).
+ProviderResolution = dict[str, Any]
 
-def claude_lookup(env=None, which=None):
+
+class ClaudeLookup(TypedDict):
+    """Где искали `claude` и что нашли: путь (None — не найден) и источник ("named" | "path")."""
+
+    path: str | None
+    where: str
+
+
+class ChildProviders(TypedDict):
+    """providers-секция `.ai-ops.yaml`, сведённая к тому, что проверяемо из движка."""
+
+    default: str | None
+    key_env: dict[str, str]
+    unverifiable: dict[str, str]
+
+
+def claude_lookup(env: Env | None = None, which: Which | None = None) -> ClaudeLookup:
     """Где искали `claude` и что нашли -> {"path": str|None, "where": "named"|"path"}.
 
     ЗАЧЕМ ОТДЕЛЬНАЯ ФУНКЦИЯ, а не `shutil.which` по месту: проверка присутствия и запуск обязаны
@@ -137,8 +161,11 @@ def claude_lookup(env=None, which=None):
     """
     env = os.environ if env is None else env
     if which is None:
-        def which(name, _path=env.get("PATH")):
+        _path = env.get("PATH")
+
+        def _which_in_env(name: str) -> str | None:
             return shutil.which(name, path=_path)
+        which = _which_in_env
     named = str(env.get(CLAUDE_BIN_ENV) or "").strip()
     if named:
         ok = os.path.isfile(named) and os.access(named, os.X_OK)
@@ -146,12 +173,12 @@ def claude_lookup(env=None, which=None):
     return {"path": which("claude"), "where": "path"}
 
 
-def claude_binary(env=None, which=None):
+def claude_binary(env: Env | None = None, which: Which | None = None) -> str | None:
     """Абсолютный путь к `claude` или None. Явное слово владельца (AI_OPS_CLAUDE_BIN) сильнее PATH."""
     return claude_lookup(env=env, which=which)["path"]
 
 
-def claude_found_reason(lookup):
+def claude_found_reason(lookup: ClaudeLookup) -> str:
     """Человеческая причина «чем пойдём» — по ФАКТУ находки, а не по догадке о её источнике."""
     if lookup["where"] == "named":
         return (f"claude CLI взят из {CLAUDE_BIN_ENV}={lookup['path']} "
@@ -159,7 +186,7 @@ def claude_found_reason(lookup):
     return "claude CLI найден в PATH (локальная сессия, API-ключ не нужен)"
 
 
-def claude_missing_message(env=None, extra=""):
+def claude_missing_message(env: Env | None = None, extra: str = "") -> str:
     """Человеческая причина вместо `FileNotFoundError: 'claude'` — с ЗАМЕРОМ, а не с догадкой.
 
     Поле 13.08 и 15.08.2026 (ИИ-Среда): прогон падал этой строкой, и по ней нельзя было отличить
@@ -183,7 +210,7 @@ def claude_missing_message(env=None, extra=""):
             "или попросить офлайн прямо — `--provider mock` (модель не вызывается, правок не будет).")
 
 
-def autoresolve_enabled(env=None) -> bool:
+def autoresolve_enabled(env: Env | None = None) -> bool:
     """Разрешён ли автовыбор провайдера. Явный AI_OPS_PROVIDER_AUTORESOLVE побеждает всегда;
     без него автовыбор выключен под pytest и в CI (офлайн-детерминизм, деньги не тратятся)."""
     env = os.environ if env is None else env
@@ -197,11 +224,11 @@ def autoresolve_enabled(env=None) -> bool:
     return True
 
 
-def _child_providers(root):
+def _child_providers(root: str | os.PathLike[str] | None) -> ChildProviders:
     """providers-секция child-конфига `.ai-ops.yaml`: {default, key_env: {id: ENV_NAME}}.
     Из credentials_ref берём ТОЛЬКО имя env-переменной (env:NAME); secret:-ссылку проверить
     из движка нельзя -> такой провайдер автовыбором не берём (fail-closed, не «вроде бы есть»)."""
-    out = {"default": None, "key_env": {}, "unverifiable": {}}
+    out: ChildProviders = {"default": None, "key_env": {}, "unverifiable": {}}
     if not root:
         return out
     try:
@@ -228,7 +255,8 @@ def _child_providers(root):
     return out
 
 
-def resolve_provider(explicit=None, root=None, env=None, which=None):
+def resolve_provider(explicit: str | None = None, root: str | os.PathLike[str] | None = None,
+                     env: Env | None = None, which: Which | None = None) -> ProviderResolution:
     """Выбрать провайдера для пользовательского прогона. Возвращает словарь-решение:
     {provider, source, reason, warning, autoresolve, checked} — имя провайдера НЕ теряется по
     дороге: вызывающий обязан передать его в make_provider и записать в отчёт прогона.
@@ -238,7 +266,7 @@ def resolve_provider(explicit=None, root=None, env=None, which=None):
     env/which — инъекция окружения и shutil.which (тестируемость без сети и без CLI)."""
     env = os.environ if env is None else env
     which = shutil.which if which is None else which
-    checked = []
+    checked: list[str] = []
 
     if explicit:
         # ЯВНЫЙ ВЫБОР ЧЕЛОВЕКА НЕ ОСПАРИВАЕТСЯ, НО И НЕ ОСТАЁТСЯ НЕПРОВЕРЕННЫМ (поле 13.08 и
@@ -307,7 +335,7 @@ def resolve_provider(explicit=None, root=None, env=None, which=None):
             "checked": checked}
 
 
-def print_provider_resolution(res, printer=print):
+def print_provider_resolution(res: object, printer: Callable[[str], object] = print) -> None:
     """Громкая печать решения ДО прогона (честность деклараций: скатились в mock — говорим сразу)."""
     if not isinstance(res, dict):
         return
@@ -323,7 +351,7 @@ def print_provider_resolution(res, printer=print):
         printer(f"провайдер: {res.get('provider')} — {res.get('reason')}")
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     print(__doc__)
     return 0
 

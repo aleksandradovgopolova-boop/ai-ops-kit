@@ -30,6 +30,11 @@ from ai_ops_kit.providers.orchestrator_usage import (
     _record_call as record_call, clear_call_context, drain_call_stats, set_call_context,
 )
 from ai_ops_kit.providers.provider_errors import ProviderEnvUnavailableError, ProviderLimitError
+from ai_ops_kit.providers.orchestrator_providers import (
+    ClaudeLookup, autoresolve_enabled, claude_lookup, print_provider_resolution, resolve_provider,
+)
+from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
+from ai_ops_kit.shared.lifecycle_store import drain_bookkeeping_losses, durable_write_json, validate_trace
 from ai_ops_kit.providers.response_contract import (
     REVIEWER_RESULT, ProviderRefusal, ShapeSupport, registry_schema, shape_report, shape_support,
 )
@@ -110,6 +115,16 @@ call_with_cost: dict[str, Any] = record_call("claude-cli", None, None, None, pro
 calls: list[dict[str, Any]] = drain_call_stats()
 clear_call_context()
 reply: Any = post_json("https://example.invalid", {"authorization": "x"}, {"a": 1}, timeout=1, retries=1)
+# Хранилище состояния и фасад выбора провайдера (#1412, четвёртый срез)
+lookup: ClaudeLookup = claude_lookup(env={"PATH": ""}, which=lambda name: None)
+lookup_path: str | None = lookup["path"]
+resolution: dict[str, Any] = resolve_provider("mock", env={})
+auto: bool = autoresolve_enabled({"CI": "1"})
+print_provider_resolution(resolution, printer=lambda line: None)
+facade_limit: str = FacadeLimitError("claude-cli", "x").human_message()
+written: dict[str, Any] = durable_write_json("state.json", {"a": 1}, require_keys=("a",))
+trace_errors: list[str] = validate_trace([{"kind": "run"}])
+losses: list[dict[str, Any]] = drain_bookkeeping_losses()
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -127,7 +142,8 @@ subscribe("run_completed", handler)
 
 # Контракты адаптеров моделей под полным strict (#1412, 23.11.2026).
 PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.providers.provider_errors",
-                      "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage")
+                      "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage",
+                      "ai_ops_kit.shared.lifecycle_store", "ai_ops_kit.providers.orchestrator_providers")
 
 
 def _mypy(tmp_path, source):
@@ -194,6 +210,15 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('{"authorization": "x"}', '{"authorization": 1}', '[dict-item]'),
     ('"session limit", None)', '"session limit", 7)', '[arg-type]'),
     ('limit_text: str', 'limit_text: int', '[assignment]'),
+    ('lookup_path: str | None', 'lookup_path: str', '[assignment]'),
+    ('lookup["path"]', 'lookup["file"]', '[typeddict-item]'),
+    ('which=lambda name: None', 'which=lambda: None', '[arg-type]'),
+    ('env={"PATH": ""}', 'env={"PATH": 1}', '[dict-item]'),
+    ('auto: bool', 'auto: str', '[assignment]'),
+    ('FacadeLimitError("claude-cli", "x")', 'FacadeLimitError("claude-cli", 7)', '[arg-type]'),
+    ('require_keys=("a",)', 'require_keys=(1,)', '[arg-type]'),
+    ('trace_errors: list[str]', 'trace_errors: list[int]', '[assignment]'),
+    ('losses: list[dict[str, Any]]', 'losses: dict[str, Any]', '[assignment]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),
