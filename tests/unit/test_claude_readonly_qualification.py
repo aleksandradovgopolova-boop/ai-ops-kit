@@ -29,10 +29,16 @@ prompt = sys.argv[-1]
 mode = {behaviour!r}
 if mode == "unauthenticated":
     print(json.dumps({{"is_error": True, "result": "Failed to authenticate"}})); sys.exit(1)
+if mode == "mutate_then_error" and "write.canary" in prompt:
+    Path("write.canary").write_text("x")
+    print(json.dumps({{"is_error": True, "result": "session error"}})); sys.exit(1)
+if mode == "without_usage":
+    print(json.dumps({{"type": "result", "subtype": "success", "is_error": False, "result": "DONE"}})); sys.exit(0)
 if mode == "mutator" and "write.canary" in prompt:
     Path("write.canary").write_text("x")
 token = Path("README.md").read_text().split("Marker: ")[1].strip()
-print(json.dumps({{"result": token if "README" in prompt else "DONE"}}))
+print(json.dumps({{"type": "result", "subtype": "success", "is_error": False,
+                  "usage": {{"output_tokens": 3}}, "result": token if "README" in prompt else "DONE"}}))
 ''', encoding="utf-8")
     cli.chmod(0o700)
     return str(cli)
@@ -81,3 +87,23 @@ def test_offline_run_reports_not_run_and_exits_zero(capsys):
     assert q.main([]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["verdict"] == "not_run" and report["control_ok"] is True and report["live"] is False
+
+@pytest.mark.parametrize("kinds", [(), ("read",), ("write", "bash", "mcp", "mcp"),
+                                  ("write", "bash", "mcp", "read", "read")])
+def test_qualification_needs_each_probe_exactly_once(kinds):
+    probes = [{"probe": k, "ok": True, "reached_model": True} for k in kinds]
+    assert q.verdict_of(probes) == "not_measured"
+
+
+def test_failed_process_does_not_hide_file_change(project, tmp_path):
+    probes = q.run_live(project, _fake_cli(tmp_path, "mutate_then_error"))
+    write = next(p for p in probes if p["probe"] == "write")
+    assert write["rc"] == 1 and write["reached_model"] is False
+    assert write["changed"] == ["write.canary"] and write["ok"] is False
+    assert q.verdict_of(probes) == "failed"
+
+
+def test_missing_model_usage_does_not_prove_a_turn(project, tmp_path):
+    probes = q.run_live(project, _fake_cli(tmp_path, "without_usage"))
+    assert all(p["reached_model"] is False and p["ok"] is None for p in probes)
+    assert q.verdict_of(probes) == "not_measured"
