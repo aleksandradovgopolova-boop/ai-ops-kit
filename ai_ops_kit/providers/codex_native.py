@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from typing import Any
 from pathlib import Path
 import time
 import uuid
@@ -233,7 +234,7 @@ def _call(prompt, model, *, root=None, binary="codex", timeout=120):
                            native_outcome=observed["outcome"])
 
 
-def call(prompt, model=None, **options):
+def call(prompt: str, model: str | None = None, **options: Any) -> str:
     try:
         return _call(prompt, model, **options)
     except (OSError, ValueError, TypeError, KeyError) as exc:

@@ -11,9 +11,10 @@ from __future__ import annotations
 import contextlib
 import os
 import tempfile
+from collections.abc import Callable, Iterator
 
 
-def writer_lock_path():
+def writer_lock_path() -> str:
     """Путь машинного замка писателя. Переопределяется `AI_OPS_WRITER_LOCK_PATH`; по умолчанию —
     файл в системном tmp, общий для ВСЕХ worktree и процессов на машине (worktree — отдельные
     checkout'ы одного репо, поэтому замок в дереве репозитория их бы не сериализовал)."""
@@ -21,7 +22,7 @@ def writer_lock_path():
         tempfile.gettempdir(), "ai-ops-writer.lock")
 
 
-def _writer_lock_poll_seconds():
+def _writer_lock_poll_seconds() -> float:
     """Интервал (сек) между попытками взять занятый замок и между уведомлениями об ожидании.
     Дефолт 15 c; переопределяется `AI_OPS_WRITER_LOCK_POLL_SECONDS` (как `writer_lock_path()` —
     средой). Нечисло/≤0 игнорируем и берём дефолт: интервал управляет темпом уведомлений и сном,
@@ -37,7 +38,7 @@ def _writer_lock_poll_seconds():
     return val if val > 0 else default
 
 
-def writer_lock_busy():
+def writer_lock_busy() -> bool:
     """Неблокирующая ПРОБА машинного замка писателя (#661): держит ли писателя ПРЯМО СЕЙЧАС другой
     процесс на этой машине — без ожидания и без вставания в очередь. Пытается взять замок
     `LOCK_NB` и тут же отпускает: удалось → свободен (`False`); `OSError` → держит другой процесс
@@ -70,7 +71,8 @@ def writer_lock_busy():
 
 
 @contextlib.contextmanager
-def _writer_serialization_lock(notify=None, poll_seconds=None):
+def _writer_serialization_lock(notify: Callable[[str], object] | None = None,
+                               poll_seconds: float | None = None) -> Iterator[None]:
     """МАШИННЫЙ ЗАМОК ПИСАТЕЛЯ (поле 02–03.09.2026): один локальный `claude -p` за раз на всю
     машину. Причина: локальный писатель — ЕДИНСТВЕННЫЙ разделяемый ресурс, и параллельные
     `run --execute` из разных worktree конкурируют за него без координации — прогоны виснут на
