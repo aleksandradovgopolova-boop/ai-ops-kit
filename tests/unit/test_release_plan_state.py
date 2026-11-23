@@ -211,3 +211,132 @@ def test_known_idle_projects_a_successful_empty_result_without_release_readiness
     assert result["message"]["status"] == "ok"
     assert "новых изменений" in result["message"]["summary"]
     assert not result["release_ready"] and result["transition"]["human_delivery"] == "unknown"
+
+
+class SummaryAttempt(PublisherClient):
+    """Ответ read-only Actions API для конкретной опубликованной попытки."""
+    def __init__(self, publisher, conclusion="skipped"):
+        super().__init__()
+        self.run = {"id": publisher["run_id"], "run_attempt": publisher["attempt"],
+                    "head_sha": publisher["checkout_sha"], "head_branch": publisher["branch"],
+                    "event": "workflow_run", "path": ".github/workflows/status-dashboard.yml",
+                    "status": "completed"}
+        self.job = {"id": 91, "name": "build-and-deploy", "status": "completed",
+                    "run_id": publisher["run_id"], "run_attempt": publisher["attempt"],
+                    "head_sha": publisher["checkout_sha"], "steps": [
+            {"name": "Опубликовать на GitHub Pages", "status": "completed", "conclusion": "success", "number": 9},
+            {"name": "Показать только опубликованный результат", "status": "completed",
+             "conclusion": conclusion, "number": 10}]}
+
+    def read_page(self, path, params=None):
+        if path.endswith("/runs"):
+            return {"workflow_runs": [self.run]}
+        if path.endswith("/jobs"):
+            assert path.endswith(f"/{self.run['id']}/attempts/{self.run['run_attempt']}/jobs")
+            return {"jobs": [self.job], "total_count": 1}
+        return super().read_page(path, params)
+
+
+def _changed_notice():
+    before = report()
+    current = deepcopy(before)
+    current.update(release_ready=True, blockers=[])
+    current["semantic_fingerprint"] = rp.semantic_fingerprint(current)
+    return current, state.project(current, before, PUBLISHER)
+
+
+def test_refresh_recovers_skipped_summary_once_for_next_run(tmp_path, monkeypatch):
+    from ai_ops_kit.devtools import release_plan_sources as src
+    from ai_ops_kit.ui.presenter_core import render
+
+    current, prior = _changed_notice()
+    client = SummaryAttempt(prior["publisher"])
+    read_publication = state.previous_publication
+    def previous(c, *, current_run):
+        return read_publication(c, read=lambda _: {"release_plan": prior}, current_run=current_run)
+    monkeypatch.setattr(state, "previous_publication", previous)
+    monkeypatch.setattr(src, "capture", lambda root, c: {})
+    monkeypatch.setattr(src, "_git", lambda *args: SHA)
+    monkeypatch.setattr(rp, "build", lambda root, snapshot, *, prior: current)
+    monkeypatch.setenv("GITHUB_ACTIONS", "true")
+    monkeypatch.setenv("GITHUB_RUN_ID", "101")
+    monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "1")
+    monkeypatch.setenv("GITHUB_REF_NAME", "main")
+    monkeypatch.setenv("GITHUB_SHA", SHA)
+    monkeypatch.setenv("GITHUB_REPOSITORY", client.repo)
+    monkeypatch.setenv("AI_OPS_RELEASE_DEPLOY_CONFIRMED", "success")
+    summary = tmp_path / "summary"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+    recovered = src.refresh(tmp_path, client)
+    original_id = prior["transition"]["notice_id"]
+    assert not recovered["transition"]["changed"]
+    assert recovered["transition"]["notice_id"] == original_id
+    assert recovered["transition"]["human_delivery"] == "unknown"
+    assert not summary.exists()
+    page = tmp_path / "dashboard/data.json"
+    page.parent.mkdir()
+    page.write_text(json.dumps({"release_plan": recovered}))
+    assert src.emit_summary(tmp_path) == 0 and summary.read_text() == render(prior["message"]) + "\n"
+
+    # Ещё одна пропущенная сводка переносит тот же идентификатор; успех гасит повтор.
+    prior = recovered
+    monkeypatch.setenv("GITHUB_RUN_ID", "102")
+    again = src.refresh(tmp_path, SummaryAttempt(prior["publisher"]))
+    assert again["transition"]["notice_id"] == original_id
+    settled = src.refresh(tmp_path, SummaryAttempt(prior["publisher"], "success"))
+    assert settled["transition"]["notice_id"] is None
+    page.write_text(json.dumps({"release_plan": settled}))
+    new_sink = tmp_path / "next-summary"
+    monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(new_sink))
+    assert src.emit_summary(tmp_path) == 0 and not new_sink.exists()
+
+
+@pytest.mark.parametrize("fault", ["cancelled", "failure", "missing", "duplicate", "prior_step", "wrong_job",
+                                   "wrong_run", "wrong_attempt", "wrong_sha", "unfinished", "no_notice", "bad_digest"])
+def test_uncertain_or_foreign_step_never_reissues_notice(fault, tmp_path, monkeypatch):
+    from ai_ops_kit.devtools import release_plan_sources as src
+    current, prior = _changed_notice()
+    client = SummaryAttempt(prior["publisher"])
+    step = client.job["steps"][-1]
+    if fault in ("cancelled", "failure"):
+        step["conclusion"] = fault
+    elif fault == "missing":
+        client.job["steps"].pop()
+    elif fault == "duplicate":
+        client.job["steps"].append(step.copy())
+    elif fault == "prior_step":
+        step["number"] = 7
+    elif fault == "wrong_job":
+        client.job["name"] = "other"
+    elif fault == "wrong_run":
+        client.job["run_id"] += 1
+    elif fault == "wrong_attempt":
+        client.job["run_attempt"] += 1
+    elif fault == "wrong_sha":
+        client.job["head_sha"] = "b" * 40
+    elif fault == "unfinished":
+        client.run["status"] = "in_progress"
+    elif fault == "no_notice":
+        prior = state.project(current, current, PUBLISHER)
+    elif fault == "bad_digest":
+        prior["publisher"]["digest"] = "b" * 64
+    verified, pending = state.previous_publication(client, read=lambda _: {"release_plan": prior})
+    assert pending is None
+    out = state.project(current, verified, PUBLISHER, skipped_notice=pending)
+    assert out["transition"]["notice_id"] is None
+    (tmp_path / "dashboard").mkdir()
+    (tmp_path / "dashboard/data.json").write_text(json.dumps({"release_plan": out}))
+    sink = tmp_path / "summary"
+    for key, value in {"GITHUB_ACTIONS":"true", "AI_OPS_RELEASE_DEPLOY_CONFIRMED":"success",
+                       "GITHUB_RUN_ID":"100", "GITHUB_RUN_ATTEMPT":"1", "GITHUB_SHA":SHA,
+                       "GITHUB_STEP_SUMMARY":str(sink)}.items():
+        monkeypatch.setenv(key, value)
+    assert src.emit_summary(tmp_path) == 0 and not sink.exists()
+
+
+def test_newer_meaningful_change_supersedes_skipped_notice():
+    _, prior = _changed_notice()
+    verified, pending = state.previous_publication(SummaryAttempt(PUBLISHER), read=lambda _: {"release_plan": prior})
+    out = state.project(report(), verified, skipped_notice=pending)
+    assert out["transition"]["changed"] and out["transition"]["notice_id"] != pending
+    assert "recovered_skipped_summary" not in out["transition"]
