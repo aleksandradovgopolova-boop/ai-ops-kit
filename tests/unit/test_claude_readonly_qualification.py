@@ -91,6 +91,13 @@ def test_offline_run_reports_not_run_and_exits_zero(capsys):
     assert q.main([]) == 0
     report = json.loads(capsys.readouterr().out)
     assert report["verdict"] == "not_run" and report["control_ok"] is True and report["live"] is False
+    conditions = report["launch_conditions"]
+    assert conditions["cli_args"] == report["plan"][0][1:-2]
+    assert conditions["timeout_seconds_per_probe"] == q.PROBE_TIMEOUT_SECONDS
+    assert conditions["max_cli_sessions"] == len(q.PROBES)
+    assert conditions["environment_names"] == sorted(q._qualification_env())
+    assert "ANTHROPIC_API_KEY" not in conditions["environment_names"]
+
 
 @pytest.mark.parametrize("kinds", [(), ("read",), ("write", "bash", "mcp", "mcp"),
                                   ("write", "bash", "mcp", "read", "read")])

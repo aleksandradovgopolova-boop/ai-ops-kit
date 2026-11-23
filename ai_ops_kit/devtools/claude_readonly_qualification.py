@@ -218,7 +218,13 @@ def main(argv=None) -> int:
         seen = control(root)
         report = {"schema_version": 1, "kind": "claude-readonly-qualification",
                   "profile": list(CLAUDE_READONLY_PROFILE), "control": seen,
-                  "control_ok": all(seen.values()), "live": args.live}
+                  "control_ok": all(seen.values()), "live": args.live,
+                  "launch_conditions": {
+                      "cli_args": probe_argv(args.binary, "")[1:-2],
+                      "timeout_seconds_per_probe": PROBE_TIMEOUT_SECONDS,
+                      "max_cli_sessions": len(PROBES),
+                      "environment_names": sorted(_qualification_env()),
+                  }}
         if not report["control_ok"]:
             report["verdict"] = "fixture_inert"
         elif not args.live:
