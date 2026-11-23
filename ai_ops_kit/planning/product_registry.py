@@ -171,7 +171,9 @@ def kit_state(root):
         if any(p.is_file() and p.name not in {".gitkeep", "README.md"} for p in overlay.rglob("*")):
             overlay_state = "observed"
     installed = managed if state == "consistent" else None
-    candidate_source = installed if drift == "clean" and policy.get("update_policy") == "pr" else None
+    # Как у штатного installer: только явное manual отключает путь через ветку.
+    manual = policy.get("update_policy", "").strip().lower() == "manual"
+    candidate_source = installed if drift == "clean" and not manual else None
     return {"version_state": state, "installed_version": installed,
             "declared_version": declared, "managed_version": managed, "update_policy": policy,
             "update_candidate": _local_candidate(root, candidate_source),
@@ -185,7 +187,7 @@ def render_kit_state(state):
     override = {"observed": "есть", "none_observed": "не найдены", "unknown": "неизвестны"}[state["drift"]["owner_overrides"]]
     used = ", ".join(state["capabilities_used"]["workflows"]) or "нет данных"
     candidate = state.get("update_candidate") or {}
-    suffix = (f"; локальная ветка обновления: {candidate['branch']}"
+    suffix = (f"; локальная ветка обновления: {candidate['branch']} ({candidate['head'][:12]})"
               if candidate.get("state") == "local_branch_verified" else "")
     return f"Kit {version}; {drift}; локальные настройки: {override}; наблюдаемая работа: {used}{suffix}"
 

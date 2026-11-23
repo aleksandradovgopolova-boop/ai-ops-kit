@@ -188,6 +188,9 @@ def test_report_survives_and_names_the_deferral(prepared_update_copy):
     assert r.returncode == 0
 
     rep = _report(child)
+    from ai_ops_kit.validation.validate_research_artifacts import check_schema
+    schema = json.loads((KIT / "schemas/update-result.schema.json").read_bytes())
+    assert check_schema(rep, schema) == []
     assert rep["applied_in_place"] is False
     assert rep["human_approval_required"] is True, "решение человека объявлено ненужным"
     assert rep["pull_request"], "поле pull_request снова пустое — это и была улика F-022"

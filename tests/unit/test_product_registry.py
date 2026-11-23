@@ -280,6 +280,7 @@ def test_fleet_verifies_local_candidate_without_writing(deferred_candidate, tmp_
     assert kit["update_candidate"] == {"state": "local_branch_verified", "target_version": "1.1.0",
         "branch": doc["deferred_to_branch"], "base": doc["candidate_base"], "head": doc["candidate_head"]}
     assert doc["deferred_to_branch"] in product_registry.render_kit_state(kit)
+    assert doc["candidate_head"][:12] in product_registry.render_kit_state(kit)
     assert {p: p.read_bytes() for p in root.rglob("*") if p.is_file()} == before
 
 
@@ -318,3 +319,12 @@ def test_unbound_update_is_unknown(deferred_candidate, change):
         report = child / ".ai/runtime/last-update-report.json"
     report.write_text(json.dumps(doc))
     assert product_registry.kit_state(root)["update_candidate"] == {"state": "unknown"}
+
+
+@pytest.mark.parametrize(("policy", "expected"), [
+    ("", "local_branch_verified"), (", update_policy: ' PR '", "local_branch_verified"),
+    (", update_policy: ' MANUAL '", "unknown")])
+def test_candidate_follows_effective_installer_policy(deferred_candidate, policy, expected):
+    root, _, _ = deferred_candidate
+    (root / ".ai-ops.yaml").write_text("parent: {installed_version: 1.0.0" + policy + "}\n")
+    assert product_registry.kit_state(root)["update_candidate"]["state"] == expected
