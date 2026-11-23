@@ -24,14 +24,14 @@ def test_refresh_supplies_only_previous_boundary_result_to_model(monkeypatch, tm
     def previous(c, *, current_run):
         assert c is client and current_run is None
         calls.append("verified-boundary")
-        return prior
+        return prior, None
     def build(root, snapshot, *, prior):
         calls.append("model")
         assert calls == ["verified-boundary", "model"]
         return {"prior": prior}
-    monkeypatch.setattr(state, "previous", previous)
+    monkeypatch.setattr(state, "previous_publication", previous)
     monkeypatch.setattr(rp, "build", build)
-    monkeypatch.setattr(state, "project", lambda report, old, publisher: report)
+    monkeypatch.setattr(state, "project", lambda report, old, publisher, *, skipped_notice: report)
     assert src.refresh(tmp_path, client) == {"prior": prior}
 
 
