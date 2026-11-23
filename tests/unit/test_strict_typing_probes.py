@@ -34,6 +34,8 @@ from ai_ops_kit.providers.orchestrator_providers import (
     ClaudeLookup, autoresolve_enabled, claude_lookup, print_provider_resolution, resolve_provider,
 )
 from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
+from ai_ops_kit.providers.provider_calls import Provider, for_contract, make_claude_cli_provider, make_provider
+from ai_ops_kit.providers.provider_writer_lock import _writer_serialization_lock as writer_lock, writer_lock_busy
 from ai_ops_kit.shared.lifecycle_store import drain_bookkeeping_losses, durable_write_json, validate_trace
 from ai_ops_kit.providers.response_contract import (
     REVIEWER_RESULT, ProviderRefusal, ShapeSupport, registry_schema, shape_report, shape_support,
@@ -125,6 +127,15 @@ facade_limit: str = FacadeLimitError("claude-cli", "x").human_message()
 written: dict[str, Any] = durable_write_json("state.json", {"a": 1}, require_keys=("a",))
 trace_errors: list[str] = validate_trace([{"kind": "run"}])
 losses: list[dict[str, Any]] = drain_bookkeeping_losses()
+# Сборка и вызов провайдеров, замок писателя (#1412, пятый срез)
+mock_fn: Provider = make_provider("mock")
+mock_text: str = mock_fn("role")
+bound_fn, bound_shape = for_contract(mock_fn, REVIEWER_RESULT)
+bound_text: str = bound_fn("role")
+cli_fn: Provider = make_claude_cli_provider("sonnet")
+busy: bool = writer_lock_busy()
+with writer_lock(notify=lambda message: None, poll_seconds=0.5):
+    pass
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -143,7 +154,8 @@ subscribe("run_completed", handler)
 # Контракты адаптеров моделей под полным strict (#1412, 23.11.2026).
 PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.providers.provider_errors",
                       "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage",
-                      "ai_ops_kit.shared.lifecycle_store", "ai_ops_kit.providers.orchestrator_providers")
+                      "ai_ops_kit.shared.lifecycle_store", "ai_ops_kit.providers.orchestrator_providers",
+                      "ai_ops_kit.providers.provider_calls", "ai_ops_kit.providers.provider_writer_lock")
 
 
 def _mypy(tmp_path, source):
@@ -219,6 +231,13 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('require_keys=("a",)', 'require_keys=(1,)', '[arg-type]'),
     ('trace_errors: list[str]', 'trace_errors: list[int]', '[assignment]'),
     ('losses: list[dict[str, Any]]', 'losses: dict[str, Any]', '[assignment]'),
+    ('mock_text: str', 'mock_text: int', '[assignment]'),
+    ('make_provider("mock")', 'make_provider(7)', '[arg-type]'),
+    ('for_contract(mock_fn, REVIEWER_RESULT)', 'for_contract(mock_fn, "reviewer-result")', '[arg-type]'),
+    ('bound_text: str', 'bound_text: int', '[assignment]'),
+    ('make_claude_cli_provider("sonnet")', 'make_claude_cli_provider(1)', '[arg-type]'),
+    ('busy: bool', 'busy: str', '[assignment]'),
+    ('poll_seconds=0.5', 'poll_seconds="0.5"', '[arg-type]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),

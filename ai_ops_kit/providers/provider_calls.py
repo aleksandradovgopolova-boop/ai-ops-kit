@@ -15,7 +15,12 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    import subprocess
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
@@ -28,6 +33,7 @@ from ai_ops_kit.providers.response_contract import (
     JSON_ONLY,
     UNSUPPORTED,
     ProviderRefusal,
+    ResponseContract,
     shape_support,
 )
 from ai_ops_kit.providers.provider_errors import (
@@ -38,6 +44,11 @@ from ai_ops_kit.providers.provider_errors import (
     _session_limit,
 )
 from ai_ops_kit.providers.provider_writer_lock import _writer_serialization_lock
+
+# Провайдер: промпт роли -> текст ответа. Фабрика вешает на него метку формы `.shape`.
+Provider = Callable[[str], str]
+# Инъекция вместо subprocess.run в офлайн-проверках `claude -p` (см. `_claude_cli_call`).
+Runner = Callable[[list[str]], "subprocess.CompletedProcess[str]"]
 
 
 # --- провайдеры ---
@@ -74,7 +85,7 @@ DEFAULT_MODELS = {"anthropic": "claude-sonnet-5", "openai": "gpt-4o"}
 _MAX_TOKENS = 8192
 
 
-def _anthropic_call(prompt, model, contract=None):
+def _anthropic_call(prompt: str, model: str, contract: ResponseContract | None = None) -> str:
     """Messages API. С контрактом форма ответа обеспечивается механизмом провайдера
     (`output_config.format`), а не разбором прозы; неполученный ответ даёт ОТКАЗ с причиной."""
     import os
@@ -113,7 +124,8 @@ def _anthropic_call(prompt, model, contract=None):
     return text or "(пустой ответ модели)"
 
 
-def _response_format_for(vendor, contract):
+def _response_format_for(vendor: str, contract: ResponseContract | None
+                         ) -> tuple[dict[str, Any] | None, str]:
     """`response_format` под объявленный режим вендора — или None, если механизма нет.
 
     Три состояния, и третье не сворачивается во второе: `enforced` шлёт схему, `json_only` просит
@@ -130,8 +142,9 @@ def _response_format_for(vendor, contract):
     return None, UNSUPPORTED
 
 
-def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/completions",
-                 key_env="OPENAI_API_KEY", contract=None, vendor="openai"):
+def _openai_call(prompt: str, model: str, base_url: str = "https://api.openai.com/v1/chat/completions",
+                 key_env: str = "OPENAI_API_KEY", contract: ResponseContract | None = None,
+                 vendor: str = "openai") -> str:
     """OpenAI Chat Completions и любой OpenAI-совместимый endpoint (DeepSeek, local, …)
     через base_url + ключ из указанной env. Секрет — только из env, не в репо/логах.
 
@@ -153,7 +166,7 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
         # v3.0-rc7: reasoning-модели медленные (kimi-k3) — 120с не хватало -> 300с default.
         # v3.6.8: таймаут настраиваем через env OPENAI_COMPATIBLE_TIMEOUT (флагман kimi-k3 бывает >300с).
         _to = int(os.environ.get("OPENAI_COMPATIBLE_TIMEOUT", "300"))
-        _body = {"model": model, "max_tokens": _MAX_TOKENS,
+        _body: dict[str, Any] = {"model": model, "max_tokens": _MAX_TOKENS,
                  "messages": [{"role": "user", "content": prompt}]}
         if rf is not None:
             _body["response_format"] = rf
@@ -161,7 +174,7 @@ def _openai_call(prompt, model, base_url="https://api.openai.com/v1/chat/complet
             base_url, {"authorization": f"Bearer {key}"}, _body, timeout=_to)
         _choice = (data.get("choices", [{}])[0] or {})
         msg = _choice.get("message", {}) or {}
-        content = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
+        content: str = ((msg.get("content") or msg.get("reasoning_content") or "")).strip()
         # #1411 R10: каждая попытка — оплаченный вызов, и пустой HTTP 200 тоже. Запись только при
         # непустом content занижала учёт ровно на перегрузке, где ретраев больше всего.
         _u = data.get("usage") or {}   # v3.1 trace v0.2: OpenAI-совместимый usage
@@ -210,20 +223,22 @@ DECLARED_NOT_IMPLEMENTED = {
 }
 
 
-def _tagged(fn, name, model, contract):
+def _tagged(fn: Provider, name: str, model: str | None, contract: ResponseContract | None) -> Provider:
     """Повесить на callable честную метку формы: чем именно обеспечен ответ.
 
     Метка едет ВМЕСТЕ с провайдером, а не выводится вызывающим по имени: как только «кто закрыл»
     считают в двух местах, эти два места расходятся (ровно этот класс кит ловит у гейтов)."""
     sup = shape_support(name)
-    fn.shape = {"provider": name, "model": model,
-                "contract": getattr(contract, "name", None),
-                "mode": sup["mode"] if contract is not None else "not_requested",
-                "mechanism": sup["mechanism"], "note": sup["note"]}
+    # setattr, а не `fn.shape =`: у Callable в типах нет атрибута, у объекта функции он есть.
+    setattr(fn, "shape", {"provider": name, "model": model,  # noqa: B010
+                          "contract": getattr(contract, "name", None),
+                          "mode": sup["mode"] if contract is not None else "not_requested",
+                          "mechanism": sup["mechanism"], "note": sup["note"]})
     return fn
 
 
-def make_provider(name: str, model: str = None, contract=None):
+def make_provider(name: str | None, model: str | None = None,
+                  contract: ResponseContract | None = None) -> Provider:
     """Вернуть callable(role_prompt)->text для провайдера.
     'mock' (по умолчанию, офлайн, детерминированный) | 'anthropic' | 'openai' |
     'openai-compatible' | 'claude-cli' | вендоры из OPENAI_COMPATIBLE_VENDORS (qwen/deepseek/kimi).
@@ -250,14 +265,14 @@ def make_provider(name: str, model: str = None, contract=None):
                        name, m, contract)
     if name == "openai-compatible":
         # DeepSeek / local / любой OpenAI-совместимый: base_url + ключ из env (provider-agnostic).
-        base = os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
-        if not base:
+        compat_base = os.environ.get("OPENAI_COMPATIBLE_BASE_URL")
+        if not compat_base:
             raise SystemExit("OPENAI_COMPATIBLE_BASE_URL не задан — для openai-совместимого "
                              "провайдера (напр. DeepSeek: https://api.deepseek.com/chat/completions) "
                              "укажите base URL в env.")
         if not model:
             raise SystemExit("--model обязателен для openai-compatible (напр. deepseek-chat).")
-        return _tagged(lambda prompt: _openai_call(prompt, model, base_url=base,
+        return _tagged(lambda prompt: _openai_call(prompt, model, base_url=compat_base,
                                                    key_env="OPENAI_COMPATIBLE_API_KEY",
                                                    contract=contract, vendor=name),
                        name, model, contract)
@@ -283,7 +298,7 @@ def make_provider(name: str, model: str = None, contract=None):
                      f"{', '.join(sorted(OPENAI_COMPATIBLE_VENDORS))})")
 
 
-def for_contract(provider_fn, contract):
+def for_contract(provider_fn: Provider, contract: ResponseContract) -> tuple[Provider, dict[str, Any]]:
     """Тот же провайдер, но обязанный отдать ответ ОБЪЯВЛЕННОЙ формы — если он это умеет.
 
     Пересобираем через `make_provider` по метке `.shape`, которую повесил `_tagged`: имя и модель
@@ -294,12 +309,14 @@ def for_contract(provider_fn, contract):
     Механизма нет (`claude-cli`, `mock`, неизвестный вендор) — тоже возвращаем как есть. Это не
     деградация молчком: режим уезжает в отчёт словом, и `claude-cli` остаётся первоклассным путём,
     работающим без ключа."""
-    shape = getattr(provider_fn, "shape", None)
+    shape: object = getattr(provider_fn, "shape", None)
     if not isinstance(shape, dict):
         return provider_fn, {"mode": "unknown", "mechanism": None,
                              "note": "провайдер собран в обход make_provider — что он умеет "
                                      "с формой, отсюда не видно"}
-    name, model = shape.get("provider"), shape.get("model")
+    label: dict[str, Any] = shape
+    name: Any = label.get("provider")
+    model: Any = label.get("model")
     sup = shape_support(name)
     if sup["mode"] not in (ENFORCED, JSON_ONLY):
         return provider_fn, {**sup, "provider": name, "model": model}
@@ -307,11 +324,11 @@ def for_contract(provider_fn, contract):
     return bound, {**sup, "provider": name, "model": model, "contract": contract.name}
 
 
-def _human_error(text):
+def _human_error(text: str | None) -> str:
     # F-011a: читаемая причина из JSON claude (content[].text / error) — НЕ резать диагностику до 200 символов
     import json as _json
     try:
-        d = _json.loads(text)
+        d = _json.loads(text or "")   # None и "" одинаково не JSON -> текст как есть
     # Узкий тип (срез providers, 2026-08-12): ожидаемый отказ — «это не JSON», и тогда отдаём
     # текст как есть. Любой другой тип здесь — дефект разбора, и он обязан всплыть.
     except (ValueError, TypeError):
@@ -326,7 +343,7 @@ def _human_error(text):
     return (" | ".join(parts) or (text or "").strip())[:2000]
 
 
-def _transient(text):
+def _transient(text: str | None) -> bool:
     t = (text or "").lower()
     # 19.08.2026 (заявка #160): список стал ЕДИНСТВЕННЫМ основанием повторять, поэтому в нём
     # обязано быть и само слово. Сообщение, прямо называющее себя транзиентным, повторять
@@ -353,13 +370,14 @@ CLAUDE_READONLY_PROFILE = (
 )
 
 
-def _backoff(n):
+def _backoff(n: int) -> None:
     import time
     import random
     time.sleep(min(30.0, 2.0 ** n) + random.uniform(0, 1))   # экспонента + jitter, потолок 30с
 
 
-def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=5):
+def _claude_cli_call(prompt: str, model: str | None = None, runner: Runner | None = None,
+                     timeout: float = 600, max_attempts: int = 5) -> str:
     """v3.9.0 First-class Claude Code Adapter — локальный `claude -p` как ТЕКСТ-провайдер (сильный writer),
     БЕЗ API-ключа (использует локальную аутентифицированную сессию claude CLI).
 
@@ -402,8 +420,7 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     # Инъекция runner (офлайн-selftest) в бинаре не нуждается и имя не меняет: там запуска нет.
     binary = "claude"
     if runner is None:
-        binary = claude_binary()
-        if not binary:
+        if not claude_binary():
             raise RuntimeError(claude_missing_message())
         # Нет квалифицированного профиля: help/metadata и argv-only fixture не доказывают
         # effective tool/config boundary. Отказ ДО любых subprocess (включая preflight),
@@ -425,7 +442,7 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     import time
     import random
     # runner заменяет subprocess.run (не весь вызов) — production-path проходит в selftest
-    _run = runner if runner is not None else (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=timeout))
+    _run: Runner = runner if runner is not None else (lambda c: subprocess.run(c, capture_output=True, text=True, timeout=timeout))
 
     last = ""
     for _attempt in range(max_attempts):
@@ -482,7 +499,7 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
             # до разбора куском без вердикта: судья «не выносил вердикт», гейт краснел «нет заключения
             # reviewer» — правда по существу, ложь по причине. Приводим claude-cli к тому же контракту,
             # что и API-провайдеры (anthropic/openai уже так делают): пустое — названный отказ.
-            result = d.get("result") or ""
+            result: str = d.get("result") or ""
             if not result.strip():
                 raise ProviderRefusal("empty_answer", "claude -p вернул пустой result (rc=0)",
                                       "claude-cli", d.get("model") or model or "claude-code-local")
@@ -526,7 +543,7 @@ def _claude_cli_call(prompt, model=None, runner=None, timeout=600, max_attempts=
     raise RuntimeError("claude -p не удался после %d попыток: %s" % (max_attempts, last))
 
 
-def make_claude_cli_provider(model=None, runner=None):
+def make_claude_cli_provider(model: str | None = None, runner: Runner | None = None) -> Provider:
     """Текст-провайдер; live Claude BLOCKED до read-only квалификации (#1476).
 
     runner — доверенная офлайн-инъекция; она не доказывает изоляцию реального CLI.
@@ -534,7 +551,7 @@ def make_claude_cli_provider(model=None, runner=None):
     return lambda prompt: _claude_cli_call(prompt, model=model, runner=runner)
 
 
-def make_openai_provider(model, base_url, key_env):
+def make_openai_provider(model: str, base_url: str, key_env: str) -> Provider:
     """openai-compatible провайдер с ЯВНЫМ endpoint+key_env — per-role/vendor маршрутизация (v3.7.12,
     Router->ai_ops_run). Ключ читает _openai_call из env по имени key_env; значение не передаётся и не
     логируется. Так writer/reviewer резолвятся в РАЗНЫЕ модели/вендоры в одном прогоне."""

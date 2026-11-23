@@ -228,7 +228,8 @@ select = [
 files = ["ai_ops_kit/shared", "ai_ops_kit/kernel", "ai_ops_kit/engine/run_context.py",
          "ai_ops_kit/providers/orchestrator_http.py", "ai_ops_kit/providers/provider_errors.py",
          "ai_ops_kit/providers/response_contract.py", "ai_ops_kit/providers/orchestrator_usage.py",
-         "ai_ops_kit/providers/orchestrator_providers.py"]
+         "ai_ops_kit/providers/orchestrator_providers.py", "ai_ops_kit/providers/provider_calls.py",
+         "ai_ops_kit/providers/provider_writer_lock.py"]
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
@@ -254,6 +255,9 @@ module = [
     # Хранилище состояния и фасад выбора провайдера (#1412, четвёртый срез).
     "ai_ops_kit.shared.lifecycle_store",
     "ai_ops_kit.providers.orchestrator_providers",
+    # Сборка и вызов провайдеров, машинный замок писателя (#1412, пятый срез).
+    "ai_ops_kit.providers.provider_calls",
+    "ai_ops_kit.providers.provider_writer_lock",
 ]
 # Полный набор --strict mypy 2.3.1, развёрнутый по модулям: strict=true в override
 # этой версии протекает в global options. warn_redundant_casts — только global (выше).
