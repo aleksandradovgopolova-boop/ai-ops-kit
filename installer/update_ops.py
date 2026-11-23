@@ -270,7 +270,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
             cmd.append("--force")
         if refresh_ci:
             cmd.append("--refresh-ci")
-        applied = subprocess.run(cmd, cwd=str(wt))
+        applied = subprocess.run(cmd, cwd=str(wt), env=_core().deferred_update_env(wt))
         if applied.returncode != 0:
             # Ветка бесполезна без применённого обновления: удаляем, чтобы повтор не спотыкался
             # о «ветка уже существует» и чтобы не осталось видимости подготовленного PR.
@@ -334,6 +334,7 @@ def _deferred_update(inst, target, force=False, refresh_ci=False):
           f"на месте НЕ применено.\n"
           f"  ветка:          {branch} ({len(staged)} файлов)\n"
           f"  рабочее дерево: не тронуто (кроме .ai/runtime/last-update-report.json — в gitignore)\n"
+          f"  локальная регистрация Git-драйвера и личные команды Codex отложены до установки на месте.\n"
           f"  открыть PR:     git push -u origin {branch} && gh pr create --fill\n"
           f"  посмотреть:     git diff {_base}..{branch} --stat\n"
           f"Чтобы применить на месте осознанно: `ai-ops update --in-place`.")

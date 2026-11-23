@@ -283,3 +283,29 @@ def test_update_fixture_copy_isolation(prepared_update_copy, prepared_update_tem
     assert _git(source, "rev-parse", "HEAD").stdout == source_head
     assert (source / ".git/index").read_bytes() == source_index
     assert not _git(source, "branch", "--list", "fixture-isolation-proof").stdout.strip()
+
+
+@pytest.mark.slow
+def test_deferred_update_keeps_owner_driver_and_personal_prompts(child, tmp_path, monkeypatch):
+    cfg = child / ".git/config"
+    for key in ("name", "driver"):
+        assert _git(child, "config", f"merge.ai-ops-plan.{key}", "owner-value").returncode == 0
+    config_before = cfg.read_bytes()
+    shared = tmp_path / "owner-home"
+    prompts = shared / "prompts"
+    prompts.mkdir(parents=True)
+    names = sorted((child / ".ai/generated/codex/prompts").glob("*.md"))
+    assert names
+    personal = prompts / names[0].name
+    personal.write_bytes(b"owner prompt\r\n")
+    monkeypatch.setenv("CODEX_HOME", str(shared))
+    result = _run(child, "update")
+    assert result.returncode == 0, result.stdout[-1000:]
+    branch, = _branches(child)
+    version = _git(child, "show", f"{branch}:.ai/managed/VERSION").stdout.strip()
+    assert version == (KIT / "VERSION").read_text().strip()
+    report = _report(child)
+    assert cfg.read_bytes() == config_before
+    assert [(p.name, p.read_bytes()) for p in prompts.iterdir()] == [(personal.name, b"owner prompt\r\n")]
+    assert report["plan_merge_driver"] == "deferred"
+    assert report["commands_installed"]["codex_generated"] > 0 and report["commands_installed"]["codex_prompts"] == 0
