@@ -13,6 +13,7 @@ F-033, B2-15, B2-19, B2-29, OK-01). F-032 показал форму точнее
   2 — отстала (версия, содержимое или дрейф) — отдельный код, чтобы CI отличал это от поломки гейта;
   1 — «не знаю»: гейт запущен из самой копии, или репозиторий не является установкой.
 """
+import shlex
 import shutil
 import subprocess
 import sys
@@ -126,6 +127,15 @@ class TestNonInstallIsNotAFailure:
         assert r.returncode != 2, f"кит объявлен отставшей дочкой:\n{r.stdout}"
 
 
+def _local_command(step):
+    """Команда шага CI с клоном кита, подменённым корнем этого репозитория.
+
+    Шаг исполняется через shell, поэтому подставленные пути экранируются: в папке с пробелом
+    (`~/Desktop/AI OPS`) неэкранированный путь рвался на два аргумента (#1569)."""
+    return (str(step).strip().replace('"$RUNNER_TEMP"/ai-ops-kit', shlex.quote(str(KIT)))
+            .replace("python3", shlex.quote(sys.executable)))
+
+
 class TestGateIsWiredIntoChildCI:
     """Гейт, который никто не зовёт, — это отчёт. Проверяется по УСТАНОВЛЕННОМУ workflow."""
 
@@ -142,7 +152,7 @@ class TestGateIsWiredIntoChildCI:
         steps = yaml.safe_load(wf)["jobs"]["validate"]["steps"]
         cmds = [str(s.get("run", "")) for s in steps if "check-update" in str(s.get("run", ""))]
         assert cmds, "в установленном workflow нет шага с гейтом отставания"
-        cmd = cmds[0].strip().replace('"$RUNNER_TEMP"/ai-ops-kit', str(KIT)).replace("python3", sys.executable)
+        cmd = _local_command(cmds[0])
         r = subprocess.run(cmd, shell=True, cwd=str(child), capture_output=True, text=True,
                            timeout=300)
         assert r.returncode == 0, f"шаг CI упал на свежей установке:\n{r.stdout}\n{r.stderr}"
@@ -158,10 +168,14 @@ class TestGateIsWiredIntoChildCI:
         wf = (broken / ".github" / "workflows" / "ai-ops-validate.yml").read_text(encoding="utf-8")
         steps = yaml.safe_load(wf)["jobs"]["validate"]["steps"]
         cmd = next(str(s["run"]).strip() for s in steps if "check-update" in str(s.get("run", "")))
-        cmd = cmd.replace('"$RUNNER_TEMP"/ai-ops-kit', str(KIT)).replace("python3", sys.executable)
+        cmd = _local_command(cmd)
         r = subprocess.run(cmd, shell=True, cwd=str(broken), capture_output=True, text=True,
                            timeout=300)
         assert r.returncode == 2, f"отставшая копия прошла шаг CI (rc={r.returncode}):\n{r.stdout}"
+        # rc=2 даёт и сам Python, не найдя скрипт («can't open file»): без этой проверки тест
+        # зеленел, даже когда гейт не запускался вовсе (#1569, путь к киту с пробелом).
+        assert r.stdout.strip() and "can't open file" not in r.stderr, \
+            f"гейт не запустился, rc=2 дал интерпретатор:\n{r.stderr}"
 
 
 class TestJsonAnswerIsMachineReadable:
