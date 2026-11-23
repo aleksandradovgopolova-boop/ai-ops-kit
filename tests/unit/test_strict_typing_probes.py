@@ -25,6 +25,14 @@ from ai_ops_kit.shared.budget import Budget, resolve_budget
 from ai_ops_kit.shared.ai_route import route
 from ai_ops_kit.shared.lifecycle_store import load_guarded
 from ai_ops_kit.engine.ai_route import route as legacy_route
+from ai_ops_kit.providers.orchestrator_http import _http_post_json as post_json
+from ai_ops_kit.providers.orchestrator_usage import (
+    _record_call as record_call, clear_call_context, drain_call_stats, set_call_context,
+)
+from ai_ops_kit.providers.provider_errors import ProviderEnvUnavailableError, ProviderLimitError
+from ai_ops_kit.providers.response_contract import (
+    REVIEWER_RESULT, ProviderRefusal, ShapeSupport, registry_schema, shape_report, shape_support,
+)
 from ai_ops_kit.shared.review_verdict import (
     build_record, load as load_review, checked_sources, who_checked_lines, node_title, persist,
 )
@@ -85,6 +93,23 @@ elif guarded["state"] == "corrupt":
 else:
     guarded_absent: str = guarded["state"]
 # guarded state boundary
+# Контракты адаптеров моделей (#1412, 23.11.2026)
+refusal = ProviderRefusal("empty_answer", "three empty", "kimi", "kimi-k2")
+refusal_payload: dict[str, Any] = refusal.as_dict()
+contract_errors: list[str] = REVIEWER_RESULT.violations({"kind": "reviewer-result"})
+schema: dict[str, Any] = registry_schema()
+support: ShapeSupport = shape_support("kimi")
+support_mode: str = support["mode"]
+support_mechanism: str | None = support["mechanism"]
+shape_text: str = shape_report(["kimi", "anthropic"])
+limit_text: str = ProviderLimitError("claude-cli", "session limit", None).human_message()
+env_text: str = ProviderEnvUnavailableError("claude-cli").human_message()
+set_call_context(role="reviewer", run_id="run-1")
+call: dict[str, Any] = record_call("kimi-k2", 100, 8192, 0.5)
+call_with_cost: dict[str, Any] = record_call("claude-cli", None, None, None, provider="claude-cli", cost=0.01)
+calls: list[dict[str, Any]] = drain_call_stats()
+clear_call_context()
+reply: Any = post_json("https://example.invalid", {"authorization": "x"}, {"a": 1}, timeout=1, retries=1)
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -98,6 +123,11 @@ def handler(data: dict[str, Any]) -> None:
 
 subscribe("run_completed", handler)
 '''
+
+
+# Контракты адаптеров моделей под полным strict (#1412, 23.11.2026).
+PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.providers.provider_errors",
+                      "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage")
 
 
 def _mypy(tmp_path, source):
@@ -153,6 +183,17 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('{"status": "pass"}', '{"status": "unknown"}', '[typeddict-item]'),
     ('return {"ready_for_pr": True}', 'return {"ready_for_pr": "yes"}', '[typeddict-item]'),
     ('data: dict[str, Any]', 'data: str', '[arg-type]'),
+    ('support_mechanism: str | None', 'support_mechanism: str', '[assignment]'),
+    ('support_mode: str = support["mode"]', 'support_mode: str = support["kind"]', '[typeddict-item]'),
+    ('contract_errors: list[str]', 'contract_errors: list[int]', '[assignment]'),
+    ('shape_text: str', 'shape_text: int', '[assignment]'),
+    ('record_call("kimi-k2", 100, 8192, 0.5)', 'record_call("kimi-k2", "100", 8192, 0.5)', '[arg-type]'),
+    ('cost=0.01)', 'cost="free")', '[arg-type]'),
+    ('calls: list[dict[str, Any]]', 'calls: dict[str, Any]', '[assignment]'),
+    ('timeout=1, retries=1)', 'timeout=1, retries="1")', '[arg-type]'),
+    ('{"authorization": "x"}', '{"authorization": 1}', '[dict-item]'),
+    ('"session limit", None)', '"session limit", 7)', '[arg-type]'),
+    ('limit_text: str', 'limit_text: int', '[assignment]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),
@@ -174,7 +215,8 @@ def test_effective_options_match_strict_without_leaking_to_other_modules():
     _, strict = process_options(["--config-file", str(ROOT / "pyproject.toml"), "--strict"])
     for module in ("ai_ops_kit.kernel.ports", "ai_ops_kit.shared.contracts",
                    "ai_ops_kit.shared.events", "ai_ops_kit.shared.budget", "ai_ops_kit.shared.ai_route",
-                   "ai_ops_kit.shared.review_verdict", "ai_ops_kit.engine.run_context"):
+                   "ai_ops_kit.shared.review_verdict", "ai_ops_kit.engine.run_context",
+                   *PROVIDER_CONTRACTS):
         effective = configured.clone_for_module(module)
         reference = strict.clone_for_module(module)
         for flag in PER_MODULE_OPTIONS | {"warn_redundant_casts"}:
