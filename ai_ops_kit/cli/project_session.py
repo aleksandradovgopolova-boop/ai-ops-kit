@@ -68,8 +68,8 @@ def initial_intake(root, runtime, session, prompt):
     origin = {"kind": "current-agent-intake", "identity_scope": "declared", "hook_event_name": None}
     with sessions.session_lock(directory / "requests"):
         with sessions.reading():
-            if (directory / "active.json").exists():
-                task = sessions.load(root, runtime, session)
+            task = sessions.load(root, runtime, session, missing_ok=True)
+            if task is not None:
                 if (task.get("input_origin") != origin or task.get("prompt") != prompt
                         or task.get("status") == "accepted"):
                     raise ValueError("initial intake не заменяет сохранённую задачу; продолжи её штатным run")
@@ -251,10 +251,7 @@ def hook(runtime, payload):
         current = sessions.binding(root)
         context = f"AI Ops: проект {current['root']}, ветка {current['branch']}, версия {current['version']}. "
         context += f"runtime={runtime}; session_id={session}. "
-        try:
-            task = sessions.load(root, runtime, session)
-        except FileNotFoundError:
-            task = None
+        task = sessions.load(root, runtime, session, missing_ok=True)
         if task:
             context += (f"Сохранённая задача {task['request_id']} ({task['status']}). "
                         "Прочитай её из .ai/runtime/sessions/; перед продолжением проверь текущую привязку. ")

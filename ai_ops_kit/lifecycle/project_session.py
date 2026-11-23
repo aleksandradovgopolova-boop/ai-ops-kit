@@ -13,6 +13,7 @@ import functools
 import json
 import math
 import os
+import re
 import signal
 import subprocess
 import time
@@ -296,8 +297,8 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
                 or task.get("input_latest")):
             raise ValueError("повтор события не совпадает с активной постановкой; сохранённые задачи не изменены")
         return task, False, None
-    if (directory / "active.json").exists():
-        active = load(root, runtime, session)
+    active = load(root, runtime, session, missing_ok=True)
+    if active is not None:
         claim = directory / (active["request_id"] + ".execution-claim")
         if active.get("status") != "accepted" and (claim.exists() or claim.is_symlink() or active.get("status") != "pending"
                 or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation", "state_migration"))):
@@ -410,11 +411,32 @@ def run_process(command, root, directory, *, timeout=300, progress=None, env=Non
     return subprocess.CompletedProcess(command, code, *tails)
 
 
+def _has_session_evidence(directory):
+    # Имена файлов и каталогов штатной задачи. Содержимое, ссылки и вложенные пути не читаем.
+    try:
+        with os.scandir(directory) as entries:
+            return any(re.match(r"[0-9a-f]{32}\.", entry.name)
+                       or entry.name in ("process.stdout.log", "process.stderr.log") for entry in entries)
+    except FileNotFoundError:
+        return False
+
+
 @read_phase
-def load(root, runtime, session):
+def load(root, runtime, session, *, missing_ok=False):
     session_migration_store.incomplete(root)
     directory = session_dir(root, runtime, session)
-    active = json.loads((directory / "active.json").read_text(encoding="utf-8"))
+    pointer = directory / "active.json"
+    if pointer.is_symlink():
+        raise ValueError("повреждён указатель active.json; проверь сохранённое состояние сессии")
+    try:
+        active = json.loads(pointer.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        if _has_session_evidence(directory):
+            raise ValueError("отсутствует active.json при сохранённой работе; "
+                             "сверь задачу и её исполнение перед восстановлением") from None
+        if missing_ok:
+            return None
+        raise
     request = active["request_id"]
     if not isinstance(request, str) or len(request) != 32 or any(c not in "0123456789abcdef" for c in request):
         raise ValueError("повреждён request_id")
