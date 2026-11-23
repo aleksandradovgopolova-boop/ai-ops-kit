@@ -34,6 +34,7 @@ from pathlib import Path
 
 import yaml
 
+from ai_ops_kit.engops import adoption
 from ai_ops_kit.engops import adoption_evidence as installed_evidence
 from ai_ops_kit.planning import product_contract
 
@@ -98,6 +99,47 @@ def _observed_workflows(root):
             "unreadable_reports": unreadable, "invalid_reports": invalid, "truncated": len(paths) > 1000}
 
 
+def _local_candidate(root, installed):
+    """Сверить последний deferred update с локальной веткой и её родителем."""
+    unknown = {"state": "unknown"}
+    if not installed:
+        return unknown
+    try:
+        report = installed_evidence._evidence_json(root, ".ai/runtime/last-update-report.json")
+        target = report.get("to_version")
+        branch = report.get("deferred_to_branch")
+        if (type(report.get("schema_version")) is not int or report["schema_version"] != 1
+                or report.get("command") != "update" or report.get("status") != "ok"
+                or report.get("from_version") != installed or report.get("update_policy") != "pr"
+                or report.get("applied_in_place") is not False or "report_read_error" in report
+                or not installed_evidence._evidence_version(target) or len(target) > 100
+                or branch != f"ai-ops/update-v{target}"):
+            return unknown
+        base, head = report.get("candidate_base"), report.get("candidate_head")
+        if not all(isinstance(oid, str) and re.fullmatch(r"[a-f0-9]{40}(?:[a-f0-9]{24})?", oid)
+                   for oid in (base, head)):
+            return unknown
+        rc, top, _ = adoption.git(root, "rev-parse", "--show-toplevel")
+        if rc or Path(top).resolve() != root.resolve():
+            return unknown
+        ref = f"refs/heads/{branch}"
+        rc, ids, _ = adoption.git(root, "rev-parse", "HEAD", ref, f"{ref}^@")
+        if rc or ids.splitlines() != [base, head, base]:
+            return unknown
+        path = ".ai/managed/VERSION"
+        rc, entry, _ = adoption.git(root, "ls-tree", "-l", head, "--", path)
+        blob = re.fullmatch(r"100644 blob ([0-9a-f]+) +([0-9]+)\t" + re.escape(path), entry)
+        if rc or not blob or not 0 < int(blob[2]) <= 256:
+            return unknown
+        rc, content, _ = adoption.git(root, "cat-file", "blob", blob[1])
+        if rc or content != target:
+            return unknown
+        return {"state": "local_branch_verified", "branch": branch, "base": base,
+                "head": head, "target_version": target}
+    except (OSError, ValueError, RuntimeError):
+        return unknown
+
+
 def kit_state(root):
     """Снимок оператора: декларации отдельно от наблюдений и целостности managed."""
     root = Path(root)
@@ -128,8 +170,13 @@ def kit_state(root):
     if overlay_state != "unknown" and overlay.is_dir():
         if any(p.is_file() and p.name not in {".gitkeep", "README.md"} for p in overlay.rglob("*")):
             overlay_state = "observed"
-    return {"version_state": state, "installed_version": managed if state == "consistent" else None,
+    installed = managed if state == "consistent" else None
+    # Как у штатного installer: только явное manual отключает путь через ветку.
+    manual = policy.get("update_policy", "").strip().lower() == "manual"
+    candidate_source = installed if drift == "clean" and not manual else None
+    return {"version_state": state, "installed_version": installed,
             "declared_version": declared, "managed_version": managed, "update_policy": policy,
+            "update_candidate": _local_candidate(root, candidate_source),
             "capabilities_used": _observed_workflows(root),
             "drift": {"managed": drift, "owner_overrides": overlay_state, "override_root": ".ai/custom"}}
 
@@ -139,7 +186,10 @@ def render_kit_state(state):
     drift = {"clean": "без дрейфа", "detected": "есть дрейф", "unknown": "дрейф неизвестен"}[state["drift"]["managed"]]
     override = {"observed": "есть", "none_observed": "не найдены", "unknown": "неизвестны"}[state["drift"]["owner_overrides"]]
     used = ", ".join(state["capabilities_used"]["workflows"]) or "нет данных"
-    return f"Kit {version}; {drift}; локальные настройки: {override}; наблюдаемая работа: {used}"
+    candidate = state.get("update_candidate") or {}
+    suffix = (f"; локальная ветка обновления: {candidate['branch']} ({candidate['head'][:12]})"
+              if candidate.get("state") == "local_branch_verified" else "")
+    return f"Kit {version}; {drift}; локальные настройки: {override}; наблюдаемая работа: {used}{suffix}"
 
 
 def fleet(registry_path, *, health_map: dict | None = None) -> dict:

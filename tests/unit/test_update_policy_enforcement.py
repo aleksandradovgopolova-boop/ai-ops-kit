@@ -188,10 +188,16 @@ def test_report_survives_and_names_the_deferral(prepared_update_copy):
     assert r.returncode == 0
 
     rep = _report(child)
+    from ai_ops_kit.validation.validate_research_artifacts import check_schema
+    schema = json.loads((KIT / "schemas/update-result.schema.json").read_bytes())
+    assert check_schema(rep, schema) == []
     assert rep["applied_in_place"] is False
     assert rep["human_approval_required"] is True, "решение человека объявлено ненужным"
     assert rep["pull_request"], "поле pull_request снова пустое — это и была улика F-022"
     assert rep["pull_request"] == rep["deferred_to_branch"] == _branches(child)[0]
+    assert rep["candidate_head"] == _git(child, "rev-parse", rep["deferred_to_branch"]).stdout.strip()
+    assert rep["candidate_base"] == _git(child, "rev-parse", "HEAD").stdout.strip()
+    assert _git(child, "rev-parse", rep["candidate_head"] + "^@").stdout.splitlines() == [rep["candidate_base"]]
     assert rep["update_policy"] == "pr"
     assert "Что этот выпуск привозит по безопасности" in rep["security_surface"]["text"]
 
@@ -283,3 +289,74 @@ def test_update_fixture_copy_isolation(prepared_update_copy, prepared_update_tem
     assert _git(source, "rev-parse", "HEAD").stdout == source_head
     assert (source / ".git/index").read_bytes() == source_index
     assert not _git(source, "branch", "--list", "fixture-isolation-proof").stdout.strip()
+
+
+@pytest.mark.slow
+def test_deferred_update_keeps_owner_driver_and_personal_prompts(child, tmp_path, monkeypatch):
+    cfg = child / ".git/config"
+    for key in ("name", "driver"):
+        assert _git(child, "config", f"merge.ai-ops-plan.{key}", "owner-value").returncode == 0
+    config_before = cfg.read_bytes()
+    shared = tmp_path / "owner-home"
+    prompts = shared / "prompts"
+    prompts.mkdir(parents=True)
+    names = sorted((child / ".ai/generated/codex/prompts").glob("*.md"))
+    assert names
+    personal = prompts / names[0].name
+    personal.write_bytes(b"owner prompt\r\n")
+    monkeypatch.setenv("CODEX_HOME", str(shared))
+    result = _run(child, "update")
+    assert result.returncode == 0, result.stdout[-1000:]
+    branch, = _branches(child)
+    version = _git(child, "show", f"{branch}:.ai/managed/VERSION").stdout.strip()
+    assert version == (KIT / "VERSION").read_text().strip()
+    report = _report(child)
+    assert cfg.read_bytes() == config_before
+    assert [(p.name, p.read_bytes()) for p in prompts.iterdir()] == [(personal.name, b"owner prompt\r\n")]
+    assert report["plan_merge_driver"] == "deferred"
+    assert report["commands_installed"]["codex_generated"] > 0 and report["commands_installed"]["codex_prompts"] == 0
+
+
+@pytest.mark.slow
+def test_explicit_update_finishes_host_commands_after_branch_merge(prepared_update_copy, tmp_path, monkeypatch):
+    child, _, _ = prepared_update_copy
+    branch, = _branches(child)
+    assert _git(child, "merge", "--ff-only", branch).returncode == 0
+    host = tmp_path / "profile"
+    prompts = host / "prompts"
+    prompts.mkdir(parents=True)
+    monkeypatch.setenv("CODEX_HOME", str(host))
+    owner = prompts / "personal.md"
+    owner.write_bytes(b"owner data")
+    generated = child / ".ai/generated/codex/prompts"
+    expected = (generated / "ai-run.md").read_bytes()
+    (generated / "unlisted.md").write_bytes(b"outside declared command surface")
+    result = _run(child, "update", "--in-place")
+    assert result.returncode == 0, result.stdout[-1000:]
+    assert (prompts / "ai-run.md").read_bytes() == expected
+    assert not (prompts / "unlisted.md").exists() and owner.read_bytes() == b"owner data"
+    assert _report(child)["commands_installed"]["codex_prompts"] > 0
+    before_retry = (prompts / "ai-run.md").stat().st_mtime_ns
+    assert _run(child, "update", "--in-place").returncode == 0
+    assert (prompts / "ai-run.md").stat().st_mtime_ns == before_retry
+
+
+@pytest.mark.slow
+def test_host_prompt_directory_collision_rolls_back(prepared_update_copy, tmp_path, monkeypatch):
+    child, _, _ = prepared_update_copy
+    branch, = _branches(child)
+    assert _git(child, "merge", "--ff-only", branch).returncode == 0
+    home = tmp_path / "owner-profile"
+    directory = home / "prompts/ai-run.md"
+    directory.mkdir(parents=True)
+    owner_file = directory / "original"
+    owner_file.write_bytes(b"owner content")
+    monkeypatch.setenv("CODEX_HOME", str(home))
+    result = _run(child, "update", "--in-place")
+    assert result.returncode == 1
+    from ai_ops_kit.validation.validate_research_artifacts import check_schema
+    report = _report(child)
+    assert report["status"] == "rolled_back"
+    assert check_schema(report, json.loads((KIT / "schemas/update-result.schema.json").read_bytes())) == []
+    assert sorted((p.relative_to(home).as_posix() for p in home.rglob("*") if p.is_file())) == ["prompts/ai-run.md/original"]
+    assert owner_file.read_bytes() == b"owner content"

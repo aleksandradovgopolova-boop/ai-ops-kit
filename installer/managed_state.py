@@ -374,6 +374,21 @@ def restore_managed_from(backup: Path):
     shutil.copytree(backup, _ao().MANAGED)
 
 
+_DEFERRED_ROOT_ENV = "_AI_OPS_DEFERRED_UPDATE_ROOT"
+
+
+def deferred_update_env(worktree):
+    """Область записи вложенного update — только созданное для ветки дерево."""
+    env = os.environ.copy()
+    env.pop("CODEX_HOME", None)  # prompts владельца не входят в Git-ветку
+    env[_DEFERRED_ROOT_ENV] = str(Path(worktree).resolve())
+    return env
+
+
+def _preparing_branch(root):
+    return os.environ.get(_DEFERRED_ROOT_ENV) == str(Path(root).resolve())
+
+
 def asset_inventory(root, refresh_ci=False):
     """Шаг поставки и его footprint объявляются ВМЕСТЕ; delivery и snapshot читают это место."""
     root, core, ao = Path(root), _core(), _ao()
@@ -394,7 +409,8 @@ def asset_inventory(root, refresh_ci=False):
          [root / ".ai" / zone / "README.md" for zone in core._ZONE_WHY]),
         ("gitignore", lambda: core.ensure_gitignore(root), [root / ".gitignore"]),
         ("gitattributes", lambda: core.ensure_gitattributes(root), [root / ".gitattributes"]),
-        ("plan_merge_driver", lambda: ao._plan_merge_setup().ensure_plan_merge_driver(root), []),
+        ("plan_merge_driver", lambda: "deferred" if _preparing_branch(root)
+         else ao._plan_merge_setup().ensure_plan_merge_driver(root), []),
         ("entry_point", lambda: core._install_entry_point(root), [root / core.ENTRY_NAME]),
         ("communication_adapter", lambda: core._install_communication_adapter(root), [root / "CLAUDE.md"]),
         ("team_session", lambda: core.ensure_team_session(root),
@@ -430,7 +446,9 @@ def _footprint_paths():
 
 def _merge_driver_config(root, values=None):
     """Только два локальных ключа доставки; чужой config и глобальные настройки не копируются."""
-    if not (Path(root) / ".git").exists():
+    # Git config общий у linked worktrees. В ветке его нельзя и восстанавливать:
+    # между снимком и ошибкой свои настройки мог поменять владелец.
+    if _preparing_branch(root) or not (Path(root) / ".git").exists():
         return {}
     out = {}
     for suffix in ("name", "driver"):
