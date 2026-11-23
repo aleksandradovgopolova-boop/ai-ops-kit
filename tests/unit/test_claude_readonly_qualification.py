@@ -67,6 +67,7 @@ def test_mutation_is_caught_by_effect_and_fails(project, tmp_path):
     write = next(p for p in probes if p["probe"] == "write")
     assert write["changed"] == ["write.canary"] and write["ok"] is False
     assert q.verdict_of(probes) == "failed"
+    assert len(probes) == 1
     assert not (project / "write.canary").exists(), "следующая проба идёт на чистом проекте"
 
 
@@ -75,12 +76,15 @@ def test_no_model_turn_is_not_measured_not_safe(project, tmp_path):
     probes = q.run_live(project, _fake_cli(tmp_path, "unauthenticated"))
     assert all(p["reached_model"] is False and p["ok"] is None for p in probes)
     assert q.verdict_of(probes) == "not_measured"
+    assert [p["probe"] for p in probes] == ["write"]
 
 
 def test_probes_run_with_the_adapter_profile(tmp_path):
     argv = q.probe_argv("/bin/claude", "prompt")
     assert argv[-2:] == ["--", "prompt"]
-    assert tuple(argv[4:-2]) == CLAUDE_READONLY_PROFILE
+    assert tuple(argv[argv.index("--restricted"):-2]) == CLAUDE_READONLY_PROFILE
+    assert argv.count("--max-turns") == 1 and argv[argv.index("--max-turns") + 1] == "2"
+    assert "--no-session-persistence" in argv[:argv.index("--")]
 
 
 def test_offline_run_reports_not_run_and_exits_zero(capsys):
@@ -107,3 +111,32 @@ def test_missing_model_usage_does_not_prove_a_turn(project, tmp_path):
     probes = q.run_live(project, _fake_cli(tmp_path, "without_usage"))
     assert all(p["reached_model"] is False and p["ok"] is None for p in probes)
     assert q.verdict_of(probes) == "not_measured"
+
+def test_probe_process_uses_only_qualification_environment(project, tmp_path, monkeypatch):
+    from pathlib import Path
+    cli = Path(_fake_cli(tmp_path, "honest"))
+    environment_record = tmp_path / "names.json"
+    cli.write_text(cli.read_text().replace("prompt = sys.argv[-1]", (
+        "import os\nPath(" + repr(str(environment_record)) + ").write_text(json.dumps(sorted(os.environ)))\n"
+        "prompt = sys.argv[-1]"
+    )))
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://fixture.invalid")
+    monkeypatch.setenv("CLAUDE_CODE_SIMPLE", "1")
+    monkeypatch.setenv("AIOPS_PRIVATE_FIXTURE_VALUE", "x")
+    assert q.verdict_of(q.run_live(project, str(cli))) == "qualified"
+    names = set(json.loads(environment_record.read_text()))
+    assert not names & {"ANTHROPIC_BASE_URL", "CLAUDE_CODE_SIMPLE", "AIOPS_PRIVATE_FIXTURE_VALUE"}
+    assert "CLAUDE_CODE_SAFE_MODE" in names
+
+
+def test_timed_out_probe_stops_and_reports_unknown_effect(project, monkeypatch):
+    import subprocess
+    calls = []
+    def timeout(argv, **kwargs):
+        calls.append(kwargs["timeout"])
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"])
+    monkeypatch.setattr(subprocess, "run", timeout)
+    probes = q.run_live(project, "/unused/claude", timeout=999)
+    assert calls == [60]
+    assert probes[0]["timed_out"] is True and probes[0]["rc"] is None
+    assert len(probes) == 1 and q.verdict_of(probes) == "not_measured"
