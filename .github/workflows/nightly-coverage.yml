@@ -62,6 +62,17 @@ jobs:
           --scope "nightly-coverage: tests/ -m 'not nightly and not release_gate', CI ubuntu-latest"
           -- python3 -m pytest tests/ -q -n auto --dist loadfile -m "not nightly and not release_gate"
           --cov=ai_ops_kit --cov=installer --cov-fail-under=70
+      # Рекомендательно (#1387): новый и выросший долг виден в сводке прогона, прогон не краснеет.
+      # Без этого шага находки копились молча — за пять дней после заморозки их набралось 21.
+      - name: "Сложность при слабом покрытии: новый и выросший долг (рекомендательно, #1387)"
+        if: always() && steps.cov.outputs.rc == '0'
+        run: |
+          {
+            echo "## Сложность при слабом покрытии (CRAP, рекомендательно)"
+            echo '```'
+            python3 -m ai_ops_kit.devtools.crap_score --coverage "$RUNNER_TEMP/coverage.json" --coverage-binding "$RUNNER_TEMP/coverage-binding.json" || echo "код $?: 1 — есть новый/выросший долг или неполный замер, 2 — замер не принят"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
       - name: "Сохранить покрытие и привязку для CRAP-заморозки"
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

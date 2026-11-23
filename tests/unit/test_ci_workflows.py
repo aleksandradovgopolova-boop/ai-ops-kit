@@ -370,3 +370,14 @@ def test_no_module_hardcodes_root_depth():
     assert not offenders, (
         "корень пакета зашит через parents[N] — перенос файла глубже сломает пути: "
         f"{offenders[:6]}")
+
+
+def test_crap_findings_are_shown_in_the_nightly_summary_without_failing_the_run():
+    """#1387: находки видны в сводке; рекомендательная проверка не краснит ночное покрытие."""
+    workflow = yaml.safe_load((PKG / ".github/workflows/nightly-coverage.yml").read_text())
+    steps = workflow["jobs"]["coverage"]["steps"]
+    step = next(s for s in steps if "crap_score" in s.get("run", ""))
+    assert "GITHUB_STEP_SUMMARY" in step["run"] and "|| echo" in step["run"]
+    assert "steps.cov.outputs.rc == '0'" in step["if"]
+    names = [s.get("name", "") for s in steps]
+    assert names.index(step["name"]) > next(i for i, n in enumerate(names) if "Привязка покрытия" in n)

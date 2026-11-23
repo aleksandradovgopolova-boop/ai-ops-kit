@@ -88,6 +88,9 @@ ALLOWED = (
     # CRAP — снимок хешей до тестов и сверка после. Вердикта о коде нет; логика —
     # tests/unit/test_coverage_binding.py.
     re.compile(r"^python3?\s+-m\s+ai_ops_kit\.devtools\.coverage_binding\s+(snapshot|bind)\b"),
+    # Показ CRAP-находок в сводке ночного покрытия (#1387): рекомендательный отчёт по готовому
+    # замеру, вердикт не блокирует прогон. Логика — tests/unit/test_crap_score.py.
+    re.compile(r"^python3?\s+-m\s+ai_ops_kit\.devtools\.crap_score\s+--coverage\b"),
 )
 
 # Workflow целиком операционный: ручной замер, который ПРОИЗВОДИТ сырые данные (артефакты прогона),
