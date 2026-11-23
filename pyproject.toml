@@ -225,7 +225,9 @@ select = [
 # доступны потребителям. Это НЕ strict всего пакета; py.typed пока не объявляем.
 # Ратчет охвата и подавлений: tests/contracts/test_strict_typing_scope.py.
 [tool.mypy]
-files = ["ai_ops_kit/shared", "ai_ops_kit/kernel", "ai_ops_kit/engine/run_context.py"]
+files = ["ai_ops_kit/shared", "ai_ops_kit/kernel", "ai_ops_kit/engine/run_context.py",
+         "ai_ops_kit/providers/orchestrator_http.py", "ai_ops_kit/providers/provider_errors.py",
+         "ai_ops_kit/providers/response_contract.py", "ai_ops_kit/providers/orchestrator_usage.py"]
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
@@ -243,6 +245,11 @@ module = [
     "ai_ops_kit.shared.ai_route",
     "ai_ops_kit.shared.review_verdict",
     "ai_ops_kit.engine.run_context",
+    # Контракты адаптеров моделей (#1412): транспорт, отказы, форма ответа, учёт расхода.
+    "ai_ops_kit.providers.orchestrator_http",
+    "ai_ops_kit.providers.provider_errors",
+    "ai_ops_kit.providers.response_contract",
+    "ai_ops_kit.providers.orchestrator_usage",
 ]
 # Полный набор --strict mypy 2.3.1, развёрнутый по модулям: strict=true в override
 # этой версии протекает в global options. warn_redundant_casts — только global (выше).

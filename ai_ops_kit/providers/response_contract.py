@@ -35,7 +35,11 @@ false` и явный `required` — без них structured outputs не вкл
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable
 from pathlib import Path
+from typing import Any, TypedDict
+
+JsonObject = dict[str, Any]
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
            Path(__file__).resolve().parents[2])
@@ -60,7 +64,7 @@ class ProviderRefusal(Exception):
     был прав по существу и врал по причине — человека отправляли искать судью там, где ответ
     обрезало потолком токенов. Отказ несёт свою причину до самого отчёта."""
 
-    def __init__(self, reason: str, detail: str = "", provider: str = "", model: str = ""):
+    def __init__(self, reason: str, detail: str = "", provider: str = "", model: str = "") -> None:
         self.reason = reason
         self.detail = detail
         self.provider = provider
@@ -69,7 +73,7 @@ class ProviderRefusal(Exception):
         where = f" [{provider}{'/' + model if model else ''}]" if provider else ""
         super().__init__(f"{base}{where}{': ' + detail if detail else ''}")
 
-    def as_dict(self) -> dict:
+    def as_dict(self) -> JsonObject:
         return {"kind": "provider-refusal", "reason": self.reason,
                 "reason_text": REFUSAL_REASONS.get(self.reason, self.reason),
                 "detail": self.detail, "provider": self.provider, "model": self.model}
@@ -80,12 +84,12 @@ class ProviderRefusal(Exception):
 class ResponseContract:
     """Имя формы + схема для провайдера + постфактум-проверка того же."""
 
-    def __init__(self, name: str, wire_schema: dict, required: tuple):
+    def __init__(self, name: str, wire_schema: JsonObject, required: tuple[str, ...]) -> None:
         self.name = name
         self.wire_schema = wire_schema
         self.required = required
 
-    def violations(self, obj) -> list:
+    def violations(self, obj: object) -> list[str]:
         """Проверка ФОРМЫ постфактум — она нужна ВСЕГДА, а не только там, где механизма нет.
 
         Провайдер с `enforced` обещает схему; обещание проверяется. Гейт, поверивший обещанию без
@@ -105,7 +109,7 @@ class ResponseContract:
         return errs
 
 
-def _reviewer_result_wire_schema() -> dict:
+def _reviewer_result_wire_schema() -> JsonObject:
     """Строгая проекция `schemas/reviewer-result.schema.json` для structured outputs.
 
     Почему проекция, а не сам файл: draft-07 с `const` и вложенными необязательными объектами
@@ -153,9 +157,13 @@ REVIEWER_RESULT = ResponseContract(
 )
 
 
-def registry_schema(name: str = "reviewer-result") -> dict:
+def registry_schema(name: str = "reviewer-result") -> JsonObject:
     """Схема-источник из `schemas/` — для теста связи проекции с реестром."""
-    return json.loads((PKG / "schemas" / f"{name}.schema.json").read_text(encoding="utf-8"))
+    path = PKG / "schemas" / f"{name}.schema.json"
+    schema = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(schema, dict):
+        raise ValueError(f"{path}: схема должна быть объектом JSON")
+    return schema
 
 
 # --- карта поддержки -------------------------------------------------------
@@ -164,11 +172,20 @@ ENFORCED = "enforced"        # схема гарантирована механ�
 JSON_ONLY = "json_only"      # гарантирован валидный JSON, схема — нет
 UNSUPPORTED = "unsupported"  # механизма нет; проза плюс разбор, как раньше
 
+
+class ShapeSupport(TypedDict):
+    """Что провайдер умеет с формой ответа: режим, механизм (None — нет) и пояснение для человека."""
+
+    mode: str
+    mechanism: str | None
+    note: str
+
+
 # КАРТА ЧЕСТНАЯ, А НЕ ОПТИМИСТИЧНАЯ. Здесь перечислено только то, что реализовано адаптером в
 # `orchestrator_providers`; вендор, чей режим не проверен нами, объявлен `unsupported`, а не
 # «наверное умеет». Завышенная декларация здесь дала бы гейту право сказать «форма обеспечена» там,
 # где она не обеспечена, — то есть ровно ту ложь, которую весь этот срез убирает.
-SHAPE_SUPPORT = {
+SHAPE_SUPPORT: dict[str, ShapeSupport] = {
     "codex-app-server": {"mode": UNSUPPORTED, "mechanism": None,
                          "note": "native текстовая роль; форма проверяется китом после ответа. "
                                  "Живая квалификация общего pipeline ещё не получена"},
@@ -201,16 +218,16 @@ SHAPE_SUPPORT = {
                      "обеспечена» проверяется тестами живых адаптеров с подменённым HTTP"},
 }
 
-_DEFAULT_SUPPORT = {"mode": UNSUPPORTED, "mechanism": None,
+_DEFAULT_SUPPORT: ShapeSupport = {"mode": UNSUPPORTED, "mechanism": None,
                     "note": "провайдер не объявлен в карте форм — считаем, что механизма нет"}
 
 
-def shape_support(provider_name: str) -> dict:
+def shape_support(provider_name: str) -> ShapeSupport:
     """Что провайдер умеет с формой ответа. Неизвестный -> unsupported, а не «наверное умеет»."""
-    return dict(SHAPE_SUPPORT.get(provider_name) or _DEFAULT_SUPPORT)
+    return (SHAPE_SUPPORT.get(provider_name) or _DEFAULT_SUPPORT).copy()
 
 
-def shape_report(providers=None) -> str:
+def shape_report(providers: Iterable[str] | None = None) -> str:
     """Человекочитаемая граница: кто умеет, кто нет и что происходит там, где нет."""
     names = sorted(providers or SHAPE_SUPPORT)
     width = max(len(n) for n in names)

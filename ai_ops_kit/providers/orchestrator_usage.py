@@ -13,18 +13,22 @@ import sys
 import threading
 import tempfile
 from pathlib import Path
+from typing import Any
 
 import yaml
+
+# Запись одного вызова модели: поля фиксированные плюс вмерженный контекст вызова.
+CallRecord = dict[str, Any]
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
             Path(__file__).resolve().parents[1])
 # v3.1 (trace v0.2): аккумулятор статистики вызовов модели — tokens/latency/cost для трейсе. Вызывающий
 # (ai_ops_run) дренирует после прогона и эмитит в journal + отчёт. Наблюдаемость, не источник истины.
-_CALL_STATS = []
+_CALL_STATS: list[CallRecord] = []
 _WORKER_CALLS = threading.local()
 
 
-def _call_buffers():
+def _call_buffers() -> tuple[list[CallRecord], dict[str, Any]]:
     """Отдельный буфер текущего worker; старые main-thread alias'ы фасада остаются живыми.
 
     ThreadPool-пакеты не наследуют контекст координатора и не дренируют соседей.
@@ -37,7 +41,7 @@ def _call_buffers():
     return _WORKER_CALLS.stats, _WORKER_CALLS.context
 
 
-def _load_pricing_from_registry() -> dict:
+def _load_pricing_from_registry() -> dict[str, dict[str, float]]:
     """Загрузить цены per-token из registry/models.yaml (SoT). Только модели с pricing.per_mtok.
 
     -> {model_id: {"in": float, "out": float}} для совместимости с _record_call.
@@ -46,7 +50,7 @@ def _load_pricing_from_registry() -> dict:
     if not models_path.is_file():
         return {}
     data = yaml.safe_load(models_path.read_text(encoding="utf-8"))
-    result = {}
+    result: dict[str, dict[str, float]] = {}
     for m in (data.get("models") or []):
         mid = m.get("id")
         pricing = m.get("pricing") or {}
@@ -63,7 +67,7 @@ def _load_pricing_from_registry() -> dict:
 _PRICE_PER_MTOK = _load_pricing_from_registry()
 
 
-def drain_call_stats():
+def drain_call_stats() -> list[CallRecord]:
     """Забрать и очистить накопленную статистику вызовов модели (per-call {model,in,out,latency_s,cost})."""
     stats, _ = _call_buffers()
     result = list(stats)
@@ -73,20 +77,22 @@ def drain_call_stats():
 
 # v3.10.0 Usage Truth: контекст вызова (role/trigger/provider/runtime/run_id/workitem_id/package_id).
 # ai_ops_run ставит его через provider-обёртку ПЕРЕД вызовом; _record_call вмерживает в каждую запись.
-_CALL_CONTEXT = {}
+_CALL_CONTEXT: dict[str, Any] = {}
 
 
-def set_call_context(**ctx):
+def set_call_context(**ctx: Any) -> None:
     _, context = _call_buffers()
     context.update({k: v for k, v in ctx.items() if v is not None})
 
 
-def clear_call_context():
+def clear_call_context() -> None:
     _, context = _call_buffers()
     context.clear()
 
 
-def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, cost_status=None):
+def _record_call(model: str, in_tok: int | None, out_tok: int | None, latency_s: float | None,
+                 provider: str | None = None, cost: float | None = None,
+                 cost_status: str | None = None) -> CallRecord:
     # v3.10.0 Usage Truth. cost: ИЗМЕРЕННАЯ стоимость (напр. claude -p total_cost_usd). Иначе оценка по
     # прайс-таблице, если есть токены+цена (cost_status=estimated); иначе None (unavailable).
     if cost is not None:
@@ -100,7 +106,7 @@ def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, co
             cost_status = "unavailable"
     # ЧЕСТНО: неизвестное использование -> unavailable, НЕ 0. measured, если провайдер вернул токены.
     usage_status = "measured" if (in_tok is not None or out_tok is not None) else "unavailable"
-    rec = {"model": model, "provider": provider, "runtime": None,
+    rec: CallRecord = {"model": model, "provider": provider, "runtime": None,
            "input_tokens": in_tok, "output_tokens": out_tok, "usage_status": usage_status,
            "cost": cost, "cost_status": cost_status,
            "latency": (round(latency_s, 3) if latency_s is not None else None),
@@ -111,7 +117,7 @@ def _record_call(model, in_tok, out_tok, latency_s, provider=None, cost=None, co
     return rec
 
 
-def main(argv):
+def main(argv: list[str]) -> int:
     print(__doc__)
     return 0
 

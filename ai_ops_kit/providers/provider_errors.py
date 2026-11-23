@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re as _re
+from typing import Any
 
 
 class ProviderLimitError(RuntimeError):
@@ -22,13 +23,13 @@ class ProviderLimitError(RuntimeError):
     не спутать с транзиентным 529 (F-011): тот повторять НУЖНО, этот — бессмысленно.
     """
 
-    def __init__(self, provider, detail, reset_hint=None):
+    def __init__(self, provider: str, detail: str, reset_hint: str | None = None) -> None:
         self.provider = provider
         self.detail = detail
         self.reset_hint = reset_hint
         super().__init__(self.human_message())
 
-    def human_message(self):
+    def human_message(self) -> str:
         when = f" вернусь после {self.reset_hint}," if self.reset_hint else ""
         return (f"Лимит модели ({self.provider}) исчерпан:{when} "
                 f"либо укажи другого провайдера: --provider anthropic|openai|qwen. "
@@ -50,12 +51,12 @@ class ProviderEnvUnavailableError(RuntimeError):
     (ProviderLimitError — там ждать сброса или менять провайдера, здесь — сменить среду запуска).
     """
 
-    def __init__(self, provider, detail=""):
+    def __init__(self, provider: str, detail: str = "") -> None:
         self.provider = provider
         self.detail = detail
         super().__init__(self.human_message())
 
-    def human_message(self):
+    def human_message(self) -> str:
         base = (f"Исполнитель `{self.provider}` в этой среде запуститься не смог, поэтому работу "
                 "выполнить не удалось. Так бывает, когда запуск идёт изнутри уже открытой сессии "
                 "Claude — вложенный вызов обрывается сразу, не дойдя до модели, и повторять его "
@@ -66,7 +67,7 @@ class ProviderEnvUnavailableError(RuntimeError):
         return base + (f"\n  (подробно: {self.detail})" if self.detail else "")
 
 
-def _session_limit(text):
+def _session_limit(text: str | None) -> bool:
     """Отличить исчерпание ЛИМИТА СЕССИИ/КВОТЫ от транзиентного 5xx/529.
 
     Лимит сессии часто несёт в тексте и «429», поэтому проверяется ПЕРВЫМ — иначе он попал бы в
@@ -79,14 +80,14 @@ def _session_limit(text):
                                 "limit reached", "usage_limit"))
 
 
-def _reset_hint(text):
+def _reset_hint(text: str | None) -> str | None:
     """Время сброса из текста, если названо (для человека). -> str|None."""
     m = _re.search(r"(?:resets? at|try again at|after)\s+([0-9:apm\s\.]{3,20})", text or "",
                    _re.IGNORECASE)
     return m.group(1).strip().rstrip(".") if m else None
 
 
-def _env_unavailable_envelope(d):
+def _env_unavailable_envelope(d: object) -> bool:
     """Распознать СТРУКТУРНЫЙ отказ среды по конверту claude-cli (заявка #160).
 
     Сигнатура из поля: `is_error:true` + `terminal_reason:"api_error"` + `duration_api_ms:0` +
@@ -103,7 +104,7 @@ def _env_unavailable_envelope(d):
     if str(d.get("terminal_reason") or "").strip().lower() != "api_error":
         return False
 
-    def _is_zero(value):
+    def _is_zero(value: Any) -> bool:
         try:
             return int(value) == 0
         except (TypeError, ValueError):
