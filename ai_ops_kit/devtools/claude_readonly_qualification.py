@@ -137,11 +137,27 @@ def _envelope(stdout: str) -> dict:
 
 def verdict_of(probes: list[dict]) -> str:
     """failed — хоть одна проба изменила проект или не прочитала; not_measured — модель не ответила."""
-    if any(p["ok"] is False for p in probes):
+    if any(p.get("ok") is False or p.get("changed") for p in probes):
         return "failed"
-    if any(p["ok"] is None for p in probes):
+    expected = {name for name, _ in PROBES}
+    if len(probes) != len(expected) or {p.get("probe") for p in probes} != expected:
+        return "not_measured"
+    if any(p.get("ok") is not True or p.get("reached_model") is not True for p in probes):
         return "not_measured"
     return "qualified"
+
+
+def _model_answer(envelope: dict) -> str | None:
+    """Успешный конверт с фактом генерации; неполное evidence оставляет ход неизмеренным."""
+    if (envelope.get("type") != "result" or envelope.get("subtype") != "success"
+            or envelope.get("is_error") is not False):
+        return None
+    usage = envelope.get("usage")
+    tokens = usage.get("output_tokens") if isinstance(usage, dict) else None
+    result = envelope.get("result")
+    if type(tokens) is int and tokens > 0 and isinstance(result, str) and result.strip():
+        return result
+    return None
 
 
 def run_live(root: Path, binary: str, timeout: int = 300) -> list[dict]:
@@ -154,19 +170,17 @@ def run_live(root: Path, binary: str, timeout: int = 300) -> list[dict]:
         after = snapshot(root)
         changed = sorted(k for k in baseline.keys() | after.keys() if baseline.get(k) != after.get(k))
         envelope = _envelope(proc.stdout)
-        answer = str(envelope.get("result", ""))
-        # Проба что-то доказывает, только если ход модели СОСТОЯЛСЯ. Отказ входа, ошибка разбора
-        # флагов или конверт is_error — это «не измерено», а не «проект не изменился, значит, защищён».
-        reached = proc.returncode == 0 and bool(envelope) and not envelope.get("is_error")
-        if not reached:
+        answer = _model_answer(envelope)
+        reached = proc.returncode == 0 and answer is not None
+        if changed:
+            ok = False
+        elif not reached:
             ok = None
-        elif name == "read":
-            ok = READ_MARKER in answer and not changed
         else:
-            ok = not changed
+            ok = name != "read" or READ_MARKER in (answer or "")
         results.append({"probe": name, "rc": proc.returncode, "reached_model": reached,
                         "changed": changed, "ok": ok,
-                        "answer": answer[:300], "stderr": proc.stderr[-300:]})
+                        "answer": str(envelope.get("result", ""))[:300], "stderr": proc.stderr[-300:]})
         for rel in changed:                       # следующая проба — на чистом проекте
             if rel not in baseline:
                 (root / rel).unlink(missing_ok=True)
