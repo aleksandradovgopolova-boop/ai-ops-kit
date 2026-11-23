@@ -34,6 +34,7 @@ from ai_ops_kit.providers.orchestrator_providers import (
     ClaudeLookup, autoresolve_enabled, claude_lookup, print_provider_resolution, resolve_provider,
 )
 from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
+from ai_ops_kit.providers.model_router import check_independence, escalation_decision, plan_run, writer_tier
 from ai_ops_kit.providers.provider_calls import Provider, for_contract, make_claude_cli_provider, make_provider
 from ai_ops_kit.providers.provider_writer_lock import _writer_serialization_lock as writer_lock, writer_lock_busy
 from ai_ops_kit.shared.lifecycle_store import drain_bookkeeping_losses, durable_write_json, validate_trace
@@ -136,6 +137,12 @@ cli_fn: Provider = make_claude_cli_provider("sonnet")
 busy: bool = writer_lock_busy()
 with writer_lock(notify=lambda message: None, poll_seconds=0.5):
     pass
+# Роутер моделей (#1412, шестой срез)
+route_plan: dict[str, Any] = plan_run({"roles": {}}, [], {}, signals={"task_type": "QUICK"},
+                                      available_providers={"kimi"})
+tier: dict[str, str] = writer_tier({"risk": "high"})
+independence: dict[str, Any] = check_independence(route_plan, escalations={"code_review": "kimi-k2"})
+next_step: dict[str, Any] = escalation_decision("code_review", 0, "reviewer_abstain", {"escalation_policy": {}})
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -155,7 +162,8 @@ subscribe("run_completed", handler)
 PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.providers.provider_errors",
                       "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage",
                       "ai_ops_kit.shared.lifecycle_store", "ai_ops_kit.providers.orchestrator_providers",
-                      "ai_ops_kit.providers.provider_calls", "ai_ops_kit.providers.provider_writer_lock")
+                      "ai_ops_kit.providers.provider_calls", "ai_ops_kit.providers.provider_writer_lock",
+                      "ai_ops_kit.providers.model_router")
 
 
 def _mypy(tmp_path, source):
@@ -238,6 +246,11 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('make_claude_cli_provider("sonnet")', 'make_claude_cli_provider(1)', '[arg-type]'),
     ('busy: bool', 'busy: str', '[assignment]'),
     ('poll_seconds=0.5', 'poll_seconds="0.5"', '[arg-type]'),
+    ('plan_run({"roles": {}}, [], {}', 'plan_run(["roles"], [], {}', '[arg-type]'),
+    ('available_providers={"kimi"}', 'available_providers=7', '[arg-type]'),
+    ('tier: dict[str, str]', 'tier: dict[str, int]', '[assignment]'),
+    ('escalations={"code_review": "kimi-k2"}', 'escalations={"code_review": 2}', '[dict-item]'),
+    ('escalation_decision("code_review", 0,', 'escalation_decision("code_review", "0",', '[arg-type]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),
