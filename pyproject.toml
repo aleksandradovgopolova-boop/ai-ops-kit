@@ -234,7 +234,8 @@ files = ["ai_ops_kit/shared", "ai_ops_kit/kernel", "ai_ops_kit/engine/run_contex
          "ai_ops_kit/providers/cost_method.py", "ai_ops_kit/providers/codex_native.py",
          "ai_ops_kit/providers/codex_transport.py", "ai_ops_kit/providers/codex_native_hook.py",
          "ai_ops_kit/engops/session_guardrails.py", "ai_ops_kit/engops/delegation_advisor.py",
-         "ai_ops_kit/engops/session_telemetry.py"]
+         "ai_ops_kit/engops/session_telemetry.py", "ai_ops_kit/providers/skill_context.py",
+         "ai_ops_kit/gates/gate_evidence.py"]
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
@@ -278,6 +279,9 @@ module = [
     "ai_ops_kit.engops.session_guardrails",
     "ai_ops_kit.engops.delegation_advisor",
     "ai_ops_kit.engops.session_telemetry",
+    # Помощники оркестратора: подбор навыков, доказательства гейтов (#1586).
+    "ai_ops_kit.providers.skill_context",
+    "ai_ops_kit.gates.gate_evidence",
 ]
 # Полный набор --strict mypy 2.3.1, развёрнутый по модулям: strict=true в override
 # этой версии протекает в global options. warn_redundant_casts — только global (выше).

@@ -70,18 +70,19 @@ RUNTIMES = ('claude-code', 'codex')
 MAX_CONTEXT_BYTES = 32768
 
 
-def digest(value):
+def digest(value: object) -> str:
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
                                      allow_nan=False, separators=(',', ':')).encode()).hexdigest()
 
 
-def text(value, field):
+def text(value: object, field: str) -> str:
     if not isinstance(value, str) or not value.strip():
         raise ValueError(f'{field}: требуется непустая строка')
     return value
 
 
-def context_response(runtime, stage, root, max_context_bytes=MAX_CONTEXT_BYTES):
+def context_response(runtime: str, stage: object, root: str | os.PathLike[str],
+                     max_context_bytes: int = MAX_CONTEXT_BYTES) -> tuple[dict[str, Any], dict[str, Any]]:
     """Сериализация по документам; это не ACK runtime или подтверждение соблюдения skills."""
     if runtime not in RUNTIMES or not isinstance(stage, dict):
         raise ValueError('неизвестный runtime или stage')
@@ -91,7 +92,7 @@ def context_response(runtime, stage, root, max_context_bytes=MAX_CONTEXT_BYTES):
     if mode not in ('writer', 'read-only') or (mode == 'read-only' and stage.get('writer')):
         raise ValueError('review_mode или writer противоречит роли')
     bodies = resolve_skills(stage, root)
-    binding = {'stage': sid, 'owner': owner, 'review_mode': mode,
+    binding: dict[str, Any] = {'stage': sid, 'owner': owner, 'review_mode': mode,
                'skills': {key: hashlib.sha256(body.encode()).hexdigest()
                           for key, body in bodies.items()}}
     context = json.dumps(binding, ensure_ascii=False, sort_keys=True) + '\n'
@@ -101,7 +102,7 @@ def context_response(runtime, stage, root, max_context_bytes=MAX_CONTEXT_BYTES):
     size = len(context.encode())
     if size > max_context_bytes:
         raise ValueError('обязательный контекст превышает бюджет probe; сокращение запрещено')
-    output = {'hookSpecificOutput': {'hookEventName': 'SessionStart',
+    output: dict[str, Any] = {'hookSpecificOutput': {'hookEventName': 'SessionStart',
                                      'additionalContext': context}}
     receipt = {'kind': 'FACT', 'claim': 'context_serialized', 'runtime': runtime,
                'binding': binding, 'context_sha256': hashlib.sha256(context.encode()).hexdigest(),
@@ -110,12 +111,16 @@ def context_response(runtime, stage, root, max_context_bytes=MAX_CONTEXT_BYTES):
     return output, receipt
 
 
-def audit_events(runtime, events):
+def audit_events(runtime: str, events: object) -> dict[str, Any]:
     """Порядок локального replay, не глобальные часы; raw payloads не сохраняются."""
     if runtime not in RUNTIMES or not isinstance(events, list) or not events:
         raise ValueError('runtime/events невалидны')
-    records, gaps, pending, completed, seen = [], [], {}, set(), set()
-    session = None
+    records: list[dict[str, Any]] = []
+    gaps: list[dict[str, Any]] = []
+    pending: dict[tuple[Any, Any], str] = {}
+    completed: set[tuple[Any, Any]] = set()
+    seen: set[str] = set()
+    session: str | None = None
     started = False
     for sequence, payload in enumerate(events, 1):
         if not isinstance(payload, dict):

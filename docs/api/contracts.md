@@ -239,8 +239,14 @@ Anthropic/OpenAI-совместимых вендоров и `claude -p`, `for_co
 `session_handoff.latest` и `session_boundary.classify` — получили аннотированные сигнатуры;
 сами модули под strict не переводились.
 
-Поведение не менялось. Следующая часть #1586 — `providers.skill_context` и
-`gates.gate_evidence`.
+Поведение не менялось.
+
+Вторая часть #1586: `providers.skill_context` (разрешение skills, сериализация контекста,
+аудит событий hook) и `gates.gate_evidence` (классификация гейта, evidence из ответа судьи,
+сбор и валидация evidence) переведены под strict. Входы, которые функции только читают,
+объявлены как `Mapping[str, Any]` вместо голого `dict` — вызывающим это мягче, поведение то же.
+`load_evidence` возвращает объект через `cast`: форму уже проверил `validate_evidence`.
+Этим список модулей #1586 исчерпан.
 
 ### Решение по Pydantic v2
 
