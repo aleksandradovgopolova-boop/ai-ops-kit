@@ -1,7 +1,8 @@
 # No-model smoke эталонного образа (#1478): собрать containers/Dockerfile из ТОЧНОГО коммита и
 # запустить штатный ENTRYPOINT без сети и модели. Статический validate_container_assets.py читает
 # только текст Dockerfile и сборку не доказывает — это делает этот прогон.
-# Изоляцию (ФС/сеть/UID) он НЕ квалифицирует — это #1407. В обязательные проверки ветки не входит:
+# Второй шаг (#1407) проверяет изоляцию (ФС/сеть/UID/capabilities/лимиты) изнутри контейнера,
+# запущенного штатной run-sandboxed.sh. В обязательные проверки ветки не входит:
 # сделать его обязательным — решение владельца.
 name: container-smoke
 on:
@@ -34,3 +35,9 @@ jobs:
         env:
           AI_OPS_IMAGE_SMOKE: "1"
         run: python3 -m pytest tests/integration/test_reference_image_smoke.py -v -s --tb=short
+      # #1407: та же сборка + образ-проба через штатную run-sandboxed.sh с AI_OPS_NETWORK=none —
+      # uid, read-only корень, сеть, capabilities, лимиты, секреты проверяются ИЗНУТРИ контейнера.
+      - name: Проверить изоляцию изнутри контейнера штатной обёрткой
+        env:
+          AI_OPS_IMAGE_SMOKE: "1"
+        run: python3 -m pytest tests/integration/test_container_isolation_smoke.py -v -s --tb=short

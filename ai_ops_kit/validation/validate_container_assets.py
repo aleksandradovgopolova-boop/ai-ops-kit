@@ -11,12 +11,14 @@ root, последний ENTRYPOINT, наличие файла модуля в b
 Сборку и запуск образа делает отдельный режим `--image-smoke` (CI container-smoke через pytest): образ
 собирается из `git archive HEAD`, штатный ENTRYPOINT отвечает на `--help` без сети и модели, а
 launch target в образе сверяется по sha256 с коммитом. Нет Docker — честный BLOCKED (код 2), не
-успех. Реальные свойства изоляции (ФС/сеть/UID) этот smoke НЕ доказывает — это #1407.
+успех. Реальные свойства изоляции (ФС/сеть/UID) этот smoke НЕ доказывает: их проверяет режим
+`--isolation-smoke` (#1407) — проба изнутри контейнера, запущенного штатной обёрткой.
 
 Использование:
   validate_container_assets.py            # проверить поставляемые containers/*
   validate_container_assets.py --runtime-floor  # фактические версии внутри build; stdlib-only
   validate_container_assets.py --image-smoke    # собрать и запустить образ на коммите HEAD
+  validate_container_assets.py --isolation-smoke  # негативная проверка изоляции изнутри (#1407)
 Возврат 0 — ок, 1 — ошибки, 2 — проверка не исполнена (BLOCKED).
 """
 from __future__ import annotations
@@ -379,11 +381,49 @@ def image_smoke(root=PKG):
                "Изоляция ФС/сети/UID НЕ проверена (#1407).", *leftover]
 
 
+def isolation_smoke(root=PKG):
+    """Негативная проверка изоляции изнутри контейнера штатной обёрткой (#1407). Коды как у image_smoke."""
+    try:
+        from ai_ops_kit.validation import container_isolation_probe as probe
+    except ImportError:  # запуск скриптом из каталога валидаторов
+        import container_isolation_probe as probe
+    blocker = _docker_blocker()
+    if blocker:
+        return 2, [f"CONTAINER-ISOLATION: BLOCKED — {blocker}. Изоляция не проверялась; это не успех."]
+    source, error = _commit_source(root)
+    if error:
+        return 1, ["CONTAINER-ISOLATION: ошибки:", f"  - {error}"]
+    rev = source[0]
+    base_tag, probe_tag = f"ai-ops-engine:isolation-{rev[:12]}", f"ai-ops-engine:isolation-probe-{rev[:12]}"
+    try:
+        errors = (_build_from_commit(root, rev, base_tag)
+                  or probe.probe_isolation(Path(root), _docker, base_tag, probe_tag))
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        errors = [f"проверка изоляции не завершена: {exc}"]
+    finally:
+        leftover = [f"ВНИМАНИЕ: образ {t} не удалён — docker image rm {t}" for t in (probe_tag, base_tag)
+                    if not _removed(t)]
+    if errors:
+        return 1, ["CONTAINER-ISOLATION: нарушения:", *(f"  - {e}" for e in errors), *leftover]
+    return 0, [f"CONTAINER-ISOLATION-OK: на коммите {rev} штатная обёртка с AI_OPS_NETWORK=none даёт "
+               "uid 10001, read-only корень, запись только в одноразовый клон, без сети, без "
+               "capabilities, с лимитами pids/памяти/CPU, без посторонних секретов и SSH-агента; "
+               "исходный репозиторий не изменён, клон удалён. Режим bridge (сеть есть намеренно) и "
+               "лимит времени работы контейнера (его у обёртки нет) этим не проверяются.", *leftover]
+
+
+def _removed(tag):
+    try:
+        return _docker(["image", "rm", "-f", tag], timeout=120).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
 def main(argv):
     if argv == ["--runtime-floor"]:
         return _runtime_main()
-    if argv == ["--image-smoke"]:
-        code, lines = image_smoke()
+    if argv in (["--image-smoke"], ["--isolation-smoke"]):
+        code, lines = image_smoke() if argv == ["--image-smoke"] else isolation_smoke()
         print("\n".join(lines))
         return code
     errs = check_assets()
