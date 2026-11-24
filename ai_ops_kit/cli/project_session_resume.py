@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import stat
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +15,66 @@ from ai_ops_kit.lifecycle import session_prepared_update
 
 TIMEOUT = 30
 SNAPSHOT_LIMIT = 4 * 1024 * 1024
+
+
+def rejected_turn(root, payload):
+    """Предыдущий turn_id только для отказа до ответа/инструментов в этой сессии."""
+    session, turn, raw = (payload.get(k) for k in ("session_id", "turn_id", "transcript_path"))
+    if not all(isinstance(s, str) and s for s in (session, turn, raw)):
+        return None
+    directory = Path(os.environ.get("CODEX_HOME") or Path.home() / ".codex") / "sessions"
+    path = Path(raw)
+    try:
+        rel = path.relative_to(directory)
+        if (not path.is_absolute() or directory.is_relative_to(root) or len(rel.parts) != 4
+                or not re.fullmatch(r"\d{4}/\d{2}/\d{2}/rollout-[\dT-]+-" + re.escape(session) + r"\.jsonl", rel.as_posix())
+                or path.resolve(strict=True) != path):
+            return None
+        with os.fdopen(os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK), "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                return None
+            limit = 2 * 1024 * 1024
+            header = json.loads(stream.readline(limit))
+            if header["type"] != "session_meta" or header["payload"]["id"] != session or header["payload"]["cwd"] != str(root):
+                return None
+            if info.st_size - stream.tell() > limit:
+                stream.seek(-limit, os.SEEK_END)
+                stream.readline(limit)  # only complete records from the tail
+            data = stream.read(limit + 1)
+        if len(data) > limit or not data.endswith(b"\n"):
+            return None
+        return _rejected_before_turn(data, turn)
+    except (OSError, RuntimeError, ValueError, KeyError, AttributeError, TypeError, RecursionError):
+        return None
+
+
+def _rejected_before_turn(data, turn):
+    previous = rejected = None
+    current = False
+    for line in data.splitlines():
+        record = json.loads(line)
+        kind, body = record["type"], record["payload"]
+        event = body.get("type")
+        if kind == "event_msg" and event == "task_started":
+            if current:
+                return None
+            current = body["turn_id"] == turn
+            if not current:
+                previous, rejected = body["turn_id"], None
+        elif kind == "event_msg" and event == "task_complete" and previous and body["turn_id"] == previous:
+            error = json.loads((body.get("error") or {}).get("message") or "{}")
+            if (body["last_agent_message"] is None and error.get("status") == 400
+                    and (error.get("error") or {}).get("code") == "model_not_found"):
+                rejected = previous
+            previous = None
+        elif kind in ("world_state", "turn_context") or (kind == "event_msg" and event == "user_message"):
+            continue
+        elif kind == "response_item" and event == "message" and body.get("role") in ("user", "developer"):
+            continue
+        else:
+            previous = rejected = None
+    return rejected
 
 
 def _diagnostic(directory):

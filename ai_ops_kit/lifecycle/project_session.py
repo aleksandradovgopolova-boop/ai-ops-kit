@@ -249,18 +249,18 @@ def session_lock(path):
 
 
 @session_migration_store.guarded
-def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=None):
+def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=None, retry_check=None):
     root = project_root(root)
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 131072:
         raise ValueError("постановка пуста или превышает бюджет 128 KiB")
     directory = session_dir(root, runtime, session)
     with session_lock(directory / "requests"):
-        return _begin(root, runtime, session, prompt, turn, directory, continuation_validator)
+        return _begin(root, runtime, session, prompt, turn, directory, continuation_validator, retry_check=retry_check)
 
 
-def _begin(root, runtime, session, prompt, turn, directory, continuation_validator, *, input_origin=None):
+def _begin(root, runtime, session, prompt, turn, directory, continuation_validator, *, input_origin=None, retry_check=None):
     with reading():
-        task, fresh, receipt = _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator)
+        task, fresh, receipt = _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator, retry_check)
     if fresh and input_origin is not None:
         task["input_origin"] = input_origin
     if receipt:
@@ -275,7 +275,7 @@ def _begin(root, runtime, session, prompt, turn, directory, continuation_validat
     return task
 
 
-def _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator):
+def _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator, retry_check):
     if turn is not None and (not isinstance(turn, str) or not turn.strip() or len(turn) > 1024):
         raise ValueError("неверный turn_id")
     # Идентичность события, не текст: одинаковые новые запросы остаются разными.
@@ -288,7 +288,10 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
             raise ValueError("повтор пользовательского ввода конфликтует или относится к прежней задаче")
         if task.get("status") == "accepted" or task.get("input_latest") != request or continuation_validator is None:
             raise ValueError("поздний повтор пользовательского ввода не является новым запросом")
-        continuation_validator(root, runtime, session, task)
+        if _pristine_codex(task) and prompt == task["prompt"]:
+            _check_unstarted_retry(root, task)
+        else:
+            continuation_validator(root, runtime, session, task)
         return task, False, None
     previous = directory / f"{request}.json"
     if previous.exists():
@@ -300,11 +303,19 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
     active = load(root, runtime, session, missing_ok=True)
     if active is not None:
         claim = directory / (active["request_id"] + ".execution-claim")
-        if active.get("status") != "accepted" and (claim.exists() or claim.is_symlink() or active.get("status") != "pending"
+        retry = False
+        if retry_check and turn and _pristine_codex(active) and prompt == active["prompt"]:
+            rejected = retry_check()
+            retry = bool(rejected and digest(json.dumps([runtime, session, rejected]))[:32]
+                         == (active.get("input_latest") or active["request_id"]))
+        if active.get("status") != "accepted" and (retry or claim.exists() or claim.is_symlink() or active.get("status") != "pending"
                 or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation", "state_migration"))):
             if continuation_validator is None:
                 raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
-            continuation_validator(root, runtime, session, active)
+            if retry:
+                _check_unstarted_retry(root, active)
+            else:
+                continuation_validator(root, runtime, session, active)
             path = directory / (active["request_id"] + ".inputs") / (request + ".json")
             relative = str(path.relative_to(root))
             if git(root, "ls-files", "--", relative) or not git(root, "check-ignore", "--", relative):
@@ -322,6 +333,21 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
     except (OSError, ValueError, yaml.YAMLError) as exc:
         task.update(status="blocked", blocker=str(exc), next_step="Восстановить установку штатным update и повторить задачу.")
     return task, True, None
+
+
+def _pristine_codex(task):
+    return (task.get("runtime") == "codex" and task.get("status") == "pending" and task.get("turn_id")
+            and not any(k in task for k in ("execution", "intake", "preparation", "provider_preparation", "state_migration", "verification")))
+
+
+def _check_unstarted_retry(root, task):
+    pending(root, task["runtime"], task["session_id"])
+    fid = "session-" + task["request_id"]
+    for prefix in ("features", ".ai/runplan"):
+        path = within(root, f"{prefix}/{fid}")
+        if path.exists() or path.is_symlink():
+            raise ValueError("обнаружены артефакты прежней попытки; повтор не подтверждён")
+    artifact_inputs(root, fid)
 
 
 def input_receipt(task, prompt, turn, event):
