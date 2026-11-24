@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from functools import partial
+from http.client import HTTPException
 import json
 import re
 import time
@@ -29,6 +30,10 @@ def page_url(repo):
     return f"https://{owner.lower()}.github.io{path}/data.json"
 
 
+class _InvalidProjection(ValueError):
+    """Получено тело ответа с неверным содержимым."""
+
+
 class _PagesReader:
     """Одна сверка publisher делит прежние лимиты чтения Pages между попытками."""
     def __init__(self):
@@ -49,10 +54,13 @@ class _PagesReader:
         self.remaining_seconds -= time.monotonic() - started
         self.remaining_bytes -= len(raw)
         if self.remaining_bytes < 0:
-            raise ValueError("previous projection too large")
-        payload = json.loads(raw)
+            raise _InvalidProjection("previous projection too large")
+        try:
+            payload = json.loads(raw)
+        except (ValueError, RecursionError) as exc:
+            raise _InvalidProjection("invalid previous projection") from exc
         if not isinstance(payload, dict):
-            raise ValueError("invalid previous projection")
+            raise _InvalidProjection("invalid previous projection")
         return payload
 
 
@@ -133,7 +141,13 @@ def previous_publication(client, *, read=read_page, current_run=None):
 
 def _observe_previous(client, read, current_run, observation, job_budget, expected=None):
     try:
-        page = read(client.repo)
+        try:
+            page = read(client.repo)
+        except _InvalidProjection:
+            observation["reason"] = "invalid_pages_projection"
+            return None, None
+        except HTTPException:
+            return None, None
         observation["reason"] = "invalid_pages_projection"
         report = page["release_plan"]
         if not isinstance(report, dict):

@@ -1,5 +1,7 @@
 """Переходы без дублей, недоказанная история и provenance последней публикации."""
 from copy import deepcopy
+from http.client import BadStatusLine, IncompleteRead
+import io
 import json
 from pathlib import Path
 
@@ -478,3 +480,34 @@ def test_same_origin_retry_shares_page_size_and_socket_timeout(monkeypatch):
     with pytest.raises(OSError, match="budget exhausted"):
         reader.read("owner/kit", retry=True)
     assert len(requests) == 2
+
+
+@pytest.mark.parametrize("on_retry", [False, True], ids=["first", "retry"])
+@pytest.mark.parametrize(("fault", "reason"), [
+    (BadStatusLine("private-response"), "pages_read_failed"),
+    (IncompleteRead(b"private-response"), "pages_read_failed"),
+    (b'{"private-response":', "invalid_pages_projection"),
+    (b'["private-response"]', "invalid_pages_projection"),
+    (b'\xffprivate-response', "invalid_pages_projection"),
+])
+def test_stock_pages_read_failure_preserves_unknown(fault, reason, on_retry, monkeypatch, capsys):
+    stale = state.project(report(), None, PUBLISHER)
+    replies = ([json.dumps({"release_plan": stale}).encode()] if on_retry else []) + [fault]
+    client = SummaryAttempt({**PUBLISHER, "run_id": 101}, "success")
+
+    class Opener:
+        def open(self, request, *, timeout):
+            assert request.full_url == state.page_url(client.repo)
+            reply = replies.pop(0)
+            if isinstance(reply, Exception):
+                raise reply
+            return io.BytesIO(reply)
+
+    monkeypatch.setattr(state, "build_opener", lambda *_: Opener())
+    assert state.previous_publication(client, current_run=102) == (None, None)
+    assert not replies
+    captured = capsys.readouterr()
+    assert captured.err == "" and "private-response" not in captured.out
+    record = json.loads(captured.out.removeprefix("[release-history] "))
+    assert ("retry" in record) == on_retry
+    assert record["retry" if on_retry else "first"]["reason"] == reason
