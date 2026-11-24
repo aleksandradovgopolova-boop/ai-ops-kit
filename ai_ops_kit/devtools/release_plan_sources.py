@@ -5,6 +5,8 @@
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
+from http.client import HTTPException
 import json
 from pathlib import Path
 import os
@@ -24,6 +26,17 @@ class SnapshotError(ValueError):
     def __init__(self, code, **identifiers):
         super().__init__(code)
         self.diagnostic = release_plan.snapshot_diagnostic({"code": code, **identifiers}) or {"code": "snapshot_invalid"}
+
+
+@contextmanager
+def _reading(field, **identifiers):
+    """Указывает место отказа транспорта, не перенося текст ответа в пульт."""
+    try:
+        yield
+    except (GitHubError, HTTPException) as exc:
+        denied = "github_read_permission_denied" in str(exc) or "HTTP 403" in str(exc)
+        code = "github_read_permission_denied" if denied else "github_read_failed"
+        raise SnapshotError(code, field=field, **identifiers) from exc
 
 
 def collection(client, path, *, key=None, params=None):
@@ -69,7 +82,8 @@ def _ancestor(root, sha, target):
 def _pull(client, number, ci, signatures, policy):
     if type(number) is not int or number < 1:
         raise SnapshotError("dependency_pr_invalid")
-    pr = _object(client, f"repos/{client.repo}/pulls/{number}")
+    with _reading("pr_details", pr=number):
+        pr = _object(client, f"repos/{client.repo}/pulls/{number}")
     links = client.closing_issue_numbers(number)
     if not links.ok:
         raise SnapshotError(links.reason if links.reason == "github_read_permission_denied" else "closing_issues_unavailable", pr=number)
@@ -83,7 +97,8 @@ def _pull(client, number, ci, signatures, policy):
     ci[str(number)] = _ci(client, item, policy, signatures)
     if item["merged"] is True and any(run.get("pull_requests") == [] for run in ci[str(number)]):
         # После слияния GitHub снимает связь run→PR; однозначность head-коммита проверяет модель.
-        associated = collection(client, f"repos/{client.repo}/commits/{item['head_sha']}/pulls")
+        with _reading("head_pull_links", pr=number, commit_sha=item["head_sha"]):
+            associated = collection(client, f"repos/{client.repo}/commits/{item['head_sha']}/pulls")
         item["head_prs"] = sorted(p["number"] for p in associated
                                   if (p.get("head") or {}).get("sha") == item["head_sha"])
     return item
@@ -138,7 +153,8 @@ def _changed_run(before, after):
 def _ci(client, pr, policy, signatures):
     result = []
     for workflow in policy:
-        runs = _runs(client, workflow, pr["head_sha"])
+        with _reading("workflow_runs", pr=pr["number"], workflow=workflow):
+            runs = _runs(client, workflow, pr["head_sha"])
         signatures[(workflow, pr["head_sha"])] = _run_signature(runs)
         if not runs:
             continue
@@ -150,7 +166,8 @@ def _ci(client, pr, policy, signatures):
         attempt = run["run_attempt"]
         if type(run["id"]) is not int or type(attempt) is not int or attempt < 1:
             raise SnapshotError("workflow_identity_invalid", pr=pr["number"], workflow=workflow)
-        jobs = collection(client, f"repos/{client.repo}/actions/runs/{run['id']}/attempts/{attempt}/jobs", key="jobs")
+        with _reading("jobs", pr=pr["number"], workflow=workflow, run_id=run["id"], attempt=attempt):
+            jobs = collection(client, f"repos/{client.repo}/actions/runs/{run['id']}/attempts/{attempt}/jobs", key="jobs")
         run.update(queried_attempt=attempt, total_jobs=len(jobs),
                    jobs=[{k: j.get(k) for k in ("id", "name", "status", "conclusion")} for j in jobs])
         result.append(run)
@@ -280,7 +297,8 @@ def capture(root, client=None):
         stage = "pull_links_and_ci"
         pulls, signatures, ci, seen = [], {}, {}, set()
         for commit in commits:
-            associated = collection(client, f"{prefix}/commits/{commit['sha']}/pulls")
+            with _reading("commit_pull_links", commit_sha=commit["sha"]):
+                associated = collection(client, f"{prefix}/commits/{commit['sha']}/pulls")
             for candidate in associated:
                 number = candidate["number"]
                 if number in seen:
@@ -365,10 +383,10 @@ def capture(root, client=None):
         denied = "github_read_permission_denied" in str(exc) or "HTTP 403" in str(exc)
         snapshot["reason"] = "github_read_permission_denied" if denied else "release_snapshot_unavailable_incomplete_or_changed"
         snapshot["failure_stage"] = stage
-        if denied:
-            diagnostic = {"code": "github_read_permission_denied"}
-        elif isinstance(exc, SnapshotError):
+        if isinstance(exc, SnapshotError):
             diagnostic = exc.diagnostic
+        elif denied:
+            diagnostic = {"code": "github_read_permission_denied"}
         else:
             code = ("github_read_failed" if isinstance(exc, GitHubError) else
                     "source_io_unavailable" if isinstance(exc, OSError) else "source_invalid")

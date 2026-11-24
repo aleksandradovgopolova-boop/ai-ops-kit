@@ -33,6 +33,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from http.client import HTTPException
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: F401  (правит sys.path пакета)
@@ -253,7 +254,7 @@ class GitHubClient:
             if av.transport == "gh":
                 return self._gh_api(path, params, paginate=False)
             return self._rest_get(path, params, paginate=False)
-        except (ValueError, OSError, subprocess.SubprocessError) as exc:
+        except (ValueError, OSError, HTTPException, subprocess.SubprocessError) as exc:
             raise GitHubError("read page unavailable or invalid") from exc
 
     # -- предметные чтения --------------------------------------------------------------------
@@ -341,7 +342,7 @@ class GitHubClient:
                     raise GitHubError("invalid closing issue cursor")
                 cursors.add(cursor)
             raise GitHubError("closing issue reconciliation budget exceeded")
-        except (GitHubError, ValueError, TypeError, KeyError, AttributeError, OSError, subprocess.SubprocessError) as exc:
+        except (GitHubError, ValueError, TypeError, KeyError, AttributeError, OSError, HTTPException, subprocess.SubprocessError) as exc:
             denied = "github_read_permission_denied" in str(exc) or getattr(exc, "code", None) == 403
             return FetchResult(False, reason="github_read_permission_denied" if denied else "closing issue query unavailable, incomplete or changed")
 

@@ -740,3 +740,81 @@ def test_merged_pr_ci_is_bound_without_any_archive(producer_case, monkeypatch):
 def test_post_merge_binding_never_accepts_a_lookalike_run(producer_case, monkeypatch, failure):
     root, snap = _merged_with_native_fields(producer_case, monkeypatch, failure)
     assert not rp.build(root, snap)["implementation_evidence_complete"]
+
+
+@pytest.mark.parametrize("field", ["commit_pull_links", "pr_details", "workflow_runs", "jobs", "head_pull_links"])
+def test_failed_implementation_read_identifies_request_without_publishing_response(source_case, monkeypatch, field):
+    root, client = source_case
+    paths = {
+        "commit_pull_links": f"/commits/{client.head}/pulls", "pr_details": "/pulls/10",
+        "workflow_runs": "/actions/workflows/docs.yml/runs", "jobs": "/actions/runs/1/attempts/1/jobs",
+        "head_pull_links": "/commits/" + "3" * 40 + "/pulls",
+    }
+    read_page = client.read_page
+    failures = []
+    def fail_one(path, params=None):
+        if path.endswith(paths[field]):
+            failures.append(path)
+            raise GitHubError("HTTP 403 private-response" if field == "jobs" else "private-response")
+        value = read_page(path, params)
+        if field == "head_pull_links" and path.endswith("/runs") and value.get("workflow_runs"):
+            value["workflow_runs"][0]["pull_requests"] = []
+        return value
+
+    monkeypatch.setattr(client, "read_page", fail_one)
+    snapshot = src.capture(root, client)
+    plan = rp.build(root, snapshot)
+    reason = {"field": field, "code": "github_read_permission_denied" if field == "jobs" else "github_read_failed"}
+    if field != "commit_pull_links":
+        reason["pr"] = 10
+    if field in ("workflow_runs", "jobs"):
+        reason["workflow"] = "docs.yml"
+    if field == "jobs":
+        reason.update(run_id=1, attempt=1)
+    if field in ("commit_pull_links", "head_pull_links"):
+        reason["commit_sha"] = client.head if field == "commit_pull_links" else "3" * 40
+    assert failures == [f"repos/{client.repo}" + paths[field]]
+    assert plan["unavailable_stage"] == "pull_links_and_ci"
+    assert plan["unavailable_diagnostic"] == reason
+    assert not plan["plan_ready"] and not plan["release_ready"]
+    assert "private-response" not in json.dumps([plan, snapshot])
+
+
+def test_bad_commit_identifier_is_omitted_from_public_diagnostic():
+    assert rp.snapshot_diagnostic({"code": "github_read_failed", "commit_sha": "private-response"}) == {
+        "code": "github_read_failed"}
+
+
+@pytest.mark.parametrize("failure_on", [1, 2], ids=["initial", "revalidation"])
+def test_dropped_graphql_response_keeps_snapshot_incomplete(source_case, monkeypatch, failure_on):
+    from http.client import IncompleteRead
+    root, fixture_client = source_case
+    client = GitHubClient(fixture_client.repo, transport="rest")
+    calls = []
+    def closing_page(number, cursor):
+        assert cursor is None
+        calls.append(number)
+        if len(calls) == failure_on:
+            raise IncompleteRead(b"private-response")
+        return {"totalCount": 1, "nodes": [{"repository": {"nameWithOwner": client.repo}, "number": 9}],
+                "pageInfo": {"hasNextPage": False}}
+    monkeypatch.setattr(client, "_closing_page", closing_page)
+    monkeypatch.setattr(fixture_client, "closing_issue_numbers", client.closing_issue_numbers)
+    snapshot = src.capture(root, fixture_client)
+    plan = rp.build(root, snapshot)
+    assert calls == [10] * failure_on
+    assert not plan["plan_ready"] and not plan["release_ready"]
+    assert plan["unavailable_diagnostic"]["pr"] == 10
+    expected = "closing_issues_unavailable" if failure_on == 1 else "closing_issues_changed"
+    assert plan["unavailable_diagnostic"]["code"] == expected
+    assert "private-response" not in json.dumps([snapshot, plan])
+
+
+def test_read_page_normalizes_broken_http_status(monkeypatch):
+    from http.client import BadStatusLine
+    client = GitHubClient("owner/kit", transport="rest")
+    def fail(*args, **kwargs):
+        raise BadStatusLine("private-response")
+    monkeypatch.setattr(client, "_rest_get", fail)
+    with pytest.raises(GitHubError, match="^read page unavailable or invalid$"):
+        client.read_page("repos/owner/kit")

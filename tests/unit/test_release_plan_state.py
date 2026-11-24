@@ -1,7 +1,10 @@
 """Переходы без дублей, недоказанная история и provenance последней публикации."""
 from copy import deepcopy
+from http.client import BadStatusLine, IncompleteRead
+import io
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import yaml
@@ -340,3 +343,221 @@ def test_newer_meaningful_change_supersedes_skipped_notice():
     out = state.project(report(), verified, skipped_notice=pending)
     assert out["transition"]["changed"] and out["transition"]["notice_id"] != pending
     assert "recovered_skipped_summary" not in out["transition"]
+
+
+def test_one_history_reread_recovers_transition_from_same_official_page(capsys, tmp_path):
+    # Two successful publishers for the same prior content, as in 45211233642/45212034688.
+    current, _ = _changed_notice()
+    old = state.project(report(), None, PUBLISHER)
+    latest = state.project(report(), old, {**PUBLISHER, "run_id": 101})
+    client = SummaryAttempt(latest["publisher"], "success")
+    pages = iter([old, latest])
+    reads = []
+    def read(repo):
+        reads.append(repo)
+        return {"release_plan": next(pages)}
+    prior, notice = state.previous_publication(client, read=read, current_run=102)
+    assert prior == latest and notice is None and reads == ["owner/kit", "owner/kit"]
+    lines = capsys.readouterr().out.splitlines()
+    assert len(lines) == 1
+    observation = json.loads(lines[0].removeprefix("[release-history] "))
+    assert observation["first"]["reason"] == "older_page_than_latest_deploy"
+    assert observation["first"]["page"]["run_id"] == 100
+    assert observation["first"]["attempt_checked"]["run_id"] == 101
+    assert observation["retry"]["reason"] == "verified"
+    assert observation["retry"]["page"]["computed_digest"] == latest["publisher"]["digest"]
+    projection = state.project(current, prior)
+    assert projection["transition"]["changed"] and projection["transition"]["notice_id"]
+    assert not state.project(current, projection)["transition"]["changed"]
+    assert not list(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize("fault", ["stale_again", "other_attempt", "newer_deploy", "bad_digest", "origin_error"])
+def test_retry_conflict_or_second_miss_remains_unknown(fault, capsys):
+    old = state.project(report(), None, PUBLISHER)
+    expected = {**PUBLISHER, "run_id": 101}
+    client = SummaryAttempt(expected, "success")
+    latest = state.project(report(), old, expected)
+    read_count = 0
+    secret = uuid4().hex
+    def read(repo):
+        nonlocal read_count
+        read_count += 1
+        assert repo == client.repo
+        if read_count == 1 or fault == "stale_again":
+            return {"release_plan": old}
+        if fault == "origin_error":
+            raise OSError(secret)
+        if fault == "other_attempt":
+            latest["publisher"]["attempt"] += 1
+        if fault == "bad_digest":
+            latest["publisher"]["digest"] = secret
+        if fault == "newer_deploy":
+            client.run["id"] = 103
+        return {"release_plan": latest}
+    prior, notice = state.previous_publication(client, read=read, current_run=102)
+    assert prior is None and notice is None and read_count == 2
+    log = capsys.readouterr().out
+    assert secret not in log and len(log.splitlines()) == 1
+    reason = json.loads(log.removeprefix("[release-history] "))["retry"]["reason"]
+    assert reason == {"origin_error":"pages_read_failed", "other_attempt":"retry_page_identity_mismatch",
+                      "stale_again":"retry_page_identity_mismatch", "newer_deploy":"older_page_than_latest_deploy",
+                      "bad_digest":"payload_digest_mismatch"}[fault]
+
+
+@pytest.mark.parametrize("fault", ["foreign_origin","api_denial","attempt_mismatch","digest","bad_identity"])
+def test_initial_unknown_inputs_are_safe_and_not_retried(fault, capsys):
+    secret = uuid4().hex
+    view = state.project(report(), None, PUBLISHER)
+    view["message"]["private"] = secret
+    view["publisher"]["digest"] = state.payload_digest(view)
+    client = SummaryAttempt(PUBLISHER)
+    if fault == "attempt_mismatch":
+        client.run["run_attempt"] += 1
+    if fault == "digest":
+        view["publisher"]["digest"] = secret
+    if fault == "bad_identity":
+        view["publisher"]["checkout_sha"] = secret
+    if fault == "api_denial":
+        def denied(*args):
+            raise GitHubError(secret)
+        client.read_page = denied
+    calls = []
+    def read(repo):
+        calls.append(repo)
+        if fault == "foreign_origin":
+            raise ValueError(secret)
+        return {"release_plan": view}
+    assert state.previous_publication(client, read=read, current_run=102) == (None, None)
+    log = capsys.readouterr().out
+    assert calls == ["owner/kit"] and secret not in log and "user-message" not in log
+    observation = json.loads(log.removeprefix("[release-history] "))
+    assert "retry" not in observation
+    assert observation["first"]["reason"] == {"foreign_origin":"pages_read_failed", "api_denial":"repository_read_failed",
+        "attempt_mismatch":"latest_deploy_mismatch","digest":"payload_digest_mismatch",
+        "bad_identity":"invalid_pages_projection"}[fault]
+
+
+def test_second_lookup_cannot_exceed_the_shared_jobs_budget(capsys):
+    old = state.project(report(), None, PUBLISHER)
+    publisher = {**PUBLISHER, "run_id": 101}
+    latest = state.project(report(), old, publisher)
+    class Busy(SummaryAttempt):
+        def __init__(self):
+            super().__init__(publisher, "success")
+            self.jobs_reads = 0
+        def read_page(self, path, params=None):
+            if path.endswith("/runs"):
+                return {"workflow_runs":[{**self.run, "id":i} for i in range(101, 161)]}
+            if path.endswith("/jobs"):
+                self.jobs_reads += 1
+                if "/101/" not in path:
+                    return {"total_count":0, "jobs":[]}
+            return super().read_page(path, params)
+    client = Busy()
+    pages = iter([old, latest])
+    assert state.previous_publication(client, read=lambda _:{"release_plan":next(pages)}, current_run=200) == (None, None)
+    record = json.loads(capsys.readouterr().out.removeprefix("[release-history] "))
+    assert client.jobs_reads == 98
+    assert record["retry"]["reason"] == "lookup_budget_exhausted"
+
+
+def test_same_origin_retry_shares_page_size_and_socket_timeout(monkeypatch):
+    import io
+    responses = iter([b'{"a":1}', b'{"b":2}'])
+    requests = []
+    class Opener:
+        def open(self, req, *, timeout):
+            requests.append((req.full_url, req.get_header("Cache-control"), timeout))
+            return io.BytesIO(next(responses))
+    monkeypatch.setattr(state, "build_opener", lambda *_: Opener())
+    reader = state._PagesReader()
+    reader.remaining_bytes = 10
+    assert reader.read("owner/kit") == {"a":1}
+    with pytest.raises(ValueError, match="too large"):
+        reader.read("owner/kit", retry=True)
+    assert [k[:2] for k in requests] == [("https://owner.github.io/kit/data.json", "no-cache")] * 2
+    assert 0 < requests[1][2] <= 3 and requests[0][2] == 20
+    with pytest.raises(OSError, match="budget exhausted"):
+        reader.read("owner/kit", retry=True)
+    assert len(requests) == 2
+
+
+@pytest.mark.parametrize("on_retry", [False, True], ids=["first", "retry"])
+@pytest.mark.parametrize(("fault", "reason"), [
+    (BadStatusLine("private-response"), "pages_read_failed"),
+    (IncompleteRead(b"private-response"), "pages_read_failed"),
+    (b'{"private-response":', "invalid_pages_projection"),
+    (b'["private-response"]', "invalid_pages_projection"),
+    (b'\xffprivate-response', "invalid_pages_projection"),
+])
+def test_stock_pages_read_failure_preserves_unknown(fault, reason, on_retry, monkeypatch, capsys):
+    stale = state.project(report(), None, PUBLISHER)
+    replies = ([json.dumps({"release_plan": stale}).encode()] if on_retry else []) + [fault]
+    client = SummaryAttempt({**PUBLISHER, "run_id": 101}, "success")
+
+    class Opener:
+        def open(self, request, *, timeout):
+            assert request.full_url == state.page_url(client.repo)
+            reply = replies.pop(0)
+            if isinstance(reply, Exception):
+                raise reply
+            return io.BytesIO(reply)
+
+    monkeypatch.setattr(state, "build_opener", lambda *_: Opener())
+    assert state.previous_publication(client, current_run=102) == (None, None)
+    assert not replies
+    captured = capsys.readouterr()
+    assert captured.err == "" and "private-response" not in captured.out
+    record = json.loads(captured.out.removeprefix("[release-history] "))
+    assert ("retry" in record) == on_retry
+    assert record["retry" if on_retry else "first"]["reason"] == reason
+
+
+@pytest.mark.parametrize("on_retry", [False, True])
+def test_pages_with_short_content_length_cannot_be_accepted(monkeypatch, capsys, on_retry):
+    from http.client import HTTPResponse
+    from unittest.mock import Mock
+    publisher = {**PUBLISHER, "run_id": 101}
+    latest = state.project(report(), None, publisher)
+    stale = state.project(report(), None, PUBLISHER)
+    pages = ([stale] if on_retry else []) + [latest]
+
+    class Opener:
+        def open(self, request, *, timeout):
+            page = pages.pop(0)
+            body = json.dumps({"release_plan": page}).encode()
+            length = len(body) + (17 if page is latest else 0)
+            wire = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\n\r\n".encode() + body
+            sock = Mock()
+            sock.makefile.return_value = io.BytesIO(wire)
+            response = HTTPResponse(sock)
+            response.begin()
+            return response
+
+    monkeypatch.setattr(state, "build_opener", lambda *_: Opener())
+    assert state.previous_publication(SummaryAttempt(publisher), current_run=102) == (None, None)
+    obs = json.loads(capsys.readouterr().out.removeprefix("[release-history] "))
+    assert obs["retry" if on_retry else "first"]["reason"] == "pages_read_failed"
+    assert not pages
+
+
+def test_http_failure_on_retry_jobs_emits_only_fixed_reason(monkeypatch, capsys):
+    publisher = {**PUBLISHER, "run_id": 101}
+    pages = iter([state.project(report(), None, PUBLISHER), state.project(report(), None, publisher)])
+    client = SummaryAttempt(publisher)
+    original = client.read_page
+    jobs_reads = []
+
+    def read(path, params=None):
+        if path.endswith("/jobs"):
+            jobs_reads.append(path)
+            if len(jobs_reads) == 2:
+                raise BadStatusLine("private-response")
+        return original(path, params)
+
+    monkeypatch.setattr(client, "read_page", read)
+    assert state.previous_publication(client, read=lambda _: {"release_plan": next(pages)}, current_run=102) == (None, None)
+    log = capsys.readouterr().out
+    assert len(jobs_reads) == 2 and "private-response" not in log
+    assert json.loads(log.removeprefix("[release-history] "))["retry"]["reason"] == "attempt_jobs_read_failed"
