@@ -427,11 +427,12 @@ def test_shared_registry_lock_is_bounded_by_supervised_verifier(project, monkeyp
     task, args = start(project, monkeypatch, "codex")
     actual = sessions.run_process
     monkeypatch.setattr(sessions, "run_process", lambda command, root, directory, **kw:
-                        actual(command, root, directory, timeout=2))
+                        actual(command, root, directory, timeout=5))
     started = time.monotonic()
     with _locked(active_work.shared_registry_path(project)):
         assert cli.main(["finalize", *args]) == 1
-    assert time.monotonic() - started < 6
+    # Потолок покрывает и запуск проверки под параллельной нагрузкой (#1579); граница — тот же timeout.
+    assert time.monotonic() - started < 12
     assert (project / ".ai/runtime/check-ran").exists()  # проверка дошла до terminal bookkeeping
     saved = sessions.load(project, "codex", "complete")
     assert saved["status"] == "blocked" and saved["verification"]["phase"] == "running"

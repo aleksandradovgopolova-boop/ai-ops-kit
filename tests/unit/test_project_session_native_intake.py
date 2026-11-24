@@ -198,19 +198,22 @@ def test_replay_blocked_state_read_is_bounded_and_preserves_task(project, tmp_pa
     fifo, marker = tmp_path / "fifo", tmp_path / "entered"
     os.mkfifo(fifo)
     code = f"""
-import os, sys
+import os, signal, sys
 sys.path.insert(0, {str(Path(__file__).resolve().parents[2])!r})
 from pathlib import Path
 from ai_ops_kit.cli import project_session as cli
 actual = Path.{method}
 def read(path, *args, **kwargs):
     if path == Path({str(target)!r}):
+        # Бюджет отсчитывается от блокировки, а не от старта: предварительные чтения
+        # под параллельной нагрузкой не должны съедать его до проверяемой точки (#1579).
+        assert signal.getitimer(signal.ITIMER_REAL)[0] > 0, "чтение должно идти под бюджетом hook"
+        signal.setitimer(signal.ITIMER_REAL, 0.7)
         Path({str(marker)!r}).write_text('entered')
         fd = os.open({str(fifo)!r}, os.O_RDWR)
         os.read(fd, 1)
     return actual(path, *args, **kwargs)
 Path.{method} = read
-cli.sessions.HOOK_READ_SECONDS = 0.7
 raise SystemExit(cli.main(['intake','--runtime','codex','--session','native']))
 """
     process = subprocess.Popen([sys.executable, "-u", "-c", code], cwd=project,
@@ -219,8 +222,9 @@ raise SystemExit(cli.main(['intake','--runtime','codex','--session','native']))
         process.stdin.write('{"prompt":"original"}')
         process.stdin.close()
         process.stdin = None
-        deadline = time.monotonic() + 3
-        while not marker.exists() and time.monotonic() < deadline:
+        deadline = time.monotonic() + 30  # потолок только от зависания: ждём событие
+        # Ждём содержимое, а не появление файла: write_text создаёт его пустым до записи.
+        while not (marker.exists() and marker.read_text() == "entered") and time.monotonic() < deadline:
             time.sleep(0.01)
         assert marker.read_text() == "entered" and process.poll() is None
         started = time.monotonic()
