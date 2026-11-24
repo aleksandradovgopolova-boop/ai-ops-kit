@@ -245,7 +245,7 @@ def hook(runtime, payload):
         from ai_ops_kit.cli import project_session_resume
         task = sessions.begin(root, runtime, session, payload["prompt"], payload.get("turn_id"),
                               continuation_validator=continuation,
-                              retry_check=lambda: project_session_resume.rejected_turn(root, payload))
+                              retry_check=lambda task, replay: project_session_resume.unstarted_retry(root, payload, task, replay=replay))
         event_id = (sessions.digest(json.dumps([runtime, session, payload["turn_id"]]))[:32]
                     if payload.get("turn_id") else task.get("input_latest"))
         # Только уже сверенные/записанные bytes: никаких новых FS reads после commit.

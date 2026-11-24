@@ -17,6 +17,28 @@ TIMEOUT = 30
 SNAPSHOT_LIMIT = 4 * 1024 * 1024
 
 
+def unstarted_retry(root, payload, task, *, replay):
+    """Связать только доказанный повтор с исходной незапущенной постановкой."""
+    runtime, session = task["runtime"], task["session_id"]
+    if (runtime != "codex" or task["status"] != "pending" or not task.get("turn_id") or not payload.get("turn_id")
+            or task["prompt"] != payload["prompt"]
+            or any(k in task for k in ("execution", "intake", "preparation", "provider_preparation", "state_migration", "verification"))):
+        return False
+    if not replay:  # replay уже сверил точные байты immutable input receipt
+        rejected = rejected_turn(root, payload)
+        expected = task.get("input_latest") or task["request_id"]
+        if not rejected or sessions.digest(json.dumps([runtime, session, rejected]))[:32] != expected:
+            return False
+    sessions.pending(root, runtime, session)
+    fid = "session-" + task["request_id"]
+    for prefix in ("features", ".ai/runplan"):
+        path = sessions.within(root, f"{prefix}/{fid}")
+        if path.exists() or path.is_symlink():
+            raise ValueError("обнаружены артефакты прежней попытки; повтор не подтверждён")
+    sessions.artifact_inputs(root, fid)
+    return True
+
+
 def rejected_turn(root, payload):
     """Предыдущий turn_id только для отказа до ответа/инструментов в этой сессии."""
     session, turn, raw = (payload.get(k) for k in ("session_id", "turn_id", "transcript_path"))

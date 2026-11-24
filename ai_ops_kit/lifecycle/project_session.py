@@ -288,9 +288,7 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
             raise ValueError("повтор пользовательского ввода конфликтует или относится к прежней задаче")
         if task.get("status") == "accepted" or task.get("input_latest") != request or continuation_validator is None:
             raise ValueError("поздний повтор пользовательского ввода не является новым запросом")
-        if _pristine_codex(task) and prompt == task["prompt"]:
-            _check_unstarted_retry(root, task)
-        else:
+        if not (retry_check and retry_check(task, replay=True)):
             continuation_validator(root, runtime, session, task)
         return task, False, None
     previous = directory / f"{request}.json"
@@ -303,18 +301,12 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
     active = load(root, runtime, session, missing_ok=True)
     if active is not None:
         claim = directory / (active["request_id"] + ".execution-claim")
-        retry = False
-        if retry_check and turn and _pristine_codex(active) and prompt == active["prompt"]:
-            rejected = retry_check()
-            retry = bool(rejected and digest(json.dumps([runtime, session, rejected]))[:32]
-                         == (active.get("input_latest") or active["request_id"]))
+        retry = retry_check and retry_check(active, replay=False)
         if active.get("status") != "accepted" and (retry or claim.exists() or claim.is_symlink() or active.get("status") != "pending"
                 or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation", "state_migration"))):
             if continuation_validator is None:
                 raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
-            if retry:
-                _check_unstarted_retry(root, active)
-            else:
+            if not retry:
                 continuation_validator(root, runtime, session, active)
             path = directory / (active["request_id"] + ".inputs") / (request + ".json")
             relative = str(path.relative_to(root))
@@ -333,21 +325,6 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
     except (OSError, ValueError, yaml.YAMLError) as exc:
         task.update(status="blocked", blocker=str(exc), next_step="Восстановить установку штатным update и повторить задачу.")
     return task, True, None
-
-
-def _pristine_codex(task):
-    return (task.get("runtime") == "codex" and task.get("status") == "pending" and task.get("turn_id")
-            and not any(k in task for k in ("execution", "intake", "preparation", "provider_preparation", "state_migration", "verification")))
-
-
-def _check_unstarted_retry(root, task):
-    pending(root, task["runtime"], task["session_id"])
-    fid = "session-" + task["request_id"]
-    for prefix in ("features", ".ai/runplan"):
-        path = within(root, f"{prefix}/{fid}")
-        if path.exists() or path.is_symlink():
-            raise ValueError("обнаружены артефакты прежней попытки; повтор не подтверждён")
-    artifact_inputs(root, fid)
 
 
 def input_receipt(task, prompt, turn, event):
