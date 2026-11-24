@@ -4,6 +4,7 @@ from http.client import BadStatusLine, IncompleteRead
 import io
 import json
 from pathlib import Path
+from uuid import uuid4
 
 import pytest
 import yaml
@@ -378,7 +379,7 @@ def test_retry_conflict_or_second_miss_remains_unknown(fault, capsys):
     client = SummaryAttempt(expected, "success")
     latest = state.project(report(), old, expected)
     read_count = 0
-    secret = "PRIVATE-FULL-RESPONSE-DO-NOT-LOG"
+    secret = uuid4().hex
     def read(repo):
         nonlocal read_count
         read_count += 1
@@ -406,7 +407,7 @@ def test_retry_conflict_or_second_miss_remains_unknown(fault, capsys):
 
 @pytest.mark.parametrize("fault", ["foreign_origin","api_denial","attempt_mismatch","digest","bad_identity"])
 def test_initial_unknown_inputs_are_safe_and_not_retried(fault, capsys):
-    secret = "private-payload-or-exception"
+    secret = uuid4().hex
     view = state.project(report(), None, PUBLISHER)
     view["message"]["private"] = secret
     view["publisher"]["digest"] = state.payload_digest(view)
