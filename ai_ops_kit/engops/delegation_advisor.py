@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 import sys
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Any
 
 RETURN_TO_MAIN = ["краткий вывод", "релевантные пути", "evidence", "открытые вопросы", "следующий шаг"]
@@ -36,9 +36,9 @@ def advise(signals: Mapping[str, Any] | None,
     """-> список рекомендаций делегирования. Каждая: {trigger, reason, delegate_to, return_to_main, do_not_return}."""
     s = dict(signals or {})
     t = {**DEFAULT_THRESHOLDS, **(thresholds or {})}
-    recs = []
+    recs: list[dict[str, Any]] = []
 
-    def add(trigger, reason, delegate_to="Explore-сабагент"):
+    def add(trigger: str, reason: str, delegate_to: str = "Explore-сабагент") -> None:
         recs.append({"trigger": trigger, "reason": reason, "delegate_to": delegate_to,
                      "return_to_main": list(RETURN_TO_MAIN), "do_not_return": list(DO_NOT_RETURN)})
 
@@ -75,7 +75,7 @@ def advise(signals: Mapping[str, Any] | None,
     return recs
 
 
-def check(recs):
+def check(recs: Iterable[Mapping[str, Any]] | None) -> list[str]:
     """Валидация: каждая рекомендация делегирует и возвращает СВОДКУ, а не сырьё."""
     e = []
     for r in recs or []:
@@ -86,7 +86,7 @@ def check(recs):
     return e
 
 
-def render(recs):
+def render(recs: Sequence[Mapping[str, Any]]) -> str:
     if not recs:
         return "делегирование не требуется: задача не тяжёлая для контекста."
     L = []
@@ -98,8 +98,8 @@ def render(recs):
     return "\n".join(L)
 
 
-def main(argv):
-    sig = {"external_research": "--research" in argv, "independent_review": "--review" in argv,
+def main(argv: Sequence[str]) -> int:
+    sig: dict[str, Any] = {"external_research": "--research" in argv, "independent_review": "--review" in argv,
            "mass_mechanical_inspection": "--mechanical" in argv}
     it = iter(argv)
     for a in it:

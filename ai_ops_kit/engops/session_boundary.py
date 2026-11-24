@@ -29,8 +29,9 @@ _CONT_MARKERS = ("продолж", "дожми", "доделай", "доведи
                  "follow-up", "followup", "next step", "следующий шаг", "закончи")
 
 
-def classify(current_workitem=None, new_task="", new_workitem=None, repo_changed=False,
-             scope_overlap=False, continues=None, related_requirements=False):
+def classify(current_workitem: object = None, new_task: str | None = "", new_workitem: object = None,
+             repo_changed: bool = False, scope_overlap: bool = False, continues: object = None,
+             related_requirements: bool = False) -> tuple[str, str]:
     """-> (class, reason). Детерминированная эвристика; при неоднозначности — безопасный для гигиены исход."""
     txt = (new_task or "").lower()
 

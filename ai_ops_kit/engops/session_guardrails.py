@@ -19,7 +19,7 @@ from __future__ import annotations
 import json
 import os
 import sys
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -120,29 +120,29 @@ def classify_session_spend(total_tokens: float | None, policy: Mapping[str, Any]
     return "normal"
 
 
-def _tok(n):
+def _tok(n: int | float | None) -> str:
     return "н/д" if n is None else (f"{n / 1000000:.1f}M" if n >= 1000000
                                     else f"{n / 1000:.0f}k" if n >= 1000 else str(n))
 
 
-def _compact_cmd(wid):
+def _compact_cmd(wid: object) -> str:
     return (f"/compact Сохрани цель {wid or 'текущего WorkItem'}, принятые решения, изменённые файлы, "
             "результаты проверок, открытые блокеры и следующий безопасный шаг. Удали подробные логи, "
             "повторяющиеся исследования и промежуточные попытки.")
 
 
-def _clear_cmds(wid, next_task):
+def _clear_cmds(wid: object, next_task: str | None) -> str:
     nxt = f'\nai-ops do "{next_task}"' if next_task else '\nai-ops do "<следующая задача>"'
     return f"/clear {wid or 'task'}-completed{nxt}"
 
 
-def _new_session_cmds(repo_path, next_task):
+def _new_session_cmds(repo_path: str | None, next_task: str | None) -> str:
     nxt = next_task or "<следующая задача>"
     return (f"/exit\n# в терминале:\ncd {repo_path or '<путь/к/репозиторию>'}\nclaude\n"
             f'# затем:\nai-ops do "{nxt}"')
 
 
-def _handoff_note(repo_path, session_id):
+def _handoff_note(repo_path: str | None, session_id: object) -> tuple[str, str | None]:
     """ПРАВДА о сессионном handoff, а не заявление о нём. -> (текст, путь или None).
 
     ЗАМЕР 17.08.2026, живая сессия кита `88c802ae`: обе фразы про handoff в этом файле были
@@ -166,8 +166,10 @@ def _handoff_note(repo_path, session_id):
             "потеряется вместе с ней"), None
 
 
-def recommend(snapshot, policy=None, next_relation="new_independent_task",
-              next_task=None, at_safe_boundary=True, task_done=True, repo_path=None):
+def recommend(snapshot: Mapping[str, Any], policy: Mapping[str, Any] | None = None,
+              next_relation: str = "new_independent_task", next_task: str | None = None,
+              at_safe_boundary: bool = True, task_done: bool = True,
+              repo_path: str | None = None) -> dict[str, Any]:
     """4 исхода + defer. Приоритет: гигиена сессии/контекста > продолжение/новизна задачи.
     strong-advice: outcome + причина + ТОЧНАЯ команда; НЕ блокирует прогон движка."""
     p = policy or SESSION_ECONOMY_DEFAULTS
@@ -190,7 +192,7 @@ def recommend(snapshot, policy=None, next_relation="new_independent_task",
             # оно тоже правда о сессии, и молчание о нём читалось бы как «всё записано».
             "handoff": handoff_txt, "handoff_path": handoff_path}
 
-    def out(outcome, reason, command=None):
+    def out(outcome: str, reason: str, command: str | None = None) -> dict[str, Any]:
         return dict(base, outcome=outcome, reason=reason, command=command)
 
     if not at_safe_boundary:
@@ -236,10 +238,12 @@ def recommend(snapshot, policy=None, next_relation="new_independent_task",
     return out("continue", "cross-task-сессии разрешены политикой (allow_cross_task_session=true).")
 
 
-def completion_ritual(snapshot, policy=None, *, workitem_id=None, pr=None, checks=None,
-                      next_relation="new_independent_task", next_task=None,
-                      at_safe_boundary=True, decisions_recorded=True,
-                      committed=True, repo_path=None):
+def completion_ritual(snapshot: Mapping[str, Any], policy: Mapping[str, Any] | None = None, *,
+                      workitem_id: str | None = None, pr: str | None = None,
+                      checks: object = None, next_relation: str = "new_independent_task",
+                      next_task: str | None = None, at_safe_boundary: bool = True,
+                      decisions_recorded: bool = True, committed: bool = True,
+                      repo_path: str | None = None) -> dict[str, Any]:
     """WP5: обязательный ритуал завершения WorkItem -> отчёт + usage + SessionRecommendation + NextCommand.
 
     ПАРАМЕТР `handoff_saved` УБРАН 17.08.2026, и это не переименование. Он имел значение по
@@ -277,7 +281,7 @@ def completion_ritual(snapshot, policy=None, *, workitem_id=None, pr=None, check
     }
 
 
-def check_recommendation(rec):
+def check_recommendation(rec: object) -> list[str]:
     """Валидация SessionRecommendation — СОБСТВЕННАЯ, а не заимствованная у ритуала.
 
     ПОВОД (найдено лентой A 19.08.2026 на чистой установке). `./ai-ops session` печатал в stderr
@@ -295,7 +299,7 @@ def check_recommendation(rec):
         return [f"SessionRecommendation должен быть словарём, получен {type(rec).__name__}"]
     if rec.get("kind") != RECOMMENDATION_KIND:
         return [f"kind должен быть {RECOMMENDATION_KIND}, получен {rec.get('kind')!r}"]
-    e = []
+    e: list[str] = []
     outcome = rec.get("outcome")
     if outcome not in OUTCOMES:
         e.append(f"недопустимый outcome: {outcome!r} (допустимы {', '.join(sorted(OUTCOMES))})")
@@ -311,9 +315,9 @@ def check_recommendation(rec):
     return e
 
 
-def check_ritual(r):
+def check_ritual(r: object) -> list[str]:
     """Валидация ритуала: 4 допустимых исхода(+defer), рекомендация присутствует, команда есть кроме continue."""
-    e = []
+    e: list[str] = []
     if not isinstance(r, dict) or r.get("kind") != RITUAL_KIND:
         return [f"kind должен быть {RITUAL_KIND}"]
     rec = r.get("session_recommendation") or {}
@@ -324,7 +328,7 @@ def check_ritual(r):
     return e
 
 
-def check(r):
+def check(r: object) -> list[str]:
     """Единый шов модуля: артефакт проверяется тем, что проверяет ЕГО, а не соседа.
 
     Раньше `check` знал один артефакт из двух, и вызов на втором давал вечную ошибку о kind.
@@ -340,7 +344,7 @@ def check(r):
             f"(ожидается {RITUAL_KIND} или {RECOMMENDATION_KIND})"]
 
 
-def render_block(ritual):
+def render_block(ritual: Mapping[str, Any]) -> str:
     """Обязательный пользовательский блок (WP5)."""
     us, rec = ritual["usage_summary"], ritual["session_recommendation"]
     cost = us["estimated_cost"]
@@ -368,9 +372,15 @@ def render_block(ritual):
     return "\n".join(L)
 
 
-def main(argv):
-    wid = ctx = nrel = nxt = pr = checks = None
-    args, it = [], iter(argv)
+def main(argv: Sequence[str]) -> int:
+    wid: str | None = None
+    ctx: int | None = None
+    nrel: str | None = None
+    nxt: str | None = None
+    pr: str | None = None
+    checks: str | None = None
+    args: list[str] = []
+    it = iter(argv)
     unsafe = "--unsafe" in argv
     for a in it:
         if a == "--workitem":
