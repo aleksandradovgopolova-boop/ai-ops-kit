@@ -43,7 +43,8 @@ _SNAPSHOT_CODES = frozenset({
     "default_branch_changed", "published_release_changed", "release_inputs_changed",
 })
 _DIAGNOSTIC_WORKFLOWS = frozenset({"docs.yml", "pr-smoke.yml", "package-quality.yml", "release.yml"})
-_DIAGNOSTIC_FIELDS = frozenset({"identity", "head_sha", "base_sha", "jobs", "closing_issues",
+_DIAGNOSTIC_FIELDS = frozenset({"pr_details", "head_pull_links", "workflow_runs", "commit_pull_links",
+                               "identity", "head_sha", "base_sha", "jobs", "closing_issues",
                                "issues", "ci_signature", "release_ci_signature", "main_sha",
                                "published_release", "input_digests"})
 
@@ -53,6 +54,9 @@ def snapshot_diagnostic(value):
     if not isinstance(value, dict) or type(value.get("code")) is not str or value["code"] not in _SNAPSHOT_CODES:
         return None
     safe = {"code": value["code"]}
+    sha = value.get("commit_sha")
+    if isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{40}", sha):
+        safe["commit_sha"] = sha
     for key in ("pr", "run_id", "attempt"):
         number = value.get(key)
         if type(number) is int and 0 < number < 2**63:
