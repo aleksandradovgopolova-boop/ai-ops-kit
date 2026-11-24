@@ -35,9 +35,14 @@ def current_session(root, runtime, session, task, signals):
     try:
         result = sessions.run_process(command, root, directory, timeout=30,
                                       progress=lambda message: print(message, file=sys.stderr, flush=True))
+        if result.returncode != 0:
+            task["execution"]["controller_exit_code"] = result.returncode
+            logs = directory.relative_to(root)
+            raise ValueError(f"контроллер завершился с кодом {result.returncode}. "
+                             f"Журналы: {logs}/process.stderr.log и {logs}/process.stdout.log")
         report_path = sessions.within(root, f"features/{fid}/run-report.json")
         report = json.loads(report_path.read_text(encoding="utf-8"))
-        if (result.returncode != 0 or report.get("kind") != "run-report" or report.get("status") != "planned"
+        if (report.get("kind") != "run-report" or report.get("status") != "planned"
                 or report.get("execution") != "planned" or report.get("workitem_id") != fid
                 or report.get("runtime") != runtime or report.get("lifecycle_errors")):
             raise ValueError("controller не подтвердил подготовку: " + str(report.get("error") or result.stderr)[-4096:])

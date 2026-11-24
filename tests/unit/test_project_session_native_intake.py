@@ -306,3 +306,43 @@ def test_initial_intake_preserves_dangling_pointer(project):
         cli.initial_intake(project, "codex", "native", "new")
     assert pointer.is_symlink() and not (directory / "absent").exists()
     assert list(directory.glob("*.json")) == [pointer]
+
+
+@pytest.mark.parametrize("write_report", [False, True], ids=["no-report", "planned-report"])
+def test_controller_failure_survives_reconcile(project, monkeypatch, capsys, write_report):
+    task = cli.initial_intake(project, "codex", "native", "Проверь документ")
+    monkeypatch.chdir(project)
+    run_process = sessions.run_process
+    calls = []
+
+    def fail_controller(command, root, directory, **kwargs):
+        calls.append(command)
+        # Реальный контроллер успевает записать валидный отчёт во втором сценарии.
+        failing = [sys.executable, "-c",
+                   "import subprocess, sys\n"
+                   "if sys.argv[1] == 'after': subprocess.run(sys.argv[2:], check=True)\n"
+                   "print('local diagnostic marker', file=sys.stderr)\n"
+                   "sys.exit(73)", "after" if write_report else "before", *command]
+        return run_process(failing, root, directory, **kwargs)
+
+    monkeypatch.setattr(sessions, "run_process", fail_controller)
+    args = ["--runtime", "codex", "--session", "native"]
+    assert cli.main(["run", *args, "--signals",
+                     '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+    saved = sessions.load(project, "codex", "native")
+    assert saved["status"] == "blocked" and saved["execution"]["controller_exit_code"] == 73
+    assert not saved["execution"].get("prepared")
+    log = sessions.session_dir(project, "codex", "native") / "process.stderr.log"
+    assert "local diagnostic marker" in log.read_text()
+    assert str(log.relative_to(project)) in saved["blocker"] and "73" in saved["blocker"]
+    assert "local diagnostic marker" not in saved["blocker"]
+    report = project / "features" / ("session-" + task["request_id"]) / "run-report.json"
+    if write_report:
+        assert json.loads(report.read_text())["status"] == "planned"
+    else:
+        assert not report.exists()
+    before = state(project)
+    capsys.readouterr()
+    assert cli.main(["reconcile", *args]) == 2
+    assert saved["blocker"] in capsys.readouterr().err
+    assert len(calls) == 1 and state(project) == before
