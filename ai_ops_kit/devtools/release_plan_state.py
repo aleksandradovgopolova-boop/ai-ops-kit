@@ -50,7 +50,10 @@ class _PagesReader:
         started = time.monotonic()
         with build_opener(_SamePage).open(Request(url, headers={"Cache-Control": "no-cache"}),
                                           timeout=timeout) as response:
+            expected = getattr(response, "length", None)
             raw = response.read(self.remaining_bytes + 1)
+            if expected is not None and len(raw) < min(expected, self.remaining_bytes + 1):
+                raise OSError("incomplete Pages response")
         self.remaining_seconds -= time.monotonic() - started
         self.remaining_bytes -= len(raw)
         if self.remaining_bytes < 0:
@@ -146,8 +149,6 @@ def _observe_previous(client, read, current_run, observation, job_budget, expect
         except _InvalidProjection:
             observation["reason"] = "invalid_pages_projection"
             return None, None
-        except HTTPException:
-            return None, None
         observation["reason"] = "invalid_pages_projection"
         report = page["release_plan"]
         if not isinstance(report, dict):
@@ -218,7 +219,7 @@ def _observe_previous(client, read, current_run, observation, job_budget, expect
                 return report, skipped
             return None, None
         observation["reason"] = "no_deploy_in_window"
-    except (GitHubError, ValueError, TypeError, KeyError, OSError):
+    except (GitHubError, HTTPException, ValueError, TypeError, KeyError, OSError):
         return None, None
     return None, None
 

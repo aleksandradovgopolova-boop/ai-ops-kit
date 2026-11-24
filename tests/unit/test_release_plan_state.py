@@ -511,3 +511,52 @@ def test_stock_pages_read_failure_preserves_unknown(fault, reason, on_retry, mon
     record = json.loads(captured.out.removeprefix("[release-history] "))
     assert ("retry" in record) == on_retry
     assert record["retry" if on_retry else "first"]["reason"] == reason
+
+
+@pytest.mark.parametrize("on_retry", [False, True])
+def test_pages_with_short_content_length_cannot_be_accepted(monkeypatch, capsys, on_retry):
+    from http.client import HTTPResponse
+    from unittest.mock import Mock
+    publisher = {**PUBLISHER, "run_id": 101}
+    latest = state.project(report(), None, publisher)
+    stale = state.project(report(), None, PUBLISHER)
+    pages = ([stale] if on_retry else []) + [latest]
+
+    class Opener:
+        def open(self, request, *, timeout):
+            page = pages.pop(0)
+            body = json.dumps({"release_plan": page}).encode()
+            length = len(body) + (17 if page is latest else 0)
+            wire = f"HTTP/1.1 200 OK\r\nContent-Length: {length}\r\n\r\n".encode() + body
+            sock = Mock()
+            sock.makefile.return_value = io.BytesIO(wire)
+            response = HTTPResponse(sock)
+            response.begin()
+            return response
+
+    monkeypatch.setattr(state, "build_opener", lambda *_: Opener())
+    assert state.previous_publication(SummaryAttempt(publisher), current_run=102) == (None, None)
+    obs = json.loads(capsys.readouterr().out.removeprefix("[release-history] "))
+    assert obs["retry" if on_retry else "first"]["reason"] == "pages_read_failed"
+    assert not pages
+
+
+def test_http_failure_on_retry_jobs_emits_only_fixed_reason(monkeypatch, capsys):
+    publisher = {**PUBLISHER, "run_id": 101}
+    pages = iter([state.project(report(), None, PUBLISHER), state.project(report(), None, publisher)])
+    client = SummaryAttempt(publisher)
+    original = client.read_page
+    jobs_reads = []
+
+    def read(path, params=None):
+        if path.endswith("/jobs"):
+            jobs_reads.append(path)
+            if len(jobs_reads) == 2:
+                raise BadStatusLine("private-response")
+        return original(path, params)
+
+    monkeypatch.setattr(client, "read_page", read)
+    assert state.previous_publication(client, read=lambda _: {"release_plan": next(pages)}, current_run=102) == (None, None)
+    log = capsys.readouterr().out
+    assert len(jobs_reads) == 2 and "private-response" not in log
+    assert json.loads(log.removeprefix("[release-history] "))["retry"]["reason"] == "attempt_jobs_read_failed"
