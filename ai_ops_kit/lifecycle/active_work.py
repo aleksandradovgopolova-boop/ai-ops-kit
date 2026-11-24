@@ -51,7 +51,7 @@ from ai_ops_kit.lifecycle.work_claims import (          # noqa: F401 — ре-э
     _claim_slug, publish_claim, unpublish_claim, load_published_claims,
     _git_common_dir, copies_claims_dir, working_copies, copies_reach_note,
     _copies_line, claim_to_copies, withdraw_claim_from_copies, load_copy_claims,
-    _claim_entry, _controller_projections_match, team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin, _budget_binding,
+    _claim_entry, _controller_projections_match, _legacy_operator_finish, team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin, _budget_binding,
 )
 from ai_ops_kit.lifecycle.work_reconcile import (        # noqa: F401 — ре-экспорт для совместимости
     _machine, _now_iso, _CLAIM_STALE_HOURS, _claim_age_hours, _pid_is_dead,
@@ -535,13 +535,16 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
     от исхода — при NOT_READY, при исключении провайдера и даже при Ctrl-C. `ai-ops status` после
     этого показывал пустоту, хотя работа не сделана: реестр активной работы врал ровно там, где
     он единственный источник правды о незавершённом."""
+    operator_relative = expected_admission is None and expected_controller is None and not Path(path).is_absolute()
     path = _canonical_path(path, child_root)
     if status not in STATUS:
         print(f"ОШИБКА: status '{status}' не в {sorted(STATUS)}")
         return 1
-    # v3.0.12: read-modify-write под блокировкой (симметрично register — без гонки на общем реестре)
     with _claim_lock(path, child_root) as legacy:
         data = load(path)
+        if operator_relative and not _legacy_operator_finish(data, legacy, child_root, wid, _machine()):
+            logging.warning("ОТКАЗ: локальная и общая заявки расходятся.")
+            return 1
         if expected_admission is not None:
             try:
                 _require_attempt(data, wid, expected_admission, child_root)
@@ -575,9 +578,6 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
         if entry is not None:
             _project_claim(legacy, entry)
             _m = entry.get("machine") or _machine()
-            # #695: носитель копий координирует ТОЛЬКО идущий прогон — снимаем на ВЫХОДЕ любым исходом
-            # (done/blocked/прерван). Заявка там без `owner_pid` → `holder_is_gone` судила её лишь по
-            # возрасту (12ч) и блокировала следующую команду (замер 01.09); локальный реестр сохраняется.
             withdraw_claim_from_copies(child_root, _m, wid)
             if status == "done":                      # опубликованную (наружу) — только на завершении
                 unpublish_claim(child_root, _m, wid)

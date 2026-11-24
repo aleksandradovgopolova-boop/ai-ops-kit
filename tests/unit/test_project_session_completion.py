@@ -635,3 +635,38 @@ def test_historical_split_claim_refuses_every_write(project, divergence):
     before = {p: p.read_bytes() for p in (registry, legacy, copy, public)}
     assert aw.finish_cmd(legacy, wid, child_root=project, expected_controller=("first", attempt)) == 1
     assert {p: p.read_bytes() for p in before} == before
+
+
+@pytest.mark.parametrize("actor", ["operator", "controller", "conflicting-copy"])
+def test_relative_finish_after_upgrade_from_local_operator_registry(project, monkeypatch, actor):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    monkeypatch.chdir(project)
+    wid = "older-operator"
+    relative = Path(".ai/runtime/active-work.yaml")
+    registry = aw.shared_registry_path(project)
+    # До обновления относительный CLI записывал свою строку и носитель без общей строки.
+    with monkeypatch.context() as old:
+        old.setattr(aw, "_canonical_path", lambda path, root: Path(path))
+        assert aw.main(["register", str(relative), wid, "--branch", f"feature/{wid}",
+                        "--areas", "docs", "--session", "legacy-owner"]) == 0
+    assert not registry.exists()
+    copy, = aw.copies_claims_dir(project).glob("*.yaml")
+    before = relative.read_bytes()
+    if actor == "conflicting-copy":
+        data = yaml.safe_load(copy.read_text())
+        data["owner_session"] = "other"
+        copy.write_text(yaml.safe_dump(data))
+    copy_before = copy.read_bytes()
+    if actor == "controller":
+        rc = aw.finish_cmd(relative, wid, child_root=project, expected_controller=("legacy-owner", None))
+    else:
+        rc = aw.main(["finish", str(relative), wid])
+    if actor == "operator":
+        assert rc == 0
+        assert aw.load(registry)["active"] == aw.load(relative)["active"]
+        assert aw.load(relative)["active"][0]["status"] == "done"
+        assert not copy.exists()
+    else:
+        assert rc == 1 and not registry.exists()
+        assert relative.read_bytes() == before and copy.read_bytes() == copy_before
