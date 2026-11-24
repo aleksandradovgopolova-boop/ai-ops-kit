@@ -30,6 +30,7 @@ BEGIN = "<!-- AI-OPS-PROJECT-SESSION:BEGIN -->"
 END = "<!-- AI-OPS-PROJECT-SESSION:END -->"
 POLICY = "templates/runtime/team-session.md"
 RUNTIMES = {"claude-code": ".claude/settings.json", "codex": ".codex/hooks.json"}
+ARTIFACT_ROOTS = ("features", ".ai/runplan", "openspec/changes")
 EVENTS = ("SessionStart", "UserPromptSubmit", "Stop")
 HOOK_READ_SECONDS = 10  # внешний hook: 15 с; остаток — cleanup и ответ
 _read_deadline = contextvars.ContextVar("hook_read_deadline", default=None)
@@ -453,8 +454,8 @@ def load(root, runtime, session, *, missing_ok=False):
 def artifact_inputs(root, fid, *, before_read=None):
     """Полный состав артефактов, включая ignored и отсутствие будущих файлов."""
     files = {}
-    for relative in (f"features/{fid}", f".ai/runplan/{fid}", f"openspec/changes/{fid}"):
-        for path in _read_path(root, relative, before_read).rglob("*"):
+    for prefix in ARTIFACT_ROOTS:
+        for path in _read_path(root, f"{prefix}/{fid}", before_read).rglob("*"):
             if before_read:
                 before_read(path)
             if path.is_symlink():

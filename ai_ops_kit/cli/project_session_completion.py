@@ -486,7 +486,8 @@ def response(root, task, *, before_read=None):
         action.update(status="reconcile_execution", next_action="reconcile")
     else:
         action["after_plan"] = {"next_action": "finalize", "required_before_final_answer": True,
-                                "argv": [sys.executable, "-m", "ai_ops_kit.cli.project_session", "finalize",
+                                "pythonpath": str(Path(__file__).resolve().parents[2]),
+                                "argv": [sys.executable, "-P", "-m", "ai_ops_kit.cli.project_session", "finalize",
                                          "--runtime", task["runtime"], "--session", task["session_id"]]}
     result["host_actions"] = action
     return result

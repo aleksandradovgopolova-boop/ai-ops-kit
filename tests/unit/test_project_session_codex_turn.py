@@ -1,6 +1,7 @@
 """Process-shaped Codex events from the rejected-turn incident, without a model."""
 import json
 import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -68,13 +69,22 @@ def test_long_session_reads_recent_complete_turn_and_rejects_late_delivery(proje
     assert resume.rejected_turn(project, payload) is None
 
 
-@pytest.mark.parametrize("damage", ["claim", "stale-report", "orphan-plan", "binding"])
+@pytest.mark.parametrize("damage", ["claim", "stale-report", "orphan-plan", "orphan-openspec", "binding"])
 def test_even_confirmed_model_rejection_needs_pristine_kit_state(project, rollout, damage):
     payload, _, _ = rollout
+    if damage == "orphan-openspec":
+        (project / ".gitignore").write_text("openspec/\n.ai/runtime/\n")
+        sessions.git(project, "add", ".gitignore")
+        sessions.git(project, "commit", "-qm", "ignored artifacts")
     task = sessions.begin(project, "codex", "complete", payload["prompt"], "first")
     directory = sessions.session_dir(project, "codex", "complete")
     if damage == "claim":
         (directory / (task["request_id"] + ".execution-claim")).touch()
+    elif damage == "orphan-openspec":
+        proposal = project / "openspec/changes" / ("session-" + task["request_id"]) / "proposal.md"
+        proposal.parent.mkdir(parents=True)
+        proposal.write_text("Earlier preparation")
+        assert sessions.git(project, "check-ignore", "--", str(proposal.relative_to(project)))
     elif damage == "orphan-plan":
         (project / ".ai/runplan" / ("session-" + task["request_id"])).mkdir(parents=True)
     elif damage == "stale-report":
@@ -90,7 +100,7 @@ def test_even_confirmed_model_rejection_needs_pristine_kit_state(project, rollou
 
 
 @pytest.mark.parametrize("damage", ["tool", "other-session", "other-root", "other-error", "assistant",
-                                     "intervening", "outside", "symlink", "fifo", "partial", "oversize"])
+                                     "intervening", "missing-start", "late-failure", "outside", "symlink", "fifo", "partial", "oversize"])
 def test_unproven_provider_failure_never_associates_turns(project, rollout, tmp_path, damage):
     payload, rows, write = rollout
     path = Path(payload["transcript_path"])
@@ -104,6 +114,10 @@ def test_unproven_provider_failure_never_associates_turns(project, rollout, tmp_
         rows[-2][1]["error"] = {"message": json.dumps({"status": 429})}
     elif damage == "assistant":
         rows[-2][1]["last_agent_message"] = "an answer"
+    elif damage == "missing-start":
+        rows.pop()
+    elif damage == "late-failure":
+        rows[-2], rows[-1] = rows[-1], rows[-2]
     elif damage == "intervening":
         rows.insert(-1, ("event_msg", {"type": "task_started", "turn_id": "other"}))
     write()
@@ -129,7 +143,7 @@ def test_stop_persists_missing_finalize_then_normal_verification_can_finish(proj
     before = path.read_bytes(), path.stat().st_mtime_ns
     from ai_ops_kit.cli.project_session_completion import response
     transition = response(project, task)["host_actions"]["after_plan"]
-    assert transition["required_before_final_answer"] and transition["argv"][3:] == ["finalize", *args]
+    assert transition["required_before_final_answer"] and transition["argv"][4:] == ["finalize", *args]
     dirty = project / "pending-result.txt"
     dirty.write_text("unfinished local result")
     stop = {"hook_event_name": "Stop", "session_id": "complete", "cwd": str(project), "turn_id": "turn-one"}
@@ -144,6 +158,14 @@ def test_stop_persists_missing_finalize_then_normal_verification_can_finish(proj
     assert cli.main(["run", *args]) == 1
     assert (path.read_bytes(), path.stat().st_mtime_ns) == before
     dirty.unlink()
-    assert cli.main(transition["argv"][3:]) == 0
+    # Launch the advertised command as a new process from the child. A local
+    # namesake must not shadow the exact installation which issued the handoff.
+    shadow = project / "ai_ops_kit.py"
+    shadow.write_text("raise RuntimeError('shadow package')\n")
+    sessions.git(project, "add", "ai_ops_kit.py")
+    sessions.git(project, "commit", "-qm", "child module with kit name")
+    proc = subprocess.run(transition["argv"], cwd=project, env=dict(os.environ, PYTHONPATH=transition["pythonpath"]),
+                          text=True, capture_output=True, timeout=35)
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
     assert sessions.verify(project, "codex", "complete")["accepted"]
     assert cli.hook("codex", stop) == {}

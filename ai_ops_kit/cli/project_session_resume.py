@@ -31,7 +31,7 @@ def unstarted_retry(root, payload, task, *, replay):
             return False
     sessions.pending(root, runtime, session)
     fid = "session-" + task["request_id"]
-    for prefix in ("features", ".ai/runplan"):
+    for prefix in sessions.ARTIFACT_ROOTS:
         path = sessions.within(root, f"{prefix}/{fid}")
         if path.exists() or path.is_symlink():
             raise ValueError("обнаружены артефакты прежней попытки; повтор не подтверждён")
@@ -82,6 +82,8 @@ def _rejected_before_turn(data, turn):
             if current:
                 return None
             current = body["turn_id"] == turn
+            if current and not rejected:
+                return None
             if not current:
                 previous, rejected = body["turn_id"], None
         elif kind == "event_msg" and event == "task_complete" and previous and body["turn_id"] == previous:
@@ -96,7 +98,7 @@ def _rejected_before_turn(data, turn):
             continue
         else:
             previous = rejected = None
-    return rejected
+    return rejected if current else None
 
 
 def _diagnostic(directory):
