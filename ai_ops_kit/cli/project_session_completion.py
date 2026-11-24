@@ -228,9 +228,20 @@ def evaluate(root, runtime, session, request, attempt):
         ready = not missing and (pipeline or {}).get("ready_for_pr") is True
         if ready:
             from ai_ops_kit.lifecycle import active_work
+            relative = f"features/{fid}/run-report.json"
+            raw = sessions.within(root, relative).read_bytes()
+            if sessions.digest(raw) != task["execution"]["files"].get(relative):
+                raise ValueError("отчёт регистрации изменён после подготовки")
+            report = json.loads(raw)
+            generation = report.get("controller_attempt")
+            if "controller_attempt" in report and not (
+                    isinstance(generation, str) and len(generation) == 32
+                    and all(c in "0123456789abcdef" for c in generation)):
+                raise ValueError("некорректный идентификатор регистрации")
             # Shared registry lock тоже находится под общим deadline работника.
             if active_work.finish_cmd(root / ".ai/runtime/active-work.yaml", fid, child_root=root,
-                                      published=active_work.publication_enabled(root)):
+                                      published=active_work.publication_enabled(root),
+                                      expected_controller=(session, generation)):
                 raise ValueError("не удалось завершить запись активной работы")
         report = {"kind": "current-session-verification", "request_id": request, "attempt": attempt,
                   "binding": current, "scope": scope(task, current), "pipeline": pipeline, "files": files,

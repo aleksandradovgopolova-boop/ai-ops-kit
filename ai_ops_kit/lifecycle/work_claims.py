@@ -17,6 +17,7 @@ from pathlib import Path
 
 import yaml
 import contextlib
+import stat
 
 from ai_ops_kit.shared import lifecycle_store as _ls
 
@@ -113,10 +114,9 @@ def load_published_claims(child_root, exclude_machine: str | None = None) -> lis
 
 COPIES_CLAIMS_REL = Path("ai-ops") / "claims"
 
-# На одно поле больше: `worktree` — в какой копии держатель. Без него отказ на одной машине звучит
-# «держит сессия X на машине Y», где Y — та же машина. В `PUBLISHED_FIELDS` его нет: абсолютный путь
-# другим машинам не уезжает.
-COPY_CLAIM_FIELDS = PUBLISHED_FIELDS + ("worktree",)
+# Только внутри одной машины сохраняем рабочую копию и поколение её контроллера.
+# Эти поля различают локальных владельцев при завершении и не публикуются через git.
+COPY_CLAIM_FIELDS = PUBLISHED_FIELDS + ("worktree", "controller_attempt")
 
 
 def _git_common_dir(start=None):
@@ -301,6 +301,111 @@ def probe_registry_write(root):
         pass
 
 
+def _claim_entry(wid, branch, areas, session, status, machine, started_at, controller_attempt):
+    import os
+    # Заявка = кто (сессия) + где (машина) + когда (время) + что (ветка/зоны). Машина и время
+    # добавлены 18.08.2026: без «где» и «когда» инцидент параллельных сессий не разобрать
+    # (заявка #150: атрибуция была невозможна). Поля аддитивны — прежние записи без них валидны.
+    # `owner_pid` — pid ЭТОГО процесса прогона, держащего заявку. По нему `holder_is_gone`
+    # доказывает смерть session-заявки сразу (процесс мёртв), не дожидаясь возрастного порога.
+    # Наружу поле НЕ уезжает (нет в PUBLISHED_FIELDS/COPY_CLAIM_FIELDS): pid значим только на
+    # своей машине, где liveness и проверяется.
+    entry = {"id": wid, "branch": branch, "status": status,
+             "affected_areas": list(areas), "owner_session": session,
+             "machine": machine, "started_at": started_at,
+             "owner_pid": os.getpid()}
+    if controller_attempt is not None:
+        entry["controller_attempt"] = controller_attempt
+    return entry
+
+
+def _same_controller(entry, wid, root, machine, expected):
+    session, attempt = expected
+    owned_state = (entry.get("status") == "in-progress" or
+                   (entry.get("status") == "done" and entry.get("closed_by_controller") is True))
+    return (bool(root and session) and owned_state
+            and entry.get("owner_session") == session and entry.get("machine") == machine
+            and entry.get("worktree") == str(Path(root).resolve()) and entry.get("branch") == f"feature/{wid}"
+            and "auto_admission" not in entry
+            and (entry.get("controller_attempt") == attempt if attempt is not None else "controller_attempt" not in entry))
+
+
+def _controller_projections_match(entry, legacy, root, machine, expected):
+    """Под общей блокировкой сверить каждую проекцию до её замены или удаления."""
+    wid = entry["id"]
+    if not _same_controller(entry, wid, root, machine, expected):
+        return False
+    try:
+        if legacy is not None:
+            if legacy.is_symlink() or (legacy.exists() and not legacy.is_file()):
+                return False
+            active = load(legacy)["active"]
+            if not isinstance(active, list):
+                return False
+            rows = [row for row in active if row["id"] == wid]
+            if rows and (len(rows) != 1 or not _same_controller(rows[0], wid, root, machine, expected)
+                         or rows[0].get("started_at") != entry.get("started_at")):
+                return False
+        return _carriers_match(root, entry, {"in-progress"})
+    except (ActiveWorkCorrupt, OSError, KeyError, TypeError):
+        return False
+
+
+def _carriers_match(root, entry, statuses):
+    """Существующие файлы должны соответствовать заявке, которую finish снимет."""
+    try:
+        copies = copies_claims_dir(root)
+        if copies is None:
+            return False
+        slug = _claim_slug(entry["machine"], entry["id"])
+        for path, kind, fields in ((copies / slug, "copy-claim", COPY_CLAIM_FIELDS),
+                                   (Path(root) / CLAIMS_DIR_REL / slug, "published-claim", PUBLISHED_FIELDS)):
+            try:
+                mode = path.lstat().st_mode
+            except FileNotFoundError:
+                continue  # регистрация или завершение могли оставить неполную проекцию
+            if not stat.S_ISREG(mode):
+                return False
+            record = _ls.load_guarded(path, required_keys=PUBLISHED_FIELDS, kind=kind).get("data", {})
+            if record.get("status") not in statuses:
+                return False
+            if any(record.get(k) != entry.get(k) for k in fields if k != "status"):
+                return False
+    except OSError:
+        return False
+    return True
+
+
+def _legacy_operator_finish(data, legacy, root, wid, machine, statuses):
+    """При относительном CLI finish поднять совместимую старую запись под обеими блокировками."""
+    if legacy is None:
+        return True
+    if legacy.is_symlink() or (legacy.exists() and not legacy.is_file()):
+        return False
+    active = load(legacy)["active"]
+    if not isinstance(active, list) or any(not isinstance(row, dict) for row in active):
+        return False
+    rows = [row for row in active if row.get("id") == wid]
+    canonical = [row for row in data["active"] if row["id"] == wid]
+    if not rows:
+        return not canonical or (len(canonical) == 1 and canonical[0].get("machine") == machine
+                                 and canonical[0].get("worktree") == str(Path(root).resolve())
+                                 and _carriers_match(root, canonical[0], statuses))
+    if len(rows) != 1 or len(canonical) > 1:
+        return False
+    entry = rows[0]
+    if (entry.get("machine") != machine or entry.get("worktree") != str(Path(root).resolve())
+            or any(not entry.get(k) for k in PUBLISHED_FIELDS) or entry["status"] not in statuses
+            or (canonical and any(entry.get(k) != canonical[0].get(k) for k in COPY_CLAIM_FIELDS if k != "status"))
+            or not _carriers_match(root, entry, statuses)):
+        return False
+    if not canonical:
+        if "auto_admission" in entry or "controller_attempt" in entry:
+            return False
+        data["active"].append(entry)
+    return True
+
+
 def _require_attempt(data, wid, admission, root):
     """Сверить generation; session identity сама по себе не различает два запуска."""
     entries = [w for w in data["active"] if w.get("id") == wid]
@@ -365,7 +470,7 @@ def _locked(path: Path):
 
 
 def _canonical_path(path, root):
-    if root and Path(path) == Path(root) / ".ai/runtime/active-work.yaml" and _git_common_dir(root):
+    if root and Path(path).absolute() == Path(root).absolute() / ".ai/runtime/active-work.yaml" and _git_common_dir(root):
         return shared_registry_path(root)
     return Path(path)
 

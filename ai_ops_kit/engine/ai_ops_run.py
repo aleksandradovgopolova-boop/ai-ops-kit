@@ -37,6 +37,7 @@ if _root is not None and str(_root) not in _sys.path:
 
 import json
 import sys
+from uuid import uuid4
 from pathlib import Path
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
@@ -107,9 +108,10 @@ def _run_controller_path(task_text, signals, child_root, features_dir, feature,
     # 5. регистрация активной работы (координация параллельных сессий)
     aw_path = child_root / ".ai" / "runtime" / "active-work.yaml"
     areas = _work_areas.areas_for(signals, write_scope)   # #138: вывод, а не заглушка (см. work_areas)
+    controller_attempt = uuid4().hex
     _reg_rc2 = active_work.register(aw_path, fid, f"feature/{fid}", areas, session,
                                     workitem=f"features/{fid}/workitem.yaml",
-                                    child_root=child_root,
+                                    child_root=child_root, controller_attempt=controller_attempt,
                                     published=active_work.publication_enabled(child_root))
     if _reg_rc2:
         # Тот же отказ на планирующем пути: он тоже занимает ветку и заводит артефакты работы.
@@ -141,7 +143,7 @@ def _run_controller_path(task_text, signals, child_root, features_dir, feature,
     # 7. компактный отчёт
     report = {
         "schema_version": 1, "kind": "run-report",
-        "workitem_id": fid, "base_workflow": base_wf,
+        "workitem_id": fid, "base_workflow": base_wf, "controller_attempt": controller_attempt,
         "required_tracks": [t["track"] for t in plan["required_tracks"]],
         "conditional_tracks": [t["track"] for t in plan["conditional_tracks"]],
         "skipped_tracks": [{"track": t["track"], "reason": t["reason"]} for t in plan["skipped_tracks"]],

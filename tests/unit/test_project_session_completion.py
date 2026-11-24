@@ -513,3 +513,188 @@ def test_new_ignored_artifact_after_acceptance_invalidates_verify(project, monke
     with pytest.raises(ValueError, match="состав артефактов изменён"):
         sessions.verify(project, "codex", "complete")
     assert cli.main(["finalize", *args]) == 2
+
+
+@pytest.mark.parametrize("field,replacement", [("owner_session", "next-session"),
+                                               ("controller_attempt", "1" * 32)])
+def test_finalizing_old_handoff_keeps_reassigned_claim(project, monkeypatch, field, replacement):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    task, args = start(project, monkeypatch, "codex")
+    wid = "session-" + task["request_id"]
+    report = json.loads((project / "features" / wid / "run-report.json").read_bytes())
+    registry = aw.shared_registry_path(project)
+    data = aw.load(registry)
+    entry, = data["active"]
+    assert entry["id"] == wid and len(report["controller_attempt"]) == 32
+    assert entry["controller_attempt"] == report["controller_attempt"]
+    entry[field] = replacement
+    aw.save(registry, data)
+    projection = project / ".ai/runtime/active-work.yaml"
+    copy = next(aw.copies_claims_dir(project).glob("*.yaml"))
+    before = {p: p.read_bytes() for p in (registry, projection, copy)}
+
+    assert cli.main(["finalize", *args]) != 0
+    saved = sessions.load(project, "codex", "complete")
+    assert saved["status"] != "accepted"
+    assert (project / ".ai/runtime/check-ran").read_text() == "real check"
+    assert {p: p.read_bytes() for p in before} == before
+    assert not (project / saved["verification"]["report"]).exists()
+
+
+@pytest.mark.parametrize("report_attempt,entry_attempt,allow", [
+    (None, None, True), (None, "b" * 32, False), ("b" * 32, None, False)])
+def test_legacy_controller_claim_must_match_report_generation(project, report_attempt, entry_attempt, allow):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    registry = aw.shared_registry_path(project)
+    path = project / ".ai/runtime/active-work.yaml"
+    assert aw.register(path, "session-test", "feature/session-test", ["docs"], "s", child_root=project,
+                       controller_attempt=entry_attempt) == 0
+    before = registry.read_bytes()
+    rc = aw.finish_cmd(path, "session-test", child_root=project, expected_controller=("s", report_attempt))
+    assert (rc == 0) == allow
+    if allow:
+        assert aw.load(registry)["active"][0]["status"] == "done"
+    else:
+        assert registry.read_bytes() == before
+
+
+def test_same_controller_repairs_projection_after_canonical_close(project, monkeypatch):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    wid, owner, attempt = "session-repair", "session", "a" * 32
+    path = project / ".ai/runtime/active-work.yaml"
+    registry = aw.shared_registry_path(project)
+    assert aw.register(path, wid, f"feature/{wid}", ["docs"], owner, child_root=project,
+                       controller_attempt=attempt) == 0
+    finish = dict(child_root=project, expected_controller=(owner, attempt))
+    with monkeypatch.context() as chunk:
+        def interrupted(*args):
+            raise OSError("projection interrupted")
+        chunk.setattr(aw, "_project_claim", interrupted)
+        with pytest.raises(OSError, match="projection interrupted"):
+            aw.finish_cmd(path, wid, **finish)
+    assert aw.load(registry)["active"][0]["status"] == "done"
+    assert aw.load(path)["active"][0]["status"] == "in-progress"
+    assert aw.finish_cmd(path, wid, child_root=project, expected_controller=(owner, "b" * 32)) == 1
+    assert aw.finish_cmd(path, wid, **finish) == 0
+    assert aw.load(registry)["active"] == aw.load(path)["active"]
+    assert not list(aw.copies_claims_dir(project).glob("*.yaml"))
+    assert aw.finish_cmd(path, wid, child_root=project) == 0
+    assert aw.finish_cmd(path, wid, **finish) == 1  # отдельное операторское закрытие
+
+
+@pytest.mark.parametrize("linked", [False, True])
+def test_relative_operator_takeover_prevents_old_controller_finish(project, monkeypatch, linked):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    relative = Path(".ai/runtime/active-work.yaml")
+    owner_path = project / relative
+    wid, attempt = "session-relative", "c" * 32
+    assert aw.register(owner_path, wid, f"feature/{wid}", ["code"], "first", child_root=project,
+                       controller_attempt=attempt) == 0
+    operator = project
+    if linked:
+        operator = project.parent / "operator"
+        subprocess.run(["git", "-C", str(project), "worktree", "add", "--detach", str(operator), "HEAD"],
+                       check=True, capture_output=True)
+    monkeypatch.chdir(operator)
+    assert aw.main(["register", str(relative), wid, "--branch", f"feature/{wid}", "--areas", "code",
+                    "--session", "second", "--takeover", "--takeover-reason", "handover"]) == 0
+    registry = aw.shared_registry_path(project)
+    assert aw.load(registry)["active"][0]["owner_session"] == "second"
+    copies = aw.copies_claims_dir(project)
+    before = {p: p.read_bytes() for p in (registry, owner_path, operator / relative, *copies.glob("*.yaml"))}
+    assert aw.finish_cmd(owner_path, wid, child_root=project, expected_controller=("first", attempt)) == 1
+    assert {p: p.read_bytes() for p in before} == before
+
+
+@pytest.mark.parametrize("divergence", ["legacy", "copy", "generation", "published", "corrupt"])
+def test_historical_split_claim_refuses_every_write(project, divergence):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    wid, attempt = "session-split", "a" * 32
+    legacy = project / ".ai/runtime/active-work.yaml"
+    assert aw.register(legacy, wid, f"feature/{wid}", ["code"], "first", published=True, child_root=project,
+                       controller_attempt=attempt) == 0
+    registry = aw.shared_registry_path(project)
+    copy, = aw.copies_claims_dir(project).glob("*.yaml")
+    public, = (project / aw.CLAIMS_DIR_REL).glob("*.yaml")
+    path = {"legacy": legacy, "copy": copy, "generation": copy, "published": public, "corrupt": copy}[divergence]
+    data = yaml.safe_load(path.read_text())
+    if divergence == "corrupt":
+        path.write_text("broken: [")
+    else:
+        record = data["active"][0] if path == legacy else data
+        if divergence == "generation":
+            record["controller_attempt"] = "b" * 32
+        else:
+            record["owner_session"] = "second"
+        path.write_text(yaml.safe_dump(data))
+    before = {p: p.read_bytes() for p in (registry, legacy, copy, public)}
+    assert aw.finish_cmd(legacy, wid, child_root=project, expected_controller=("first", attempt)) == 1
+    assert {p: p.read_bytes() for p in before} == before
+
+
+@pytest.mark.parametrize("actor", ["operator", "controller", "conflicting-copy"])
+def test_relative_finish_after_upgrade_from_local_operator_registry(project, monkeypatch, actor):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    monkeypatch.chdir(project)
+    wid = "older-operator"
+    relative = Path(".ai/runtime/active-work.yaml")
+    registry = aw.shared_registry_path(project)
+    # До обновления относительный CLI записывал свою строку и носитель без общей строки.
+    with monkeypatch.context() as old:
+        old.setattr(aw, "_canonical_path", lambda path, root: Path(path))
+        assert aw.main(["register", str(relative), wid, "--branch", f"feature/{wid}",
+                        "--areas", "docs", "--session", "legacy-owner"]) == 0
+    assert not registry.exists()
+    copy, = aw.copies_claims_dir(project).glob("*.yaml")
+    before = relative.read_bytes()
+    if actor == "conflicting-copy":
+        data = yaml.safe_load(copy.read_text())
+        data["owner_session"] = "other"
+        copy.write_text(yaml.safe_dump(data))
+    copy_before = copy.read_bytes()
+    if actor == "controller":
+        rc = aw.finish_cmd(relative, wid, child_root=project, expected_controller=("legacy-owner", None))
+    else:
+        rc = aw.main(["finish", str(relative), wid])
+    if actor == "operator":
+        assert rc == 0
+        assert aw.load(registry)["active"] == aw.load(relative)["active"]
+        assert aw.load(relative)["active"][0]["status"] == "done"
+        assert not copy.exists()
+    else:
+        assert rc == 1 and not registry.exists()
+        assert relative.read_bytes() == before and copy.read_bytes() == copy_before
+
+
+@pytest.mark.parametrize("interrupt", [True, False])
+def test_relative_operator_finish_reconciles_own_previous_status(project, monkeypatch, interrupt):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    monkeypatch.chdir(project)
+    path = ".ai/runtime/active-work.yaml"
+    wid = "operator-handoff"
+    monkeypatch.setattr(aw, "publication_enabled", lambda root: True)
+    assert aw.main(["register", path, wid, "--branch", f"feature/{wid}", "--areas", "docs", "--session", "s"]) == 0
+    public, = (project / aw.CLAIMS_DIR_REL).glob("*.yaml")
+    if interrupt:
+        def interrupt_projection(*args):
+            raise OSError("operator projection interrupted")
+        with monkeypatch.context() as partial:
+            partial.setattr(aw, "_project_claim", interrupt_projection)
+            with pytest.raises(OSError, match="operator projection interrupted"):
+                aw.main(["finish", path, wid])
+        assert aw.load(aw.shared_registry_path(project))["active"][0]["status"] == "done"
+        assert aw.load(Path(path))["active"][0]["status"] == "in-progress"
+    else:
+        assert aw.main(["finish", path, wid, "--status", "blocked"]) == 0
+        assert yaml.safe_load(public.read_text())["status"] == "in-progress"
+    assert aw.main(["finish", path, wid]) == 0
+    assert aw.load(aw.shared_registry_path(project))["active"] == aw.load(Path(path))["active"]
+    assert aw.load(Path(path))["active"][0]["status"] == "done"
+    assert not public.exists() and not list(aw.copies_claims_dir(project).glob("*.yaml"))

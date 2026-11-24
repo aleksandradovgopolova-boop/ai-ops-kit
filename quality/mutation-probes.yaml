@@ -472,9 +472,9 @@ probes:
     решения владельца (ep-2026-08-18-claim-medium-hybrid).'
 - id: claim-records-the-machine
   kind: guard
-  file: ai_ops_kit/lifecycle/active_work.py
-  find: '                 "machine": _machine(), "started_at": at or _now_iso(),'
-  replace_with: '                 "started_at": at or _now_iso(),'
+  file: ai_ops_kit/lifecycle/work_claims.py
+  find: '             "machine": machine, "started_at": started_at,'
+  replace_with: '             "started_at": started_at,'
   tests:
   - tests/unit/test_local_claim_honest_reach.py
   why: 'Без машины в заявке «кто держит» теряет «где» — ровно то, из-за чего атрибуция инцидента
