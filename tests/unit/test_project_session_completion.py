@@ -670,3 +670,31 @@ def test_relative_finish_after_upgrade_from_local_operator_registry(project, mon
     else:
         assert rc == 1 and not registry.exists()
         assert relative.read_bytes() == before and copy.read_bytes() == copy_before
+
+
+@pytest.mark.parametrize("interrupt", [True, False])
+def test_relative_operator_finish_reconciles_own_previous_status(project, monkeypatch, interrupt):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    monkeypatch.chdir(project)
+    path = ".ai/runtime/active-work.yaml"
+    wid = "operator-handoff"
+    monkeypatch.setattr(aw, "publication_enabled", lambda root: True)
+    assert aw.main(["register", path, wid, "--branch", f"feature/{wid}", "--areas", "docs", "--session", "s"]) == 0
+    public, = (project / aw.CLAIMS_DIR_REL).glob("*.yaml")
+    if interrupt:
+        def interrupt_projection(*args):
+            raise OSError("operator projection interrupted")
+        with monkeypatch.context() as partial:
+            partial.setattr(aw, "_project_claim", interrupt_projection)
+            with pytest.raises(OSError, match="operator projection interrupted"):
+                aw.main(["finish", path, wid])
+        assert aw.load(aw.shared_registry_path(project))["active"][0]["status"] == "done"
+        assert aw.load(Path(path))["active"][0]["status"] == "in-progress"
+    else:
+        assert aw.main(["finish", path, wid, "--status", "blocked"]) == 0
+        assert yaml.safe_load(public.read_text())["status"] == "in-progress"
+    assert aw.main(["finish", path, wid]) == 0
+    assert aw.load(aw.shared_registry_path(project))["active"] == aw.load(Path(path))["active"]
+    assert aw.load(Path(path))["active"][0]["status"] == "done"
+    assert not public.exists() and not list(aw.copies_claims_dir(project).glob("*.yaml"))

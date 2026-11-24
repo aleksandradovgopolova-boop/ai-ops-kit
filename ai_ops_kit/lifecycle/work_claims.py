@@ -346,12 +346,12 @@ def _controller_projections_match(entry, legacy, root, machine, expected):
             if rows and (len(rows) != 1 or not _same_controller(rows[0], wid, root, machine, expected)
                          or rows[0].get("started_at") != entry.get("started_at")):
                 return False
-        return _carriers_match(root, entry, "in-progress")
+        return _carriers_match(root, entry, {"in-progress"})
     except (ActiveWorkCorrupt, OSError, KeyError, TypeError):
         return False
 
 
-def _carriers_match(root, entry, status):
+def _carriers_match(root, entry, statuses):
     """Существующие файлы должны соответствовать заявке, которую finish снимет."""
     try:
         copies = copies_claims_dir(root)
@@ -367,7 +367,7 @@ def _carriers_match(root, entry, status):
             if not stat.S_ISREG(mode):
                 return False
             record = _ls.load_guarded(path, required_keys=PUBLISHED_FIELDS, kind=kind).get("data", {})
-            if record.get("status") != status:
+            if record.get("status") not in statuses:
                 return False
             if any(record.get(k) != entry.get(k) for k in fields if k != "status"):
                 return False
@@ -376,7 +376,7 @@ def _carriers_match(root, entry, status):
     return True
 
 
-def _legacy_operator_finish(data, legacy, root, wid, machine):
+def _legacy_operator_finish(data, legacy, root, wid, machine, statuses):
     """При относительном CLI finish поднять совместимую старую запись под обеими блокировками."""
     if legacy is None:
         return True
@@ -390,14 +390,14 @@ def _legacy_operator_finish(data, legacy, root, wid, machine):
     if not rows:
         return not canonical or (len(canonical) == 1 and canonical[0].get("machine") == machine
                                  and canonical[0].get("worktree") == str(Path(root).resolve())
-                                 and _carriers_match(root, canonical[0], canonical[0].get("status")))
+                                 and _carriers_match(root, canonical[0], statuses))
     if len(rows) != 1 or len(canonical) > 1:
         return False
     entry = rows[0]
     if (entry.get("machine") != machine or entry.get("worktree") != str(Path(root).resolve())
-            or not entry.get("owner_session") or (canonical and
-                any(entry.get(k) != canonical[0].get(k) for k in COPY_CLAIM_FIELDS))
-            or not _carriers_match(root, entry, entry.get("status"))):
+            or any(not entry.get(k) for k in PUBLISHED_FIELDS) or entry["status"] not in statuses
+            or (canonical and any(entry.get(k) != canonical[0].get(k) for k in COPY_CLAIM_FIELDS if k != "status"))
+            or not _carriers_match(root, entry, statuses)):
         return False
     if not canonical:
         if "auto_admission" in entry or "controller_attempt" in entry:

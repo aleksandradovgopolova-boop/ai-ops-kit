@@ -542,7 +542,7 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
         return 1
     with _claim_lock(path, child_root) as legacy:
         data = load(path)
-        if operator_relative and not _legacy_operator_finish(data, legacy, child_root, wid, _machine()):
+        if operator_relative and not _legacy_operator_finish(data, legacy, child_root, wid, _machine(), STATUS):
             logging.warning("ОТКАЗ: локальная и общая заявки расходятся.")
             return 1
         if expected_admission is not None:
