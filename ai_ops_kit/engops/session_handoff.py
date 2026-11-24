@@ -212,7 +212,7 @@ def write(child_root, handoff):
     return p
 
 
-def latest(child_root, session_id=None):
+def latest(child_root: str | Path | None, session_id: object = None) -> Path | None:
     """Есть ли записанный handoff. -> путь или None.
 
     ЭТО ЕДИНСТВЕННЫЙ ИСТОЧНИК ответа на вопрос «handoff сохранён?». Раньше ответом было значение

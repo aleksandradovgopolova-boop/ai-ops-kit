@@ -35,6 +35,9 @@ from ai_ops_kit.providers.orchestrator_providers import (
 )
 from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
 from pathlib import Path as _Path
+from ai_ops_kit.engops.delegation_advisor import advise as delegation_advise
+from ai_ops_kit.engops.session_guardrails import check as guard_check, recommend as session_recommend
+from ai_ops_kit.engops.session_telemetry import snapshot as session_snapshot
 from ai_ops_kit.providers.codex_native import command as codex_command, readiness as codex_readiness
 from ai_ops_kit.providers.codex_native_hook import denied as codex_denied
 from ai_ops_kit.providers.codex_transport import RPC as CodexRPC
@@ -171,6 +174,13 @@ codex_denial: dict[str, Any] = codex_denied("tools are forbidden")
 
 def codex_reply(rpc: CodexRPC) -> dict[str, Any]:
     return rpc.call("account/read", {"refreshToken": False})
+
+
+# Помощники учёта стоимости (#1586)
+guard_rec: dict[str, Any] = session_recommend({"context_current": 1000}, next_task="next")
+guard_errors: list[str] = guard_check(guard_rec)
+delegation: list[dict[str, Any]] = delegation_advise({"compare_files": 6})
+telemetry: dict[str, Any] = session_snapshot(".", context_current=1000)
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -194,7 +204,8 @@ PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.prov
                       "ai_ops_kit.providers.model_router", "ai_ops_kit.providers.orchestrator",
                       "ai_ops_kit.providers.cost_account", "ai_ops_kit.providers.cost_method",
                       "ai_ops_kit.providers.codex_native", "ai_ops_kit.providers.codex_transport",
-                      "ai_ops_kit.providers.codex_native_hook")
+                      "ai_ops_kit.providers.codex_native_hook", "ai_ops_kit.engops.session_guardrails",
+                      "ai_ops_kit.engops.delegation_advisor", "ai_ops_kit.engops.session_telemetry")
 
 
 def _mypy(tmp_path, source):
@@ -299,6 +310,11 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('codex_denied("tools are forbidden")', 'codex_denied(1)', '[arg-type]'),
     ('{"refreshToken": False})', '["refreshToken"])', '[arg-type]'),
     ('def codex_reply(rpc: CodexRPC) -> dict[str, Any]:', 'def codex_reply(rpc: CodexRPC) -> str:', '[return-value]'),
+    ('next_task="next")', 'next_task=1)', '[arg-type]'),
+    ('guard_errors: list[str]', 'guard_errors: str', '[assignment]'),
+    ('{"compare_files": 6})', '["compare_files"])', '[arg-type]'),
+    ('delegation: list[dict[str, Any]]', 'delegation: dict[str, Any]', '[assignment]'),
+    ('context_current=1000)', 'context_current="1000")', '[arg-type]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),

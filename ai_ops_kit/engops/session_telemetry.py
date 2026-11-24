@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Any
 
@@ -36,7 +37,7 @@ from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import usage_ledger  # noqa: E402
 
 
-def _context_estimate(records):
+def _context_estimate(records: Sequence[Mapping[str, Any]]) -> tuple[int | None, int | None]:
     """context ≈ вход последнего вызова (модель читает весь контекст как input); peak = max входа.
     Оценка, не измерение — помечается estimated. Нет данных -> None (unavailable)."""
     ins = [int(r.get("input_tokens") or 0) for r in records
@@ -46,7 +47,8 @@ def _context_estimate(records):
     return ins[-1], max(ins)
 
 
-def _read_runtime_session(child_root, session_id):
+def _read_runtime_session(child_root: str | os.PathLike[str],
+                          session_id: str | None) -> dict[str, Any]:
     """Измеренный расход живой сессии или None. Провайдер opt-in: нет транскрипта — нет чисел.
 
     Каталог репозитория передаётся ОБЯЗАТЕЛЬНО: без него провайдер не знает, какая сессия наша, а
@@ -54,7 +56,8 @@ def _read_runtime_session(child_root, session_id):
     """
     try:
         from ai_ops_kit.engops import session_telemetry_provider as _p
-        data = _p.read_session_metadata(session_id=session_id, project_dir=str(child_root))
+        data: dict[str, Any] | None = _p.read_session_metadata(session_id=session_id,
+                                                               project_dir=str(child_root))
         # «Не нашли» обязано отличаться от «сессия не идёт»: причина называется словами.
         return data or {"unavailable_reason": _p.lookup_reason(session_id, str(child_root))}
     # Причина подавления (срез ратчета, 2026-08-12): провайдер телеметрии — OPT-IN, его отсутствие
@@ -71,8 +74,9 @@ def snapshot(child_root: str | os.PathLike[str], workitem_id: str | None = None,
     Контекст: `/context` рантайма -> measured; транскрипт живой сессии -> measured;
     ledger -> estimated; ничего -> unavailable (None, НЕ 0).
     """
-    records = (usage_ledger.load_task(child_root, workitem_id) if workitem_id
-               else usage_ledger.load_product(child_root))
+    ledger_root = Path(child_root)  # загрузчики ledger и так строят Path(child_root)
+    records = (usage_ledger.load_task(ledger_root, workitem_id) if workitem_id
+               else usage_ledger.load_product(ledger_root))
     agg = usage_ledger.aggregate(records)
     ctx_cur_est, ctx_peak_est = _context_estimate(records)
 
@@ -92,7 +96,7 @@ def snapshot(child_root: str | os.PathLike[str], workitem_id: str | None = None,
         ctx_cur, ctx_peak, ctx_status = None, None, "unavailable"
         ctx_source = None
 
-    wids = sorted({r.get("workitem_id") for r in records if r.get("workitem_id")})
+    wids: list[Any] = sorted({r["workitem_id"] for r in records if r.get("workitem_id")})
     started_at = rt.get("started_at")
     cache_measured = rt.get("cache_status") == "measured"
 
@@ -135,9 +139,9 @@ def snapshot(child_root: str | os.PathLike[str], workitem_id: str | None = None,
     }
 
 
-def check(s):
+def check(s: object) -> list[str]:
     """Валидация формы + ЧЕСТНОСТИ: unknown НЕ как 0 (cache/context при unavailable = None)."""
-    e = []
+    e: list[str] = []
     if not isinstance(s, dict) or s.get("kind") != "SessionTelemetry":
         return ["kind должен быть SessionTelemetry"]
     if s.get("context_status") == "unavailable" and s.get("context_current") not in (None,):
@@ -154,8 +158,8 @@ def check(s):
     return e
 
 
-def _fmt(s):
-    def tok(n):
+def _fmt(s: Mapping[str, Any]) -> str:
+    def tok(n: int | float | None) -> str:
         return "н/д" if n is None else (f"{n/1000:.0f}k" if n >= 1000 else str(n))
     L = [f"=== Session Telemetry — {s['repository']} / session {s['session_id']} ==="]
     ctx = s["context_current"]
@@ -176,9 +180,12 @@ def _fmt(s):
     return "\n".join(L)
 
 
-def main(argv):
-    wid = sid = ctx = None
-    args, it = [], iter(argv)
+def main(argv: Sequence[str]) -> int:
+    wid: str | None = None
+    sid: str | None = None
+    ctx: int | None = None
+    args: list[str] = []
+    it = iter(argv)
     for a in it:
         if a == "--workitem":
             wid = next(it, None)
