@@ -153,8 +153,9 @@ time.sleep(60)
     sessions.git(project, "commit", "-qm", "silent runtime fixture")
     original = sessions.begin(project, "claude-code", "silent", "Проверь документ", "event")
     started = time.monotonic()
-    task = sessions.execute(project, "claude-code", "silent", {}, timeout=1)
-    assert time.monotonic() - started < 5
+    # timeout покрывает и запуск провайдера с потомком под параллельной нагрузкой (#1579).
+    task = sessions.execute(project, "claude-code", "silent", {}, timeout=4)
+    assert time.monotonic() - started < 10
     assert task["status"] == "blocked" and "исход неизвестен" in task["blocker"]
     directory = sessions.session_dir(project, "claude-code", "silent")
     assert (directory / "process.stdout.log").read_text() == "provider entered\n"

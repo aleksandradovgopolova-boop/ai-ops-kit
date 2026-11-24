@@ -45,12 +45,16 @@ def launch(root, tmp_path, request, target=None, *, journal=False, seconds=0.4, 
     fifo, marker = tmp_path / "blocked-fifo", tmp_path / "entered-read"
     os.mkfifo(fifo)
     code = f"""
-import os, sys, json
+import os, signal, sys, json
 from pathlib import Path
 from ai_ops_kit.cli import project_session as cli
 from ai_ops_kit.lifecycle import project_session as sessions
-sessions.HOOK_READ_SECONDS = {seconds!r}
+# С целевым чтением бюджет отсчитывается от блокировки (см. blocked): предварительные
+# чтения под параллельной нагрузкой не должны съедать его до проверяемой точки (#1579).
+sessions.HOOK_READ_SECONDS = {seconds if target is None else max(seconds, 10)!r}
 def blocked():
+    assert signal.getitimer(signal.ITIMER_REAL)[0] > 0, "чтение должно идти под бюджетом hook"
+    signal.setitimer(signal.ITIMER_REAL, {seconds!r})
     Path({str(marker)!r}).write_text(str(os.getpid()))
     fd = os.open({str(fifo)!r}, os.O_RDWR)
     try:
@@ -137,7 +141,7 @@ def test_cancel_during_actual_read_preserves_claim_and_unlocks(project, prepared
     process, marker = launch(project, tmp_path, payload(project, "UserPromptSubmit"),
         project / next(iter(prepared["execution"]["files"])), seconds=10)
     try:
-        deadline = time.monotonic() + 4
+        deadline = time.monotonic() + 30  # потолок только от зависания: ждём событие
         while not marker.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         assert marker.exists()
@@ -181,12 +185,14 @@ def test_read_timer_and_cancel_handler_are_disarmed_before_mutation(project, mon
 
 def test_expired_read_budget_does_not_interrupt_started_write_or_read_after_it(project, monkeypatch):
     actual, committed = sessions.write, []
-    monkeypatch.setattr(sessions, "HOOK_READ_SECONDS", 0.5)
+    monkeypatch.setattr(sessions, "HOOK_READ_SECONDS", 3)
     def write(path, data):
         assert signal.getitimer(signal.ITIMER_REAL) == (0, 0)
         result = actual(path, data)
         if not committed:
-            time.sleep(0.6)  # истечение бюджета в durable-фазе не является read timeout
+            # Бюджет истекает ровно в durable-фазе, а не раньше — на предварительных
+            # чтениях под параллельной нагрузкой (#1579). Это не read timeout.
+            time.sleep(max(0.0, sessions._read_deadline.get() - time.monotonic()) + 0.1)
         committed.append(path)
         return result
     monkeypatch.setattr(sessions, "write", write)
@@ -274,7 +280,7 @@ sessions.subprocess.Popen = spawn
     process, _ = launch(project, tmp_path, payload(project, "SessionStart"),
                          seconds=0.5 if sig is None else 10, extra=extra)
     try:
-        deadline = time.monotonic() + 4
+        deadline = time.monotonic() + 30  # потолок только от зависания: ждём событие
         while not pids.exists() and time.monotonic() < deadline:
             time.sleep(0.01)
         assert pids.exists(), "Git и потомок действительно должны запуститься"
