@@ -321,7 +321,9 @@ def _claim_entry(wid, branch, areas, session, status, machine, started_at, contr
 
 def _same_controller(entry, wid, root, machine, expected):
     session, attempt = expected
-    return (bool(root and session) and entry.get("status") == "in-progress"
+    owned_state = (entry.get("status") == "in-progress" or
+                   (entry.get("status") == "done" and entry.get("closed_by_controller") is True))
+    return (bool(root and session) and owned_state
             and entry.get("owner_session") == session and entry.get("machine") == machine
             and entry.get("worktree") == str(Path(root).resolve()) and entry.get("branch") == f"feature/{wid}"
             and "auto_admission" not in entry

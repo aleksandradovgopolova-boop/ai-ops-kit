@@ -558,3 +558,28 @@ def test_legacy_controller_claim_must_match_report_generation(project, report_at
         assert aw.load(registry)["active"][0]["status"] == "done"
     else:
         assert registry.read_bytes() == before
+
+
+def test_same_controller_repairs_projection_after_canonical_close(project, monkeypatch):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    wid, owner, attempt = "session-repair", "session", "a" * 32
+    path = project / ".ai/runtime/active-work.yaml"
+    registry = aw.shared_registry_path(project)
+    assert aw.register(path, wid, f"feature/{wid}", ["docs"], owner, child_root=project,
+                       controller_attempt=attempt) == 0
+    finish = dict(child_root=project, expected_controller=(owner, attempt))
+    with monkeypatch.context() as chunk:
+        def interrupted(*args):
+            raise OSError("projection interrupted")
+        chunk.setattr(aw, "_project_claim", interrupted)
+        with pytest.raises(OSError, match="projection interrupted"):
+            aw.finish_cmd(path, wid, **finish)
+    assert aw.load(registry)["active"][0]["status"] == "done"
+    assert aw.load(path)["active"][0]["status"] == "in-progress"
+    assert aw.finish_cmd(path, wid, child_root=project, expected_controller=(owner, "b" * 32)) == 1
+    assert aw.finish_cmd(path, wid, **finish) == 0
+    assert aw.load(registry)["active"] == aw.load(path)["active"]
+    assert not list(aw.copies_claims_dir(project).glob("*.yaml"))
+    assert aw.finish_cmd(path, wid, child_root=project) == 0
+    assert aw.finish_cmd(path, wid, **finish) == 1  # отдельное операторское закрытие

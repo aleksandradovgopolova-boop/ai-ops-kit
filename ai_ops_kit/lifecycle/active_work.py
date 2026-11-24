@@ -557,6 +557,10 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
         for w in data["active"]:
             if w.get("id") == wid:
                 w["status"] = status
+                if expected_controller is not None and status == "done":
+                    w["closed_by_controller"] = True
+                else:
+                    w.pop("closed_by_controller", None)
                 if reason:
                     # #137: причина ДАТИРУЕТСЯ. Без даты «код не написан — правок 0» читается как
                     # утверждение о настоящем, хотя относится к одному давнему прогону.
