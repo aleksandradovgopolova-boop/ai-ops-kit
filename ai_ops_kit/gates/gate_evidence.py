@@ -12,9 +12,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+from collections.abc import Iterable, Mapping, Sized
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import yaml
 
@@ -31,10 +33,10 @@ _EVIDENCE_KEYS = {"status", "source", "provided", "checks", "evidence", "warning
 _EVIDENCE_SOURCE_KINDS = ("deterministic", "ai_judgment", "human")
 
 
-def validate_evidence(evidence) -> list:
+def validate_evidence(evidence: object) -> list[str]:
     """Мини-валидация формы evidence по schemas/gate-evidence.schema.json (stdlib, без jsonschema).
     Возвращает список ошибок (пустой = валидно)."""
-    errs = []
+    errs: list[str] = []
     if not isinstance(evidence, dict):
         return ["evidence: верхний уровень должен быть объектом {gate_id: {...}}"]
     for gid, e in evidence.items():
@@ -74,7 +76,7 @@ def load_evidence(path: str | Path) -> dict[str, Any]:
     if errs:
         raise SystemExit("evidence не соответствует schemas/gate-evidence.schema.json:\n  - "
                          + "\n  - ".join(errs))
-    return data
+    return cast("dict[str, Any]", data)  # validate_evidence уже потребовал объект верхнего уровня
 
 
 # вердикт reviewer-стадии в ПРОЗЕ: строка вида "Recommendation: pass" / "status: passed" /
@@ -95,7 +97,7 @@ _VERDICT_FAIL = re.compile(
     r"(fail|failed|blocker|blocked|отклонено|провален)\b", re.I)
 
 
-def _last_prose_verdict(text):
+def _last_prose_verdict(text: str | None) -> str | None:
     """Последний вердикт-в-прозе -> 'pass'|'warn'|'fail'|None (берём ИТОГОВЫЙ, а не первый).
 
     Прежде фолбэк проверял FAIL-паттерн ПЕРВЫМ и возвращал 'fail' при любом его совпадении. На тексте,
@@ -105,7 +107,8 @@ def _last_prose_verdict(text):
     другим — та же дисциплина «последний блок побеждает», что у extract_reviewer_json для JSON."""
     if not text:
         return None
-    best_pos, best = -1, None
+    best_pos = -1
+    best: str | None = None
     for verdict, rx in (("pass", _VERDICT_PASS), ("warn", _VERDICT_WARN), ("fail", _VERDICT_FAIL)):
         for m in rx.finditer(text):
             if m.start() > best_pos:
@@ -158,7 +161,7 @@ def extract_reviewer_json(text: str | None) -> dict[str, Any] | None:
     return found
 
 
-def evidence_from_reviewer_result(gate: dict, rr: dict, source: str) -> dict:
+def evidence_from_reviewer_result(gate: Mapping[str, Any], rr: Mapping[str, Any], source: str) -> dict[str, Any]:
     """Структурный вердикт судьи -> evidence одного гейта (источник истины, не regex по прозе)."""
     if rr["status"] == "fail":
         return {"source": "ai_judgment", "provenance": "JUDGMENT", "status": "fail",
@@ -170,7 +173,7 @@ def evidence_from_reviewer_result(gate: dict, rr: dict, source: str) -> dict:
             "checks": rr.get("checks", []), "evidence": [source]}
 
 
-def evidence_from_markdown(gate: dict, text: str, source: str):
+def evidence_from_markdown(gate: Mapping[str, Any], text: str | None, source: str) -> dict[str, Any] | None:
     """Фолбэк для артефактов без структурного заключения: строка вердикта в прозе.
     None — вердикта в тексте нет (и тогда гейт остаётся НЕзакрытым, а не «зелёным по умолчанию»)."""
     verdict = _last_prose_verdict(text or "")
@@ -202,7 +205,7 @@ def evidence_from_markdown(gate: dict, text: str, source: str):
 _REFUSAL_NEEDS_HUMAN = {"refused_by_model"}
 
 
-def evidence_from_judge_refusal(gate: dict, refusal: dict, source: str):
+def evidence_from_judge_refusal(gate: Mapping[str, Any], refusal: Mapping[str, Any], source: str) -> dict[str, Any]:
     """Отказ судьи -> evidence, которое НАЗЫВАЕТ причину, а не растворяется в «нет заключения».
 
     Статус повторяет то, что дал бы гейт без evidence (блокирующий -> fail, advisory -> warn):
@@ -213,7 +216,7 @@ def evidence_from_judge_refusal(gate: dict, refusal: dict, source: str):
     who = refusal.get("provider") or "провайдер"
     text = (f"заключение судьи не получено ({who}): {reason}"
             f"{'; ' + detail if detail else ''}")
-    ev = {"status": "fail" if gate.get("blocking") else "warn", "evidence": [source]}
+    ev: dict[str, Any] = {"status": "fail" if gate.get("blocking") else "warn", "evidence": [source]}
     if gate.get("blocking"):
         ev["blockers"] = [text]
     else:
@@ -223,8 +226,9 @@ def evidence_from_judge_refusal(gate: dict, refusal: dict, source: str):
     return ev
 
 
-def evidence_from_no_verdict(gate: dict, *, gate_id: str, stopped=None, reads=None,
-                             errors=None, refusal=None):
+def evidence_from_no_verdict(gate: Mapping[str, Any], *, gate_id: str, stopped: object = None,
+                             reads: Sized | int | None = None, errors: Iterable[str] | None = None,
+                             refusal: Mapping[str, Any] | None = None) -> dict[str, Any]:
     """Ревью-петля завершилась без разбираемого вердикта -> evidence, которое НАЗЫВАЕТ причину.
 
     Тот же принцип, что evidence_from_judge_refusal: гейт остаётся НЕзакрытым (blocking -> fail,
@@ -263,7 +267,8 @@ def evidence_from_no_verdict(gate: dict, *, gate_id: str, stopped=None, reads=No
     return ev
 
 
-def evidence_from_judge_output(gate: dict, text: str, source: str = "judge-output"):
+def evidence_from_judge_output(gate: Mapping[str, Any], text: str | None,
+                              source: str = "judge-output") -> dict[str, Any] | None:
     """Ответ судьи (сырой текст) -> evidence одного гейта. Тот же путь, что в бою:
     структурный reviewer-result имеет приоритет, проза — фолбэк, отсутствие вердикта -> None."""
     rr = extract_reviewer_json(text)
@@ -272,7 +277,7 @@ def evidence_from_judge_output(gate: dict, text: str, source: str = "judge-outpu
     return evidence_from_markdown(gate, text, source)
 
 
-def collect_evidence(workflow_id: str, run_dir) -> dict:
+def collect_evidence(workflow_id: str, run_dir: str | os.PathLike[str]) -> dict[str, Any]:
     """Собрать evidence из артефактов reviewer-стадий (orchestrator --collect-evidence).
     Для каждого гейта ищем ответственную стадию (gate.stage / gate.responsible_role),
     читаем её артефакт stage-<id>.md и извлекаем вердикт. Reviewer'ский pass = доказательство
@@ -281,7 +286,7 @@ def collect_evidence(workflow_id: str, run_dir) -> dict:
     wf = workflows.get(workflow_id, {})
     stages = wf.get("stages", [])
     run_dir = Path(run_dir)
-    ev = {}
+    ev: dict[str, Any] = {}
     for gid in wf.get("quality_gates", []) or []:
         g = gates.get(gid, {})
         stage_id = next((s.get("id") for s in stages
@@ -322,15 +327,19 @@ def collect_evidence(workflow_id: str, run_dir) -> dict:
     return ev
 
 
-def load_gates():
-    return yaml.safe_load((PKG / "quality" / "gates.yaml").read_text(encoding="utf-8")).get("gates", {})
+def load_gates() -> dict[str, Any]:
+    gates: dict[str, Any] = yaml.safe_load(
+        (PKG / "quality" / "gates.yaml").read_text(encoding="utf-8")).get("gates", {})
+    return gates
 
 
-def load_workflows():
-    return yaml.safe_load((PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8")).get("workflows", {})
+def load_workflows() -> dict[str, Any]:
+    workflows: dict[str, Any] = yaml.safe_load(
+        (PKG / "registry" / "workflows.yaml").read_text(encoding="utf-8")).get("workflows", {})
+    return workflows
 
 
-def risk_calibrated_config(root) -> "bool | None":
+def risk_calibrated_config(root: str | os.PathLike[str]) -> "bool | None":
     """Owner-флаг `gates.risk_calibrated_enforcement` из .ai-ops.yaml ДОЧЕРНЕГО репозитория (#543).
 
     None -> ключ не задан (флаг не инжектим -> остаётся дефолт OFF, поведение не меняется). Читает
@@ -351,7 +360,7 @@ def risk_calibrated_config(root) -> "bool | None":
     return None
 
 
-def override_effective(gate: dict, override) -> bool:
+def override_effective(gate: Mapping[str, Any], override: object) -> bool:
     """Снимает ли override блокировку гейта — с учётом ПОЛИТИКИ гейта (v2.16).
     Раньше любой override с by+reason обходил любой блокирующий гейт, игнорируя
     `bypass_policy: forbidden` — это ломало главную гарантию. Теперь:
@@ -367,7 +376,7 @@ def override_effective(gate: dict, override) -> bool:
     return bool(isinstance(op, dict) and op.get("allowed"))
 
 
-def _approval_required(gate: dict, signals: dict = None) -> bool:
+def _approval_required(gate: Mapping[str, Any], signals: Mapping[str, Any] | None = None) -> bool:
     """human_approval: True -> всегда; dict {required_when:[...]} -> только если условие активно
     в сигналах задачи (finding аудита: условный approval не должен блокировать безусловно).
     Токены условий сверяются с сигналами. v2.107 (finding аудита): единый набор алиасов —
@@ -388,7 +397,7 @@ def _approval_required(gate: dict, signals: dict = None) -> bool:
     return bool(ha)
 
 
-def classify(gate: dict, signals: dict = None) -> str:
+def classify(gate: Mapping[str, Any], signals: Mapping[str, Any] | None = None) -> str:
     """Способ проверки гейта: human-approval | deterministic | ai-review | writer-check.
     Условный human_approval становится human-approval ТОЛЬКО когда условие активно (signals)."""
     if _approval_required(gate, signals):
@@ -439,7 +448,7 @@ EVIDENCE_SOURCE = {
 EVIDENCE_SOURCE_VALUES = tuple(dict.fromkeys(EVIDENCE_SOURCE.values()))
 
 
-def closed_by(gate: dict, signals: dict = None) -> str:
+def closed_by(gate: Mapping[str, Any], signals: Mapping[str, Any] | None = None) -> str:
     """Кто закрывает гейт СЕЙЧАС: validator | judge | writer | human.
 
     Выводится из той же классификации, по которой гейт исполняется, а не объявляется рядом:
@@ -449,7 +458,7 @@ def closed_by(gate: dict, signals: dict = None) -> str:
     return CLOSED_BY[classify(gate, signals)]
 
 
-def evidence_source(gate: dict, signals: dict = None) -> str:
+def evidence_source(gate: Mapping[str, Any], signals: Mapping[str, Any] | None = None) -> str:
     """Источник доказательства гейта: deterministic | ai_judgment | human (веха 4.2, #588).
 
     Выводится из `closed_by` — той же классификации, что ИСПОЛНЯЕТ гейт, а не из самозаявления:

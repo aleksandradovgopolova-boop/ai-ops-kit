@@ -13,7 +13,9 @@
 #   --tmpfs /tmp,/home     writable временные каталоги (npm/pip кэш) без записи на root-fs
 #   --memory/--cpus/--pids-limit   лимиты ресурсов (модель/сборка не съедят машину)
 #   --cap-drop=ALL + --security-opt=no-new-privileges   без привилегий/эскалации
-#   --user 10001 (non-root, зашит в образ)
+#   --user <uid:gid пользователя хоста>   non-root; запуск под root отвергается до клона (#1594).
+#     Не uid 10001 из образа: на Linux bind-клон принадлежит пользователю хоста, и чужой uid не
+#     мог в него писать (на macOS Docker Desktop это маскировалось подменой владельца).
 #   credential-less git (см. ниже): GIT_ASKPASS=/bin/false, GIT_TERMINAL_PROMPT=0, credential.helper=""
 #     -> `git push` из модельной петли НЕ имеет источника креды и падает быстро (не виснет в промпте),
 #        а не полагается на regex block_push. Это ПЕРВЫЙ (жёсткий) рубеж недоставки; regex — второй.
@@ -43,6 +45,15 @@ CPUS="${AI_OPS_CPUS:-2}"
 NET="${AI_OPS_NETWORK:-bridge}" # bridge (нужен egress к модели/реестрам) | none (всё локально)
 
 CHILD_ABS="$(cd "$CHILD" && pwd)"
+
+# Пользователь контейнера = пользователь хоста: клон и tmpfs HOME принадлежат ему, уборка клона
+# хостом работает. Root отвергается ДО любых побочных эффектов — гарантия non-root явная (#1594).
+HOST_UID="$(id -u)"
+HOST_GID="$(id -g)"
+if [ "$HOST_UID" = "0" ]; then
+  echo "ОШИБКА: run-sandboxed.sh не запускается под root — контейнер унаследовал бы uid 0." >&2
+  exit 2
+fi
 
 if [ ! -d "$CHILD_ABS/.git" ]; then
   echo "ОШИБКА: $CHILD_ABS — не git-репозиторий; worktree-only изоляция требует git." >&2
@@ -134,7 +145,9 @@ docker run --rm \
   --network "$NET" \
   --mount "type=bind,src=${CLONE},dst=/work" \
   --tmpfs /tmp:rw,size=1g \
-  --tmpfs /home/runner:rw,size=1g \
+  --tmpfs "/home/runner:rw,size=1g,uid=${HOST_UID},gid=${HOST_GID},mode=0700" \
+  --user "${HOST_UID}:${HOST_GID}" \
+  -e HOME=/home/runner \
   --workdir /work \
   --memory "$MEM" --cpus "$CPUS" --pids-limit 512 \
   --cap-drop ALL --security-opt no-new-privileges \

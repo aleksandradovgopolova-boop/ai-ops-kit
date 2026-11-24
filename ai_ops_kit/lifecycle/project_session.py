@@ -30,6 +30,7 @@ BEGIN = "<!-- AI-OPS-PROJECT-SESSION:BEGIN -->"
 END = "<!-- AI-OPS-PROJECT-SESSION:END -->"
 POLICY = "templates/runtime/team-session.md"
 RUNTIMES = {"claude-code": ".claude/settings.json", "codex": ".codex/hooks.json"}
+ARTIFACT_ROOTS = ("features", ".ai/runplan", "openspec/changes")
 EVENTS = ("SessionStart", "UserPromptSubmit", "Stop")
 HOOK_READ_SECONDS = 10  # внешний hook: 15 с; остаток — cleanup и ответ
 _read_deadline = contextvars.ContextVar("hook_read_deadline", default=None)
@@ -249,18 +250,18 @@ def session_lock(path):
 
 
 @session_migration_store.guarded
-def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=None):
+def begin(root, runtime, session, prompt, turn=None, *, continuation_validator=None, retry_check=None):
     root = project_root(root)
     if not isinstance(prompt, str) or not prompt.strip() or len(prompt.encode()) > 131072:
         raise ValueError("постановка пуста или превышает бюджет 128 KiB")
     directory = session_dir(root, runtime, session)
     with session_lock(directory / "requests"):
-        return _begin(root, runtime, session, prompt, turn, directory, continuation_validator)
+        return _begin(root, runtime, session, prompt, turn, directory, continuation_validator, retry_check=retry_check)
 
 
-def _begin(root, runtime, session, prompt, turn, directory, continuation_validator, *, input_origin=None):
+def _begin(root, runtime, session, prompt, turn, directory, continuation_validator, *, input_origin=None, retry_check=None):
     with reading():
-        task, fresh, receipt = _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator)
+        task, fresh, receipt = _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator, retry_check)
     if fresh and input_origin is not None:
         task["input_origin"] = input_origin
     if receipt:
@@ -275,7 +276,7 @@ def _begin(root, runtime, session, prompt, turn, directory, continuation_validat
     return task
 
 
-def _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator):
+def _begin_read(root, runtime, session, prompt, turn, directory, continuation_validator, retry_check):
     if turn is not None and (not isinstance(turn, str) or not turn.strip() or len(turn) > 1024):
         raise ValueError("неверный turn_id")
     # Идентичность события, не текст: одинаковые новые запросы остаются разными.
@@ -288,7 +289,8 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
             raise ValueError("повтор пользовательского ввода конфликтует или относится к прежней задаче")
         if task.get("status") == "accepted" or task.get("input_latest") != request or continuation_validator is None:
             raise ValueError("поздний повтор пользовательского ввода не является новым запросом")
-        continuation_validator(root, runtime, session, task)
+        if not (retry_check and retry_check(task, replay=True)):
+            continuation_validator(root, runtime, session, task)
         return task, False, None
     previous = directory / f"{request}.json"
     if previous.exists():
@@ -300,11 +302,13 @@ def _begin_read(root, runtime, session, prompt, turn, directory, continuation_va
     active = load(root, runtime, session, missing_ok=True)
     if active is not None:
         claim = directory / (active["request_id"] + ".execution-claim")
-        if active.get("status") != "accepted" and (claim.exists() or claim.is_symlink() or active.get("status") != "pending"
+        retry = retry_check and retry_check(active, replay=False)
+        if active.get("status") != "accepted" and (retry or claim.exists() or claim.is_symlink() or active.get("status") != "pending"
                 or any(key in active for key in ("execution", "intake", "preparation", "provider_preparation", "state_migration"))):
             if continuation_validator is None:
                 raise ValueError("предыдущая попытка уже закреплена; продолжи сохранённую задачу и проверь её исход")
-            continuation_validator(root, runtime, session, active)
+            if not retry:
+                continuation_validator(root, runtime, session, active)
             path = directory / (active["request_id"] + ".inputs") / (request + ".json")
             relative = str(path.relative_to(root))
             if git(root, "ls-files", "--", relative) or not git(root, "check-ignore", "--", relative):
@@ -450,8 +454,8 @@ def load(root, runtime, session, *, missing_ok=False):
 def artifact_inputs(root, fid, *, before_read=None):
     """Полный состав артефактов, включая ignored и отсутствие будущих файлов."""
     files = {}
-    for relative in (f"features/{fid}", f".ai/runplan/{fid}", f"openspec/changes/{fid}"):
-        for path in _read_path(root, relative, before_read).rglob("*"):
+    for prefix in ARTIFACT_ROOTS:
+        for path in _read_path(root, f"{prefix}/{fid}", before_read).rglob("*"):
             if before_read:
                 before_read(path)
             if path.is_symlink():

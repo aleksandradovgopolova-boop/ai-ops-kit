@@ -35,6 +35,8 @@ from ai_ops_kit.providers.orchestrator_providers import (
 )
 from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
 from pathlib import Path as _Path
+from ai_ops_kit.gates.gate_evidence import classify as gate_classify, evidence_from_judge_output
+from ai_ops_kit.providers.skill_context import context_response
 from ai_ops_kit.engops.delegation_advisor import advise as delegation_advise
 from ai_ops_kit.engops.session_guardrails import check as guard_check, recommend as session_recommend
 from ai_ops_kit.engops.session_telemetry import snapshot as session_snapshot
@@ -181,6 +183,10 @@ guard_rec: dict[str, Any] = session_recommend({"context_current": 1000}, next_ta
 guard_errors: list[str] = guard_check(guard_rec)
 delegation: list[dict[str, Any]] = delegation_advise({"compare_files": 6})
 telemetry: dict[str, Any] = session_snapshot(".", context_current=1000)
+# Помощники оркестратора: навыки и доказательства гейтов (#1586)
+gate_kind: str = gate_classify({"validator": "x"}, signals={"secret_boundary": True})
+judge_ev: dict[str, Any] | None = evidence_from_judge_output({"blocking": True}, "Verdict: pass")
+skill_output: tuple[dict[str, Any], dict[str, Any]] = context_response("codex", {"id": "s"}, ".")
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -205,7 +211,8 @@ PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.prov
                       "ai_ops_kit.providers.cost_account", "ai_ops_kit.providers.cost_method",
                       "ai_ops_kit.providers.codex_native", "ai_ops_kit.providers.codex_transport",
                       "ai_ops_kit.providers.codex_native_hook", "ai_ops_kit.engops.session_guardrails",
-                      "ai_ops_kit.engops.delegation_advisor", "ai_ops_kit.engops.session_telemetry")
+                      "ai_ops_kit.engops.delegation_advisor", "ai_ops_kit.engops.session_telemetry",
+                      "ai_ops_kit.providers.skill_context", "ai_ops_kit.gates.gate_evidence")
 
 
 def _mypy(tmp_path, source):
@@ -315,6 +322,11 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('{"compare_files": 6})', '["compare_files"])', '[arg-type]'),
     ('delegation: list[dict[str, Any]]', 'delegation: dict[str, Any]', '[assignment]'),
     ('context_current=1000)', 'context_current="1000")', '[arg-type]'),
+    ('gate_kind: str', 'gate_kind: int', '[assignment]'),
+    ('signals={"secret_boundary": True})', 'signals=["secret_boundary"])', '[arg-type]'),
+    ('judge_ev: dict[str, Any] | None', 'judge_ev: dict[str, Any]', '[assignment]'),
+    ('"Verdict: pass")', '42)', '[arg-type]'),
+    ('context_response("codex",', 'context_response(1,', '[arg-type]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),
