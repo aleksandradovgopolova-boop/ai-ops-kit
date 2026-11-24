@@ -783,3 +783,38 @@ def test_failed_implementation_read_identifies_request_without_publishing_respon
 def test_bad_commit_identifier_is_omitted_from_public_diagnostic():
     assert rp.snapshot_diagnostic({"code": "github_read_failed", "commit_sha": "private-response"}) == {
         "code": "github_read_failed"}
+
+
+@pytest.mark.parametrize("failure_on", [1, 2], ids=["initial", "revalidation"])
+def test_dropped_graphql_response_keeps_snapshot_incomplete(source_case, monkeypatch, failure_on):
+    from http.client import IncompleteRead
+    root, fixture_client = source_case
+    client = GitHubClient(fixture_client.repo, transport="rest")
+    calls = []
+    def closing_page(number, cursor):
+        assert cursor is None
+        calls.append(number)
+        if len(calls) == failure_on:
+            raise IncompleteRead(b"private-response")
+        return {"totalCount": 1, "nodes": [{"repository": {"nameWithOwner": client.repo}, "number": 9}],
+                "pageInfo": {"hasNextPage": False}}
+    monkeypatch.setattr(client, "_closing_page", closing_page)
+    monkeypatch.setattr(fixture_client, "closing_issue_numbers", client.closing_issue_numbers)
+    snapshot = src.capture(root, fixture_client)
+    plan = rp.build(root, snapshot)
+    assert calls == [10] * failure_on
+    assert not plan["plan_ready"] and not plan["release_ready"]
+    assert plan["unavailable_diagnostic"]["pr"] == 10
+    expected = "closing_issues_unavailable" if failure_on == 1 else "closing_issues_changed"
+    assert plan["unavailable_diagnostic"]["code"] == expected
+    assert "private-response" not in json.dumps([snapshot, plan])
+
+
+def test_read_page_normalizes_broken_http_status(monkeypatch):
+    from http.client import BadStatusLine
+    client = GitHubClient("owner/kit", transport="rest")
+    def fail(*args, **kwargs):
+        raise BadStatusLine("private-response")
+    monkeypatch.setattr(client, "_rest_get", fail)
+    with pytest.raises(GitHubError, match="^read page unavailable or invalid$"):
+        client.read_page("repos/owner/kit")
