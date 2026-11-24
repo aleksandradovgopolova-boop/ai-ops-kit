@@ -27,8 +27,10 @@ CLI:  session_telemetry.py <child_root> [--workitem WID] [--session SID] [--cont
 from __future__ import annotations
 
 import json
+import os
 import sys
 from pathlib import Path
+from typing import Any
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 from ai_ops_kit.shared import usage_ledger  # noqa: E402
@@ -62,7 +64,8 @@ def _read_runtime_session(child_root, session_id):
         return {"unavailable_reason": f"{type(exc).__name__}: {exc}"}
 
 
-def snapshot(child_root, workitem_id=None, session_id=None, context_current=None):
+def snapshot(child_root: str | os.PathLike[str], workitem_id: str | None = None,
+             session_id: str | None = None, context_current: int | None = None) -> dict[str, Any]:
     """Машинный снимок сессии.
 
     Контекст: `/context` рантайма -> measured; транскрипт живой сессии -> measured;

@@ -19,22 +19,26 @@ CLI:  cost_method.py <child_root> [--task-type T] [--risk R] [--context N] [--fi
 from __future__ import annotations
 
 import json
+import os
 import sys
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
+from typing import Any
 
 from ai_ops_kit.shared import _bootstrap  # noqa: E402
 FIX_LOOP_LIMIT = 2   # стартовый порог: после N безуспешных fix-итераций — стоп/эскалация, не жечь
 
 
-def advise(signals, snapshot=None, child_root=None):
+def advise(signals: Mapping[str, Any] | None, snapshot: Mapping[str, Any] | None = None,
+           child_root: str | os.PathLike[str] | None = None) -> list[dict[str, Any]]:
     """-> упорядоченный список рекомендаций {priority, category, advice}. Порядок = приоритеты владельца."""
     s = dict(signals or {})
-    out = []
+    out: list[dict[str, Any]] = []
 
-    def add(priority, category, advice):
+    def add(priority: int, category: str, advice: str) -> None:
         out.append({"priority": priority, "category": category, "advice": advice})
 
-    def skipped(priority, category, exc):
+    def skipped(priority: int, category: str, exc: BaseException) -> None:
         """Категорию совета оценить не удалось — СКАЗАТЬ это, а не выдать 4 совета вместо 5.
 
         Срез `providers` ратчета (2026-08-12). Три блока стояли под `except Exception: pass`, и при
@@ -125,8 +129,8 @@ def advise(signals, snapshot=None, child_root=None):
     return out
 
 
-def check(recs):
-    e = []
+def check(recs: Iterable[Mapping[str, Any]] | None) -> list[str]:
+    e: list[str] = []
     for r in recs or []:
         if r.get("priority") not in (1, 2, 3, 4, 5):
             e.append(f"priority вне 1..5: {r.get('priority')}")
@@ -135,7 +139,7 @@ def check(recs):
     return e
 
 
-def render(recs):
+def render(recs: Sequence[Mapping[str, Any]]) -> str:
     if not recs:
         return "cost-method: явных советов нет (задача простая, сессия здоровая)."
     L = ["=== Cost-aware Work Method (порядок приоритетов) ==="]
@@ -145,11 +149,12 @@ def render(recs):
     return "\n".join(L)
 
 
-def main(argv):
-    sig = {"mechanical": "--mechanical" in argv, "small_change": "--small-change" in argv,
+def main(argv: list[str]) -> int:
+    sig: dict[str, Any] = {"mechanical": "--mechanical" in argv, "small_change": "--small-change" in argv,
            "needs_repo_read": "--repo-read" in argv, "reusable_component": "--reuse" in argv}
-    ctx = None
-    args, it = [], iter(argv)
+    ctx: int | None = None
+    args: list[str] = []
+    it = iter(argv)
     for a in it:
         if a == "--task-type":
             sig["task_type"] = next(it, None)
@@ -164,7 +169,7 @@ def main(argv):
         elif not a.startswith("--"):
             args.append(a)
     root = args[0] if args else "."
-    snap = None
+    snap: dict[str, Any] | None = None
     try:
         from ai_ops_kit.engops import session_telemetry
         snap = session_telemetry.snapshot(root, context_current=ctx)

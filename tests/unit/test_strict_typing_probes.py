@@ -34,6 +34,13 @@ from ai_ops_kit.providers.orchestrator_providers import (
     ClaudeLookup, autoresolve_enabled, claude_lookup, print_provider_resolution, resolve_provider,
 )
 from ai_ops_kit.providers.orchestrator_providers import ProviderLimitError as FacadeLimitError
+from pathlib import Path as _Path
+from ai_ops_kit.providers.codex_native import command as codex_command, readiness as codex_readiness
+from ai_ops_kit.providers.codex_native_hook import denied as codex_denied
+from ai_ops_kit.providers.codex_transport import RPC as CodexRPC
+from ai_ops_kit.providers.cost_account import cost_per_successful_outcome, estimate_vs_actual, reconcile
+from ai_ops_kit.providers.cost_method import advise as cost_advise, render as cost_render
+from ai_ops_kit.providers.orchestrator import build_role_prompt, load_state, run_workflow
 from ai_ops_kit.providers.model_router import check_independence, escalation_decision, plan_run, writer_tier
 from ai_ops_kit.providers.provider_calls import Provider, for_contract, make_claude_cli_provider, make_provider
 from ai_ops_kit.providers.provider_writer_lock import _writer_serialization_lock as writer_lock, writer_lock_busy
@@ -143,6 +150,27 @@ route_plan: dict[str, Any] = plan_run({"roles": {}}, [], {}, signals={"task_type
 tier: dict[str, str] = writer_tier({"risk": "high"})
 independence: dict[str, Any] = check_independence(route_plan, escalations={"code_review": "kimi-k2"})
 next_step: dict[str, Any] = escalation_decision("code_review", 0, "reviewer_abstain", {"escalation_policy": {}})
+# Оркестратор workflow (#1412, седьмой срез)
+saved: dict[str, Any] | None = load_state(_Path("run"))
+role_prompt: str = build_role_prompt({"id": "s1"}, "planner", {}, "task", {"stage-a": "text"},
+                                     skill_bodies={})
+run_state, run_dir = run_workflow("quick", "task", _Path("."), provider=mock_fn, verbose=False,
+                                  budget={"max_model_calls": 3}, gate_ids=["g1"])
+run_dir_name: str = run_dir.name
+# Учёт стоимости (#1412, восьмой срез)
+account: dict[str, Any] = reconcile({"limits": {"max_model_calls": 3}}, {"calls": 2}, iterations=1)
+outcome: dict[str, Any] = cost_per_successful_outcome({"calls_cost": 0.4}, human_attention_cost_usd=5)
+delta: dict[str, Any] = estimate_vs_actual({"estimate_status": "measured", "cost_median": 1.0}, 1.2)
+advice: list[dict[str, Any]] = cost_advise({"task_type": "QUICK"}, child_root=".")
+advice_text: str = cost_render(advice)
+# Codex-адаптеры (#1412, девятый срез)
+codex_args: list[str] = codex_command("codex", ("docs",))
+codex_ready: dict[str, Any] = codex_readiness(".", timeout=5)
+codex_denial: dict[str, Any] = codex_denied("tools are forbidden")
+
+
+def codex_reply(rpc: CodexRPC) -> dict[str, Any]:
+    return rpc.call("account/read", {"refreshToken": False})
 gate: GateResultV2 = {"status": "pass"}
 
 class Executor:
@@ -163,7 +191,10 @@ PROVIDER_CONTRACTS = ("ai_ops_kit.providers.orchestrator_http", "ai_ops_kit.prov
                       "ai_ops_kit.providers.response_contract", "ai_ops_kit.providers.orchestrator_usage",
                       "ai_ops_kit.shared.lifecycle_store", "ai_ops_kit.providers.orchestrator_providers",
                       "ai_ops_kit.providers.provider_calls", "ai_ops_kit.providers.provider_writer_lock",
-                      "ai_ops_kit.providers.model_router")
+                      "ai_ops_kit.providers.model_router", "ai_ops_kit.providers.orchestrator",
+                      "ai_ops_kit.providers.cost_account", "ai_ops_kit.providers.cost_method",
+                      "ai_ops_kit.providers.codex_native", "ai_ops_kit.providers.codex_transport",
+                      "ai_ops_kit.providers.codex_native_hook")
 
 
 def _mypy(tmp_path, source):
@@ -251,6 +282,23 @@ def test_real_contract_consumer_passes_strict(tmp_path):
     ('tier: dict[str, str]', 'tier: dict[str, int]', '[assignment]'),
     ('escalations={"code_review": "kimi-k2"}', 'escalations={"code_review": 2}', '[dict-item]'),
     ('escalation_decision("code_review", 0,', 'escalation_decision("code_review", "0",', '[arg-type]'),
+    ('saved: dict[str, Any] | None', 'saved: dict[str, Any]', '[assignment]'),
+    ('{"stage-a": "text"}', '{"stage-a": 1}', '[dict-item]'),
+    ('provider=mock_fn, verbose=False', 'provider="mock", verbose=False', '[arg-type]'),
+    ('gate_ids=["g1"])', 'gate_ids="g1")', '[arg-type]'),
+    ('run_dir_name: str', 'run_dir_name: int', '[assignment]'),
+    ('iterations=1)', 'iterations="1")', '[arg-type]'),
+    ('account: dict[str, Any]', 'account: list[Any]', '[assignment]'),
+    ('{"calls_cost": 0.4}, human', '["calls_cost"], human', '[arg-type]'),
+    ('advice: list[dict[str, Any]]', 'advice: dict[str, Any]', '[assignment]'),
+    ('advice_text: str', 'advice_text: int', '[assignment]'),
+    ('child_root=".")', 'child_root=1)', '[arg-type]'),
+    ('codex_args: list[str]', 'codex_args: str', '[assignment]'),
+    ('("docs",))', '(1,))', '[arg-type]'),
+    ('timeout=5)', 'timeout="5")', '[arg-type]'),
+    ('codex_denied("tools are forbidden")', 'codex_denied(1)', '[arg-type]'),
+    ('{"refreshToken": False})', '["refreshToken"])', '[arg-type]'),
+    ('def codex_reply(rpc: CodexRPC) -> dict[str, Any]:', 'def codex_reply(rpc: CodexRPC) -> str:', '[return-value]'),
     ('ctx.rev_prop = lambda prompt: "Recommendation: pass"', 'ctx.rev_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.auth_prop = lambda prompt: "kind: requirements-artifact"', 'ctx.auth_prop = lambda prompt: 42', '[assignment]'),
     ('ctx.writer_prov = lambda prompt: "raw model response"', 'ctx.writer_prov = lambda prompt: {"raw": "text"}', '[assignment]'),

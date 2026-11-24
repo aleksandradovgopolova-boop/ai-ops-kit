@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -66,7 +67,7 @@ def validate_evidence(evidence) -> list:
     return errs
 
 
-def load_evidence(path):
+def load_evidence(path: str | Path) -> dict[str, Any]:
     """Загрузить evidence-файл и провалидировать по схеме; SystemExit при ошибках формы."""
     data = json.loads(Path(path).read_text(encoding="utf-8"))
     errs = validate_evidence(data)
@@ -112,7 +113,7 @@ def _last_prose_verdict(text):
     return best
 
 
-def extract_reviewer_json(text):
+def extract_reviewer_json(text: str | None) -> dict[str, Any] | None:
     """Достать структурное `reviewer-result` из ответа судьи. None — блока нет или он не тот.
 
     ЕДИНОЕ место разбора (v3.37): раньше эта эвристика жила в `orchestrator._write_reviewer_json`

@@ -192,6 +192,44 @@ Anthropic/OpenAI-совместимых вендоров и `claude -p`, `for_co
 все три значения, либо ни одного. `orchestrator` вместе с сигнатурами `skill_context` и
 `gate_executor` — следующий срез.
 
+### Седьмой срез: оркестратор workflow
+
+`providers.orchestrator` (стадии workflow, writer и judge, handoff, гейты, TaskState) переведён
+под strict. TaskState, записи реестров и гейт-отчёт — `JsonDict`; провайдер — `Provider`,
+бюджет — `Budget` или его словарь, как и прежде. Для этого сигнатуры получили помощники
+из нестрогих модулей: `skill_context.resolve_skills` / `runtime_skill_resolver` и
+`gates.gate_evidence.load_evidence` / `extract_reviewer_json`. Сами эти модули под strict
+не переводились.
+
+Поведение не менялось. Ответ writer-стадии без отказа приводится к `str` через `cast`:
+`_writer_stage` отдаёт ответ провайдера как есть, а тип провайдера — `str`.
+Остались codex-адаптеры (`codex_native`, `codex_transport`, `codex_native_hook`) и учёт
+стоимости (`cost_account`, `cost_method`).
+
+### Восьмой срез: учёт стоимости
+
+`providers.cost_account` (сверка бюджета с фактом, цена успешного изменения и исхода,
+оценка против факта) и `providers.cost_method` (советы по методу работы и их отрисовка)
+переведены под strict. Записи прогона и советы — `JsonDict`; входы, которые модули только
+читают, — `Mapping`. Сигнатуры получили помощники из нестрогих модулей
+`engops.session_guardrails`, `engops.delegation_advisor` и `engops.session_telemetry`;
+сами они под strict не переводились.
+
+Поведение не менялось. Остались codex-адаптеры (`codex_native`, `codex_transport`,
+`codex_native_hook`).
+
+### Девятый срез: codex-адаптеры
+
+`providers.codex_native` (подготовка и запуск native-сессии Codex, проверка readiness, ответ
+роли), `providers.codex_transport` (ограниченный stdio JSON-RPC) и `providers.codex_native_hook`
+(изолированный workspace и запрет инструментов) переведены под strict. Сообщения RPC —
+`JsonDict`; `RPC.call` возвращает словарь результата, `start` — `(RPC, thread, модель)`.
+
+Поведение не менялось. Потоки stdin/stdout процесса проходят через `_pipe`: при `PIPE`
+они всегда есть, а `None` означал бы несовместимый runtime — тогда `NativeError` вместо
+`AttributeError`. Токены вызова раскладываются в `_record_call` явно, а не через `*values`.
+Этим срезом список модулей #1412 исчерпан.
+
 ### Решение по Pydantic v2
 
 Решение этого среза: **не внедрять Pydantic**. Сравнение сделано с существующими
