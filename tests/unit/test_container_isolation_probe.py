@@ -21,14 +21,14 @@ from ai_ops_kit.validation import container_isolation_probe as probe
 PKG = Path(__file__).resolve().parents[2]
 GOOD = {
     "uid": 10001, "euid": 10001, "root_fs_options": ["ro", "relatime"], "opt_writable": False,
-    "work_writable": True, "work_is_clone": True, "host_child_visible": False, "interfaces": ["lo"],
+    "work_writable": True, "work_is_clone": True, "home_writable": True, "tmp_writable": True, "host_child_visible": False, "interfaces": ["lo"],
     "egress": False, "cap_eff": probe.NO_CAPABILITIES, "cap_bnd": probe.NO_CAPABILITIES,
     "no_new_privs": "1", **probe.EXPECTED_LIMITS, "foreign_secret_visible": False,
     "ssh_agent_forwarded": False, "git_askpass": "/bin/false", "git_credentials_file": False,
 }
 BREAKS = {
     "uid": 0, "euid": 0, "root_fs_options": ["rw"], "opt_writable": True, "work_writable": False,
-    "work_is_clone": False, "host_child_visible": True, "interfaces": ["eth0", "lo"], "egress": True,
+    "work_is_clone": False, "home_writable": False, "tmp_writable": False, "host_child_visible": True, "interfaces": ["eth0", "lo"], "egress": True,
     "cap_eff": "00000000a80425fb", "cap_bnd": "00000000a80425fb", "no_new_privs": "0",
     "pids_max": "max", "memory_max": "max", "cpu_max": "max 100000", "foreign_secret_visible": True,
     "ssh_agent_forwarded": True, "git_askpass": None, "git_credentials_file": True,
@@ -41,6 +41,10 @@ def test_complete_isolation_has_no_violations():
 
 def test_every_expectation_has_a_breaking_case():
     assert {field for field, _, _ in probe.EXPECTATIONS} == set(BREAKS) == set(GOOD)
+
+
+def test_unreadable_credentials_file_is_not_presence():
+    assert probe.evaluate({**GOOD, "git_credentials_file": "unreadable"}) == []
 
 
 @pytest.mark.parametrize("field", sorted(BREAKS))
@@ -109,7 +113,8 @@ def test_real_wrapper_runs_probe_offline_without_foreign_env_and_cleans_up(fake_
 def test_reported_violation_from_container_fails_the_check(fake_docker, monkeypatch):
     monkeypatch.setenv("FAKE_PROBE_FACTS", json.dumps({**GOOD, "egress": True}))
     errors = probe.probe_isolation(PKG, built, "base:tag", "probe:tag")
-    assert errors == ["при AI_OPS_NETWORK=none есть выход в сеть (egress=True)"]
+    assert errors[0] == "при AI_OPS_NETWORK=none есть выход в сеть (egress=True)"
+    assert len(errors) == 2 and errors[1].startswith("факты пробы: ") and '"egress": true' in errors[1]
 
 
 def test_wrapper_failure_is_reported_not_evaluated(fake_docker, monkeypatch):

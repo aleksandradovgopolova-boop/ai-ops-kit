@@ -62,6 +62,19 @@ def writable(directory):
     except OSError:
         return False
 
+def exists(path):
+    try:
+        return Path(path).exists()
+    except OSError:
+        return "unreadable"
+
+def owner_mode(path):
+    try:
+        st = os.stat(path)
+    except OSError as exc:
+        return "error:" + str(exc.errno)
+    return "%d:%o" % (st.st_uid, st.st_mode & 0o7777)
+
 def egress():
     sock = socket.socket()
     sock.settimeout(3)
@@ -77,6 +90,8 @@ host_child = sys.argv[2] if len(sys.argv) > 2 else ""
 facts = {
     "uid": os.getuid(), "euid": os.geteuid(), "root_fs_options": root_options(),
     "opt_writable": writable("/opt/ai-ops-kit"), "work_writable": writable("/work"),
+    "home_writable": writable(Path.home()), "tmp_writable": writable("/tmp"),
+    "home_owner_mode": owner_mode(Path.home()),
     "work_is_clone": Path("/work/.git").exists(),
     "host_child_visible": bool(host_child) and Path(host_child).exists(),
     "interfaces": sorted(os.listdir("/sys/class/net")), "egress": egress(),
@@ -86,7 +101,7 @@ facts = {
     "foreign_secret_visible": "AI_OPS_PROBE_FOREIGN_SECRET" in os.environ,
     "ssh_agent_forwarded": "SSH_AUTH_SOCK" in os.environ,
     "git_askpass": os.environ.get("GIT_ASKPASS"),
-    "git_credentials_file": (Path.home() / ".git-credentials").exists(),
+    "git_credentials_file": exists(Path.home() / ".git-credentials"),
 }
 print("ISOLATION-PROBE " + json.dumps(facts, sort_keys=True), flush=True)
 '''
@@ -100,6 +115,8 @@ EXPECTATIONS: tuple[Expectation, ...] = (
     ("opt_writable", False, "каталог кита в образе доступен на запись"),
     ("work_writable", True, "одноразовый клон /work недоступен на запись"),
     ("work_is_clone", True, "в /work не git-клон"),
+    ("home_writable", True, "домашний каталог (tmpfs) недоступен на запись — кэши npm/pip и git config не работают"),
+    ("tmp_writable", True, "/tmp (tmpfs) недоступен на запись"),
     ("host_child_visible", False, "исходный репозиторий хоста виден в контейнере"),
     ("interfaces", ["lo"], "при AI_OPS_NETWORK=none есть сетевые интерфейсы кроме lo"),
     ("egress", False, "при AI_OPS_NETWORK=none есть выход в сеть"),
@@ -110,7 +127,8 @@ EXPECTATIONS: tuple[Expectation, ...] = (
     ("foreign_secret_visible", False, "переменная окружения вне allowlist попала в контейнер"),
     ("ssh_agent_forwarded", False, "SSH-агент хоста проброшен в контейнер"),
     ("git_askpass", "/bin/false", "git может запросить креды"),
-    ("git_credentials_file", False, "в контейнере есть ~/.git-credentials"),
+    # «unreadable» — git его тоже не прочтёт; сама недоступность HOME — отдельное нарушение выше.
+    ("git_credentials_file", lambda v: v in (False, "unreadable"), "в контейнере есть ~/.git-credentials"),
 )
 
 
@@ -190,6 +208,8 @@ def probe_isolation(root: Path, docker: Callable[..., Any], base_tag: str, tag: 
             return [f"обёртка с пробой не отчиталась (rc={result.returncode}): "
                     f"{(result.stderr or result.stdout).strip()[-800:]}"]
         errors = evaluate(facts)
+        if errors:  # факты целиком — чтобы причину было видно в логе CI, а не угадывать
+            errors.append("факты пробы: " + json.dumps(facts, ensure_ascii=False, sort_keys=True))
         if _git(child, "rev-parse", "HEAD") != head_before or _git(child, "status", "--porcelain"):
             errors.append("исходный репозиторий изменился после запуска")
         if any(workdir.iterdir()):
