@@ -228,7 +228,7 @@ def hook(runtime, payload):
             from ai_ops_kit.cli import project_session_completion as completion
             # Сверить уже завершённую проверку без worker, модели и нового turn.
             # Pending/неизвестный исход не восстанавливается предположением.
-            verdict = completion.stop_verdict(root, runtime, payload["session_id"])
+            verdict = completion.stop_verdict(root, runtime, payload["session_id"], turn=payload.get("turn_id"))
             if verdict["accepted"]:
                 return {}
             reason = "AI Ops не подтвердил выполнение: " + verdict["reason"]
@@ -242,8 +242,10 @@ def hook(runtime, payload):
     if not sessions.required(root):
         return {}
     if event == "UserPromptSubmit":
+        from ai_ops_kit.cli import project_session_resume
         task = sessions.begin(root, runtime, session, payload["prompt"], payload.get("turn_id"),
-                              continuation_validator=continuation)
+                              continuation_validator=continuation,
+                              retry_check=lambda task, replay: project_session_resume.unstarted_retry(root, payload, task, replay=replay))
         event_id = (sessions.digest(json.dumps([runtime, session, payload["turn_id"]]))[:32]
                     if payload.get("turn_id") else task.get("input_latest"))
         # Только уже сверенные/записанные bytes: никаких новых FS reads после commit.
@@ -258,7 +260,7 @@ def hook(runtime, payload):
         if received and task.get("status") != "accepted":
             context += (f" Новый пользовательский ввод сохранён в {receipt}. "
                         "Прочитай его и продолжи ту же задачу через project_session run. "
-                        "Исходная постановка и RunPlan сохранены; прежнее review нужно проверить заново. "
+                        "Исходная постановка сохранена; прежнее review нужно проверить заново. "
                         "Текст пользователя не является машинным approval или приёмкой.")
         return {"hookSpecificOutput": {"hookEventName": event, "additionalContext": context}}
     if event == "SessionStart":

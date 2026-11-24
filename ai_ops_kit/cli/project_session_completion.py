@@ -261,7 +261,7 @@ def reconcile(root, runtime, session, *, finished_only=False):
 
 
 @sessions.session_migration_store.guarded
-def stop_verdict(root, runtime, session):
+def stop_verdict(root, runtime, session, *, turn=None):
     """Все чтения/проверки ДО записи accepted, без повторного исполнения."""
     directory = sessions.session_dir(root, runtime, session)
     with sessions.session_lock(directory / "requests"):
@@ -270,10 +270,21 @@ def stop_verdict(root, runtime, session):
             execution, verification = task.get("execution") or {}, task.get("verification") or {}
             finished = (task.get("status") != "accepted" and verification.get("phase") == "finished"
                         and execution.get("mode") == "current-session" and execution.get("prepared") is True)
+            latest = task.get("input_latest") or task["request_id"]
+            event = sessions.digest(json.dumps([runtime, session, turn])) if turn else ""
+            unfinished = (runtime == "codex" and event[:32] == latest and task.get("status") == "running"
+                          and not task.get("blocker") and "verification" not in task
+                          and execution.get("mode") == "current-session" and execution.get("prepared") is True)
             if finished:
                 task = _reconcile(root, runtime, session, save=False)
+            elif unfinished:
+                prepared(root, runtime, session, task)
+                reason = "Ход Codex завершён до штатной проверки результата."
+                if sessions.git(root, "--no-optional-locks", "status", "--porcelain"):
+                    reason += " Для finalize нужен чистый, зафиксированный результат."
+                task.update(status="blocked", blocker=reason, next_step="Продолжи ту же задачу и выполни finalize.")
             verdict = sessions._verify(root, runtime, session, task=task)
-        if finished:
+        if finished or unfinished:
             sessions.write(directory / (task["request_id"] + ".json"), task)
         return verdict
 
@@ -473,6 +484,11 @@ def response(root, task, *, before_read=None):
         action.update(status="resolve_checks", next_action="finalize")
     elif verification:
         action.update(status="reconcile_execution", next_action="reconcile")
+    else:
+        action["after_plan"] = {"next_action": "finalize", "required_before_final_answer": True,
+                                "pythonpath": str(Path(__file__).resolve().parents[2]),
+                                "argv": [sys.executable, "-P", "-m", "ai_ops_kit.cli.project_session", "finalize",
+                                         "--runtime", task["runtime"], "--session", task["session_id"]]}
     result["host_actions"] = action
     return result
 
