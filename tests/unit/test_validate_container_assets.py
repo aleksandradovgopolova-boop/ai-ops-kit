@@ -32,8 +32,10 @@ GOOD_DOCKERFILE = (
 )
 
 GOOD_WRAPPER = (
+    'if [ "$HOST_UID" = "0" ]; then exit 2; fi\n'
     'git clone --no-hardlinks --local "$CHILD_ABS" "$CLONE"\n'
     "docker run --read-only --tmpfs /tmp --memory 2g --cpus 2 --pids-limit 512 "
+    '--tmpfs "/home/runner:rw,uid=${HOST_UID},gid=${HOST_GID}" --user "${HOST_UID}:${HOST_GID}" '
     "-e GIT_ASKPASS=/bin/false -e GIT_TERMINAL_PROMPT=0 "
     "-e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=credential.helper -e GIT_CONFIG_VALUE_0= "
     '--cap-drop ALL --security-opt no-new-privileges --mount type=bind,src=${CLONE},dst=/work img\n'
