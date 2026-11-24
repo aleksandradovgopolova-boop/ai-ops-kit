@@ -583,3 +583,55 @@ def test_same_controller_repairs_projection_after_canonical_close(project, monke
     assert not list(aw.copies_claims_dir(project).glob("*.yaml"))
     assert aw.finish_cmd(path, wid, child_root=project) == 0
     assert aw.finish_cmd(path, wid, **finish) == 1  # отдельное операторское закрытие
+
+
+@pytest.mark.parametrize("linked", [False, True])
+def test_relative_operator_takeover_prevents_old_controller_finish(project, monkeypatch, linked):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    relative = Path(".ai/runtime/active-work.yaml")
+    owner_path = project / relative
+    wid, attempt = "session-relative", "c" * 32
+    assert aw.register(owner_path, wid, f"feature/{wid}", ["code"], "first", child_root=project,
+                       controller_attempt=attempt) == 0
+    operator = project
+    if linked:
+        operator = project.parent / "operator"
+        subprocess.run(["git", "-C", str(project), "worktree", "add", "--detach", str(operator), "HEAD"],
+                       check=True, capture_output=True)
+    monkeypatch.chdir(operator)
+    assert aw.main(["register", str(relative), wid, "--branch", f"feature/{wid}", "--areas", "code",
+                    "--session", "second", "--takeover", "--takeover-reason", "handover"]) == 0
+    registry = aw.shared_registry_path(project)
+    assert aw.load(registry)["active"][0]["owner_session"] == "second"
+    copies = aw.copies_claims_dir(project)
+    before = {p: p.read_bytes() for p in (registry, owner_path, operator / relative, *copies.glob("*.yaml"))}
+    assert aw.finish_cmd(owner_path, wid, child_root=project, expected_controller=("first", attempt)) == 1
+    assert {p: p.read_bytes() for p in before} == before
+
+
+@pytest.mark.parametrize("divergence", ["legacy", "copy", "generation", "published", "corrupt"])
+def test_historical_split_claim_refuses_every_write(project, divergence):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    wid, attempt = "session-split", "a" * 32
+    legacy = project / ".ai/runtime/active-work.yaml"
+    assert aw.register(legacy, wid, f"feature/{wid}", ["code"], "first", published=True, child_root=project,
+                       controller_attempt=attempt) == 0
+    registry = aw.shared_registry_path(project)
+    copy, = aw.copies_claims_dir(project).glob("*.yaml")
+    public, = (project / aw.CLAIMS_DIR_REL).glob("*.yaml")
+    path = {"legacy": legacy, "copy": copy, "generation": copy, "published": public, "corrupt": copy}[divergence]
+    data = yaml.safe_load(path.read_text())
+    if divergence == "corrupt":
+        path.write_text("broken: [")
+    else:
+        record = data["active"][0] if path == legacy else data
+        if divergence == "generation":
+            record["controller_attempt"] = "b" * 32
+        else:
+            record["owner_session"] = "second"
+        path.write_text(yaml.safe_dump(data))
+    before = {p: p.read_bytes() for p in (registry, legacy, copy, public)}
+    assert aw.finish_cmd(legacy, wid, child_root=project, expected_controller=("first", attempt)) == 1
+    assert {p: p.read_bytes() for p in before} == before

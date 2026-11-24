@@ -51,7 +51,7 @@ from ai_ops_kit.lifecycle.work_claims import (          # noqa: F401 — ре-э
     _claim_slug, publish_claim, unpublish_claim, load_published_claims,
     _git_common_dir, copies_claims_dir, working_copies, copies_reach_note,
     _copies_line, claim_to_copies, withdraw_claim_from_copies, load_copy_claims,
-    _claim_entry, _same_controller, team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin, _budget_binding,
+    _claim_entry, _controller_projections_match, team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin, _budget_binding,
 )
 from ai_ops_kit.lifecycle.work_reconcile import (        # noqa: F401 — ре-экспорт для совместимости
     _machine, _now_iso, _CLAIM_STALE_HOURS, _claim_age_hours, _pid_is_dead,
@@ -550,7 +550,7 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
                 return 1
         if expected_controller is not None:
             entries = [w for w in data["active"] if w.get("id") == wid]
-            if len(entries) != 1 or not _same_controller(entries[0], wid, child_root, _machine(), expected_controller):
+            if len(entries) != 1 or not _controller_projections_match(entries[0], legacy, child_root, _machine(), expected_controller):
                 logging.warning("ОТКАЗ: владелец или попытка регистрации изменились; заявка сохранена.")
                 return 1
         found = False

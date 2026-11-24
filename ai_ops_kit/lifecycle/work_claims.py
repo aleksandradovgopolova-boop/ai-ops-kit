@@ -17,6 +17,7 @@ from pathlib import Path
 
 import yaml
 import contextlib
+import stat
 
 from ai_ops_kit.shared import lifecycle_store as _ls
 
@@ -113,10 +114,9 @@ def load_published_claims(child_root, exclude_machine: str | None = None) -> lis
 
 COPIES_CLAIMS_REL = Path("ai-ops") / "claims"
 
-# На одно поле больше: `worktree` — в какой копии держатель. Без него отказ на одной машине звучит
-# «держит сессия X на машине Y», где Y — та же машина. В `PUBLISHED_FIELDS` его нет: абсолютный путь
-# другим машинам не уезжает.
-COPY_CLAIM_FIELDS = PUBLISHED_FIELDS + ("worktree",)
+# Только внутри одной машины сохраняем рабочую копию и поколение её контроллера.
+# Эти поля различают локальных владельцев при завершении и не публикуются через git.
+COPY_CLAIM_FIELDS = PUBLISHED_FIELDS + ("worktree", "controller_attempt")
 
 
 def _git_common_dir(start=None):
@@ -330,6 +330,44 @@ def _same_controller(entry, wid, root, machine, expected):
             and (entry.get("controller_attempt") == attempt if attempt is not None else "controller_attempt" not in entry))
 
 
+def _controller_projections_match(entry, legacy, root, machine, expected):
+    """Под общей блокировкой сверить каждую проекцию до её замены или удаления."""
+    wid = entry["id"]
+    if not _same_controller(entry, wid, root, machine, expected):
+        return False
+    try:
+        if legacy is not None:
+            if legacy.is_symlink() or (legacy.exists() and not legacy.is_file()):
+                return False
+            active = load(legacy)["active"]
+            if not isinstance(active, list):
+                return False
+            rows = [row for row in active if row["id"] == wid]
+            if rows and (len(rows) != 1 or not _same_controller(rows[0], wid, root, machine, expected)
+                         or rows[0].get("started_at") != entry.get("started_at")):
+                return False
+        copies = copies_claims_dir(root)
+        if copies is None:
+            return False
+        slug = _claim_slug(machine, wid)
+        for path, kind, fields in ((copies / slug, "copy-claim", COPY_CLAIM_FIELDS),
+                                   (Path(root) / CLAIMS_DIR_REL / slug, "published-claim", PUBLISHED_FIELDS)):
+            try:
+                mode = path.lstat().st_mode
+            except FileNotFoundError:
+                continue  # регистрация или завершение могли оставить неполную проекцию
+            if not stat.S_ISREG(mode):
+                return False
+            record = _ls.load_guarded(path, required_keys=PUBLISHED_FIELDS, kind=kind).get("data", {})
+            if record.get("status") != "in-progress":
+                return False
+            if any(record.get(k) != entry.get(k) for k in fields if k != "status"):
+                return False
+    except (ActiveWorkCorrupt, OSError, UnicodeError, yaml.YAMLError, KeyError, TypeError):
+        return False
+    return True
+
+
 def _require_attempt(data, wid, admission, root):
     """Сверить generation; session identity сама по себе не различает два запуска."""
     entries = [w for w in data["active"] if w.get("id") == wid]
@@ -394,7 +432,7 @@ def _locked(path: Path):
 
 
 def _canonical_path(path, root):
-    if root and Path(path) == Path(root) / ".ai/runtime/active-work.yaml" and _git_common_dir(root):
+    if root and Path(path).absolute() == Path(root).absolute() / ".ai/runtime/active-work.yaml" and _git_common_dir(root):
         return shared_registry_path(root)
     return Path(path)
 
