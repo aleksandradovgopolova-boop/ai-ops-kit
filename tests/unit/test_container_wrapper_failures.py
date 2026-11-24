@@ -146,7 +146,7 @@ def harness(tmp_path):
     bindir.mkdir()
     # An allowlist PATH guarantees the host's real Docker is never a fallback, even in
     # the command-not-found test. Absolute links still allow Git's trusted helpers.
-    for name in ("bash", "git", "dirname", "mktemp", "rm", "awk"):
+    for name in ("bash", "git", "dirname", "mktemp", "rm", "awk", "id"):
         executable = shutil.which(name)
         if executable is None:
             pytest.skip(f"required executable unavailable: {name}")
@@ -225,6 +225,20 @@ def test_wrapper_rejects_invalid_child_before_docker(harness, target):
     assert harness.child_state() == before
 
 
+def test_wrapper_refuses_root_before_clone_or_docker(harness):
+    before = harness.child_state()
+    fake_id = harness.bindir / "id"
+    fake_id.unlink()
+    fake_id.write_text("#!/bin/sh\necho 0\n")
+    fake_id.chmod(0o755)
+    result = harness.run()
+    assert result.returncode == 2
+    assert "под root" in result.stderr
+    assert not harness.record.exists()
+    assert list(harness.workbase.iterdir()) == []
+    assert harness.child_state() == before
+
+
 @pytest.mark.parametrize("count", [0, 1, 2])
 def test_delivery_requires_all_arguments(harness, count):
     before = harness.child_state()
@@ -267,6 +281,11 @@ def test_spaces_reach_docker_as_single_arguments_and_only_clone_is_writable(harn
     assert clone.parent.parent == harness.workbase
     assert clone != harness.child
     assert "--read-only" in args
+    # #1594: под пользователем хоста — владельцем клона; HOME (tmpfs) тоже его.
+    host = f"{os.getuid()}:{os.getgid()}"
+    assert args[args.index("--user") + 1] == host
+    assert f"/home/runner:rw,size=1g,uid={os.getuid()},gid={os.getgid()},mode=0700" in args
+    assert "HOME=/home/runner" in args
     assert "GIT_TERMINAL_PROMPT=0" in args
     assert ("OPENAI_COMPATIBLE_BASE_URL" in args) == provider_configured
     assert "https://fixture.invalid/provider path" not in args

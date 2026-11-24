@@ -108,9 +108,9 @@ print("ISOLATION-PROBE " + json.dumps(facts, sort_keys=True), flush=True)
 
 # (поле, ожидание, что нарушено). Ожидание — значение или предикат над фактом.
 Expectation = tuple[str, Any, str]
+# uid/euid сверяются с пользователем хоста отдельно (identity_expectations): обёртка запускает
+# контейнер под ним, а root отвергает сама (#1594).
 EXPECTATIONS: tuple[Expectation, ...] = (
-    ("uid", 10001, "процесс не под непривилегированным uid 10001"),
-    ("euid", 10001, "эффективный uid не 10001"),
     ("root_fs_options", lambda v: isinstance(v, list) and "ro" in v, "корневая ФС не read-only"),
     ("opt_writable", False, "каталог кита в образе доступен на запись"),
     ("work_writable", True, "одноразовый клон /work недоступен на запись"),
@@ -132,10 +132,18 @@ EXPECTATIONS: tuple[Expectation, ...] = (
 )
 
 
-def evaluate(facts: Mapping[str, Any]) -> list[str]:
+def identity_expectations(host_uid: int) -> tuple[Expectation, ...]:
+    """Контейнер — под пользователем хоста и никогда не под root."""
+    def same(value: object) -> bool:
+        return value == host_uid and value != 0
+    return (("uid", same, f"процесс не под пользователем хоста {host_uid} или под root"),
+            ("euid", same, f"эффективный uid не {host_uid} или root"))
+
+
+def evaluate(facts: Mapping[str, Any], host_uid: int) -> list[str]:
     """Нарушения изоляции по фактам пробы; пустой список — все обещания обёртки выполнены."""
     errors = []
-    for field, expected, problem in EXPECTATIONS:
+    for field, expected, problem in (*identity_expectations(host_uid), *EXPECTATIONS):
         if field not in facts:
             errors.append(f"{field}: проба не сообщила факт")
             continue
@@ -207,7 +215,7 @@ def probe_isolation(root: Path, docker: Callable[..., Any], base_tag: str, tag: 
         if result.returncode != 0 or facts is None:
             return [f"обёртка с пробой не отчиталась (rc={result.returncode}): "
                     f"{(result.stderr or result.stdout).strip()[-800:]}"]
-        errors = evaluate(facts)
+        errors = evaluate(facts, os.getuid())
         if errors:  # факты целиком — чтобы причину было видно в логе CI, а не угадывать
             errors.append("факты пробы: " + json.dumps(facts, ensure_ascii=False, sort_keys=True))
         if _git(child, "rev-parse", "HEAD") != head_before or _git(child, "status", "--porcelain"):

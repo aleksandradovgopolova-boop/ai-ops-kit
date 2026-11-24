@@ -19,8 +19,9 @@ import validate_container_assets as vca
 from ai_ops_kit.validation import container_isolation_probe as probe
 
 PKG = Path(__file__).resolve().parents[2]
+HOST = 1000  # пользователь хоста, под которым обёртка запускает контейнер (#1594)
 GOOD = {
-    "uid": 10001, "euid": 10001, "root_fs_options": ["ro", "relatime"], "opt_writable": False,
+    "uid": HOST, "euid": HOST, "root_fs_options": ["ro", "relatime"], "opt_writable": False,
     "work_writable": True, "work_is_clone": True, "home_writable": True, "tmp_writable": True, "host_child_visible": False, "interfaces": ["lo"],
     "egress": False, "cap_eff": probe.NO_CAPABILITIES, "cap_bnd": probe.NO_CAPABILITIES,
     "no_new_privs": "1", **probe.EXPECTED_LIMITS, "foreign_secret_visible": False,
@@ -35,27 +36,35 @@ BREAKS = {
 }
 
 
+ALL_FIELDS = {field for field, _, _ in (*probe.identity_expectations(HOST), *probe.EXPECTATIONS)}
+
+
 def test_complete_isolation_has_no_violations():
-    assert probe.evaluate(GOOD) == []
+    assert probe.evaluate(GOOD, HOST) == []
 
 
 def test_every_expectation_has_a_breaking_case():
-    assert {field for field, _, _ in probe.EXPECTATIONS} == set(BREAKS) == set(GOOD)
+    assert ALL_FIELDS == set(BREAKS) == set(GOOD)
 
 
 def test_unreadable_credentials_file_is_not_presence():
-    assert probe.evaluate({**GOOD, "git_credentials_file": "unreadable"}) == []
+    assert probe.evaluate({**GOOD, "git_credentials_file": "unreadable"}, HOST) == []
+
+
+def test_foreign_uid_or_root_is_a_violation_even_if_host_is_root():
+    assert len(probe.evaluate({**GOOD, "uid": 10001, "euid": 10001}, HOST)) == 2
+    assert len(probe.evaluate({**GOOD, "uid": 0, "euid": 0}, 0)) == 2
 
 
 @pytest.mark.parametrize("field", sorted(BREAKS))
 def test_each_broken_promise_is_reported(field):
-    errors = probe.evaluate({**GOOD, field: BREAKS[field]})
+    errors = probe.evaluate({**GOOD, field: BREAKS[field]}, HOST)
     assert len(errors) == 1 and f"{field}=" in errors[0]
 
 
 def test_missing_fact_is_a_violation_not_a_pass():
     facts = {k: v for k, v in GOOD.items() if k != "egress"}
-    assert probe.evaluate(facts) == ["egress: проба не сообщила факт"]
+    assert probe.evaluate(facts, HOST) == ["egress: проба не сообщила факт"]
 
 
 def test_parse_takes_last_probe_line_and_rejects_absent_or_malformed():
@@ -69,7 +78,7 @@ def test_probe_source_is_stdlib_python_that_reports_every_expected_fact():
     code = compile(probe.PROBE_SOURCE, "isolation-probe", "exec")
     assert "ai_ops_kit" not in probe.PROBE_SOURCE  # проба не зависит от проверяемого кита
     names = set(code.co_consts) | {c for const in code.co_consts if isinstance(const, tuple) for c in const}
-    assert {field for field, _, _ in probe.EXPECTATIONS} <= names
+    assert ALL_FIELDS <= names
 
 
 FAKE_DOCKER = r'''
@@ -92,7 +101,7 @@ def fake_docker(tmp_path, monkeypatch):
     log = tmp_path / "docker.log"
     monkeypatch.setenv("PATH", f"{bindir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("FAKE_DOCKER_LOG", str(log))
-    monkeypatch.setenv("FAKE_PROBE_FACTS", json.dumps(GOOD))
+    monkeypatch.setenv("FAKE_PROBE_FACTS", json.dumps({**GOOD, "uid": os.getuid(), "euid": os.getuid()}))
     return log
 
 
@@ -105,13 +114,15 @@ def test_real_wrapper_runs_probe_offline_without_foreign_env_and_cleans_up(fake_
     calls = [json.loads(line) for line in fake_docker.read_text().splitlines()]
     run = next(c for c in calls if c[0] == "run")
     assert run[run.index("--network") + 1] == "none"
+    assert run[run.index("--user") + 1] == f"{os.getuid()}:{os.getgid()}"
     assert "probe:tag" in run and "--read-only" in run
     joined = " ".join(run)
     assert probe.FOREIGN_SECRET not in joined and "SSH_AUTH_SOCK" not in joined
 
 
 def test_reported_violation_from_container_fails_the_check(fake_docker, monkeypatch):
-    monkeypatch.setenv("FAKE_PROBE_FACTS", json.dumps({**GOOD, "egress": True}))
+    monkeypatch.setenv("FAKE_PROBE_FACTS", json.dumps({**GOOD, "uid": os.getuid(), "euid": os.getuid(),
+                                                       "egress": True}))
     errors = probe.probe_isolation(PKG, built, "base:tag", "probe:tag")
     assert errors[0] == "при AI_OPS_NETWORK=none есть выход в сеть (egress=True)"
     assert len(errors) == 2 and errors[1].startswith("факты пробы: ") and '"egress": true' in errors[1]

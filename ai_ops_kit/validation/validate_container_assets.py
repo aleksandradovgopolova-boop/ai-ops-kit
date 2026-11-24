@@ -79,6 +79,10 @@ WRAPPER_REQUIRED = {
     "GIT_ASKPASS=/bin/false": "нет источника логина/пароля для git push из модельной петли",
     "GIT_TERMINAL_PROMPT=0": "push по HTTPS без креды падёт быстро, не виснет в промпте",
     "GIT_CONFIG_KEY_0=credential.helper": "credential helper отключён (нет канала креды для push)",
+    # #1594: контейнер под uid:gid хоста (иначе на Linux клон и HOME не пишутся), root отвергнут.
+    '--user "${HOST_UID}:${HOST_GID}"': "контейнер под пользователем хоста, владельцем клона",
+    'if [ "$HOST_UID" = "0" ]': "запуск под root отвергается до клона (non-root гарантия явная)",
+    "uid=${HOST_UID},gid=${HOST_GID}": "tmpfs HOME принадлежит пользователю контейнера",
 }
 # Анти-маркер: основной child НЕ должен монтироваться как writable напрямую (регресс worktree-only).
 WRAPPER_FORBIDDEN = {
@@ -406,7 +410,7 @@ def isolation_smoke(root=PKG):
     if errors:
         return 1, ["CONTAINER-ISOLATION: нарушения:", *(f"  - {e}" for e in errors), *leftover]
     return 0, [f"CONTAINER-ISOLATION-OK: на коммите {rev} штатная обёртка с AI_OPS_NETWORK=none даёт "
-               "uid 10001, read-only корень, запись только в одноразовый клон, без сети, без "
+               "uid пользователя хоста (не root), read-only корень, запись только в одноразовый клон, без сети, без "
                "capabilities, с лимитами pids/памяти/CPU, без посторонних секретов и SSH-агента; "
                "исходный репозиторий не изменён, клон удалён. Режим bridge (сеть есть намеренно) и "
                "лимит времени работы контейнера (его у обёртки нет) этим не проверяются.", *leftover]
