@@ -348,7 +348,8 @@ def test_controller_failure_survives_reconcile(project, monkeypatch, capsys, wri
     assert len(calls) == 1 and state(project) == before
 
 
-def test_registry_denial_keeps_same_request_retryable(project, monkeypatch):
+@pytest.mark.parametrize("revise_signals", [False, True])
+def test_registry_denial_keeps_same_request_retryable(project, monkeypatch, revise_signals):
     from ai_ops_kit.lifecycle import work_claims
 
     task = cli.initial_intake(project, "codex", "native", "Проверь документ")
@@ -367,7 +368,14 @@ def test_registry_denial_keeps_same_request_retryable(project, monkeypatch):
         assert "execution" not in saved and not list(directory.glob("*.execution-claim"))
         cli.waiting_continuation(project, "codex", "native", saved)
         assert not (project / ".git/ai-ops/active-work.yaml").exists()
-    assert cli.main(args) == 1
+    resume_args = list(args)
+    if revise_signals:
+        assert cli.main([*args, "--signals", '{"risk":null}']) == 2
+        waiting = sessions.pending(project, "codex", "native")
+        assert "risk" in waiting["blocker"] and "реестр" not in waiting["blocker"]
+        assert "реестр" not in waiting["next_step"] and "registry_error" not in waiting["intake"]
+        resume_args.extend(["--signals", '{"risk":"low"}'])
+    assert cli.main(resume_args) == 1
     saved = sessions.load(project, "codex", "native")
     assert saved["request_id"] == task["request_id"] and saved["execution"]["prepared"] is True
     assert len(list(directory.glob("*.execution-claim"))) == 1 and saved["blocker"] is None

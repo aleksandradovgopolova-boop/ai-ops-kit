@@ -580,6 +580,9 @@ def save_intake(root, runtime, session, request, signals, missing, *, autonomous
             task["blocker"] = f"Общий реестр заявок недоступен для записи: {registry_error}"
             task["next_step"] = ("Контроллер не запущен. Когда общий реестр станет доступен, "
                                  "продолжи тот же project_session run без новой постановки.")
+        elif missing:
+            task["blocker"] = "Нужно уточнить: " + ", ".join(item["signal"] for item in missing)
+            task["next_step"] = "Уточни недостающие данные той же постановки."
         write(directory / (request + ".json"), task)
     return task
 
