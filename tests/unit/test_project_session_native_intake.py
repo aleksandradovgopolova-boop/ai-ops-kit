@@ -306,3 +306,113 @@ def test_initial_intake_preserves_dangling_pointer(project):
         cli.initial_intake(project, "codex", "native", "new")
     assert pointer.is_symlink() and not (directory / "absent").exists()
     assert list(directory.glob("*.json")) == [pointer]
+
+
+@pytest.mark.parametrize("write_report", [False, True], ids=["no-report", "planned-report"])
+def test_controller_failure_survives_reconcile(project, monkeypatch, capsys, write_report):
+    task = cli.initial_intake(project, "codex", "native", "Проверь документ")
+    monkeypatch.chdir(project)
+    run_process = sessions.run_process
+    calls = []
+
+    def fail_controller(command, root, directory, **kwargs):
+        calls.append(command)
+        # Реальный контроллер успевает записать валидный отчёт во втором сценарии.
+        failing = [sys.executable, "-c",
+                   "import subprocess, sys\n"
+                   "if sys.argv[1] == 'after': subprocess.run(sys.argv[2:], check=True)\n"
+                   "print('local diagnostic marker', file=sys.stderr)\n"
+                   "sys.exit(73)", "after" if write_report else "before", *command]
+        return run_process(failing, root, directory, **kwargs)
+
+    monkeypatch.setattr(sessions, "run_process", fail_controller)
+    args = ["--runtime", "codex", "--session", "native"]
+    assert cli.main(["run", *args, "--signals",
+                     '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+    saved = sessions.load(project, "codex", "native")
+    assert saved["status"] == "blocked" and saved["execution"]["controller_exit_code"] == 73
+    assert not saved["execution"].get("prepared")
+    log = sessions.session_dir(project, "codex", "native") / "process.stderr.log"
+    assert "local diagnostic marker" in log.read_text()
+    assert str(log.relative_to(project)) in saved["blocker"] and "73" in saved["blocker"]
+    assert "local diagnostic marker" not in saved["blocker"]
+    report = project / "features" / ("session-" + task["request_id"]) / "run-report.json"
+    if write_report:
+        assert json.loads(report.read_text())["status"] == "planned"
+    else:
+        assert not report.exists()
+    before = state(project)
+    capsys.readouterr()
+    assert cli.main(["reconcile", *args]) == 2
+    assert saved["blocker"] in capsys.readouterr().err
+    assert len(calls) == 1 and state(project) == before
+
+
+@pytest.mark.parametrize("revise_signals", [False, True])
+def test_registry_denial_keeps_same_request_retryable(project, monkeypatch, revise_signals):
+    from ai_ops_kit.lifecycle import work_claims
+
+    task = cli.initial_intake(project, "codex", "native", "Проверь документ")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "codex", "--session", "native"]
+    directory = sessions.session_dir(project, "codex", "native")
+    with monkeypatch.context() as blocked:
+        def deny(root):
+            raise PermissionError("synthetic EPERM")
+
+        blocked.setattr(work_claims, "probe_registry_write", deny)
+        blocked.setattr(sessions, "run_process", lambda *a, **kw: pytest.fail("controller started"))
+        assert cli.main([*args, "--signals", '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+        saved = sessions.pending(project, "codex", "native")
+        assert saved["request_id"] == task["request_id"] and "synthetic EPERM" in saved["blocker"]
+        assert "execution" not in saved and not list(directory.glob("*.execution-claim"))
+        cli.waiting_continuation(project, "codex", "native", saved)
+        assert not (project / ".git/ai-ops/active-work.yaml").exists()
+    resume_args = list(args)
+    if revise_signals:
+        assert cli.main([*args, "--signals", '{"risk":null}']) == 2
+        waiting = sessions.pending(project, "codex", "native")
+        assert "risk" in waiting["blocker"] and "реестр" not in waiting["blocker"]
+        assert "реестр" not in waiting["next_step"] and "registry_error" not in waiting["intake"]
+        resume_args.extend(["--signals", '{"risk":"low"}'])
+    assert cli.main(resume_args) == 1
+    saved = sessions.load(project, "codex", "native")
+    assert saved["request_id"] == task["request_id"] and saved["execution"]["prepared"] is True
+    assert len(list(directory.glob("*.execution-claim"))) == 1 and saved["blocker"] is None
+    assert (project / ".git/ai-ops/active-work.yaml").is_file()
+
+
+def test_registry_probe_uses_common_store_and_preserves_existing_files(project, tmp_path):
+    from ai_ops_kit.lifecycle import work_claims
+
+    linked = tmp_path / "linked"
+    subprocess.run(["git", "-C", str(project), "worktree", "add", "--detach", str(linked)], check=True)
+    registry = work_claims.shared_registry_path(project)
+    registry.parent.mkdir()
+    lock = registry.with_suffix(".yaml.lock")
+    registry.write_bytes(b"owner registry")
+    lock.write_bytes(b"owner lock")
+    work_claims.probe_registry_write(linked)
+    assert set(registry.parent.iterdir()) == {registry, lock}
+    assert registry.read_bytes() == b"owner registry" and lock.read_bytes() == b"owner lock"
+    assert not (linked / ".ai/runtime/active-work.yaml").exists()
+
+
+def test_writable_registry_directory_does_not_admit_failed_registration(project, monkeypatch):
+    from ai_ops_kit.lifecycle import work_claims
+
+    task = cli.initial_intake(project, "codex", "native", "Проверь документ")
+    monkeypatch.chdir(project)
+    registry = work_claims.shared_registry_path(project)
+    lock = registry.with_suffix(".yaml.lock")
+    lock.mkdir(parents=True)
+    owner = lock / "owner"
+    owner.write_bytes(b"untouched")
+    args = ["run", "--runtime", "codex", "--session", "native"]
+    assert cli.main([*args, "--signals", '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+    saved = sessions.load(project, "codex", "native")
+    assert saved["request_id"] == task["request_id"]
+    assert saved["status"] == "blocked" and saved["execution"]["controller_exit_code"] != 0
+    before = state(project)
+    assert cli.main(args) == 2 and state(project) == before
+    assert owner.read_bytes() == b"untouched" and not registry.exists()

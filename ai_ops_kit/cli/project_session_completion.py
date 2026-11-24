@@ -55,6 +55,8 @@ def record_prepared(root, task):
 @sessions.session_migration_store.guarded
 def recover_handoff(root, runtime, session, task):
     from ai_ops_kit.lifecycle import session_prepared_update
+    if task.get("execution", {}).get("controller_exit_code"):
+        raise ValueError(task.get("blocker") or "контроллер завершился с ошибкой")
     current = sessions.binding(root, "session-" + task["request_id"])
     expected = session_prepared_update.runtime_binding(root, task)
     if any(current.get(k) != expected.get(k) for k in

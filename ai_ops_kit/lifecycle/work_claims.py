@@ -291,6 +291,16 @@ def shared_registry_path(start=None):
     return common / "ai-ops" / "active-work.yaml"
 
 
+def probe_registry_write(root):
+    """Проба создания файла на общем носителе до execution-claim; регистрацию выполняет контроллер."""
+    from tempfile import TemporaryFile
+
+    directory = shared_registry_path(root).parent
+    directory.mkdir(exist_ok=True)
+    with TemporaryFile(dir=directory):
+        pass
+
+
 def _require_attempt(data, wid, admission, root):
     """Сверить generation; session identity сама по себе не различает два запуска."""
     entries = [w for w in data["active"] if w.get("id") == wid]
