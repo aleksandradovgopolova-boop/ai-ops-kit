@@ -231,7 +231,8 @@ files = ["ai_ops_kit/shared", "ai_ops_kit/kernel", "ai_ops_kit/engine/run_contex
          "ai_ops_kit/providers/orchestrator_providers.py", "ai_ops_kit/providers/provider_calls.py",
          "ai_ops_kit/providers/provider_writer_lock.py", "ai_ops_kit/providers/model_router.py",
          "ai_ops_kit/providers/orchestrator.py", "ai_ops_kit/providers/cost_account.py",
-         "ai_ops_kit/providers/cost_method.py"]
+         "ai_ops_kit/providers/cost_method.py", "ai_ops_kit/providers/codex_native.py",
+         "ai_ops_kit/providers/codex_transport.py", "ai_ops_kit/providers/codex_native_hook.py"]
 ignore_missing_imports = true
 follow_imports = "silent"
 warn_redundant_casts = true
@@ -267,6 +268,10 @@ module = [
     # Учёт стоимости: бюджет vs факт, цена успешного изменения/исхода, советы (#1412, восьмой срез).
     "ai_ops_kit.providers.cost_account",
     "ai_ops_kit.providers.cost_method",
+    # Codex-адаптеры: нативный вызов, транспорт, хук (#1412, девятый срез).
+    "ai_ops_kit.providers.codex_native",
+    "ai_ops_kit.providers.codex_transport",
+    "ai_ops_kit.providers.codex_native_hook",
 ]
 # Полный набор --strict mypy 2.3.1, развёрнутый по модулям: strict=true в override
 # этой версии протекает в global options. warn_redundant_casts — только global (выше).

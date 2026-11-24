@@ -218,6 +218,18 @@ Anthropic/OpenAI-совместимых вендоров и `claude -p`, `for_co
 Поведение не менялось. Остались codex-адаптеры (`codex_native`, `codex_transport`,
 `codex_native_hook`).
 
+### Девятый срез: codex-адаптеры
+
+`providers.codex_native` (подготовка и запуск native-сессии Codex, проверка readiness, ответ
+роли), `providers.codex_transport` (ограниченный stdio JSON-RPC) и `providers.codex_native_hook`
+(изолированный workspace и запрет инструментов) переведены под strict. Сообщения RPC —
+`JsonDict`; `RPC.call` возвращает словарь результата, `start` — `(RPC, thread, модель)`.
+
+Поведение не менялось. Потоки stdin/stdout процесса проходят через `_pipe`: при `PIPE`
+они всегда есть, а `None` означал бы несовместимый runtime — тогда `NativeError` вместо
+`AttributeError`. Токены вызова раскладываются в `_record_call` явно, а не через `*values`.
+Этим срезом список модулей #1412 исчерпан.
+
 ### Решение по Pydantic v2
 
 Решение этого среза: **не внедрять Pydantic**. Сравнение сделано с существующими

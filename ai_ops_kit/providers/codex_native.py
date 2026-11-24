@@ -4,13 +4,15 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
+from collections.abc import Sequence
 from typing import Any
 from pathlib import Path
 import time
 import uuid
 
 from ai_ops_kit.providers import codex_native_hook as hook
-from ai_ops_kit.providers.codex_transport import NativeError, RPC
+from ai_ops_kit.providers.codex_transport import JsonDict, NativeError, RPC
 from ai_ops_kit.providers.orchestrator_usage import _record_call
 from ai_ops_kit.providers.provider_errors import ProviderEnvUnavailableError
 from ai_ops_kit.shared import lifecycle_store
@@ -31,12 +33,12 @@ class NativeLifecycleUnavailable(NativeError):
 class NativeUnavailable(ProviderEnvUnavailableError):
     """Сохраняет общий тип отказа, но не приписывает Codex причину/советы Claude CLI."""
 
-    def human_message(self):
+    def human_message(self) -> str:
         return ("Native Codex не подтвердил выполнение: " + self.detail + ". "
                 "Устрани указанную готовность той же среды и продолжи сохранённую задачу.")
 
 
-def command(binary, servers=()):
+def command(binary: str, servers: Sequence[str] = ()) -> list[str]:
     args = [binary, "app-server", "--stdio", "-c", 'forced_login_method="chatgpt"',
             "-c", 'web_search="disabled"']
     for flag in DISABLED:
@@ -49,7 +51,8 @@ def command(binary, servers=()):
     return args
 
 
-def connect(binary, directory, timeout, servers=()):
+def connect(binary: str, directory: Path, timeout: float,
+            servers: Sequence[str] = ()) -> tuple[RPC, list[str]]:
     rpc = RPC(command(binary, servers), directory, timeout)
     try:
         rpc.call("initialize", {"clientInfo": {"name": "ai_ops_text_provider", "version": "1"},
@@ -70,7 +73,8 @@ def connect(binary, directory, timeout, servers=()):
         raise
 
 
-def start(binary, directory, expected_command, timeout, prompt, model=None):
+def start(binary: str, directory: Path, expected_command: str, timeout: float, prompt: str,
+          model: str | None = None) -> tuple[RPC, str, str]:
     deadline = time.monotonic() + timeout
     rpc, active = connect(binary, directory, timeout)
     if active:
@@ -81,7 +85,7 @@ def start(binary, directory, expected_command, timeout, prompt, model=None):
             raise NativeError("унаследованные MCP остались активны; turn не запущен")
         listed = rpc.call("hooks/list", {"cwds": [str(directory)]}).get("data", [])
         entries = [e for e in listed if Path(e.get("cwd", "")).resolve() == directory.resolve()]
-        events = set()
+        events: set[Any] = set()
         for entry in entries:
             if entry.get("errors"):
                 raise NativeError("Codex сообщил ошибки загрузки native hooks")
@@ -120,7 +124,8 @@ def start(binary, directory, expected_command, timeout, prompt, model=None):
         selected = result.get("model")
         if not isinstance(selected, str) or not selected or (model is not None and selected != model):
             raise NativeError("Codex не подтвердил выбранную модель; подмена запрещена")
-        cursor, catalog = None, []
+        cursor: Any = None
+        catalog: list[Any] = []
         for _ in range(10):
             page = rpc.call("model/list", {"cursor": cursor})
             catalog += page.get("data", [])
@@ -141,7 +146,7 @@ def start(binary, directory, expected_command, timeout, prompt, model=None):
         raise
 
 
-def readiness(root, *, binary="codex", timeout=15):
+def readiness(root: str | os.PathLike[str], *, binary: str = "codex", timeout: float = 15) -> JsonDict:
     """Metadata only: ни одного turn/start и никакого доверия от имени участника."""
     try:
         directory, cmd = hook.prepare(root)
@@ -150,7 +155,7 @@ def readiness(root, *, binary="codex", timeout=15):
             rpc.close()
         return {"ready": True, "provider": NAME, "workspace": str(directory)}
     except (OSError, ValueError, TypeError, KeyError) as exc:
-        result = {"ready": False, "provider": NAME, "reason": str(exc),
+        result: JsonDict = {"ready": False, "provider": NAME, "reason": str(exc),
                   "next_step": "Устрани указанную готовность native Codex; затем продолжи сохранённую задачу. "
                                "Execution claim и модельная попытка не расходованы."}
         if isinstance(exc, NativeLifecycleUnavailable):
@@ -159,7 +164,8 @@ def readiness(root, *, binary="codex", timeout=15):
         return result
 
 
-def answer(rpc, thread, prompt, model, directory, observed):
+def answer(rpc: RPC, thread: str, prompt: str, model: str, directory: Path,
+           observed: JsonDict) -> tuple[str, JsonDict | None, str]:
     observed["attempted"] = True
     begun = rpc.call("turn/start", {"threadId": thread, "input": [{"type": "text", "text": prompt}],
                      "model": model, "approvalPolicy": "on-request",
@@ -168,7 +174,8 @@ def answer(rpc, thread, prompt, model, directory, observed):
     observed["turn"] = turn
     if not turn:
         raise NativeError("native turn id отсутствует")
-    texts, usage = {}, None
+    texts: dict[Any, Any] = {}
+    usage: JsonDict | None = None
     while True:
         event = rpc.event()
         method, params = event.get("method", ""), event.get("params") or {}
@@ -203,7 +210,8 @@ def answer(rpc, thread, prompt, model, directory, observed):
     return "\n".join(texts.values()), usage, turn
 
 
-def _call(prompt, model, *, root=None, binary="codex", timeout=120):
+def _call(prompt: str, model: str | None, *, root: str | os.PathLike[str] | None = None,
+          binary: str = "codex", timeout: float = 120) -> str:
     if ((model is not None and (not isinstance(model, str) or not model.strip())) or not isinstance(prompt, str)
             or not prompt.strip() or len(prompt.encode()) > 1024 * 1024
             or isinstance(timeout, bool) or not isinstance(timeout, (float, int))
@@ -213,7 +221,7 @@ def _call(prompt, model, *, root=None, binary="codex", timeout=120):
     started = time.monotonic()
     with lifecycle_store._journal_lock(directory / "execution", required=True):
         rpc, thread, selected = start(binary, directory, cmd, timeout, prompt, model)
-        observed = {"outcome": "failed"}
+        observed: JsonDict = {"outcome": "failed"}
         try:
             with rpc:
                 text, usage, turn = answer(rpc, thread, prompt, selected, directory, observed)
@@ -226,9 +234,9 @@ def _call(prompt, model, *, root=None, binary="codex", timeout=120):
         finally:
             if observed.get("attempted"):
                 usage = observed.get("usage") or {}
-                values = [usage.get(k) for k in ("inputTokens", "outputTokens")]
-                values = [v if type(v) is int and v >= 0 else None for v in values]
-                rec = _record_call(selected, *values, time.monotonic() - started,
+                in_tok, out_tok = (v if type(v) is int and v >= 0 else None
+                                   for v in (usage.get(k) for k in ("inputTokens", "outputTokens")))
+                rec = _record_call(selected, in_tok, out_tok, time.monotonic() - started,
                                    provider=NAME, cost_status="unavailable")
                 rec.update(native_thread_id=thread, native_turn_id=observed.get("turn"),
                            native_outcome=observed["outcome"])

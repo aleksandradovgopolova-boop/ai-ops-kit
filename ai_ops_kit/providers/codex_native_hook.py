@@ -9,15 +9,16 @@ import shlex
 import subprocess
 import sys
 import tempfile
+from typing import Any
 
 from ai_ops_kit.providers.codex_transport import NativeError
 
 
-def policy_digest():
+def policy_digest() -> str:
     return hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
 
-def prepare(root):
+def prepare(root: str | os.PathLike[str]) -> tuple[Path, str]:
     if os.name != "posix":
         raise NativeError("native text provider пока поддерживает только POSIX process isolation")
     key = hashlib.sha256((str(Path(root).resolve()) + str(Path(__file__).resolve())
@@ -66,12 +67,12 @@ def prepare(root):
     return directory, command
 
 
-def denied(reason):
+def denied(reason: str) -> dict[str, Any]:
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
                                    "permissionDecisionReason": reason}}
 
 
-def handle(directory, payload):
+def handle(directory: Path, payload: dict[str, Any]) -> dict[str, Any]:
     """Нет копии auth, автоматического trust и разрешения инструментов."""
     event = payload.get("hook_event_name")
     if event == "SessionStart":
@@ -90,7 +91,7 @@ def handle(directory, payload):
     return denied("Unexpected native hook event; tools denied")
 
 
-def main(directory=None):
+def main(directory: Path | None = None) -> dict[str, Any]:
     raw = sys.stdin.buffer.read(262145)
     if len(raw) > 262144:
         raise ValueError("native hook payload exceeds 256 KiB")

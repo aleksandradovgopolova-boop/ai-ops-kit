@@ -9,16 +9,28 @@ import signal
 import subprocess
 import tempfile
 import time
+from collections.abc import Sequence
+from typing import IO, Any
+
+JsonDict = dict[str, Any]
 
 
 class NativeError(ValueError):
     """Нет подтверждённого результата; автоматический retry/допуск запрещены."""
 
 
+def _pipe(stream: IO[bytes] | None) -> IO[bytes]:
+    # Popen с PIPE всегда отдаёт поток; None здесь означал бы несовместимый runtime.
+    if stream is None:
+        raise NativeError("Codex app-server запущен без stdio-канала")
+    return stream
+
+
 class RPC:
-    def __init__(self, command, cwd, timeout=120):
+    def __init__(self, command: Sequence[str], cwd: str | os.PathLike[str], timeout: float = 120) -> None:
         self.deadline = time.monotonic() + timeout
-        self.pending, self.buffer, self.number, self.received = [], b"", 0, 0
+        self.pending: list[JsonDict] = []
+        self.buffer, self.number, self.received = b"", 0, 0
         self.stderr = tempfile.TemporaryFile()
         self.selector = selectors.DefaultSelector()
         self.writer = selectors.DefaultSelector()
@@ -31,9 +43,9 @@ class RPC:
             self.process = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.PIPE,
                                             stdout=subprocess.PIPE, stderr=self.stderr,
                                             start_new_session=True)
-            self.selector.register(self.process.stdout, selectors.EVENT_READ)
-            os.set_blocking(self.process.stdin.fileno(), False)
-            self.writer.register(self.process.stdin, selectors.EVENT_WRITE)
+            self.selector.register(_pipe(self.process.stdout), selectors.EVENT_READ)
+            os.set_blocking(_pipe(self.process.stdin).fileno(), False)
+            self.writer.register(_pipe(self.process.stdin), selectors.EVENT_WRITE)
         except OSError:
             if hasattr(self, "process"):
                 self.close()
@@ -43,7 +55,7 @@ class RPC:
                 self.stderr.close()
             raise NativeError("Codex app-server не запустился; проверь установленный CLI") from None
 
-    def send(self, message):
+    def send(self, message: JsonDict) -> None:
         try:
             remaining_data = memoryview((json.dumps(message, ensure_ascii=False) + "\n").encode())
             while remaining_data:
@@ -51,19 +63,19 @@ class RPC:
                 if remaining <= 0 or not self.writer.select(remaining):
                     raise NativeError("таймаут записи в Codex app-server")
                 try:
-                    count = os.write(self.process.stdin.fileno(), remaining_data)
+                    count = os.write(_pipe(self.process.stdin).fileno(), remaining_data)
                 except BlockingIOError:
                     continue
                 remaining_data = remaining_data[count:]
         except (BrokenPipeError, OSError):
             raise NativeError("Codex закрыл RPC до подтверждения результата") from None
 
-    def receive(self):
+    def receive(self) -> JsonDict:
         while b"\n" not in self.buffer:
             remaining = self.deadline - time.monotonic()
             if remaining <= 0 or not self.selector.select(remaining):
                 raise NativeError("таймаут Codex app-server; автоматического повтора нет")
-            chunk = os.read(self.process.stdout.fileno(), 65536)
+            chunk = os.read(_pipe(self.process.stdout).fileno(), 65536)
             if not chunk:
                 raise NativeError("Codex app-server закрыл поток без подтверждения")
             self.received += len(chunk)
@@ -88,7 +100,7 @@ class RPC:
             raise NativeError("Codex запросил инструмент/разрешение; результат не принят")
         return message
 
-    def call(self, method, params):
+    def call(self, method: str, params: JsonDict) -> JsonDict:
         self.number += 1
         current = self.number
         self.send({"id": current, "method": method, "params": params})
@@ -99,14 +111,15 @@ class RPC:
                 continue
             if message["id"] != current:
                 raise NativeError("RPC ответ принадлежит другому запросу")
-            if "error" in message or not isinstance(message.get("result"), dict):
+            result = message.get("result")
+            if "error" in message or not isinstance(result, dict):
                 raise NativeError(f"Codex отказал RPC {method}; проверь совместимость CLI/политику среды")
-            return message["result"]
+            return result
 
-    def event(self):
+    def event(self) -> JsonDict:
         return self.pending.pop(0) if self.pending else self.receive()
 
-    def group_alive(self):
+    def group_alive(self) -> bool:
         # Darwin может вернуть EPERM для группы, в которой остались лишь zombies.
         # Это не разрешение игнорировать отказ для реально живой группы.
         try:
@@ -120,7 +133,7 @@ class RPC:
                 return True
         return False
 
-    def close(self):
+    def close(self) -> None:
         if self.closed:
             return
         self.closed = True
@@ -146,12 +159,13 @@ class RPC:
         finally:
             self.selector.close()
             self.writer.close()
-            self.process.stdin.close()
-            self.process.stdout.close()
+            for stream in (self.process.stdin, self.process.stdout):
+                if stream is not None:
+                    stream.close()
             self.stderr.close()
 
-    def __enter__(self):
+    def __enter__(self) -> RPC:
         return self
 
-    def __exit__(self, *exc):
+    def __exit__(self, *exc: object) -> None:
         self.close()
