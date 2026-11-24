@@ -513,3 +513,48 @@ def test_new_ignored_artifact_after_acceptance_invalidates_verify(project, monke
     with pytest.raises(ValueError, match="состав артефактов изменён"):
         sessions.verify(project, "codex", "complete")
     assert cli.main(["finalize", *args]) == 2
+
+
+@pytest.mark.parametrize("field,replacement", [("owner_session", "next-session"),
+                                               ("controller_attempt", "1" * 32)])
+def test_finalizing_old_handoff_keeps_reassigned_claim(project, monkeypatch, field, replacement):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    task, args = start(project, monkeypatch, "codex")
+    wid = "session-" + task["request_id"]
+    report = json.loads((project / "features" / wid / "run-report.json").read_bytes())
+    registry = aw.shared_registry_path(project)
+    data = aw.load(registry)
+    entry, = data["active"]
+    assert entry["id"] == wid and len(report["controller_attempt"]) == 32
+    assert entry["controller_attempt"] == report["controller_attempt"]
+    entry[field] = replacement
+    aw.save(registry, data)
+    projection = project / ".ai/runtime/active-work.yaml"
+    copy = next(aw.copies_claims_dir(project).glob("*.yaml"))
+    before = {p: p.read_bytes() for p in (registry, projection, copy)}
+
+    assert cli.main(["finalize", *args]) != 0
+    saved = sessions.load(project, "codex", "complete")
+    assert saved["status"] != "accepted"
+    assert (project / ".ai/runtime/check-ran").read_text() == "real check"
+    assert {p: p.read_bytes() for p in before} == before
+    assert not (project / saved["verification"]["report"]).exists()
+
+
+@pytest.mark.parametrize("report_attempt,entry_attempt,allow", [
+    (None, None, True), (None, "b" * 32, False), ("b" * 32, None, False)])
+def test_legacy_controller_claim_must_match_report_generation(project, report_attempt, entry_attempt, allow):
+    from ai_ops_kit.lifecycle import active_work as aw
+
+    registry = aw.shared_registry_path(project)
+    path = project / ".ai/runtime/active-work.yaml"
+    assert aw.register(path, "session-test", "feature/session-test", ["docs"], "s", child_root=project,
+                       controller_attempt=entry_attempt) == 0
+    before = registry.read_bytes()
+    rc = aw.finish_cmd(path, "session-test", child_root=project, expected_controller=("s", report_attempt))
+    assert (rc == 0) == allow
+    if allow:
+        assert aw.load(registry)["active"][0]["status"] == "done"
+    else:
+        assert registry.read_bytes() == before

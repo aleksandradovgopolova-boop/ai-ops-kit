@@ -51,7 +51,7 @@ from ai_ops_kit.lifecycle.work_claims import (          # noqa: F401 — ре-э
     _claim_slug, publish_claim, unpublish_claim, load_published_claims,
     _git_common_dir, copies_claims_dir, working_copies, copies_reach_note,
     _copies_line, claim_to_copies, withdraw_claim_from_copies, load_copy_claims,
-    team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin, _budget_binding,
+    _claim_entry, _same_controller, team_view, shared_registry_path, ActiveWorkCorrupt, load, _locked, _canonical_path, _require_attempt, claimed_attempt, _budget_origin, _budget_binding,
 )
 from ai_ops_kit.lifecycle.work_reconcile import (        # noqa: F401 — ре-экспорт для совместимости
     _machine, _now_iso, _CLAIM_STALE_HOURS, _claim_age_hours, _pid_is_dead,
@@ -336,7 +336,8 @@ def _refuse_busy(blocking, published, child_root):
 
 def register(path, wid, branch, areas, session, workitem=None, status="in-progress",
              depends=None, contracts=None, at=None, published=False, child_root=None,
-             takeover=False, takeover_reason=None, owner_role=None, audience="technical", admission=None):
+             takeover=False, takeover_reason=None, owner_role=None, audience="technical", admission=None,
+             controller_attempt=None):
     path = _canonical_path(path, child_root)
     if branch in (None, "", "main", "master"):
         print("ОШИБКА: работа не должна вестись в main/master — задайте ветку/worktree.")
@@ -364,17 +365,7 @@ def register(path, wid, branch, areas, session, workitem=None, status="in-progre
             if reason:
                 logging.warning("ОТКАЗ: %s", reason)
                 return 1
-        # Заявка = кто (сессия) + где (машина) + когда (время) + что (ветка/зоны). Машина и время
-        # добавлены 18.08.2026: без «где» и «когда» инцидент параллельных сессий не разобрать
-        # (заявка #150: атрибуция была невозможна). Поля аддитивны — прежние записи без них валидны.
-        # `owner_pid` — pid ЭТОГО процесса прогона, держащего заявку. По нему `holder_is_gone`
-        # доказывает смерть session-заявки сразу (процесс мёртв), не дожидаясь возрастного порога.
-        # Наружу поле НЕ уезжает (нет в PUBLISHED_FIELDS/COPY_CLAIM_FIELDS): pid значим только на
-        # своей машине, где liveness и проверяется.
-        entry = {"id": wid, "branch": branch, "status": status,
-                 "affected_areas": list(areas), "owner_session": session,
-                 "machine": _machine(), "started_at": at or _now_iso(),
-                 "owner_pid": os.getpid()}
+        entry = _claim_entry(wid, branch, areas, session, status, _machine(), at or _now_iso(), controller_attempt)
         if admission is not None:
             entry.update(auto_admission=admission, budget_origin=_budget_origin(data["active"], wid), budget_binding=_budget_binding(data["active"], wid))
         # В КАКОЙ копии сидит держатель: без этого отказ называл бы «машину», то есть саму себя.
@@ -537,7 +528,7 @@ def check_cmd(path, areas, depends=None, contracts=None, exclude_id=None, as_jso
 
 
 def finish_cmd(path, wid, status="done", reason=None, child_root=None, published=False,
-               audience="technical", expected_admission=None):
+               audience="technical", expected_admission=None, expected_controller=None):
     """Снять работу с учёта. status — из STATUS; 'done' ТОЛЬКО когда работа действительно закончена.
 
     v3.28.x (F-012, находка живой квалификации на niti): прогон помечал работу `done` независимо
@@ -556,6 +547,11 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
                 _require_attempt(data, wid, expected_admission, child_root)
             except ActiveWorkCorrupt as exc:
                 logging.warning("ОТКАЗ: %s", exc)
+                return 1
+        if expected_controller is not None:
+            entries = [w for w in data["active"] if w.get("id") == wid]
+            if len(entries) != 1 or not _same_controller(entries[0], wid, child_root, _machine(), expected_controller):
+                print("ОТКАЗ: владелец или попытка регистрации изменились; заявка сохранена.")
                 return 1
         found = False
         for w in data["active"]:

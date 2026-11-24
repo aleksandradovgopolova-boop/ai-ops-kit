@@ -301,6 +301,33 @@ def probe_registry_write(root):
         pass
 
 
+def _claim_entry(wid, branch, areas, session, status, machine, started_at, controller_attempt):
+    import os
+    # Заявка = кто (сессия) + где (машина) + когда (время) + что (ветка/зоны). Машина и время
+    # добавлены 18.08.2026: без «где» и «когда» инцидент параллельных сессий не разобрать
+    # (заявка #150: атрибуция была невозможна). Поля аддитивны — прежние записи без них валидны.
+    # `owner_pid` — pid ЭТОГО процесса прогона, держащего заявку. По нему `holder_is_gone`
+    # доказывает смерть session-заявки сразу (процесс мёртв), не дожидаясь возрастного порога.
+    # Наружу поле НЕ уезжает (нет в PUBLISHED_FIELDS/COPY_CLAIM_FIELDS): pid значим только на
+    # своей машине, где liveness и проверяется.
+    entry = {"id": wid, "branch": branch, "status": status,
+             "affected_areas": list(areas), "owner_session": session,
+             "machine": machine, "started_at": started_at,
+             "owner_pid": os.getpid()}
+    if controller_attempt is not None:
+        entry["controller_attempt"] = controller_attempt
+    return entry
+
+
+def _same_controller(entry, wid, root, machine, expected):
+    session, attempt = expected
+    return (bool(root and session) and entry.get("status") == "in-progress"
+            and entry.get("owner_session") == session and entry.get("machine") == machine
+            and entry.get("worktree") == str(Path(root).resolve()) and entry.get("branch") == f"feature/{wid}"
+            and "auto_admission" not in entry
+            and (entry.get("controller_attempt") == attempt if attempt is not None else "controller_attempt" not in entry))
+
+
 def _require_attempt(data, wid, admission, root):
     """Сверить generation; session identity сама по себе не различает два запуска."""
     entries = [w for w in data["active"] if w.get("id") == wid]
