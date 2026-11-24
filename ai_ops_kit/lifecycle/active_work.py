@@ -551,7 +551,7 @@ def finish_cmd(path, wid, status="done", reason=None, child_root=None, published
         if expected_controller is not None:
             entries = [w for w in data["active"] if w.get("id") == wid]
             if len(entries) != 1 or not _same_controller(entries[0], wid, child_root, _machine(), expected_controller):
-                print("ОТКАЗ: владелец или попытка регистрации изменились; заявка сохранена.")
+                logging.warning("ОТКАЗ: владелец или попытка регистрации изменились; заявка сохранена.")
                 return 1
         found = False
         for w in data["active"]:
