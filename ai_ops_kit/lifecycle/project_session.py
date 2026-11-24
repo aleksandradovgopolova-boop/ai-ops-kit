@@ -566,7 +566,7 @@ def save_preparation(root, runtime, session, request, preparation, reason=None):
 
 
 @session_migration_store.guarded
-def save_intake(root, runtime, session, request, signals, missing, *, autonomous=False):
+def save_intake(root, runtime, session, request, signals, missing, *, autonomous=False, registry_error=None):
     """Факт реально запрошенных CLI данных, не догадка по пользовательскому тексту."""
     directory = session_dir(root, runtime, session)
     with session_lock(directory / "requests"):
@@ -575,6 +575,11 @@ def save_intake(root, runtime, session, request, signals, missing, *, autonomous
             raise ValueError("постановка сменилась при уточнении intake")
         task["intake"] = {"mode": "autonomous" if autonomous else "current-session",
                           "signals": signals, "missing": missing}
+        if registry_error is not None:
+            task["intake"]["registry_error"] = registry_error
+            task["blocker"] = f"Общий реестр заявок недоступен для записи: {registry_error}"
+            task["next_step"] = ("Контроллер не запущен. Когда общий реестр станет доступен, "
+                                 "продолжи тот же project_session run без новой постановки.")
         write(directory / (request + ".json"), task)
     return task
 

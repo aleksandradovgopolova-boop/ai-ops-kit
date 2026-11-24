@@ -346,3 +346,65 @@ def test_controller_failure_survives_reconcile(project, monkeypatch, capsys, wri
     assert cli.main(["reconcile", *args]) == 2
     assert saved["blocker"] in capsys.readouterr().err
     assert len(calls) == 1 and state(project) == before
+
+
+def test_registry_denial_keeps_same_request_retryable(project, monkeypatch):
+    from ai_ops_kit.lifecycle import work_claims
+
+    task = cli.initial_intake(project, "codex", "native", "Проверь документ")
+    monkeypatch.chdir(project)
+    args = ["run", "--runtime", "codex", "--session", "native"]
+    directory = sessions.session_dir(project, "codex", "native")
+    with monkeypatch.context() as blocked:
+        def deny(root):
+            raise PermissionError("synthetic EPERM")
+
+        blocked.setattr(work_claims, "probe_registry_write", deny)
+        blocked.setattr(sessions, "run_process", lambda *a, **kw: pytest.fail("controller started"))
+        assert cli.main([*args, "--signals", '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+        saved = sessions.pending(project, "codex", "native")
+        assert saved["request_id"] == task["request_id"] and "synthetic EPERM" in saved["blocker"]
+        assert "execution" not in saved and not list(directory.glob("*.execution-claim"))
+        cli.waiting_continuation(project, "codex", "native", saved)
+        assert not (project / ".git/ai-ops/active-work.yaml").exists()
+    assert cli.main(args) == 1
+    saved = sessions.load(project, "codex", "native")
+    assert saved["request_id"] == task["request_id"] and saved["execution"]["prepared"] is True
+    assert len(list(directory.glob("*.execution-claim"))) == 1 and saved["blocker"] is None
+    assert (project / ".git/ai-ops/active-work.yaml").is_file()
+
+
+def test_registry_probe_uses_common_store_and_preserves_existing_files(project, tmp_path):
+    from ai_ops_kit.lifecycle import work_claims
+
+    linked = tmp_path / "linked"
+    subprocess.run(["git", "-C", str(project), "worktree", "add", "--detach", str(linked)], check=True)
+    registry = work_claims.shared_registry_path(project)
+    registry.parent.mkdir()
+    lock = registry.with_suffix(".yaml.lock")
+    registry.write_bytes(b"owner registry")
+    lock.write_bytes(b"owner lock")
+    work_claims.probe_registry_write(linked)
+    assert set(registry.parent.iterdir()) == {registry, lock}
+    assert registry.read_bytes() == b"owner registry" and lock.read_bytes() == b"owner lock"
+    assert not (linked / ".ai/runtime/active-work.yaml").exists()
+
+
+def test_writable_registry_directory_does_not_admit_failed_registration(project, monkeypatch):
+    from ai_ops_kit.lifecycle import work_claims
+
+    task = cli.initial_intake(project, "codex", "native", "Проверь документ")
+    monkeypatch.chdir(project)
+    registry = work_claims.shared_registry_path(project)
+    lock = registry.with_suffix(".yaml.lock")
+    lock.mkdir(parents=True)
+    owner = lock / "owner"
+    owner.write_bytes(b"untouched")
+    args = ["run", "--runtime", "codex", "--session", "native"]
+    assert cli.main([*args, "--signals", '{"task_type":"quick","size":"small","risk":"low"}']) == 1
+    saved = sessions.load(project, "codex", "native")
+    assert saved["request_id"] == task["request_id"]
+    assert saved["status"] == "blocked" and saved["execution"]["controller_exit_code"] != 0
+    before = state(project)
+    assert cli.main(args) == 2 and state(project) == before
+    assert owner.read_bytes() == b"untouched" and not registry.exists()

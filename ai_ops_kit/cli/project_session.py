@@ -18,6 +18,12 @@ def current_session(root, runtime, session, task, signals):
     from pathlib import Path
     import subprocess
     from ai_ops_kit.gates import gate_executor
+    from ai_ops_kit.lifecycle import work_claims
+    try:
+        work_claims.probe_registry_write(root)
+    except (OSError, work_claims.ActiveWorkCorrupt) as exc:
+        return sessions.save_intake(root, runtime, session, task["request_id"], signals, [],
+                                    registry_error=str(exc))
     signals = dict(signals)
     calibrated = gate_executor.risk_calibrated_config(root)
     if calibrated is not None and "risk_calibrated_enforcement" not in (signals.get("gates") or {}):
@@ -122,8 +128,11 @@ def waiting_continuation(root, runtime, session, task):
     intake, preparation = task.get("intake") or {}, task.get("preparation") or {}
     if intake:
         missing = pipeline_helpers.missing_intake_signals(intake.get("signals"))
+        registry_error = intake.get("registry_error")
+        waiting_for_registry = (isinstance(registry_error, str) and bool(registry_error)
+                                and task.get("blocker") == f"Общий реестр заявок недоступен для записи: {registry_error}")
         if (intake.get("mode") != "current-session" or not isinstance(intake.get("signals"), dict)
-                or not missing or intake.get("missing") != missing):
+                or (not missing and not waiting_for_registry) or intake.get("missing") != missing):
             raise ValueError("ожидаемый current-session intake не подтверждён")
         return
     fid = "session-" + task["request_id"]
