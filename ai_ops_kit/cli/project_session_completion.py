@@ -363,21 +363,25 @@ def research_checkpoint(root, task, outputs):
     directory = Path(outputs["proposal"]).parent
     allowed = {str(directory / name) for name in ("workitem.yaml", "run-plan.yaml", "run-report.json", "spec.yaml")}
     allowed.update(outputs.values())
+    names = {relative.encode("ascii"): relative for relative in allowed}
     status = sessions.git(root, "--no-optional-locks", "status", "--porcelain=v1", "-z",
-                          "--no-renames", "--untracked-files=all", "--ignore-submodules=none")
-    own, other = [], []
-    for record in status.split("\0"):
+                          "--no-renames", "--untracked-files=all", "--ignore-submodules=none", binary=True)
+    if not status:
+        return None
+    own = []
+    other_count = 0
+    for record in status.split(b"\0"):
         if not record:
             continue
-        if len(record) < 4 or record[2] != " ":
+        if len(record) < 4 or record[2:3] != b" ":
             raise ValueError("не удалось разобрать состояние Git")
-        relative = record[3:]
-        file = root / relative
-        if (relative in allowed and record[:2] in {"??", " A", "A ", " M", "M ", "AM", "MM"}
-                and file.resolve() == file and file.is_file()):
-            own.append(relative)
-        else:
-            other.append(relative)
+        relative = names.get(record[3:])
+        if relative and record[:2] in {b"??", b" A", b"A ", b" M", b"M ", b"AM", b"MM"}:
+            file = root / relative
+            if file.resolve() == file and file.is_file():
+                own.append(relative)
+                continue
+        other_count += 1
     missing = []
     for relative in outputs.values():
         file = root / relative
@@ -386,10 +390,10 @@ def research_checkpoint(root, task, outputs):
     return {"kind": "research-checkpoint", "request_id": task["request_id"],
             "runtime": task["runtime"], "session_id": task["session_id"],
             "base_revision": task["binding"]["head"], "current_revision": sessions.git(root, "rev-parse", "HEAD"),
-            "status": "other_changes" if other else "uncommitted_research", "task_paths": sorted(own),
-            "other_paths": sorted(other), "missing_outputs": missing, "outputs": outputs,
+            "status": "other_changes" if other_count else "uncommitted_research", "task_paths": sorted(own),
+            "other_count": other_count, "missing_outputs": missing, "outputs": outputs,
             "next_step": ("Сохрани посторонние изменения; разберись с ними до фиксации исследования."
-                          if other else "Сохрани вывод с источниками и свидетельства. Проверь diff своих файлов и "
+                          if other_count else "Сохрани вывод с источниками и свидетельства. Проверь diff своих файлов и "
                           "зафиксируй их в пределах разрешённых прав. Возобнови finalize той же сессии.")}
 
 
@@ -403,10 +407,12 @@ def finalize(root, runtime, session, digests):
     if previous and previous.get("phase") not in ("finished", "failed"):
         return reconcile(root, runtime, session)
     from ai_ops_kit.engine.pipeline_git import _tree_clean
-    if not _tree_clean(root):
-        outputs = research_outputs(task)
-        if outputs:
-            raise ResearchCheckpointRequired(research_checkpoint(root, task, outputs))
+    outputs = research_outputs(task)
+    if outputs:
+        recovery = research_checkpoint(root, task, outputs)
+        if recovery is not None:
+            raise ResearchCheckpointRequired(recovery)
+    elif not _tree_clean(root):
         raise ValueError("сначала зафиксируй результат; проверки требуют чистый committed HEAD")
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
         task = prepared(root, runtime, session, sessions.load(root, runtime, session))

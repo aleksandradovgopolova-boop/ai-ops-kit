@@ -1,5 +1,8 @@
 """RESEARCH через установившиеся CLI-пути, Git и сохранённый controller handoff."""
+import errno
 import json
+import os
+import subprocess
 
 import pytest
 
@@ -76,7 +79,8 @@ def test_dirty_research_returns_scoped_recovery_without_mutation(research, capsy
     assert set(recovery["task_paths"]) == ours
     expected_other = ([outputs["proposal"]] if case == "link" else
                       [str(foreign.relative_to(root))] if foreign else [])
-    assert recovery["other_paths"] == expected_other
+    assert recovery["other_count"] == len(expected_other)
+    assert "other_paths" not in recovery
     assert recovery["status"] == ("other_changes" if expected_other else "uncommitted_research")
     assert outputs["verification"] in recovery["missing_outputs"] and not evidence.exists()
     assert {p: p.read_bytes() for p in files} == before and sessions.git(root, "rev-parse", "HEAD") == head
@@ -111,3 +115,47 @@ def test_checkpointed_research_requests_independent_review(research, capsys):
     assert handoff["status"] == "awaiting_dispatch" and handoff["jobs"]
     assert handoff["scope"]["base_revision"] == recovery["base_revision"]
     assert handoff["scope"]["reviewed_revision"] == sessions.git(root, "rev-parse", "HEAD")
+
+
+@pytest.mark.skipif(os.name != "posix", reason="байтовые имена POSIX")
+@pytest.mark.parametrize("name", [b"foreign\rfile", b"foreign\r\nfile", b"foreign\xfffile"])
+def test_nonstandard_foreign_name_is_counted_privately(research, capsys, name):
+    root, task, args = research
+    path = os.fsencode(root) + b"/" + name
+    before = sessions.source_digest(root)
+    try:
+        with open(path, "wb") as stream:
+            stream.write(b"foreign-content")
+    except OSError as exc:
+        if exc.errno != errno.EILSEQ:
+            raise
+        # APFS запрещает не-UTF8 имя на диске; настоящий Git index хранит его побайтно.
+        blob = subprocess.run(["git", "hash-object", "-w", "--stdin"], input=b"private",
+                              cwd=root, check=True, capture_output=True).stdout.strip()
+        subprocess.run(["git", "update-index", "-z", "--index-info"], cwd=root, check=True,
+                       input=b"100644 " + blob + b"\t" + name + b"\0")
+    assert name + b"\0" in sessions.git(root, "--no-optional-locks", "status", "--porcelain=v1",
+                                        "-z", "--untracked-files=all", binary=True)
+    assert sessions.source_digest(root) != before
+    assert cli.main(["finalize", *args]) == 2
+    std = capsys.readouterr()
+    assert "foreign" not in std.out and "foreign" not in std.err
+    recovery = json.loads(std.out)["recovery"]
+    assert recovery["other_count"] == 1 and recovery["status"] == "other_changes"
+    assert set(recovery["task_paths"]) == set(task["execution"]["files"]) | {task["preparation"]["spec"]}
+
+
+def test_research_status_reports_all_untracked_and_never_refreshes_index(research, capsys):
+    root, task, args = research
+    sessions.git(root, "config", "status.showUntrackedFiles", "no")
+    index = root / ".git/index"
+    before = index.read_bytes()
+    tracked = root / "AGENTS.md"
+    st = tracked.stat()
+    os.utime(tracked, ns=(st.st_atime_ns, st.st_mtime_ns - 600_000_000_000))
+    assert sessions.git(root, "--no-optional-locks", "status", "--porcelain") == ""
+    assert cli.main(["finalize", *args]) == 2
+    result = json.loads(capsys.readouterr().out)["recovery"]
+    assert result["status"] == "uncommitted_research" and result["other_count"] == 0
+    assert set(result["task_paths"]) == set(task["execution"]["files"]) | {task["preparation"]["spec"]}
+    assert index.read_bytes() == before

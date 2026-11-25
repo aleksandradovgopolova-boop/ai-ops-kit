@@ -57,7 +57,7 @@ PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.project_session finalize --runt
 `features/session-<request_id>/verification.md`. Codex получает точные пути в
 `host_actions.after_plan.research_outputs`. При отказе на незакоммиченном результате
 `finalize` возвращает код 2 и JSON с `recovery.task_paths`, `missing_outputs` и
-`other_paths`. При статусе `other_changes` останови фиксацию для разбора
+количеством посторонних изменений `other_count`. При статусе `other_changes` останови фиксацию для разбора
 посторонних изменений. Когда права позволяют, проверь и зафиксируй только
 файлы задачи, затем вызови finalize исходной сессии. При отсутствии прав сохрани
 материалы и передай причину штатному исполнителю Git.
