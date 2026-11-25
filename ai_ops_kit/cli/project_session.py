@@ -8,7 +8,7 @@ import sys
 import yaml
 
 from ai_ops_kit.lifecycle import project_session as sessions
-from ai_ops_kit.cli.project_session_completion import response as agent_response
+from ai_ops_kit.cli.project_session_completion import ResearchCheckpointRequired, response as agent_response
 
 
 @sessions.session_migration_store.guarded
@@ -377,6 +377,11 @@ def main(argv=None):
                                   if args.autonomous else current_session(root, args.runtime, args.session, task, signals))
             print(json.dumps(agent_response(root, result), ensure_ascii=False))
             return 0 if result.get("accepted") or result.get("status") == "accepted" else 1
+    except ResearchCheckpointRequired as exc:
+        print(json.dumps({"accepted": False, "status": "blocked", "reason": str(exc),
+                          "recovery": exc.recovery}, ensure_ascii=False))
+        print(f"AI Ops: {exc}. Сохранённая задача не считается принятой.", file=sys.stderr)
+        return 2
     except (sessions.HookReadInterrupted, KeyboardInterrupt, OSError, ValueError,
             KeyError, TypeError, AttributeError, yaml.YAMLError) as exc:
         if args.action == "hook":

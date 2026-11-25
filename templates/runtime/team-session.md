@@ -52,6 +52,16 @@ RESEARCH-контракт. Для другой задачи выбери при�
 PYTHONPATH=.ai/managed python3 -m ai_ops_kit.cli.project_session finalize --runtime <runtime> --session <session_id>
 ```
 
+В подготовленном исследовании RESEARCH сохрани ответ и ссылки на конкретные источники в
+`features/session-<request_id>/proposal.md`. Команды, результаты проверки и ограничения сохрани в
+`features/session-<request_id>/verification.md`. Codex получает точные пути в
+`host_actions.after_plan.research_outputs`. При отказе на незакоммиченном результате
+`finalize` возвращает код 2 и JSON с `recovery.task_paths`, `missing_outputs` и
+`other_paths`. При статусе `other_changes` останови фиксацию для разбора
+посторонних изменений. Когда права позволяют, проверь и зафиксируй только
+файлы задачи, затем вызови finalize исходной сессии. При отсутствии прав сохрани
+материалы и передай причину штатному исполнителю Git.
+
 Finalize запускает штатные проверки на committed HEAD, без моделей, установки зависимостей
 и доставки. Не достраивай заключения судьи за него: команда создаёт scoped reviewer requests.
 Передай их вместе с полным диапазоном base..HEAD реальному независимому read-only агенту/

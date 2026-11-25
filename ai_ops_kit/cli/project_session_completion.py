@@ -344,6 +344,55 @@ def _reconcile(root, runtime, session, *, save=True):
     return task
 
 
+def research_outputs(task):
+    """Пути для синтеза и доказательств из подготовленной RESEARCH постановки."""
+    if (task.get("preparation") or {}).get("workflow") != "RESEARCH":
+        return {}
+    directory = f"features/session-{task['request_id']}"
+    return {"proposal": f"{directory}/proposal.md", "verification": f"{directory}/verification.md"}
+
+
+class ResearchCheckpointRequired(ValueError):
+    def __init__(self, recovery):
+        super().__init__("сначала зафиксируй результат; проверки требуют чистый committed HEAD")
+        self.recovery = recovery
+
+
+def research_checkpoint(root, task, outputs):
+    """Read-only подсказка. Имена соседних файлов не дают права включить их в постановку."""
+    directory = Path(outputs["proposal"]).parent
+    allowed = {str(directory / name) for name in ("workitem.yaml", "run-plan.yaml", "run-report.json", "spec.yaml")}
+    allowed.update(outputs.values())
+    status = sessions.git(root, "--no-optional-locks", "status", "--porcelain=v1", "-z",
+                          "--no-renames", "--untracked-files=all", "--ignore-submodules=none")
+    own, other = [], []
+    for record in status.split("\0"):
+        if not record:
+            continue
+        if len(record) < 4 or record[2] != " ":
+            raise ValueError("не удалось разобрать состояние Git")
+        relative = record[3:]
+        file = root / relative
+        if (relative in allowed and record[:2] in {"??", " A", "A ", " M", "M ", "AM", "MM"}
+                and file.resolve() == file and file.is_file()):
+            own.append(relative)
+        else:
+            other.append(relative)
+    missing = []
+    for relative in outputs.values():
+        file = root / relative
+        if file.resolve() != file or not file.is_file() or file.stat().st_size == 0:
+            missing.append(relative)
+    return {"kind": "research-checkpoint", "request_id": task["request_id"],
+            "runtime": task["runtime"], "session_id": task["session_id"],
+            "base_revision": task["binding"]["head"], "current_revision": sessions.git(root, "rev-parse", "HEAD"),
+            "status": "other_changes" if other else "uncommitted_research", "task_paths": sorted(own),
+            "other_paths": sorted(other), "missing_outputs": missing, "outputs": outputs,
+            "next_step": ("Сохрани посторонние изменения; разберись с ними до фиксации исследования."
+                          if other else "Сохрани вывод с источниками и свидетельства. Проверь diff своих файлов и "
+                          "зафиксируй их в пределах разрешённых прав. Возобнови finalize той же сессии.")}
+
+
 @sessions.session_migration_store.guarded
 def finalize(root, runtime, session, digests):
     task = prepared(root, runtime, session, sessions.load(root, runtime, session))
@@ -355,6 +404,9 @@ def finalize(root, runtime, session, digests):
         return reconcile(root, runtime, session)
     from ai_ops_kit.engine.pipeline_git import _tree_clean
     if not _tree_clean(root):
+        outputs = research_outputs(task)
+        if outputs:
+            raise ResearchCheckpointRequired(research_checkpoint(root, task, outputs))
         raise ValueError("сначала зафиксируй результат; проверки требуют чистый committed HEAD")
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
         task = prepared(root, runtime, session, sessions.load(root, runtime, session))
@@ -500,6 +552,13 @@ def response(root, task, *, before_read=None):
                                 "pythonpath": str(Path(__file__).resolve().parents[2]),
                                 "argv": [sys.executable, "-P", "-m", "ai_ops_kit.cli.project_session", "finalize",
                                          "--runtime", task["runtime"], "--session", task["session_id"]]}
+        outputs = research_outputs(task)
+        if outputs:
+            action["after_plan"]["research_outputs"] = outputs
+            action["after_plan"]["instructions"] = (
+                "Перед finalize сохрани содержательный ответ с выводами и ссылками на источники в proposal, "
+                "а выполненные проверки, результаты и известные ограничения — в verification. "
+                "Проверь diff и зафиксируй результат только в пределах своих прав.")
     result["host_actions"] = action
     return result
 
