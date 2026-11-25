@@ -101,11 +101,11 @@ def within(root, relative):
 
 
 @read_phase
-def git(root, *args):
-    proc = gitio.raw_group(["-C", str(root), *args], timeout=10)
+def git(root, *args, binary=False):
+    proc = gitio.raw_group(["-C", str(root), *args], timeout=10, binary=binary)
     if proc.returncode:
         raise ValueError(f"git {' '.join(args)} недоступен: {proc.stderr.strip()[:200]}")
-    return proc.stdout.removesuffix("\n")
+    return proc.stdout if binary else proc.stdout.removesuffix("\n")
 
 
 @read_phase
@@ -167,7 +167,8 @@ def source_digest(root, feature=None, *, before_read=None):
     ignored = (".ai/runtime/", ".ai/generated/", ".ai/usage/", ".ai/managed/", ".ai/worktrees/")
     if feature:
         ignored += (f"features/{feature}/",)
-    files = git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard").split("\0")
+    raw = git(root, "ls-files", "-z", "--cached", "--others", "--exclude-standard", binary=True)
+    files = map(os.fsdecode, raw.split(b"\0"))
     values = {}
     for relative in sorted(set(files)):
         if not relative or relative.startswith(ignored):

@@ -29,10 +29,10 @@ def _exited(process: subprocess.Popen[str]) -> bool:
 
 
 def raw_group(args: list[str], *, cwd: str | Path | None = None,
-              timeout: float = GIT_TIMEOUT_DEFAULT) -> subprocess.CompletedProcess[str]:
+              timeout: float = GIT_TIMEOUT_DEFAULT, binary: bool = False) -> subprocess.CompletedProcess:
     """Дословный вывод, конечное ожидание и cleanup собственной POSIX Git-группы."""
     with subprocess.Popen(["git", *args], cwd=cwd, stdout=subprocess.PIPE,
-                          stderr=subprocess.PIPE, text=True, start_new_session=True) as process:
+                          stderr=subprocess.PIPE, text=not binary, start_new_session=True) as process:
         try:
             stdout, stderr = process.communicate(timeout=timeout)
         finally:

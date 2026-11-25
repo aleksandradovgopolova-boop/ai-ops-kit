@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import subprocess
 import sys
 import uuid
@@ -344,6 +346,68 @@ def _reconcile(root, runtime, session, *, save=True):
     return task
 
 
+def research_outputs(task):
+    """Пути для синтеза и доказательств из подготовленной RESEARCH постановки."""
+    if (task.get("preparation") or {}).get("workflow") != "RESEARCH":
+        return {}
+    directory = f"features/session-{task['request_id']}"
+    return {"proposal": f"{directory}/proposal.md", "verification": f"{directory}/verification.md"}
+
+
+class ResearchCheckpointRequired(ValueError):
+    def __init__(self, recovery):
+        super().__init__("сначала зафиксируй результат; проверки требуют чистый committed HEAD")
+        self.recovery = recovery
+
+
+def _research_file_sizes(root, proposal, allowed):
+    """Снимок обычных файлов задачи без перехода по ссылкам в каталоге или имени."""
+    sizes = {}
+    with sessions.session_migration_store.parent(root / proposal) as (directory, _):
+        for relative in allowed:
+            try:
+                info = os.stat(Path(relative).name, dir_fd=directory, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(info.st_mode):
+                sizes[relative] = info.st_size
+    return sizes
+
+
+def research_checkpoint(root, task, outputs):
+    """Read-only подсказка. Имена соседних файлов не дают права включить их в постановку."""
+    directory = Path(outputs["proposal"]).parent
+    allowed = {str(directory / name) for name in ("workitem.yaml", "run-plan.yaml", "run-report.json", "spec.yaml")}
+    allowed.update(outputs.values())
+    names = {relative.encode("ascii"): relative for relative in allowed}
+    status = sessions.git(root, "--no-optional-locks", "status", "--porcelain=v1", "-z",
+                          "--no-renames", "--untracked-files=all", "--ignore-submodules=none", binary=True)
+    if not status:
+        return None
+    sizes = _research_file_sizes(root, outputs["proposal"], allowed)
+    own = []
+    other_count = 0
+    for record in status.split(b"\0"):
+        if not record:
+            continue
+        if len(record) < 4 or record[2:3] != b" ":
+            raise ValueError("не удалось разобрать состояние Git")
+        relative = names.get(record[3:])
+        if relative in sizes and record[:2] in {b"??", b" A", b"A ", b" M", b"M ", b"AM", b"MM"}:
+            own.append(relative)
+            continue
+        other_count += 1
+    missing = [relative for relative in outputs.values() if not sizes.get(relative)]
+    return {"kind": "research-checkpoint", "request_id": task["request_id"],
+            "runtime": task["runtime"], "session_id": task["session_id"],
+            "base_revision": task["binding"]["head"], "current_revision": sessions.git(root, "rev-parse", "HEAD"),
+            "status": "other_changes" if other_count else "uncommitted_research", "task_paths": sorted(own),
+            "other_count": other_count, "missing_outputs": missing, "outputs": outputs,
+            "next_step": ("Сохрани посторонние изменения; разберись с ними до фиксации исследования."
+                          if other_count else "Сохрани вывод с источниками и свидетельства. Проверь diff своих файлов и "
+                          "зафиксируй их в пределах разрешённых прав. Возобнови finalize той же сессии.")}
+
+
 @sessions.session_migration_store.guarded
 def finalize(root, runtime, session, digests):
     task = prepared(root, runtime, session, sessions.load(root, runtime, session))
@@ -354,7 +418,12 @@ def finalize(root, runtime, session, digests):
     if previous and previous.get("phase") not in ("finished", "failed"):
         return reconcile(root, runtime, session)
     from ai_ops_kit.engine.pipeline_git import _tree_clean
-    if not _tree_clean(root):
+    outputs = research_outputs(task)
+    if outputs:
+        recovery = research_checkpoint(root, task, outputs)
+        if recovery is not None:
+            raise ResearchCheckpointRequired(recovery)
+    elif not _tree_clean(root):
         raise ValueError("сначала зафиксируй результат; проверки требуют чистый committed HEAD")
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
         task = prepared(root, runtime, session, sessions.load(root, runtime, session))
@@ -500,6 +569,13 @@ def response(root, task, *, before_read=None):
                                 "pythonpath": str(Path(__file__).resolve().parents[2]),
                                 "argv": [sys.executable, "-P", "-m", "ai_ops_kit.cli.project_session", "finalize",
                                          "--runtime", task["runtime"], "--session", task["session_id"]]}
+        outputs = research_outputs(task)
+        if outputs:
+            action["after_plan"]["research_outputs"] = outputs
+            action["after_plan"]["instructions"] = (
+                "Перед finalize сохрани содержательный ответ с выводами и ссылками на источники в proposal, "
+                "а выполненные проверки, результаты и известные ограничения — в verification. "
+                "Проверь diff и зафиксируй результат только в пределах своих прав.")
     result["host_actions"] = action
     return result
 
