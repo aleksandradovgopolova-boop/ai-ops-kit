@@ -159,3 +159,34 @@ def test_research_status_reports_all_untracked_and_never_refreshes_index(researc
     assert result["status"] == "uncommitted_research" and result["other_count"] == 0
     assert set(result["task_paths"]) == set(task["execution"]["files"]) | {task["preparation"]["spec"]}
     assert index.read_bytes() == before
+
+
+@pytest.mark.parametrize("ignored", [False, True])
+def test_cyclic_research_outputs_return_json_without_mutation(research, capsys, ignored):
+    root, task, args = research
+    outputs = task["host_actions"]["after_plan"]["research_outputs"]
+    proposal, verification = (root / outputs[key] for key in ("proposal", "verification"))
+    proposal.symlink_to(verification.name)
+    verification.symlink_to(proposal.name)
+    if ignored:
+        with (root / ".git/info/exclude").open("a") as stream:
+            for relative in outputs.values():
+                stream.write(f"/{relative}\n")
+    directory = sessions.session_dir(root, "codex", "research")
+    paths = [root / ".git/index", active_work.shared_registry_path(root),
+             *(p for p in directory.iterdir() if p.is_file()),
+             *(root / relative for relative in task["execution"]["files"]),
+             root / task["preparation"]["spec"]]
+    before = {p: p.read_bytes() for p in paths}
+    entries = set(directory.iterdir())
+    head = sessions.git(root, "rev-parse", "HEAD")
+    assert cli.main(["finalize", *args]) == 2
+    error = json.loads(capsys.readouterr().out)
+    assert error["accepted"] is False and error["status"] == "blocked"
+    recovery = error["recovery"]
+    assert set(recovery["missing_outputs"]) == set(outputs.values())
+    assert set(recovery["task_paths"]) == set(task["execution"]["files"]) | {task["preparation"]["spec"]}
+    assert recovery["other_count"] == (0 if ignored else 2)
+    assert set(directory.iterdir()) == entries and {p: p.read_bytes() for p in paths} == before
+    assert os.readlink(proposal) == verification.name and os.readlink(verification) == proposal.name
+    assert sessions.git(root, "rev-parse", "HEAD") == head

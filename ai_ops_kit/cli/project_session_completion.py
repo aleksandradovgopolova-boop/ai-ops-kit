@@ -7,6 +7,8 @@
 from __future__ import annotations
 
 import json
+import os
+import stat
 import subprocess
 import sys
 import uuid
@@ -358,6 +360,20 @@ class ResearchCheckpointRequired(ValueError):
         self.recovery = recovery
 
 
+def _research_file_sizes(root, proposal, allowed):
+    """Снимок обычных файлов задачи без перехода по ссылкам в каталоге или имени."""
+    sizes = {}
+    with sessions.session_migration_store.parent(root / proposal) as (directory, _):
+        for relative in allowed:
+            try:
+                info = os.stat(Path(relative).name, dir_fd=directory, follow_symlinks=False)
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(info.st_mode):
+                sizes[relative] = info.st_size
+    return sizes
+
+
 def research_checkpoint(root, task, outputs):
     """Read-only подсказка. Имена соседних файлов не дают права включить их в постановку."""
     directory = Path(outputs["proposal"]).parent
@@ -368,6 +384,7 @@ def research_checkpoint(root, task, outputs):
                           "--no-renames", "--untracked-files=all", "--ignore-submodules=none", binary=True)
     if not status:
         return None
+    sizes = _research_file_sizes(root, outputs["proposal"], allowed)
     own = []
     other_count = 0
     for record in status.split(b"\0"):
@@ -376,17 +393,11 @@ def research_checkpoint(root, task, outputs):
         if len(record) < 4 or record[2:3] != b" ":
             raise ValueError("не удалось разобрать состояние Git")
         relative = names.get(record[3:])
-        if relative and record[:2] in {b"??", b" A", b"A ", b" M", b"M ", b"AM", b"MM"}:
-            file = root / relative
-            if file.resolve() == file and file.is_file():
-                own.append(relative)
-                continue
+        if relative in sizes and record[:2] in {b"??", b" A", b"A ", b" M", b"M ", b"AM", b"MM"}:
+            own.append(relative)
+            continue
         other_count += 1
-    missing = []
-    for relative in outputs.values():
-        file = root / relative
-        if file.resolve() != file or not file.is_file() or file.stat().st_size == 0:
-            missing.append(relative)
+    missing = [relative for relative in outputs.values() if not sizes.get(relative)]
     return {"kind": "research-checkpoint", "request_id": task["request_id"],
             "runtime": task["runtime"], "session_id": task["session_id"],
             "base_revision": task["binding"]["head"], "current_revision": sessions.git(root, "rev-parse", "HEAD"),
