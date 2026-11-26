@@ -228,7 +228,10 @@ def test_host_record_is_revalidated_after_finalization(machine_packet):
     root, _, _, receipt, task, current = machine_packet
     _, reviews, _, _ = completion.review_inputs(root, task, current, {})
     from ai_ops_kit.shared import model_review_receipt
-    saved = {'model_review_receipt': reviews['ai_red_team']['model_receipt']}
+    red_team = reviews['ai_red_team']
+    saved = {'model_review_receipt': red_team['model_receipt'],
+             'files': {red_team['path']: red_team['sha256'], red_team['request_file']: receipt['scope']['request_sha256'],
+                       **red_team['attack_artifacts']}}
     model_review_receipt.recheck(saved)
     receipt['reviewer']['turn'] = 'replacement'
     with pytest.raises(ValueError, match='изменилась'):
@@ -242,3 +245,60 @@ def test_user_writable_directory_cannot_supply_host_attestation(tmp_path, monkey
     (tmp_path/name).write_text('{}')
     with pytest.raises((ValueError, OSError)):
         model_review_receipt._read_host_file(name)
+
+
+@pytest.mark.parametrize('damage', ['missing-attestation', 'wrong-result', 'wrong-request', 'missing-proof'])
+def test_replay_keeps_the_host_attestation_bound_to_files(machine_packet, damage):
+    from ai_ops_kit.shared import model_review_receipt
+    root, _, _, host, task, current = machine_packet
+    _, reviews, _, _ = completion.review_inputs(root, task, current, {})
+    review = reviews['ai_red_team']
+    files = {review['path']: review['sha256'], review['request_file']: host['scope']['request_sha256'],
+             **review['attack_artifacts']}
+    saved = {'model_review_receipt': review['model_receipt'], 'files': files}
+    if damage == 'missing-attestation':
+        del saved['model_review_receipt']
+    elif damage == 'wrong-result':
+        files[review['path']] = '7' * 64
+    elif damage == 'wrong-request':
+        files[review['request_file']] = '7' * 64
+    else:
+        del files[next(iter(review['attack_artifacts']))]
+    with pytest.raises(ValueError):
+        model_review_receipt.recheck(saved)
+
+
+@pytest.mark.parametrize('damage', ['lost-reference', 'replaced-reference', 'removed-machine-files', 'changed-report'])
+def test_execution_state_cannot_remove_or_replace_verified_machine_judgment(machine_packet, damage):
+    from ai_ops_kit.shared import model_review_receipt
+    root, _, _, host, task, current = machine_packet
+    _, reviews, _, _ = completion.review_inputs(root, task, current, {})
+    review = reviews['ai_red_team']
+    report = {'kind':'current-session-verification','ready_for_pr':True,'attempt':'attempt-fixture',
+              'scope':host['scope'],'binding':current,'request_id':task['request_id'],
+              'files': {review['path']: review['sha256'], review['request_file']: host['scope']['request_sha256'],
+                        **review['attack_artifacts']}, 'model_review_receipt': review['model_receipt'],
+              'pipeline': {'reviews': [{'source': 'host-model-red-team-artifact'}]}}
+    raw = json.dumps(report).encode()
+    checksum = hashlib.sha256(raw).hexdigest()
+    verification = {'report':'report.json','sha256':checksum,'attempt':'attempt-fixture','scope':host['scope']}
+    execution = {'mode':'current-session', 'completion_binding':current, 'model_review_receipt':review['model_receipt'],
+                 'files':{**report['files'],'report.json':checksum}}
+    saved = {'request_id':task['request_id'],'execution':execution,'verification':verification}
+    model_review_receipt.recheck_completion(saved, lambda _: raw)
+    if damage == 'lost-reference':
+        del execution['model_review_receipt']
+    elif damage == 'replaced-reference':
+        execution['model_review_receipt'] = dict(review['model_receipt'], sha256='7'*64)
+    elif damage == 'removed-machine-files':
+        del execution['files'][review['path']]
+    else:
+        raw = b'{}'
+    with pytest.raises(ValueError):
+        model_review_receipt.recheck_completion(saved, lambda _: raw)
+
+
+def test_installed_team_session_instructions_expose_passive_model_path():
+    text = (Path(__file__).resolve().parents[2]/'templates/runtime/team-session.md').read_text()
+    assert all(key in text for key in ('host_actions.model_jobs', 'awaiting_specialist_evidence',
+                                       'collect-existing-host-review', 'human_jobs', 'NO_SELF_REVIEW'))

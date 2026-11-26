@@ -86,8 +86,46 @@ def load(scope, *, expected_sha256=None):
 
 
 def recheck(record):
-    if "model_review_receipt" in record:
-        receipt = record["model_review_receipt"]
-        if not isinstance(receipt, dict) or not re.fullmatch(r"[0-9a-f]{64}", str(receipt.get("sha256"))):
-            raise ValueError("неверная сохранённая привязка квитанции хоста")
-        load(receipt["scope"], expected_sha256=receipt["sha256"])
+    """На reconcile/verify связать receipt с теми же проверенными файлами."""
+    files = record.get("files", {})
+    model_paths = [Path(path) for path in files if Path(path).parts[-3:] ==
+                   (".ai", "reviewer-requests", "ai_red_team.model.reviewer.json")]
+    if not model_paths and "model_review_receipt" not in record:
+        return
+    receipt = record.get("model_review_receipt")
+    if (len(model_paths) != 1 or not isinstance(receipt, dict) or not isinstance(receipt.get("scope"), dict)
+            or not re.fullmatch(r"[0-9a-f]{64}", str(receipt.get("sha256")))):
+        raise ValueError("нет полной сохранённой привязки квитанции хоста")
+    host, _ = load(receipt["scope"], expected_sha256=receipt["sha256"])
+    verdict = model_paths[0]
+    request = verdict.with_name("ai_red_team.request.json")
+    if (files[str(verdict)] != host["verdict_sha256"] or files.get(str(request)) != receipt["scope"].get("request_sha256")
+            or any(files.get(path) != checksum for path, checksum in host["execution_artifacts"].items())):
+        raise ValueError("квитанция хоста относится к другим проверенным файлам")
+
+
+def recheck_completion(task, read_project_file):
+    """Верификация принятой задачи использует закреплённый отчёт штатного finalize."""
+    execution = task["execution"]
+    if execution.get("mode") != "current-session":
+        return
+    verification = task.get("verification") or {}
+    report_path = verification.get("report")
+    if not report_path or execution["files"].get(report_path) != verification.get("sha256"):
+        raise ValueError("нет подтверждённого отчёта приёмки текущей сессии")
+    raw = read_project_file(report_path)
+    if hashlib.sha256(raw).hexdigest() != verification.get("sha256"):
+        raise ValueError("отчёт приёмки текущей сессии изменён")
+    report = json.loads(raw)
+    if (report.get("kind") != "current-session-verification" or report.get("ready_for_pr") is not True
+            or report.get("request_id") != task["request_id"] or report.get("attempt") != verification.get("attempt")
+            or report.get("scope") != verification.get("scope") or report.get("binding") != execution.get("completion_binding")):
+        raise ValueError("исходный отчёт не подтверждает принятие этой попытки")
+    host = report.get("model_review_receipt")
+    judged = any(entry.get("source") == "host-model-red-team-artifact"
+                 for entry in ((report.get("pipeline") or {}).get("reviews") or []))
+    if judged != bool(host) or host != execution.get("model_review_receipt"):
+        raise ValueError("привязка к заключению модели расходится с отчётом проверки")
+    if host and any(execution["files"].get(path) != value for path, value in report["files"].items()):
+        raise ValueError("проверенные машиной файлы расходятся с отчётом проверки")
+    recheck(report)

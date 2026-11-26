@@ -253,8 +253,11 @@ def evaluate(root, runtime, session, request, attempt):
         for review in reviews.values():
             files.update(review.get('attack_artifacts', {}))
         if model_receipt:
-            model_review_receipt.recheck({'model_review_receipt': model_receipt})
             files[red_team['request_file']] = model_receipt['scope']['request_sha256']
+            model_review_receipt.recheck({'model_review_receipt': model_receipt, 'files': files})
+            for relative, checksum in files.items():
+                if sessions.digest(sessions.within(root, relative).read_bytes()) != checksum:
+                    raise ValueError('проверенный артефакт изменён до завершения работы: ' + relative)
         ready = not missing and (pipeline or {}).get("ready_for_pr") is True
         if ready:
             from ai_ops_kit.lifecycle import active_work

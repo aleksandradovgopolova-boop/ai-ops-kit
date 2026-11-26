@@ -702,7 +702,8 @@ def test_relative_operator_finish_reconciles_own_previous_status(project, monkey
     assert not public.exists() and not list(aw.copies_claims_dir(project).glob("*.yaml"))
 
 
-def test_finalize_accepts_machine_judgment_without_overriding_another_gate(project, monkeypatch):
+@pytest.mark.parametrize('change_evidence', [False, True])
+def test_finalize_accepts_machine_judgment_without_overriding_another_gate(project, monkeypatch, change_evidence):
     from ai_ops_kit.shared import model_review_receipt
     task, args = start(project, monkeypatch, 'codex', 'research', ai_component=True)
     assert cli.main(['finalize', *args]) == 1
@@ -737,6 +738,23 @@ def test_finalize_accepts_machine_judgment_without_overriding_another_gate(proje
         completion.evaluate(Path(command[2]), *command[3:])
         return subprocess.CompletedProcess(command, 0, '', '')
     monkeypatch.setattr(sessions, 'run_process', run_worker)
+    if change_evidence:
+        from ai_ops_kit.engine import execution_pipeline
+        from ai_ops_kit.lifecycle import active_work
+        actual_pipeline = execution_pipeline.run_pipeline
+        def change_after_checks(*args, **kwargs):
+            pipeline = actual_pipeline(*args, **kwargs)
+            assert next(g for g in pipeline['gates']['gate_results'] if g['gate'] == 'ai_red_team')['status'] == 'pass'
+            proof.write_text('evidence changed after checks')
+            return pipeline
+        monkeypatch.setattr(execution_pipeline, 'run_pipeline', change_after_checks)
+        monkeypatch.setattr(active_work, 'finish_cmd', lambda *args, **kw: pytest.fail('stale evidence closed active work'))
+        blocked = completion.finalize(project, 'codex', 'complete', other_digests)
+        assert blocked['status'] == 'blocked'
+        assert 'артефакт изменён до завершения работы' in blocked['blocker']
+        assert proof.read_text() == 'evidence changed after checks'
+        assert sessions.load(project, 'codex', 'complete')['status'] != 'accepted'
+        return
     assert cli.main(['finalize', *args, '--review-digests', json.dumps(other_digests)]) == 1
     assert (project/'.ai/runtime/check-ran').read_text() == 'real check'
     saved = sessions.load(project, 'codex', 'complete')
