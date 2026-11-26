@@ -224,6 +224,19 @@ def _observe_previous(client, read, current_run, observation, job_budget, expect
     return None, None
 
 
+def _pending_checks(report):
+    if "implementation_ci_incomplete" in report["blockers"]:
+        missing = sorted({row["pr"] for row in report.get("implementations", [])
+                          if row.get("merged_change_observed") is True and row.get("ci_observed") is False
+                          and type(row.get("pr")) is int and row["pr"] > 0})
+        if missing:
+            preview = ", ".join(f"#{number}" for number in missing[:5])
+            if len(missing) > 5:
+                preview += f" и ещё {len(missing) - 5}"
+            return f"Сверьте результаты проверок для слитых PR {preview}. План пока не подтвердил их для версии, вошедшей в выпуск."
+    return "Завершить проверки и зависимости, перечисленные в плане выпуска."
+
+
 def project(report, prior, publisher=None, *, skipped_notice=None):
     """Deterministic result/decision notice; это UI projection, не human push receipt."""
     report = json.loads(json.dumps(report))
@@ -244,7 +257,7 @@ def project(report, prior, publisher=None, *, skipped_notice=None):
         summary = f"План выпуска {report['target_version']} пересчитан по слитым изменениям."
         status = "ok" if report["release_ready"] else "degraded"
         next_steps = (["Выпуск проверен. Действия публикации выполняет действующий релизный процесс."]
-                      if report["release_ready"] else ["Завершить проверки и зависимости, перечисленные в плане выпуска."])
+                      if report["release_ready"] else [_pending_checks(report)])
     else:
         summary, status = "Не удалось подтвердить полный состав следующего выпуска.", "blocked"
         next_steps = ["Повторить автоматическую сверку после восстановления источников."]
