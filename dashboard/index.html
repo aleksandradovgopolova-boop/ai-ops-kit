@@ -477,11 +477,39 @@
     .main .rh-h{margin-bottom:0}
     .foot{gap:2px}
   }
+  @media (min-width:1101px) and (max-height:660px){
+    .app{padding:7px 16px;gap:5px}
+    .main{gap:5px}
+    .main .panel{padding:6px 10px}
+    .main .north,.roadstrip .rh-list,.roadstrip .rh-empty{display:none}
+    .main .rh-h{margin-bottom:0}
+    .main .rh{padding:6px 9px}
+    .main .northstar-metric .k .dir{display:none}
+    .card-focus .preview-title{-webkit-line-clamp:1}
+  }
   @media (max-width:420px) and (max-height:700px){
     .app{gap:4px;padding:5px 8px}
     .main{gap:4px}
     .main .panel{padding:5px 8px}
     .head .brand-label{display:none}
+  }
+  @media (max-width:420px) and (max-height:600px){
+    .app{gap:3px;padding:4px 7px}
+    .main{gap:3px}
+    .main .panel{padding:4px 7px}
+    .main .eyebrow{margin-bottom:2px}
+    .card-focus .preview-title,#release-preview{-webkit-line-clamp:1}
+    .card-focus .focus-prog .bar{display:none}
+    .foot{flex-direction:row;align-items:center;justify-content:space-between;font-size:9px}
+  }
+  @media (min-width:620px) and (max-width:1100px) and (max-height:500px){
+    .main{grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+    .main .card-health,.main .card-focus{grid-column:1}
+    .main .metrics-panel,.main .roadstrip{grid-column:2}
+    .main .wide{grid-column:auto}
+    .head{flex-wrap:nowrap}
+    .main .panel{padding:5px 8px}
+    .foot{flex-direction:row}
   }
 </style>
 
@@ -1947,12 +1975,28 @@
       if(rows.length) paragraph("Изменения с подтверждёнными проверками: "+rows.filter(p=>p.ci_observed).length+" из "+rows.length+".");
       if(entries.some(e=>e.kind==="limit")) list(entries.filter(e=>e.kind==="limit").map(bullet));
       if(plan.delivery?.observed==="unknown") paragraph("Доставка в дочерние проекты ещё не подтверждена.");
-      if(plan.message.next?.length){heading("Что осталось до выпуска");list(plan.message.next.map(esc));}
+      const reasons={
+        release_bump_pending:"Версия в репозитории ещё не поднята до запланированной.",
+        final_release_evidence_required:"Итоговые проверки на коммите выпуска ещё не подтверждены.",
+        implementation_ci_incomplete:"Для части включённых изменений ещё не подтверждены все проверки.",
+        dependency_evidence_missing:"Не подтверждена готовность зависимостей выпуска.",
+        unverified_merge_provenance:"Для части коммитов не подтверждена связь со слитыми изменениями.",
+        channel_evidence_missing:"Не подтверждена готовность канала распространения.",
+        major_requires_owner_decision:"Для новой основной версии требуется решение владельца.",
+        unreleased_changes_without_fragments:"У части изменений отсутствует описание для выпуска.",
+        source_unknown_or_invalid:"Не удалось подтвердить исходные данные плана."
+      };
+      if(plan.blockers?.length||plan.message.next?.length){
+        heading("Что осталось до выпуска");
+        list((plan.blockers||[]).map(code=>esc(reasons[code]||code)));
+        for(const next of plan.message.next||[]) paragraph(next);
+      }
       if(rows.length){
         heading("Подробнее");
         parts.push("<details><summary>Изменения и результаты проверок</summary>");
         list(rows.map(p=>(repo&&Number.isInteger(p.pr)?evidenceLink(repo+"/pull/"+p.pr,"PR #"+p.pr):esc("PR #"+p.pr))+
-          (p.ci_observed?" · проверки подтверждены":" · проверки ещё не подтверждены")));
+          (p.ci_observed?" · проверки подтверждены":" · проверки ещё не подтверждены")+
+          (repo&&/^[0-9a-f]{40}$/.test(p.merge_sha)?" · "+evidenceLink(repo+"/commit/"+p.merge_sha,p.merge_sha.slice(0,7)):"")));
         parts.push("</details>");
       }
       return '<div class="release-notes">'+parts.join("")+"</div>";

@@ -32,6 +32,7 @@ def dashboard_data():
         horizon["items"] = horizon["items"] + ["Подробное описание ожидаемого результата " * 8] * 15
         horizon["total"] = len(horizon["items"])
     release = {
+        "blockers": ["final_release_evidence_required"],
         "source": {"sha": NEXT_SHA}, "target_version": "4.15.1",
         "message": {"summary": "Подготовка следующего выпуска", "next": ["Проверить состав"]},
         "implementations": [{"pr": 1000 + i, "merge_sha": "a" * 40, "ci_observed": True} for i in range(48)],
@@ -106,7 +107,9 @@ def measure_in_chrome(chrome, path, width, height):
 
 @pytest.fixture(scope="module", params=[
     pytest.param((1101, 680, True), id="1101x680"), pytest.param((1280, 720, True), id="1280x720"),
+    pytest.param((1366, 600, True), id="1366x600"), pytest.param((1280, 600, True), id="1280x600"),
     pytest.param((1440, 800, True), id="1440x800"), pytest.param((1920, 1080, True), id="1920x1080"),
+    pytest.param((844, 390, True), id="844x390"), pytest.param((320, 568, True), id="320x568"),
     pytest.param((390, 844, True), id="390x844"), pytest.param((320, 640, True), id="320x640"),
     pytest.param((1101, 680, False), id="1101x680-no-focus"),
 ])
@@ -144,6 +147,8 @@ def test_future_and_published_releases_have_separate_details(page):
     future = page["dialogs"]["panel:release"]
     published = page["dialogs"]["published-release"]
     assert "1047" in future["text"] and future["detailsOpen"]
+    assert "Итоговые проверки на коммите выпуска" in future["text"]
+    assert REPO_URL + "/commit/" + "a" * 40 in future["links"]
     assert RELEASE_NOTE in published["text"] and RELEASE_NOTE not in future["text"]
     assert NEXT_NOTE in future["text"] and NEXT_NOTE not in published["text"]
     assert REPO_URL + "/blob/" + NEXT_SHA + "/" + NEXT_PATH in future["links"]
