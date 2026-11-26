@@ -18,8 +18,11 @@
 from __future__ import annotations
 
 import argparse
+import json
 import sys
 from pathlib import Path
+
+from ai_ops_kit.devtools import release_child_observation
 
 PKG = next((_p for _p in Path(__file__).resolve().parents if (_p / "VERSION").is_file()),
            Path(__file__).resolve().parents[2])
@@ -110,7 +113,15 @@ def main(argv) -> int:
     ap.add_argument("--schedule", default="", help="триггер сборки: дата/период")
     ap.add_argument("--pending", action="store_true", help="только перечислить накопленное")
     ap.add_argument("--root", default=str(PKG))
+    ap.add_argument("--child-delivery", nargs="+", metavar="OWNER/REPO",
+                    help="частный отчёт о версии и PR в явно выбранных дочерних проектах")
     a = ap.parse_args(argv[1:])
+    if a.child_delivery:
+        if a.pending or a.milestone or a.schedule:
+            ap.error("--child-delivery запускается отдельно от режимов сборки")
+        rows = [release_child_observation.observe(repo) for repo in a.child_delivery]
+        print(json.dumps({"rows": rows}, ensure_ascii=False, indent=2))
+        return 0 if all(row["update_pr"]["state"] == "observed" for row in rows) else 1
     root = Path(a.root)
     if a.pending:
         frags = pending_fragments(root)
