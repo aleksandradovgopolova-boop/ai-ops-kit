@@ -198,7 +198,7 @@ def test_release_notes_follow_vision_typography(page):
     assert source["family"] == vision["section"]["family"]
     assert float(source["size"].removesuffix("px")) < float(vision["detail"]["size"].removesuffix("px"))
 
-@pytest.mark.parametrize("width,height", [(320, 568), (844, 390)])
+@pytest.mark.parametrize("width,height", [(305, 568), (320, 568), (844, 390)])
 def test_overview_fits_when_github_is_unavailable(tmp_path, dashboard_data, width, height):
     data = dict(dashboard_data, issues=None, release_plan={"message": {
         "summary": "Не удалось подтвердить полный состав следующего выпуска."}})
