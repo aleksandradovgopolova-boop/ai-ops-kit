@@ -21,10 +21,13 @@ from __future__ import annotations
 
 import argparse
 import datetime as _dt
+import hashlib
+import io
 import json
 import re
 import subprocess
 import sys
+import tarfile
 from pathlib import Path
 
 # Этот dev-сборщик поддерживает прежний запуск файлом из любого cwd.
@@ -249,13 +252,20 @@ def _plan(root: Path, rel="planning/plan.yaml"):
         return None
 
 
-def goals(plan):
+def _russian_text(value):
+    return " ".join(value.split()) if isinstance(value, str) and re.search(r"[А-Яа-яЁё]", value) else None
+
+
+def goals(plan, roadmap_text=""):
     gs = (plan or {}).get("goals", []) or []
     from collections import Counter
     c = Counter(g.get("status", "?") for g in gs)
     active = [g.get("id") for g in gs if g.get("status") == "active"]
     paused = [g.get("id") for g in gs if g.get("status") == "paused"]
-    return {"total": len(gs), "achieved": c.get("achieved", 0),
+    roadmap_titles = {gid: label for gid, label in _road_entries(roadmap_text) if gid}
+    titles = {g["id"]: _russian_text(g.get("title")) or _russian_text(roadmap_titles.get(g["id"]))
+              for g in gs if g.get("id") and g.get("status") in ("active", "paused")}
+    return {"titles": titles, "total": len(gs), "achieved": c.get("achieved", 0),
             "active": c.get("active", 0), "paused": c.get("paused", 0),
             "active_list": active, "paused_list": paused}
 
@@ -276,16 +286,16 @@ ROAD_HORIZONS = [
 ]
 
 
-def _road_bullets(block: str, limit: int = 20):
+def _road_entries(block: str):
     """Ёмкие названия направлений из буллитов секции — на понятном языке, без id и YAML.
 
     Жирный заголовок, в том числе после `` `goal-id` — ``, — готовое название направления.
     Без жирного заголовка берём фразу после id до первого предложения или запятой.
     """
-    items = []
     for m in re.finditer(r"^-\s+(.+?)(?=\n-\s|\n\(|\n##\s|\Z)", block, re.DOTALL | re.MULTILINE):
         raw = " ".join(m.group(1).split())
-        rest = re.sub(r"^`[^`]+`\s*[—-]\s*", "", raw)
+        goal = re.match(r"^`([^`]+)`\s*[—-]\s*", raw)
+        rest = raw[goal.end():] if goal else raw
         bold = re.match(r"\*\*(.+?)\*\*", rest)
         if bold:
             label = bold.group(1)
@@ -295,7 +305,11 @@ def _road_bullets(block: str, limit: int = 20):
         if not bold and len(label) > 90:
             label = label[:88].rstrip() + "…"
         if label:
-            items.append(label)
+            yield goal.group(1) if goal else None, label
+
+
+def _road_bullets(block: str, limit: int = 20):
+    items = [label for _, label in _road_entries(block)]
     return {"items": items[:limit], "total": len(items)}
 
 
@@ -421,7 +435,7 @@ def delivery_evidence(root: Path):
         if published:
             r = max(published, key=lambda r: r["published_at"])
             out["release"] = {"tag": r["tag_name"], "published_at": r["published_at"],
-                              "url": r["html_url"]}
+                              "url": r["html_url"], "notes": r.get("body") or ""}
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
         pass
     try:
@@ -701,12 +715,16 @@ def build_modals(root: Path, *, roadmap_data, goals_data, waiting, capmap, obs):
 
     g = goals_data or {}
     bsec = []
-    if g.get("active_list"):
-        bsec.append({"h": "В работе", "list": norm(g["active_list"])})
-    if g.get("paused_list"):
-        bsec.append({"h": "На паузе", "list": norm(g["paused_list"])})
+    titles = g.get("titles") or {}
+    for key, heading in (("active_list", "В работе"), ("paused_list", "На паузе")):
+        if g.get(key):
+            bsec.append({"h": heading, "list": [
+                {"name": titles.get(gid) or "Название цели пока не указано"} for gid in g[key]]})
     if waiting:
-        bsec.append({"h": "Ждёт решения владельца", "list": [{"name": w["title"]} for w in waiting]})
+        bsec.append({"h": "Ждёт решения владельца", "list": [
+            {"name": _russian_text(w.get("human_decision")) or "Решение владельца пока не сформулировано",
+             "desc": _russian_text(w.get("title")) or _russian_text(w.get("waiting_on")) or ""}
+            for w in waiting]})
     modals["backlog"] = {
         "title": "Бэклог целей", "path": "planning/plan.yaml",
         "lead": f"{g.get('achieved','—')} из {g.get('total','—')} целей достигнуто · "
@@ -762,6 +780,57 @@ def build_spine(root: Path, metrics_filled: bool):
     return out
 
 
+def upcoming_release_notes(root: Path, plan, repo):
+    """Тексты запланированных фрагментов из дерева Git. Неполный набор не показываем."""
+    if not isinstance(plan, dict) or plan.get("cycle_state") != "planned" or plan.get("composition_available") is not True:
+        return None
+    if not repo or plan.get("repository") != f"{repo['owner']}/{repo['name']}":
+        return None
+    source = plan.get("source")
+    sha = source.get("sha") if isinstance(source, dict) else None
+    target = plan.get("target_version")
+    fragments = plan.get("fragments")
+    digests = plan.get("input_digests")
+    if not (isinstance(sha, str) and re.fullmatch(r"[0-9a-f]{40}", sha)
+            and isinstance(target, str) and re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", target)
+            and isinstance(fragments, dict) and fragments and isinstance(digests, dict)):
+        return None
+    entries = []
+    matched = set()
+    try:
+        head = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, timeout=10, stderr=subprocess.DEVNULL)
+        if head.decode().strip() != sha:
+            return None
+        archive = subprocess.check_output(["git", "archive", "--format=tar", sha, "--", "newsfragments"],
+                                          cwd=root, timeout=15, stderr=subprocess.DEVNULL)
+        with tarfile.open(fileobj=io.BytesIO(archive), mode="r:") as tree:
+            for kind, slugs in fragments.items():
+                if not isinstance(kind, str) or not re.fullmatch(r"[a-z][a-z0-9_-]*", kind) or not isinstance(slugs, list):
+                    return None
+                for slug in slugs:
+                    if not isinstance(slug, str) or not re.fullmatch(r"[\w-][\w.-]*", slug):
+                        return None
+                    path = f"newsfragments/{slug}.{kind}.md"
+                    if kind == "misc" and path not in digests:
+                        path = f"newsfragments/{slug}.md"
+                    if path in matched or path == "newsfragments/README.md" or path not in digests:
+                        return None
+                    member = tree.getmember(path)
+                    if not member.isfile():
+                        return None
+                    raw = tree.extractfile(member).read()
+                    if hashlib.sha256(raw).hexdigest() != digests[path]:
+                        return None
+                    text = raw.decode("utf-8").strip()
+                    if not text:
+                        return None
+                    entries.append({"kind": kind, "text": text, "path": path})
+                    matched.add(path)
+    except (KeyError, OSError, subprocess.SubprocessError, tarfile.TarError, UnicodeError):
+        return None
+    return {"source_sha": sha, "target_version": target, "entries": entries} if entries else None
+
+
 def build(root: Path, *, release_plan=None) -> dict:
     action = next_action(root)
     plan = _plan(root, action.get("source"))
@@ -769,15 +838,17 @@ def build(root: Path, *, release_plan=None) -> dict:
     pm = product_metrics_status(root)
     capmap = capability_map(root)
     road = roadmap(root)
-    g = goals(plan)
+    g = goals(plan, _read(root, "ROADMAP.md"))
     waiting = waiting_on_owner(plan)
     obs = metric_observations(root)
     delivery = delivery_evidence(root)
     field = field_readout(root)
+    repo = repo_slug(root)
     return {
         "release_plan": release_plan,
+        "upcoming_release_notes": upcoming_release_notes(root, release_plan, repo),
         "generated_at": _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds"),
-        "repo": repo_slug(root),
+        "repo": repo,
         "version": version(root),
         "channel": channel(root),
         "maturity": _maturity_from_passport(psections),
