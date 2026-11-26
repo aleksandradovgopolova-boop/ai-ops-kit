@@ -191,6 +191,8 @@ def test_valid_negative_human_verdict_reaches_gate_even_with_model_pass(machine_
     human = reviewer_handoff.verdict_path(handoff, 'ai_red_team')
     verdict = dict(json.loads(machine.read_bytes()), reviewer_kind='human', reviewer='human-fixture',
                    status=status, blockers=['independent fixture finding'])
+    if status == 'warn':
+        del verdict['attack_evidence']
     human.write_text(json.dumps(verdict))
     digests = {'ai_red_team': hashlib.sha256(human.read_bytes()).hexdigest()}
     old_request = receipt['scope']['request_sha256'] if pending else None
@@ -224,6 +226,50 @@ def test_unusable_human_can_fall_back_only_for_current_pending_codex_request(mac
         assert not missing and reviews['ai_red_team']['path'] == str(machine.relative_to(root))
     else:
         assert missing and 'ai_red_team' not in reviews
+
+
+@pytest.mark.parametrize('damage', ['missing-path', 'missing-sha256', 'wrong-path', 'wrong-sha256',
+                                    'wrong-kind', 'wrong-revision', 'not-a-record', 'not-a-list',
+                                    'null', 'too-many', 'decode-depth', 'unresolved-file'])
+def test_invalid_supplied_evidence_in_negative_verdict_stays_pending_until_permitted_fallback(
+        machine_packet, damage, monkeypatch):
+    root, handoff, machine, receipt, task, current = machine_packet
+    human = reviewer_handoff.verdict_path(handoff, 'ai_red_team')
+    verdict = dict(json.loads(machine.read_bytes()), reviewer_kind='human', reviewer='human-fixture',
+                   status='fail', blockers=['qualification finding'])
+    proof = verdict['attack_evidence'][0]
+    bad = {'missing-path': [{}], 'missing-sha256': [{k: v for k, v in proof.items() if k != 'sha256'}],
+           'wrong-path': [dict(proof, path=[])], 'wrong-sha256': [dict(proof, sha256=123)],
+           'wrong-kind': [dict(proof, kind=False)], 'wrong-revision': [dict(proof, tested_revision={})],
+           'not-a-record': [None], 'not-a-list': {}, 'null': None, 'too-many': [proof] * 33}
+    if damage in bad:
+        verdict['attack_evidence'] = bad[damage]
+    elif damage == 'unresolved-file':
+        proof['path'] = '.ai/runtime/unresolved-qualification-file'
+        original_resolve = Path.resolve
+        def controlled_resolve(path, *args, **kwargs):
+            if path == root / proof['path']:
+                raise RuntimeError('unresolved path on Python 3.12')
+            return original_resolve(path, *args, **kwargs)
+        monkeypatch.setattr(Path, 'resolve', controlled_resolve)
+    raw = json.dumps(verdict).encode()
+    human.write_bytes(raw)
+    if damage == 'decode-depth':
+        original_loads = json.loads
+        def controlled_decode(value, *args, **kwargs):
+            if value == raw:
+                raise RecursionError('decoder depth limit')
+            return original_loads(value, *args, **kwargs)
+        monkeypatch.setattr(json, 'loads', controlled_decode)
+    digests = {'ai_red_team': hashlib.sha256(raw).hexdigest()}
+    scope = {k: v for k, v in receipt['scope'].items() if k != 'request_sha256'}
+    with pytest.raises(ValueError):
+        pipeline_evidence._specialist_input(root, human, digests['ai_red_team'], scope)
+    _, reviews, missing, requests = completion.review_inputs(root, task, current, digests)
+    assert 'ai_red_team' not in reviews and missing and len(requests) == 1
+    _, reviews, missing, requests = completion.review_inputs(root, task, current, digests,
+        pending_model_request=receipt['scope']['request_sha256'])
+    assert not missing and not requests and reviews['ai_red_team']['path'] == str(machine.relative_to(root))
 
 
 def test_finalize_inputs_automatically_consume_host_review_with_no_supplied_digest(machine_packet):

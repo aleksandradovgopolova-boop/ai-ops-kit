@@ -91,6 +91,7 @@ def scope(task, current, *, before_read=None):
 
 
 def _review_record(root, task, current, expected, handoff, gid, path, checksum, criteria, request_path, *, model_scope=None):
+    from ai_ops_kit.checks import acceptance_result, reviewer_result
     from ai_ops_kit.engine import reviewer_handoff
     if model_scope is not None:
         from ai_ops_kit.engine.pipeline_evidence import _specialist_input
@@ -102,7 +103,7 @@ def _review_record(root, task, current, expected, handoff, gid, path, checksum, 
         raw = stream.read(262145 if gid == 'ai_red_team' else -1)
     if gid == 'ai_red_team' and len(raw) > 262144:
         raise ValueError('заключение специалиста превышает предел')
-    rr = json.loads(raw)
+    rr = reviewer_result.decode(raw)
     if sessions.digest(raw) != checksum or any(rr.get(k) != v for k, v in expected.items()):
         raise ValueError("нет доверенного digest либо привязка вердикта устарела")
     who = rr.get("reviewer")
@@ -119,7 +120,6 @@ def _review_record(root, task, current, expected, handoff, gid, path, checksum, 
         if valid is None:
             raise ValueError(reason)
     elif gid == "acceptance":
-        from ai_ops_kit.checks import acceptance_result
         errors = acceptance_result.check(rr, [c["id"] for c in criteria])
         if errors:
             raise ValueError("; ".join(errors))
