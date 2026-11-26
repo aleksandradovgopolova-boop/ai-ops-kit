@@ -134,7 +134,7 @@ def test_human_request_is_exposed_separately_from_native_agent_jobs(packet, monk
     alternative = verdict_path.with_name('ai_red_team.model.reviewer.json')
     alternative.write_text('{}')  # поздний неподтверждённый кандидат не вытесняет человеческий digest
     _, accepted, missing, pending = completion.review_inputs(root, task, current,
-        {'ai_red_team': hashlib.sha256(before[0]).hexdigest()}, inherited=True)
+        {'ai_red_team': hashlib.sha256(before[0]).hexdigest()}, pending_model_request=action['model_jobs'][0]['request_sha256'])
     assert not missing and not pending and 'model_receipt' not in accepted['ai_red_team']
     assert (verdict_path.read_bytes(), attack_path.read_bytes(), json.dumps(task, sort_keys=True)) == before
 
@@ -144,14 +144,16 @@ def test_malformed_specialized_checks_return_errors_instead_of_crashing():
 
 
 @pytest.fixture
-def machine_packet(packet, monkeypatch):
+def machine_packet(packet, monkeypatch, request):
     """Host I/O boundary substituted with sealed fixture bytes; no real model calls."""
     from ai_ops_kit.engine import acceptance_verify
     from ai_ops_kit.shared import review_verdict
     root, _, verdict, _, report, expected, _, _ = packet
+    runtime = getattr(request, 'param', 'codex')
+    expected = dict(expected, writer_session=runtime + ':writer-fixture')
     current = dict(root=str(root), head=expected['reviewed_revision'],
                    managed_sha256='4'*64, config_sha256='5'*64)
-    task = {'runtime': 'codex', 'session_id': 'writer-fixture', 'request_id': expected['request_id'],
+    task = {'runtime': runtime, 'session_id': 'writer-fixture', 'request_id': expected['request_id'],
             'binding': {'head': expected['base_revision']}, 'execution': {'signals': {}}}
     directory = root/'features'/expected['workitem_id']
     directory.mkdir(parents=True)
@@ -175,6 +177,53 @@ def machine_packet(packet, monkeypatch):
         return json.dumps(receipt).encode()
     monkeypatch.setattr(review_verdict, '_read_host_file', host_file)
     return root, handoff, machine_path, receipt, task, current
+
+
+@pytest.mark.parametrize('machine_packet', ['codex', 'claude-code'], indirect=True)
+@pytest.mark.parametrize('status', ['fail', 'warn'])
+@pytest.mark.parametrize('pending', [False, True])
+def test_valid_negative_human_verdict_reaches_gate_even_with_model_pass(machine_packet, status, pending, monkeypatch):
+    root, handoff, machine, receipt, task, current = machine_packet
+    _, model_reviews, missing, _ = completion.review_inputs(root, task, current, {})
+    assert not missing and 'model_receipt' in model_reviews['ai_red_team']
+    monkeypatch.setattr(completion.review_verdict, 'load_model_receipt',
+                        lambda *a, **kw: pytest.fail("валидное человеческое решение уже выбрано"))
+    human = reviewer_handoff.verdict_path(handoff, 'ai_red_team')
+    verdict = dict(json.loads(machine.read_bytes()), reviewer_kind='human', reviewer='human-fixture',
+                   status=status, blockers=['independent fixture finding'])
+    human.write_text(json.dumps(verdict))
+    digests = {'ai_red_team': hashlib.sha256(human.read_bytes()).hexdigest()}
+    old_request = receipt['scope']['request_sha256'] if pending else None
+    _, reviews, missing, _ = completion.review_inputs(root, task, current, digests,
+                                                       pending_model_request=old_request, observed={})
+    assert not missing and reviews['ai_red_team']['path'] == str(human.relative_to(root))
+    assert 'model_receipt' not in reviews['ai_red_team']
+    scope = dict(receipt['scope'])
+    del scope['request_sha256']
+    evidence, entries = pipeline_evidence._consume_handoff_verdicts(root, ['ai_red_team'], {}, {}, current['head'],
+        child_root=handoff, review_base=scope['base_revision'], human_review_context={'scope': scope, 'digests': digests})
+    assert entries[-1]['source'] == 'human-red-team-artifact'
+    assert evidence['ai_red_team']['status'] in ('fail', 'warn')
+    assert 'independent fixture finding' in evidence['ai_red_team']['blockers']
+
+
+@pytest.mark.parametrize('machine_packet', ['codex', 'claude-code'], indirect=True)
+@pytest.mark.parametrize('pending', ['none', 'stale', 'current'])
+@pytest.mark.parametrize('delivered_invalid', [False, True])
+def test_unusable_human_can_fall_back_only_for_current_pending_codex_request(machine_packet, pending, delivered_invalid):
+    root, handoff, machine, receipt, task, current = machine_packet
+    human = reviewer_handoff.verdict_path(handoff, 'ai_red_team')
+    assert not human.exists()
+    raw = b'{"kind":"incomplete-local-observation"}'
+    if delivered_invalid:
+        human.write_bytes(raw)
+    permit = {'none': None, 'stale': 'f' * 64, 'current': receipt['scope']['request_sha256']}[pending]
+    _, reviews, missing, _ = completion.review_inputs(root, task, current, {'ai_red_team': hashlib.sha256(raw).hexdigest()},
+                                                       pending_model_request=permit)
+    if task['runtime'] == 'codex' and pending == 'current':
+        assert not missing and reviews['ai_red_team']['path'] == str(machine.relative_to(root))
+    else:
+        assert missing and 'ai_red_team' not in reviews
 
 
 def test_finalize_inputs_automatically_consume_host_review_with_no_supplied_digest(machine_packet):

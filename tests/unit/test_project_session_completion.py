@@ -702,8 +702,8 @@ def test_relative_operator_finish_reconciles_own_previous_status(project, monkey
     assert not public.exists() and not list(aw.copies_claims_dir(project).glob("*.yaml"))
 
 
-@pytest.mark.parametrize('change_evidence', [False, True])
-def test_finalize_accepts_machine_judgment_without_overriding_another_gate(project, monkeypatch, change_evidence):
+@pytest.mark.parametrize('change_evidence,human_status', [(False, None), (True, None), (False, 'fail'), (False, 'warn')])
+def test_finalize_accepts_machine_judgment_without_overriding_another_gate(project, monkeypatch, change_evidence, human_status):
     from ai_ops_kit.shared import review_verdict
     task, args = start(project, monkeypatch, 'codex', 'research', ai_component=True)
     assert cli.main(['finalize', *args]) == 1
@@ -714,6 +714,14 @@ def test_finalize_accepts_machine_judgment_without_overriding_another_gate(proje
     scope = dict(completion.human_scope(project, current, completion.scope(task, current)),
                  request_sha256=sessions.digest(request_path.read_bytes()))
     stale = dict(other_digests, ai_red_team="0" * 64)
+    if human_status:
+        human = dict(scope, gate='ai_red_team', kind='reviewer-result', schema_version=1,
+                     status=human_status, reviewer='independent-human-fixture', reviewer_kind='human',
+                     review_role='ai-red-teamer', blockers=['qualification finding'], attack_evidence=[],
+                     checks=[{'id': k, 'status': 'pass', 'evidence': [{'file': 'result.py', 'lines': '1'}]}
+                             for k in request['required_evidence']])
+        human_bytes = json.dumps(human).encode()
+        stale['ai_red_team'] = sessions.digest(human_bytes)
     if not change_evidence:
         assert cli.main(['finalize', *args, '--review-digests', json.dumps(stale)]) == 1
         waiting = sessions.load(project, 'codex', 'complete')['verification']
@@ -742,6 +750,19 @@ def test_finalize_accepts_machine_judgment_without_overriding_another_gate(proje
         completion.evaluate(Path(command[2]), *command[3:])
         return subprocess.CompletedProcess(command, 0, '', '')
     monkeypatch.setattr(sessions, 'run_process', run_worker)
+    if human_status:
+        reviewer_handoff.verdict_path(handoff, 'ai_red_team').write_bytes(human_bytes)
+        for was_pending in (True, False):
+            assert cli.main(['finalize', *args]) == 1
+            verification = sessions.load(project, 'codex', 'complete')['verification']
+            assert ('pending_model_request_sha256' in verification) == was_pending
+            report = json.loads((project / verification['report']).read_bytes())
+            assert 'model_review_receipt' not in report
+            judgements = [r for r in report['pipeline']['reviews'] if r['source'] == 'human-red-team-artifact']
+            assert len(judgements) == 1
+            gate = next(g for g in report['pipeline']['gates']['gate_results'] if g['gate'] == 'ai_red_team')
+            assert gate['status'] == 'fail' and 'qualification finding' in gate['blockers']
+        return
     if change_evidence:
         from ai_ops_kit.engine import execution_pipeline
         from ai_ops_kit.lifecycle import active_work
