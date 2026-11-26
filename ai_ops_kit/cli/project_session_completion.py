@@ -21,6 +21,7 @@ if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ai_ops_kit.lifecycle import project_session as sessions
+from ai_ops_kit.shared import model_review_receipt
 
 
 def prepared(root, runtime, session, task):
@@ -126,6 +127,9 @@ def review_inputs(root, task, current, digests):
             "Автор не заполняет заключение за судью. Поля привязки скопировать из request.")
         if gid == 'ai_red_team':
             request.update(human_scope(root, current, expected), reviewer_kind='human',
+                model_alternative={'kind': 'observed-model-review',
+                    'verdict_artifact': str(request_path.with_name('ai_red_team.model.reviewer.json')),
+                    'contract_fragment': '#/definitions/model_red_team'},
                 review_role='ai-red-teamer', dispatch='qualified-external-human',
                 instructions='Нужен независимый человеческий ai-red-teamer. Generic same-model review запрещён. '
                 'Проверь реальное adversarial evidence, все required_evidence и точные привязки request. '
@@ -137,25 +141,41 @@ def review_inputs(root, task, current, digests):
         sessions.write(request_path, request)
         path = reviewer_handoff.verdict_path(handoff, gid)
         try:
-            raw = path.read_bytes()
+            model_receipt = None
+            checksum = digests.get(gid)
+            if gid == 'ai_red_team' and gid not in digests:
+                model_path = path.with_name('ai_red_team.model.reviewer.json')
+                if model_path.is_file():
+                    from ai_ops_kit.engine.pipeline_evidence import _specialist_input
+                    path = model_path
+                    model_scope = dict(human_scope(root, current, expected),
+                        request_sha256=sessions.digest(request_path.read_bytes()))
+                    _, attack_artifacts, host_hash, checksum = _specialist_input(root, path, None, model_scope, model=True)
+                    model_receipt = {'scope': model_scope, 'sha256': host_hash}
+            if gid == 'ai_red_team':
+                with path.open('rb') as stream:
+                    raw = stream.read(262145)
+                if len(raw) > 262144:
+                    raise ValueError('заключение специалиста превышает предел')
+            else:
+                raw = path.read_bytes()
             rr = json.loads(raw)
-            if sessions.digest(raw) != digests.get(gid) or any(rr.get(k) != v for k, v in expected.items()):
+            if sessions.digest(raw) != checksum or any(rr.get(k) != v for k, v in expected.items()):
                 raise ValueError("нет доверенного digest либо привязка вердикта устарела")
             who = rr.get("reviewer")
             if (not isinstance(who, str) or not who.strip() or who.strip().casefold() in
                     reviewer_handoff._WRITER_IDENTITIES | {task["runtime"].casefold(), task["session_id"].casefold(),
                      expected["writer_session"].casefold()}):
                 raise ValueError("writer не может быть независимым судьёй")
-            attack_artifacts = {}
-            if gid == 'ai_red_team':
+            if gid == 'ai_red_team' and model_receipt is None:
                 from ai_ops_kit.engine.pipeline_evidence import _human_red_team_input
                 _, attack_artifacts = _human_red_team_input(root, path, digests.get(gid),
                     human_scope(root, current, expected))
-            elif gid != "acceptance":
+            elif gid not in ("acceptance", "ai_red_team"):
                 valid, reason = reviewer_handoff.load_verdict(handoff, gid, revision=current["head"])
                 if valid is None:
                     raise ValueError(reason)
-            else:
+            elif gid == "acceptance":
                 from ai_ops_kit.checks import acceptance_result
                 errors = acceptance_result.check(rr, [c["id"] for c in criteria])
                 if errors:
@@ -163,6 +183,9 @@ def review_inputs(root, task, current, digests):
             accepted[gid] = {"path": str(path.relative_to(root)), "sha256": sessions.digest(raw)}
             if gid == 'ai_red_team':
                 accepted[gid]['attack_artifacts'] = attack_artifacts
+                if model_receipt:
+                    accepted[gid]['model_receipt'] = model_receipt
+                    accepted[gid]['request_file'] = str(request_path.relative_to(root))
         except (OSError, ValueError, TypeError, AttributeError) as exc:
             missing.append(f"{gid}: {exc}; {request_path.relative_to(root)}")
             pending_requests.append(request_path)
@@ -192,6 +215,8 @@ def evaluate(root, runtime, session, request, attempt):
         raise ValueError("чужой кеш переоценки не подтверждает текущую сессию")
     handoff, reviews, missing, pending_requests = review_inputs(root, task, current, verification["review_digests"])
     pipeline = None
+    red_team = reviews.get('ai_red_team') or {}
+    model_receipt = red_team.get('model_receipt')
     if not missing:
         plan = yaml.safe_load(sessions.within(root, f"features/{fid}/run-plan.yaml").read_text())
         signals = task["execution"]["signals"]
@@ -212,9 +237,9 @@ def evaluate(root, runtime, session, request, attempt):
             reviewer_proposer=acceptance_artifact if acceptance else None,
             review_handoff_root=handoff, base_revision=task["binding"]["head"],
             policy=tool_broker.sandbox_policy(child_root=str(root), allow_network=False),
-            human_review_context=({'scope': human_scope(root, current, scope(task, current)),
-                'digests': {'ai_red_team': reviews['ai_red_team']['sha256']}}
-                if 'ai_red_team' in reviews else None))
+            human_review_context=({'scope': model_receipt['scope'] if model_receipt else human_scope(root, current, scope(task, current)),
+                'digests': {'ai_red_team': red_team['sha256']},
+                **({'host_sha256': model_receipt['sha256']} if model_receipt else {})} if red_team else None))
         if flags.get("require_fix") and (pipeline.get("regression") or {}).get("status") != "proven":
             missing.append("не подтверждён regression proof исправления")
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
@@ -227,6 +252,9 @@ def evaluate(root, runtime, session, request, attempt):
         files.update({r["path"]: r["sha256"] for r in reviews.values()})
         for review in reviews.values():
             files.update(review.get('attack_artifacts', {}))
+        if model_receipt:
+            model_review_receipt.recheck({'model_review_receipt': model_receipt})
+            files[red_team['request_file']] = model_receipt['scope']['request_sha256']
         ready = not missing and (pipeline or {}).get("ready_for_pr") is True
         if ready:
             from ai_ops_kit.lifecycle import active_work
@@ -250,6 +278,8 @@ def evaluate(root, runtime, session, request, attempt):
                   "artifact_inputs": artifacts,
                   "ready_for_pr": ready, "active_work_closed": ready, "ci": "not-verified",
                   "missing": missing}
+        if model_receipt:
+            report['model_review_receipt'] = model_receipt
         if task["runtime"] == "codex" and pending_requests:
             report["agent_handoff"] = review_jobs(root, task, report["scope"], pending_requests)
         path = sessions.within(root, verification["report"])
@@ -323,6 +353,7 @@ def _reconcile(root, runtime, session, *, save=True):
     for relative, checksum in report["files"].items():
         if sessions.digest(sessions.within(root, relative).read_bytes()) != checksum:
             raise ValueError("проверенный артефакт изменён: " + relative)
+    model_review_receipt.recheck(report)
     if report.get("ready_for_pr") is True:
         pipeline = report.get("pipeline") or {}
         if (pipeline.get("ready_for_pr") is not True or pipeline.get("kind") != "execution-pipeline"
@@ -336,6 +367,8 @@ def _reconcile(root, runtime, session, *, save=True):
             artifact_inputs=report["artifact_inputs"], input_events=task.get("input_events", []),
             files=files, revision=current["head"], worktree=None,
             result_sha256=current["source_sha256"], completion_binding=current)
+        if report.get('model_review_receipt'):
+            task['execution']['model_review_receipt'] = report['model_review_receipt']
         task.update(status="accepted", blocker=None, next_step=None)
     else:
         task.update(status="running", blocker="; ".join(report.get("missing") or []) or
@@ -462,7 +495,7 @@ def review_jobs(root, task, expected, paths):
     """Связать существующие requests с ревизией и точными bytes без выдачи verdict."""
     from ai_ops_kit.engine import reviewer_handoff
     handoff = sessions.session_dir(root, task["runtime"], task["session_id"]) / (task["request_id"] + ".reviews")
-    jobs, human_jobs = [], []
+    jobs, human_jobs, model_jobs = [], [], []
     for path in paths:
         path = sessions.within(root, str(path.relative_to(root)))
         raw = path.read_bytes()
@@ -508,10 +541,25 @@ def review_jobs(root, task, expected, paths):
                 raise ValueError('red-team request потерял специализированный человеческий контракт')
             job.update(status='awaiting_human', dispatch='qualified-external-human', prompt=request['instructions'],
                 result_contract_fragment='#/definitions/human_red_team')
+            if 'model_alternative' in request:
+                alternative = request['model_alternative']
+                model_path = verdict.with_name('ai_red_team.model.reviewer.json')
+                if (alternative != {'kind': 'observed-model-review', 'verdict_artifact': str(model_path),
+                        'contract_fragment': '#/definitions/model_red_team'}
+                        or sessions.within(root, str(model_path.relative_to(root))).resolve() != model_path):
+                    raise ValueError('request подменяет машинный вариант приёмки')
+                host_scope = dict(expected, review_root=str(root.resolve()), request_sha256=checksum)
+                model_jobs.append({'gate': gid, 'dispatch': 'collect-existing-host-review', 'review_mode': 'read-only',
+                    'request': job['request'], 'request_sha256': checksum, 'verdict': str(model_path.relative_to(root)),
+                    'result_contract': str(contract), 'contract_sha256': contract_digest,
+                    'result_contract_fragment': alternative['contract_fragment'],
+                    'host_receipt': model_review_receipt.receipt_name(host_scope)})
             human_jobs.append(job)
         else:
             jobs.append(job)
-    return {"kind": "native-agent-handoff", "status": "awaiting_human" if human_jobs and not jobs else "awaiting_dispatch", "scope": expected,
+    status = "awaiting_dispatch" if jobs else "awaiting_specialist_evidence" if model_jobs else "awaiting_human"
+    return {"kind": "native-agent-handoff", "status": status, "scope": expected,
+            **({'model_jobs': model_jobs, 'next_action': 'collect_existing_model_evidence_or_human_review'} if model_jobs else {}),
             "jobs": jobs, "dispatch": "active-runtime-native-agents",
             'human_jobs': human_jobs,
             "resume": {"argv": [sys.executable, "-m", "ai_ops_kit.cli.project_session", "finalize",
@@ -543,7 +591,7 @@ def response(root, task, *, before_read=None):
             raise ValueError("отчёт передачи относится к другой задаче/попытке")
         if report.get("scope") != scope(task, current, before_read=before_read) or report.get("binding") != current:
             action.update(status="refresh_review", next_action="finalize")
-        elif (report.get("agent_handoff", {}).get("jobs") or report.get("agent_handoff", {}).get('human_jobs')):
+        elif any(report.get("agent_handoff", {}).get(key) for key in ("jobs", "human_jobs", "model_jobs")):
             action = report["agent_handoff"]
             if action.get("scope") != report["scope"]:
                 raise ValueError("задания агентов относятся к другой области review")
@@ -556,7 +604,8 @@ def response(root, task, *, before_read=None):
                     raise ValueError("запрос агенту изменён; выполни finalize")
                 paths.append(request)
             rebuilt = review_jobs(root, task, report['scope'], paths)
-            if (rebuilt['jobs'] != action['jobs'] or rebuilt['human_jobs'] != action.get('human_jobs', [])):
+            if any(rebuilt.get(key) != action.get(key) for key in
+                   ('jobs', 'human_jobs', 'model_jobs', 'next_action', 'status', 'resume')):
                 raise ValueError("задания агентов изменены; выполни finalize")
         else:
             action.update(status="resolve_checks", next_action="finalize")

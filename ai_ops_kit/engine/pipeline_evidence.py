@@ -251,11 +251,23 @@ def _human_red_team_input(work_root, path, checksum, expected):
     Оператор обязан получить checksum по независимому человеческому каналу.
     Same-model callback сюда не подключён. Привязка не заменяет суждение судьи.
     """
+    result, artifacts, _, _ = _specialist_input(work_root, path, checksum, expected)
+    return result, artifacts
+
+
+def _specialist_input(work_root, path, checksum, expected, *, model=False, host_checksum=None):
     import hashlib
     import json
     from ai_ops_kit.checks import reviewer_result
     from ai_ops_kit.engine import reviewer_handoff
+    from ai_ops_kit.shared import model_review_receipt
     root, path = Path(work_root).resolve(), Path(path)
+    host = None
+    if model:
+        if not re.fullmatch(r'[0-9a-f]{64}', str(expected.get('request_sha256'))):
+            raise ValueError('нет привязки к точному запросу для модели')
+        host, host_checksum = model_review_receipt.load(expected, expected_sha256=host_checksum)
+        checksum = host['verdict_sha256']
     keys = {'workitem_id', 'request_id', 'writer_session', 'base_revision', 'reviewed_revision',
             'source_sha256', 'inputs_sha256', 'artifacts_sha256', 'review_root', 'managed_sha256', 'config_sha256'}
     if (not isinstance(expected, dict) or not keys.issubset(expected)
@@ -270,7 +282,8 @@ def _human_red_team_input(work_root, path, checksum, expected):
         raise ValueError('red-team verdict не соответствует доверенным bytes')
     result = json.loads(raw)
     required = gate_executor.load_gates()['ai_red_team']['required_evidence']
-    errors = reviewer_result.check_human_red_team(result, required)
+    kind = 'model' if model else 'human'
+    errors = reviewer_result.check_specialist_red_team(result, required, reviewer_kind=kind)
     if errors or any(result.get(k) != v for k, v in expected.items()):
         raise ValueError('; '.join(errors) if errors else 'red-team verdict относится к другому scope')
     who = result.get('reviewer')
@@ -293,7 +306,13 @@ def _human_red_team_input(work_root, path, checksum, expected):
                 or hashlib.sha256(body).hexdigest() != record['sha256']):
             raise ValueError('attack evidence изменено/превышает предел')
         artifacts[relative] = record['sha256']
-    return result, artifacts
+    if model:
+        if (who != host['reviewer']['session'] or host.get('execution_artifacts') != artifacts):
+            raise ValueError('хост не подтвердил автора суждения или происхождение исполнения свидетельств')
+        if result.get('status') == 'pass' and (result.get('blockers') or
+                any(c.get('status') != 'pass' for c in result['checks'])):
+            raise ValueError('machine pass несовместим с незакрытыми проверками')
+    return result, artifacts, host_checksum, checksum
 
 
 def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *, child_root=None,
@@ -337,24 +356,29 @@ def _consume_handoff_verdicts(work_root, gate_ids, gate_ev, signals, revision, *
         reviews.append(entry)
     if 'ai_red_team' in gate_ids and human_review_context:
         gid = 'ai_red_team'
+        source = 'host-model-red-team-artifact' if 'host_sha256' in human_review_context else 'human-red-team-artifact'
         try:
             context = human_review_context
             expected = context['scope']
             if expected['reviewed_revision'] != revision or expected['base_revision'] != review_base:
                 raise ValueError('human red-team context относится к другому диапазону')
-            rr, artifacts = _human_red_team_input(work_root,
-                reviewer_handoff.verdict_path(handoff_root, gid), context['digests'].get(gid), expected)
+            model = 'host_sha256' in context
+            path = reviewer_handoff.verdict_path(handoff_root, gid)
+            if model:
+                path = path.with_name('ai_red_team.model.reviewer.json')
+            rr, artifacts, _, _ = _specialist_input(work_root, path, context['digests'].get(gid), expected,
+                model=model, host_checksum=context.get('host_sha256'))
             ev, entry = _gate_ev_from_verdict(gid, gates[gid],
-                {'result': rr, 'stopped': 'human-handoff-artifact', 'reads': [], 'denied': [],
-                 'source': 'human-red-team-artifact'}, revision=revision, delivered=delivered,
+                {'result': rr, 'stopped': source, 'reads': [], 'denied': [],
+                 'source': source}, revision=revision, delivered=delivered,
                 work_root=work_root, valid_ids=set(gates), signals=signals,
                 calibrated_enforcement=calibrated_enforcement, ui_evidence=ui_evidence)
             ev['artifact_hashes'] = artifacts
             gate_ev[gid] = ev
             reviews.append(entry)
         except (OSError, ValueError, TypeError, KeyError, AttributeError) as exc:
-            gate_ev[gid] = {'status': 'fail', 'blockers': ['human red-team: ' + str(exc)]}
-            reviews.append({'gate': gid, 'valid': False, 'source': 'human-red-team-artifact',
+            gate_ev[gid] = {'status': 'fail', 'blockers': ['red-team: ' + str(exc)]}
+            reviews.append({'gate': gid, 'valid': False, 'source': source,
                             'status': 'fail', 'errors': [str(exc)]})
     return gate_ev, reviews
 
