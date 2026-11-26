@@ -820,7 +820,7 @@ def test_read_page_normalizes_broken_http_status(monkeypatch):
         client.read_page("repos/owner/kit")
 
 
-@pytest.mark.parametrize("mode", ["unchanged", "rerun", "403"])
+@pytest.mark.parametrize("mode", ["unchanged", "rerun", "403", "invalid-json", "stderr-403", "network"])
 def test_capture_revalidates_real_client_workflow_pages(source_case, monkeypatch, mode):
     from types import SimpleNamespace
     from urllib.parse import parse_qs, urlsplit
@@ -841,6 +841,12 @@ def test_capture_revalidates_real_client_workflow_pages(source_case, monkeypatch
         assert "--include" in cmd
         endpoint = cmd[-1]
         parsed = urlsplit(endpoint)
+        if parsed.path.endswith("/docs.yml/runs"):
+            if mode == "invalid-json":
+                return SimpleNamespace(returncode=0, stdout=b'HTTP/2.0 200 OK\nX-Test: 1\r\n\r\n{"private-input":', stderr=b"")
+            if mode in ("stderr-403", "network"):
+                stderr = b"gh: permission denied (HTTP 403)" if mode == "stderr-403" else b"dial tcp: private-host"
+                return SimpleNamespace(returncode=1, stdout=b"", stderr=stderr)
         if endpoint in baseline:
             assert 'If-None-Match: "version-1"' in cmd
             repeats.append(endpoint)
@@ -857,6 +863,12 @@ def test_capture_revalidates_real_client_workflow_pages(source_case, monkeypatch
                                stderr=b"")
     monkeypatch.setattr(release_plan_etags.subprocess, "run", run)
     snap = src.capture(root, client)
+    if mode in ("invalid-json", "stderr-403", "network"):
+        code = "github_read_permission_denied" if mode == "stderr-403" else "github_read_failed"
+        assert not snap["complete"] and not snap["unchanged"]
+        assert snap["diagnostic"] == {"code": code, "pr": 10, "workflow": "docs.yml", "field": "workflow_runs"}
+        assert "private-" not in json.dumps(snap)
+        return
     assert len(baseline) == len(fixture.policy)
     if mode == "unchanged":
         assert len(repeats) == len(baseline)

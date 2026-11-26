@@ -61,6 +61,9 @@ class _CapturePages:
         headers = parts[0].splitlines()
         status = re.fullmatch(rb"HTTP/[0-9.]+ ([0-9]{3})(?: [^\r\n]*)?", headers[0]) if headers else None
         if len(parts) != 2 or not status:
+            # gh может сообщить отказ до вывода заголовков; не переносим его stderr в пульт.
+            if proc.returncode and re.search(rb"\bHTTP 403\b", proc.stderr):
+                raise GitHubError("workflow page HTTP 403")
             raise GitHubError("invalid workflow page response")
         tags = []
         cache_allowed = True
@@ -77,12 +80,18 @@ class _CapturePages:
             if (previous is None or parts[1] or (tags and tags != [previous[0].encode("ascii")]) or
                     not (proc.returncode == 0 or (proc.returncode == 1 and proc.stderr.strip() == b"gh: HTTP 304"))):
                 raise GitHubError("invalid conditional workflow response")
-            if cache_allowed:
-                self.remember(endpoint, *previous)
-            return json.loads(previous[1])
-        if code != 200 or proc.returncode:
+            tag, body = previous
+        elif code == 200 and not proc.returncode:
+            body = parts[1]
+            tag = None
+            if len(tags) == 1 and len(tags[0]) <= 1024 and re.fullmatch(rb'(?:W/)?"[\x21\x23-\x7e]*"', tags[0]):
+                tag = tags[0].decode("ascii")
+        else:
             raise GitHubError(f"workflow page HTTP {code}")
-        data = json.loads(parts[1])
-        if cache_allowed and len(tags) == 1 and len(tags[0]) <= 1024 and re.fullmatch(rb'(?:W/)?"[\x21\x23-\x7e]*"', tags[0]):
-            self.remember(endpoint, tags[0].decode("ascii"), parts[1])
+        try:
+            data = json.loads(body)
+        except ValueError as exc:
+            raise GitHubError("read page unavailable or invalid") from exc
+        if cache_allowed and tag:
+            self.remember(endpoint, tag, body)
         return data

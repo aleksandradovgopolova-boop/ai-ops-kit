@@ -168,3 +168,24 @@ def test_full_cache_does_not_hide_later_pages_or_evict_an_unrelated_validator(tr
     assert reader.bytes_held == byte_count and len(reader.pages) == 1
     assert not any(h.startswith("If-None-Match") for h in calls[2])
     assert 'If-None-Match: "etag"' in calls[3]
+
+
+@pytest.mark.parametrize("wire,stderr,rc,expected", [
+    (b'HTTP/2.0 200 OK\nEtag: "new"\r\n\r\n{"private-fragment":', b"", 0, "github_read_failed"),
+    (b"HTTP/2.0 200 OK\nX-Test: 1\r\n\r\n\xff", b"", 0, "github_read_failed"),
+    (b"", b"gh: Resource not accessible by integration (HTTP 403)\n", 1, "github_read_permission_denied"),
+    (b"", b"gh: private-network-error\n", 1, "github_read_failed"),
+    (b"HTTP/2.0 403 Forbidden\nX-Test: 1\r\n\r\n", b"", 1, "github_read_permission_denied"),
+])
+def test_failed_revalidation_keeps_pr_and_workflow_diagnostic(transport, wire, stderr, rc, expected):
+    client, calls, replies = transport
+    reader = etags.capture_reader(client)
+    pr = {"number": 42, "head_sha": SHA}
+    first_page = b'HTTP/2.0 200 OK\nEtag: "one"\r\n\r\n{"total_count":0,"workflow_runs":[]}'
+    replies.extend([SimpleNamespace(returncode=0, stdout=first_page, stderr=b""),
+                    SimpleNamespace(returncode=rc, stdout=wire, stderr=stderr)])
+    assert source._ci(reader, pr, ["docs.yml"], {}) == []
+    with pytest.raises(source.SnapshotError) as err:
+        source._ci(reader, pr, ["docs.yml"], {})
+    assert err.value.diagnostic == {"code": expected, "pr": 42, "workflow": "docs.yml", "field": "workflow_runs"}
+    assert 'If-None-Match: "one"' in calls[1] and not reader.pages and reader.bytes_held == 0
