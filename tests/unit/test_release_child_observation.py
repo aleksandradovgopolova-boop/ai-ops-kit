@@ -27,7 +27,7 @@ def history(tmp_path_factory):
     git("config", "user.email", "fixture@example.invalid")
     (root / VERSION).parent.mkdir(parents=True)
     commits = []
-    for version in ("1.0.0", "2.0.0"):
+    for version in ("2.0.0", "1.0.0", "2.0.0"):
         (root / VERSION).write_text(version + "\n")
         (root / CONFIG).write_text(f"parent:\n  installed_version: {version}\n"
                                    '  update_channel: stable\n  update_policy: pr\n'
@@ -36,16 +36,16 @@ def history(tmp_path_factory):
         git("commit", "-qm", version)
         commits.append(git("rev-parse", "HEAD"))
     git("commit", "--allow-empty", "-qm", "later")
-    prev, merge = commits
+    start, prev, merge = commits
     head = git("rev-parse", "HEAD")
     repo = {"id": 11, "full_name": REPO, "default_branch": "main"}
     pull = {"number": 2, "state": "closed", "merged": True, "merge_commit_sha": merge,
-            "merged_at": "2026-02-07T12:00:00Z", "base": {"ref": "main", "repo": repo}}
+            "merged_at": "2026-02-07T12:00:00Z", "base": {"ref": "main", "sha": prev, "repo": repo}}
     pages = {"": repo, "git/ref/heads/main": {"ref": "refs/heads/main", "object": {"type": "commit", "sha": head}},
              "commits": [{"sha": merge}], f"compare/{merge}...{head}": {"status": "ahead",
              "base_commit": {"sha": merge}, "merge_base_commit": {"sha": merge}},
              f"commits/{merge}/pulls": [dict(pull)], "pulls/2": dict(pull)}
-    for commit in (prev, merge, head):
+    for commit in (start, prev, merge, head):
         pages[f"git/commits/{commit}"] = {"sha": commit, "tree": {"sha": git("rev-parse", f"{commit}^{{tree}}")},
                                           "parents": [{"sha": p} for p in git("show", "-s", "--format=%P", commit).split()]}
         for directory in ("", ".ai", ".ai/managed"):
@@ -87,6 +87,7 @@ def test_owner_cli_reads_selected_repositories_and_preserves_git_state(api, tmp_
     pages, git, merge, head, calls = api
     monkeypatch.chdir(tmp_path)
     refs = git("show-ref")
+    assert pages["pulls/2"]["base"]["sha"] == git("rev-parse", merge + "^")
     assert git("show", f"{merge}^:{VERSION}") == "1.0.0"
     assert git("show", f"{merge}:{VERSION}") == "2.0.0"
     rc = release_assembly.main(["cli", "--child-delivery", "example/unavailable", REPO])
@@ -108,7 +109,7 @@ def test_owner_cli_reads_selected_repositories_and_preserves_git_state(api, tmp_
 
 
 @pytest.mark.parametrize("case", ["unmerged", "wrong_merge", "wrong_repo", "wrong_name", "wrong_base", "no_transition",
-                                  "not_ancestor", "ambiguous", "pr_unavailable", "unexpected_type", "bad_time", "parent_config_conflict"])
+                                  "not_ancestor", "ambiguous", "pr_unavailable", "unexpected_type", "bad_time", "parent_config_conflict", "missing_base_sha"])
 def test_unverified_pr_keeps_observed_version(api, case):
     pages, git, merge, head, _ = api
     pr = deepcopy(pages["pulls/2"])
@@ -121,6 +122,8 @@ def test_unverified_pr_keeps_observed_version(api, case):
         pr["base"]["repo"]["id"] += 1
     elif case == "wrong_name":
         pr["base"]["repo"]["full_name"] = "other/child"
+    elif case == "missing_base_sha":
+        del pr["base"]["sha"]
     elif case == "wrong_base":
         pr["base"]["ref"] = "draft"
     elif case == "no_transition":
@@ -140,6 +143,18 @@ def test_unverified_pr_keeps_observed_version(api, case):
         pr["merged_at"] = "yesterday"
     row = child.observe(REPO)
     assert row["version"]["value"] == "2.0.0" and row["update_pr"]["state"] == "unknown"
+
+
+def test_rebased_pr_with_no_net_version_change_cannot_claim_its_last_commit(api):
+    pages, git, merge, head, _ = api
+    base = git("rev-parse", merge + "~2")
+    pages["pulls/2"]["base"]["sha"] = base
+    assert git("rev-list", "--count", f"{base}..{merge}") == "2"
+    assert git("show", f"{base}:{VERSION}") == git("show", f"{merge}:{VERSION}") == "2.0.0"
+    assert git("show", f"{merge}^:{VERSION}") == "1.0.0"
+    row = child.observe(REPO)
+    assert row["default_branch"]["sha"] == head and row["version"]["value"] == "2.0.0"
+    assert row["update_pr"]["state"] == "unknown"
 
 
 @pytest.mark.parametrize("case", ["blob_bytes", "config_conflict", "symlink", "incomplete_tree", "head_moves",

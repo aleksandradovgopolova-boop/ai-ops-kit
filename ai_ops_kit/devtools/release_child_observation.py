@@ -100,12 +100,10 @@ class _Repository:
         _require(self.installation(merge)[0]["value"] == value, "merge_version_mismatch")
         parents = self.git_object("commits", merge)["parents"]
         _require(isinstance(parents, list) and len(parents) in (1, 2), "first_parent_unknown")
-        previous = self.installation(_oid(parents[0]["sha"]))[0]["value"]
-        _require(previous != value, "no_version_transition")
-        return merge, previous
+        return merge, _oid(parents[0]["sha"])
 
     def update_pr(self, repo_id: int, branch: str, head: str, value: str) -> dict:
-        merge, previous = self.transition(head, value)
+        merge, first_parent = self.transition(head, value)
         associated = self.read(f"commits/{merge}/pulls", {"per_page": 100})
         _require(isinstance(associated, list) and len(associated) < 100, "ambiguous_associations")
         matches = [p["number"] for p in associated if p["merge_commit_sha"] == merge
@@ -118,6 +116,9 @@ class _Repository:
                  and pr["merge_commit_sha"] == merge and pr["base"]["ref"] == branch
                  and type(base["id"]) is int and base["id"] == repo_id
                  and isinstance(base["full_name"], str) and base["full_name"].lower() == self.repo.lower(), "pr_mismatch")
+        _require(pr["base"]["sha"] == first_parent, "pr_base_not_first_parent")
+        previous = self.installation(first_parent)[0]["value"]
+        _require(previous != value, "no_version_transition")
         merged_at = pr["merged_at"]
         _require(isinstance(merged_at, str), "merge_time_unknown")
         _require(datetime.fromisoformat(merged_at.replace("Z", "+00:00")).utcoffset() is not None, "merge_time_unknown")

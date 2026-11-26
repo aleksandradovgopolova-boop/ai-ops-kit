@@ -175,7 +175,10 @@ python3 -m ai_ops_kit.devtools.release_assembly --child-delivery OWNER/PROJECT-A
 два Git blob SHA для `.ai-ops.yaml` и `.ai/managed/VERSION`. В `policy` указаны
 объявленные `update_channel`, `allowed_version_range` и `update_policy`. Значение
 `null` означает, что поле прочитать не удалось. Поле `update_pr` показывает
-номер слитого PR, его merge SHA, время и переход версий относительно первого родителя.
+номер слитого PR, его merge SHA, время и переход версий. Базовый SHA из карточки PR
+должен совпасть с первым родителем merge SHA. При rebase нескольких коммитов
+первый родитель последнего коммита может находиться внутри PR. В таком случае
+версия основной ветки остаётся видимой, а `update_pr.state` принимает значение `unknown`.
 Для ссылки на PR откройте `https://github.com/OWNER/PROJECT/pull/NUMBER`.
 
 Номер PR может остаться неизвестным при подтверждённой версии. Это происходит,
