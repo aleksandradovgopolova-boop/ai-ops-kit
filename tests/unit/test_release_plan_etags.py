@@ -35,9 +35,10 @@ def transport(monkeypatch):
     return client, calls, replies
 
 
-def test_confirmed_304_reuses_exact_unmutated_representation(transport):
+@pytest.mark.parametrize("initial,returned", [('W/"one"', 'W/"one"'), ('W/"one"', '"one"'), ('"one"', 'W/"one"')])
+def test_confirmed_304_reuses_exact_unmutated_representation(transport, initial, returned):
     client, calls, replies = transport
-    replies.extend([response(etag='W/"one"'), response(304, etag='W/"one"', rc=1, stderr=b"gh: HTTP 304\n")])
+    replies.extend([response(etag=initial), response(304, etag=returned, rc=1, stderr=b"gh: HTTP 304\n")])
     reader = etags.capture_reader(client)
     first = source._runs(reader, "docs.yml", SHA)
     signature = source._run_signature(first)
@@ -45,7 +46,7 @@ def test_confirmed_304_reuses_exact_unmutated_representation(transport):
     assert source._run_signature(source._runs(reader, "docs.yml", SHA)) == signature
     assert calls[1][-1] == calls[0][-1]
     assert not any(h.startswith("If-None-Match") for h in calls[0])
-    assert 'If-None-Match: W/"one"' in calls[1]
+    assert f"If-None-Match: {initial}" in calls[1]
 
 
 def test_changed_200_is_seen_by_normal_run_signature(transport):
@@ -58,7 +59,9 @@ def test_changed_200_is_seen_by_normal_run_signature(transport):
 
 
 @pytest.mark.parametrize("bad", [response(403, rc=1), response(500, rc=1), response(304, rc=7),
-                                 response(304, etag='"other"'), response(304, rc=1, stderr=b"other error")])
+                                 response(304, etag='"other"'), response(304, etag='W/"ONE"'),
+                                 response(304, etag='W/W/"one"'), response(304, etag='"one"', extra=b'Etag: W/"one"\r\n'),
+                                 response(304, rc=1, stderr=b"other error")])
 def test_error_never_returns_old_page(transport, bad):
     client, calls, replies = transport
     replies.extend([response(etag='"one"'), bad, response(attempt=2)])
