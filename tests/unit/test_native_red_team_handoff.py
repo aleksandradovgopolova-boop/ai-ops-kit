@@ -131,6 +131,11 @@ def test_human_request_is_exposed_separately_from_native_agent_jobs(packet, monk
     assert not missing and not pending
     assert accepted['ai_red_team']['attack_artifacts'] == {
         str(attack_path.relative_to(root)): hashlib.sha256(before[1]).hexdigest()}
+    alternative = verdict_path.with_name('ai_red_team.model.reviewer.json')
+    alternative.write_text('{}')  # поздний неподтверждённый кандидат не вытесняет человеческий digest
+    _, accepted, missing, pending = completion.review_inputs(root, task, current,
+        {'ai_red_team': hashlib.sha256(before[0]).hexdigest()}, inherited=True)
+    assert not missing and not pending and 'model_receipt' not in accepted['ai_red_team']
     assert (verdict_path.read_bytes(), attack_path.read_bytes(), json.dumps(task, sort_keys=True)) == before
 
 

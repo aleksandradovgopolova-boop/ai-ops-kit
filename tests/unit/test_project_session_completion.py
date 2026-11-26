@@ -713,6 +713,10 @@ def test_finalize_accepts_machine_judgment_without_overriding_another_gate(proje
     current = sessions.binding(project, 'session-' + task['request_id'])
     scope = dict(completion.human_scope(project, current, completion.scope(task, current)),
                  request_sha256=sessions.digest(request_path.read_bytes()))
+    stale = dict(other_digests, ai_red_team="0" * 64)
+    if not change_evidence:
+        assert cli.main(['finalize', *args, '--review-digests', json.dumps(stale)]) == 1
+        waiting = sessions.load(project, 'codex', 'complete')['verification']
     proof = project/'.ai/runtime/fixture-specialist.json'
     proof.write_text('{"fixture_only": true}\n')
     relative = str(proof.relative_to(project))
@@ -755,9 +759,22 @@ def test_finalize_accepts_machine_judgment_without_overriding_another_gate(proje
         assert proof.read_text() == 'evidence changed after checks'
         assert sessions.load(project, 'codex', 'complete')['status'] != 'accepted'
         return
-    assert cli.main(['finalize', *args, '--review-digests', json.dumps(other_digests)]) == 1
+    assert cli.main(['finalize', *args, '--review-digests', json.dumps(stale)]) == 1
+    assert sessions.load(project, 'codex', 'complete')['verification'] == waiting
+    original = proof.read_bytes()
+    proof.write_bytes(b'qualification: incomplete evidence')
+    assert cli.main(['finalize', *args]) == 1
+    rejected = sessions.load(project, 'codex', 'complete')
+    assert rejected['verification']['attempt'] != waiting['attempt']
+    status = completion.response(project, rejected)['host_actions']['model_jobs'][0]['status']
+    assert status == 'awaiting_corrected_evidence'
+    assert cli.main(['finalize', *args]) == 1
+    assert sessions.load(project, 'codex', 'complete')['verification'] == rejected['verification']
+    proof.write_bytes(original)
+    assert cli.main(['finalize', *args]) == 1
     assert (project/'.ai/runtime/check-ran').read_text() == 'real check'
     saved = sessions.load(project, 'codex', 'complete')
+    assert saved['verification']['review_digests'] == stale
     verification = json.loads((project/saved['verification']['report']).read_bytes())
     gates = verification['pipeline']['gates']
     assert gates['unmet'] == ['security']

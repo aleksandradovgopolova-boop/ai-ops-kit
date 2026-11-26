@@ -12,9 +12,123 @@ import tempfile
 
 from ai_ops_kit.lifecycle import project_session as sessions
 from ai_ops_kit.lifecycle import session_prepared_update
+from ai_ops_kit.shared import review_verdict
 
 TIMEOUT = 30
 SNAPSHOT_LIMIT = 4 * 1024 * 1024
+
+
+def specialist_route(root, action, rejected=None):
+    """Показать текущие внешние входы после проверки сохранённой передачи."""
+    jobs = []
+    for job in action["model_jobs"]:
+        scope = dict(action["scope"], review_root=str(root.resolve()), request_sha256=job["request_sha256"])
+        try:
+            review_verdict.load_model_receipt(scope)
+            receipt = "available"
+        except FileNotFoundError:
+            receipt = "missing"
+        except (OSError, ValueError):
+            receipt = "unusable"
+        verdict_present = sessions.within(root, job["verdict"]).is_file()
+        status = "inspect_evidence" if receipt == "available" and verdict_present else "awaiting_external_evidence"
+        prior = (rejected or {}).get(job["gate"]) or {}
+        if status == "inspect_evidence":
+            human = next(j for j in action["human_jobs"] if j["gate"] == job["gate"])
+            current = pending_identity(root, sessions.within(root, human["verdict"]), None, scope, True)
+            if current is not None and (not current.get("model") or current.get("model") == prior.get("model")):
+                status = "awaiting_corrected_evidence"
+        jobs.append(dict(job, owner="trusted-host-operator", status=status,
+                         receipt_status=receipt, verdict_present=verdict_present))
+    next_action = ("dispatch_review_jobs" if action["jobs"] else "inspect_specialist_evidence"
+                   if any(j["status"] == "inspect_evidence" for j in jobs) else "await_external_evidence")
+    return dict(action, model_jobs=jobs, next_action=next_action)
+
+
+def _candidate(root, path, checksum, specialist):
+    """False — нужных байтов нет; None — безопасный ограниченный снимок невозможен."""
+    if checksum is None:
+        return False
+    try:
+        if path.resolve() != path or not path.is_relative_to(root):
+            return None
+        if not stat.S_ISREG(path.lstat().st_mode):
+            return False
+        flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+        with os.fdopen(os.open(path, flags), "rb") as stream:
+            info = os.fstat(stream.fileno())
+            if not stat.S_ISREG(info.st_mode):
+                return None
+            if info.st_size > 262144:
+                return False if specialist else None
+            raw = stream.read(262145)
+            if len(raw) != info.st_size or os.fstat(stream.fileno()).st_ctime_ns != info.st_ctime_ns:
+                return None
+    except FileNotFoundError:
+        return False
+    if sessions.digest(raw) != checksum:
+        return False
+    primary = [checksum, info.st_dev, info.st_ino, info.st_ctime_ns]
+    if not specialist:
+        return primary
+    try:
+        value = json.loads(raw)
+    except (ValueError, RecursionError):
+        return primary
+    proofs = value.get("attack_evidence") if isinstance(value, dict) else None
+    if not isinstance(proofs, list):
+        return primary
+    if len(proofs) > 64:
+        return None
+    stamps = []
+    for item in proofs:
+        relative = item.get("path") if isinstance(item, dict) else None
+        if not isinstance(relative, str):
+            continue
+        file = root / relative
+        if Path(relative).is_absolute() or file.resolve() != file or not file.is_relative_to(root):
+            return None
+        try:
+            info = file.lstat()
+            stamps.append([info.st_dev, info.st_ino, info.st_mode, info.st_size, info.st_ctime_ns, info.st_mtime_ns])
+        except FileNotFoundError:
+            stamps.append(None)
+    return [primary, stamps]
+
+
+def pending_identity(root, verdict, digest, model_scope, inherited):
+    """Снимок только для повторного ожидания. Ни один его исход не принимает gate."""
+    try:
+        human = _candidate(root, verdict, digest, model_scope is not None)
+        if human is None:
+            return None
+        key = {"supplied": human} if human else {}
+        if model_scope is None or (digest is not None and not inherited):
+            return key
+        try:
+            host, host_hash = review_verdict.load_model_receipt(model_scope)
+        except (OSError, ValueError):
+            return key
+        machine = _candidate(root, verdict.with_name("ai_red_team.model.reviewer.json"), host["verdict_sha256"], True)
+        if machine is None:
+            return None
+        if machine:
+            key["model"] = [host_hash, machine]
+        return key
+    except (OSError, ValueError, RuntimeError):
+        return None
+
+
+def waiting_unchanged(root, action, report, digests, inherited):
+    previous = report.get("pending_review_inputs", {})
+    for job in action["jobs"] + action["human_jobs"]:
+        gid = job["gate"]
+        scope = dict(action["scope"], review_root=str(root.resolve()), request_sha256=job["request_sha256"])
+        key = pending_identity(root, sessions.within(root, job["verdict"]), digests.get(gid),
+                               scope if gid == "ai_red_team" else None, inherited)
+        if key is None or key != previous.get(gid, {}):
+            return False
+    return True
 
 
 def unstarted_retry(root, payload, task, *, replay):

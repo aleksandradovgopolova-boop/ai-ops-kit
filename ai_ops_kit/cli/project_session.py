@@ -347,7 +347,8 @@ def main(argv=None):
                         from ai_ops_kit.cli import project_session_completion as completion
                         digests = (json.loads(args.review_digests) if args.review_digests is not None else
                                    (existing.get("verification") or {}).get("review_digests", {}))
-                        result = (completion.finalize(root, args.runtime, args.session, digests)
+                        result = (completion.finalize(root, args.runtime, args.session, digests,
+                                                      inherited=args.review_digests is None)
                                   if args.action == "finalize" else completion.reconcile(root, args.runtime, args.session))
                         print(json.dumps(agent_response(root, result), ensure_ascii=False))
                         return 0 if result.get("status") == "accepted" else 1

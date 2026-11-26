@@ -64,13 +64,61 @@ def test_new_ordinary_digest_triggers_full_check_while_host_is_missing(project, 
     assert result["status"] == "running" and not result["execution"].get("verification_ready")
 
 
+@pytest.mark.parametrize("gate", ["acceptance", "ai_red_team"])
+def test_digest_delivered_before_rejected_file_wakes_once_per_verified_change(project, pending_specialist, gate):
+    action = agents.response(project, pending_specialist)["host_actions"]
+    job = next(j for j in action["jobs"] + action["human_jobs"] if j["gate"] == gate)
+    path = project / job["verdict"]
+    # Совпадение байтов запускает проверку, а неполный JSON остаётся отклонённым.
+    new_bytes = b'{"kind":"incomplete-local-observation"}'
+    digests = {gate: sessions.digest(new_bytes)}
+    def finish():
+        return agents.finalize(project, "codex", "complete", digests)
+    first = finish()
+    assert not path.exists() and finish()["verification"] == first["verification"]
+    path.write_bytes(b"older bytes")
+    assert finish()["verification"] == first["verification"]
+    path.write_bytes(new_bytes)
+    checked = finish()
+    assert checked["verification"]["attempt"] != first["verification"]["attempt"]
+    assert checked["status"] == "running" and finish()["verification"] == checked["verification"]
+    assert path.read_bytes() == new_bytes
+
+
+def test_delivered_ordinary_verdict_advances_other_jobs_while_specialist_waits(project, pending_specialist):
+    _, receipts = reviewer_receipts(project, pending_specialist, "codex", skip={"ai_red_team"})
+    job = next(j for j in agents.response(project, pending_specialist)["host_actions"]["jobs"] if j["gate"] == "acceptance")
+    path = project / job["verdict"]
+    payload = path.read_bytes()
+    path.unlink()
+    digest = {"acceptance": receipts["acceptance"]}
+    first = agents.finalize(project, "codex", "complete", digest)
+    assert agents.finalize(project, "codex", "complete", digest)["verification"] == first["verification"]
+    path.write_bytes(payload)
+    resumed = agents.finalize(project, "codex", "complete", digest)
+    action = agents.response(project, resumed)["host_actions"]
+    assert "acceptance" not in [j["gate"] for j in action["jobs"]]
+    assert action["model_jobs"] and resumed["status"] == "running"
+
+
+def test_retry_probe_leaves_large_and_nonregular_verdicts_to_their_native_limits(tmp_path):
+    resume = agents.resume_checks
+    path = tmp_path / "local.json"
+    path.mkdir()
+    assert resume._candidate(tmp_path, path, "0" * 64, True) is False
+    path.rmdir()
+    path.write_bytes(b" " * 262145)
+    assert resume._candidate(tmp_path, path, "0" * 64, True) is False
+    assert resume._candidate(tmp_path, path, "0" * 64, False) is None
+
+
 def test_specialist_only_wait_names_external_owner_even_with_local_verdict(project, pending_specialist):
     saved = json.loads((project / pending_specialist["verification"]["report"]).read_text())["agent_handoff"]
     job, = saved["model_jobs"]
     action = agents.review_jobs(project, pending_specialist, saved["scope"], [project / job["request"]])
     path = project / job["verdict"]
     path.write_bytes(b"unverified qualification marker")
-    waiting = agents.specialist_route(project, action)
+    waiting = agents.resume_checks.specialist_route(project, action)
     assert waiting["jobs"] == [] and waiting["next_action"] == "await_external_evidence"
     assert waiting["model_jobs"][0]["verdict_present"] and waiting["model_jobs"][0]["receipt_status"] == "missing"
     assert waiting["model_jobs"][0]["owner"] == "trusted-host-operator"
@@ -94,6 +142,7 @@ def test_changed_specialist_request_cannot_reuse_wait(project, pending_specialis
         agents.response(project, pending_specialist)
     result = agents.finalize(project, "codex", "complete", {})
     assert result["verification"]["attempt"] != pending_specialist["verification"]["attempt"]
+    assert "запрос агенту изменён" in result["verification"]["recheck_reason"]
     assert result["status"] == "running"
 
 
