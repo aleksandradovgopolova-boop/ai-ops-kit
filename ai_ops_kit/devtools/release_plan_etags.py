@@ -77,7 +77,10 @@ class _CapturePages:
         code = int(status[1])
         if code == 304:
             # gh api печатает подтверждённый HTTP 304 и завершает его с кодом 1.
-            if (previous is None or parts[1] or (tags and tags != [previous[0].encode("ascii")]) or
+            # If-None-Match сравнивает непрозрачные метки без префикса W/ (RFC 9110 §13.1.2).
+            opaque_tags = [tag.removeprefix(b"W/") for tag in tags]
+            if (previous is None or parts[1] or
+                    (tags and opaque_tags != [previous[0].encode("ascii").removeprefix(b"W/")]) or
                     not (proc.returncode == 0 or (proc.returncode == 1 and proc.stderr.strip() == b"gh: HTTP 304"))):
                 raise GitHubError("invalid conditional workflow response")
             tag, body = previous
