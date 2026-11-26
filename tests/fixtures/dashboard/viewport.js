@@ -54,8 +54,10 @@
     await until(inDialog, "Фокус не перешёл в диалог: " + key);
     if (key === "panel:release") {
       const summary = q("#modal-body details summary");
-      summary.scrollIntoView({block:"center", behavior:"instant"});
-      click(summary);
+      if (summary) {
+        summary.scrollIntoView({block:"center", behavior:"instant"});
+        click(summary);
+      }
     }
     function typography(selector) {
       const el = q("#modal-body " + selector);
