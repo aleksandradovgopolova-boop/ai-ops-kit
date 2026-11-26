@@ -56,8 +56,19 @@
       summary.scrollIntoView({block:"center", behavior:"instant"});
       click(summary);
     }
+    function typography(selector) {
+      const el = q("#modal-body " + selector);
+      if (!el) return null;
+      const css = getComputedStyle(el);
+      return {size:css.fontSize, family:css.fontFamily, leading:css.lineHeight, color:css.color};
+    }
     result.dialogs[key] = {
       title:q("#modal-title").innerText, text:q("#modal-body").textContent,
+      type: {
+        lead:typography(".lead"), section:typography(".mh"), detail:typography(".mrow .md"),
+        paragraph:typography(".release-notes p"), heading:typography(".release-notes h3"),
+        item:typography(".release-notes li"), source:typography(".release-notes .source-link")
+      },
       detailsOpen: q("#modal-body details")?.open,
       links:Array.from(q("[role=dialog]").querySelectorAll("a[href]"), a => a.href)
     };

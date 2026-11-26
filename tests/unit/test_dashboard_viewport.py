@@ -39,7 +39,7 @@ def dashboard_data():
     }
     delivery = saved["metrics"]["delivery_evidence"]
     delivery["release"] = {"tag": "v4.15.0", "published_at": "2026-11-26T08:00:00Z",
-                           "url": RELEASE_URL, "notes": f"#### Что вошло\n\n- {RELEASE_NOTE} #1510 [описание]({REPO_URL}/pull/1434)"}
+                           "url": RELEASE_URL, "notes": f"#### Что вошло\n\nОписание выпуска.\n\n- {RELEASE_NOTE} #1510 [описание]({REPO_URL}/pull/1434)"}
     with pytest.MonkeyPatch.context() as patch:
         # Внешние источники и вычисляемые процессы заменяем известным снимком.
         sources = {"delivery_evidence": delivery, "repo_slug": saved["repo"], "passport": saved["passport_sections"],
@@ -169,6 +169,23 @@ def test_all_artifacts_open_their_own_content_and_restore_focus(page, dashboard_
         assert any(url.endswith("/" + expected["path"]) for url in actual["links"]), key
         assert actual["closed"] and actual["focusReturned"], key
         assert actual["text"].strip() not in {"", "—"}, key
+    passport = page["dialogs"]["passport"]
+    assert any(url.endswith("/.ai/project/context/product/PRODUCT_PASSPORT.md") for url in passport["links"])
+    assert "product-team" in passport["text"] and "продуктовые команды" in passport["text"].lower()
+    assert "назвать должен человек" not in passport["text"]
     assert dashboard_data["north_star"] in page["dialogs"]["strategy"]["text"]
     for section in dashboard_data["passport_sections"]:
-        assert section["name"] in page["dialogs"]["passport"]["text"]
+        assert (section.get("label") or section["name"]) in page["dialogs"]["passport"]["text"]
+
+
+def test_release_notes_follow_vision_typography(page):
+    vision = page["dialogs"]["vision"]["type"]
+    assert vision["lead"] and vision["section"] and vision["detail"]
+    for key in ("published-release", "panel:release"):
+        release = page["dialogs"][key]["type"]
+        assert release["paragraph"] == vision["lead"]
+        assert release["item"] == vision["detail"]
+        assert release["heading"] == vision["section"]
+    source = page["dialogs"]["panel:release"]["type"]["source"]
+    assert source["family"] == vision["section"]["family"]
+    assert float(source["size"].removesuffix("px")) < float(vision["detail"]["size"].removesuffix("px"))

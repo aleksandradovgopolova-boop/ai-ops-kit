@@ -38,6 +38,7 @@ on:
       - "planning/plan.yaml"
       - "docs/capability-map.md"
       - "context/product/**"
+      - ".ai/project/context/product/PRODUCT_PASSPORT.md"
       - ".research/**"
       - ".github/workflows/status-dashboard.yml"
 
