@@ -86,6 +86,18 @@ def test_incomplete_or_non_success_cannot_be_green(evidence, change):
     assert mod.delivery_evidence(root)["tech"]["state"] != "green"
 
 
+def test_health_details_distinguish_failure_from_missing_workflow(evidence):
+    mod, root, runs, jobs = evidence
+    runs.pop(0)
+    jobs[4][0]["conclusion"] = "failure"
+
+    tech = mod.delivery_evidence(root)["tech"]
+
+    assert tech["state"] == "red"
+    assert "Завершились без успеха: coverage." in tech["detail"]
+    assert "Ожидаем результат: package-quality.yml." in tech["detail"]
+
+
 def test_latest_attempt_failure_overrides_earlier_success(evidence):
     mod, root, runs, jobs = evidence
     runs.append(dict(runs[0], run_attempt=1, conclusion="success"))
