@@ -468,13 +468,17 @@ def delivery_evidence(root: Path):
             elif run["conclusion"] != "success":
                 failures.append(workflow)
         state = "red" if failures else ("yellow" if pending else "green")
+        details = []
+        if failures:
+            details.append("Завершились без успеха: " + ", ".join(failures) + ".")
+        if pending:
+            details.append("Ожидаем результат: " + ", ".join(pending) + ".")
         out["tech"] = {"state": state, "head": head, "passed": passed, "total": total,
                        "label": ("есть сбои" if failures else ("ожидаем проверки" if pending
                                   else f"{passed}/{total} пройдено")),
                        "detail": f"Текущий main {head[:7]}: {passed}/{total} проверок качества, документации, "
                                  "покрытия и тяжёлых гейтов. PR-only проверки здесь не учитываются. "
-                                 + ("Не подтверждены: " + ", ".join(failures + pending)
-                                                    if failures or pending else "Все завершены успешно."),
+                                 + (" ".join(details) if details else "Все завершены успешно."),
                        "sources": sources}
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError, AttributeError, YAML_ERROR):
         pass

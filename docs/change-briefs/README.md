@@ -174,3 +174,4 @@
 - [#1434 — повтор после отказа модели и завершение хода](1434-turn-completion-retry.md)
 - [#1434 — проверка владельца при завершении сессии](1434-current-session-owner.md)
 - [#1434 — передача исследовательского результата к finalize](1434-research-finalize-handoff.md)
+- [Пульт — высота карточек по содержимому](dashboard-content-layout.md)

@@ -266,9 +266,17 @@ def test_stop_disarms_deadline_before_persisting_verified_candidate(project, mon
 def test_git_read_timeout_or_cancel_kills_owned_process_group(project, tmp_path, sig):
     pids = tmp_path / "git-pids.json"
     child = "import time; time.sleep(60)"
-    helper = ("import os, subprocess, sys, time, json; from pathlib import Path; "
-              f"p=subprocess.Popen([sys.executable,'-c',{child!r}]); "
-              f"Path({str(pids)!r}).write_text(json.dumps([os.getpid(),p.pid])); time.sleep(60)")
+    helper = f"""
+import json, os, subprocess, sys, time
+from pathlib import Path
+
+child = subprocess.Popen([sys.executable, '-c', {child!r}])
+ready = Path({str(pids)!r})
+pending = ready.with_suffix('.tmp')
+pending.write_text(json.dumps([os.getpid(), child.pid]))
+pending.replace(ready)
+time.sleep(60)
+"""
     extra = f"""
 actual = sessions.subprocess.Popen
 def spawn(command, **kwargs):

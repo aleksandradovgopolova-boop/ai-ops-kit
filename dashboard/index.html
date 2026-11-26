@@ -14,6 +14,7 @@
     --accent:#8b93f6; --accent-soft:#1f2547;
     --ok:#40c896; --ok-soft:#0f3226;
     --run:#5f95ee; --run-soft:#112441;
+    --error:#ff9297;
     --hold:#e3ac4c; --hold-soft:#33280f;
     --need:#c98bf0; --need-soft:#2a1b3a;
     --zero:#828ba3; --zero-soft:#182034;
@@ -165,6 +166,7 @@
   .hp .hv{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:15px;margin-top:3px;display:flex;align-items:center;gap:6px}
   .hp .hv .d{width:9px;height:9px;border-radius:50%}
   .green .hv{color:var(--ok)} .green .hv .d{background:var(--ok)}
+  .red .hv{color:var(--error)} .red .hv .d{background:var(--error)}
   .amber .hv{color:var(--hold)} .amber .hv .d{background:var(--hold)}
   .unknownc .hv{color:var(--need)} .unknownc .hv .d{background:var(--need)}
   .callout{font-size:11.5px;color:var(--muted);background:var(--need-soft);border-radius:9px;
@@ -340,6 +342,7 @@
   .metrics-panel{grid-column:2}
   .card-focus{grid-column:1}
   .roadstrip{grid-column:2}
+  .card-focus[hidden] ~ .roadstrip{grid-column:1/-1}
   .card-health .preview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0}
   .hp{min-width:0;padding:10px 8px}
   .hp .hl{font-size:11px;line-height:1.4;padding-right:16px}
@@ -383,18 +386,13 @@
   .modal-b .tasks{grid-template-columns:1fr}
   .modal-b .spine{display:grid;grid-template-columns:1fr}
   .modal-b .focus-list{grid-template-columns:1fr;margin-bottom:14px}
+  #release-plan{overflow-wrap:anywhere}
   #next-action{font-size:12px;line-height:1.5}
   #next-action > a{display:inline-block;color:var(--accent);font-size:11px;margin-top:10px}
   #recent-changes{display:flex;flex-direction:column;gap:8px}
   .change-line{font-size:12px;line-height:1.5;padding:8px 0;border-top:1px solid var(--line)}
   .change-line:first-child{border-top:0;padding-top:0}
   .change-line span{display:block;color:var(--muted);font-size:10px;margin-top:4px}
-  @media (min-width:1101px) and (min-height:680px){
-    .app{height:100dvh;min-height:0;display:grid;grid-template-rows:auto minmax(0,1fr) auto}
-    .main{grid-template-rows:auto auto minmax(0,1fr) auto}
-    .roadstrip{min-height:0}
-    .road{overflow:auto}
-  }
   @media (min-width:1450px){
     .app{padding:20px 30px;gap:14px}
     .panel{padding:15px 16px}
@@ -504,15 +502,15 @@
 </div>
   </section>
 
-  <section class="panel wide" aria-label="Следующий выпуск">
-    <div class="eyebrow">Следующий выпуск · по проверяемым источникам</div>
-    <div id="release-plan">План выпуска ещё не получен.</div>
-  </section>
-
   <section class="panel roadstrip" id="plan" aria-label="Роадмап">
     <div class="eyebrow"><span>Роадмап · направление</span>
       <button class="more" data-modal="roadmap">весь роадмап →</button></div>
     <div class="road" id="road"></div>
+  </section>
+
+  <section class="panel wide" aria-label="Следующий выпуск">
+    <div class="eyebrow">Следующий выпуск · по проверяемым источникам</div>
+    <div id="release-plan">План выпуска ещё не получен.</div>
   </section>
 
   <section class="panel mapstrip wide" id="artifacts-full" aria-label="Артефакты продукта">
@@ -1568,7 +1566,7 @@
     const blob=d=>d.repo?d.repo.blob_base:"#";
     const link=(d,path)=>{if(!d.repo)return"#";const base=d.repo.blob_base;const last=path.split("/").pop();
       return (last.indexOf(".")<0? base.replace("/blob/","/tree/") : base)+"/"+path;};
-    const HSTATE={green:"green",yellow:"amber",red:"amber",early:"amber",unknown:"unknownc"};
+    const HSTATE={green:"green",yellow:"amber",red:"red",early:"amber",unknown:"unknownc"};
     const HRU={green:"в норме",yellow:"под контролем",red:"риск",early:"первые данные",unknown:"нет данных"};
     const OUTCOME_RU={
       one_input_hides_the_pipeline:"Единый вход скрывает трубопровод",
