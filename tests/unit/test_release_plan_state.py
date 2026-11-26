@@ -71,6 +71,40 @@ def test_semantic_failure_gets_one_deterministic_transition_not_human_receipt():
     assert not state.project(changed, first)["transition"]["changed"]
 
 
+def test_plan_names_only_merged_prs_with_unconfirmed_checks():
+    value = report()
+    value.update(blockers=["implementation_ci_incomplete"], implementations=[
+        {"pr": 8, "merged_change_observed": True, "ci_observed": False},
+        {"pr": 3, "merged_change_observed": True, "ci_observed": False},
+        {"pr": 9, "merged_change_observed": False, "ci_observed": False},
+        {"pr": 4, "merged_change_observed": True, "ci_observed": True},
+    ])
+    projected = state.project(value, None)
+    step, = projected["message"]["next"]
+    assert "#3, #8" in step and "#9" not in step and "#4" not in step
+    assert not projected["release_ready"] and projected["message"]["status"] == "degraded"
+
+
+def test_plan_never_guesses_pr_from_absent_or_invalid_evidence():
+    value = report()
+    value.update(blockers=["implementation_ci_incomplete"], implementations=[
+        {"pr": None, "merged_change_observed": True, "ci_observed": False},
+        {"pr": 5, "merged_change_observed": True},
+    ])
+    step, = state.project(value, None)["message"]["next"]
+    assert "#" not in step
+
+
+def test_plan_bounds_long_pr_list_and_counts_the_remainder():
+    value = report()
+    value.update(blockers=["implementation_ci_incomplete"], implementations=[
+        {"pr": n, "merged_change_observed": True, "ci_observed": False}
+        for n in [6, 5, 2, 1, 3, 7, 4, 3]
+    ])
+    step, = state.project(value, None)["message"]["next"]
+    assert "#1, #2, #3, #4, #5 и ещё 2" in step
+
+
 def test_missing_corrupt_or_untrusted_history_is_unknown_not_empty_success():
     projected = state.project(report(), None)
     assert projected["transition"] == {"history": "unknown", "changed": False,
@@ -176,12 +210,14 @@ def test_dashboard_snapshot_is_the_same_object_and_script_safe(tmp_path):
     assert "</script>" not in raw and json.loads(raw) == value
 
 
-def test_summary_requires_actual_deploy_and_retry_replaces_one_result(tmp_path, monkeypatch):
+@pytest.mark.parametrize("ready", [True, False])
+def test_summary_requires_actual_deploy_and_retry_replaces_one_result(tmp_path, monkeypatch, ready):
     from ai_ops_kit.devtools import release_plan_sources as src
     prior = state.project(report(), None, PUBLISHER)
     current = report()
-    current["blockers"] = []
-    current["release_ready"] = True
+    current["blockers"] = [] if ready else ["implementation_ci_incomplete"]
+    current["release_ready"] = ready
+    current["implementations"] = [{"pr": 7, "merged_change_observed": True, "ci_observed": False}] if not ready else []
     current["semantic_fingerprint"] = rp.semantic_fingerprint(current)
     payload = state.project(current, prior, PUBLISHER)
     (tmp_path / "dashboard").mkdir()
@@ -199,6 +235,8 @@ def test_summary_requires_actual_deploy_and_retry_replaces_one_result(tmp_path, 
     monkeypatch.setenv("AI_OPS_RELEASE_DEPLOY_CONFIRMED", "success")
     assert src.emit_summary(tmp_path) == 0
     first = summary.read_bytes()
+    if not ready:
+        assert "#7" in first.decode()
     assert src.emit_summary(tmp_path) == 0 and summary.read_bytes() == first
     monkeypatch.setenv("GITHUB_RUN_ATTEMPT", "2")
     with pytest.raises(src.SnapshotError):
