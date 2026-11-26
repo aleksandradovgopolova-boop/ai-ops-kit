@@ -39,7 +39,7 @@ def dashboard_data():
     }
     delivery = saved["metrics"]["delivery_evidence"]
     delivery["release"] = {"tag": "v4.15.0", "published_at": "2026-11-26T08:00:00Z",
-                           "url": RELEASE_URL, "notes": f"#### Что вошло\n\n- {RELEASE_NOTE} #1510 [описание]({REPO_URL}/pull/1434)"}
+                           "url": RELEASE_URL, "notes": f"#### Что вошло\n\nОписание выпуска.\n\n- {RELEASE_NOTE} #1510 [описание]({REPO_URL}/pull/1434)"}
     with pytest.MonkeyPatch.context() as patch:
         # Внешние источники и вычисляемые процессы заменяем известным снимком.
         sources = {"delivery_evidence": delivery, "repo_slug": saved["repo"], "passport": saved["passport_sections"],
@@ -105,6 +105,22 @@ def measure_in_chrome(chrome, path, width, height):
             browser.terminate()
 
 
+def render_dashboard(work, data, width, height):
+    chrome = next((p for name in ("google-chrome", "chromium", "chromium-browser",
+                                  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
+                   if (p := shutil.which(name))), None)
+    if not chrome:
+        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_OS") == "Linux":
+            pytest.fail("На Linux runner отсутствует Chrome для проверки пульта")
+        pytest.skip("Для проверки раскладки требуется установленный Chrome или Chromium")
+    page_file = work / "dashboard.html"
+    shutil.copyfile(ROOT / "dashboard/index.html", page_file)
+    assert build_data.sync_snapshot(page_file, data) == 1
+    result = measure_in_chrome(chrome, page_file, width, height)
+    assert result["viewport"] == [width, height]
+    return result
+
+
 @pytest.fixture(scope="module", params=[
     pytest.param((1101, 680, True), id="1101x680"), pytest.param((1280, 720, True), id="1280x720"),
     pytest.param((1366, 600, True), id="1366x600"), pytest.param((1280, 600, True), id="1280x600"),
@@ -114,32 +130,24 @@ def measure_in_chrome(chrome, path, width, height):
     pytest.param((1101, 680, False), id="1101x680-no-focus"),
 ])
 def page(request, tmp_path_factory, dashboard_data):
-    chrome = next((p for name in ("google-chrome", "chromium", "chromium-browser",
-                                  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome")
-                   if (p := shutil.which(name))), None)
-    if not chrome:
-        if os.environ.get("GITHUB_ACTIONS") == "true" and os.environ.get("RUNNER_OS") == "Linux":
-            pytest.fail("На Linux runner отсутствует Chrome для проверки пульта")
-        pytest.skip("Для проверки раскладки требуется установленный Chrome или Chromium")
     width, height, with_focus = request.param
-    work = tmp_path_factory.mktemp("dashboard-browser")
-    page_file = work / "dashboard.html"
-    shutil.copyfile(ROOT / "dashboard/index.html", page_file)
     data = dashboard_data if with_focus else dict(dashboard_data, current_focus=None)
-    assert build_data.sync_snapshot(page_file, data) == 1
-    result = measure_in_chrome(chrome, page_file, width, height)
-    assert result["viewport"] == [width, height]
+    result = render_dashboard(tmp_path_factory.mktemp("dashboard-browser"), data, width, height)
     assert ("focus-block" in result["panels"]) == with_focus
     return result
 
 
-def test_overview_fits_one_viewport(page):
+def assert_overview_fits(page):
     assert page["document"] == page["viewport"]
     assert page["footer"]
     assert {"Пульс продукта", "overview", "plan", "Следующий выпуск", "Артефакты продукта"} <= set(page["panels"])
     assert not page["boxes"], page["boxes"]
     assert not page["overlaps"], page["overlaps"]
     assert not page["clipped"], page["clipped"]
+
+
+def test_overview_fits_one_viewport(page):
+    assert_overview_fits(page)
 
 
 def test_future_and_published_releases_have_separate_details(page):
@@ -169,6 +177,34 @@ def test_all_artifacts_open_their_own_content_and_restore_focus(page, dashboard_
         assert any(url.endswith("/" + expected["path"]) for url in actual["links"]), key
         assert actual["closed"] and actual["focusReturned"], key
         assert actual["text"].strip() not in {"", "—"}, key
+    passport = page["dialogs"]["passport"]
+    assert any(url.endswith("/.ai/project/context/product/PRODUCT_PASSPORT.md") for url in passport["links"])
+    assert "product-team" in passport["text"] and "продуктовые команды" in passport["text"].lower()
+    assert "назвать должен человек" not in passport["text"]
     assert dashboard_data["north_star"] in page["dialogs"]["strategy"]["text"]
     for section in dashboard_data["passport_sections"]:
-        assert section["name"] in page["dialogs"]["passport"]["text"]
+        assert (section.get("label") or section["name"]) in page["dialogs"]["passport"]["text"]
+
+
+def test_release_notes_follow_vision_typography(page):
+    vision = page["dialogs"]["vision"]["type"]
+    assert vision["lead"] and vision["section"] and vision["detail"]
+    for key in ("published-release", "panel:release"):
+        release = page["dialogs"][key]["type"]
+        assert release["paragraph"] == vision["lead"]
+        assert release["item"] == vision["detail"]
+        assert release["heading"] == vision["section"]
+    source = page["dialogs"]["panel:release"]["type"]["source"]
+    assert source["family"] == vision["section"]["family"]
+    assert float(source["size"].removesuffix("px")) < float(vision["detail"]["size"].removesuffix("px"))
+
+@pytest.mark.parametrize("width,height", [(305, 568), (320, 568), (844, 390)])
+def test_overview_fits_when_github_is_unavailable(tmp_path, dashboard_data, width, height):
+    data = dict(dashboard_data, issues=None, release_plan={"message": {
+        "summary": "Не удалось подтвердить полный состав следующего выпуска."}})
+    data["metrics"] = dict(data["metrics"], delivery_evidence={"tech": {
+        "state": "unknown", "label": "результаты недоступны"}, "release": None})
+    data["current_focus"] = dict(data["current_focus"], title="Завершить первую реальную задачу с Китом в каждом из трёх проектов")
+    page = render_dashboard(tmp_path, data, width, height)
+    assert not page["publishedReleaseAvailable"]
+    assert_overview_fits(page)

@@ -53,6 +53,14 @@ CONTOUR_LABELS = {
     "analytics_learning": "Аналитика и обучение",
 }
 
+PASSPORT_PATH = ".ai/project/context/product/PRODUCT_PASSPORT.md"
+PASSPORT_LABELS = {
+    "Repository и окружения": "Репозиторий и среды",
+    "Owner и команда": "Владелец и команда",
+    "Здоровье (продукт / технологии / delivery)": "Состояние продукта, проверок и поставки",
+    "Текущий milestone и прогресс": "Текущая цель и прогресс",
+}
+
 # Продуктовый хребет: что показать карточками и в какой файл вести. Порядок = поток продукта.
 SPINE = [
     ("vision",     "Видение",              "Куда идёт продукт и зачем",                 "VISION.md"),
@@ -62,7 +70,7 @@ SPINE = [
     ("roadmap",    "Роадмап",               "Четыре горизонта: сейчас → дальше → later", "ROADMAP.md"),
     ("backlog",    "Бэклог целей",          "Цели и работа, что берётся следующим",      "planning/plan.yaml"),
     ("metrics",    "Метрики продукта",      "North star, outcome-метрики, guardrails",   "context/product/ProductMetrics.md"),
-    ("passport",   "Паспорт продукта",      "Сводка показателей продукта",               "ai_ops_kit/planning/passport_generator.py"),
+    ("passport",   "Паспорт продукта",      "Для кого продукт, кто его ведёт и как идут дела", PASSPORT_PATH),
 ]
 
 
@@ -133,21 +141,104 @@ def north_star(root: Path):
 
 
 def passport(root: Path):
-    """Живые секции паспорта из генератора кита. Нет пакета/зависимостей → None."""
+    """Поля владельца берём из паспорта, машинные разделы обновляем при сборке."""
     try:
-        out = subprocess.run([sys.executable, "-m", "ai_ops_kit.planning.passport_generator",
-                              "sections", ".", "--json"], cwd=root,
-                             capture_output=True, text=True, timeout=60, check=True).stdout
-        raw = json.loads(out)
-    except Exception as exc:  # noqa: BLE001
-        print(f"[build_data] паспорт не собран ({exc.__class__.__name__})", file=sys.stderr)
+        from ai_ops_kit.planning import passport_generator as generator
+    except ImportError:
         return None
-    sections = []
-    for name, v in raw.items():
-        if isinstance(v, dict):
-            sections.append({"name": name, "state": v.get("state"),
-                             "source": v.get("source"), "value": v.get("value")})
-    return sections
+    try:
+        raw = generator.sections(root)
+    except Exception as exc:  # noqa: BLE001 — поля владельца доступны и при отказе аудита
+        print(f"[build_data] машинные разделы паспорта недоступны ({type(exc).__name__})", file=sys.stderr)
+        raw = {}
+    try:
+        document = (root / PASSPORT_PATH).read_text(encoding="utf-8")
+    except (OSError, UnicodeError):
+        document = ""
+    visible = re.sub(r"<!--.*?-->", "", document, flags=re.DOTALL)
+    _, bodies = generator._split_sections(visible)
+    authored = dict(bodies)
+    for name in generator.OWNER_SECTIONS:
+        body = authored.get(name, "").strip()
+        filled = bool(body) and not re.match(r"^[_*]*(?:неизвестно|unknown)\b", body, re.I)
+        raw[name] = {"source": PASSPORT_PATH, "state": "authored" if filled else "unknown",
+                     "value": " ".join(body.split()) if filled else
+                              ("Раздел не заполнен в паспорте." if document else "Файл паспорта недоступен.")}
+    return [{"name": name, "label": PASSPORT_LABELS.get(name, name), **data}
+            for name, data in raw.items()]
+
+
+def passport_snapshot(root, sections, *, delivery, observations, field, plan):
+    """Дополняем разделы теми же результатами, что показаны на главном экране."""
+    if not sections:
+        return sections
+    rows = {s["name"]: dict(s) for s in sections}
+    tech = (delivery or {}).get("tech") or {}
+    release = (delivery or {}).get("release") or {}
+    tag = release.get("tag")
+    current = version(root)
+    date = release.get("published_at")
+    has_release = bool(tag and date)
+    published = f"Опубликован {tag} ({date[:10]})." if has_release else "Сведения об опубликованном выпуске недоступны."
+    release_state = "partial" if current or has_release else "unknown"
+    rows["Версия и последний релиз"] = {
+        "name": "Версия и последний релиз", "source": "VERSION, GitHub Releases",
+        "state": "verified" if current and has_release else release_state,
+        "value": (f"Версия в репозитории — {current}." if current else "Версия в репозитории неизвестна.")
+                 + " " + published}
+
+    health_key = "Здоровье (продукт / технологии / delivery)"
+    n = ((observations or {}).get("aggregate") or {}).get("n")
+    product = (f"Число замеров времени от постановки задачи до проверенного результата — {n}."
+               if isinstance(n, int) else "Наблюдения о пользе продукта недоступны.")
+    ci = (tech.get("detail") or "Результаты проверок недоступны.").strip()
+    rows[health_key] = {
+        "name": health_key, "label": PASSPORT_LABELS[health_key],
+        "state": "partial" if isinstance(n, int) or tech.get("head") or has_release else "unknown",
+        "source": "context/product/metric-observations.yaml, GitHub Actions, GitHub Releases",
+        "value": f"{product} Общей оценки пользы пока нет. {ci} {published}"}
+
+    maturity = _maturity_from_passport(sections) or {}
+    if maturity.get("cls") == "EXISTING_PRODUCT":
+        row = rows["Статус и зрелость"]
+        row["display_value"] = "История разработки и состав репозитория указывают на существующий продукт."
+        if maturity.get("commits") is not None and maturity.get("code_files") is not None:
+            row["display_value"] += (f" В истории {maturity['commits']} коммитов, "
+                                     f"в дереве {maturity['code_files']} файлов кода.")
+
+    environment = rows.get("Repository и окружения")
+    if environment:
+        parts = [environment["value"].split(". Какое окружение")[0].rstrip(".") + "."]
+        if "gh release create" in _read(root, ".github/workflows/release.yml"):
+            parts.append("Рабочий процесс выпуска публикует версию кита в GitHub Releases.")
+        if "uses: actions/deploy-pages@" in _read(root, ".github/workflows/status-dashboard.yml"):
+            parts.append("На GitHub Pages публикуется пульт. Среды подключённых продуктов "
+                         "находятся в ведении их владельцев.")
+        environment["display_value"] = " ".join(parts)
+        environment["source"] = "структура репозитория, .github/workflows"
+
+    milestone = (plan or {}).get("current_milestone") or {}
+    target = rows.get("Текущий milestone и прогресс")
+    if target and milestone.get("name"):
+        goal = milestone.get("goal") or ""
+        parts = [f"Цель — {milestone['name']}.", goal[:1].upper() + goal[1:]]
+        linked = set(milestone.get("linked_goals") or [])
+        goals_by_id = {g["id"]: g.get("outcome") for g in plan.get("goals", []) if g.get("id") in linked}
+        if linked and set(goals_by_id) == linked and all(isinstance(oc, dict) and oc for oc in goals_by_id.values()):
+            outcomes = [v for outcome in goals_by_id.values() for v in outcome.values()]
+            if all(isinstance(v, bool) for v in outcomes):
+                parts.append(f"В плане отмечено выполненными {sum(outcomes)} из {len(outcomes)} "
+                             "результатов по связанным направлениям.")
+        target.update(display_value=" ".join(filter(None, parts)), state="documented")
+
+    risks = rows.get("Риски и зависимости")
+    if field and risks:
+        deps = risks["value"].split(" Продуктовые риски")[0]
+        risks.update(source=f"{field['source']}, {risks['source']}", state="documented",
+                     display_value=f"В полевом отчёте зафиксированы принятые работы. "
+                                   f"Репозиториев — {field['repositories']}, участников — {field['people']}. "
+                                   f"{field['note']} {deps}")
+    return list(rows.values())
 
 
 def _health_from_passport(sections):
@@ -166,7 +257,7 @@ def _health_from_passport(sections):
         return None
     out["product"] = sig("Продукт")
     out["tech"] = sig("Технологии")
-    out["delivery"] = "green" if re.search(r"Delivery[^.]*?есть", val) else sig("Delivery")
+    out["delivery"] = sig("Delivery") or "unknown"
     return out
 
 
@@ -766,12 +857,15 @@ def build_modals(root: Path, *, roadmap_data, goals_data, waiting, capmap, obs):
     return modals
 
 
-def build_spine(root: Path, metrics_filled: bool):
+def build_spine(root: Path, metrics_filled: bool, passport_sections=None):
     out = []
     for key, title, desc, path in SPINE:
         exists = (root / path).exists()
-        if key in ("capability", "passport"):
+        if key == "capability":
             state = "generated"
+        elif key == "passport" and (root / path).is_file():
+            owner_states = [row["state"] for row in passport_sections or [] if row.get("source") == PASSPORT_PATH]
+            state = "filled" if owner_states and all(s == "authored" for s in owner_states) else "template"
         elif key == "metrics":
             state = "filled" if metrics_filled else "template"
         else:
@@ -844,6 +938,9 @@ def build(root: Path, *, release_plan=None) -> dict:
     delivery = delivery_evidence(root)
     field = field_readout(root)
     repo = repo_slug(root)
+    health = _health_from_passport(psections)
+    health["tech"] = ((delivery or {}).get("tech") or {}).get("state") or "unknown"
+    psections = passport_snapshot(root, psections, delivery=delivery, observations=obs, field=field, plan=plan)
     return {
         "release_plan": release_plan,
         "upcoming_release_notes": upcoming_release_notes(root, release_plan, repo),
@@ -854,14 +951,14 @@ def build(root: Path, *, release_plan=None) -> dict:
         "maturity": _maturity_from_passport(psections),
         "north_star": north_star(root),
         "product_tagline": product_tagline(root),
-        "spine": build_spine(root, pm["outcomes_filled"]),
+        "spine": build_spine(root, pm["outcomes_filled"], psections),
         "capability_map": capmap,
         "discovery": discovery(root),
         "metrics": {
             "north_star_defined": bool(north_star(root)),
             "outcomes_filled": pm["outcomes_filled"],
             "observations": obs,
-            "health": _health_from_passport(psections),
+            "health": health,
             "tech_dimensions": tech_dimensions(root),
             "delivery_evidence": delivery,
             "field_readout": field,

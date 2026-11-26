@@ -20,6 +20,17 @@
     --zero:#828ba3; --zero-soft:#182034;
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 12px 34px rgba(0,0,0,.42);
     --r:14px;
+    --font-text:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+    --font-display:"Bricolage Grotesque","IBM Plex Sans",sans-serif;
+    --font-meta:"IBM Plex Mono",ui-monospace,monospace;
+    --type-section:.625rem;
+    --type-caption:.6875rem;
+    --type-detail:.75rem;
+    --type-item:.78125rem;
+    --type-body:.8125rem;
+    --type-dialog-title:1.0625rem;
+    --leading-text:1.5;
+    --row-inset:8px;
   }
   *{box-sizing:border-box}
   html{background:var(--bg)}
@@ -27,10 +38,10 @@
       radial-gradient(1200px 620px at 84% -8%, rgba(139,147,246,.13), transparent 60%),
       radial-gradient(900px 520px at 6% 108%, rgba(64,200,150,.06), transparent 55%),
       var(--bg);
-    color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,sans-serif;
+    color:var(--ink);font-family:var(--font-text);
     -webkit-font-smoothing:antialiased;line-height:1.45}
-  .mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-variant-numeric:tabular-nums}
-  h1,h2,h3{margin:0;font-family:"Bricolage Grotesque","IBM Plex Sans",sans-serif;text-wrap:balance}
+  .mono{font-family:var(--font-meta);font-variant-numeric:tabular-nums}
+  h1,h2,h3{margin:0;font-family:var(--font-display);text-wrap:balance}
   a{color:inherit;text-decoration:none}
   /* UI-029 — видимый фокус на всех интерактивных элементах (WCAG 2.2 AA, 2.4.7/2.4.11) */
   a:focus-visible,button:focus-visible,summary:focus-visible,[tabindex]:focus-visible{
@@ -55,12 +66,12 @@
   .head-right{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
   .chip{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;
     border:1px solid var(--line);background:var(--panel);font-size:11.5px;box-shadow:var(--shadow)}
-  .chip b{font-family:"IBM Plex Mono",monospace;font-weight:600}
+  .chip b{font-family:var(--font-meta);font-weight:600}
   .chip .dot{width:8px;height:8px;border-radius:50%}
   .chip.chan{background:var(--hold-soft);border-color:transparent;color:var(--hold)}
   .chip.chan .dot{background:var(--hold)}
   .chip.mat{color:var(--muted)}
-  .src{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--faint)}
+  .src{display:inline-flex;align-items:center;gap:6px;font-size:var(--type-caption);color:var(--faint)}
   .src .dot{width:7px;height:7px;border-radius:50%;background:var(--faint)}
   .src.live{color:var(--ok)} .src.live .dot{background:var(--ok)}
 
@@ -68,12 +79,12 @@
   .north{background:linear-gradient(100deg,var(--accent-soft),var(--panel-2));
     border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:var(--r);
     padding:12px 16px;display:flex;align-items:center;gap:14px;box-shadow:var(--shadow)}
-  .north .lbl{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.14em;
+  .north .lbl{font-family:var(--font-meta);font-size:var(--type-section);letter-spacing:.14em;
     text-transform:uppercase;color:var(--accent);flex:none;writing-mode:horizontal-tb}
   .north .txt{font-size:13.5px;color:var(--ink);line-height:1.4;min-width:0}
-  .north .txt b{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:13px;
+  .north .txt b{font-family:var(--font-display);font-weight:600;font-size:var(--type-body);
     letter-spacing:-.005em;line-height:1.4;display:block}
-  .north .txt .sub{display:block;color:var(--muted);font-size:12px;margin-top:3px}
+  .north .txt .sub{display:block;color:var(--muted);font-size:var(--type-detail);margin-top:3px}
 
   .grid{display:grid;gap:clamp(11px,1.2vw,15px);grid-template-columns:1.12fr 1.16fr 1fr;
     align-items:stretch;min-height:0}
@@ -82,7 +93,7 @@
     border-radius:var(--r);padding:14px 15px 13px;box-shadow:var(--shadow);display:flex;
     flex-direction:column;min-height:0}
   .panel.grow{flex:1}
-  .eyebrow{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
+  .eyebrow{font-family:var(--font-meta);font-size:var(--type-section);letter-spacing:.13em;
     text-transform:uppercase;color:var(--faint);margin-bottom:10px;display:flex;
     justify-content:space-between;align-items:center;gap:8px}
   .eyebrow .n{color:var(--muted)}
@@ -94,18 +105,18 @@
   a.rh:hover{border-color:var(--accent)}
   .rh-h{display:flex;align-items:center;gap:8px;margin-bottom:7px}
   .rh-h .dot{width:8px;height:8px;border-radius:50%;flex:none}
-  .rh-h .lb{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:13px;color:var(--ink)}
-  .rh-h .ct{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint)}
+  .rh-h .lb{font-family:var(--font-display);font-weight:700;font-size:var(--type-body);color:var(--ink)}
+  .rh-h .ct{margin-left:auto;font-family:var(--font-meta);font-size:var(--type-section);color:var(--faint)}
   /* горизонт выделяется цветом заголовка, а не точкой-маркером */
   .rh.now .rh-h .lb{color:var(--run)}
   .rh.next .rh-h .lb{color:var(--accent)}
   .rh.later .rh-h .lb{color:var(--zero)}
   .rh-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:5px}
-  .rh-list li{position:relative;padding-left:15px;font-size:12px;color:var(--muted);line-height:1.35}
+  .rh-list li{position:relative;padding-left:15px;font-size:var(--type-detail);color:var(--muted);line-height:1.35}
   .rh-list li::before{content:"";position:absolute;left:3px;top:7px;width:5px;height:5px;border-radius:50%;
     background:var(--faint)}
   .rh.now .rh-list li{color:var(--ink)}
-  .rh-more{padding-left:15px;font-size:11px;color:var(--faint);margin-top:1px}
+  .rh-more{padding-left:15px;font-size:var(--type-caption);color:var(--faint);margin-top:1px}
   .rh-empty{padding-left:15px;font-size:11.5px;color:var(--faint)}
 
   /* spine (product map) — bottom full-width strip */
@@ -113,20 +124,20 @@
   /* ближайшие задачи — две подколонки в одном блоке */
   .tasks{display:grid;grid-template-columns:1fr 1fr;gap:clamp(11px,1.4vw,18px)}
   .tasks-col{min-width:0}
-  .tasks-h{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+  .tasks-h{font-family:var(--font-meta);font-size:var(--type-section);letter-spacing:.11em;text-transform:uppercase;
     color:var(--faint);margin-bottom:9px;display:flex;justify-content:space-between;gap:8px;align-items:baseline}
   .tasks-h .n{color:var(--muted)}
   .spine{display:flex;flex-direction:column;gap:6px}
   .node{display:flex;align-items:center;gap:11px;padding:9px 10px;border-radius:10px;
     border:1px solid var(--line-2);background:var(--panel-2);transition:border-color .12s,background .12s}
   a.node:hover{border-color:var(--accent);background:#151d30}
-  .node .idx{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--faint);width:14px;flex:none;text-align:center}
+  .node .idx{font-family:var(--font-meta);font-size:var(--type-section);color:var(--faint);width:14px;flex:none;text-align:center}
   .node .body{min-width:0;flex:1}
   .node .t{font-size:13.5px;font-weight:500;line-height:1.15;display:flex;align-items:center;gap:7px}
-  .node .d{display:block;font-size:11px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .node .d{display:block;font-size:var(--type-caption);color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .node .go{flex:none;color:var(--faint);font-size:14px}
   a.node:hover .go{color:var(--accent)}
-  .badge{font-family:"IBM Plex Mono",monospace;font-size:9px;text-transform:uppercase;letter-spacing:.04em;
+  .badge{font-family:var(--font-meta);font-size:9px;text-transform:uppercase;letter-spacing:.04em;
     padding:2px 6px;border-radius:5px;flex:none}
   .badge.filled{background:var(--ok-soft);color:var(--ok)}
   .badge.generated{background:var(--run-soft);color:var(--run)}
@@ -135,15 +146,15 @@
 
   /* current focus */
   .focus{border-left:3px solid var(--run)}
-  .focus-title{font-family:"Bricolage Grotesque",sans-serif;font-weight:600;font-size:15px;
+  .focus-title{font-family:var(--font-display);font-weight:600;font-size:15px;
     color:var(--ink);line-height:1.35;margin-bottom:11px}
   .focus-prog{display:flex;align-items:center;gap:12px;margin-bottom:12px}
   .focus-prog .bar{flex:1;height:7px;border-radius:5px;background:var(--zero-soft);overflow:hidden;position:relative}
   .focus-prog .bar > i{position:absolute;left:0;top:0;bottom:0;background:var(--run);border-radius:5px;transition:width .3s}
-  .focus-n{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);white-space:nowrap}
+  .focus-n{font-family:var(--font-meta);font-size:11.5px;color:var(--muted);white-space:nowrap}
   .focus-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:6px 16px}
-  .focus-item{display:flex;gap:8px;font-size:12px;color:var(--muted);line-height:1.35;align-items:baseline}
-  .focus-item .mark{color:var(--faint);flex:none;font-size:11px}
+  .focus-item{display:flex;gap:8px;font-size:var(--type-detail);color:var(--muted);line-height:1.35;align-items:baseline}
+  .focus-item .mark{color:var(--faint);flex:none;font-size:var(--type-caption)}
   .focus-item.done{color:var(--ink)}
   .focus-item.done .mark{color:var(--ok)}
 
@@ -152,18 +163,18 @@
   .hp{flex:1;border-radius:10px;padding:9px 10px;border:1px solid var(--line-2);background:var(--panel-2);position:relative}
   .hp .hl{font-size:10.5px;color:var(--muted);padding-right:22px}
   .hp-info{position:absolute;top:7px;right:7px;width:17px;height:17px;border-radius:50%;
-    border:1px solid var(--line);background:transparent;color:var(--faint);font-size:10px;font-weight:600;
+    border:1px solid var(--line);background:transparent;color:var(--faint);font-size:var(--type-section);font-weight:600;
     font-style:italic;line-height:1;cursor:help;display:flex;align-items:center;justify-content:center;padding:0}
   .hp-info:hover,.hp-info:focus-visible{color:var(--ink);border-color:var(--accent)}
   .hp-tip{position:absolute;top:28px;width:min(240px,80vw);background:var(--panel);
-    border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:11px;line-height:1.45;
+    border:1px solid var(--line);border-radius:9px;padding:9px 11px;font-size:var(--type-caption);line-height:1.45;
     color:var(--muted);box-shadow:var(--shadow);z-index:6;opacity:0;pointer-events:none;transition:opacity .12s}
   /* привязка по краю в зависимости от карточки — тултип не вылезает за экран */
   .health .hp:first-child .hp-tip{left:4px}
   .health .hp:nth-child(2) .hp-tip{left:50%;transform:translateX(-50%)}
   .health .hp:last-child .hp-tip{right:4px}
   .hp-info:hover + .hp-tip,.hp-info:focus-visible + .hp-tip{opacity:1}
-  .hp .hv{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:15px;margin-top:3px;display:flex;align-items:center;gap:6px}
+  .hp .hv{font-family:var(--font-display);font-weight:700;font-size:15px;margin-top:3px;display:flex;align-items:center;gap:6px}
   .hp .hv .d{width:9px;height:9px;border-radius:50%}
   .green .hv{color:var(--ok)} .green .hv .d{background:var(--ok)}
   .red .hv{color:var(--error)} .red .hv .d{background:var(--error)}
@@ -174,22 +185,22 @@
   .callout b{color:var(--ink)} .callout a{color:var(--need);border-bottom:1px dotted var(--need)}
   .measures{display:flex;flex-direction:column;gap:8px}
   .m{display:flex;align-items:center;gap:10px}
-  .m .mk{font-size:12px;color:var(--muted);flex:none;width:104px}
-  .m .mv{font-size:12.5px;color:var(--ink);font-family:"IBM Plex Mono",monospace}
+  .m .mk{font-size:var(--type-detail);color:var(--muted);flex:none;width:104px}
+  .m .mv{font-size:var(--type-item);color:var(--ink);font-family:var(--font-meta)}
   .bar{flex:1;height:7px;border-radius:5px;background:var(--zero-soft);overflow:hidden;position:relative}
   .bar > i{position:absolute;left:0;top:0;bottom:0;background:var(--ok);border-radius:5px}
   .caplist{display:flex;flex-wrap:wrap;gap:5px;margin-top:2px}
-  .cap{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--muted);
+  .cap{font-family:var(--font-meta);font-size:10.5px;color:var(--muted);
     background:var(--panel-2);border:1px solid var(--line-2);border-radius:7px;padding:3px 8px}
   .cap b{color:var(--ink);font-weight:600}
-  .caplink{margin-top:9px;font-size:11px}
+  .caplink{margin-top:9px;font-size:var(--type-caption)}
   .caplink a{color:var(--accent);border-bottom:1px dotted var(--accent)}
 
   /* right col lists */
   .now{display:flex;flex-direction:column;gap:7px}
-  .nowi{font-size:12px;color:var(--ink);line-height:1.35;padding:7px 10px;border-radius:9px;
+  .nowi{font-size:var(--type-detail);color:var(--ink);line-height:1.35;padding:7px 10px;border-radius:9px;
     background:var(--panel-2);border:1px solid var(--line-2)}
-  .nowi b{font-family:"IBM Plex Mono",monospace;font-weight:600;color:var(--accent);font-size:11px}
+  .nowi b{font-family:var(--font-meta);font-weight:600;color:var(--accent);font-size:var(--type-caption)}
   .wait{display:flex;flex-direction:column;gap:7px}
   .waiti{font-size:11.5px;color:var(--ink);line-height:1.35;padding:8px 10px;border-radius:9px;
     background:var(--need-soft);border:1px solid transparent;border-left:2px solid var(--need)}
@@ -198,14 +209,14 @@
     display:flex;flex-direction:column;gap:4px}
   a.issue:hover{border-color:var(--accent)}
   .issue .top{display:flex;align-items:center;gap:8px}
-  .issue .id{font-family:"IBM Plex Mono",monospace;font-size:10.5px;font-weight:600;color:var(--accent)}
-  .issue .kind{margin-left:auto;font-size:9px;font-family:"IBM Plex Mono",monospace;text-transform:uppercase;
+  .issue .id{font-family:var(--font-meta);font-size:10.5px;font-weight:600;color:var(--accent)}
+  .issue .kind{margin-left:auto;font-size:9px;font-family:var(--font-meta);text-transform:uppercase;
     letter-spacing:.05em;padding:2px 6px;border-radius:5px}
   .kind.dir{background:var(--run-soft);color:var(--run)}
   .kind.enh{background:var(--accent-soft);color:var(--accent)}
   .kind.task{background:var(--zero-soft);color:var(--zero)}
-  .issue .ti{font-size:12px;line-height:1.3;color:var(--ink)}
-  .worknote{font-size:11px;color:var(--faint);font-family:"IBM Plex Mono",monospace;margin-top:2px;padding:4px 2px}
+  .issue .ti{font-size:var(--type-detail);line-height:1.3;color:var(--ink)}
+  .worknote{font-size:var(--type-caption);color:var(--faint);font-family:var(--font-meta);margin-top:2px;padding:4px 2px}
 
   /* passport strip */
   .passport{background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid var(--line);
@@ -219,7 +230,7 @@
     background:var(--panel-2);border:1px solid var(--line-2)}
   .pcell .d{width:9px;height:9px;border-radius:50%;flex:none}
   .pcell .pn{display:block;font-size:11.5px;color:var(--ink);line-height:1.2}
-  .pcell .ps{display:block;font-size:10px;color:var(--faint);margin-top:2px}
+  .pcell .ps{display:block;font-size:var(--type-section);color:var(--faint);margin-top:2px}
   .pcell > span:last-child{min-width:0}
   .st-verified .d{background:var(--ok)} .st-inferred .d{background:var(--hold)}
   .st-unknown .d{background:var(--need)}
@@ -231,52 +242,52 @@
   .foot b{color:var(--muted);font-weight:500}
 
   /* «подробнее» buttons in eyebrows */
-  .more{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  .more{font-family:var(--font-meta);font-size:var(--type-section);letter-spacing:.06em;text-transform:uppercase;
     color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:7px;
     padding:3px 9px;cursor:pointer;transition:border-color .12s,background .12s}
   .more:hover{border-color:var(--accent);background:var(--accent-soft)}
 
   /* metrics panel — clarified */
-  .hint{font-size:11.5px;color:var(--muted);line-height:1.4;margin-bottom:11px}
+  .hint{font-size:var(--type-detail);color:var(--muted);line-height:var(--leading-text);margin-bottom:11px}
   .hint b{color:var(--need)}
   .techdims{display:flex;flex-wrap:wrap;align-items:center;gap:7px 12px;margin-top:11px;padding-top:11px;border-top:1px solid var(--line-2)}
-  .techdims .td-lb{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+  .techdims .td-lb{font-family:var(--font-meta);font-size:var(--type-section);letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
   .td{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;color:var(--muted);cursor:help}
   .td .d{width:8px;height:8px;border-radius:50%;background:var(--zero)}
   .td.green{color:var(--ink)} .td.green .d{background:var(--ok)}
   .td.amber{color:var(--hold)} .td.amber .d{background:var(--hold)}
   .td.unknownc .d{background:var(--need)}
-  .maturity{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-2);font-size:12px;
+  .maturity{margin-top:11px;padding-top:11px;border-top:1px solid var(--line-2);font-size:var(--type-detail);
     color:var(--muted);display:flex;flex-wrap:wrap;align-items:baseline;gap:7px}
-  .maturity .lb{color:var(--faint);font-family:"IBM Plex Mono",monospace;font-size:10px;
+  .maturity .lb{color:var(--faint);font-family:var(--font-meta);font-size:var(--type-section);
     letter-spacing:.06em;text-transform:uppercase}
-  .maturity b{color:var(--ink);font-weight:600;font-family:"Bricolage Grotesque",sans-serif}
+  .maturity b{color:var(--ink);font-weight:600;font-family:var(--font-display)}
   .maturity .cf{color:var(--faint)}
   .northstar-metric{border:1px solid var(--line-2);border-radius:11px;background:var(--panel-2);
     padding:10px 12px;margin-bottom:12px}
-  .northstar-metric .k{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:7px}
-  .northstar-metric .k .tag{font-family:"IBM Plex Mono",monospace;font-size:8.5px;letter-spacing:.06em;
+  .northstar-metric .k{font-size:var(--type-caption);color:var(--muted);display:flex;align-items:center;gap:7px}
+  .northstar-metric .k .tag{font-family:var(--font-meta);font-size:8.5px;letter-spacing:.06em;
     text-transform:uppercase;color:var(--accent);background:var(--accent-soft);padding:2px 6px;border-radius:5px}
-  .northstar-metric .v{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:26px;
+  .northstar-metric .v{font-family:var(--font-display);font-weight:700;font-size:26px;
     color:var(--ink);margin-top:5px;line-height:1;display:flex;align-items:baseline;gap:9px}
-  .northstar-metric .v .u{font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:500;color:var(--faint)}
-  .northstar-metric .k .dir{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:9.5px;
+  .northstar-metric .v .u{font-family:var(--font-meta);font-size:var(--type-caption);font-weight:500;color:var(--faint)}
+  .northstar-metric .k .dir{margin-left:auto;font-family:var(--font-meta);font-size:9.5px;
     letter-spacing:.03em;color:var(--faint);flex:none}
-  .hint .path{display:inline-block;margin-top:5px;color:var(--faint);font-size:11px;line-height:1.4}
+  .hint .path{display:inline-block;margin-top:5px;color:var(--faint);font-size:var(--type-caption);line-height:1.4}
   /* следующий шаг (когда решений не ждут) */
   .nextcard{display:block;background:var(--panel-2);border:1px solid var(--line-2);
     border-left:2px solid var(--run);border-radius:9px;padding:9px 11px}
   a.nextcard:hover{border-color:var(--accent);border-left-color:var(--run)}
-  .nexti .nx{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.08em;
+  .nexti .nx{font-family:var(--font-meta);font-size:9.5px;letter-spacing:.08em;
     text-transform:uppercase;color:var(--faint)}
-  .nexti .nt{font-size:12.5px;color:var(--ink);line-height:1.35;margin-top:4px}
-  .nexti .nl{font-family:"IBM Plex Mono",monospace;font-size:10px;color:var(--run);margin-top:5px}
+  .nexti .nt{font-size:var(--type-item);color:var(--ink);line-height:1.35;margin-top:4px}
+  .nexti .nl{font-family:var(--font-meta);font-size:var(--type-section);color:var(--run);margin-top:5px}
   .metric-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px;margin-bottom:12px}
   .mtile{border:1px solid var(--line-2);border-radius:10px;background:var(--panel-2);padding:9px 11px}
   .mtile .mk{font-size:10.5px;color:var(--muted);line-height:1.25}
-  .mtile .mv{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:18px;color:var(--ink);margin-top:4px;line-height:1}
-  .mtile .mv.soft{color:var(--faint);font-size:13px}
-  .mtile .ms{font-size:9.5px;color:var(--faint);margin-top:4px;font-family:"IBM Plex Mono",monospace;letter-spacing:.02em}
+  .mtile .mv{font-family:var(--font-display);font-weight:700;font-size:18px;color:var(--ink);margin-top:4px;line-height:1}
+  .mtile .mv.soft{color:var(--faint);font-size:var(--type-body)}
+  .mtile .ms{font-size:9.5px;color:var(--faint);margin-top:4px;font-family:var(--font-meta);letter-spacing:.02em}
 
   /* modal */
   .backdrop{position:fixed;inset:0;background:rgba(6,9,16,.72);backdrop-filter:blur(3px);
@@ -290,28 +301,31 @@
   .modal-h{position:sticky;top:0;background:linear-gradient(180deg,var(--panel),rgba(20,27,43,.94));
     display:flex;align-items:center;gap:12px;padding:15px 18px 12px;border-bottom:1px solid var(--line-2);
     backdrop-filter:blur(4px)}
-  .modal-h h2{font-size:17px;font-weight:700;letter-spacing:-.01em}
+  .modal-h h2{font-size:var(--type-dialog-title);font-weight:700;letter-spacing:-.01em}
   .modal-h .x{margin-left:auto;width:28px;height:28px;border-radius:8px;border:1px solid var(--line);
     background:var(--panel-2);color:var(--muted);font-size:15px;cursor:pointer;line-height:1;
     display:flex;align-items:center;justify-content:center}
   .modal-h .x:hover{border-color:var(--accent);color:var(--ink)}
-  .modal-b{padding:15px 18px 4px}
-  .modal-b .lead{font-size:13px;color:var(--ink);line-height:1.5;margin-bottom:12px}
-  .modal-b .note{font-size:12px;color:var(--muted);line-height:1.5;background:var(--need-soft);
+  .modal-b{padding:15px 18px 12px;font-size:var(--type-body);line-height:var(--leading-text)}
+  .modal-b .lead{font-size:var(--type-body);color:var(--ink);line-height:var(--leading-text);margin-bottom:12px}
+  .modal-b .note{font-size:var(--type-detail);color:var(--muted);line-height:1.5;background:var(--need-soft);
     border-left:2px solid var(--need);border-radius:9px;padding:10px 12px;margin-bottom:13px}
   .msec{margin-bottom:14px}
-  .msec .mh{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.11em;text-transform:uppercase;
-    color:var(--faint);margin-bottom:8px}
-  .mrow{display:flex;gap:11px;padding:8px 0;border-top:1px solid var(--line-2);align-items:baseline}
+  .msec .mh,.release-notes h3{font-weight:500;line-height:1.4;font-family:var(--font-meta);font-size:var(--type-section);letter-spacing:.11em;text-transform:uppercase;
+    color:var(--muted);margin-bottom:8px}
+  .mrow{display:flex;gap:11px;padding:var(--row-inset) 0;border-top:1px solid var(--line-2);align-items:baseline}
   .msec .mrow:first-of-type{border-top:none}
-  .mrow .mn{font-size:12.5px;color:var(--ink);font-weight:500;flex:none;max-width:46%}
-  .mrow .md{font-size:12px;color:var(--muted);line-height:1.4;margin-left:auto;text-align:right}
+  .mrow .mn{font-size:var(--type-item);color:var(--ink);font-weight:500;flex:none;max-width:46%}
+  .mrow .md{font-size:var(--type-detail);color:var(--muted);line-height:var(--leading-text);margin-left:auto;text-align:right}
   .mrow.wide{flex-direction:column;gap:3px;align-items:stretch}
   .mrow.wide .md{text-align:left;margin-left:0}
   .modal-f{position:sticky;bottom:0;background:linear-gradient(0deg,var(--panel),rgba(20,27,43,.9));
     padding:12px 18px;border-top:1px solid var(--line-2);backdrop-filter:blur(4px)}
-  .modal-f a{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--accent);
-    border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-family:"IBM Plex Mono",monospace}
+  .msec .section-text{font-size:var(--type-body);line-height:var(--leading-text);margin:0;padding-top:var(--row-inset);border-top:1px solid var(--line-2)}
+  .msec .section-source{font-size:var(--type-caption);line-height:var(--leading-text);color:var(--muted);margin:4px 0 0}
+  .modal-f:empty{display:none}
+  .modal-f a{display:inline-flex;align-items:center;gap:7px;font-size:var(--type-detail);color:var(--accent);
+    border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-family:var(--font-meta)}
   .modal-f a:hover{border-color:var(--accent);background:var(--accent-soft)}
   button.node{width:100%;text-align:left;font:inherit;color:inherit;background:var(--panel-2);cursor:pointer}
   button.rh{width:100%;text-align:left;font:inherit;cursor:pointer;color:inherit}
@@ -322,22 +336,22 @@
   .app{max-width:1680px;padding:14px 24px;gap:10px}
   .head{padding-bottom:10px;border-bottom:1px solid var(--line);flex-wrap:nowrap}
   .brand h1{font-size:24px;letter-spacing:-.035em}
-  .brand-label{color:var(--muted);font-size:10px;margin-bottom:5px}
+  .brand-label{color:var(--muted);font-size:var(--type-section);margin-bottom:5px}
   .chip{box-shadow:none}
   .head-right{flex-wrap:nowrap}
   .section-nav{display:flex;gap:18px;margin-left:auto}
-  .text-button{font:inherit;font-size:12px;color:var(--accent);background:none;border:0;padding:4px 0;cursor:pointer;text-align:left}
+  .text-button{font:inherit;font-size:var(--type-detail);color:var(--accent);background:none;border:0;padding:4px 0;cursor:pointer;text-align:left}
   .text-button:hover{text-decoration:underline}
-  summary{cursor:pointer;color:var(--accent);font-size:12px;padding:4px 0}
+  summary{cursor:pointer;color:var(--accent);font-size:var(--type-detail);padding:4px 0}
   .main{display:grid;grid-template-columns:minmax(0,2fr) minmax(0,3fr);gap:12px;align-items:stretch}
   .main > *{min-width:0}
   .wide{grid-column:1/-1}
   .north{padding:2px 0;border:0;border-radius:0;background:none;box-shadow:none}
   .product-description{font-size:15px;font-weight:450;line-height:1.4;margin:0}
   .panel{padding:12px 14px;box-shadow:0 4px 16px rgba(0,0,0,.12)}
-  .eyebrow{color:var(--muted);font-size:9px;letter-spacing:.09em;margin-bottom:10px;flex-wrap:wrap}
-  .eyebrow .n{font-family:"IBM Plex Sans",sans-serif;letter-spacing:0;text-transform:none;font-size:10px}
-  .more{font-size:9px;padding:3px 6px;letter-spacing:0}
+  .eyebrow{color:var(--muted);letter-spacing:.11em;margin-bottom:10px;flex-wrap:wrap}
+  .eyebrow .n{font-family:var(--font-text);letter-spacing:0;text-transform:none;font-size:var(--type-section)}
+  .more{padding:3px 6px;letter-spacing:0}
   .card-health{grid-column:1}
   .metrics-panel{grid-column:2}
   .card-focus{grid-column:1}
@@ -345,12 +359,12 @@
   .card-focus[hidden] ~ .roadstrip{grid-column:1/-1}
   .card-health .preview{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin:0}
   .hp{min-width:0;padding:10px 8px}
-  .hp .hl{font-size:11px;line-height:1.4;padding-right:16px}
+  .hp .hl{font-size:var(--type-caption);line-height:1.4;padding-right:16px}
   .hp .hv{font-size:14px;line-height:1.4;flex-wrap:wrap;align-items:baseline;margin-top:10px}
   .hp-tip{z-index:10}
   .metrics-row{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,2.65fr);gap:7px;flex:1}
   .northstar-metric{margin:0;padding:10px;background:linear-gradient(120deg,var(--accent-soft),var(--panel-2));border-color:#343d65}
-  .northstar-metric .k{font-size:10px;line-height:1.4;flex-wrap:wrap;gap:5px}
+  .northstar-metric .k{font-size:var(--type-section);line-height:1.4;flex-wrap:wrap;gap:5px}
   .northstar-metric .k .dir{margin-left:0;white-space:normal}
   .northstar-metric .v{font-size:29px;line-height:1.1;flex-wrap:wrap;gap:5px;margin-top:8px}
   .northstar-metric .v .u{color:var(--muted);font-size:9px;line-height:1.5}
@@ -361,57 +375,64 @@
   .mtile .mv.soft{font-size:14px;line-height:1.3;color:var(--muted)}
   .mtile .ms{font-size:9px;line-height:1.4;color:var(--muted)}
   .card-focus .preview{display:flex;flex-direction:column;gap:16px;padding:10px 2px}
-  .preview-title{font-family:"Bricolage Grotesque",sans-serif;font-size:19px;font-weight:600;line-height:1.4}
-  .preview-note{font-size:12px;color:var(--muted);line-height:1.5}
+  .preview-title{font-family:var(--font-display);font-size:19px;font-weight:600;line-height:1.4}
+  .preview-note{font-size:var(--type-detail);color:var(--muted);line-height:1.5}
   .warning{color:var(--hold)}
   .card-focus .focus-prog{display:block;margin:0}
   .card-focus .focus-prog .bar{height:8px;margin-top:10px}
   .road{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;flex:1;min-height:0}
   .rh{padding:9px;min-width:0;overflow-wrap:anywhere}
   .rh-h{margin-bottom:10px}
-  .rh-h .lb{font-size:13px}
+  .rh-h .lb{font-size:var(--type-body)}
   .rh-list{gap:6px}
-  .rh-list li{font-size:11px;line-height:1.4;padding-left:12px}
+  .rh-list li{font-size:var(--type-caption);line-height:1.4;padding-left:12px}
   .rh-list li::before{left:1px;top:6px}
   .mapstrip .spine{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
   .node{padding:7px 9px;gap:8px}
-  .node .t{font-size:12px;flex-wrap:wrap;gap:4px 7px;line-height:1.25}
-  .node .d{font-size:10px;margin-top:3px}
+  .node .t{font-size:var(--type-detail);flex-wrap:wrap;gap:4px 7px;line-height:1.25}
+  .node .d{font-size:var(--type-section);margin-top:3px}
   .node .idx{width:12px}
-  .node .go{font-size:13px}
+  .node .go{font-size:var(--type-body)}
   .badge{font-size:8px;padding:2px 4px}
-  .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:0;color:var(--muted);font-size:10px;line-height:1.5}
-  .foot .text-button,.foot .src{font-size:10px}
+  .foot{display:flex;justify-content:space-between;align-items:center;gap:12px;text-align:left;padding:0;color:var(--muted);font-size:var(--type-section);line-height:1.5}
+  .foot .text-button,.foot .src{font-size:var(--type-section)}
   .src{color:var(--muted)}
   .modal-b .tasks{grid-template-columns:1fr}
   .modal-b .spine{display:grid;grid-template-columns:1fr}
   .modal-b .focus-list{grid-template-columns:1fr;margin-bottom:14px}
   #release-preview,.modal-b{overflow-wrap:anywhere}
-  #release-preview{margin:0;font-size:13px}
+  #release-preview{margin:0;font-size:var(--type-body)}
   .release-trigger{padding:0;border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;text-align:left;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
-  .compact-metric,.artifact-index{display:none}
+  .compact-metric,.artifact-index,.release-action-short{display:none}
   .foot{margin-top:auto}
   .modal-b .mrow.wide .mn,.modal-b .mn:only-child{max-width:100%}
-  .release-notes a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
-  .release-notes h3{font-size:15px;margin:14px 0 4px}
-  .release-notes p,.release-notes ul{margin:5px 0}
-  .release-notes ul{padding-left:20px}
+  .modal-b a{color:var(--accent);text-underline-offset:2px}
+  .release-notes a{text-decoration:underline}
+  .release-notes .source-link{font-family:var(--font-meta);font-size:var(--type-caption);white-space:nowrap}
+  .release-notes h3{margin:18px 0 8px}
+  .release-notes h3:first-child{margin-top:0}
+  .release-notes h4{margin:12px 0 4px;font:500 var(--type-item)/var(--leading-text) var(--font-text)}
+  .release-notes p{margin:0 0 8px}
+  .release-notes ul{list-style:none;margin:0 0 12px;padding:0}
+  .release-notes li{padding:var(--row-inset) 0;border-top:1px solid var(--line-2);
+    font-size:var(--type-detail);line-height:var(--leading-text);color:var(--muted)}
+  .release-notes li strong{font-weight:500;color:var(--ink)}
+  .release-notes code{font-family:var(--font-meta);font-size:.95em}
   .modal .spine{display:grid;gap:6px}
-  #next-action{font-size:12px;line-height:1.5}
-  #next-action > a{display:inline-block;color:var(--accent);font-size:11px;margin-top:10px}
+  #next-action{font-size:var(--type-detail);line-height:1.5}
+  #next-action > a{display:inline-block;color:var(--accent);font-size:var(--type-caption);margin-top:10px}
   #recent-changes{display:flex;flex-direction:column;gap:8px}
-  .change-line{font-size:12px;line-height:1.5;padding:8px 0;border-top:1px solid var(--line)}
+  .change-line{font-size:var(--type-detail);line-height:1.5;padding:8px 0;border-top:1px solid var(--line)}
   .change-line:first-child{border-top:0;padding-top:0}
-  .change-line span{display:block;color:var(--muted);font-size:10px;margin-top:4px}
+  .change-line span{display:block;color:var(--muted);font-size:var(--type-section);margin-top:4px}
   @media (min-width:1450px){
     .app{padding:20px 30px;gap:14px}
     .panel{padding:15px 16px}
-    .eyebrow{font-size:10px}
-    .rh-list li{font-size:13px;line-height:1.45}
+    .rh-list li{font-size:var(--type-body);line-height:1.45}
     .rh-list{gap:8px}
     .node{padding:9px 12px}
-    .node .t{font-size:13px}
-    .node .d{font-size:11px}
+    .node .t{font-size:var(--type-body)}
+    .node .d{font-size:var(--type-caption)}
   }
   @media (max-width:1100px){
     .head{flex-wrap:wrap}
@@ -434,7 +455,7 @@
     .hp .hv{margin-top:4px}
     .foot{flex-direction:column;align-items:flex-start}
     .preview-title{font-size:17px}
-    .rh-list li{font-size:12px}
+    .rh-list li{font-size:var(--type-detail)}
   }
   /* На обзоре показываем короткие выводы. Полные тексты читаются в диалоге. */
   .roadstrip .rh-list li,.card-focus .preview-title,#release-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
@@ -460,7 +481,7 @@
     .main .panel{padding:7px 10px}
     .main .eyebrow{margin-bottom:4px}
     .north,.main .metrics-row,.main #artifacts-full,.main .roadstrip .rh-list,.main .roadstrip .rh-empty{display:none}
-    .compact-metric{display:block;font-size:13px;margin:0}
+    .compact-metric{display:block;font-size:var(--type-body);margin:0}
     .artifact-index{display:inline-block}
     .mapstrip .eyebrow{margin:0}
     .head{gap:6px;padding-bottom:5px}
@@ -468,8 +489,8 @@
     .head-right{gap:4px}
     .card-health .preview,.main .road{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;min-height:0}
     .card-health .hp{padding:5px 6px}
-    .card-health .hp .hl{font-size:10px}
-    .card-health .hp .hv{margin-top:2px;font-size:12px}
+    .card-health .hp .hl{font-size:var(--type-section)}
+    .card-health .hp .hv{margin-top:2px;font-size:var(--type-detail)}
     .card-focus .preview{gap:4px;padding:0}
     .card-focus .preview-title{font-size:15px}
     .card-focus .focus-prog .bar{margin-top:3px;height:4px}
@@ -490,8 +511,23 @@
   @media (max-width:420px) and (max-height:700px){
     .app{gap:4px;padding:5px 8px}
     .main{gap:4px}
-    .main .panel{padding:5px 8px}
-    .head .brand-label{display:none}
+    .main .panel{padding:4px 8px}
+    .head{display:grid;grid-template-columns:auto minmax(0,1fr);align-items:center;gap:2px 6px}
+    .brand h1{font-size:1.1875rem;white-space:nowrap}
+    .head-right{grid-area:1 / 2;justify-content:flex-end;flex-wrap:nowrap}
+    .version-label,.release-action-full,.foot-legend{display:none}
+    .release-action-short{display:inline}
+    .head-right .chip{padding:4px 6px}
+    .section-nav{grid-column:1/-1}
+    .head .brand-label,.metrics-panel .metric-context,.card-health .eyebrow .n{display:none}
+    .card-health .preview{grid-template-columns:1fr;gap:0}
+    .card-health .preview .hp{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);
+      gap:7px;align-items:baseline;padding:3px 0;border:0;border-bottom:1px solid var(--line-2);
+      border-radius:0;background:transparent}
+    .card-health .preview .hp:last-child{border:0}
+    .card-health .preview .hl{padding:0}
+    .card-health .preview .hv{display:block;line-height:1.25;margin:0}
+    .card-health .preview .d,.card-health .preview .hp-info,.card-health .preview .hp-tip{display:none}
   }
   @media (max-width:420px) and (max-height:600px){
     .app{gap:3px;padding:4px 7px}
@@ -508,7 +544,9 @@
     .main .metrics-panel,.main .roadstrip{grid-column:2}
     .main .wide{grid-column:auto}
     .head{flex-wrap:nowrap}
-    .main .panel{padding:5px 8px}
+    .card-focus .preview-title{-webkit-line-clamp:1}
+    .app{padding-block:5px;gap:4px}
+    .main .panel{padding:4px 8px}
     .foot{flex-direction:row}
   }
 </style>
@@ -523,7 +561,7 @@
     </div>
     <nav class="section-nav" aria-label="Разделы пульта"><button class="text-button" data-modal="panel:tasks">Задачи <span id="tasks-count"></span> ↗</button></nav>
     <div class="head-right">
-      <span class="chip">версия <b id="version">—</b></span>
+      <span class="chip"><span class="version-label">версия</span> <b id="version">—</b></span>
       <span class="chip chan"><span class="dot"></span><span id="channel">—</span></span>
 
     </div>
@@ -568,7 +606,7 @@
   </section>
 
   <section class="panel metrics-panel" id="overview" aria-label="Метрики продукта">
-    <div class="eyebrow"><span>Метрики продукта · North Star</span>
+    <div class="eyebrow"><span>Метрики продукта<span class="metric-context"> · North Star</span></span>
       <button class="more" data-modal="metrics">подробнее →</button></div>
     <p class="compact-metric" id="metric-summary"></p>
     <div class="metrics-row">
@@ -595,7 +633,7 @@
   </section>
 
   <section class="panel wide" aria-label="Следующий выпуск">
-    <div class="eyebrow"><span>Следующий выпуск</span><button class="more" data-modal="panel:release">Состав и доказательства →</button></div>
+    <div class="eyebrow"><span>Следующий выпуск</span><button class="more" data-modal="panel:release"><span class="release-action-full">Состав и доказательства</span><span class="release-action-short">Подробнее</span> →</button></div>
     <p id="release-preview">План выпуска ещё не получен.</p>
     <div id="release-full" hidden><div id="release-plan">План выпуска ещё не получен.</div></div>
   </section>
@@ -613,7 +651,7 @@
   </section>
   </main>
 
-  <footer class="foot"><span>Что не доказано — помечено. <button class="text-button" data-modal="panel:changes">История изменений →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
+  <footer class="foot"><span><span class="foot-legend">Что не доказано — помечено. </span><button class="text-button" data-modal="panel:changes">История изменений →</button></span><span class="src" id="src"><span class="dot"></span><span id="src-text">—</span></span></footer>
 </div>
 
 <div class="backdrop" id="backdrop" hidden>
@@ -699,9 +737,9 @@
     {
       "key": "passport",
       "title": "Паспорт продукта",
-      "desc": "Сводка показателей продукта",
-      "path": "ai_ops_kit/planning/passport_generator.py",
-      "state": "generated"
+      "desc": "Для кого продукт, кто его ведёт и как идут дела",
+      "path": ".ai/project/context/product/PRODUCT_PASSPORT.md",
+      "state": "filled"
     }
   ],
   "capability_map": {
@@ -1277,57 +1315,69 @@
   "passport_sections": [
     {
       "name": "Название и описание",
-      "state": "inferred",
-      "source": "README.md",
-      "value": "**AI Ops Kit** — Кит — это напарник, которому вы говорите задачу обычными словами («добавь вот это», «почини вот то»), а он сам разбирается, как её сделать, делает и показывает доказательство, что она действительно работает, — а не просто отвечает «готово»."
+      "label": "Название и описание",
+      "source": ".ai/project/context/product/PRODUCT_PASSPORT.md",
+      "state": "authored",
+      "value": "**AI Ops Kit** — переиспользуемый пакет (parent) AI-first операционной системы продуктовой разработки. Кит живёт в репозитории продукта и ведёт его по полному циклу — от намерения до измеренного результата (discovery → delivery → release → measurement → следующий цикл), организует работу людей и AI-исполнителей, проверяет качество по риску детерминированными гейтами и не выдаёт утверждение без доказательства. В продуктовые репозитории устанавливается через `ai-ops init`."
     },
     {
       "name": "Аудитория и проблема",
-      "state": "unknown",
-      "source": null,
-      "value": "_неизвестно — аудитория и Problem/JTBD из кода не выводятся — нужен ответ владельца (контур product_strategy)_"
+      "label": "Аудитория и проблема",
+      "source": ".ai/project/context/product/PRODUCT_PASSPORT.md",
+      "state": "authored",
+      "value": "Аудитория — **продуктовые команды**, которые ведут цифровой продукт с участием AI на всём жизненном цикле, а не только в генерации кода. Проблема (JTBD): большинство решений — агентные фреймворки и code-генерация — фокусируются на коде, и продуктовые, дизайнерские, аналитические и эксплуатационные артефакты остаются «в голове» либо не создаются вовсе; функция считается готовой без них. Кит делает AI полноценным участником всей команды (Discovery → эксплуатация) и не даёт закрыть функцию без необходимых артефактов и без честного разделения доказанного и предположенного."
     },
     {
       "name": "Repository и окружения",
       "state": "verified",
-      "source": "структура репозитория",
-      "value": "Репозиторий `ai-ops-kit`, стек: python. CI: .github/workflows. Какое окружение считать production — за владельцем."
+      "source": "структура репозитория, .github/workflows",
+      "value": "Репозиторий `ai-ops-kit`, стек: python. CI: .github/workflows. Какое окружение считать production — за владельцем.",
+      "label": "Репозиторий и среды",
+      "display_value": "Репозиторий `ai-ops-kit`, стек: python. CI: .github/workflows. Рабочий процесс выпуска публикует версию кита в GitHub Releases. На GitHub Pages публикуется пульт. Среды подключённых продуктов находятся в ведении их владельцев."
     },
     {
       "name": "Owner и команда",
-      "state": "unknown",
-      "source": null,
-      "value": "_неизвестно — владелец и команда из кода достоверно не выводятся — назвать должен человек_"
+      "label": "Владелец и команда",
+      "source": ".ai/project/context/product/PRODUCT_PASSPORT.md",
+      "state": "authored",
+      "value": "Владелец — роль **product-team** (frontmatter `owner` в ROADMAP.md, VISION.md, ProductStatus.md). Над продуктом работает команда людей и AI-исполнителей одновременно (направление `team-works-in-parallel`); AI-исполнитель ≠ судья (инвариант writer≠judge). Конкретные имена — вне паспорта: он называет роли, а не runtime."
     },
     {
       "name": "Статус и зрелость",
       "state": "inferred",
       "source": "repo_audit.classify",
-      "value": "Класс: **EXISTING_PRODUCT** (уверенность medium). история короткая или не читается, но признаки зрелой системы на месте: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно."
+      "value": "Класс: **EXISTING_PRODUCT** (уверенность medium). история короткая или не читается, но признаки зрелой системы на месте: CI, тесты, миграции, релизы, описание архитектуры, ADR-решения, документация, манифест зависимостей, конфиг среды. Подтверждение владельца желательно.",
+      "label": "Статус и зрелость",
+      "display_value": "История разработки и состав репозитория указывают на существующий продукт."
     },
     {
       "name": "Здоровье (продукт / технологии / delivery)",
-      "state": "unknown",
-      "source": "CI/тесты (tech); метрики и наблюдения (product); релизы (delivery)",
-      "value": "Продукт: _недостаточно данных для вердикта — метрики TTVO заведены, есть первые наблюдения (n=4), но выборка мала и окна guardrail ещё открыты_. Технологии: **unknown** — есть CI и тесты; результаты прогонов не проверены. Delivery: есть история релизов (5 последних тегов) — _отклонение от плана нужно считать отдельно_."
+      "label": "Состояние продукта, проверок и поставки",
+      "state": "partial",
+      "source": "context/product/metric-observations.yaml, GitHub Actions, GitHub Releases",
+      "value": "Число замеров времени от постановки задачи до проверенного результата — 4. Общей оценки пользы пока нет. Текущий main 015331a: 14/14 проверок качества, документации, покрытия и тяжёлых гейтов. PR-only проверки здесь не учитываются. Все завершены успешно. Опубликован v4.11.1 (2026-10-19)."
     },
     {
       "name": "Версия и последний релиз",
+      "source": "VERSION, GitHub Releases",
       "state": "verified",
-      "source": "VERSION, git tags",
-      "value": "Версия: **4.11.1**. Последний релиз: **v4.11.0**."
+      "value": "Версия в репозитории — 4.11.1. Опубликован v4.11.1 (2026-10-19)."
     },
     {
       "name": "Текущий milestone и прогресс",
-      "state": "verified",
+      "state": "documented",
       "source": "planning/plan.yaml -> current_milestone",
-      "value": "**Владелец проходит первый час, а польза для дочек измерена** — владелец в трёх разных репозиториях доходит до полезного результата с измеренными временем и помощью; сопоставимые реальные работы двух дочек дают проверяемый замер результата и цены сопровождения. Связанные направления: first-hour-for-a-stranger, prove-the-loop-not-add-capabilities."
+      "value": "**Владелец проходит первый час, а польза для дочек измерена** — владелец в трёх разных репозиториях доходит до полезного результата с измеренными временем и помощью; сопоставимые реальные работы двух дочек дают проверяемый замер результата и цены сопровождения. Связанные направления: first-hour-for-a-stranger, prove-the-loop-not-add-capabilities.",
+      "label": "Текущая цель и прогресс",
+      "display_value": "Цель — Владелец проходит первый час, а польза для дочек измерена. Владелец в трёх разных репозиториях доходит до полезного результата с измеренными временем и помощью; сопоставимые реальные работы двух дочек дают проверяемый замер результата и цены сопровождения. В плане отмечено выполненными 0 из 3 результатов по связанным направлениям."
     },
     {
       "name": "Риски и зависимости",
-      "state": "inferred",
-      "source": "манифесты зависимостей, API-схемы",
-      "value": "Зависимости (по манифестам): requirements.txt, pyproject.toml. Продуктовые риски из кода не выводятся — назвать должен владелец."
+      "state": "documented",
+      "source": "qualification/FIRST-HOUR-READOUT-2026-10-05.md, манифесты зависимостей, API-схемы",
+      "value": "Зависимости (по манифестам): requirements.txt, pyproject.toml. Продуктовые риски из кода не выводятся — назвать должен владелец.",
+      "label": "Риски и зависимости",
+      "display_value": "В полевом отчёте зафиксированы принятые работы. Репозиториев — 3, участников — 1. Один знакомый владелец; разные виды работ и начала отсчёта. Общая медиана и причинный эффект Kit не установлены. Строгие пороги первого часа ещё не подтверждены. Зависимости (по манифестам): requirements.txt, pyproject.toml."
     }
   ],
   "contours": [
@@ -1645,7 +1695,8 @@
         }
       ]
     }
-  }
+  },
+  "archived_snapshot": true
 };
   /* SNAPSHOT:END */
   (function(){
@@ -1878,7 +1929,7 @@
       const when=d.generated_at?new Date(d.generated_at):null;
       const stamp=when&&!Number.isNaN(when.getTime())?`${when.getDate()}.${String(when.getMonth()+1).padStart(2,"0")}.${when.getFullYear()} ${String(when.getHours()).padStart(2,"0")}:${String(when.getMinutes()).padStart(2,"0")}`:"";
       $("src").classList.toggle("live", !!LIVE);
-      $("src-text").textContent=(LIVE?"данные загружены · ":"снимок · свежие данные недоступны · ")+(stamp||"дата неизвестна");
+      $("src-text").textContent=(d.archived_snapshot?"архивный снимок · ":LIVE?"данные загружены · ":"снимок · свежие данные недоступны · ")+(stamp||"дата неизвестна");
     }
 
     // ── модальные окна разделов карты продукта ──────────────────────────────
@@ -1896,10 +1947,14 @@
         const subtitle=d.product_tagline?.subtitle;
         if(subtitle) m.sections=[{h:"Как это работает",list:[{name:subtitle}]}];
       }else if(key==="passport"){
-        const states={verified:"Подтверждено",inferred:"По данным проекта",unknown:"Требует уточнения"};
+        if(d.generated_at) m.stamp=(d.archived_snapshot?"Архивный снимок от ":"Сведения на ")+ruDate(d.generated_at.slice(0,10));
+        const provenance={verified:"Подтверждено",documented:"По источнику",authored:"Из паспорта",partial:"Есть данные по части показателей",inferred:"По данным проекта",unknown:"Требует уточнения"};
         const sections=d.passport_sections||[];
-        m.sections=sections.map(s=>({h:s.name,list:[{name:plainLabel(s.value||"Данных пока нет").replace(/^_(.*)_$/,"$1"),
-          desc:[states[s.state],s.source].filter(Boolean).join(" · ")}]}));
+        m.sections=sections.map(s=>({
+          h:s.label||s.name,
+          body:plainLabel(s.display_value||s.value||"Данных пока нет").replace(/`([^`]+)`/g,"$1").replace(/(^|\s)_([^_]+)_(?=\s|[.,;:]|$)/g,"$1$2"),
+          caption:[provenance[s.state],s.source===item.path?"":s.source].filter(Boolean).join(" · ")
+        }));
       }else if(key==="discovery"){
         const labels={evidence:"Свидетельства",decisions:"Решения",requests:"Запросы",experiments:"Эксперименты"};
         const list=Object.entries(labels).filter(([k])=>Number.isInteger(d.discovery?.[k]))
@@ -1913,8 +1968,8 @@
     function repositoryUrl(d){
       return (d.repo?.blob_base||"").replace(/\/blob\/[^/]+$/,"");
     }
-    function evidenceLink(url,label){
-      return `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>`;
+    function evidenceLink(url,label,source=false){
+      return `<a${source?' class="source-link"':""} href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>`;
     }
     function noteInline(text,repo){
       const tokens=/\[([^\]\n]+)\]\((https:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|#(\d+)\b/g;
@@ -1934,7 +1989,7 @@
     function notesHtml(notes,repo){
       if(!notes?.trim()) return '<p class="note">Текст описания пока недоступен. Полная запись — на странице выпуска.</p>';
       const blocks=[], bullets=[];
-      const flush=()=>{if(bullets.length) blocks.push("<ul>"+bullets.splice(0).join("")+"</ul>");};
+      const flush=()=>{if(bullets.length) blocks.push('<ul role="list">'+bullets.splice(0).join("")+"</ul>");};
       for(const line of notes.split(/\r?\n/)){
         const value=line.trim();
         if(/^[-*] /.test(value)){bullets.push("<li>"+noteInline(value.slice(2),repo)+"</li>");continue;}
@@ -1955,9 +2010,9 @@
       const rows=plan.implementations||[], parts=[];
       const heading=title=>parts.push("<h3>"+esc(title)+"</h3>");
       const paragraph=text=>parts.push("<p>"+esc(text)+"</p>");
-      const list=items=>parts.push("<ul>"+items.map(item=>"<li>"+item+"</li>").join("")+"</ul>");
+      const list=items=>parts.push('<ul role="list">'+items.map(item=>"<li>"+item+"</li>").join("")+"</ul>");
       const bullet=e=>noteInline(e.text,repo)+(repo&&/^newsfragments\/[\w.-]+\.md$/.test(e.path)
-        ? " "+evidenceLink(repo+"/blob/"+notes.source_sha+"/"+e.path,"Источник") : "");
+        ? " "+evidenceLink(repo+"/blob/"+notes.source_sha+"/"+e.path,"Источник",true) : "");
       const features=entries.filter(e=>e.kind==="feat");
       heading("Что меняется для вас");
       paragraph(plan.message.summary);
@@ -2012,9 +2067,15 @@
       if($("backdrop").hidden) lastTrigger=trigger||document.activeElement;
       $("modal-title").textContent=m.title||"";
       const parts=[];
+      if(m.stamp) parts.push(`<p class="hint">${esc(m.stamp)}</p>`);
       if(m.lead) parts.push(`<div class="lead">${esc(m.lead)}</div>`);
       if(m.note) parts.push(`<div class="note">${esc(m.note)}</div>`);
       (m.sections||[]).forEach(s=>{
+        if(s.body){
+          parts.push(`<section class="msec"><h3 class="mh">${esc(s.h)}</h3><p class="section-text">${esc(s.body)}</p>`+
+            (s.caption?`<p class="section-source">${esc(s.caption)}</p>`:"")+"</section>");
+          return;
+        }
         const rows=(s.list||[]).map(it=>{
           const name=esc(it.name||"");
           const inline=it.desc&&String(it.desc).length<=26;
@@ -2028,7 +2089,7 @@
       // Копия для чтения не должна дублировать id источника в документе.
       $("modal-body").querySelectorAll("[id]").forEach(el=>el.removeAttribute("id"));
       $("modal-foot").innerHTML=m.path
-        ? `<a href="${link(d,m.path)}" target="_blank" rel="noopener">Открыть в репозитории · ${esc(m.path)} ↗</a>`
+        ? `<a href="${link(d,m.path)}" target="_blank" rel="noopener">${key==="passport"?"Открыть паспорт в репозитории":"Открыть в репозитории · "+esc(m.path)} ↗</a>`
         : "";
       if(published&&d.repo){
         const source=document.createElement("a");
