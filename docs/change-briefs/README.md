@@ -175,3 +175,4 @@
 - [#1434 — проверка владельца при завершении сессии](1434-current-session-owner.md)
 - [#1434 — передача исследовательского результата к finalize](1434-research-finalize-handoff.md)
 - [Пульт — высота карточек по содержимому](dashboard-content-layout.md)
+- [Пульт на одном экране и содержание артефактов](dashboard-one-screen.md)
