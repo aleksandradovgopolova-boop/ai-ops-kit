@@ -36,6 +36,23 @@
       "description": "при status=fail — конкретные блокеры (что именно не так)"}
   },
   "definitions": {
+  "model_red_team": {
+    "description": "Пассивный transport фактического заключения другой модели со сверкой отдельной квитанции хоста.",
+    "allOf": [{"$ref": "#"}],
+    "type": "object",
+    "required": ["reviewer_kind", "review_role", "review_root", "request_sha256", "managed_sha256", "config_sha256"],
+    "properties": {
+      "reviewer_kind": {"const": "model"},
+      "review_role": {"$ref": "#/definitions/human_red_team/properties/review_role"},
+      "review_root": {"$ref": "#/definitions/human_red_team/properties/review_root"},
+      "managed_sha256": {"$ref": "#/definitions/human_red_team/properties/managed_sha256"},
+      "config_sha256": {"$ref": "#/definitions/human_red_team/properties/config_sha256"},
+      "request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+      "attack_evidence": {"$ref": "#/definitions/human_red_team/properties/attack_evidence"}
+    },
+    "if": {"properties": {"status": {"const": "pass"}}, "required": ["status"]},
+    "then": {"required": ["attack_evidence"], "properties": {"attack_evidence": {"minItems": 1}}}
+  },
   "human_red_team": {
     "description": "Experimental human red-team fallback; нормативная other-model альтернатива не отменяется.",
     "allOf": [

@@ -65,6 +65,11 @@ def check_human_red_team(data, required_evidence):
     заменить настоящее выполнение атак обычным code review или утверждением автора.
     Hash/цитата подтверждают binding; смысл суждения остаётся ответственностью судьи.
     """
+    return check_specialist_red_team(data, required_evidence, reviewer_kind="human")
+
+
+def check_specialist_red_team(data, required_evidence, *, reviewer_kind):
+    """Проверить суждение специалиста. Происхождение machine отдельно проверяет хост."""
     if not isinstance(data, dict):
         return ['red-team verdict должен быть object']
     try:
@@ -75,8 +80,8 @@ def check_human_red_team(data, required_evidence):
         errors.append('неподдерживаемая версия red-team verdict')
     if data.get('gate') != 'ai_red_team':
         errors.append('ожидается специализированный ai_red_team verdict')
-    if data.get('reviewer_kind') != 'human' or data.get('review_role') != 'ai-red-teamer':
-        errors.append('нужен внешний человеческий ai-red-teamer; same-model review не подходит')
+    if reviewer_kind not in ('human', 'model') or data.get('reviewer_kind') != reviewer_kind or data.get('review_role') != 'ai-red-teamer':
+        errors.append('вид или роль независимого ai-red-teamer не соответствует каналу')
     if not isinstance(data.get('review_root'), str) or not data['review_root'].strip():
         errors.append('нет привязки review_root')
     if data.get('status') == 'pass':

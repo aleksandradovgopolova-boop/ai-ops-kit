@@ -176,3 +176,4 @@
 - [#1434 — передача исследовательского результата к finalize](1434-research-finalize-handoff.md)
 - [Пульт — высота карточек по содержимому](dashboard-content-layout.md)
 - [Пульт на одном экране и содержание артефактов](dashboard-one-screen.md)
+- [#1434 — приёмка заключения другой модели по квитанции хоста](1434-independent-model-acceptance.md)

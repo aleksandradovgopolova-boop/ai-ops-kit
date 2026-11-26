@@ -19,7 +19,7 @@ def project(tmp_path, monkeypatch):
     return _project_fixture.__wrapped__(tmp_path, monkeypatch)
 
 
-def start(project, monkeypatch, runtime, task_type="quick"):
+def start(project, monkeypatch, runtime, task_type="quick", **signals):
     (project / ".gitignore").write_text(".ai/runtime/\n__pycache__/\n.pytest_cache/\n")
     (project / "pyproject.toml").write_text('[project]\nname="fixture"\nversion="1.0.0"\n')
     cfg = yaml.safe_load((project / ".ai-ops.yaml").read_text())
@@ -34,7 +34,7 @@ def start(project, monkeypatch, runtime, task_type="quick"):
     task = sessions.begin(project, runtime, "complete", "Проверь результат", "turn-one")
     monkeypatch.chdir(project)
     args = ["--runtime", runtime, "--session", "complete"]
-    assert cli.main(["run", *args, "--signals", json.dumps(dict(task_type=task_type, size="small", risk="low"))]) == 1
+    assert cli.main(["run", *args, "--signals", json.dumps(dict(task_type=task_type, size="small", risk="low", **signals))]) == 1
     if task_type == "research":
         complete_prepared_spec(project, task)
         assert cli.main(["run", *args]) == 1
@@ -47,13 +47,15 @@ def start(project, monkeypatch, runtime, task_type="quick"):
     return sessions.load(project, runtime, "complete"), args
 
 
-def reviewer_receipts(project, task, runtime):
+def reviewer_receipts(project, task, runtime, *, skip=()):
     """Контролируемый независимый fixture; не доказательство живого review."""
     handoff = sessions.session_dir(project, runtime, "complete") / (task["request_id"] + ".reviews")
     digests = {}
     for request_path in (handoff / ".ai/reviewer-requests").glob("*.request.json"):
         request = json.loads(request_path.read_text())
         gid = request["gate"]
+        if gid in skip:
+            continue
         verdict = {k: request[k] for k in completion.scope(task, sessions.binding(project, "session-" + task["request_id"]))}
         verdict.update(schema_version=1, reviewer="independent-fixture")
         if gid == "acceptance":
@@ -698,3 +700,70 @@ def test_relative_operator_finish_reconciles_own_previous_status(project, monkey
     assert aw.load(aw.shared_registry_path(project))["active"] == aw.load(Path(path))["active"]
     assert aw.load(Path(path))["active"][0]["status"] == "done"
     assert not public.exists() and not list(aw.copies_claims_dir(project).glob("*.yaml"))
+
+
+@pytest.mark.parametrize('change_evidence', [False, True])
+def test_finalize_accepts_machine_judgment_without_overriding_another_gate(project, monkeypatch, change_evidence):
+    from ai_ops_kit.shared import review_verdict
+    task, args = start(project, monkeypatch, 'codex', 'research', ai_component=True)
+    assert cli.main(['finalize', *args]) == 1
+    handoff, other_digests = reviewer_receipts(project, task, 'codex', skip={'ai_red_team'})
+    request_path = reviewer_handoff.request_path(handoff, 'ai_red_team')
+    request = json.loads(request_path.read_bytes())
+    current = sessions.binding(project, 'session-' + task['request_id'])
+    scope = dict(completion.human_scope(project, current, completion.scope(task, current)),
+                 request_sha256=sessions.digest(request_path.read_bytes()))
+    proof = project/'.ai/runtime/fixture-specialist.json'
+    proof.write_text('{"fixture_only": true}\n')
+    relative = str(proof.relative_to(project))
+    checksum = sessions.digest(proof.read_bytes())
+    machine = Path(request['model_alternative']['verdict_artifact'])
+    machine.write_text(json.dumps(dict(scope, gate='ai_red_team', kind='reviewer-result', status='pass',
+        schema_version=1, reviewer='codex:fixture-reviewer', reviewer_kind='model', review_role='ai-red-teamer',
+        checks=[{'id': key, 'status':'pass', 'evidence':[{'file':'result.py','lines':'1'}]}
+                for key in request['required_evidence']],
+        attack_evidence=[{'kind':'adversarial-execution','path':relative,'sha256':checksum,'tested_revision':current['head']}])))
+    receipt = {'kind':'observed-model-review','schema_version':1,'gate':'ai_red_team','scope':scope,
+               'writer':{'session':scope['writer_session'],'turn':'t1','execution':'completed','canonical_model_id':'fixture/a'},
+               'reviewer':{'session':'codex:fixture-reviewer','turn':'t2','execution':'completed','canonical_model_id':'fixture/b'},
+               'verdict_sha256':sessions.digest(machine.read_bytes()),'execution_artifacts':{relative:checksum}}
+    def read_fixture(name):
+        assert name == review_verdict.model_receipt_name(scope)
+        return json.dumps(receipt).encode()
+    monkeypatch.setattr(review_verdict, '_read_host_file', read_fixture)
+
+    # Keep the synthetic host boundary in this process. The worker, pipeline, Git and checks run normally.
+    def run_worker(command, root, directory, **kwargs):
+        assert Path(command[1]).resolve() == Path(completion.__file__).resolve()
+        completion.evaluate(Path(command[2]), *command[3:])
+        return subprocess.CompletedProcess(command, 0, '', '')
+    monkeypatch.setattr(sessions, 'run_process', run_worker)
+    if change_evidence:
+        from ai_ops_kit.engine import execution_pipeline
+        from ai_ops_kit.lifecycle import active_work
+        actual_pipeline = execution_pipeline.run_pipeline
+        def change_after_checks(*args, **kwargs):
+            pipeline = actual_pipeline(*args, **kwargs)
+            assert next(g for g in pipeline['gates']['gate_results'] if g['gate'] == 'ai_red_team')['status'] == 'pass'
+            proof.write_text('evidence changed after checks')
+            return pipeline
+        monkeypatch.setattr(execution_pipeline, 'run_pipeline', change_after_checks)
+        monkeypatch.setattr(active_work, 'finish_cmd', lambda *args, **kw: pytest.fail('stale evidence closed active work'))
+        blocked = completion.finalize(project, 'codex', 'complete', other_digests)
+        assert blocked['status'] == 'blocked'
+        assert 'артефакт изменён до завершения работы' in blocked['blocker']
+        assert proof.read_text() == 'evidence changed after checks'
+        assert sessions.load(project, 'codex', 'complete')['status'] != 'accepted'
+        return
+    assert cli.main(['finalize', *args, '--review-digests', json.dumps(other_digests)]) == 1
+    assert (project/'.ai/runtime/check-ran').read_text() == 'real check'
+    saved = sessions.load(project, 'codex', 'complete')
+    verification = json.loads((project/saved['verification']['report']).read_bytes())
+    gates = verification['pipeline']['gates']
+    assert gates['unmet'] == ['security']
+    assert next(g for g in gates['gate_results'] if g['gate'] == 'ai_red_team')['status'] == 'pass'
+    assert not sessions.verify(project, 'codex', 'complete')['accepted']
+    assert not reviewer_handoff.verdict_path(handoff, 'ai_red_team').exists()
+    receipt['reviewer']['turn'] = 'different-turn'
+    with pytest.raises(ValueError, match='изменилась'):
+        completion.reconcile(project, 'codex', 'complete')

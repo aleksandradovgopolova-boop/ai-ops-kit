@@ -115,7 +115,12 @@ def test_human_request_is_exposed_separately_from_native_agent_jobs(packet, monk
     contract = json.loads(Path(action['human_jobs'][0]['result_contract']).read_text())
     assert 'human_red_team' in contract['definitions']
     assert 'reviewer_kind' not in contract['properties']
-    assert action['status'] == 'awaiting_human'
+    assert action['status'] == 'awaiting_specialist_evidence'
+    model_job, = action['model_jobs']
+    assert model_job['dispatch'] == 'collect-existing-host-review'
+    assert model_job['request_sha256'] == action['human_jobs'][0]['request_sha256']
+    assert model_job['verdict'].endswith('/ai_red_team.model.reviewer.json')
+    assert action['next_action'] == 'collect_existing_model_evidence_or_human_review'
     assert action['human_jobs'][0]['request_sha256'] == hashlib.sha256(pending[0].read_bytes()).hexdigest()
     payload = verdict_path.read_bytes()
     verdict_path = reviewer_handoff.verdict_path(handoff, 'ai_red_team')
@@ -131,3 +136,169 @@ def test_human_request_is_exposed_separately_from_native_agent_jobs(packet, monk
 
 def test_malformed_specialized_checks_return_errors_instead_of_crashing():
     assert reviewer_result.check_human_red_team({'checks': None, 'status': 'pass'}, ['attack_scenarios_run'])
+
+
+@pytest.fixture
+def machine_packet(packet, monkeypatch):
+    """Host I/O boundary substituted with sealed fixture bytes; no real model calls."""
+    from ai_ops_kit.engine import acceptance_verify
+    from ai_ops_kit.shared import review_verdict
+    root, _, verdict, _, report, expected, _, _ = packet
+    current = dict(root=str(root), head=expected['reviewed_revision'],
+                   managed_sha256='4'*64, config_sha256='5'*64)
+    task = {'runtime': 'codex', 'session_id': 'writer-fixture', 'request_id': expected['request_id'],
+            'binding': {'head': expected['base_revision']}, 'execution': {'signals': {}}}
+    directory = root/'features'/expected['workitem_id']
+    directory.mkdir(parents=True)
+    (directory/'run-plan.yaml').write_text(yaml.safe_dump({'gates': ['ai_red_team']}))
+    monkeypatch.setattr(completion, 'scope', lambda *args, **kwargs: expected)
+    monkeypatch.setattr(acceptance_verify, 'criteria_from_spec', lambda *args: (None, [], None))
+    handoff, _, _, pending = completion.review_inputs(root, task, current, {})
+    request = pending[0]
+    machine_path = Path(json.loads(request.read_bytes())['model_alternative']['verdict_artifact'])
+    scope = dict(completion.human_scope(root, current, expected), request_sha256=hashlib.sha256(request.read_bytes()).hexdigest())
+    verdict.update(scope, reviewer_kind='model', reviewer='codex:review-fixture')
+    machine_path.write_text(json.dumps(verdict))
+    receipt = {'schema_version': 1, 'kind': 'observed-model-review', 'gate': 'ai_red_team', 'scope':scope,
+               'verdict_sha256':hashlib.sha256(machine_path.read_bytes()).hexdigest(),
+               'execution_artifacts':{str(report.relative_to(root)):hashlib.sha256(report.read_bytes()).hexdigest()},
+               'writer':{'execution':'completed','session':scope['writer_session'],'turn':'turn-W','canonical_model_id':'vendor/a'},
+               'reviewer':{'execution':'completed','session':verdict['reviewer'],'turn':'turn-R','canonical_model_id':'vendor/b'}}
+    def host_file(name):
+        if name != review_verdict.model_receipt_name(scope):
+            raise FileNotFoundError(name)
+        return json.dumps(receipt).encode()
+    monkeypatch.setattr(review_verdict, '_read_host_file', host_file)
+    return root, handoff, machine_path, receipt, task, current
+
+
+def test_finalize_inputs_automatically_consume_host_review_with_no_supplied_digest(machine_packet):
+    root, handoff, path, receipt, task, current = machine_packet
+    _, reviews, missing, pending = completion.review_inputs(root, task, current, {})
+    assert not missing and not pending
+    record = reviews['ai_red_team']
+    assert record['path'] == str(path.relative_to(root))
+    assert record['sha256'] == hashlib.sha256(path.read_bytes()).hexdigest()
+    assert record['attack_artifacts'] == receipt['execution_artifacts']
+    assert record['model_receipt']['sha256'] == hashlib.sha256(json.dumps(receipt).encode()).hexdigest()
+    assert not reviewer_handoff.verdict_path(handoff, 'ai_red_team').exists()
+    context = {'scope': record['model_receipt']['scope'], 'host_sha256':record['model_receipt']['sha256'],
+               'digests':{'ai_red_team':record['sha256']}}
+    evidence, entries = pipeline_evidence._consume_handoff_verdicts(root, ['ai_red_team'], {}, {}, current['head'],
+        child_root=handoff, review_base=task['binding']['head'], human_review_context=context)
+    assert evidence['ai_red_team']['status'] == 'pass'
+    assert entries[-1]['source'] == 'host-model-red-team-artifact'
+
+
+@pytest.mark.parametrize('damage', ['same-model','same-session','unknown-model','missing-turn','uncompleted',
+                                    'foreign-scope','wrong-reviewer','changed-verdict','changed-evidence',
+                                    'unobserved-evidence','no-host'])
+def test_finalize_inputs_reject_unverified_model_results(machine_packet, monkeypatch, damage):
+    from ai_ops_kit.shared import review_verdict
+    root, _, path, receipt, task, current = machine_packet
+    if damage == 'same-model':
+        receipt['reviewer']['canonical_model_id'] = receipt['writer']['canonical_model_id']
+    elif damage == 'same-session':
+        receipt['reviewer']['session'] = receipt['writer']['session']
+    elif damage == 'unknown-model':
+        receipt['reviewer']['canonical_model_id'] = 'unknown'
+    elif damage == 'missing-turn':
+        del receipt['writer']['turn']
+    elif damage == 'uncompleted':
+        receipt['reviewer']['execution'] = 'selected'
+    elif damage == 'foreign-scope':
+        receipt['scope'] = dict(receipt['scope'], source_sha256='9'*64)
+    elif damage == 'wrong-reviewer':
+        receipt['reviewer']['session'] = 'codex:unrelated'
+    elif damage == 'changed-verdict':
+        path.write_bytes(path.read_bytes()+b' ')
+    elif damage == 'changed-evidence':
+        (root/next(iter(receipt['execution_artifacts']))).write_text('changed')
+    elif damage == 'unobserved-evidence':
+        receipt['execution_artifacts'] = {}
+    else:
+        def no_host(_):
+            raise FileNotFoundError('no host record')
+        monkeypatch.setattr(review_verdict, '_read_host_file', no_host)
+    _, reviews, missing, requests = completion.review_inputs(root, task, current, {})
+    assert not reviews and missing and len(requests) == 1
+
+
+def test_host_record_is_revalidated_after_finalization(machine_packet):
+    root, _, _, receipt, task, current = machine_packet
+    _, reviews, _, _ = completion.review_inputs(root, task, current, {})
+    from ai_ops_kit.shared import review_verdict
+    red_team = reviews['ai_red_team']
+    saved = {'model_review_receipt': red_team['model_receipt'],
+             'files': {red_team['path']: red_team['sha256'], red_team['request_file']: receipt['scope']['request_sha256'],
+                       **red_team['attack_artifacts']}}
+    review_verdict.recheck_model_receipt(saved)
+    receipt['reviewer']['turn'] = 'replacement'
+    with pytest.raises(ValueError, match='изменилась'):
+        review_verdict.recheck_model_receipt(saved)
+
+
+def test_user_writable_directory_cannot_supply_host_attestation(tmp_path, monkeypatch):
+    from ai_ops_kit.shared import review_verdict
+    monkeypatch.setattr(review_verdict, 'MODEL_RECEIPT_STORE', tmp_path)
+    name = '1'*64 + '.json'
+    (tmp_path/name).write_text('{}')
+    with pytest.raises((ValueError, OSError)):
+        review_verdict._read_host_file(name)
+
+
+@pytest.mark.parametrize('damage', ['missing-attestation', 'wrong-result', 'wrong-request', 'missing-proof'])
+def test_replay_keeps_the_host_attestation_bound_to_files(machine_packet, damage):
+    from ai_ops_kit.shared import review_verdict
+    root, _, _, host, task, current = machine_packet
+    _, reviews, _, _ = completion.review_inputs(root, task, current, {})
+    review = reviews['ai_red_team']
+    files = {review['path']: review['sha256'], review['request_file']: host['scope']['request_sha256'],
+             **review['attack_artifacts']}
+    saved = {'model_review_receipt': review['model_receipt'], 'files': files}
+    if damage == 'missing-attestation':
+        del saved['model_review_receipt']
+    elif damage == 'wrong-result':
+        files[review['path']] = '7' * 64
+    elif damage == 'wrong-request':
+        files[review['request_file']] = '7' * 64
+    else:
+        del files[next(iter(review['attack_artifacts']))]
+    with pytest.raises(ValueError):
+        review_verdict.recheck_model_receipt(saved)
+
+
+@pytest.mark.parametrize('damage', ['lost-reference', 'replaced-reference', 'removed-machine-files', 'changed-report'])
+def test_execution_state_cannot_remove_or_replace_verified_machine_judgment(machine_packet, damage):
+    from ai_ops_kit.shared import review_verdict
+    root, _, _, host, task, current = machine_packet
+    _, reviews, _, _ = completion.review_inputs(root, task, current, {})
+    review = reviews['ai_red_team']
+    report = {'kind':'current-session-verification','ready_for_pr':True,'attempt':'attempt-fixture',
+              'scope':host['scope'],'binding':current,'request_id':task['request_id'],
+              'files': {review['path']: review['sha256'], review['request_file']: host['scope']['request_sha256'],
+                        **review['attack_artifacts']}, 'model_review_receipt': review['model_receipt'],
+              'pipeline': {'reviews': [{'source': 'host-model-red-team-artifact'}]}}
+    raw = json.dumps(report).encode()
+    checksum = hashlib.sha256(raw).hexdigest()
+    verification = {'report':'report.json','sha256':checksum,'attempt':'attempt-fixture','scope':host['scope']}
+    execution = {'mode':'current-session', 'completion_binding':current, 'model_review_receipt':review['model_receipt'],
+                 'files':{**report['files'],'report.json':checksum}}
+    saved = {'request_id':task['request_id'],'execution':execution,'verification':verification}
+    review_verdict.recheck_model_completion(saved, lambda _: raw)
+    if damage == 'lost-reference':
+        del execution['model_review_receipt']
+    elif damage == 'replaced-reference':
+        execution['model_review_receipt'] = dict(review['model_receipt'], sha256='7'*64)
+    elif damage == 'removed-machine-files':
+        del execution['files'][review['path']]
+    else:
+        raw = b'{}'
+    with pytest.raises(ValueError):
+        review_verdict.recheck_model_completion(saved, lambda _: raw)
+
+
+def test_installed_team_session_instructions_expose_passive_model_path():
+    text = (Path(__file__).resolve().parents[2]/'templates/runtime/team-session.md').read_text()
+    assert all(key in text for key in ('host_actions.model_jobs', 'awaiting_specialist_evidence',
+                                       'collect-existing-host-review', 'human_jobs', 'NO_SELF_REVIEW'))
