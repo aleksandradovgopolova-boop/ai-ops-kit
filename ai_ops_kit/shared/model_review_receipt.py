@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 import hashlib
 import json
 import os
@@ -13,22 +14,24 @@ import re
 import stat
 import sys
 
+from ai_ops_kit.shared.lifecycle_store import JsonDict
+
 
 STORE = (Path("/private/var") if sys.platform == "darwin" else Path("/var")) / "lib/ai-ops/model-reviews"
 LIMIT = 64 * 1024
 
 
-def receipt_name(scope):
+def receipt_name(scope: dict[str, str]) -> str:
     raw = json.dumps(scope, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest() + ".json"
 
 
-def _trusted(info, path):
+def _trusted(info: os.stat_result, path: Path) -> None:
     if info.st_uid != 0 or info.st_mode & 0o022 or os.access(path, os.W_OK):
         raise ValueError("квитанция хоста доступна для изменения или её владелец не системный")
 
 
-def _read_host_file(name):
+def _read_host_file(name: str) -> bytes:
     if os.name != "posix" or os.geteuid() == 0:
         raise ValueError("для чтения независимой квитанции нужен непривилегированный POSIX-процесс")
     directory = os.open("/", os.O_RDONLY | os.O_DIRECTORY)
@@ -55,7 +58,7 @@ def _read_host_file(name):
         os.close(directory)
 
 
-def load(scope, *, expected_sha256=None):
+def load(scope: dict[str, str], *, expected_sha256: str | None = None) -> tuple[JsonDict, str]:
     """Канонические id описывают выполненные turns; выбор модели до отправки недостаточен."""
     raw = _read_host_file(receipt_name(scope))
     checksum = hashlib.sha256(raw).hexdigest()
@@ -71,8 +74,10 @@ def load(scope, *, expected_sha256=None):
             or not re.fullmatch(r"[0-9a-f]{64}", str(data.get("verdict_sha256")))):
         raise ValueError("квитанция хоста не подтверждает проверяемую область и результат")
     writer, reviewer = data.get("writer"), data.get("reviewer")
+    if not isinstance(writer, dict) or not isinstance(reviewer, dict):
+        raise ValueError("нет записей выполненных ходов автора и судьи")
     for actor in (writer, reviewer):
-        if (not isinstance(actor, dict) or actor.get("execution") != "completed"
+        if (actor.get("execution") != "completed"
                 or not isinstance(actor.get("session"), str) or not actor["session"].strip()
                 or not isinstance(actor.get("turn"), str) or not actor["turn"].strip()
                 or not isinstance(actor.get("canonical_model_id"), str)
@@ -85,7 +90,7 @@ def load(scope, *, expected_sha256=None):
     return data, checksum
 
 
-def recheck(record):
+def recheck(record: JsonDict) -> None:
     """На reconcile/verify связать receipt с теми же проверенными файлами."""
     files = record.get("files", {})
     model_paths = [Path(path) for path in files if Path(path).parts[-3:] ==
@@ -104,7 +109,7 @@ def recheck(record):
         raise ValueError("квитанция хоста относится к другим проверенным файлам")
 
 
-def recheck_completion(task, read_project_file):
+def recheck_completion(task: JsonDict, read_project_file: Callable[[str], bytes]) -> None:
     """Верификация принятой задачи использует закреплённый отчёт штатного finalize."""
     execution = task["execution"]
     if execution.get("mode") != "current-session":
