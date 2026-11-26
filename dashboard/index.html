@@ -2029,7 +2029,11 @@
       paragraph(plan.release_ready?"Готовность выпуска подтверждена.":"Готовность выпуска ещё не подтверждена.");
       if(rows.length) paragraph("Изменения с подтверждёнными проверками: "+rows.filter(p=>p.ci_observed).length+" из "+rows.length+".");
       if(entries.some(e=>e.kind==="limit")) list(entries.filter(e=>e.kind==="limit").map(bullet));
-      if(plan.delivery?.observed==="unknown") paragraph("Доставка в дочерние проекты ещё не подтверждена.");
+      if(plan.delivery?.observed==="unknown"){
+        heading("Доставка в проекты");
+        paragraph("Доставка планируемой версии ещё не подтверждена. Текущие версии в основных ветках проектов и PR обновлений доступны в частном отчёте владельца.");
+        if(d.repo?.blob_base) parts.push("<p>"+evidenceLink(d.repo.blob_base+"/docs/agent-guides/release-replanning.md#частный-отчёт-о-доставке-в-дочерние-проекты","Как получить отчёт",true)+"</p>");
+      }
       const reasons={
         release_bump_pending:"Версия в репозитории ещё не поднята до запланированной.",
         final_release_evidence_required:"Итоговые проверки на коммите выпуска ещё не подтверждены.",

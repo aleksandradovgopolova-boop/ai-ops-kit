@@ -33,6 +33,7 @@ def dashboard_data():
         horizon["total"] = len(horizon["items"])
     release = {
         "blockers": ["final_release_evidence_required"],
+        "delivery": {"observed": "unknown"},
         "source": {"sha": NEXT_SHA}, "target_version": "4.15.1",
         "message": {"summary": "Подготовка следующего выпуска", "next": ["Проверить состав"]},
         "implementations": [{"pr": 1000 + i, "merge_sha": "a" * 40, "ci_observed": True} for i in range(48)],
@@ -156,6 +157,9 @@ def test_future_and_published_releases_have_separate_details(page):
     published = page["dialogs"]["published-release"]
     assert "1047" in future["text"] and future["detailsOpen"]
     assert "Итоговые проверки на коммите выпуска" in future["text"]
+    assert "Доставка планируемой версии ещё не подтверждена" in future["text"]
+    guide = "docs/agent-guides/release-replanning.md"
+    assert any("/" + guide + "#" in url for url in future["links"])
     assert REPO_URL + "/commit/" + "a" * 40 in future["links"]
     assert RELEASE_NOTE in published["text"] and RELEASE_NOTE not in future["text"]
     assert NEXT_NOTE in future["text"] and NEXT_NOTE not in published["text"]
