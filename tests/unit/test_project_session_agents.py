@@ -23,6 +23,80 @@ def pending_review(project, monkeypatch, capsys):
     return task, args, output
 
 
+@pytest.fixture
+def pending_specialist(project, monkeypatch):
+    def absent(_scope):
+        raise FileNotFoundError("no host evidence")
+    monkeypatch.setattr(agents.review_verdict, "load_model_receipt", absent)
+    start(project, monkeypatch, "codex", "research", ai_component=True)
+    return agents.finalize(project, "codex", "complete", {})
+
+
+def test_saved_model_job_keeps_ordinary_jobs_actionable(project, pending_specialist):
+    report = project / pending_specialist["verification"]["report"]
+    saved = json.loads(report.read_bytes())["agent_handoff"]
+    assert saved["next_action"] == "collect_existing_model_evidence_or_human_review"
+    assert "receipt_status" not in saved["model_jobs"][0]
+    action = agents.response(project, pending_specialist)["host_actions"]
+    assert action["jobs"] == saved["jobs"] and any(j["gate"] == "acceptance" for j in action["jobs"])
+    assert action["status"] == "awaiting_dispatch" and action["next_action"] == "dispatch_review_jobs"
+    job, = action["model_jobs"]
+    assert (job["status"], job["receipt_status"], job["verdict_present"]) == ("awaiting_external_evidence", "missing", False)
+    assert job["owner"] == "trusted-host-operator" and action["human_jobs"] == saved["human_jobs"]
+    assert json.loads(report.read_bytes())["agent_handoff"] == saved
+
+
+def test_unchanged_waiting_finalize_preserves_attempt_and_files(project, pending_specialist, monkeypatch):
+    folder = sessions.session_dir(project, "codex", "complete")
+    def snapshot():
+        return {p: p.read_bytes() for p in folder.rglob("*") if p.is_file()}
+    before = snapshot()
+    monkeypatch.setattr(sessions, "run_process", lambda *a, **kw: pytest.fail("second worker started"))
+    result = agents.finalize(project, "codex", "complete", {})
+    assert result["verification"] == pending_specialist["verification"] and result["status"] == "running"
+    assert result.get("verification_history") == pending_specialist.get("verification_history")
+    assert snapshot() == before
+
+
+def test_new_ordinary_digest_triggers_full_check_while_host_is_missing(project, pending_specialist):
+    result = agents.finalize(project, "codex", "complete", {"acceptance": "0" * 64})
+    assert result["verification"]["attempt"] != pending_specialist["verification"]["attempt"]
+    assert result["status"] == "running" and not result["execution"].get("verification_ready")
+
+
+def test_specialist_only_wait_names_external_owner_even_with_local_verdict(project, pending_specialist):
+    saved = json.loads((project / pending_specialist["verification"]["report"]).read_text())["agent_handoff"]
+    job, = saved["model_jobs"]
+    action = agents.review_jobs(project, pending_specialist, saved["scope"], [project / job["request"]])
+    path = project / job["verdict"]
+    path.write_bytes(b"unverified qualification marker")
+    waiting = agents.specialist_route(project, action)
+    assert waiting["jobs"] == [] and waiting["next_action"] == "await_external_evidence"
+    assert waiting["model_jobs"][0]["verdict_present"] and waiting["model_jobs"][0]["receipt_status"] == "missing"
+    assert waiting["model_jobs"][0]["owner"] == "trusted-host-operator"
+    assert path.read_bytes() == b"unverified qualification marker"
+
+
+def test_new_revision_restarts_verification_when_host_is_missing(project, pending_specialist):
+    (project / "followup.md").write_text("Updated research observation.\n")
+    sessions.git(project, "add", "followup.md")
+    sessions.git(project, "commit", "-qm", "update observation")
+    result = agents.finalize(project, "codex", "complete", {})
+    assert result["verification"]["attempt"] != pending_specialist["verification"]["attempt"]
+    assert result["verification"]["binding"]["head"] == sessions.git(project, "rev-parse", "HEAD")
+
+
+def test_changed_specialist_request_cannot_reuse_wait(project, pending_specialist):
+    original = agents.response(project, pending_specialist)["host_actions"]["model_jobs"][0]
+    path = project / original["request"]
+    path.write_bytes(path.read_bytes() + b" ")
+    with pytest.raises(ValueError, match="запрос агенту изменён"):
+        agents.response(project, pending_specialist)
+    result = agents.finalize(project, "codex", "complete", {})
+    assert result["verification"]["attempt"] != pending_specialist["verification"]["attempt"]
+    assert result["status"] == "running"
+
+
 def test_native_job_reaches_existing_acceptance_without_nested_provider(project, monkeypatch, capsys):
     from ai_ops_kit.providers import codex_native
     task, args, output = pending_review(project, monkeypatch, capsys)
