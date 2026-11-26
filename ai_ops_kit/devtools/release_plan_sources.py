@@ -15,7 +15,7 @@ import re
 import yaml
 from urllib.parse import quote
 
-from ai_ops_kit.devtools import release_plan
+from ai_ops_kit.devtools import release_plan, release_plan_etags
 from ai_ops_kit.integrations.github import GitHubClient, GitHubError, parse_slug
 from ai_ops_kit.shared.gitio import git
 
@@ -268,6 +268,7 @@ def capture(root, client=None):
         client = client or GitHubClient(repo=parse_slug(_git(root, "remote", "get-url", "origin")))
         if not parse_slug(client.repo):
             raise SnapshotError("repository_unknown")
+        client = release_plan_etags.capture_reader(client)
         prefix = f"repos/{client.repo}"
         repo = _object(client, prefix)
         if repo.get("full_name", "").casefold() != client.repo.casefold():

@@ -23,7 +23,8 @@ _INPUTS = ("VERSION", "planning/plan.yaml", "quality/premerge-checks.json",
            ".github/workflows/package-quality.yml", "history/plan-history.yaml",
            "registry/communication-policy.yaml", ".github/workflows/status-dashboard.yml",
            "ai_ops_kit/devtools/release_plan.py", "ai_ops_kit/devtools/release_plan_sources.py",
-           "ai_ops_kit/devtools/release_plan_state.py", "ai_ops_kit/devtools/release_assembly.py",
+           "ai_ops_kit/devtools/release_plan_state.py", "ai_ops_kit/devtools/release_plan_etags.py",
+           "ai_ops_kit/devtools/release_assembly.py",
            "ai_ops_kit/integrations/github.py", "ai_ops_kit/planning/plan_model.py",
            "ai_ops_kit/planning/plan_validate.py", "ai_ops_kit/validation/validate_release_claims.py", *_CI_INPUTS)
 
