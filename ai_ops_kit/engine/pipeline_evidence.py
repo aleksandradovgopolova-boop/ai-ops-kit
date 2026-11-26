@@ -260,13 +260,13 @@ def _specialist_input(work_root, path, checksum, expected, *, model=False, host_
     import json
     from ai_ops_kit.checks import reviewer_result
     from ai_ops_kit.engine import reviewer_handoff
-    from ai_ops_kit.shared import model_review_receipt
+    from ai_ops_kit.shared import review_verdict
     root, path = Path(work_root).resolve(), Path(path)
     host = None
     if model:
         if not re.fullmatch(r'[0-9a-f]{64}', str(expected.get('request_sha256'))):
             raise ValueError('нет привязки к точному запросу для модели')
-        host, host_checksum = model_review_receipt.load(expected, expected_sha256=host_checksum)
+        host, host_checksum = review_verdict.load_model_receipt(expected, expected_sha256=host_checksum)
         checksum = host['verdict_sha256']
     keys = {'workitem_id', 'request_id', 'writer_session', 'base_revision', 'reviewed_revision',
             'source_sha256', 'inputs_sha256', 'artifacts_sha256', 'review_root', 'managed_sha256', 'config_sha256'}

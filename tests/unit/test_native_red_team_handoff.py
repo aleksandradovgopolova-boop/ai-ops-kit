@@ -142,7 +142,7 @@ def test_malformed_specialized_checks_return_errors_instead_of_crashing():
 def machine_packet(packet, monkeypatch):
     """Host I/O boundary substituted with sealed fixture bytes; no real model calls."""
     from ai_ops_kit.engine import acceptance_verify
-    from ai_ops_kit.shared import model_review_receipt
+    from ai_ops_kit.shared import review_verdict
     root, _, verdict, _, report, expected, _, _ = packet
     current = dict(root=str(root), head=expected['reviewed_revision'],
                    managed_sha256='4'*64, config_sha256='5'*64)
@@ -165,10 +165,10 @@ def machine_packet(packet, monkeypatch):
                'writer':{'execution':'completed','session':scope['writer_session'],'turn':'turn-W','canonical_model_id':'vendor/a'},
                'reviewer':{'execution':'completed','session':verdict['reviewer'],'turn':'turn-R','canonical_model_id':'vendor/b'}}
     def host_file(name):
-        if name != model_review_receipt.receipt_name(scope):
+        if name != review_verdict.model_receipt_name(scope):
             raise FileNotFoundError(name)
         return json.dumps(receipt).encode()
-    monkeypatch.setattr(model_review_receipt, '_read_host_file', host_file)
+    monkeypatch.setattr(review_verdict, '_read_host_file', host_file)
     return root, handoff, machine_path, receipt, task, current
 
 
@@ -194,7 +194,7 @@ def test_finalize_inputs_automatically_consume_host_review_with_no_supplied_dige
                                     'foreign-scope','wrong-reviewer','changed-verdict','changed-evidence',
                                     'unobserved-evidence','no-host'])
 def test_finalize_inputs_reject_unverified_model_results(machine_packet, monkeypatch, damage):
-    from ai_ops_kit.shared import model_review_receipt
+    from ai_ops_kit.shared import review_verdict
     root, _, path, receipt, task, current = machine_packet
     if damage == 'same-model':
         receipt['reviewer']['canonical_model_id'] = receipt['writer']['canonical_model_id']
@@ -219,7 +219,7 @@ def test_finalize_inputs_reject_unverified_model_results(machine_packet, monkeyp
     else:
         def no_host(_):
             raise FileNotFoundError('no host record')
-        monkeypatch.setattr(model_review_receipt, '_read_host_file', no_host)
+        monkeypatch.setattr(review_verdict, '_read_host_file', no_host)
     _, reviews, missing, requests = completion.review_inputs(root, task, current, {})
     assert not reviews and missing and len(requests) == 1
 
@@ -227,29 +227,29 @@ def test_finalize_inputs_reject_unverified_model_results(machine_packet, monkeyp
 def test_host_record_is_revalidated_after_finalization(machine_packet):
     root, _, _, receipt, task, current = machine_packet
     _, reviews, _, _ = completion.review_inputs(root, task, current, {})
-    from ai_ops_kit.shared import model_review_receipt
+    from ai_ops_kit.shared import review_verdict
     red_team = reviews['ai_red_team']
     saved = {'model_review_receipt': red_team['model_receipt'],
              'files': {red_team['path']: red_team['sha256'], red_team['request_file']: receipt['scope']['request_sha256'],
                        **red_team['attack_artifacts']}}
-    model_review_receipt.recheck(saved)
+    review_verdict.recheck_model_receipt(saved)
     receipt['reviewer']['turn'] = 'replacement'
     with pytest.raises(ValueError, match='изменилась'):
-        model_review_receipt.recheck(saved)
+        review_verdict.recheck_model_receipt(saved)
 
 
 def test_user_writable_directory_cannot_supply_host_attestation(tmp_path, monkeypatch):
-    from ai_ops_kit.shared import model_review_receipt
-    monkeypatch.setattr(model_review_receipt, 'STORE', tmp_path)
+    from ai_ops_kit.shared import review_verdict
+    monkeypatch.setattr(review_verdict, 'MODEL_RECEIPT_STORE', tmp_path)
     name = '1'*64 + '.json'
     (tmp_path/name).write_text('{}')
     with pytest.raises((ValueError, OSError)):
-        model_review_receipt._read_host_file(name)
+        review_verdict._read_host_file(name)
 
 
 @pytest.mark.parametrize('damage', ['missing-attestation', 'wrong-result', 'wrong-request', 'missing-proof'])
 def test_replay_keeps_the_host_attestation_bound_to_files(machine_packet, damage):
-    from ai_ops_kit.shared import model_review_receipt
+    from ai_ops_kit.shared import review_verdict
     root, _, _, host, task, current = machine_packet
     _, reviews, _, _ = completion.review_inputs(root, task, current, {})
     review = reviews['ai_red_team']
@@ -265,12 +265,12 @@ def test_replay_keeps_the_host_attestation_bound_to_files(machine_packet, damage
     else:
         del files[next(iter(review['attack_artifacts']))]
     with pytest.raises(ValueError):
-        model_review_receipt.recheck(saved)
+        review_verdict.recheck_model_receipt(saved)
 
 
 @pytest.mark.parametrize('damage', ['lost-reference', 'replaced-reference', 'removed-machine-files', 'changed-report'])
 def test_execution_state_cannot_remove_or_replace_verified_machine_judgment(machine_packet, damage):
-    from ai_ops_kit.shared import model_review_receipt
+    from ai_ops_kit.shared import review_verdict
     root, _, _, host, task, current = machine_packet
     _, reviews, _, _ = completion.review_inputs(root, task, current, {})
     review = reviews['ai_red_team']
@@ -285,7 +285,7 @@ def test_execution_state_cannot_remove_or_replace_verified_machine_judgment(mach
     execution = {'mode':'current-session', 'completion_binding':current, 'model_review_receipt':review['model_receipt'],
                  'files':{**report['files'],'report.json':checksum}}
     saved = {'request_id':task['request_id'],'execution':execution,'verification':verification}
-    model_review_receipt.recheck_completion(saved, lambda _: raw)
+    review_verdict.recheck_model_completion(saved, lambda _: raw)
     if damage == 'lost-reference':
         del execution['model_review_receipt']
     elif damage == 'replaced-reference':
@@ -295,7 +295,7 @@ def test_execution_state_cannot_remove_or_replace_verified_machine_judgment(mach
     else:
         raw = b'{}'
     with pytest.raises(ValueError):
-        model_review_receipt.recheck_completion(saved, lambda _: raw)
+        review_verdict.recheck_model_completion(saved, lambda _: raw)
 
 
 def test_installed_team_session_instructions_expose_passive_model_path():

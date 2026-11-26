@@ -22,7 +22,7 @@ from pathlib import Path
 
 import yaml
 
-from ai_ops_kit.shared import gitio, lifecycle_store, model_review_receipt
+from ai_ops_kit.shared import gitio, lifecycle_store, review_verdict
 from ai_ops_kit.lifecycle import session_migration_store
 
 MARKER = "ai-ops-kit:project-session"
@@ -519,7 +519,7 @@ def _verify(root, runtime, session, *, task=None):
                else receipt.get("exit_code") == 0)
     if not success or not receipt.get("files"):
         raise ValueError("нет подтверждения фактического успешного запуска")
-    model_review_receipt.recheck_completion(task, lambda path: within(root, path).read_bytes())
+    review_verdict.recheck_model_completion(task, lambda path: within(root, path).read_bytes())
     for relative, checksum in receipt["files"].items():
         if digest(within(root, relative).read_bytes()) != checksum:
             raise ValueError(f"артефакт изменён после проверки: {relative}")

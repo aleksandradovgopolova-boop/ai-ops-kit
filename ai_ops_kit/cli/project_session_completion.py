@@ -21,7 +21,7 @@ if __name__ == "__main__":
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from ai_ops_kit.lifecycle import project_session as sessions
-from ai_ops_kit.shared import model_review_receipt
+from ai_ops_kit.shared import review_verdict
 
 
 def prepared(root, runtime, session, task):
@@ -254,7 +254,7 @@ def evaluate(root, runtime, session, request, attempt):
             files.update(review.get('attack_artifacts', {}))
         if model_receipt:
             files[red_team['request_file']] = model_receipt['scope']['request_sha256']
-            model_review_receipt.recheck({'model_review_receipt': model_receipt, 'files': files})
+            review_verdict.recheck_model_receipt({'model_review_receipt': model_receipt, 'files': files})
             for relative, checksum in files.items():
                 if sessions.digest(sessions.within(root, relative).read_bytes()) != checksum:
                     raise ValueError('проверенный артефакт изменён до завершения работы: ' + relative)
@@ -356,7 +356,7 @@ def _reconcile(root, runtime, session, *, save=True):
     for relative, checksum in report["files"].items():
         if sessions.digest(sessions.within(root, relative).read_bytes()) != checksum:
             raise ValueError("проверенный артефакт изменён: " + relative)
-    model_review_receipt.recheck(report)
+    review_verdict.recheck_model_receipt(report)
     if report.get("ready_for_pr") is True:
         pipeline = report.get("pipeline") or {}
         if (pipeline.get("ready_for_pr") is not True or pipeline.get("kind") != "execution-pipeline"
@@ -556,7 +556,7 @@ def review_jobs(root, task, expected, paths):
                     'request': job['request'], 'request_sha256': checksum, 'verdict': str(model_path.relative_to(root)),
                     'result_contract': str(contract), 'contract_sha256': contract_digest,
                     'result_contract_fragment': alternative['contract_fragment'],
-                    'host_receipt': model_review_receipt.receipt_name(host_scope)})
+                    'host_receipt': review_verdict.model_receipt_name(host_scope)})
             human_jobs.append(job)
         else:
             jobs.append(job)

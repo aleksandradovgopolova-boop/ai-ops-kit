@@ -704,7 +704,7 @@ def test_relative_operator_finish_reconciles_own_previous_status(project, monkey
 
 @pytest.mark.parametrize('change_evidence', [False, True])
 def test_finalize_accepts_machine_judgment_without_overriding_another_gate(project, monkeypatch, change_evidence):
-    from ai_ops_kit.shared import model_review_receipt
+    from ai_ops_kit.shared import review_verdict
     task, args = start(project, monkeypatch, 'codex', 'research', ai_component=True)
     assert cli.main(['finalize', *args]) == 1
     handoff, other_digests = reviewer_receipts(project, task, 'codex', skip={'ai_red_team'})
@@ -728,9 +728,9 @@ def test_finalize_accepts_machine_judgment_without_overriding_another_gate(proje
                'reviewer':{'session':'codex:fixture-reviewer','turn':'t2','execution':'completed','canonical_model_id':'fixture/b'},
                'verdict_sha256':sessions.digest(machine.read_bytes()),'execution_artifacts':{relative:checksum}}
     def read_fixture(name):
-        assert name == model_review_receipt.receipt_name(scope)
+        assert name == review_verdict.model_receipt_name(scope)
         return json.dumps(receipt).encode()
-    monkeypatch.setattr(model_review_receipt, '_read_host_file', read_fixture)
+    monkeypatch.setattr(review_verdict, '_read_host_file', read_fixture)
 
     # Keep the synthetic host boundary in this process. The worker, pipeline, Git and checks run normally.
     def run_worker(command, root, directory, **kwargs):
