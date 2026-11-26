@@ -22,6 +22,7 @@ if __name__ == "__main__":
 
 from ai_ops_kit.lifecycle import project_session as sessions
 from ai_ops_kit.shared import review_verdict
+from ai_ops_kit.cli import project_session_resume as resume_checks
 
 
 def prepared(root, runtime, session, task):
@@ -89,7 +90,49 @@ def scope(task, current, *, before_read=None):
             "artifacts_sha256": sessions.digest(json.dumps(artifacts, sort_keys=True))}
 
 
-def review_inputs(root, task, current, digests):
+def _review_record(root, task, current, expected, handoff, gid, path, checksum, criteria, request_path, *, model_scope=None):
+    from ai_ops_kit.checks import acceptance_result, reviewer_result
+    from ai_ops_kit.engine import reviewer_handoff
+    if model_scope is not None:
+        from ai_ops_kit.engine.pipeline_evidence import _specialist_input
+        _, attack_artifacts, host_hash, checksum = _specialist_input(root, path, None, model_scope, model=True)
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
+    with os.fdopen(os.open(path, flags), 'rb') as stream:
+        if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+            raise ValueError('заключение должно быть обычным файлом')
+        raw = stream.read(262145 if gid == 'ai_red_team' else -1)
+    if gid == 'ai_red_team' and len(raw) > 262144:
+        raise ValueError('заключение специалиста превышает предел')
+    rr = reviewer_result.decode(raw)
+    if sessions.digest(raw) != checksum or any(rr.get(k) != v for k, v in expected.items()):
+        raise ValueError("нет доверенного digest либо привязка вердикта устарела")
+    who = rr.get("reviewer")
+    if (not isinstance(who, str) or not who.strip() or who.strip().casefold() in
+            reviewer_handoff._WRITER_IDENTITIES | {task["runtime"].casefold(), task["session_id"].casefold(),
+             expected["writer_session"].casefold()}):
+        raise ValueError("writer не может быть независимым судьёй")
+    if gid == 'ai_red_team' and model_scope is None:
+        from ai_ops_kit.engine.pipeline_evidence import _human_red_team_input
+        _, attack_artifacts = _human_red_team_input(root, path, checksum,
+            human_scope(root, current, expected))
+    elif gid not in ("acceptance", "ai_red_team"):
+        valid, reason = reviewer_handoff.load_verdict(handoff, gid, revision=current["head"])
+        if valid is None:
+            raise ValueError(reason)
+    elif gid == "acceptance":
+        errors = acceptance_result.check(rr, [c["id"] for c in criteria])
+        if errors:
+            raise ValueError("; ".join(errors))
+    record = {"path": str(path.relative_to(root)), "sha256": sessions.digest(raw)}
+    if gid == 'ai_red_team':
+        record['attack_artifacts'] = attack_artifacts
+        if model_scope is not None:
+            record['model_receipt'] = {'scope': model_scope, 'sha256': host_hash}
+            record['request_file'] = str(request_path.relative_to(root))
+    return record
+
+
+def review_inputs(root, task, current, digests, *, pending_model_request=None, observed=None):
     """Проверить внешние квитанции ДО их потребления pipeline; открыть конкретные requests."""
     from ai_ops_kit.engine import acceptance_verify, pipeline_helpers, reviewer_handoff
     from ai_ops_kit.gates import gate_executor
@@ -97,6 +140,8 @@ def review_inputs(root, task, current, digests):
     handoff = sessions.session_dir(root, task["runtime"], task["session_id"]) / (task["request_id"] + ".reviews")
     plan = yaml.safe_load(sessions.within(root, f"features/{fid}/run-plan.yaml").read_text())
     signals = task["execution"]["signals"]
+    if task["runtime"] != "codex" or "ai_red_team" not in plan["gates"]:
+        observed = None
     needed = pipeline_helpers._reviewable_gates(plan["gates"], signals)
     if 'ai_red_team' in plan['gates']:
         needed = list(needed) + ['ai_red_team']  # отдельный human path, не generic same-model
@@ -140,53 +185,33 @@ def review_inputs(root, task, current, digests):
                 'Оператор получает digest из независимого человеческого канала; автор его не фабрикует.')
         sessions.write(request_path, request)
         path = reviewer_handoff.verdict_path(handoff, gid)
+        model_scope = (dict(human_scope(root, current, expected), request_sha256=sessions.digest(request_path.read_bytes()))
+                       if gid == 'ai_red_team' else None)
+        fallback = (task['runtime'] == 'codex' and model_scope is not None and pending_model_request is not None
+                    and model_scope['request_sha256'] == pending_model_request)
+        if observed is not None:
+            before = resume_checks.pending_identity(root, path, digests.get(gid), model_scope, False)
         try:
-            model_receipt = None
-            checksum = digests.get(gid)
-            if gid == 'ai_red_team' and gid not in digests:
-                model_path = path.with_name('ai_red_team.model.reviewer.json')
-                if model_path.is_file():
-                    from ai_ops_kit.engine.pipeline_evidence import _specialist_input
-                    path = model_path
-                    model_scope = dict(human_scope(root, current, expected),
-                        request_sha256=sessions.digest(request_path.read_bytes()))
-                    _, attack_artifacts, host_hash, checksum = _specialist_input(root, path, None, model_scope, model=True)
-                    model_receipt = {'scope': model_scope, 'sha256': host_hash}
-            if gid == 'ai_red_team':
-                with path.open('rb') as stream:
-                    raw = stream.read(262145)
-                if len(raw) > 262144:
-                    raise ValueError('заключение специалиста превышает предел')
+            model_path = path.with_name('ai_red_team.model.reviewer.json')
+            if gid == 'ai_red_team' and gid not in digests and model_path.is_file():
+                accepted[gid] = _review_record(root, task, current, expected, handoff, gid, model_path, None,
+                                               criteria, request_path, model_scope=model_scope)
             else:
-                raw = path.read_bytes()
-            rr = json.loads(raw)
-            if sessions.digest(raw) != checksum or any(rr.get(k) != v for k, v in expected.items()):
-                raise ValueError("нет доверенного digest либо привязка вердикта устарела")
-            who = rr.get("reviewer")
-            if (not isinstance(who, str) or not who.strip() or who.strip().casefold() in
-                    reviewer_handoff._WRITER_IDENTITIES | {task["runtime"].casefold(), task["session_id"].casefold(),
-                     expected["writer_session"].casefold()}):
-                raise ValueError("writer не может быть независимым судьёй")
-            if gid == 'ai_red_team' and model_receipt is None:
-                from ai_ops_kit.engine.pipeline_evidence import _human_red_team_input
-                _, attack_artifacts = _human_red_team_input(root, path, digests.get(gid),
-                    human_scope(root, current, expected))
-            elif gid not in ("acceptance", "ai_red_team"):
-                valid, reason = reviewer_handoff.load_verdict(handoff, gid, revision=current["head"])
-                if valid is None:
-                    raise ValueError(reason)
-            elif gid == "acceptance":
-                from ai_ops_kit.checks import acceptance_result
-                errors = acceptance_result.check(rr, [c["id"] for c in criteria])
-                if errors:
-                    raise ValueError("; ".join(errors))
-            accepted[gid] = {"path": str(path.relative_to(root)), "sha256": sessions.digest(raw)}
-            if gid == 'ai_red_team':
-                accepted[gid]['attack_artifacts'] = attack_artifacts
-                if model_receipt:
-                    accepted[gid]['model_receipt'] = model_receipt
-                    accepted[gid]['request_file'] = str(request_path.relative_to(root))
+                try:
+                    accepted[gid] = _review_record(root, task, current, expected, handoff, gid, path,
+                                                   digests.get(gid), criteria, request_path)
+                except (OSError, ValueError, TypeError, AttributeError):
+                    if not fallback or gid not in digests or not model_path.is_file():
+                        raise
+                    if observed is not None:
+                        pair = resume_checks.pending_identity(root, path, digests[gid], model_scope, True)
+                        before = pair if pair is not None and {k: v for k, v in pair.items() if k != "model"} == before else None
+                    accepted[gid] = _review_record(root, task, current, expected, handoff, gid, model_path, None,
+                                                   criteria, request_path, model_scope=model_scope)
         except (OSError, ValueError, TypeError, AttributeError) as exc:
+            if observed is not None:
+                after = resume_checks.pending_identity(root, path, digests.get(gid), model_scope, fallback)
+                observed[gid] = after if before == after else None
             missing.append(f"{gid}: {exc}; {request_path.relative_to(root)}")
             pending_requests.append(request_path)
     return handoff, accepted, missing, pending_requests
@@ -198,13 +223,14 @@ def human_scope(root, current, expected):
 
 
 @sessions.session_migration_store.guarded
-def evaluate(root, runtime, session, request, attempt):
+def evaluate(root, runtime, session, request, attempt, pending_model_request=None):
     """Работник: только проверки. Создаёт attempt-specific отчёт и durable checksum."""
     from ai_ops_kit.engine import execution_pipeline, pipeline_git, tool_broker
     from ai_ops_kit.cli.ai_ops_cli import resolve_flags
     task = prepared(root, runtime, session, sessions.load(root, runtime, session))
     verification = task["verification"]
-    if task["request_id"] != request or verification["attempt"] != attempt or verification["phase"] != "running":
+    if (task["request_id"] != request or verification["attempt"] != attempt or verification["phase"] != "running"
+            or verification.get("pending_model_request_sha256") != pending_model_request):
         raise ValueError("проверка принадлежит другой попытке")
     fid = "session-" + request
     current = sessions.binding(root, fid)
@@ -213,7 +239,9 @@ def evaluate(root, runtime, session, request, attempt):
         raise ValueError("результат изменился перед проверкой или не зафиксирован")
     if sessions.within(root, f".ai/reevaluate-evidence-{fid}.json").exists():
         raise ValueError("чужой кеш переоценки не подтверждает текущую сессию")
-    handoff, reviews, missing, pending_requests = review_inputs(root, task, current, verification["review_digests"])
+    observed = {}
+    handoff, reviews, missing, pending_requests = review_inputs(root, task, current, verification["review_digests"],
+        pending_model_request=pending_model_request, observed=observed)
     pipeline = None
     red_team = reviews.get('ai_red_team') or {}
     model_receipt = red_team.get('model_receipt')
@@ -285,6 +313,8 @@ def evaluate(root, runtime, session, request, attempt):
             report['model_review_receipt'] = model_receipt
         if task["runtime"] == "codex" and pending_requests:
             report["agent_handoff"] = review_jobs(root, task, report["scope"], pending_requests)
+            if report["agent_handoff"].get("model_jobs"):
+                report["pending_review_inputs"] = observed
         path = sessions.within(root, verification["report"])
         sessions.write(path, report)
         latest = sessions.load(root, runtime, session)
@@ -377,6 +407,10 @@ def _reconcile(root, runtime, session, *, save=True):
         task.update(status="running", blocker="; ".join(report.get("missing") or []) or
                     "штатные gates не подтвердили готовность; см. " + verification["report"],
                     next_step="Устрани названную причину и повтори finalize той же задачи. Не удаляй claim.")
+        if report.get("agent_handoff", {}).get("model_jobs"):
+            task["next_step"] = ("Передай обычные jobs текущей среде. Оператор хоста предоставляет сохранённые "
+                                 "модельные свидетельства, либо независимый специалист возвращает своё заключение. "
+                                 "Возобнови finalize при новых свидетельствах или изменении результата.")
     if save:
         sessions.write(sessions.session_dir(root, runtime, session) / (task["request_id"] + ".json"), task)
     return task
@@ -445,7 +479,7 @@ def research_checkpoint(root, task, outputs):
 
 
 @sessions.session_migration_store.guarded
-def finalize(root, runtime, session, digests):
+def finalize(root, runtime, session, digests, *, inherited=False):
     task = prepared(root, runtime, session, sessions.load(root, runtime, session))
     if task.get("status") == "accepted":
         sessions.verify(root, runtime, session)
@@ -463,6 +497,21 @@ def finalize(root, runtime, session, digests):
         raise ValueError("сначала зафиксируй результат; проверки требуют чистый committed HEAD")
     with sessions.session_lock(sessions.session_dir(root, runtime, session) / "requests"):
         task = prepared(root, runtime, session, sessions.load(root, runtime, session))
+        if task.get("verification") != previous:
+            raise ValueError("попытка проверки сменилась; перечитай исход текущей попытки")
+        recheck_reason = None
+        pending_model_request = None
+        if (runtime == "codex" and task.get("status") == "running" and previous
+                and previous.get("phase") == "finished" and previous.get("review_digests") == digests):
+            try:
+                action = response(root, task, retry_digests=digests, inherited=inherited).get("host_actions", {})
+                if action.get("unchanged_wait"):
+                    return _reconcile(root, runtime, session, save=False)
+                if inherited and "ai_red_team" in digests:
+                    pending_model_request = next((j["request_sha256"] for j in action.get("model_jobs", [])
+                                                  if j["gate"] == "ai_red_team"), None)
+            except (OSError, ValueError) as exc:
+                recheck_reason = f"Прежнее ожидание не подтверждено: {exc}"
         directory = sessions.session_dir(root, runtime, session)
         attempt = uuid.uuid4().hex
         if previous:
@@ -470,10 +519,16 @@ def finalize(root, runtime, session, digests):
         report = directory / f"{task['request_id']}.verification-{attempt}.json"
         task["verification"] = {"attempt": attempt, "phase": "running", "review_digests": digests,
             "binding": sessions.binding(root, "session-" + task["request_id"]), "report": str(report.relative_to(root))}
+        if pending_model_request is not None:
+            task["verification"]["pending_model_request_sha256"] = pending_model_request
+        if recheck_reason:
+            task["verification"]["recheck_reason"] = recheck_reason
         task["verification"]["scope"] = scope(task, task["verification"]["binding"])
         path = directory / (task["request_id"] + ".json")
         sessions.write(path, task)
     command = [sys.executable, str(Path(__file__).resolve()), str(root), runtime, session, task["request_id"], attempt]
+    if pending_model_request is not None:
+        command.append(pending_model_request)
     try:
         result = sessions.run_process(command, root, directory, timeout=300,
                                       progress=lambda message: print(message, file=sys.stderr, flush=True))
@@ -571,7 +626,7 @@ def review_jobs(root, task, expected, paths):
                 "digest_argument": "--review-digests", "digest_source": "independent-agent-result"}}
 
 
-def response(root, task, *, before_read=None):
+def response(root, task, *, before_read=None, retry_digests=None, inherited=False):
     """Добавить только актуальное host-действие; ничего не исполнять и не писать."""
     if (task.get("runtime") != "codex" or task.get("status") == "accepted"
             or task.get("execution", {}).get("mode") != "current-session"
@@ -610,6 +665,10 @@ def response(root, task, *, before_read=None):
             if any(rebuilt.get(key) != action.get(key) for key in
                    ('jobs', 'human_jobs', 'model_jobs', 'next_action', 'status', 'resume')):
                 raise ValueError("задания агентов изменены; выполни finalize")
+            if action.get("model_jobs"):
+                action = resume_checks.specialist_route(root, action, report.get("pending_review_inputs"))
+                if retry_digests is not None:
+                    action["unchanged_wait"] = resume_checks.waiting_unchanged(root, action, report, retry_digests, inherited)
         else:
             action.update(status="resolve_checks", next_action="finalize")
     elif verification.get("phase") == "failed":

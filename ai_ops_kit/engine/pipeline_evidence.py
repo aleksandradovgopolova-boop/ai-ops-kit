@@ -255,9 +255,15 @@ def _human_red_team_input(work_root, path, checksum, expected):
     return result, artifacts
 
 
+def _specialist_file(path, root):
+    try:
+        return path.resolve().is_relative_to(root) and path.is_file()
+    except RuntimeError as exc:  # Path.resolve сообщает так о циклической ссылке на Python 3.12
+        raise ValueError('невозможно разрешить путь файла специализированного заключения') from exc
+
+
 def _specialist_input(work_root, path, checksum, expected, *, model=False, host_checksum=None):
     import hashlib
-    import json
     from ai_ops_kit.checks import reviewer_result
     from ai_ops_kit.engine import reviewer_handoff
     from ai_ops_kit.shared import review_verdict
@@ -274,13 +280,13 @@ def _specialist_input(work_root, path, checksum, expected, *, model=False, host_
             or expected['review_root'] != str(root)
             or not isinstance(checksum, str) or not re.fullmatch(r'[0-9a-f]{64}', checksum)):
         raise ValueError('нет доверенного digest/полной привязки человеческого red-team review')
-    if not path.resolve().is_relative_to(root) or not path.is_file():
+    if not _specialist_file(path, root):
         raise ValueError('недопустимый путь red-team verdict')
     with path.open('rb') as handle:
         raw = handle.read(262145)
     if len(raw) > 262144 or hashlib.sha256(raw).hexdigest() != checksum:
         raise ValueError('red-team verdict не соответствует доверенным bytes')
-    result = json.loads(raw)
+    result = reviewer_result.decode(raw)
     required = gate_executor.load_gates()['ai_red_team']['required_evidence']
     kind = 'model' if model else 'human'
     errors = reviewer_result.check_specialist_red_team(result, required, reviewer_kind=kind)
@@ -295,7 +301,7 @@ def _specialist_input(work_root, path, checksum, expected, *, model=False, host_
     for record in result.get('attack_evidence') or []:
         relative = record['path']
         artifact = root / relative
-        if Path(relative).is_absolute() or not artifact.resolve().is_relative_to(root) or not artifact.is_file():
+        if Path(relative).is_absolute() or not _specialist_file(artifact, root):
             raise ValueError('attack evidence должно быть файлом внутри текущего проекта')
         if relative in artifacts:
             raise ValueError('повтор attack evidence')

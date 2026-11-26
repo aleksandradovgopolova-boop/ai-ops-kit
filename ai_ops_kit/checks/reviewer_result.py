@@ -10,9 +10,21 @@ fail ⇒ общий status не pass. Только stdlib — никакого �
 """
 from __future__ import annotations
 
+import json
 import re
 
 ST = {"pass", "warn", "fail"}
+
+
+def decode(raw: bytes) -> dict:
+    """Оба потребителя вердикта одинаково сообщают об ошибках входного JSON."""
+    try:
+        result = json.loads(raw)
+    except RecursionError as exc:
+        raise ValueError('слишком глубокая вложенность JSON заключения') from exc
+    if not isinstance(result, dict):
+        raise ValueError('заключение должно быть JSON-объектом')
+    return result
 
 
 def check(data: dict, gate_ids=None, allow_empty_checks=False):
@@ -89,15 +101,18 @@ def check_specialist_red_team(data, required_evidence, *, reviewer_kind):
         passing = {c.get('id') for c in checks if isinstance(c, dict) and isinstance(c.get('id'), str) and c.get('status') == 'pass'}
         if set(required_evidence) - passing:
             errors.append('не подтверждены все обязательные red-team checks')
-        records = data.get('attack_evidence')
-        if not isinstance(records, list) or not records or len(records) > 32:
-            errors.append('pass требует ограниченный непустой список attack_evidence')
-        else:
-            for record in records:
-                if (not isinstance(record, dict) or record.get('kind') != 'adversarial-execution'
-                        or not isinstance(record.get('path'), str) or not record['path'].strip()
-                        or not isinstance(record.get('sha256'), str)
-                        or not re.fullmatch(r'[0-9a-f]{64}', record['sha256'])
-                        or record.get('tested_revision') != data.get('reviewed_revision')):
-                    errors.append('attack_evidence требует конкретный артефакт/hash текущей ревизии')
+    records = data.get('attack_evidence', [])
+    if not isinstance(records, list) or len(records) > 32:
+        errors.append('attack_evidence должен быть списком до 32 записей')
+    elif data.get('status') == 'pass' and not records:
+        errors.append('pass требует непустой список attack_evidence')
+    else:
+        for record in records:
+            if (not isinstance(record, dict) or set(record) != {'kind', 'path', 'sha256', 'tested_revision'}
+                    or record['kind'] != 'adversarial-execution'
+                    or not isinstance(record['path'], str) or not record['path'].strip()
+                    or not isinstance(record['sha256'], str) or not re.fullmatch(r'[0-9a-f]{64}', record['sha256'])
+                    or not isinstance(record['tested_revision'], str) or not record['tested_revision']
+                    or record['tested_revision'] != data.get('reviewed_revision')):
+                errors.append('attack_evidence требует конкретный артефакт/hash текущей ревизии')
     return errors
