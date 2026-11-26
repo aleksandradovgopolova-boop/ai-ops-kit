@@ -386,7 +386,17 @@
   .modal-b .tasks{grid-template-columns:1fr}
   .modal-b .spine{display:grid;grid-template-columns:1fr}
   .modal-b .focus-list{grid-template-columns:1fr;margin-bottom:14px}
-  #release-plan{overflow-wrap:anywhere}
+  #release-preview,.modal-b{overflow-wrap:anywhere}
+  #release-preview{margin:0;font-size:13px}
+  .release-trigger{padding:0;border:0;background:transparent;font:inherit;color:inherit;cursor:pointer;text-align:left;text-decoration:underline;text-decoration-style:dotted;text-underline-offset:3px}
+  .compact-metric,.artifact-index{display:none}
+  .foot{margin-top:auto}
+  .modal-b .mrow.wide .mn,.modal-b .mn:only-child{max-width:100%}
+  .release-notes a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+  .release-notes h3{font-size:15px;margin:14px 0 4px}
+  .release-notes p,.release-notes ul{margin:5px 0}
+  .release-notes ul{padding-left:20px}
+  .modal .spine{display:grid;gap:6px}
   #next-action{font-size:12px;line-height:1.5}
   #next-action > a{display:inline-block;color:var(--accent);font-size:11px;margin-top:10px}
   #recent-changes{display:flex;flex-direction:column;gap:8px}
@@ -425,6 +435,53 @@
     .foot{flex-direction:column;align-items:flex-start}
     .preview-title{font-size:17px}
     .rh-list li{font-size:12px}
+  }
+  /* На обзоре показываем короткие выводы. Полные тексты читаются в диалоге. */
+  .roadstrip .rh-list li,.card-focus .preview-title,#release-preview{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+  @media (min-width:1101px) and (max-height:900px){
+    .app{padding:12px 22px;gap:8px}
+    .main{gap:8px}
+    .main .panel{padding:9px 12px}
+    .main .eyebrow{margin-bottom:6px}
+    .card-focus .preview{gap:7px;padding:3px 0}
+    .roadstrip .rh-h{margin-bottom:5px}
+    .mapstrip .node{padding:6px 8px}
+    .main .mtile{gap:4px}
+    .main .hp{padding:7px}
+  }
+  @media (min-width:1101px) and (max-height:720px){
+    .main .node .d,.main .mtile .ms,.main .northstar-metric .v .u{display:none}
+    .roadstrip .rh-list li,.card-focus .preview-title{-webkit-line-clamp:2}
+    .mapstrip .node .badge{display:none}
+  }
+  @media (max-width:1100px){
+    .app{gap:6px;padding:8px 12px}
+    .main{gap:6px}
+    .main .panel{padding:7px 10px}
+    .main .eyebrow{margin-bottom:4px}
+    .north,.main .metrics-row,.main #artifacts-full,.main .roadstrip .rh-list,.main .roadstrip .rh-empty{display:none}
+    .compact-metric{display:block;font-size:13px;margin:0}
+    .artifact-index{display:inline-block}
+    .mapstrip .eyebrow{margin:0}
+    .head{gap:6px;padding-bottom:5px}
+    .brand-label{margin-bottom:1px}
+    .head-right{gap:4px}
+    .card-health .preview,.main .road{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:4px;min-height:0}
+    .card-health .hp{padding:5px 6px}
+    .card-health .hp .hl{font-size:10px}
+    .card-health .hp .hv{margin-top:2px;font-size:12px}
+    .card-focus .preview{gap:4px;padding:0}
+    .card-focus .preview-title{font-size:15px}
+    .card-focus .focus-prog .bar{margin-top:3px;height:4px}
+    .main .rh{padding:5px 7px}
+    .main .rh-h{margin-bottom:0}
+    .foot{gap:2px}
+  }
+  @media (max-width:420px) and (max-height:700px){
+    .app{gap:4px;padding:5px 8px}
+    .main{gap:4px}
+    .main .panel{padding:5px 8px}
+    .head .brand-label{display:none}
   }
 </style>
 
@@ -485,6 +542,7 @@
   <section class="panel metrics-panel" id="overview" aria-label="Метрики продукта">
     <div class="eyebrow"><span>Метрики продукта · North Star</span>
       <button class="more" data-modal="metrics">подробнее →</button></div>
+    <p class="compact-metric" id="metric-summary"></p>
     <div class="metrics-row">
     <div class="northstar-metric" id="ns-metric"></div>
     <div class="metric-tiles" id="metric-tiles"></div>
@@ -509,13 +567,14 @@
   </section>
 
   <section class="panel wide" aria-label="Следующий выпуск">
-    <div class="eyebrow">Следующий выпуск · по проверяемым источникам</div>
-    <div id="release-plan">План выпуска ещё не получен.</div>
+    <div class="eyebrow"><span>Следующий выпуск</span><button class="more" data-modal="panel:release">Состав и доказательства →</button></div>
+    <p id="release-preview">План выпуска ещё не получен.</p>
+    <div id="release-full" hidden><div id="release-plan">План выпуска ещё не получен.</div></div>
   </section>
 
-  <section class="panel mapstrip wide" id="artifacts-full" aria-label="Артефакты продукта">
-    <div class="eyebrow"><span>Артефакты</span><span class="n">клик → раздел, внутри — ссылка в репозиторий ↗</span></div>
-    <div class="spine" id="spine"></div>
+  <section class="panel mapstrip wide" aria-label="Артефакты продукта">
+    <div class="eyebrow"><span>Артефакты</span><button class="more artifact-index" data-modal="panel:artifacts">Все артефакты →</button></div>
+    <div id="artifacts-full"><div class="spine" id="spine"></div></div>
 </section>
   <section hidden class="panel card-changes" aria-label="Последние изменения">
     <div class="eyebrow"><span>Что изменилось</span><span class="n">история Git · эффект проверяется отдельно</span><button class="more" data-modal="panel:changes">подробнее →</button></div>
@@ -841,7 +900,8 @@
       "release": {
         "tag": "v4.11.1",
         "published_at": "2026-10-19T09:17:53Z",
-        "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/releases/tag/v4.11.1"
+        "url": "https://github.com/aleksandradovgopolova-boop/ai-ops-kit/releases/tag/v4.11.1",
+        "notes": "#### Что меняется для вас\n\nПроверки файлов и выбор следующего шага занимают меньше времени. Учёт параллельных агентов разделён по работам.\n\n#### Что вошло\n\n- Проверка четырёх файлов ии-среды: 2,10 с вместо 8,72 с в трёх парных замерах. Нарушение останавливает работу. (#1309)\n- Выбор следующей задачи: 4,52 с вместо 7,96 с в трёх парных замерах с тем же полным ответом. Содержание ответа сохранено. (#1309)\n- Запустите разрешённые параллельные работы — обращения и время каждой учитываются отдельно; незавершённая доставка сверяется перед повтором. (#1307, #1308)\n- Независимая готовая работа занимает освободившееся место, не ожидая постороннюю задачу. Запустите разрешённый параллельный план — доказательства пакетов сохранятся до очистки. (#1310, #1313)\n- Для широкой локальной проверки доступен явный режим `./scripts/check-full.sh --pr`: обычные тесты выполняются без ночного набора. Обязательные проверки слияния и выпуска сохраняются. (local-pr-profile)\n- Итог работы привязан к действительно проверенной версии кода. Проверки, изменившие собственную рабочую копию, больше не подтверждают готовность доставки. (#1312)\n\n#### Что изменилось в привычном поведении\n\n- Задания без применимой работы не устанавливают лишние зависимости. Обязательные проверки перед слиянием сохраняются. (#1305, #1306)\n\n#### Известные ограничения\n\n- Замеры относятся к указанным операциям на копии ии-среды; сроки разработки целого продукта и денежная экономия ими не доказаны. (#1309)\n- Общий бюджет нескольких параллельных агентов пока не поддерживается. Прогон с таким ограничением отклоняется до обращения к моделям. (parallel-shared-budget.limit)\n- Автоматическое открытие дополнительных рабочих сессий ещё не подключено; параллельная работа запускается явно. (#1307)\n- Сохранение журналов отклоняет символические ссылки. Защита от конкурентной подмены каталогов другим локальным процессом между проверкой пути и записью пока не реализована. (parallel-artifact-path-race.limit)\n\n#### Что сделать после выпуска\n\n- Установите выпуск через обычный PR обновления. Повторите проверку четырёх файлов и выбор следующего шага; сравните ответы и время с исходными замерами. (#1309)\n\n#### Подробнее\n\nПолный журнал изменений приведён ниже.\n\n---\n\nПолный список изменений этой версии — [CHANGELOG.md](https://github.com/aleksandradovgopolova-boop/ai-ops-kit/blob/v4.11.1/CHANGELOG.md).\n"
       }
     },
     "field_readout": {
@@ -1430,19 +1490,19 @@
           "h": "В работе",
           "list": [
             {
-              "name": "first-hour-for-a-stranger"
+              "name": "владелец проходит первый час в трёх разных репозиториях и завершает реальные работы"
             },
             {
-              "name": "prove-the-loop-not-add-capabilities"
+              "name": "кит доказывает, что уже построенное меняет жизнь продуктов"
             },
             {
-              "name": "verification-cycle-performance"
+              "name": "маленькая правка получает быстрый ответ проверок без потери обязательной защиты в Ките и дочках"
             },
             {
-              "name": "autonomous-work-distribution"
+              "name": "Кит сам распределяет работу исполнителей и безопасно продолжает её после прерывания"
             },
             {
-              "name": "child-code-style-held-by-machine"
+              "name": "стиль кода в дочке держит машина, а не проза"
             }
           ]
         },
@@ -1450,7 +1510,7 @@
           "h": "На паузе",
           "list": [
             {
-              "name": "advisory-gates-obkatka"
+              "name": "Испытать необязательные проверки качества на реальных проектах"
             }
           ]
         },
@@ -1458,10 +1518,12 @@
           "h": "Ждёт решения владельца",
           "list": [
             {
-              "name": "Полевой прогон на ии-среде: профиль с базой включён, новое нарушение отказано при правке и в CI, main дочки не упал"
+              "name": "Решить способ подтверждения обязательной серверной защиты приватного репозитория; покупка тарифа или публикация репозитория автоматически не разрешены.",
+              "desc": "Полевой прогон на ии-среде: профиль с базой включён, новое нарушение отказано при правке и в CI, main дочки не упал"
             },
             {
-              "name": "Главная мера меняется с «идея → релиз» на «доля изменений, дошедших до ИЗМЕРЕННОГО результата с непрерывной цепочкой доказательств»"
+              "name": "Ревью: «идея → релиз» слишком про доставку и потому берётся легко (100% уже сегодня), а обещание Vision — про обучение продукта. Предлагаемая мера строже: путь засчитывается только если результат ИЗМЕРЕН и цепочка доказательств не рвётся. Цена решения: заглавное число кита упадёт с 100% до честно низкого — это и есть смысл смены, но объявлять его должен владелец.",
+              "desc": "Главная мера меняется с «идея → релиз» на «доля изменений, дошедших до ИЗМЕРЕННОГО результата с непрерывной цепочкой доказательств»"
             }
           ]
         }
@@ -1565,7 +1627,7 @@
     const ruDate=iso=>{if(!iso)return"";const[y,m,d]=iso.split("-");return `${+d} ${MONTHS[+m-1]} ${y}`;};
     const blob=d=>d.repo?d.repo.blob_base:"#";
     const link=(d,path)=>{if(!d.repo)return"#";const base=d.repo.blob_base;const last=path.split("/").pop();
-      return (last.indexOf(".")<0? base.replace("/blob/","/tree/") : base)+"/"+path;};
+      return (last.indexOf(".",1)<0? base.replace("/blob/","/tree/") : base)+"/"+path;};
     const HSTATE={green:"green",yellow:"amber",red:"red",early:"amber",unknown:"unknownc"};
     const HRU={green:"в норме",yellow:"под контролем",red:"риск",early:"первые данные",unknown:"нет данных"};
     const OUTCOME_RU={
@@ -1580,15 +1642,8 @@
     function render(d){
       DATA=d;
       const rp=d.release_plan, rbox=$("release-plan");
-      if(rp&&rp.message){
-        const rows=rp.implementations||[];
-        rbox.innerHTML=`<p>${esc(rp.message.summary)}</p>`+
-          `<p>Состав: ${rows.length} изменений. Готовность выпуска: ${rp.cycle_state==="idle"?"новый выпуск пока не требуется":(rp.release_ready?"проверки пройдены":"ещё не подтверждена")}. Доставка дочкам: не подтверждена.</p>`+
-          `<p>${(rp.message.next||[]).map(esc).join(" ")}</p>`+
-          `<details><summary>Состав и доказательства</summary><ul>`+
-          rows.map(p=>`<li>PR #${esc(String(p.pr))} · проверки ${p.ci_observed?"подтверждены":"не подтверждены"} · ${esc(p.merge_sha||"")}</li>`).join("")+
-          `</ul><p>${esc((rp.blockers||[]).join(", "))}</p></details>`;
-      }else{rbox.textContent="План выпуска ещё не получен. Готовность не подтверждена.";}
+      $("release-preview").textContent=rp?.message?.summary||"План выпуска ещё не получен. Готовность не подтверждена.";
+      rbox.innerHTML=upcomingNotes(d);
 
       $("version").textContent=d.version||"—";
       $("channel").textContent=d.channel||"—";
@@ -1648,16 +1703,13 @@
         fb.hidden=false;
       } else fb.hidden=true;
 
-      // spine — разделы с модалкой открывают её, остальные ведут прямо в репозиторий
+      // Одинаковый путь от карточки к содержанию и первоисточнику.
       const BADGE={filled:"заполнено",generated:"генерируется",template:"пустой шаблон",missing:"нет"};
-      const MODALS=d.modals||{};
       $("spine").innerHTML=(d.spine||[]).map((s,i)=>{
         const inner=`<span class="idx">${i+1}</span><span class="body">`+
           `<span class="t">${esc(s.title)} <span class="badge ${s.state}">${BADGE[s.state]||s.state}</span></span>`+
           `<span class="d">${esc(s.desc)} · ${esc(s.path)}</span></span>`;
-        return MODALS[s.key]
-          ? `<button class="node" data-modal="${esc(s.key)}">${inner}<span class="go">▸</span></button>`
-          : `<a class="node" href="${link(d,s.path)}" target="_blank" rel="noopener">${inner}<span class="go">↗</span></a>`;
+        return `<button class="node" data-modal="${esc(s.key)}">${inner}<span class="go">▸</span></button>`;
       }).join("");
 
       // пульс продукта — три оси на понятном языке; «неизвестно» с первыми данными → «первые данные»
@@ -1668,11 +1720,11 @@
       let prodState=h.product, prodVal=HRU[h.product]||"—";
       if(h.product==="unknown"&&nObs){ prodState="early"; prodVal=`первые данные · n=${nObs}`; }
       if(field){prodState="early";prodVal=`${field.rows.length} принятые работы`;}
-      const hcell=(lbl,state,val,tip)=>{const cls=HSTATE[state]||"unknownc";
+      const hcell=(lbl,state,val,tip,modalKey)=>{const cls=HSTATE[state]||"unknownc";
         const info=tip?`<button class="hp-info" aria-label="Как определяется: ${esc(lbl)}. ${esc(tip)}" `+
           `title="${esc(tip)}">i</button><div class="hp-tip" role="tooltip">${esc(tip)}</div>`:"";
         return `<div class="hp ${cls}">${info}<div class="hl">${esc(lbl)}</div>`+
-          `<div class="hv"><span class="d"></span>${esc(val)}</div></div>`;};
+          `<div class="hv"><span class="d"></span>${modalKey?`<button class="release-trigger" data-modal="${esc(modalKey)}">${esc(val)}</button>`:esc(val)}</div></div>`;};
       const tipProduct = field ? `${field.repositories} репозитория, ${field.people} владелец. Польза подтверждена владельцем. ${field.note}` : (prodState==="early")
         ? `Есть первые наблюдения TTVO (n=${nObs}). Выборка мала; итог переделок и дефектов требует отдельной сверки.`
         : (h.product==="unknown"
@@ -1685,7 +1737,7 @@
       $("health").innerHTML=
         hcell("Ценность для пользователя",prodState,prodVal,tipProduct)+
         hcell("Технологии и качество",tech.state,tech.label,tipTech)+
-        hcell("Доставка и релизы",release?"early":"unknown",release?`${release.tag} выпущен`:"выпуск не проверен",tipDelivery);
+        hcell("Доставка и релизы",release?"early":"unknown",release?`${release.tag} выпущен`:"выпуск не проверен",tipDelivery,release?"published-release":null);
       const evidenceLink=(url,label)=>`<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>`;
       $("health-evidence").innerHTML=`<p>${esc(tipProduct)}</p><p>${esc(tipTech)}</p>`+
         (tech.sources||[]).map(s=>`<p>${evidenceLink(s.url,s.name+" · попытка "+s.attempt)}</p>`).join("")+
@@ -1708,6 +1760,9 @@
       // north-star metric — одна понятная цифра: идея → проверенный результат
       const obs=d.metrics&&d.metrics.observations;
       const agg=obs&&obs.aggregate;
+      $("metric-summary").textContent=agg?.median_intent_to_verified
+        ? "Идея → проверенный результат · "+agg.median_intent_to_verified
+        : "Наблюдения метрик недоступны";
       const nsm=$("ns-metric");
       if(agg&&agg.median_intent_to_verified){
         nsm.innerHTML=`<div class="k"><span class="tag">North Star</span>Идея → проверенный результат · медиана`+
@@ -1728,11 +1783,11 @@
         tiles.hidden=false;
       } else {tiles.innerHTML="";tiles.hidden=true;}
 
-      // Роадмап — все доступные буллиты трёх горизонтов прямо на обзоре.
+      // Обзор показывает первый пункт каждого горизонта; остальные доступны в полном роадмапе.
       $("road").innerHTML=(d.roadmap||[]).map(h=>{
         const items=h.items||[];
         const body=items.length
-          ? `<ul class="rh-list">${items.map(t=>`<li>${esc(plainLabel(t))}</li>`).join("")}</ul>`
+          ? `<ul class="rh-list">${items.slice(0,1).map(t=>`<li>${esc(plainLabel(t))}</li>`).join("")}</ul>`
           : `<div class="rh-empty">пусто — осознанно</div>`;
         return `<button class="rh ${esc(h.key)}" data-modal="roadmap">`+
           `<div class="rh-h"><span class="lb">${esc(h.label)}</span>`+
@@ -1802,12 +1857,114 @@
     let DATA=null, lastTrigger=null;
     const focusablesIn=el=>[...el.querySelectorAll('a[href],button,summary,[tabindex]:not([tabindex="-1"])')]
       .filter(x=>!x.disabled&&x.offsetParent!==null);
+    function artifactModal(d,key){
+      const saved=(d.modals||{})[key];
+      if(saved) return saved;
+      const item=(d.spine||[]).find(entry=>entry.key===key);
+      if(!item) return null;
+      const m={title:item.title,path:item.path};
+      if(key==="strategy"){
+        m.lead=d.north_star;
+        const subtitle=d.product_tagline?.subtitle;
+        if(subtitle) m.sections=[{h:"Как это работает",list:[{name:subtitle}]}];
+      }else if(key==="passport"){
+        const states={verified:"Подтверждено",inferred:"По данным проекта",unknown:"Требует уточнения"};
+        const sections=d.passport_sections||[];
+        m.sections=sections.map(s=>({h:s.name,list:[{name:plainLabel(s.value||"Данных пока нет").replace(/^_(.*)_$/,"$1"),
+          desc:[states[s.state],s.source].filter(Boolean).join(" · ")}]}));
+      }else if(key==="discovery"){
+        const labels={evidence:"Свидетельства",decisions:"Решения",requests:"Запросы",experiments:"Эксперименты"};
+        const list=Object.entries(labels).filter(([k])=>Number.isInteger(d.discovery?.[k]))
+          .map(([k,name])=>({name,desc:String(d.discovery[k])}));
+        if(list.length) m.sections=[{h:"Материалы исследований",list}];
+      }
+      if(!m.lead&&!m.sections?.length) m.note="Содержание пока недоступно. Источник можно открыть в репозитории.";
+      return m;
+    }
+
+    function repositoryUrl(d){
+      return (d.repo?.blob_base||"").replace(/\/blob\/[^/]+$/,"");
+    }
+    function evidenceLink(url,label){
+      return `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(label)} ↗</a>`;
+    }
+    function noteInline(text,repo){
+      const tokens=/\[([^\]\n]+)\]\((https:\/\/[^\s)]+)\)|\*\*([^*\n]+)\*\*|`([^`\n]+)`|#(\d+)\b/g;
+      let html="", offset=0;
+      for(const match of String(text).matchAll(tokens)){
+        html+=esc(text.slice(offset,match.index));
+        const [,label,url,bold,code,issue]=match;
+        if(url&&repo&&url.startsWith(repo+"/")) html+=evidenceLink(url,label);
+        else if(code) html+="<code>"+esc(code)+"</code>";
+        else if(bold) html+="<strong>"+esc(bold)+"</strong>";
+        else if(issue&&repo) html+=evidenceLink(repo+"/issues/"+issue,"#"+issue);
+        else html+=esc(label||match[0]);
+        offset=match.index+match[0].length;
+      }
+      return html+esc(text.slice(offset));
+    }
+    function notesHtml(notes,repo){
+      if(!notes?.trim()) return '<p class="note">Текст описания пока недоступен. Полная запись — на странице выпуска.</p>';
+      const blocks=[], bullets=[];
+      const flush=()=>{if(bullets.length) blocks.push("<ul>"+bullets.splice(0).join("")+"</ul>");};
+      for(const line of notes.split(/\r?\n/)){
+        const value=line.trim();
+        if(/^[-*] /.test(value)){bullets.push("<li>"+noteInline(value.slice(2),repo)+"</li>");continue;}
+        flush();
+        if(/^#{1,6} /.test(value)) blocks.push("<h3>"+noteInline(value.replace(/^#{1,6} /,""),repo)+"</h3>");
+        else if(value==="---") blocks.push("<hr>");
+        else if(value) blocks.push("<p>"+noteInline(value,repo)+"</p>");
+      }
+      flush();
+      return '<div class="release-notes">'+blocks.join("")+"</div>";
+    }
+    function upcomingNotes(d){
+      const plan=d.release_plan;
+      if(!plan?.message) return "<p>План выпуска ещё не получен. Готовность не подтверждена.</p>";
+      const notes=d.upcoming_release_notes, repo=repositoryUrl(d);
+      const entries=notes&&notes.source_sha===plan.source?.sha&&notes.target_version===plan.target_version
+        ? notes.entries||[] : [];
+      const rows=plan.implementations||[], parts=[];
+      const heading=title=>parts.push("<h3>"+esc(title)+"</h3>");
+      const paragraph=text=>parts.push("<p>"+esc(text)+"</p>");
+      const list=items=>parts.push("<ul>"+items.map(item=>"<li>"+item+"</li>").join("")+"</ul>");
+      const bullet=e=>noteInline(e.text,repo)+(repo&&/^newsfragments\/[\w.-]+\.md$/.test(e.path)
+        ? " "+evidenceLink(repo+"/blob/"+notes.source_sha+"/"+e.path,"Источник") : "");
+      const features=entries.filter(e=>e.kind==="feat");
+      heading("Что меняется для вас");
+      paragraph(plan.message.summary);
+      if(plan.cycle_state==="idle") return '<div class="release-notes">'+parts.join("")+"</div>";
+      const highlights=features.slice(0,2);
+      if(highlights.length) list(highlights.map(bullet));
+      heading("Состав планируемого выпуска");
+      if(!entries.length) paragraph("Подробное описание изменений пока не подготовлено.");
+      for(const [kind,title] of Object.entries({feat:"Новые возможности",fix:"Исправления",quality:"Качество и проверки",chore:"Обслуживание"})){
+        const group=entries.filter(e=>e.kind===kind&&!highlights.includes(e));
+        if(group.length){parts.push("<h4>"+esc(title)+"</h4>");list(group.map(bullet));}
+      }
+      heading("Готовность и ограничения");
+      paragraph(plan.release_ready?"Готовность выпуска подтверждена.":"Готовность выпуска ещё не подтверждена.");
+      if(rows.length) paragraph("Изменения с подтверждёнными проверками: "+rows.filter(p=>p.ci_observed).length+" из "+rows.length+".");
+      if(entries.some(e=>e.kind==="limit")) list(entries.filter(e=>e.kind==="limit").map(bullet));
+      if(plan.delivery?.observed==="unknown") paragraph("Доставка в дочерние проекты ещё не подтверждена.");
+      if(plan.message.next?.length){heading("Что осталось до выпуска");list(plan.message.next.map(esc));}
+      if(rows.length){
+        heading("Подробнее");
+        parts.push("<details><summary>Изменения и результаты проверок</summary>");
+        list(rows.map(p=>(repo&&Number.isInteger(p.pr)?evidenceLink(repo+"/pull/"+p.pr,"PR #"+p.pr):esc("PR #"+p.pr))+
+          (p.ci_observed?" · проверки подтверждены":" · проверки ещё не подтверждены")));
+        parts.push("</details>");
+      }
+      return '<div class="release-notes">'+parts.join("")+"</div>";
+    }
     function openModal(key,trigger){
       const d=DATA; if(!d) return;
       const panelKey=key.startsWith("panel:")?key.slice(6):null;
-      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",artifacts:"Артефакты продукта"};
+      const panelTitles={about:"О продукте",next:"Следующая работа",focus:"Текущий фокус",health:"Пульс продукта",changes:"Последние изменения",tasks:"Задачи",release:"Следующий выпуск",artifacts:"Артефакты продукта"};
       const full=panelKey&&$(panelKey+"-full");
-      const m=full?{title:panelTitles[panelKey]}:(d.modals||{})[key]; if(!m) return;
+      const published=key==="published-release"&&d.metrics?.delivery_evidence?.release;
+      const m=full?{title:panelKey==="release"&&d.release_plan?.target_version?"План выпуска "+d.release_plan.target_version:panelTitles[panelKey]}:published?{title:"AI Ops Kit "+published.tag}:artifactModal(d,key);
+      if(!m) return;
       if($("backdrop").hidden) lastTrigger=trigger||document.activeElement;
       $("modal-title").textContent=m.title||"";
       const parts=[];
@@ -1823,12 +1980,28 @@
         }).join("");
         if(rows) parts.push(`<div class="msec"><div class="mh">${esc(s.h||"")}</div>${rows}</div>`);
       });
-      $("modal-body").innerHTML=full?full.innerHTML:(parts.join("")||`<div class="lead">—</div>`);
+      $("modal-body").innerHTML=full?full.innerHTML:published?('<p class="hint">Опубликован '+esc(ruDate((published.published_at||"").slice(0,10)))+'</p>'+notesHtml(published.notes,repositoryUrl(d))):(parts.join("")||`<div class="lead">—</div>`);
       // Копия для чтения не должна дублировать id источника в документе.
       $("modal-body").querySelectorAll("[id]").forEach(el=>el.removeAttribute("id"));
       $("modal-foot").innerHTML=m.path
         ? `<a href="${link(d,m.path)}" target="_blank" rel="noopener">Открыть в репозитории · ${esc(m.path)} ↗</a>`
         : "";
+      if(published&&d.repo){
+        const source=document.createElement("a");
+        source.href=repositoryUrl(d)+"/releases/tag/"+encodeURIComponent(published.tag);
+        source.textContent="Открыть выпуск "+published.tag+" на GitHub ↗";
+        source.target="_blank"; source.rel="noopener";
+        $("modal-foot").replaceChildren(source);
+        const ref=d.release_plan?.published;
+        if(ref?.tag===published.tag&&/^[a-f0-9]{40}$/.test(ref.sha)){
+          const commit=document.createElement("a");
+          commit.href=repositoryUrl(d)+"/commit/"+ref.sha;
+          commit.textContent="Коммит "+ref.sha.slice(0,7)+" ↗";
+          commit.target="_blank";commit.rel="noopener";
+          $("modal-foot").append(" ",commit);
+        }
+      }
+      $("modal-body").closest(".modal").scrollTop=0;
       const bd=$("backdrop"); bd.hidden=false;
       requestAnimationFrame(()=>{bd.classList.add("on"); ($("modal-x")||bd).focus();});
     }
