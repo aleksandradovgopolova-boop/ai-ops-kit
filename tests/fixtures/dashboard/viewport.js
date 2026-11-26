@@ -28,6 +28,7 @@
   }
   const result = {
     viewport:[innerWidth,innerHeight], document:[document.documentElement.scrollWidth,document.documentElement.scrollHeight],
+    publishedReleaseAvailable:!!q('[data-modal="published-release"]'),
     footer:visible(q("footer")), panels:panels.map(name), boxes, overlaps, clipped, dialogs:{}
   };
   const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));

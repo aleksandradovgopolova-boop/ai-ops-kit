@@ -512,7 +512,7 @@
     .app{gap:4px;padding:5px 8px}
     .main{gap:4px}
     .main .panel{padding:4px 8px}
-    .head .brand-label{display:none}
+    .head .brand-label,.metrics-panel .metric-context,.card-health .eyebrow .n{display:none}
   }
   @media (max-width:420px) and (max-height:600px){
     .app{gap:3px;padding:4px 7px}
@@ -529,6 +529,8 @@
     .main .metrics-panel,.main .roadstrip{grid-column:2}
     .main .wide{grid-column:auto}
     .head{flex-wrap:nowrap}
+    .card-focus .preview-title{-webkit-line-clamp:1}
+    .app{padding-block:5px;gap:4px}
     .main .panel{padding:4px 8px}
     .foot{flex-direction:row}
   }
@@ -589,7 +591,7 @@
   </section>
 
   <section class="panel metrics-panel" id="overview" aria-label="Метрики продукта">
-    <div class="eyebrow"><span>Метрики продукта · North Star</span>
+    <div class="eyebrow"><span>Метрики продукта<span class="metric-context"> · North Star</span></span>
       <button class="more" data-modal="metrics">подробнее →</button></div>
     <p class="compact-metric" id="metric-summary"></p>
     <div class="metrics-row">
