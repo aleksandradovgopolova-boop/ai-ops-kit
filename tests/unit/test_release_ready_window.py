@@ -1,4 +1,7 @@
 from copy import deepcopy
+import json
+import os
+import subprocess
 
 import pytest
 import yaml
@@ -73,3 +76,44 @@ def test_release_uses_receipt_before_reporting_ready():
     assert step["run"].index("ai_ops_kit.devtools.release_ready_window") < step["run"].index('echo "Пульт опубликован')
     assert "gh run list" not in step["run"]
     assert "не удалось подтвердить на пульте готовность версии $VERSION для $GITHUB_SHA" in step["run"]
+
+
+@pytest.mark.parametrize("observed", [True, False], ids=["authenticated", "refused"])
+def test_only_confirmed_ready_page_exports_receipt(tmp_path, observed):
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+    steps = yaml.safe_load(path.read_text())["jobs"]["release"]["steps"]
+    window = next(step for step in steps if step.get("id") == "ready_window")
+    output = tmp_path / "step-output"
+    output.touch()
+    receipt = json.dumps({"version": "4.16.0", "source_sha": HEAD, "pages_run_id": 7,
+                          "attempt": 1, "digest": "b" * 64, "release_ready": True})
+    # Локальные подстановки исключают GitHub и переводят часы к концу окна после одной пробы.
+    fixture = """
+gh() { [[ "$1 $2 $3" == "workflow run status-dashboard.yml" ]]; }
+sleep() { SECONDS=895; }
+timeout() { printf '%s\\n' "$SAMPLE"; return "$VERIFY_RC"; }
+"""
+    env = dict(os.environ, GITHUB_REPOSITORY="demo/project", GITHUB_SHA=HEAD, VERSION="4.16.0",
+               GITHUB_OUTPUT=str(output), RUNNER_TEMP=str(tmp_path), SAMPLE=receipt,
+               VERIFY_RC="0" if observed else "1")
+    result = subprocess.run(["bash", "-e", "-c", fixture + window["run"]], env=env,
+                            capture_output=True, text=True, timeout=5, check=True)
+    archived = tmp_path / "release-ready.json"
+    if observed:
+        assert archived.read_bytes() == (receipt + "\n").encode()
+        assert output.read_text() == "observed=true\n" and receipt in result.stdout
+    else:
+        assert not archived.exists() and output.read_text() == ""
+        assert receipt not in result.stdout
+
+
+def test_ready_receipt_upload_is_scoped_to_observed_attempt_after_tag():
+    path = Path(__file__).resolve().parents[2] / ".github/workflows/release.yml"
+    steps = yaml.safe_load(path.read_text())["jobs"]["release"]["steps"]
+    upload = next(s for s in steps if s.get("with", {}).get("path") == "${{ runner.temp }}/release-ready.json")
+    tag = next(s for s in steps if "gh release create" in s.get("run", ""))
+    assert steps.index(tag) < steps.index(upload)
+    assert upload["if"] == "${{ !cancelled() && steps.ready_window.outputs.observed == 'true' }}"
+    assert upload["continue-on-error"] is True
+    assert upload["uses"].startswith("actions/upload-artifact@")
+    assert upload["with"]["name"] == "release-ready-${{ github.run_id }}-${{ github.run_attempt }}"
