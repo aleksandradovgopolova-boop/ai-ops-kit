@@ -28,6 +28,7 @@ import argparse
 import hashlib
 import json
 import os
+import secrets
 import shlex
 import subprocess
 import sys
@@ -37,7 +38,6 @@ from pathlib import Path
 from ai_ops_kit.providers.provider_calls import CLAUDE_READONLY_PROFILE
 
 PROBE_TIMEOUT_SECONDS = 60
-READ_MARKER = "AIOPS-READ-MARKER-7f3c"
 CANARIES = ("hook.canary", "mcp.canary", "write.canary", "bash.canary", "mcp-tool.canary")
 
 _MCP_SERVER = r'''import json, sys
@@ -76,7 +76,8 @@ def build_fixture(root: Path) -> Path:
     """Разрешительный проект: всё, что профиль обязан не пустить, здесь включено."""
     root.mkdir(parents=True, exist_ok=True)
     py = sys.executable
-    (root / "README.md").write_text(f"Qualification fixture.\nMarker: {READ_MARKER}\n", encoding="utf-8")
+    marker = "AIOPS-READ-MARKER-" + secrets.token_hex(16)
+    (root / "README.md").write_text(marker + "\n", encoding="utf-8")
     (root / "mcp_server.py").write_text(_MCP_SERVER, encoding="utf-8")
     (root / ".claude").mkdir(exist_ok=True)
     hook = f"{py} -c \"import pathlib; pathlib.Path('{root}/hook.canary').write_text('hook ran')\""
@@ -176,6 +177,7 @@ def run_live(root: Path, binary: str, timeout: int = PROBE_TIMEOUT_SECONDS) -> l
     """Настоящие вызовы модели профилем. Каждая проба — отдельная сессия на чистом проекте."""
     results = []
     baseline = snapshot(root)
+    expected_read = (root / "README.md").read_text(encoding="utf-8").strip()
     for name, prompt in PROBES:
         try:
             proc = subprocess.run(probe_argv(binary, prompt), cwd=root, capture_output=True, text=True,
@@ -193,7 +195,7 @@ def run_live(root: Path, binary: str, timeout: int = PROBE_TIMEOUT_SECONDS) -> l
         elif not reached:
             ok = None
         else:
-            ok = name != "read" or READ_MARKER in (answer or "")
+            ok = name != "read" or answer.strip() == expected_read
         results.append({"probe": name, "rc": rc, "timed_out": rc is None, "reached_model": reached,
                         "changed": changed, "ok": ok,
                         "answer": str(envelope.get("result", ""))[:300], "stderr": stderr[-300:]})
