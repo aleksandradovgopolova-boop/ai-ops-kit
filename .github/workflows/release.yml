@@ -160,8 +160,11 @@ jobs:
             sleep 15
             REMAINING=$((DEADLINE - SECONDS))
             (( REMAINING > 0 )) || break
-            if timeout "$REMAINING" python3 -m ai_ops_kit.devtools.release_ready_window \
-                --repo "$GITHUB_REPOSITORY" --head "$GITHUB_SHA" --version "$VERSION" --started "$STARTED"; then
+            if RECEIPT=$(timeout "$REMAINING" python3 -m ai_ops_kit.devtools.release_ready_window \
+                --repo "$GITHUB_REPOSITORY" --head "$GITHUB_SHA" --version "$VERSION" --started "$STARTED"); then
+              printf '%s\n' "$RECEIPT" > "$RUNNER_TEMP/release-ready.json"
+              cat "$RUNNER_TEMP/release-ready.json"
+              echo "observed=true" >> "$GITHUB_OUTPUT"
               echo "Пульт опубликован с состоянием «выпуск готов»"
               exit 0
             fi
@@ -208,3 +211,13 @@ jobs:
             $PRERELEASE \
             --notes-file /tmp/notes.md
           echo "Создан $TAG -> $HEAD_SHA"
+
+      - name: Сохранить подтверждение готовности пульта до тега
+        if: ${{ !cancelled() && steps.ready_window.outputs.observed == 'true' }}
+        continue-on-error: true
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-ready-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-ready.json
+          if-no-files-found: error
+          retention-days: 90

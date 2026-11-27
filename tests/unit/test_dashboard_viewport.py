@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from time import monotonic
 from urllib.parse import unquote
 
 import pytest
@@ -70,22 +71,28 @@ def measure_in_chrome(chrome, path, width, height):
         pass_fds=(child.fileno(),), stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     ) as browser:
         child.close()
-        client.settimeout(15)
         buffer = bytearray()
         serial = 0
         session = {}
 
-        def call(method, **params):
+        def call(method, *, timeout=15, **params):
             nonlocal serial
             serial += 1
             message = dict(id=serial, method=method, params=params, **session)
+            deadline = monotonic() + timeout
+            client.settimeout(timeout)
             client.sendall(json.dumps(message).encode() + b"\0")
             while True:
-                while 0 not in buffer:
+                remaining = deadline - monotonic()
+                if remaining <= 0:
+                    raise TimeoutError(f"Chrome не ответил на {method} за {timeout} с")
+                if 0 not in buffer:
+                    client.settimeout(remaining)
                     chunk = client.recv(65536)
                     if not chunk:
                         raise RuntimeError(f"Chrome завершился во время {method}")
                     buffer.extend(chunk)
+                    continue
                 raw, _, tail = buffer.partition(b"\0")
                 buffer[:] = tail
                 reply = json.loads(raw)
@@ -94,7 +101,8 @@ def measure_in_chrome(chrome, path, width, height):
                     return reply["result"]
 
         try:
-            target = call("Target.createTarget", url="about:blank")
+            # Первый ответ включает холодный старт Chrome на runner.
+            target = call("Target.createTarget", timeout=60, url="about:blank")
             session.update(call("Target.attachToTarget", targetId=target["targetId"], flatten=True))
             call("Emulation.setDeviceMetricsOverride", width=width, height=height, deviceScaleFactor=1, mobile=False)
             call("Network.enable")
@@ -244,3 +252,34 @@ def test_future_release_explains_deferred_work_and_unmapped_pr(tmp_path, dashboa
     assert "Задача отложена для этой версии. В составе уже есть PR #10." in dialog["text"]
     assert "PR #1551 (закрывает #1483)" in dialog["text"] and "#90" in dialog["text"]
     assert "Связь работы со слитым изменением для этой версии пока не подтверждена." in dialog["text"]
+
+
+def test_chrome_cold_start_has_separate_deadline(tmp_path, monkeypatch):
+    # Исполняемый двойник возвращает первый ответ. Монотонные часы моделируют
+    # 20 секунд до открытия и следующие 16 секунд ожидания подключения к вкладке.
+    chrome = tmp_path / "test-chrome"
+    chrome.write_text(f"#!{sys.executable}\n" + """
+import os
+os.read(3, 65536)
+os.write(4, b'{"id":1,"result":{"targetId":"blank"}}\\0')
+os.read(3, 65536)
+""", encoding="utf-8")
+    chrome.chmod(0o700)
+    times = iter([0, 20, 20, 20, 36])
+    monkeypatch.setattr(sys.modules[__name__], "monotonic", lambda: next(times))
+    with pytest.raises(TimeoutError, match="Target.attachToTarget за 15"):
+        measure_in_chrome(str(chrome), tmp_path / "unused.html", 1101, 680)
+
+
+def test_chrome_unrelated_event_does_not_reset_deadline(tmp_path, monkeypatch):
+    chrome = tmp_path / "test-chrome"
+    chrome.write_text(f"#!{sys.executable}\n" + """
+import os
+os.read(3, 65536)
+os.write(4, b'{"method":"Target.targetCreated"}\\0')
+""", encoding="utf-8")
+    chrome.chmod(0o700)
+    times = iter([0, 1, 59, 61])
+    monkeypatch.setattr(sys.modules[__name__], "monotonic", lambda: next(times))
+    with pytest.raises(TimeoutError, match="Target.createTarget за 60"):
+        measure_in_chrome(str(chrome), tmp_path / "unused.html", 1101, 680)
