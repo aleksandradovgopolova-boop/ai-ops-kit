@@ -417,3 +417,30 @@ def test_invalid_wait_has_no_effect(receipt, seconds):
     with pytest.raises(premerge.AdmissionError, match='wait must'):
         invoke(forge, receipt, merge=True, wait_seconds=seconds)
     assert not forge.calls
+
+
+@pytest.mark.parametrize('terminal', ['next_workflow', 'same_workflow_job', 'target'])
+def test_pending_cannot_mask_observable_refusal(receipt, wait_clock, terminal):
+    forge = Forge()
+    forge.pr['mergeable'] = None
+
+    def call(args):
+        value = forge(args)
+        if 'workflow_runs' in value:
+            run = value['workflow_runs'][0]
+            run.update(status='in_progress', conclusion=None)
+            if terminal == 'next_workflow' and forge.workflow == 'quality.yml':
+                run.update(status='completed', conclusion='failure')
+        if 'jobs' in value:
+            if terminal == 'same_workflow_job' and forge.workflow == 'quality.yml':
+                value['jobs'][0].update(status='in_progress', conclusion=None)
+                value['jobs'][1]['conclusion'] = 'failure'
+            else:
+                return {'total_count': 0, 'jobs': []}
+        if terminal == 'target' and '/git/ref/' in args[1]:
+            value['object']['sha'] = 'c' * 40
+        return value
+
+    with pytest.raises(premerge.AdmissionError, match='target branch|CI not successful'):
+        invoke(call, receipt, merge=True, wait_seconds=60)
+    assert not wait_clock and forge.reads == 1 and all(c[0] == 'api' for c in forge.calls)

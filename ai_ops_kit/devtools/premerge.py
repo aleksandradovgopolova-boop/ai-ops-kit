@@ -85,11 +85,12 @@ def validate_review(review, repo, number, head, pr):
             'review provenance reference missing')
 
 
-def check_success(record, label):
+def success_or_pending(record, label):
     status, conclusion = record['status'], record['conclusion']
     if status in ('queued', 'in_progress', 'requested', 'waiting', 'pending') and conclusion in (None, 'success'):
-        raise PendingAdmission(f'CI pending: {label}')
+        return False
     require(status == 'completed' and conclusion == 'success', f'CI not successful: {label}')
+    return True
 
 
 def admit(repo, number, head, review, policy, call):
@@ -100,9 +101,11 @@ def admit(repo, number, head, review, policy, call):
             'PR must be open and ready')
     require(pr['base']['ref'] == 'main' and pr['head']['sha'] == head, 'head/base mismatch')
     validate_review(review, repo, number, head, pr)
+    pending = []
     if pr['mergeable'] is None:
-        raise PendingAdmission('GitHub is calculating mergeability')
-    require(pr['mergeable'] is True, 'PR cannot be merged')
+        pending.append('mergeability')
+    else:
+        require(pr['mergeable'] is True, 'PR cannot be merged')
     require(isinstance(policy, dict) and bool(policy), 'empty check policy')
     evidence = {}
     for workflow, names in policy.items():
@@ -111,24 +114,32 @@ def admit(repo, number, head, review, policy, call):
         runs = pages(call, f'repos/{repo}/actions/workflows/{workflow}/runs?head_sha={head}&event=pull_request',
                      'workflow_runs')
         if not runs:
-            raise PendingAdmission(f'waiting for workflow: {workflow}')
+            pending.append(workflow)
+            continue
         run = max(runs, key=lambda r: (r['id'], r['run_attempt']))
         require(run['head_sha'] == head and run['event'] == 'pull_request'
                 and run['path'] == f'.github/workflows/{workflow}'
                 and any(p['number'] == number and p['head']['sha'] == head
                         and p['base']['sha'] == pr['base']['sha']
                         for p in run['pull_requests']), 'run identity mismatch')
-        check_success(run, workflow)
+        complete = success_or_pending(run, workflow)
+        if not complete:
+            pending.append(workflow)
         jobs = pages(call, f"repos/{repo}/actions/runs/{run['id']}/attempts/{run['run_attempt']}/jobs", 'jobs')
         for name in names:
             matches = [j for j in jobs if j['name'] == name]
+            if not matches and not complete:
+                continue  # GitHub may not have created this job yet.
             require(len(matches) == 1, f'missing/ambiguous required check: {workflow}/{name}')
-            check_success(matches[0], f'{workflow}/{name}')
+            if not success_or_pending(matches[0], f'{workflow}/{name}'):
+                pending.append(f'{workflow}/{name}')
         evidence[workflow] = dict(run_id=run['id'], attempt=run['run_attempt'], checks=names)
     # GitHub's PR snapshot can lag behind the actual target during parallel merges.
     target = call(['api', f'repos/{repo}/git/ref/heads/main'])
     require(target['ref'] == 'refs/heads/main' and target['object']['type'] == 'commit'
             and target['object']['sha'] == pr['base']['sha'], 'target branch differs from reviewed base')
+    if pending:
+        raise PendingAdmission('waiting for ' + ', '.join(pending))
     return dict(repository=repo, pr=number, head=head, base=pr['base']['sha'], checks=evidence)
 
 
