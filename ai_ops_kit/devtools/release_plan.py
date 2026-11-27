@@ -278,16 +278,23 @@ def _work_inventory(root, plan):
     history_path = Path(root) / plan_model.HISTORY_REL
     history = yaml.safe_load(history_path.read_text()) if history_path.is_file() else {}
     closed = history.get("work", []) if isinstance(history, dict) else []
-    all_rows = [*plan_model.items(plan), *closed]
+    active = plan_model.items(plan)
+    all_rows = [*active, *closed]
     work = {w["id"]: w for w in all_rows}
     if len(work) != len(all_rows):
         raise ValueError("ambiguous dependency inventory")
-    return work
+    # Старый расчёт зависимостей допускает отсутствие списка. Пояснение при этом
+    # не может утверждать, что проверило связи со всеми работами.
+    complete = (isinstance(history, dict) and isinstance(history.get("work"), list)
+                and isinstance(plan.get("work"), list) and len(active) == len(plan["work"])
+                and all(isinstance(wid, str) and wid for wid in work))
+    return work, complete
 
 
 def dependency_records(root, plan, version):
     """Один транзитивный граф для collector и read model, включая прошлые циклы."""
-    return _dependency_records(_work_inventory(root, plan), version)
+    work, _ = _work_inventory(root, plan)
+    return _dependency_records(work, version)
 
 
 def _dependency_records(work, version):
@@ -397,7 +404,7 @@ def build(root, snapshot, *, prior=None):
         unlinked = sorted(set(commits) - linked)
         if unlinked:
             report["blockers"].append("unverified_merge_provenance")
-        work = _work_inventory(root, plan)
+        work, inventory_complete = _work_inventory(root, plan) if target else ({}, False)
         missing_deps = _dependencies(work, target, issues, [*implementations, *historical_rows]) if target else []
         if missing_deps:
             report["blockers"].append("dependency_evidence_missing")
@@ -407,7 +414,7 @@ def build(root, snapshot, *, prior=None):
         deferred = intent.get("deferred", {})
         deferred_issues = sorted(deferred.get("issues", [])) if deferred.get("cycle_version") == target else []
         selection = (release_selection.explain(plan, intent, work, implementations, deferred_issues)
-                     if target and commits else None)
+                     if target and commits and inventory_complete else None)
         report.update(cycle_state="planned", target_version=target, cycle_id=intent["id"] + ":" + str(target),
                       input_digests=inputs, source={k: snapshot["source"][k] for k in ("sha", "branch", "version")},
                       published={k: snapshot["published"][k] for k in ("sha", "version", "tag", "id")},

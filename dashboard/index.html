@@ -2011,7 +2011,7 @@
       const scope={in_milestone:"Цель этой вехи",outside_milestone:"Цель за пределами этой вехи",unknown:"Связь с вехой неизвестна"};
       const rows=s.work.map(w=>{
         const reason=w.reason==="deferred_for_version"?"Задача отложена для этой версии.":
-          w.reason==="completed_only"?"В этом выпуске нет связанного слитого изменения.":"";
+          w.reason==="completed_only"?"Связь работы со слитым изменением для этой версии пока не подтверждена.":"";
         const prs=w.merged_prs.length?"В составе уже есть "+w.merged_prs.map(n=>"PR #"+n).join(", ")+".":"";
         const rank=w.goal_rank===null?"Приоритет цели неизвестен.":"Приоритет цели "+w.goal_rank+".";
         const title=(w.issue?"#"+w.issue+" ":"")+w.title;
