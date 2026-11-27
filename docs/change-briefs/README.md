@@ -18,6 +18,8 @@
 
 ## Что здесь есть
 
+- [Почему работа вошла в ближайший выпуск — #1446](1446-release-selection.md).
+
 - [Native finalize: Spec-First и человеческий red-team fallback — #1434](1434-native-finalize.md).
 
 - [Выполненный падающий тест обязателен для mutation kill — #1482](1482-mutation-executed-test.md).

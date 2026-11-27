@@ -485,3 +485,191 @@ def test_defining_plan_with_lost_ci_associations_preserves_inputs(release_case):
     assert result['plan_ready'] and not result['release_ready']
     assert snap == before
     assert files == {str(p.relative_to(root)): p.read_bytes() for p in root.rglob('*') if p.is_file()}
+
+
+def _selection_case(root, snap, **overrides):
+    plan = {"goals": [{"id": "paused", "status": "paused"}, {"id": "first"}, {"id": "other"}],
+            "current_milestone": {"id": "m1", "name": "Первая веха", "status": "todo",
+                                  "linked_goals": ["paused", "first"]},
+            "work": [{"id": "high", "goal": "first", "issue": 9, "status": "in_progress"},
+                     {"id": "outside", "goal": "other", "issue": 12},
+                     {"id": "no-link", "goal": "absent", "status": "done"},
+                     {"id": "later", "goal": "paused", "issue": 11}]}
+    plan.update(overrides)
+    (root / "planning/plan.yaml").write_text(yaml.safe_dump(plan))
+    snap["input_digests"] = rp.input_digests(root)
+    return rp.build(root, snap)
+
+
+def test_ranked_milestone_selection_uses_real_closing_links_and_plan_pr(release_case):
+    root, snap = release_case
+    (root / "history/plan-history.yaml").write_text("work: [{id: archived, goal: paused, pr: 10}]")
+    report = _selection_case(root, snap)
+    selection = report["selection"]
+    high, archived, later, outside, unknown = selection["work"]
+    assert (high["work_id"], high["goal_rank"], high["scope"], high["merged_prs"]) == ("high", 1, "in_milestone", [10])
+    assert archived["work_id"] == "archived" and archived["merged_prs"] == [10]
+    assert later["goal_rank"] == 3 and later["reason"] == "completed_only"
+    assert outside["scope"] == "outside_milestone" and outside["goal_rank"] == 2
+    assert unknown["scope"] == "unknown" and unknown["goal_rank"] is None and not unknown["merged_prs"]
+    assert selection["prioritized_milestone_prs"] == [10] and not selection["unmapped_prs"]
+    assert report["issues"][0]["acceptance"] == "unknown" and not report["release_ready"]
+
+
+def test_cycle_deferral_keeps_linked_code_and_only_changes_named_version(release_case):
+    root, snap = release_case
+    intent = {"id": "cut", "milestone": "m1", "candidate_limit": 0,
+              "deferred": {"cycle_version": "4.12.0", "issues": [9, 12, 90]}}
+    report = _selection_case(root, snap, release_intent=intent)
+    selection = report["selection"]
+    row = selection["work"][0]
+    assert row["reason"] == "deferred_for_version" and row["merged_prs"] == [10]
+    assert selection["unmapped_deferred_issues"] == [90] and selection["prioritized_milestone_prs"] == []
+    assert report["included_commits"] == snap["commits"] and report["issues"][0]["acceptance"] == "unknown"
+    intent["deferred"]["cycle_version"] = "4.13.0"
+    report = _selection_case(root, snap, release_intent=intent)
+    assert report["selection"]["prioritized_milestone_prs"] == [10] and report["deferred_issues"] == []
+
+
+@pytest.mark.parametrize("override", [
+    {"current_milestone": None}, {"current_milestone": {"id": "missing-fields"}},
+    {"goals": [{"id": "first", "status": "typo"}]},
+    {"release_intent": {"id": "different", "milestone": "Другая веха", "candidate_limit": 0}},
+])
+def test_selection_marks_unproven_milestone_unknown_without_removing_merges(release_case, override):
+    root, snap = release_case
+    snap["pulls"][0]["closing_issues"] = [42]
+    snap["issues"].append({"number": 42, "state": "closed"})
+    report = _selection_case(root, snap, **override)
+    selection = report["selection"]
+    assert selection["milestone"] is None and selection["prioritized_milestone_prs"] is None
+    assert all(row["scope"] == "unknown" and row["reason"] == "completed_only" for row in selection["work"])
+    if "goals" in override:
+        assert all(row["goal_rank"] is None for row in selection["work"])
+    assert selection["unmapped_prs"] == [{"pr": 10, "closing_issues": [42], "reason": "merged_change",
+                                         "scope": "unknown", "goal_rank": None}]
+    assert report["included_commits"] == snap["commits"]
+
+
+def test_explanation_binds_payload_and_preserves_input_and_legacy_transition(release_case):
+    from ai_ops_kit.devtools import release_plan_state as state
+    root, snap = release_case
+    report = _selection_case(root, snap)
+    before = deepcopy(snap)
+    assert rp.build(root, snap) == report and snap == before and rp.input_digests(root) == snap["input_digests"]
+    legacy = dict(report)
+    del legacy["selection"]
+    assert rp.semantic_fingerprint(legacy) == report["semantic_fingerprint"]
+    assert state.payload_digest(legacy) != state.payload_digest(report)
+    assert not state.project(report, legacy)["transition"]["changed"]
+
+
+def test_idle_and_invalid_release_inputs_have_no_selection(release_case):
+    root, snap = release_case
+    snap["source"]["sha"] = BASE
+    snap["commits"] = []
+    (root / "newsfragments/new.feat.md").unlink()
+    report = _selection_case(root, snap)
+    assert report["cycle_state"] == "idle" and "selection" not in report
+    snap["complete"] = False
+    report = rp.build(root, snap)
+    assert report["cycle_state"] == "unknown" and "selection" not in report
+
+
+def test_milestone_pr_order_follows_goals_without_reordering_included_commits(release_case):
+    root, snap = release_case
+    earlier = "4" * 40
+    snap["commits"][0]["parents"][0] = earlier
+    snap["commits"].append({"sha": earlier, "parents": [BASE]})
+    snap["pulls"].append(dict(snap["pulls"][0], number=3, merge_sha=earlier, closing_issues=[11]))
+    snap["issues"].append({"number": 11, "state": "closed"})
+    first = _selection_case(root, snap)
+    assert first["selection"]["prioritized_milestone_prs"] == [10, 3]
+    reordered = _selection_case(root, snap, goals=[{"id": "paused"}, {"id": "first"}, {"id": "other"}])
+    assert reordered["selection"]["prioritized_milestone_prs"] == [3, 10]
+    assert first["included_commits"] == reordered["included_commits"]
+    assert first["semantic_fingerprint"] == reordered["semantic_fingerprint"]
+    assert first["input_fingerprint"] != reordered["input_fingerprint"]
+
+
+def test_historical_issue_link_is_not_an_inclusion_in_this_cycle(release_case):
+    root, snap = release_case
+    historical = dict(snap["pulls"][0], number=20, merge_sha="5" * 40, published_ancestor=BASE)
+    snap["dependency_pulls"] = [historical]
+    snap["pulls"][0]["closing_issues"] = []
+    report = _selection_case(root, snap)
+    assert report["issues"][0]["implementation_observed"] and report["issues"][0]["linked_prs"] == [20]
+    high = report["selection"]["work"][0]
+    assert high["reason"] == "completed_only" and high["merged_prs"] == []
+    assert report["selection"]["prioritized_milestone_prs"] == []
+
+
+@pytest.mark.parametrize("work_pr", ["https://github.com/owner/kit/pull/5",
+                                     "https://github.com/foreign/kit/pull/10", "10", "#10",
+                                     False, True, 10.0, ["10"], {"number": 10}])
+def test_archive_evidence_is_not_a_pr_identity_or_a_release_blocker(release_case, work_pr):
+    root, snap = release_case
+    baseline = _selection_case(root, snap)
+    archived = {"id": "legacy", "status": "done", "result": "Проверено", "pr": work_pr,
+                "evidence": "отчёт", "closed_at": "2026-11-27", "issue": {"number": 9}}
+    assert rp.plan_validate.validate_history([archived])["errors"] == []
+    (root / "history/plan-history.yaml").write_text(yaml.safe_dump({"work": [archived]}))
+    report = _selection_case(root, snap)
+    for key in ("included_commits", "composition_available", "plan_ready", "release_ready", "semantic_fingerprint",
+                "implementations", "blockers", "selection"):
+        assert report[key] == baseline[key]
+
+
+@pytest.mark.parametrize("issue, work_pr, goal", [(True, True, {"id": "first"}), (9.0, 10.0, False),
+                                                  ("9", ["10"], ["first"]), ([9], {"number": 10}, None)])
+def test_optional_active_work_fields_do_not_bind_unknown_links(release_case, issue, work_pr, goal):
+    root, snap = release_case
+    snap["pulls"][0].update(number=1, closing_issues=[1, 9])
+    snap["issues"].append({"number": 1, "state": "closed"})
+    report = _selection_case(root, snap, work=[{"id": "active", "pr": work_pr, "issue": issue, "goal": goal}])
+    assert report["composition_available"] and report["included_commits"] == snap["commits"]
+    row, = report["selection"]["work"]
+    assert row["scope"] == "unknown" and row["issue"] is None and row["goal_rank"] is None
+    assert row["merged_prs"] == [] and report["selection"]["unmapped_prs"][0]["pr"] == 1
+
+
+def test_exact_url_and_independent_closing_issue_each_bind_with_unknown_goal(release_case):
+    root, snap = release_case
+    archived = {"id": "linked", "status": "done", "pr": "https://github.com/owner/kit/pull/10",
+                "result": "Проверено", "issue": []}
+    (root / "history/plan-history.yaml").write_text(yaml.safe_dump({"work": [archived]}))
+    milestone = {"id": "m", "name": "Веха", "status": "todo", "linked_goals": ["only"]}
+    work = [{"id": "active", "status": "in_progress", "issue": 9, "pr": {"number": 12}},
+            {"id": "unknown-goal", "goal": "external", "issue": 9}]
+    report = _selection_case(root, snap, goals=[{"id": "only"}], current_milestone=milestone, work=work)
+    rows = {w["work_id"]: w for w in report["selection"]["work"]}
+    assert all(w["merged_prs"] == [10] for w in rows.values()) and len(rows) == 3
+    assert rows["active"]["goal"] == "only" and rows["active"]["scope"] == "in_milestone"
+    assert rows["linked"]["goal"] is None and rows["linked"]["scope"] == "unknown"
+    assert rows["unknown-goal"]["scope"] == "unknown" and rows["unknown-goal"]["goal_rank"] is None
+
+
+@pytest.mark.parametrize("archive", [[], [{"id": "other"}], {"version": 1}, None])
+def test_incomplete_work_inventory_preserves_composition_without_selection(release_case, archive):
+    root, snap = release_case
+    before = _selection_case(root, snap)
+    (root / "history/plan-history.yaml").write_text(yaml.safe_dump(archive))
+    report = _selection_case(root, snap)
+    for key in ("included_commits", "composition_available", "plan_ready", "release_ready", "semantic_fingerprint",
+                "implementations", "blockers"):
+        assert report[key] == before[key]
+    assert "selection" in before and "selection" not in report
+
+
+@pytest.mark.parametrize("failure", ["duplicate_work", "invalid_pr_number", "invalid_closing_issue"])
+def test_source_identity_failure_still_blocks_release_with_legacy_work(release_case, failure):
+    root, snap = release_case
+    archived = {"id": "high" if failure == "duplicate_work" else "legacy", "pr": {"number": 10}}
+    (root / "history/plan-history.yaml").write_text(yaml.safe_dump({"work": [archived]}))
+    if failure == "invalid_pr_number":
+        snap["pulls"][0]["number"] = True
+    if failure == "invalid_closing_issue":
+        snap["pulls"][0]["closing_issues"] = ["9"]
+    report = _selection_case(root, snap)
+    assert not report["composition_available"] and "source_unknown_or_invalid" in report["blockers"]
+    assert "selection" not in report and not report["release_ready"]

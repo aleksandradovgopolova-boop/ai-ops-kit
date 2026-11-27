@@ -852,6 +852,7 @@ workflow (release.yml: VERSION в main -> тег + Release; идемпотент
 - `qualification/runtime-hooks/` — source metadata и offline schema evidence без model turns.
 - `qualification/CHANGE-BRIEF-runtime-hooks-2026-10-06.md` — границы read-only исследования до артефактов.
 
+- `ai_ops_kit/devtools/release_selection.py` — причины включения работ в выпуск по связям со слитыми PR, текущей вехе и приоритету целей.
 - `ai_ops_kit/devtools/runtime_context_probe.py` — непоставляемый offline prototype контекста и аудита command hooks.
 - `qualification/runtime-context-prototype/` — synthetic native-shape inputs и actual CLI capture, границы доказательств.
 - `qualification/CHANGE-BRIEF-runtime-context-2026-10-06.md` — brief перед prototype #1267.

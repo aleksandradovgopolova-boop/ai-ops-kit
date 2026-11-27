@@ -228,3 +228,19 @@ def test_overview_fits_when_github_is_unavailable(tmp_path, dashboard_data, widt
     page = render_dashboard(tmp_path, data, width, height)
     assert not page["publishedReleaseAvailable"]
     assert_overview_fits(page)
+
+
+def test_future_release_explains_deferred_work_and_unmapped_pr(tmp_path, dashboard_data):
+    selection = {"milestone": {"name": "Проверка первого часа"},
+                 "work": [{"title": "Подтвердить результат", "issue": 9, "scope": "in_milestone",
+                           "goal_rank": 1, "reason": "deferred_for_version", "merged_prs": [10]},
+                          {"title": "Сверить связь", "scope": "unknown", "goal_rank": None,
+                           "reason": "completed_only", "merged_prs": []}],
+                 "unmapped_prs": [{"pr": 1551, "closing_issues": [1483]}], "unmapped_deferred_issues": [90]}
+    plan = dict(dashboard_data["release_plan"], selection=selection)
+    page = render_dashboard(tmp_path, dict(dashboard_data, release_plan=plan), 1280, 720)
+    dialog = page["dialogs"]["panel:release"]
+    assert dialog["detailsOpen"] and "Проверка первого часа" in dialog["text"]
+    assert "Задача отложена для этой версии. В составе уже есть PR #10." in dialog["text"]
+    assert "PR #1551 (закрывает #1483)" in dialog["text"] and "#90" in dialog["text"]
+    assert "Связь работы со слитым изменением для этой версии пока не подтверждена." in dialog["text"]
