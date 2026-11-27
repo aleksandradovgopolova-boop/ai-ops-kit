@@ -8,7 +8,7 @@ import re
 
 import yaml
 
-from ai_ops_kit.devtools import release_assembly
+from ai_ops_kit.devtools import release_assembly, release_selection
 from ai_ops_kit.planning import plan_model, plan_validate
 from ai_ops_kit.validation import validate_release_claims
 
@@ -24,7 +24,7 @@ _INPUTS = ("VERSION", "planning/plan.yaml", "quality/premerge-checks.json",
            "registry/communication-policy.yaml", ".github/workflows/status-dashboard.yml",
            "ai_ops_kit/devtools/release_plan.py", "ai_ops_kit/devtools/release_plan_sources.py",
            "ai_ops_kit/devtools/release_plan_state.py", "ai_ops_kit/devtools/release_plan_etags.py",
-           "ai_ops_kit/devtools/release_assembly.py",
+           "ai_ops_kit/devtools/release_assembly.py", "ai_ops_kit/devtools/release_selection.py",
            "ai_ops_kit/integrations/github.py", "ai_ops_kit/planning/plan_model.py",
            "ai_ops_kit/planning/plan_validate.py", "ai_ops_kit/validation/validate_release_claims.py", *_CI_INPUTS)
 
@@ -274,8 +274,7 @@ def _issue_rows(snapshot, implementations):
     return result
 
 
-def dependency_records(root, plan, version):
-    """Один транзитивный граф для collector и read model, включая прошлые циклы."""
+def _work_inventory(root, plan):
     history_path = Path(root) / plan_model.HISTORY_REL
     history = yaml.safe_load(history_path.read_text()) if history_path.is_file() else {}
     closed = history.get("work", []) if isinstance(history, dict) else []
@@ -283,6 +282,15 @@ def dependency_records(root, plan, version):
     work = {w["id"]: w for w in all_rows}
     if len(work) != len(all_rows):
         raise ValueError("ambiguous dependency inventory")
+    return work
+
+
+def dependency_records(root, plan, version):
+    """Один транзитивный граф для collector и read model, включая прошлые циклы."""
+    return _dependency_records(_work_inventory(root, plan), version)
+
+
+def _dependency_records(work, version):
     entry = work.get("next-kit-release-" + version.replace(".", "-"), {})
     states, records = {}, {}
     pending = [(d, False) for d in entry.get("depends_on", [])]
@@ -303,9 +311,9 @@ def dependency_records(root, plan, version):
     return records
 
 
-def _dependencies(root, plan, version, issue_rows, implementations):
+def _dependencies(work, version, issue_rows, implementations):
     gaps = []
-    for dep, row in dependency_records(root, plan, version).items():
+    for dep, row in _dependency_records(work, version).items():
         observed = any(i["issue"] == row.get("issue") and i["ci_chain_observed"] for i in issue_rows)
         observed |= any(p["pr"] == row.get("pr") and p["merged_change_observed"]
                         and p["ci_observed"] for p in implementations)
@@ -389,24 +397,26 @@ def build(root, snapshot, *, prior=None):
         unlinked = sorted(set(commits) - linked)
         if unlinked:
             report["blockers"].append("unverified_merge_provenance")
-        missing_deps = _dependencies(root, plan, target, issues, [*implementations, *historical_rows]) if target else []
+        work = _work_inventory(root, plan)
+        missing_deps = _dependencies(work, target, issues, [*implementations, *historical_rows]) if target else []
         if missing_deps:
             report["blockers"].append("dependency_evidence_missing")
         complete = all(p["ci_observed"] for p in implementations if p["merged_change_observed"])
         if commits and not complete:
             report["blockers"].append("implementation_ci_incomplete")
+        deferred = intent.get("deferred", {})
+        deferred_issues = sorted(deferred.get("issues", [])) if deferred.get("cycle_version") == target else []
+        selection = (release_selection.explain(plan, intent, work, implementations, deferred_issues)
+                     if target and commits else None)
         report.update(cycle_state="planned", target_version=target, cycle_id=intent["id"] + ":" + str(target),
                       input_digests=inputs, source={k: snapshot["source"][k] for k in ("sha", "branch", "version")},
                       published={k: snapshot["published"][k] for k in ("sha", "version", "tag", "id")},
                       fragments=assembly.get("by_category", {}), validation=snapshot.get("validation"),
                       included_commits=[commits[sha] for sha in sorted(commits)],
                       implementations=implementations, dependency_implementations=historical_rows,
-                      issues=issues, unlinked_commits=unlinked,
+                      issues=issues, unlinked_commits=unlinked, deferred_issues=deferred_issues,
                       dependency_gaps=missing_deps, composition_available=bool(target and commits),
                       implementation_evidence_complete=bool(commits and complete and not unlinked))
-        deferred = intent.get("deferred", {})
-        report["deferred_issues"] = (sorted(deferred.get("issues", []))
-                                     if deferred.get("cycle_version") == target else [])
         if target and current != target:
             report["blockers"].append("release_bump_pending")
         final_ok = final_release_observed(root, snapshot, policy, target)
@@ -422,6 +432,8 @@ def build(root, snapshot, *, prior=None):
                                        and not report["blockers"])
         if not final_ok:
             report["blockers"].append("final_release_evidence_required")
+        if selection is not None:
+            report["selection"] = selection
     except (ValueError, KeyError, TypeError, AttributeError, OSError, yaml.YAMLError):
         report["blockers"].append("source_unknown_or_invalid")
         if snapshot.get("reason") in ("github_read_permission_denied", "release_snapshot_unavailable_incomplete_or_changed"):

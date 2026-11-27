@@ -2006,6 +2006,26 @@
         ? "<p>"+evidenceLink(d.repo.blob_base+"/docs/agent-guides/release-replanning.md#частный-отчёт-о-доставке-в-дочерние-проекты","Как получить отчёт",true)+"</p>" : "";
       return "<h3>Доставка в проекты</h3><p>Текущие версии в основных ветках проектов и PR обновлений доступны в частном отчёте владельца.</p>"+link;
     }
+    function selectionNotes(s){
+      if(!s) return "";
+      const scope={in_milestone:"Цель этой вехи",outside_milestone:"Цель за пределами этой вехи",unknown:"Связь с вехой неизвестна"};
+      const rows=s.work.map(w=>{
+        const reason=w.reason==="deferred_for_version"?"Задача отложена для этой версии.":
+          w.reason==="completed_only"?"В этом выпуске нет связанного слитого изменения.":"";
+        const prs=w.merged_prs.length?"В составе уже есть "+w.merged_prs.map(n=>"PR #"+n).join(", ")+".":"";
+        const rank=w.goal_rank===null?"Приоритет цели неизвестен.":"Приоритет цели "+w.goal_rank+".";
+        const title=(w.issue?"#"+w.issue+" ":"")+w.title;
+        return "<li><strong>"+esc(title)+"</strong>. "+esc([scope[w.scope]+".",rank,reason,prs].filter(Boolean).join(" "))+"</li>";
+      });
+      const name=s.milestone?s.milestone.name:"Связь выпуска с текущей вехой неизвестна";
+      const unmapped=s.unmapped_prs.map(p=>{
+        const issues=p.closing_issues.map(n=>"#"+n).join(", ");
+        return "PR #"+p.pr+(issues?" (закрывает "+issues+")":"");
+      });
+      const unknown=unmapped.length?"<p>У этих слитых PR связь с целью и её приоритет неизвестны: "+esc(unmapped.join(", "))+".</p>":"";
+      const deferred=s.unmapped_deferred_issues.length?"<p>Отложены для этой версии без связи с работой плана: "+esc(s.unmapped_deferred_issues.map(n=>"#"+n).join(", "))+".</p>":"";
+      return "<details><summary>Как выбран состав</summary><p>"+esc(name)+". В выпуск входит уже слитый код.</p><ul>"+rows.join("")+"</ul>"+unknown+deferred+"</details>";
+    }
     function upcomingNotes(d){
       const plan=d.release_plan;
       if(!plan?.message) return '<div class="release-notes"><p>План выпуска ещё не получен. Готовность не подтверждена.</p>'+deliveryNotes(d)+"</div>";
@@ -2025,6 +2045,7 @@
       const highlights=features.slice(0,2);
       if(highlights.length) list(highlights.map(bullet));
       heading("Состав планируемого выпуска");
+      parts.push(selectionNotes(plan.selection));
       if(!entries.length) paragraph("Подробное описание изменений пока не подготовлено.");
       for(const [kind,title] of Object.entries({feat:"Новые возможности",fix:"Исправления",quality:"Качество и проверки",chore:"Обслуживание"})){
         const group=entries.filter(e=>e.kind===kind&&!highlights.includes(e));

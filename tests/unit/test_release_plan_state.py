@@ -27,6 +27,13 @@ def report():
     return value
 
 
+def test_saved_pre_selection_report_keeps_its_published_semantic_digest():
+    legacy = report()
+    expected = "1c0df48d56b74fe1969f2fa6df61b72eab0b0c23cf5a05d438b1da91de2aea5b"
+    assert rp.semantic_fingerprint(legacy) == expected
+    assert rp.semantic_fingerprint(dict(legacy, selection={"work": []})) == expected
+
+
 class PublisherClient:
     repo = "owner/kit"
 
