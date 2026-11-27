@@ -311,3 +311,109 @@ def test_target_advances_during_final_admission_preserves_main(receipt):
     assert forge.reads == 2
     assert forge.main_ref['object']['sha'] != BASE
     assert not any(args[0] == 'pr' for args in forge.calls)
+
+
+@pytest.fixture
+def wait_clock(monkeypatch):
+    elapsed = []
+    monkeypatch.setattr(premerge.time, 'monotonic', lambda: sum(elapsed))
+    monkeypatch.setattr(premerge.time, 'sleep', elapsed.append)
+    return elapsed
+
+
+@pytest.mark.parametrize('pending', ['workflow', 'job', 'connection', 'mergeability', 'no_run'])
+def test_wait_discards_partial_second_admission(receipt, wait_clock, pending):
+    forge = Forge()
+
+    def call(args):
+        value = forge(args)
+        if forge.reads != 2:
+            return value
+        if pending == 'connection' and '/jobs?' in args[1]:
+            raise premerge.PendingAdmission('GitHub connection unavailable')
+        if pending == 'mergeability' and '/pulls/' in args[1]:
+            return dict(value, mergeable=None)
+        if pending == 'no_run' and 'workflow_runs' in value:
+            return {'total_count': 0, 'workflow_runs': []}
+        if pending == 'workflow' and 'workflow_runs' in value:
+            value['workflow_runs'][0].update(status='in_progress', conclusion=None)
+        if pending == 'job' and 'jobs' in value:
+            return dict(value, jobs=[dict(j, status='in_progress', conclusion='success') for j in value['jobs']])
+        return value
+
+    assert invoke(call, receipt, merge=True, wait_seconds=60)['status'] == 'merge-command-succeeded'
+    assert wait_clock == [15] and forge.reads == 4
+    assert [c for c in forge.calls if c[0] == 'pr'] == [forge.calls[-1]]
+
+
+def test_deadline_caps_read_timeout_and_sleep(receipt, monkeypatch, wait_clock):
+    timeouts = []
+
+    def stalled(args, *, timeout, **kwargs):
+        timeouts.append(timeout)
+        wait_clock.append(3)
+        raise premerge.subprocess.TimeoutExpired(args, 3)
+
+    monkeypatch.setattr(premerge.subprocess, 'run', stalled)
+    with pytest.raises(premerge.AdmissionError, match='deadline expired'):
+        invoke(None, receipt, merge=True, wait_seconds=7)
+    assert timeouts == [7] and wait_clock == [3, 4]
+
+
+@pytest.mark.parametrize('reason', ['failure', 'base', 'access'])
+def test_wait_stops_on_terminal_result_without_writing(receipt, wait_clock, reason):
+    forge = Forge()
+
+    def call(args):
+        value = forge(args)
+        if '/pulls/' in args[1]:
+            if forge.reads == 1:
+                raise premerge.PendingAdmission('temporary read timeout')
+            if reason == 'base':
+                value['base']['sha'] = 'c' * 40
+            if reason == 'access':
+                raise premerge.AdmissionError('GitHub read failed')
+        if reason == 'failure' and 'workflow_runs' in value:
+            value['workflow_runs'][0]['conclusion'] = 'failure'
+        return value
+
+    with pytest.raises(premerge.AdmissionError):
+        invoke(call, receipt, merge=True, wait_seconds=60)
+    assert forge.reads == 2 and wait_clock == [15] and all(c[0] == 'api' for c in forge.calls)
+
+
+@pytest.mark.parametrize('error', [premerge.PendingAdmission('connection unavailable'), KeyboardInterrupt()])
+def test_wait_does_not_repeat_uncertain_merge(receipt, wait_clock, error):
+    forge = Forge()
+
+    def call(args):
+        value = forge(args)
+        if args[0] == 'pr':
+            raise error
+        return value
+
+    with pytest.raises(type(error)):
+        invoke(call, receipt, merge=True, wait_seconds=60)
+    assert forge.reads == 2 and not wait_clock
+    assert len([c for c in forge.calls if c[0] == 'pr']) == 1
+
+
+@pytest.mark.parametrize('operation,stderr,retryable', [
+    ('api', 'error connecting to api.github.com\ncheck your internet connection', True),
+    ('api', 'gh: HTTP 403: Forbidden', False),
+    ('pr', 'error connecting to api.github.com', False),
+])
+def test_gh_classifies_only_transient_reads(monkeypatch, operation, stderr, retryable):
+    result = premerge.subprocess.CompletedProcess([], 1, '', stderr)
+    monkeypatch.setattr(premerge.subprocess, 'run', lambda *args, **kwargs: result)
+    with pytest.raises(premerge.AdmissionError) as exc:
+        premerge.gh([operation])
+    assert isinstance(exc.value, premerge.PendingAdmission) == retryable
+
+
+@pytest.mark.parametrize('seconds', [-1, 3601, True])
+def test_invalid_wait_has_no_effect(receipt, seconds):
+    forge = Forge()
+    with pytest.raises(premerge.AdmissionError, match='wait must'):
+        invoke(forge, receipt, merge=True, wait_seconds=seconds)
+    assert not forge.calls
