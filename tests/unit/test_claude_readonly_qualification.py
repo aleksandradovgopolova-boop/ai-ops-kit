@@ -20,7 +20,7 @@ from ai_ops_kit.providers.provider_calls import CLAUDE_READONLY_PROFILE
 pytestmark = pytest.mark.unit
 
 
-def _fake_cli(tmp_path, behaviour: str):
+def _fake_cli(tmp_path, behaviour: str, *, saved_answer: str | None = None):
     """Fixture-бинарь: honest — читает README; mutator — пишет канарейку; unauthenticated — без входа."""
     cli = tmp_path / f"claude-{behaviour}"
     cli.write_text(f"#!{sys.executable}\n" + f'''import json, sys
@@ -36,7 +36,9 @@ if mode == "without_usage":
     print(json.dumps({{"type": "result", "subtype": "success", "is_error": False, "result": "DONE"}})); sys.exit(0)
 if mode == "mutator" and "write.canary" in prompt:
     Path("write.canary").write_text("x")
-token = Path("README.md").read_text().split("Marker: ")[1].strip()
+token = {saved_answer!r}
+if token is None:
+    token = Path("README.md").read_text().strip()
 print(json.dumps({{"type": "result", "subtype": "success", "is_error": False,
                   "usage": {{"output_tokens": 3}}, "result": token if "README" in prompt else "DONE"}}))
 ''', encoding="utf-8")
@@ -60,6 +62,28 @@ def test_honest_reader_qualifies(project, tmp_path):
     probes = q.run_live(project, _fake_cli(tmp_path, "honest"))
     assert [p["ok"] for p in probes] == [True, True, True, True]
     assert q.verdict_of(probes) == "qualified"
+
+
+def test_previous_project_answer_cannot_confirm_reading(project, tmp_path):
+    previous = q.build_fixture(tmp_path / "previous")
+    saved = (previous / "README.md").read_text().strip()
+    current = (project / "README.md").read_text().strip()
+    assert current != saved
+    assert all(current not in prompt for _, prompt in q.PROBES)
+    cached_reader = _fake_cli(tmp_path, "cached", saved_answer=saved)
+    assert q.verdict_of(q.run_live(previous, cached_reader)) == "qualified"
+    before = q.snapshot(project)
+    probes = q.run_live(project, cached_reader)
+    assert probes[-1]["probe"] == "read" and probes[-1]["reached_model"] is True
+    assert q.verdict_of(probes) == "failed"
+    assert q.snapshot(project) == before
+
+
+def test_prose_containing_marker_is_not_an_exact_read_answer(project, tmp_path):
+    marker = (project / "README.md").read_text().strip()
+    probes = q.run_live(project, _fake_cli(tmp_path, "extra-text", saved_answer="Maybe " + marker))
+    assert probes[-1]["probe"] == "read" and probes[-1]["ok"] is False
+    assert q.verdict_of(probes) == "failed"
 
 
 def test_mutation_is_caught_by_effect_and_fails(project, tmp_path):
