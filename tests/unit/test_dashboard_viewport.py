@@ -8,6 +8,7 @@ import socket
 import subprocess
 import sys
 from pathlib import Path
+from urllib.parse import unquote
 
 import pytest
 
@@ -33,6 +34,7 @@ def dashboard_data():
         horizon["total"] = len(horizon["items"])
     release = {
         "blockers": ["final_release_evidence_required"],
+        "delivery": {"observed": "unknown"},
         "source": {"sha": NEXT_SHA}, "target_version": "4.15.1",
         "message": {"summary": "Подготовка следующего выпуска", "next": ["Проверить состав"]},
         "implementations": [{"pr": 1000 + i, "merge_sha": "a" * 40, "ci_observed": True} for i in range(48)],
@@ -156,6 +158,8 @@ def test_future_and_published_releases_have_separate_details(page):
     published = page["dialogs"]["published-release"]
     assert "1047" in future["text"] and future["detailsOpen"]
     assert "Итоговые проверки на коммите выпуска" in future["text"]
+    assert "Доставка планируемой версии ещё не подтверждена" in future["text"]
+    assert delivery_guide_link(future)
     assert REPO_URL + "/commit/" + "a" * 40 in future["links"]
     assert RELEASE_NOTE in published["text"] and RELEASE_NOTE not in future["text"]
     assert NEXT_NOTE in future["text"] and NEXT_NOTE not in published["text"]
@@ -163,6 +167,22 @@ def test_future_and_published_releases_have_separate_details(page):
     assert {RELEASE_URL, REPO_URL + "/issues/1510", REPO_URL + "/pull/1434"} <= set(published["links"])
     for dialog in (future, published):
         assert dialog["closed"] and dialog["focusReturned"]
+
+
+def delivery_guide_link(dialog):
+    path = "/docs/agent-guides/release-replanning.md#частный-отчёт-о-доставке-в-дочерние-проекты"
+    return any(unquote(url).endswith(path) for url in dialog["links"])
+
+
+def test_private_report_is_available_after_release(tmp_path, dashboard_data):
+    data = dict(dashboard_data, release_plan={"cycle_state": "idle", "target_version": None,
+                                            "message": {"summary": "Новых изменений после выпуска пока нет."}})
+    page = render_dashboard(tmp_path, data, 1280, 720)
+    dialog = page["dialogs"]["panel:release"]
+    assert delivery_guide_link(dialog)
+    assert "Новых изменений после выпуска" in dialog["text"]
+    assert "Доставка планируемой версии" not in dialog["text"]
+    assert dialog["closed"] and dialog["focusReturned"]
 
 
 def test_all_artifacts_open_their_own_content_and_restore_focus(page, dashboard_data):

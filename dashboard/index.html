@@ -2001,9 +2001,14 @@
       flush();
       return '<div class="release-notes">'+blocks.join("")+"</div>";
     }
+    function deliveryNotes(d){
+      const link=d.repo?.blob_base
+        ? "<p>"+evidenceLink(d.repo.blob_base+"/docs/agent-guides/release-replanning.md#частный-отчёт-о-доставке-в-дочерние-проекты","Как получить отчёт",true)+"</p>" : "";
+      return "<h3>Доставка в проекты</h3><p>Текущие версии в основных ветках проектов и PR обновлений доступны в частном отчёте владельца.</p>"+link;
+    }
     function upcomingNotes(d){
       const plan=d.release_plan;
-      if(!plan?.message) return "<p>План выпуска ещё не получен. Готовность не подтверждена.</p>";
+      if(!plan?.message) return '<div class="release-notes"><p>План выпуска ещё не получен. Готовность не подтверждена.</p>'+deliveryNotes(d)+"</div>";
       const notes=d.upcoming_release_notes, repo=repositoryUrl(d);
       const entries=notes&&notes.source_sha===plan.source?.sha&&notes.target_version===plan.target_version
         ? notes.entries||[] : [];
@@ -2016,7 +2021,7 @@
       const features=entries.filter(e=>e.kind==="feat");
       heading("Что меняется для вас");
       paragraph(plan.message.summary);
-      if(plan.cycle_state==="idle") return '<div class="release-notes">'+parts.join("")+"</div>";
+      if(plan.cycle_state==="idle") return '<div class="release-notes">'+parts.join("")+deliveryNotes(d)+"</div>";
       const highlights=features.slice(0,2);
       if(highlights.length) list(highlights.map(bullet));
       heading("Состав планируемого выпуска");
@@ -2029,7 +2034,8 @@
       paragraph(plan.release_ready?"Готовность выпуска подтверждена.":"Готовность выпуска ещё не подтверждена.");
       if(rows.length) paragraph("Изменения с подтверждёнными проверками: "+rows.filter(p=>p.ci_observed).length+" из "+rows.length+".");
       if(entries.some(e=>e.kind==="limit")) list(entries.filter(e=>e.kind==="limit").map(bullet));
-      if(plan.delivery?.observed==="unknown") paragraph("Доставка в дочерние проекты ещё не подтверждена.");
+      if(plan.delivery?.observed==="unknown") paragraph("Доставка планируемой версии ещё не подтверждена.");
+      parts.push(deliveryNotes(d));
       const reasons={
         release_bump_pending:"Версия в репозитории ещё не поднята до запланированной.",
         final_release_evidence_required:"Итоговые проверки на коммите выпуска ещё не подтверждены.",
