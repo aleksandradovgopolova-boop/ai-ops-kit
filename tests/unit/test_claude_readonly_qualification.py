@@ -70,8 +70,10 @@ def test_previous_project_answer_cannot_confirm_reading(project, tmp_path):
     current = (project / "README.md").read_text().strip()
     assert current != saved
     assert all(current not in prompt for _, prompt in q.PROBES)
+    cached_reader = _fake_cli(tmp_path, "cached", saved_answer=saved)
+    assert q.verdict_of(q.run_live(previous, cached_reader)) == "qualified"
     before = q.snapshot(project)
-    probes = q.run_live(project, _fake_cli(tmp_path, "cached", saved_answer=saved))
+    probes = q.run_live(project, cached_reader)
     assert probes[-1]["probe"] == "read" and probes[-1]["reached_model"] is True
     assert q.verdict_of(probes) == "failed"
     assert q.snapshot(project) == before
